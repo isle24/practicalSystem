@@ -2,6 +2,7 @@
 
 namespace app\server\internship;
 
+use app\model\channel\InternshipRecord;
 use app\model\channel\TableRecord as ChannelTable;
 use app\server\CurrentContext;
 use InvalidArgumentException;
@@ -1331,18 +1332,7 @@ class InternshipService
 
     private function professionDepIds(array $professionIds): array
     {
-        if (!$professionIds) {
-            return [];
-        }
-
-        return $this->query('profession')
-            ->whereIn('profession_id', $professionIds)
-            ->whereNull('deleted_at')
-            ->pluck('dep_id')
-            ->map(fn ($id): int => (int) $id)
-            ->unique()
-            ->values()
-            ->all();
+        return InternshipRecord::depIdsByProfessionIds($professionIds);
     }
 
     private function studentColumnForQuery(mixed $query): string
@@ -1363,13 +1353,13 @@ class InternshipService
             return null;
         }
         if ($roleType === 'college_admin') {
-            return $this->query('students')->whereIn('dep_id', $this->scopeIds('dep_id'))->whereNull('deleted_at')->pluck('student_id')->map(fn ($id): int => (int) $id)->all();
+            return InternshipRecord::studentIdsByDepartments($this->scopeIds('dep_id'));
         }
         if ($roleType === 'profession_admin') {
-            return $this->query('students')->whereIn('profession_id', $this->scopeIds('profession_id'))->whereNull('deleted_at')->pluck('student_id')->map(fn ($id): int => (int) $id)->all();
+            return InternshipRecord::studentIdsByProfessions($this->scopeIds('profession_id'));
         }
         if ($roleType === 'teacher') {
-            return $this->query('pair')->where('teacher_id', $this->currentTeacherId(false))->where('type', 'internship')->where('status', 'active')->whereNull('deleted_at')->pluck('student_id')->map(fn ($id): int => (int) $id)->all();
+            return InternshipRecord::studentIdsByTeacher((int) $this->currentTeacherId(false));
         }
         if ($roleType === 'student') {
             $studentId = $this->currentStudentId(false);
@@ -1386,16 +1376,7 @@ class InternshipService
             return [];
         }
 
-        return $this->query('pair')
-            ->where('teacher_id', $teacherId)
-            ->where('type', 'internship')
-            ->where('status', 'active')
-            ->whereNull('deleted_at')
-            ->pluck('arrangement_id')
-            ->map(fn ($id): int => (int) $id)
-            ->unique()
-            ->values()
-            ->all();
+        return InternshipRecord::arrangementIdsByTeacher($teacherId);
     }
 
     private function studentArrangementIds(): array
@@ -1405,21 +1386,7 @@ class InternshipService
             return [];
         }
 
-        $applicationIds = $this->query('application')
-            ->where('student_id', $studentId)
-            ->whereNull('deleted_at')
-            ->pluck('arrangement_id')
-            ->map(fn ($id): int => (int) $id)
-            ->all();
-        $pairIds = $this->query('pair')
-            ->where('student_id', $studentId)
-            ->where('type', 'internship')
-            ->whereNull('deleted_at')
-            ->pluck('arrangement_id')
-            ->map(fn ($id): int => (int) $id)
-            ->all();
-
-        return array_values(array_unique(array_merge($applicationIds, $pairIds)));
+        return InternshipRecord::arrangementIdsByStudent($studentId);
     }
 
     private function studentVisibleArrangementIds(): array
@@ -1429,28 +1396,7 @@ class InternshipService
             return [];
         }
 
-        $student = $this->query('students')
-            ->where('student_id', $studentId)
-            ->whereNull('deleted_at')
-            ->first(['dep_id', 'profession_id']);
-        if (!$student) {
-            return [];
-        }
-
-        $query = $this->query('arrangement')
-            ->whereNull('deleted_at')
-            ->whereIn('status', ['enabled', 'wait', 'accept']);
-        $query->where(function ($builder) use ($student): void {
-            $builder->whereNull('dep_id')->orWhere('dep_id', (int) $student->dep_id);
-        });
-        $query->where(function ($builder) use ($student): void {
-            $builder->whereNull('profession_id')->orWhere('profession_id', (int) $student->profession_id);
-        });
-
-        return array_values(array_unique(array_merge(
-            $this->studentArrangementIds(),
-            $query->pluck('id')->map(fn ($id): int => (int) $id)->all()
-        )));
+        return InternshipRecord::visibleArrangementIdsByStudent($studentId);
     }
 
     private function teacherApplicationIds(): array
@@ -1460,35 +1406,17 @@ class InternshipService
             return [];
         }
 
-        return $this->query('student_join_teacher')
-            ->where('teacher_id', $teacherId)
-            ->where('application_type', 'internship')
-            ->whereNull('deleted_at')
-            ->pluck('application_id')
-            ->map(fn ($id): int => (int) $id)
-            ->unique()
-            ->values()
-            ->all();
+        return InternshipRecord::applicationIdsByTeacher($teacherId);
     }
 
     private function enterpriseBaseIds(): array
     {
-        return $this->query('base')
-            ->whereIn('company_id', $this->scopeIds('company_id'))
-            ->whereNull('deleted_at')
-            ->pluck('id')
-            ->map(fn ($id): int => (int) $id)
-            ->all();
+        return InternshipRecord::baseIdsByCompanies($this->scopeIds('company_id'));
     }
 
     private function enterpriseArrangementIds(): array
     {
-        return $this->query('arrangement')
-            ->whereIn('base_id', $this->enterpriseBaseIds())
-            ->whereNull('deleted_at')
-            ->pluck('id')
-            ->map(fn ($id): int => (int) $id)
-            ->all();
+        return InternshipRecord::arrangementIdsByBases($this->enterpriseBaseIds());
     }
 
     private function whereInOrDeny(mixed $query, string $column, array $ids): mixed
@@ -1569,39 +1497,32 @@ class InternshipService
 
     private function currentTeacherId(bool $required): ?int
     {
-        $teacherId = $this->query('teacher_list')
-            ->where('user_id', CurrentContext::userId())
-            ->whereNull('deleted_at')
-            ->value('teacher_id');
+        $teacherId = InternshipRecord::teacherIdByUser((int) CurrentContext::userId());
         if (!$teacherId && $required) {
             throw new RuntimeException('当前账号未绑定教师档案');
         }
 
-        return $teacherId ? (int) $teacherId : null;
+        return $teacherId;
     }
 
     private function currentStudentId(bool $required): ?int
     {
-        $studentId = $this->query('students')
-            ->where('user_id', CurrentContext::userId())
-            ->whereNull('deleted_at')
-            ->value('student_id');
+        $studentId = InternshipRecord::studentIdByUser((int) CurrentContext::userId());
         if (!$studentId && $required) {
             throw new RuntimeException('当前账号未绑定学生档案');
         }
 
-        return $studentId ? (int) $studentId : null;
+        return $studentId;
     }
 
     private function studentDepId(int $studentId): ?int
     {
-        $depId = $this->query('students')->where('student_id', $studentId)->value('dep_id');
-        return $depId ? (int) $depId : null;
+        return InternshipRecord::studentDepId($studentId);
     }
 
     private function row(string $table, int $id): object
     {
-        $row = $this->query($table)->where('id', $id)->whereNull('deleted_at')->first();
+        $row = InternshipRecord::activeRowById($table, $id);
         if (!$row) {
             throw new RuntimeException('数据不存在');
         }
@@ -1627,7 +1548,7 @@ class InternshipService
         }
         $uuid = $this->nullableString($request, 'uuid', 36);
         if ($uuid) {
-            $id = (int) ($this->query($table)->where('uuid', $uuid)->value('id') ?: 0);
+            $id = InternshipRecord::idByUuid($table, $uuid);
         }
 
         return $id ?: null;
@@ -1807,14 +1728,7 @@ class InternshipService
             return;
         }
 
-        $applicationIds = $this->query('student_join_teacher')
-            ->where('teacher_id', $teacherId)
-            ->where('application_type', 'internship')
-            ->whereNull('deleted_at')
-            ->pluck('application_id')
-            ->map(fn ($id): int => (int) $id)
-            ->all();
-        $this->whereInOrDeny($query, $applicationColumn, $applicationIds);
+        $this->whereInOrDeny($query, $applicationColumn, InternshipRecord::applicationIdsByJoinTeacher($teacherId));
     }
 
     private function applyPairTeacherFilter(mixed $query, Request $request, string $studentColumn, string $arrangementColumn): void
@@ -1824,17 +1738,12 @@ class InternshipService
             return;
         }
 
-        $pairs = $this->query('pair')
-            ->where('teacher_id', $teacherId)
-            ->where('type', 'internship')
-            ->where('status', 'active')
-            ->whereNull('deleted_at')
-            ->get(['student_id', 'arrangement_id']);
+        $pairs = InternshipRecord::pairsByTeacher($teacherId);
         $studentIds = [];
         $arrangementIds = [];
         foreach ($pairs as $pair) {
-            $studentIds[] = (int) $pair->student_id;
-            $arrangementIds[] = (int) $pair->arrangement_id;
+            $studentIds[] = (int) $pair['student_id'];
+            $arrangementIds[] = (int) $pair['arrangement_id'];
         }
 
         $this->whereInOrDeny($query, $studentColumn, $studentIds);
@@ -1845,7 +1754,7 @@ class InternshipService
     {
         $items = [];
         foreach ($rows as $row) {
-            $item = (array) $row;
+            $item = method_exists($row, 'getAttributes') ? $row->getAttributes() : (array) $row;
             foreach (['materials', 'plan_content', 'form_schema', 'fee_detail', 'items'] as $jsonField) {
                 if (isset($item[$jsonField]) && is_string($item[$jsonField])) {
                     $decoded = json_decode($item[$jsonField], true);
