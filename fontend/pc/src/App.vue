@@ -227,7 +227,6 @@
             <div class="content-head">
               <div>
                 <h1>{{ win.module.name }}</h1>
-                <p>{{ moduleDescription(win) }}</p>
               </div>
               <div class="head-actions">
                 <el-button :icon="BookOpen" @click="openGuide(win)">
@@ -800,32 +799,39 @@
                 <div v-else-if="win.module.id === 'config' && win.panel === 'operationGuides'" class="admin-panel guide-admin-panel">
                   <div class="admin-toolbar">
                     <el-button type="primary" :icon="Plus" :disabled="!hasPermission('guide:save')" @click="openGuideAdminDialog()">
-                      新增
+                      新增说明
                     </el-button>
                     <el-button :icon="RefreshCw" :loading="guideAdminState.loading" @click="loadGuideAdminItems(true)">
                       读取
                     </el-button>
                   </div>
-                  <el-table :data="guideAdminState.items" height="100%" stripe>
-                    <el-table-column label="模块" width="150">
-                      <template #default="{ row }">
-                        {{ guideModuleName(row.module_key) }}
-                      </template>
-                    </el-table-column>
-                    <el-table-column prop="title" label="标题" min-width="180" />
-                    <el-table-column prop="sort" label="排序" width="90" />
-                    <el-table-column prop="updated_at" label="更新时间" width="168" />
-                    <el-table-column label="操作" width="150" fixed="right">
-                      <template #default="{ row }">
-                        <el-button link type="primary" :disabled="!hasPermission('guide:save')" @click="openGuideAdminDialog(row)">
-                          编辑
-                        </el-button>
-                        <el-button link type="danger" :disabled="!hasPermission('guide:delete')" @click="deleteGuideAdminItem(row)">
-                          删除
-                        </el-button>
-                      </template>
-                    </el-table-column>
-                  </el-table>
+                  <section class="guide-admin-list">
+                    <el-table :data="guideAdminState.items" height="100%" stripe>
+                      <el-table-column label="模块" width="150">
+                        <template #default="{ row }">
+                          {{ guideModuleName(row.module_key) }}
+                        </template>
+                      </el-table-column>
+                      <el-table-column prop="title" label="标题" min-width="180" />
+                      <el-table-column label="内容摘要" min-width="260">
+                        <template #default="{ row }">
+                          <span class="guide-content-preview">{{ guideContentPreview(row.content) }}</span>
+                        </template>
+                      </el-table-column>
+                      <el-table-column prop="sort" label="排序" width="90" />
+                      <el-table-column prop="updated_at" label="更新时间" width="168" />
+                      <el-table-column label="操作" width="150" fixed="right">
+                        <template #default="{ row }">
+                          <el-button link type="primary" :disabled="!hasPermission('guide:save')" @click="openGuideAdminDialog(row)">
+                            编辑
+                          </el-button>
+                          <el-button link type="danger" :disabled="!hasPermission('guide:delete')" @click="deleteGuideAdminItem(row)">
+                            删除
+                          </el-button>
+                        </template>
+                      </el-table-column>
+                    </el-table>
+                  </section>
                   <small v-if="guideAdminState.message">{{ guideAdminState.message }}</small>
 
                   <div v-if="guideAdminState.dialogVisible" class="operation-mask" @click.self="closeGuideAdminDialog">
@@ -1349,9 +1355,6 @@
                         <el-button :icon="RefreshCw" :loading="statState.loading" @click="resetStatFilters">
                           重置
                         </el-button>
-                        <el-button :icon="Download" :disabled="!statState.rows.length" @click="exportStatReport">
-                          导出
-                        </el-button>
                       </div>
                     </div>
                     <el-alert
@@ -1592,7 +1595,6 @@ import {
   ChartColumn,
   CheckCircle2,
   ClipboardList,
-  Download,
   Edit3,
   FileClock,
   FileText,
@@ -2490,31 +2492,6 @@ function studentPanelFields(panel) {
   return fields[panel] || [];
 }
 
-function moduleDescription(win) {
-  if (win.module.id === 'internship') {
-    if (isStudentRole.value) {
-      return '当前学生本人的实习申请、签到、日志、报告、成绩和归档材料。';
-    }
-    if (isTeacherRole.value) {
-      return '指导学生的申请审核、日志评阅、报告评阅和过程记录。';
-    }
-    return '实习安排、申请审核、签到、日志、报告、成绩和材料归档。';
-  }
-  if (win.module.id === 'file') {
-    return '学校文件、上传记录、设备信息和业务关联管理。';
-  }
-  if (win.module.id === 'config') {
-    return '菜单、角色、组织范围、基础档案和系统连接配置。';
-  }
-  if (win.module.id === 'stat') {
-    return '按学院、专业、届次和实践环节查看统计数据。';
-  }
-  if (win.module.id === 'log') {
-    return '查看系统操作记录和关键业务留痕。';
-  }
-  return '流程确认后接入对应业务功能。';
-}
-
 function sidebarItems(win) {
   if (win.module.id === 'file') {
     return [{ key: 'fileManage', name: '文件列表' }];
@@ -2644,6 +2621,17 @@ function emptyGuideForm() {
 
 function guideModuleName(moduleKey) {
   return modules.find(item => item.id === moduleKey)?.name || moduleKey || '-';
+}
+
+function guideContentPreview(content) {
+  const text = stripHtml(content).replace(/\s+/g, ' ').trim();
+  return text ? text.slice(0, 96) : '-';
+}
+
+function stripHtml(content) {
+  const div = document.createElement('div');
+  div.innerHTML = content || '';
+  return div.textContent || div.innerText || '';
 }
 
 function guideTemplateHtml(title = '操作说明') {

@@ -121,7 +121,7 @@ const props = defineProps({
   },
   exportable: {
     type: Boolean,
-    default: true,
+    default: false,
   },
   loading: {
     type: Boolean,

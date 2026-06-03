@@ -366,9 +366,10 @@ a {
 
 .content-head {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 18px;
+  min-height: 36px;
 }
 
 .content-head h1 {
@@ -435,6 +436,7 @@ a {
   display: grid;
   grid-template-rows: minmax(0, 1fr);
   overflow: hidden;
+  background: #fff;
 }
 
 .module-empty-state {
@@ -953,10 +955,28 @@ a {
   grid-template-rows: auto minmax(0, 1fr) auto;
 }
 
+.guide-admin-list {
+  min-height: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  overflow: hidden;
+  background: #fff;
+}
+
+.guide-content-preview {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+}
+
 .guide-edit-dialog {
   width: min(860px, calc(100vw - 48px));
-  max-height: min(720px, calc(100vh - 72px));
-  grid-template-rows: auto auto auto minmax(260px, 1fr) auto;
+  max-height: min(680px, calc(100vh - 48px));
+  grid-template-rows: auto auto auto minmax(220px, 1fr) auto;
 }
 
 .guide-admin-fields {
@@ -1125,7 +1145,7 @@ a {
 }
 
 .internship-overview-work {
-  grid-template-rows: auto minmax(260px, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
 }
 
 .overview-switch {
@@ -1186,7 +1206,7 @@ a {
 }
 
 .overview-card-single {
-  min-height: 260px;
+  min-height: 0;
 }
 
 .internship-card-list {
