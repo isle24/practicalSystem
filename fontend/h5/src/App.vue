@@ -183,7 +183,13 @@
               :title="row.arrangement_title"
               :label="`${row.student_name || '-'} / ${statusText(row.teacher_status)} / ${statusText(row.admin_status)}`"
               :value="statusText(row.status)"
-            />
+            >
+              <template #right-icon>
+                <div class="cell-actions">
+                  <button @click.stop="openTimelineDialog('application', row)">记录</button>
+                </div>
+              </template>
+            </van-cell>
           </section>
         </template>
 
@@ -245,6 +251,48 @@
               提交报告
             </van-button>
           </section>
+
+          <section class="mobile-card">
+            <header>
+              <FileClock :size="20" />
+              <strong>日志记录</strong>
+            </header>
+            <van-cell
+              v-for="row in internship.lists.journals.items"
+              :key="row.id"
+              :title="row.title"
+              :label="row.date || row.created_at || '-'"
+              :value="statusText(row.status)"
+            >
+              <template #right-icon>
+                <div class="cell-actions">
+                  <button @click.stop="openTimelineDialog('journal', row)">记录</button>
+                </div>
+              </template>
+            </van-cell>
+            <div v-if="!internship.lists.journals.items.length" class="mobile-empty">暂无日志记录</div>
+          </section>
+
+          <section class="mobile-card">
+            <header>
+              <FileText :size="20" />
+              <strong>报告记录</strong>
+            </header>
+            <van-cell
+              v-for="row in internship.lists.reports.items"
+              :key="row.id"
+              :title="row.title"
+              :label="row.created_at || '-'"
+              :value="statusText(row.status)"
+            >
+              <template #right-icon>
+                <div class="cell-actions">
+                  <button @click.stop="openTimelineDialog('report', row)">记录</button>
+                </div>
+              </template>
+            </van-cell>
+            <div v-if="!internship.lists.reports.items.length" class="mobile-empty">暂无报告记录</div>
+          </section>
         </template>
 
         <template v-if="canReviewInternship && internship.panel === 'review'">
@@ -277,6 +325,7 @@
             >
               <template #right-icon>
                 <div class="cell-actions">
+                  <button @click.stop="openTimelineDialog('application', row)">记录</button>
                   <button @click.stop="openReviewDialog('application', row, 'accept')">通过</button>
                   <button @click.stop="openReviewDialog('application', row, 'modify')">退回</button>
                 </div>
@@ -298,6 +347,7 @@
             >
               <template #right-icon>
                 <div class="cell-actions">
+                  <button @click.stop="openTimelineDialog('journal', row)">记录</button>
                   <button @click.stop="openReviewDialog('journal', row, 'accept')">通过</button>
                   <button @click.stop="openReviewDialog('journal', row, 'modify')">退回</button>
                 </div>
@@ -319,6 +369,7 @@
             >
               <template #right-icon>
                 <div class="cell-actions">
+                  <button @click.stop="openTimelineDialog('report', row)">记录</button>
                   <button @click.stop="openReviewDialog('report', row, 'accept')">通过</button>
                   <button @click.stop="openReviewDialog('report', row, 'modify')">退回</button>
                 </div>
@@ -481,6 +532,47 @@
         </div>
       </section>
     </van-popup>
+
+    <van-popup
+      v-model:show="internship.timelineDialog.visible"
+      round
+      position="bottom"
+      safe-area-inset-bottom
+    >
+      <section class="timeline-sheet">
+        <header>
+          <strong>{{ internship.timelineDialog.title }}</strong>
+          <span>{{ internship.timelineDialog.subtitle }}</span>
+        </header>
+        <div class="timeline-list">
+          <div v-if="internship.timelineDialog.loading" class="timeline-empty">正在读取流程记录...</div>
+          <template v-else-if="internship.timelineDialog.items.length">
+            <section
+              v-for="(item, index) in internship.timelineDialog.items"
+              :key="timelineItemKey(item, index)"
+              class="timeline-entry"
+            >
+              <span />
+              <div>
+                <strong>{{ timelineTitle(item) }}</strong>
+                <small>{{ timelineTime(item) }}</small>
+                <p>{{ timelineContent(item) }}</p>
+                <p v-for="review in item.reviews || []" :key="review.id" class="timeline-review">
+                  审核意见：{{ review.opinion || '-' }}<template v-if="review.score !== null && review.score !== undefined">，评分：{{ review.score }}</template>
+                </p>
+                <p v-if="item.review" class="timeline-review">
+                  审核意见：{{ item.review.opinion || '-' }}<template v-if="item.review.score !== null && item.review.score !== undefined">，评分：{{ item.review.score }}</template>
+                </p>
+              </div>
+            </section>
+          </template>
+          <div v-else class="timeline-empty">{{ internship.timelineDialog.message || '暂无流程记录' }}</div>
+        </div>
+        <div class="sheet-actions single">
+          <button type="button" @click="closeTimelineDialog">关闭</button>
+        </div>
+      </section>
+    </van-popup>
   </main>
 </template>
 
@@ -517,6 +609,7 @@ import {
   fetchInternshipPairs,
   fetchInternshipReports,
   fetchInternshipScores,
+  fetchInternshipTimeline,
   reviewInternshipApplication,
   reviewInternshipJournal,
   reviewInternshipReport,
@@ -607,6 +700,15 @@ const internship = reactive({
     status: 'accept',
     row: null,
     reason: '',
+  },
+  timelineDialog: {
+    visible: false,
+    loading: false,
+    entity: 'application',
+    title: '',
+    subtitle: '',
+    items: [],
+    message: '',
   },
 });
 
@@ -901,6 +1003,15 @@ async function loadInternshipPanelData() {
     setPagedList('applications', await fetchInternshipApplications(params));
     return;
   }
+  if (internship.panel === 'submit') {
+    const [journals, reports] = await Promise.all([
+      fetchInternshipJournals(params),
+      fetchInternshipReports(params),
+    ]);
+    setPagedList('journals', journals);
+    setPagedList('reports', reports);
+    return;
+  }
   if (internship.panel === 'review') {
     const [applications, journals, reports] = await Promise.all([
       fetchInternshipApplications(params),
@@ -1042,6 +1153,28 @@ function closeReviewDialog() {
   internship.reviewDialog.row = null;
 }
 
+async function openTimelineDialog(entity, row) {
+  internship.timelineDialog.visible = true;
+  internship.timelineDialog.loading = true;
+  internship.timelineDialog.entity = entity;
+  internship.timelineDialog.title = `${reviewEntityName(entity)}流程记录`;
+  internship.timelineDialog.subtitle = row.title || row.arrangement_title || row.student_name || String(row.id);
+  internship.timelineDialog.items = [];
+  internship.timelineDialog.message = '';
+  try {
+    const data = await fetchInternshipTimeline({ entity, id: row.id });
+    internship.timelineDialog.items = data.items || [];
+  } catch (error) {
+    internship.timelineDialog.message = error.message;
+  } finally {
+    internship.timelineDialog.loading = false;
+  }
+}
+
+function closeTimelineDialog() {
+  internship.timelineDialog.visible = false;
+}
+
 async function confirmReviewDialog() {
   const { entity, status, row } = internship.reviewDialog;
   if (!row?.id) {
@@ -1152,6 +1285,39 @@ function reviewEntityName(entity) {
     report: '实习报告',
   };
   return names[entity] || '审核事项';
+}
+
+function workflowActionText(action) {
+  const names = {
+    submit: '提交',
+    review: '审核',
+    teacher_review: '教师审核',
+    admin_review: '管理员审核',
+    modify_after_accept: '通过后修改',
+  };
+  return names[action] || action || '记录';
+}
+
+function timelineTitle(item) {
+  if (item.record) {
+    return `${workflowActionText(item.record.action)}：${statusText(item.record.from_status)} -> ${statusText(item.record.to_status)}`;
+  }
+  return `审核：${statusText(item.review?.status)}`;
+}
+
+function timelineContent(item) {
+  if (item.record) {
+    return item.record.content || item.record.opinion || '-';
+  }
+  return item.review?.opinion || '-';
+}
+
+function timelineTime(item) {
+  return item.created_at || item.record?.created_at || item.review?.created_at || '-';
+}
+
+function timelineItemKey(item, index) {
+  return `${item.kind || 'timeline'}-${item.record?.id || item.review?.id || index}`;
 }
 
 const reviewDialogTitle = computed(() => {

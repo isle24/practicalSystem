@@ -91,6 +91,10 @@ export function fetchInternshipReports(params = {}) {
   return internshipList('reports', params);
 }
 
+export function fetchInternshipTimeline(params = {}) {
+  return internshipList('timeline', params);
+}
+
 export function saveInternshipReport(payload) {
   return internshipPost('save-report', payload);
 }
