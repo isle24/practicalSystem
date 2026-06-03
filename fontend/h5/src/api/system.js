@@ -47,8 +47,28 @@ export function fetchInternshipOptions() {
   return request('/internship/options');
 }
 
+export function fetchInternshipBases(params = {}) {
+  return internshipList('bases', params);
+}
+
+export function saveInternshipBase(payload) {
+  return internshipPost('save-base', payload);
+}
+
+export function fetchInternshipMentors(params = {}) {
+  return internshipList('mentors', params);
+}
+
+export function saveInternshipMentor(payload) {
+  return internshipPost('save-mentor', payload);
+}
+
 export function fetchInternshipArrangements(params = {}) {
   return internshipList('arrangements', params);
+}
+
+export function saveInternshipArrangement(payload) {
+  return internshipPost('save-arrangement', payload);
 }
 
 export function fetchInternshipApplications(params = {}) {
@@ -59,12 +79,24 @@ export function saveInternshipApplication(payload) {
   return internshipPost('save-application', payload);
 }
 
+export function submitInternshipApplication(payload) {
+  return internshipPost('submit-application', payload);
+}
+
 export function reviewInternshipApplication(payload) {
   return internshipPost('review-application', payload);
 }
 
 export function fetchInternshipPairs(params = {}) {
   return internshipList('pairs', params);
+}
+
+export function saveInternshipPair(payload) {
+  return internshipPost('save-pair', payload);
+}
+
+export function removeInternshipPair(payload) {
+  return internshipPost('remove-pair', payload);
 }
 
 export function fetchInternshipSignIns(params = {}) {
@@ -111,6 +143,18 @@ export function fetchInternshipScores(params = {}) {
   return internshipList('scores', params);
 }
 
+export function fetchInternshipStats(params = {}) {
+  return internshipList('stats', params);
+}
+
 export function saveInternshipScore(payload) {
   return internshipPost('save-score', payload);
+}
+
+export function fetchInternshipInsurances(params = {}) {
+  return internshipList('insurances', params);
+}
+
+export function fetchInternshipSafetyLetters(params = {}) {
+  return internshipList('safety-letters', params);
 }

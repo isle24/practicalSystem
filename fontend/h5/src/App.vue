@@ -336,121 +336,85 @@
         </template>
 
         <template v-if="canReviewInternship && internship.panel === 'review'">
-          <section class="mobile-card">
-            <header>
-              <ClipboardList :size="20" />
-              <strong>实习申请</strong>
-            </header>
-            <section class="mobile-list-tools">
-              <input v-model="internship.filters.applications.keyword" placeholder="学生、学号、实习安排" @keyup.enter="reloadInternshipList('applications')">
-              <select v-model="internship.filters.applications.status" @change="reloadInternshipList('applications')">
-                <option value="">全部状态</option>
-                <option value="wait">待审核</option>
-                <option value="accept">已通过</option>
-                <option value="modify">需修改</option>
-              </select>
-              <button type="button" :disabled="internship.loading" @click="reloadInternshipList('applications')">查询</button>
-            </section>
-            <van-cell
-              v-for="row in internship.lists.applications.items"
-              :key="row.id"
-              :title="row.student_name || row.student_num"
-              :label="row.arrangement_title"
-              :value="statusText(row.status)"
+          <section v-if="reviewListTabs.length > 1" class="mobile-list-switch">
+            <button
+              v-for="item in reviewListTabs"
+              :key="item.key"
+              :class="{ active: internship.reviewList === item.key }"
+              @click="switchMobileList('review', item.key)"
             >
-              <template #right-icon>
-                <div class="cell-actions">
-                  <button @click.stop="openTimelineDialog('application', row)">记录</button>
-                  <button v-if="canReviewRow(row)" @click.stop="openReviewDialog('application', row, 'accept')">通过</button>
-                  <button v-if="canReviewRow(row)" @click.stop="openReviewDialog('application', row, 'modify')">退回</button>
-                  <button v-if="row.status === 'accept'" @click.stop="openReopenDialog('application', row)">通过后修改</button>
-                </div>
-              </template>
-            </van-cell>
-            <div v-if="!internship.lists.applications.items.length" class="mobile-empty">暂无实习申请</div>
-            <div class="mobile-list-footer">
-              <span>共 {{ internship.lists.applications.pagination.total || 0 }} 条</span>
-              <button v-if="canLoadMore('applications')" :disabled="internship.loading" @click="loadMoreInternshipList('applications')">
-                加载更多
-              </button>
-            </div>
+              <component :is="item.icon" :size="17" />
+              <span>{{ item.shortTitle }}</span>
+            </button>
           </section>
 
-          <section v-if="isTeacherRole" class="mobile-card">
+          <section v-if="currentReviewListConfig" class="mobile-card">
             <header>
-              <FileClock :size="20" />
-              <strong>日志评阅</strong>
+              <component :is="currentReviewListConfig.icon" :size="20" />
+              <strong>{{ currentReviewListConfig.title }}</strong>
             </header>
-            <section class="mobile-list-tools">
-              <input v-model="internship.filters.journals.keyword" placeholder="学生、标题、内容" @keyup.enter="reloadInternshipList('journals')">
-              <select v-model="internship.filters.journals.status" @change="reloadInternshipList('journals')">
+            <section class="mobile-list-tools" :class="{ compact: !currentReviewListConfig.statusOptions.length }">
+              <input
+                v-model="internship.filters[currentReviewListConfig.key].keyword"
+                :placeholder="currentReviewListConfig.keywordPlaceholder"
+                @keyup.enter="reloadInternshipList(currentReviewListConfig.key)"
+              >
+              <select
+                v-if="currentReviewListConfig.statusOptions.length"
+                v-model="internship.filters[currentReviewListConfig.key].status"
+                @change="reloadInternshipList(currentReviewListConfig.key)"
+              >
                 <option value="">全部状态</option>
-                <option value="wait">待审核</option>
-                <option value="accept">已通过</option>
-                <option value="modify">需修改</option>
+                <option
+                  v-for="option in currentReviewListConfig.statusOptions"
+                  :key="option.value"
+                  :value="option.value"
+                >
+                  {{ option.label }}
+                </option>
               </select>
-              <button type="button" :disabled="internship.loading" @click="reloadInternshipList('journals')">查询</button>
-            </section>
-            <van-cell
-              v-for="row in internship.lists.journals.items"
-              :key="row.id"
-              :title="row.title"
-              :label="`${row.student_name || '-'} / ${row.date || '-'}`"
-              :value="statusText(row.status)"
-            >
-              <template #right-icon>
-                <div class="cell-actions">
-                  <button @click.stop="openTimelineDialog('journal', row)">记录</button>
-                  <button v-if="canReviewRow(row)" @click.stop="openReviewDialog('journal', row, 'accept')">通过</button>
-                  <button v-if="canReviewRow(row)" @click.stop="openReviewDialog('journal', row, 'modify')">退回</button>
-                  <button v-if="row.status === 'accept'" @click.stop="openReopenDialog('journal', row)">通过后修改</button>
-                </div>
-              </template>
-            </van-cell>
-            <div v-if="!internship.lists.journals.items.length" class="mobile-empty">暂无日志记录</div>
-            <div class="mobile-list-footer">
-              <span>共 {{ internship.lists.journals.pagination.total || 0 }} 条</span>
-              <button v-if="canLoadMore('journals')" :disabled="internship.loading" @click="loadMoreInternshipList('journals')">
-                加载更多
+              <button type="button" :disabled="internship.loading" @click="reloadInternshipList(currentReviewListConfig.key)">
+                查询
               </button>
-            </div>
-          </section>
-
-          <section v-if="isTeacherRole" class="mobile-card">
-            <header>
-              <FileText :size="20" />
-              <strong>报告评阅</strong>
-            </header>
-            <section class="mobile-list-tools">
-              <input v-model="internship.filters.reports.keyword" placeholder="学生、标题、内容" @keyup.enter="reloadInternshipList('reports')">
-              <select v-model="internship.filters.reports.status" @change="reloadInternshipList('reports')">
-                <option value="">全部状态</option>
-                <option value="wait">待审核</option>
-                <option value="accept">已通过</option>
-                <option value="modify">需修改</option>
-              </select>
-              <button type="button" :disabled="internship.loading" @click="reloadInternshipList('reports')">查询</button>
             </section>
             <van-cell
-              v-for="row in internship.lists.reports.items"
+              v-for="row in mobileListRows(currentReviewListConfig.key)"
               :key="row.id"
-              :title="row.title"
-              :label="row.student_name || '-'"
-              :value="statusText(row.status)"
+              :title="mobileListTitle(currentReviewListConfig.key, row)"
+              :value="mobileListValue(currentReviewListConfig.key, row)"
             >
+              <template #label>
+                <div class="mobile-cell-meta">
+                  <span
+                    v-for="(fact, index) in mobileListFacts(currentReviewListConfig.key, row)"
+                    :key="`${fact}-${index}`"
+                  >
+                    {{ fact }}
+                  </span>
+                </div>
+              </template>
               <template #right-icon>
-                <div class="cell-actions">
-                  <button @click.stop="openTimelineDialog('report', row)">记录</button>
-                  <button v-if="canReviewRow(row)" @click.stop="openReviewDialog('report', row, 'accept')">通过</button>
-                  <button v-if="canReviewRow(row)" @click.stop="openReviewDialog('report', row, 'modify')">退回</button>
-                  <button v-if="row.status === 'accept'" @click.stop="openReopenDialog('report', row)">通过后修改</button>
+                <div v-if="mobileListActions(currentReviewListConfig.key, row, 'review').length" class="cell-actions">
+                  <button
+                    v-for="action in mobileListActions(currentReviewListConfig.key, row, 'review')"
+                    :key="action.key"
+                    @click.stop="handleMobileListAction(action, row)"
+                  >
+                    {{ action.label }}
+                  </button>
                 </div>
               </template>
             </van-cell>
-            <div v-if="!internship.lists.reports.items.length" class="mobile-empty">暂无报告记录</div>
+            <div v-if="!mobileListRows(currentReviewListConfig.key).length" class="mobile-empty">
+              {{ currentReviewListConfig.emptyText }}
+            </div>
             <div class="mobile-list-footer">
-              <span>共 {{ internship.lists.reports.pagination.total || 0 }} 条</span>
-              <button v-if="canLoadMore('reports')" :disabled="internship.loading" @click="loadMoreInternshipList('reports')">
+              <span>共 {{ listTotal(currentReviewListConfig.key) }} 条</span>
+              <button
+                v-if="canLoadMore(currentReviewListConfig.key)"
+                :disabled="internship.loading"
+                @click="loadMoreInternshipList(currentReviewListConfig.key)"
+              >
                 加载更多
               </button>
             </div>
@@ -507,60 +471,85 @@
         </template>
 
         <template v-if="isAdminRole && internship.panel === 'manage'">
-          <section class="mobile-card">
-            <header>
-              <CalendarCheck :size="20" />
-              <strong>实习安排</strong>
-            </header>
-            <section class="mobile-list-tools">
-              <input v-model="internship.filters.arrangements.keyword" placeholder="安排、学院、专业" @keyup.enter="reloadInternshipList('arrangements')">
-              <select v-model="internship.filters.arrangements.status" @change="reloadInternshipList('arrangements')">
-                <option value="">全部状态</option>
-                <option value="enabled">启用</option>
-                <option value="disabled">停用</option>
-              </select>
-              <button type="button" :disabled="internship.loading" @click="reloadInternshipList('arrangements')">查询</button>
-            </section>
-            <van-cell
-              v-for="row in internship.lists.arrangements.items"
-              :key="row.id"
-              :title="row.title"
-              :label="`${row.semester || '-'} / ${row.dep_name || '全校'}`"
-              :value="statusText(row.status)"
-            />
-            <div v-if="!internship.lists.arrangements.items.length" class="mobile-empty">暂无实习安排</div>
-            <div class="mobile-list-footer">
-              <span>共 {{ internship.lists.arrangements.pagination.total || 0 }} 条</span>
-              <button v-if="canLoadMore('arrangements')" :disabled="internship.loading" @click="loadMoreInternshipList('arrangements')">
-                加载更多
-              </button>
-            </div>
+          <section class="mobile-list-switch multi">
+            <button
+              v-for="item in manageListTabs"
+              :key="item.key"
+              :class="{ active: internship.manageList === item.key }"
+              @click="switchMobileList('manage', item.key)"
+            >
+              <component :is="item.icon" :size="17" />
+              <span>{{ item.shortTitle }}</span>
+            </button>
           </section>
-          <section class="mobile-card">
+
+          <section v-if="currentManageListConfig" class="mobile-card">
             <header>
-              <UsersRound :size="20" />
-              <strong>指导关系</strong>
+              <component :is="currentManageListConfig.icon" :size="20" />
+              <strong>{{ currentManageListConfig.title }}</strong>
             </header>
-            <section class="mobile-list-tools">
-              <input v-model="internship.filters.pairs.keyword" placeholder="学生、学号、教师、安排" @keyup.enter="reloadInternshipList('pairs')">
-              <select v-model="internship.filters.pairs.status" @change="reloadInternshipList('pairs')">
+            <section class="mobile-list-tools" :class="{ compact: !currentManageListConfig.statusOptions.length }">
+              <input
+                v-model="internship.filters[currentManageListConfig.key].keyword"
+                :placeholder="currentManageListConfig.keywordPlaceholder"
+                @keyup.enter="reloadInternshipList(currentManageListConfig.key)"
+              >
+              <select
+                v-if="currentManageListConfig.statusOptions.length"
+                v-model="internship.filters[currentManageListConfig.key].status"
+                @change="reloadInternshipList(currentManageListConfig.key)"
+              >
                 <option value="">全部状态</option>
-                <option value="active">有效</option>
-                <option value="removed">已移除</option>
+                <option
+                  v-for="option in currentManageListConfig.statusOptions"
+                  :key="option.value"
+                  :value="option.value"
+                >
+                  {{ option.label }}
+                </option>
               </select>
-              <button type="button" :disabled="internship.loading" @click="reloadInternshipList('pairs')">查询</button>
+              <button type="button" :disabled="internship.loading" @click="reloadInternshipList(currentManageListConfig.key)">
+                查询
+              </button>
             </section>
             <van-cell
-              v-for="row in internship.lists.pairs.items"
+              v-for="row in mobileListRows(currentManageListConfig.key)"
               :key="row.id"
-              :title="row.student_name"
-              :label="`${row.teacher_name || '-'} / ${row.arrangement_title || '-'}`"
-              :value="statusText(row.status)"
-            />
-            <div v-if="!internship.lists.pairs.items.length" class="mobile-empty">暂无指导关系</div>
+              :title="mobileListTitle(currentManageListConfig.key, row)"
+              :value="mobileListValue(currentManageListConfig.key, row)"
+            >
+              <template #label>
+                <div class="mobile-cell-meta">
+                  <span
+                    v-for="(fact, index) in mobileListFacts(currentManageListConfig.key, row)"
+                    :key="`${fact}-${index}`"
+                  >
+                    {{ fact }}
+                  </span>
+                </div>
+              </template>
+              <template #right-icon>
+                <div v-if="mobileListActions(currentManageListConfig.key, row, 'manage').length" class="cell-actions">
+                  <button
+                    v-for="action in mobileListActions(currentManageListConfig.key, row, 'manage')"
+                    :key="action.key"
+                    @click.stop="handleMobileListAction(action, row)"
+                  >
+                    {{ action.label }}
+                  </button>
+                </div>
+              </template>
+            </van-cell>
+            <div v-if="!mobileListRows(currentManageListConfig.key).length" class="mobile-empty">
+              {{ currentManageListConfig.emptyText }}
+            </div>
             <div class="mobile-list-footer">
-              <span>共 {{ internship.lists.pairs.pagination.total || 0 }} 条</span>
-              <button v-if="canLoadMore('pairs')" :disabled="internship.loading" @click="loadMoreInternshipList('pairs')">
+              <span>共 {{ listTotal(currentManageListConfig.key) }} 条</span>
+              <button
+                v-if="canLoadMore(currentManageListConfig.key)"
+                :disabled="internship.loading"
+                @click="loadMoreInternshipList(currentManageListConfig.key)"
+              >
                 加载更多
               </button>
             </div>
@@ -722,11 +711,13 @@ import { useMobilePermissions } from './composables/useMobilePermissions';
 import {
   fetchInternshipApplications,
   fetchInternshipArrangements,
+  fetchInternshipInsurances,
   fetchInternshipJournals,
   fetchInternshipOptions,
   fetchInternshipOverview,
   fetchInternshipPairs,
   fetchInternshipReports,
+  fetchInternshipSafetyLetters,
   fetchInternshipScores,
   fetchInternshipSignIns,
   fetchInternshipTimeline,
@@ -774,6 +765,8 @@ const internship = reactive({
   loading: false,
   message: '',
   panel: 'workbench',
+  reviewList: 'applications',
+  manageList: 'arrangements',
   overview: emptyInternshipOverview(),
   options: emptyInternshipOptions(),
   lists: {
@@ -784,6 +777,8 @@ const internship = reactive({
     journals: emptyPagedList(),
     reports: emptyPagedList(),
     scores: emptyPagedList(),
+    insurances: emptyPagedList(),
+    safetyLetters: emptyPagedList(),
   },
   filters: {
     arrangements: emptyInternshipFilters(),
@@ -793,6 +788,8 @@ const internship = reactive({
     journals: emptyInternshipFilters(),
     reports: emptyInternshipFilters(),
     scores: emptyInternshipFilters(),
+    insurances: emptyInternshipFilters(),
+    safetyLetters: emptyInternshipFilters(),
   },
   forms: {
     application: {
@@ -854,20 +851,20 @@ const modules = [
   {
     key: 'training',
     title: '实训管理',
-    desc: '保留模块框架，流程待确认',
+    desc: '实训模块入口',
     icon: Workflow,
     theme: 'teal',
     permission: 'training:view',
-    flow: '待确认',
+    flow: '-',
   },
   {
     key: 'lab',
     title: '实验管理',
-    desc: '保留模块框架，流程待确认',
+    desc: '实验模块入口',
     icon: FlaskConical,
     theme: 'green',
     permission: 'lab:view',
-    flow: '待确认',
+    flow: '-',
   },
 ];
 
@@ -1004,6 +1001,128 @@ const internshipPanels = computed(() => {
   }
   return [{ key: 'workbench', name: '概况', icon: Home }];
 });
+const reviewStatusOptions = [
+  { value: 'wait', label: '待审核' },
+  { value: 'accept', label: '已通过' },
+  { value: 'modify', label: '需修改' },
+];
+const mobileListConfigs = computed(() => ({
+  arrangements: {
+    key: 'arrangements',
+    entity: '',
+    title: '实习安排',
+    shortTitle: '安排',
+    icon: CalendarCheck,
+    keywordPlaceholder: '安排、学院、专业',
+    statusOptions: [
+      { value: 'enabled', label: '启用' },
+      { value: 'disabled', label: '停用' },
+    ],
+    emptyText: '暂无实习安排',
+  },
+  applications: {
+    key: 'applications',
+    entity: 'application',
+    title: '实习申请',
+    shortTitle: '申请',
+    icon: ClipboardList,
+    keywordPlaceholder: '学生、学号、实习安排、教师',
+    statusOptions: reviewStatusOptions,
+    emptyText: '暂无实习申请',
+  },
+  pairs: {
+    key: 'pairs',
+    entity: '',
+    title: '指导关系',
+    shortTitle: '关系',
+    icon: UsersRound,
+    keywordPlaceholder: '学生、学号、教师、安排',
+    statusOptions: [
+      { value: 'active', label: '有效' },
+      { value: 'removed', label: '已移除' },
+    ],
+    emptyText: '暂无指导关系',
+  },
+  signIns: {
+    key: 'signIns',
+    entity: '',
+    title: '签到记录',
+    shortTitle: '签到',
+    icon: MapPin,
+    keywordPlaceholder: '学生、学号、安排、地点',
+    statusOptions: [],
+    emptyText: '暂无签到记录',
+  },
+  journals: {
+    key: 'journals',
+    entity: 'journal',
+    title: '日志评阅',
+    shortTitle: '日志',
+    icon: FileClock,
+    keywordPlaceholder: '学生、标题、内容、教师',
+    statusOptions: reviewStatusOptions,
+    emptyText: '暂无日志记录',
+  },
+  reports: {
+    key: 'reports',
+    entity: 'report',
+    title: '报告评阅',
+    shortTitle: '报告',
+    icon: FileText,
+    keywordPlaceholder: '学生、标题、内容、教师',
+    statusOptions: reviewStatusOptions,
+    emptyText: '暂无报告记录',
+  },
+  scores: {
+    key: 'scores',
+    entity: '',
+    title: '实习成绩',
+    shortTitle: '成绩',
+    icon: GraduationCap,
+    keywordPlaceholder: '学生、学号、安排、教师',
+    statusOptions: [],
+    emptyText: '暂无成绩记录',
+  },
+  insurances: {
+    key: 'insurances',
+    entity: '',
+    title: '保险记录',
+    shortTitle: '保险',
+    icon: FileText,
+    keywordPlaceholder: '学生、学号、安排、保单',
+    statusOptions: [],
+    emptyText: '暂无保险记录',
+  },
+  safetyLetters: {
+    key: 'safetyLetters',
+    entity: '',
+    title: '安全承诺',
+    shortTitle: '承诺',
+    icon: CheckCircle2,
+    keywordPlaceholder: '学生、学号、安排',
+    statusOptions: [
+      { value: 'pending', label: '待签署' },
+      { value: 'signed', label: '已签署' },
+    ],
+    emptyText: '暂无安全承诺',
+  },
+}));
+const reviewListTabs = computed(() => {
+  const keys = isTeacherRole.value ? ['applications', 'journals', 'reports'] : ['applications'];
+  return keys.map(getMobileListConfig).filter(Boolean);
+});
+const manageListTabs = computed(() => [
+  'arrangements',
+  'pairs',
+  'signIns',
+  'journals',
+  'reports',
+  'scores',
+  'insurances',
+  'safetyLetters',
+].map(getMobileListConfig).filter(Boolean));
+const currentReviewListConfig = computed(() => getMobileListConfig(internship.reviewList) || reviewListTabs.value[0] || null);
+const currentManageListConfig = computed(() => getMobileListConfig(internship.manageList) || manageListTabs.value[0] || null);
 const internshipSummaries = computed(() => [
   { name: '安排', value: internship.overview.arrangements || 0 },
   { name: '待审', value: internship.overview.applications_waiting || 0 },
@@ -1074,6 +1193,191 @@ function emptyInternshipOptions() {
   };
 }
 
+function getMobileListConfig(key) {
+  return mobileListConfigs.value?.[key] || null;
+}
+
+function normalizeInternshipListViews() {
+  const reviewKeys = reviewListTabs.value.map(item => item.key);
+  if (reviewKeys.length && !reviewKeys.includes(internship.reviewList)) {
+    internship.reviewList = reviewKeys[0];
+  }
+
+  const manageKeys = manageListTabs.value.map(item => item.key);
+  if (manageKeys.length && !manageKeys.includes(internship.manageList)) {
+    internship.manageList = manageKeys[0];
+  }
+}
+
+function mobileListRows(key) {
+  return internship.lists[key]?.items || [];
+}
+
+function listTotal(key) {
+  return internship.lists[key]?.pagination?.total || 0;
+}
+
+function mobileListTitle(key, row) {
+  const student = row.student_name || row.student_num || (row.student_id ? `学生ID ${row.student_id}` : '');
+  const arrangement = row.arrangement_title || (row.arrangement_id ? `安排ID ${row.arrangement_id}` : '');
+  const titles = {
+    arrangements: row.title || row.name || `安排ID ${row.id}`,
+    applications: student || arrangement || `申请ID ${row.id}`,
+    pairs: student || `关系ID ${row.id}`,
+    signIns: student || arrangement || `签到ID ${row.id}`,
+    journals: row.title || student || `日志ID ${row.id}`,
+    reports: row.title || student || `报告ID ${row.id}`,
+    scores: student || `成绩ID ${row.id}`,
+    insurances: student || row.insurance_company || `保险ID ${row.id}`,
+    safetyLetters: student || `承诺ID ${row.id}`,
+  };
+  return titles[key] || row.title || row.name || `记录ID ${row.id}`;
+}
+
+function mobileListValue(key, row) {
+  if (key === 'signIns') {
+    return signTypeText(row.sign_type);
+  }
+  if (key === 'scores') {
+    return row.final_score !== null && row.final_score !== undefined ? `总评 ${row.final_score}` : '-';
+  }
+  if (key === 'insurances') {
+    return row.policy_number || statusText(row.status);
+  }
+  return statusText(row.status);
+}
+
+function mobileListFacts(key, row) {
+  const student = joinFact([row.student_name, row.student_num]);
+  const arrangement = row.arrangement_title || (row.arrangement_id ? `安排ID ${row.arrangement_id}` : '');
+  const facts = {
+    arrangements: [
+      namedFact('学期', row.semester),
+      namedFact('类型', arrangementTypeText(row.type)),
+      namedFact('方式', organizeModeText(row.organize_mode)),
+      namedFact('时间', dateRangeText(row.start_date, row.end_date)),
+      namedFact('范围', joinFact([row.dep_name || '全校', row.profession_name || '全部专业'])),
+    ],
+    applications: [
+      namedFact('学号', row.student_num),
+      namedFact('安排', arrangement),
+      namedFact('学院专业', joinFact([row.dep_name, row.profession_name])),
+      namedFact('教师审核', statusText(row.teacher_status)),
+      namedFact('管理审核', statusText(row.admin_status)),
+      namedFact('提交', row.created_at),
+    ],
+    pairs: [
+      namedFact('学号', row.student_num),
+      namedFact('教师', row.teacher_name || row.teacher_num),
+      namedFact('安排', arrangement),
+      namedFact('创建', row.created_at),
+    ],
+    signIns: [
+      namedFact('学生', student),
+      namedFact('安排', arrangement),
+      namedFact('时间', joinFact([row.date, row.sign_time])),
+      namedFact('地点', row.location),
+    ],
+    journals: [
+      namedFact('学生', student),
+      namedFact('日期', row.date || row.created_at),
+      namedFact('安排', arrangement),
+      namedFact('内容', previewText(row.content, 42)),
+    ],
+    reports: [
+      namedFact('学生', student),
+      namedFact('安排', arrangement),
+      namedFact('提交', row.submitted_at || row.created_at),
+      namedFact('内容', previewText(row.content, 42)),
+    ],
+    scores: [
+      namedFact('安排', arrangement),
+      namedFact('评分人', row.teacher_name || row.teacher_num),
+      namedFact('分项', scoreBreakdownText(row)),
+    ],
+    insurances: [
+      namedFact('学生', student || (row.student_id ? `学生ID ${row.student_id}` : '')),
+      namedFact('安排', arrangement),
+      namedFact('保险公司', row.insurance_company),
+      namedFact('时间', dateRangeText(row.start_date, row.end_date)),
+    ],
+    safetyLetters: [
+      namedFact('学生', student || (row.student_id ? `学生ID ${row.student_id}` : '')),
+      namedFact('安排', arrangement),
+      namedFact('签署', row.signed_at),
+    ],
+  };
+  return (facts[key] || []).filter(Boolean);
+}
+
+function mobileListActions(key, row, context) {
+  const config = getMobileListConfig(key);
+  if (!config?.entity) {
+    return [];
+  }
+
+  const actions = [{ key: 'timeline', label: '记录', type: 'timeline', entity: config.entity }];
+  if (context === 'review') {
+    if (canReviewRow(row)) {
+      actions.push(
+        { key: 'accept', label: '通过', type: 'review', entity: config.entity, status: 'accept' },
+        { key: 'modify', label: '退回', type: 'review', entity: config.entity, status: 'modify' },
+      );
+    }
+    if (row.status === 'accept') {
+      actions.push({ key: 'reopen', label: '通过后修改', type: 'reopen', entity: config.entity });
+    }
+  }
+  return actions;
+}
+
+function handleMobileListAction(action, row) {
+  if (action.type === 'timeline') {
+    openTimelineDialog(action.entity, row);
+    return;
+  }
+  if (action.type === 'reopen') {
+    openReopenDialog(action.entity, row);
+    return;
+  }
+  if (action.type === 'review') {
+    openReviewDialog(action.entity, row, action.status);
+  }
+}
+
+function namedFact(label, value) {
+  const text = String(value ?? '').trim();
+  return text && text !== '-' ? `${label}：${text}` : '';
+}
+
+function joinFact(values) {
+  return values
+    .map(value => String(value ?? '').trim())
+    .filter(Boolean)
+    .join(' / ');
+}
+
+function dateRangeText(start, end) {
+  return joinFact([start, end]);
+}
+
+function previewText(value, length = 40) {
+  const text = String(value || '').replace(/\s+/g, ' ').trim();
+  if (text.length <= length) {
+    return text;
+  }
+  return `${text.slice(0, length)}...`;
+}
+
+function scoreBreakdownText(row) {
+  return [
+    `签到 ${row.sign_in_score ?? '-'}`,
+    `日志 ${row.journal_score ?? '-'}`,
+    `报告 ${row.report_score ?? '-'}`,
+    `企业 ${row.enterprise_score ?? '-'}`,
+  ].join(' / ');
+}
+
 function setPagedList(key, data, append = false) {
   const items = data.items || [];
   internship.lists[key].items = append ? [...internship.lists[key].items, ...items] : items;
@@ -1106,6 +1410,8 @@ function internshipFetcher(key) {
     journals: fetchInternshipJournals,
     reports: fetchInternshipReports,
     scores: fetchInternshipScores,
+    insurances: fetchInternshipInsurances,
+    safetyLetters: fetchInternshipSafetyLetters,
   };
   return fetchers[key] || null;
 }
@@ -1188,6 +1494,7 @@ async function loadInternship() {
       ...(options || {}),
     };
     applyDefaultInternshipSelection();
+    normalizeInternshipListViews();
     await loadInternshipPanelData();
   } catch (error) {
     internship.message = error.message;
@@ -1217,11 +1524,7 @@ async function loadInternshipPanelData() {
     return;
   }
   if (internship.panel === 'review') {
-    await Promise.all([
-      loadInternshipList('applications'),
-      loadInternshipList('journals'),
-      loadInternshipList('reports'),
-    ]);
+    await loadInternshipList(currentReviewListConfig.value?.key || 'applications');
     return;
   }
   if (internship.panel === 'score') {
@@ -1238,17 +1541,23 @@ async function loadInternshipPanelData() {
     return;
   }
   if (internship.panel === 'manage') {
-    await Promise.all([
-      loadInternshipList('arrangements'),
-      loadInternshipList('applications'),
-      loadInternshipList('pairs'),
-    ]);
+    await loadInternshipList(currentManageListConfig.value?.key || 'arrangements');
   }
 }
 
 function switchInternshipPanel(panel) {
   internship.panel = panel;
+  normalizeInternshipListViews();
   loadInternship();
+}
+
+async function switchMobileList(type, key) {
+  if (type === 'review') {
+    internship.reviewList = key;
+  } else {
+    internship.manageList = key;
+  }
+  await reloadInternshipList(key);
 }
 
 async function submitApplication() {
@@ -1659,6 +1968,27 @@ function numericOrNull(value) {
   return value === '' || value === null || value === undefined ? null : Number(value);
 }
 
+function arrangementTypeText(value) {
+  const names = {
+    cognition_internal: '认知校内',
+    cognition_external: '认知校外',
+    major_internal: '专业校内',
+    major_external: '专业校外',
+    production: '生产实习',
+    graduation: '毕业实习',
+  };
+  return names[value] || value || '-';
+}
+
+function organizeModeText(value) {
+  const names = {
+    centralized: '集中',
+    distributed: '分散',
+    autonomous: '自主',
+  };
+  return names[value] || value || '-';
+}
+
 function signTypeText(value) {
   const names = {
     gps: '定位',
@@ -1674,12 +2004,15 @@ function statusText(value) {
     wait: '待审核',
     accept: '已通过',
     modify: '需修改',
+    skipped: '跳过',
     enabled: '启用',
     disabled: '停用',
     pending: '待处理',
     active: '有效',
     removed: '已移除',
     signed: '已签署',
+    published: '已发布',
+    confirmed: '已确认',
   };
   return names[value] || value || '-';
 }
@@ -1729,6 +2062,7 @@ watch(roleType, () => {
   if (!panels.includes(internship.panel)) {
     internship.panel = panels[0] || 'workbench';
   }
+  normalizeInternshipListViews();
 });
 
 onMounted(async () => {

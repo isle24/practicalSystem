@@ -328,6 +328,43 @@ input {
   margin-bottom: 12px;
 }
 
+.mobile-list-switch {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.mobile-list-switch button {
+  flex: 0 0 auto;
+  min-width: 78px;
+  min-height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  color: var(--muted);
+  background: #fff;
+}
+
+.mobile-list-switch.multi button {
+  min-width: 70px;
+}
+
+.mobile-list-switch button.active {
+  color: var(--primary);
+  border-color: #bfd8f4;
+  background: var(--primary-soft);
+}
+
+.mobile-list-switch span {
+  font-size: 12px;
+  white-space: nowrap;
+}
+
 .mobile-card {
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -365,6 +402,10 @@ input {
 }
 
 .mobile-list-tools:has(> button:nth-child(2):last-child) {
+  grid-template-columns: minmax(0, 1fr) 58px;
+}
+
+.mobile-list-tools.compact {
   grid-template-columns: minmax(0, 1fr) 58px;
 }
 
@@ -447,7 +488,7 @@ input {
   flex-wrap: wrap;
   gap: 6px;
   padding-left: 8px;
-  max-width: 174px;
+  max-width: 148px;
 }
 
 .cell-actions button {
@@ -457,6 +498,21 @@ input {
   padding: 0 8px;
   color: var(--primary);
   background: #fff;
+}
+
+.mobile-cell-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  padding-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.mobile-cell-meta span {
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
 
 .mobile-empty {
