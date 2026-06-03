@@ -47,53 +47,19 @@ class InternshipService
     {
         $this->requirePermission('internship:view');
 
-        return [
-            'arrangements' => (int) $this->applyArrangementScope($this->query('arrangement')->whereNull('deleted_at'))->count(),
-            'applications_waiting' => (int) $this->applyApplicationScope($this->query('application')->whereNull('deleted_at')->where('status', 'wait'))->count(),
-            'active_pairs' => (int) $this->applyStudentScope($this->query('pair')->where('type', 'internship')->where('status', 'active')->whereNull('deleted_at'))->count(),
-            'journals_waiting' => (int) $this->applyStudentScope($this->query('journal')->where('entity_type', 'internship')->where('status', 'wait')->whereNull('deleted_at'))->count(),
-            'reports_waiting' => (int) $this->applyStudentScope($this->query('report')->where('status', 'wait')->whereNull('deleted_at'))->count(),
-            'today_sign_ins' => (int) $this->applyStudentScope($this->query('sign_in')->where('entity_type', 'internship')->where('date', date('Y-m-d'))->whereNull('deleted_at'))->count(),
-        ];
+        return InternshipRecord::overviewRows($this->scopeContext(), date('Y-m-d'));
     }
 
     public function options(Request $request): array
     {
         $this->requirePermission('internship:view');
-        $departments = $this->query('department')->where('flag', 'on')->whereNull('deleted_at');
-        $grades = $this->query('grade_list')->where('flag', 'on')->whereNull('deleted_at');
-        $professions = $this->query('profession')->where('flag', 'on')->whereNull('deleted_at');
-        $classes = $this->query('class')->where('flag', 'on')->whereNull('deleted_at');
-        $companies = $this->query('companies')->where('flag', 'on')->whereNull('deleted_at');
-        $teachers = $this->query('teacher_list')->where('status', 'enabled')->whereNull('deleted_at');
-        $students = $this->query('students')->where('status', 'enabled')->whereNull('deleted_at');
 
-        $this->applyOptionScope($departments, 'dep_id', null);
-        $this->applyOptionScope($grades, 'dep_id', null);
-        $this->applyOptionScope($professions, 'dep_id', 'profession_id');
-        $this->applyOptionScope($classes, 'dep_id', 'profession_id');
-        $this->applyOptionScope($teachers, 'dep_id', 'profession_id');
-        $this->applyCompanyScope($companies, 'company_id');
-        $this->applyStudentScope($students, 'students.student_id');
-        if ($this->isTeacher()) {
-            $this->whereInOrDeny($teachers, 'teacher_id', [$this->currentTeacherId(false)]);
-        }
-
-        return [
+        return array_merge([
             'types' => self::ARRANGEMENT_TYPES,
             'organize_modes' => self::ORGANIZE_MODES,
-            'departments' => $this->rows($departments->orderBy('sort')->get(['dep_id', 'dep_name', 'dep_code'])),
-            'grades' => $this->rows($grades->orderBy('sort')->get(['grade_id', 'grade_name', 'dep_id'])),
-            'professions' => $this->rows($professions->orderBy('sort')->get(['profession_id', 'profession_name', 'profession_code', 'dep_id'])),
-            'classes' => $this->rows($classes->orderBy('sort')->get(['class_id', 'class_name', 'class_num', 'dep_id', 'profession_id', 'grade_id'])),
-            'companies' => $this->rows($companies->orderBy('company_id')->get(['company_id', 'company_name', 'contact_name', 'contact_mobile'])),
-            'teachers' => $this->rows($teachers->orderBy('teacher_id')->get(['teacher_id', 'teacher_name', 'teacher_num', 'dep_id', 'profession_id'])),
-            'students' => $this->rows($students->orderBy('student_id')->get(['student_id', 'name', 'student_num', 'grade_id', 'dep_id', 'profession_id', 'class_id'])),
-            'bases' => $this->rows($this->applyBaseScope($this->query('base')->where('base.status', 'enabled')->whereNull('base.deleted_at'))->orderBy('base.id')->get(['base.id', 'base.name', 'base.company_id', 'base.dep_id'])),
-            'arrangements' => $this->rows($this->applyArrangementScope($this->query('arrangement')->whereNull('deleted_at'))->orderByDesc('id')->get(['id', 'uuid', 'title', 'name', 'type', 'organize_mode', 'semester', 'dep_id', 'profession_id', 'status'])),
-            'report_templates' => $this->rows($this->query('report_template')->where('status', 'enabled')->whereNull('deleted_at')->orderBy('id')->get(['id', 'uuid', 'name', 'code', 'version', 'online_enabled'])),
+        ], InternshipRecord::optionRows($this->scopeContext()), [
             'review_rules' => self::REVIEW_OPINION_RULES,
-        ];
+        ]);
     }
 
     public function bases(Request $request): array
@@ -1145,6 +1111,37 @@ class InternshipService
                 'page_size' => $pageSize,
                 'total' => $total,
             ],
+        ];
+    }
+
+    private function scopeContext(): array
+    {
+        $roleType = CurrentContext::roleType();
+        $depIds = $this->scopeIds('dep_id');
+        $professionIds = $this->scopeIds('profession_id');
+        $companyIds = $this->scopeIds('company_id');
+
+        return [
+            'role_type' => $roleType,
+            'dep_ids' => $depIds,
+            'profession_ids' => $professionIds,
+            'profession_dep_ids' => $this->professionDepIds($professionIds),
+            'company_ids' => $companyIds,
+            'teacher_id' => $this->currentTeacherId(false),
+            'student_id' => $this->currentStudentId(false),
+            'visible_student_ids' => $this->visibleStudentIds(),
+            'visible_arrangement_ids' => match ($roleType) {
+                'teacher' => $this->teacherArrangementIds(),
+                'student' => $this->studentVisibleArrangementIds(),
+                default => [],
+            },
+            'owned_arrangement_ids' => match ($roleType) {
+                'student' => $this->studentArrangementIds(),
+                'enterprise' => $this->enterpriseArrangementIds(),
+                default => [],
+            },
+            'application_ids' => $roleType === 'teacher' ? $this->teacherApplicationIds() : [],
+            'base_ids' => $roleType === 'enterprise' ? $this->enterpriseBaseIds() : [],
         ];
     }
 

@@ -4,6 +4,45 @@ namespace app\model\channel;
 
 class InternshipRecord extends TableRecord
 {
+    public static function overviewRows(array $scope, string $today): array
+    {
+        return [
+            'arrangements' => (int) self::applyArrangementScope(self::queryTable('arrangement')->whereNull('deleted_at'), $scope)->count(),
+            'applications_waiting' => (int) self::applyApplicationScope(self::queryTable('application')->whereNull('deleted_at')->where('status', 'wait'), $scope)->count(),
+            'active_pairs' => (int) self::applyStudentScope(self::queryTable('pair')->where('type', 'internship')->where('status', 'active')->whereNull('deleted_at'), $scope, 'pair.student_id')->count(),
+            'journals_waiting' => (int) self::applyStudentScope(self::queryTable('journal')->where('entity_type', 'internship')->where('status', 'wait')->whereNull('deleted_at'), $scope, 'journal.student_id')->count(),
+            'reports_waiting' => (int) self::applyStudentScope(self::queryTable('report')->where('status', 'wait')->whereNull('deleted_at'), $scope, 'report.student_id')->count(),
+            'today_sign_ins' => (int) self::applyStudentScope(self::queryTable('sign_in')->where('entity_type', 'internship')->where('date', $today)->whereNull('deleted_at'), $scope, 'sign_in.student_id')->count(),
+        ];
+    }
+
+    public static function optionRows(array $scope): array
+    {
+        $departments = self::applyOptionScope(self::queryTable('department')->where('flag', 'on')->whereNull('deleted_at'), $scope, 'dep_id', null);
+        $grades = self::applyOptionScope(self::queryTable('grade_list')->where('flag', 'on')->whereNull('deleted_at'), $scope, 'dep_id', null);
+        $professions = self::applyOptionScope(self::queryTable('profession')->where('flag', 'on')->whereNull('deleted_at'), $scope, 'dep_id', 'profession_id');
+        $classes = self::applyOptionScope(self::queryTable('class')->where('flag', 'on')->whereNull('deleted_at'), $scope, 'dep_id', 'profession_id');
+        $companies = self::applyCompanyScope(self::queryTable('companies')->where('flag', 'on')->whereNull('deleted_at'), $scope, 'company_id');
+        $teachers = self::applyOptionScope(self::queryTable('teacher_list')->where('status', 'enabled')->whereNull('deleted_at'), $scope, 'dep_id', 'profession_id');
+        if (($scope['role_type'] ?? '') === 'teacher') {
+            self::whereInOrDeny($teachers, 'teacher_id', [(int) ($scope['teacher_id'] ?? 0)]);
+        }
+        $students = self::applyStudentScope(self::queryTable('students')->where('status', 'enabled')->whereNull('deleted_at'), $scope, 'students.student_id');
+
+        return [
+            'departments' => self::rows($departments->orderBy('sort')->get(['dep_id', 'dep_name', 'dep_code'])),
+            'grades' => self::rows($grades->orderBy('sort')->get(['grade_id', 'grade_name', 'dep_id'])),
+            'professions' => self::rows($professions->orderBy('sort')->get(['profession_id', 'profession_name', 'profession_code', 'dep_id'])),
+            'classes' => self::rows($classes->orderBy('sort')->get(['class_id', 'class_name', 'class_num', 'dep_id', 'profession_id', 'grade_id'])),
+            'companies' => self::rows($companies->orderBy('company_id')->get(['company_id', 'company_name', 'contact_name', 'contact_mobile'])),
+            'teachers' => self::rows($teachers->orderBy('teacher_id')->get(['teacher_id', 'teacher_name', 'teacher_num', 'dep_id', 'profession_id'])),
+            'students' => self::rows($students->orderBy('student_id')->get(['student_id', 'name', 'student_num', 'grade_id', 'dep_id', 'profession_id', 'class_id'])),
+            'bases' => self::rows(self::applyBaseScope(self::queryTable('base')->where('base.status', 'enabled')->whereNull('base.deleted_at'), $scope)->orderBy('base.id')->get(['base.id', 'base.name', 'base.company_id', 'base.dep_id'])),
+            'arrangements' => self::rows(self::applyArrangementScope(self::queryTable('arrangement')->whereNull('deleted_at'), $scope)->orderByDesc('id')->get(['id', 'uuid', 'title', 'name', 'type', 'organize_mode', 'semester', 'dep_id', 'profession_id', 'status'])),
+            'report_templates' => self::rows(self::queryTable('report_template')->where('status', 'enabled')->whereNull('deleted_at')->orderBy('id')->get(['id', 'uuid', 'name', 'code', 'version', 'online_enabled'])),
+        ];
+    }
+
     public static function teacherIdByUser(int $userId): ?int
     {
         $teacherId = self::queryTable('teacher_list')
@@ -404,6 +443,110 @@ class InternshipRecord extends TableRecord
             ->get()
             ->map(static fn ($row): array => $row->getAttributes())
             ->all();
+    }
+
+    private static function applyBaseScope(mixed $query, array $scope): mixed
+    {
+        $roleType = (string) ($scope['role_type'] ?? '');
+        if ($roleType === 'college_admin') {
+            return self::whereInOrDeny($query, 'base.dep_id', $scope['dep_ids'] ?? []);
+        }
+        if ($roleType === 'enterprise') {
+            return self::whereInOrDeny($query, 'base.company_id', $scope['company_ids'] ?? []);
+        }
+
+        return $query;
+    }
+
+    private static function applyArrangementScope(mixed $query, array $scope): mixed
+    {
+        $roleType = (string) ($scope['role_type'] ?? '');
+        if (in_array($roleType, ['super_admin', 'school_admin'], true)) {
+            return $query;
+        }
+        if ($roleType === 'college_admin') {
+            return self::whereInOrDeny($query, 'arrangement.dep_id', $scope['dep_ids'] ?? []);
+        }
+        if ($roleType === 'profession_admin') {
+            return self::whereInOrDeny($query, 'arrangement.profession_id', $scope['profession_ids'] ?? []);
+        }
+        if (in_array($roleType, ['teacher', 'student'], true)) {
+            return self::whereInOrDeny($query, 'arrangement.id', $scope['visible_arrangement_ids'] ?? []);
+        }
+        if ($roleType === 'enterprise') {
+            return self::whereInOrDeny($query, 'arrangement.base_id', $scope['base_ids'] ?? []);
+        }
+
+        return $query->whereRaw('1 = 0');
+    }
+
+    private static function applyApplicationScope(mixed $query, array $scope): mixed
+    {
+        if (($scope['role_type'] ?? '') === 'teacher') {
+            return self::whereInOrDeny($query, 'application.id', $scope['application_ids'] ?? []);
+        }
+
+        self::applyStudentScope($query, $scope, 'application.student_id');
+        $roleType = (string) ($scope['role_type'] ?? '');
+        if (in_array($roleType, ['student', 'enterprise'], true)) {
+            self::whereInOrDeny($query, 'application.arrangement_id', $scope['owned_arrangement_ids'] ?? []);
+        }
+
+        return $query;
+    }
+
+    private static function applyStudentScope(mixed $query, array $scope, string $column): mixed
+    {
+        if (array_key_exists('visible_student_ids', $scope) && $scope['visible_student_ids'] !== null) {
+            self::whereInOrDeny($query, $column, $scope['visible_student_ids']);
+        }
+
+        return $query;
+    }
+
+    private static function applyCompanyScope(mixed $query, array $scope, string $column): mixed
+    {
+        if (($scope['role_type'] ?? '') === 'enterprise') {
+            self::whereInOrDeny($query, $column, $scope['company_ids'] ?? []);
+        }
+
+        return $query;
+    }
+
+    private static function applyOptionScope(mixed $query, array $scope, ?string $depColumn, ?string $professionColumn): mixed
+    {
+        $roleType = (string) ($scope['role_type'] ?? '');
+        if ($roleType === 'college_admin' && $depColumn) {
+            self::whereInOrDeny($query, $depColumn, $scope['dep_ids'] ?? []);
+        }
+        if ($roleType === 'profession_admin' && $professionColumn) {
+            self::whereInOrDeny($query, $professionColumn, $scope['profession_ids'] ?? []);
+        }
+        if ($roleType === 'profession_admin' && !$professionColumn && $depColumn) {
+            self::whereInOrDeny($query, $depColumn, $scope['profession_dep_ids'] ?? []);
+        }
+
+        return $query;
+    }
+
+    private static function whereInOrDeny(mixed $query, string $column, array $ids): mixed
+    {
+        $ids = self::ids($ids);
+        if (!$ids) {
+            return $query->whereRaw('1 = 0');
+        }
+
+        return $query->whereIn($column, $ids);
+    }
+
+    private static function rows(iterable $rows): array
+    {
+        $items = [];
+        foreach ($rows as $row) {
+            $items[] = method_exists($row, 'getAttributes') ? $row->getAttributes() : (array) $row;
+        }
+
+        return $items;
     }
 
     private static function intValues(mixed $values): array
