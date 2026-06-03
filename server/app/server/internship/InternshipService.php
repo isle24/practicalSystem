@@ -1979,7 +1979,7 @@ class InternshipService
 
     private function query(string $table): mixed
     {
-        return ChannelTable::queryTable($table);
+        return ChannelTable::table($table);
     }
 
     private function connection(): mixed

@@ -529,6 +529,20 @@ function schoolCoreStatements(): array
             UNIQUE KEY `uk_config_item` (`group_id`, `key`, `college_id`, `user_id`),
             KEY `idx_scope` (`college_id`, `user_id`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+        "CREATE TABLE IF NOT EXISTS `operation_guide` (
+            `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            `module_key` VARCHAR(60) NOT NULL,
+            `title` VARCHAR(120) NOT NULL,
+            `content` MEDIUMTEXT DEFAULT NULL,
+            `status` ENUM('enabled','disabled') DEFAULT 'enabled',
+            `sort` INT DEFAULT 0,
+            `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+            `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            `deleted_at` DATETIME DEFAULT NULL,
+            PRIMARY KEY (`id`),
+            UNIQUE KEY `uk_operation_guide_module` (`module_key`),
+            KEY `idx_status_sort` (`status`, `sort`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
         "CREATE TABLE IF NOT EXISTS `wechat_menu_config` (
             `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
             `role_id` BIGINT UNSIGNED NOT NULL,
@@ -1019,6 +1033,7 @@ function seedSchool(PDO $pdo, string $wechatProxyUrl): void
     seedPermissionAccounts($pdo);
     seedPracticeUsers($pdo);
     seedMenus($pdo);
+    seedOperationGuides($pdo);
     seedConfig($pdo, $wechatProxyUrl);
     seedInternshipDemo($pdo);
 }
@@ -1345,32 +1360,85 @@ function seedArchives(PDO $pdo): void
 function seedMenus(PDO $pdo): void
 {
     $menus = [
-        [1, 0, '实习管理', 'internship:view', '/internship', 'both', 'menu', 10, 'BriefcaseBusiness'],
-        [2, 0, '实训管理', 'training:view', '/training', 'both', 'menu', 20, 'Workflow'],
-        [3, 0, '实验管理', 'lab:view', '/lab', 'both', 'menu', 30, 'FlaskConical'],
-        [4, 0, '统计报表', 'stat:view', '/stat', 'pc', 'menu', 40, 'ChartColumn'],
-        [5, 0, '日志审计', 'log:view', '/log', 'pc', 'menu', 50, 'FileClock'],
-        [6, 0, '系统配置', 'config:view', '/config', 'pc', 'menu', 60, 'Settings'],
-        [7, 6, '企业微信代理', 'wechat:proxy', '/config/wechat-proxy', 'pc', 'menu', 61, 'Network'],
-        [8, 0, '文件管理', 'file:view', '/file', 'pc', 'menu', 70, 'FolderOpen'],
-        [101, 1, '实习处理', 'internship:manage', null, 'both', 'button', 101, null],
-        [102, 1, '实习导出', 'internship:export', null, 'pc', 'button', 102, null],
-        [103, 1, '实习申请', 'internship:apply', null, 'both', 'button', 103, null],
-        [104, 1, '实习审核', 'internship:approve', null, 'both', 'button', 104, null],
-        [105, 1, '实习签到', 'internship:sign', null, 'h5', 'button', 105, null],
-        [106, 1, '实习日志', 'internship:journal', null, 'both', 'button', 106, null],
-        [107, 1, '实习报告', 'internship:report', null, 'both', 'button', 107, null],
-        [108, 1, '实习成绩', 'internship:score', null, 'pc', 'button', 108, null],
-        [109, 1, '实习归档', 'internship:archive', null, 'pc', 'button', 109, null],
-        [110, 1, '实习计划', 'internship:plan', null, 'pc', 'button', 110, null],
-        [201, 2, '实训处理', 'training:manage', null, 'both', 'button', 201, null],
-        [202, 2, '实训导出', 'training:export', null, 'pc', 'button', 202, null],
-        [301, 3, '实验处理', 'lab:manage', null, 'both', 'button', 301, null],
-        [302, 3, '实验导出', 'lab:export', null, 'pc', 'button', 302, null],
-        [401, 4, '报表导出', 'stat:export', null, 'pc', 'button', 401, null],
-        [601, 6, '配置管理', 'config:manage', null, 'pc', 'button', 601, null],
-        [701, 7, '企业微信代理保存', 'wechat:proxy:save', null, 'pc', 'button', 701, null],
-        [801, 8, '文件处理', 'file:manage', null, 'pc', 'button', 801, null],
+        [1, 0, '实习管理', null, null, 'both', 'directory', 10, 'BriefcaseBusiness'],
+        [11, 1, '实习安排', null, null, 'both', 'menu', 11, 'CalendarCheck'],
+        [111, 11, '列表', 'internship:view', '/internship', 'both', 'menu', 111, 'List'],
+        [101, 111, '新增', 'internship:manage', null, 'both', 'button', 101, null],
+        [1112, 111, '删除', 'internship:arrangement:delete', null, 'pc', 'button', 112, null],
+        [12, 1, '实习申请', null, null, 'both', 'menu', 12, 'ClipboardList'],
+        [121, 12, '列表', 'internship:application:list', '/internship/applications', 'both', 'menu', 121, 'List'],
+        [103, 121, '提交', 'internship:apply', null, 'both', 'button', 103, null],
+        [104, 121, '审核', 'internship:approve', null, 'both', 'button', 104, null],
+        [1213, 121, '通过后修改', 'internship:application:reopen', null, 'pc', 'button', 123, null],
+        [13, 1, '指导关系', null, null, 'pc', 'menu', 13, 'UsersRound'],
+        [131, 13, '列表', 'internship:pair:list', '/internship/pairs', 'pc', 'menu', 131, 'List'],
+        [1311, 131, '新增', 'internship:pair:save', null, 'pc', 'button', 131, null],
+        [1312, 131, '删除', 'internship:pair:delete', null, 'pc', 'button', 132, null],
+        [14, 1, '签到记录', null, null, 'both', 'menu', 14, 'MapPin'],
+        [141, 14, '列表', 'internship:sign:list', '/internship/sign-ins', 'both', 'menu', 141, 'List'],
+        [105, 141, '签到', 'internship:sign', null, 'h5', 'button', 105, null],
+        [15, 1, '实习日志', null, null, 'both', 'menu', 15, 'FileClock'],
+        [151, 15, '列表', 'internship:journal:list', '/internship/journals', 'both', 'menu', 151, 'List'],
+        [106, 151, '提交', 'internship:journal', null, 'both', 'button', 106, null],
+        [1512, 151, '评阅', 'internship:journal:review', null, 'pc', 'button', 152, null],
+        [16, 1, '实习报告', null, null, 'both', 'menu', 16, 'FileText'],
+        [161, 16, '列表', 'internship:report:list', '/internship/reports', 'both', 'menu', 161, 'List'],
+        [107, 161, '提交', 'internship:report', null, 'both', 'button', 107, null],
+        [1612, 161, '评阅', 'internship:report:review', null, 'pc', 'button', 162, null],
+        [17, 1, '成绩管理', null, null, 'pc', 'menu', 17, 'GraduationCap'],
+        [171, 17, '列表', 'internship:score:list', '/internship/scores', 'pc', 'menu', 171, 'List'],
+        [108, 171, '录入', 'internship:score', null, 'pc', 'button', 108, null],
+        [18, 1, '归档材料', null, null, 'pc', 'menu', 18, 'FolderOpen'],
+        [181, 18, '列表', 'internship:archive:list', '/internship/documents', 'pc', 'menu', 181, 'List'],
+        [109, 181, '归档', 'internship:archive', null, 'pc', 'button', 109, null],
+        [19, 1, '实习计划', null, null, 'pc', 'menu', 19, 'FileText'],
+        [191, 19, '列表', 'internship:plan:list', '/internship/plans', 'pc', 'menu', 191, 'List'],
+        [110, 191, '维护', 'internship:plan', null, 'pc', 'button', 110, null],
+        [2, 0, '实训管理', null, null, 'both', 'directory', 20, 'Workflow'],
+        [21, 2, '实训项目', null, null, 'both', 'menu', 21, 'Workflow'],
+        [211, 21, '列表', 'training:view', '/training', 'both', 'menu', 211, 'List'],
+        [201, 211, '处理', 'training:manage', null, 'both', 'button', 201, null],
+        [2112, 211, '删除', 'training:project:delete', null, 'pc', 'button', 212, null],
+        [3, 0, '实验管理', null, null, 'both', 'directory', 30, 'FlaskConical'],
+        [31, 3, '实验项目', null, null, 'both', 'menu', 31, 'FlaskConical'],
+        [311, 31, '列表', 'lab:view', '/lab', 'both', 'menu', 311, 'List'],
+        [301, 311, '处理', 'lab:manage', null, 'both', 'button', 301, null],
+        [3112, 311, '删除', 'lab:project:delete', null, 'pc', 'button', 312, null],
+        [4, 0, '统计报表', null, null, 'pc', 'directory', 40, 'ChartColumn'],
+        [41, 4, '实习统计', null, null, 'pc', 'menu', 41, 'ChartColumn'],
+        [411, 41, '列表', 'stat:view', '/stat', 'pc', 'menu', 411, 'List'],
+        [402, 411, '处理', 'stat:manage', null, 'pc', 'button', 402, null],
+        [42, 4, '学院统计', null, null, 'pc', 'menu', 42, 'Building2'],
+        [421, 42, '列表', 'stat:department', '/stat/department', 'pc', 'menu', 421, 'List'],
+        [43, 4, '专业统计', null, null, 'pc', 'menu', 43, 'GraduationCap'],
+        [431, 43, '列表', 'stat:profession', '/stat/profession', 'pc', 'menu', 431, 'List'],
+        [44, 4, '指导统计', null, null, 'pc', 'menu', 44, 'UsersRound'],
+        [441, 44, '列表', 'stat:teacher', '/stat/teacher', 'pc', 'menu', 441, 'List'],
+        [45, 4, '学生过程统计', null, null, 'pc', 'menu', 45, 'UserRound'],
+        [451, 45, '列表', 'stat:student', '/stat/student', 'pc', 'menu', 451, 'List'],
+        [46, 4, '归档材料统计', null, null, 'pc', 'menu', 46, 'FolderOpen'],
+        [461, 46, '列表', 'stat:archive', '/stat/archive', 'pc', 'menu', 461, 'List'],
+        [5, 0, '日志审计', null, null, 'pc', 'directory', 50, 'FileClock'],
+        [51, 5, '操作日志', null, null, 'pc', 'menu', 51, 'FileClock'],
+        [511, 51, '列表', 'log:view', '/log', 'pc', 'menu', 511, 'List'],
+        [501, 511, '日志处理', 'log:manage', null, 'pc', 'button', 501, null],
+        [6, 0, '系统配置', null, null, 'pc', 'directory', 60, 'Settings'],
+        [61, 6, '菜单权限', null, null, 'pc', 'menu', 61, 'Settings'],
+        [611, 61, '列表', 'config:view', '/config', 'pc', 'menu', 611, 'List'],
+        [601, 611, '配置管理', 'config:manage', null, 'pc', 'button', 601, null],
+        [602, 611, '菜单管理', 'config:menu', null, 'pc', 'button', 602, null],
+        [603, 611, '角色权限', 'config:role', null, 'pc', 'button', 603, null],
+        [604, 611, '组织范围', 'config:scope', null, 'pc', 'button', 604, null],
+        [605, 611, '基础档案', 'config:archive', null, 'pc', 'button', 605, null],
+        [63, 6, '操作说明', null, null, 'pc', 'menu', 63, 'BookOpen'],
+        [631, 63, '列表', 'guide:view', '/config/guides', 'pc', 'menu', 631, 'List'],
+        [6311, 631, '保存', 'guide:save', null, 'pc', 'button', 631, null],
+        [7, 6, '企业微信应用', 'wechat:proxy', '/config/wechat-proxy', 'pc', 'menu', 62, 'Network'],
+        [701, 7, '企业微信应用保存', 'wechat:proxy:save', null, 'pc', 'button', 701, null],
+        [8, 0, '文件管理', null, null, 'pc', 'directory', 70, 'FolderOpen'],
+        [81, 8, '文件管理', null, null, 'pc', 'menu', 81, 'FolderOpen'],
+        [811, 81, '列表', 'file:view', '/file', 'pc', 'menu', 811, 'List'],
+        [801, 811, '文件处理', 'file:manage', null, 'pc', 'button', 801, null],
     ];
 
     $stmt = $pdo->prepare(
@@ -1379,17 +1447,29 @@ function seedMenus(PDO $pdo): void
          ON DUPLICATE KEY UPDATE
             `parent_id` = VALUES(`parent_id`),
             `name` = VALUES(`name`),
+            `code` = VALUES(`code`),
             `path` = VALUES(`path`),
             `platform` = VALUES(`platform`),
             `type` = VALUES(`type`),
             `sort` = VALUES(`sort`),
             `icon` = VALUES(`icon`),
             `visible` = 'true',
-            `status` = 'enabled'"
+            `status` = 'enabled',
+            `deleted_at` = NULL"
     );
 
     foreach ($menus as $menu) {
         $stmt->execute($menu);
+    }
+
+    $disabledMenuIds = [102, 202, 302, 401];
+    $disableStmt = $pdo->prepare(
+        "UPDATE `menu`
+         SET `visible` = 'false', `status` = 'disabled', `deleted_at` = COALESCE(`deleted_at`, NOW())
+         WHERE `id` = ?"
+    );
+    foreach ($disabledMenuIds as $menuId) {
+        $disableStmt->execute([$menuId]);
     }
 
     $roleMenu = $pdo->prepare(
@@ -1404,21 +1484,69 @@ function seedMenus(PDO $pdo): void
         }
     }
 
+    $internshipAdminMenus = [
+        1, 11, 111, 101, 1112, 12, 121, 103, 104, 1213, 13, 131, 1311, 1312,
+        14, 141, 105, 15, 151, 106, 1512, 16, 161, 107, 1612, 17, 171, 108,
+        18, 181, 109, 19, 191, 110,
+    ];
+    $trainingMenus = [2, 21, 211, 201, 2112];
+    $labMenus = [3, 31, 311, 301, 3112];
+
     foreach ([3, 4] as $roleId) {
-        foreach ([1, 2, 3, 101, 103, 104, 106, 107, 108, 109, 110, 201, 301] as $menuId) {
+        foreach (array_merge($internshipAdminMenus, $trainingMenus, $labMenus) as $menuId) {
             $roleMenu->execute([$roleId, $menuId]);
         }
     }
 
-    foreach ([1, 2, 3, 101, 104, 105, 106, 107, 108, 201, 301] as $menuId) {
+    foreach ([1, 11, 111, 12, 121, 104, 1213, 13, 131, 14, 141, 105, 15, 151, 106, 1512, 16, 161, 107, 1612, 17, 171, 108, 2, 21, 211, 201, 3, 31, 311, 301] as $menuId) {
         $roleMenu->execute([5, $menuId]);
     }
-    foreach ([1, 103, 105, 106, 107] as $menuId) {
+    foreach ([1, 11, 111, 12, 121, 103, 14, 141, 105, 15, 151, 106, 16, 161, 107] as $menuId) {
         $roleMenu->execute([6, $menuId]);
     }
-    foreach ([1, 108] as $menuId) {
+    foreach ([1, 17, 171, 108] as $menuId) {
         $roleMenu->execute([7, $menuId]);
     }
+}
+
+function seedOperationGuides(PDO $pdo): void
+{
+    $guides = [
+        ['internship', '实习管理操作说明', '实习管理围绕实习安排、学生申请、签到、日志、报告、成绩和归档材料进行全过程留痕。', '学生提交申请并完成过程材料，教师按指导关系审核评阅，学校管理员按学院、专业、届次查看整体进度。', '学生看不到列表筛选时，先确认当前账号是否为学生角色；教师看不到学生时，检查指导关系和组织范围；审核退回后学生重新提交会形成新的记录。', 10],
+        ['training', '实训管理操作说明', '实训流程尚未最终确认，当前先保留菜单、权限和基础框架。', '后续确认实训项目、预约、材料、报告、成绩等流程后，在该模块补充列表、提交和审核功能。', '如果页面暂无业务数据，属于流程待确认状态；权限可先在系统配置中完成角色授权。', 20],
+        ['lab', '实验管理操作说明', '实验流程尚未最终确认，当前先保留菜单、权限和基础框架。', '后续确认实验课程、项目、预约、材料、报告、成绩等流程后，在该模块补充业务页面。', '如果页面暂无业务数据，属于流程待确认状态；权限可先在系统配置中完成角色授权。', 30],
+        ['stat', '统计报表操作说明', '统计报表按当前角色的数据范围展示实习总览、学院统计、专业统计、指导统计、学生过程统计和归档材料统计。', '选择左侧报表菜单后，通过学期、学院、专业、届次和关键词筛选数据；后续接入聚合接口后可钻取明细。', '如果统计值与列表不一致，优先确认当前角色的数据范围、筛选条件和业务数据是否已刷新。', 40],
+        ['log', '日志审计操作说明', '日志审计读取当前学校业务库下所有 operation_log 按月分表，支持关键词、动作、IP 和日期范围查询。', '管理员进入日志审计后先设置查询条件，再查看来源分表、操作账号、动作、IP 和日志内容。', '如果日志为空，检查当前月份日志分表是否存在，以及账号是否具备日志查看权限。', 50],
+        ['file', '文件管理操作说明', '文件管理用于查看学校业务库内的上传文件、上传人、上传时间、设备信息和文件状态。', '通过关键词、状态和分类定位文件，点击打开可查看文件访问地址。', '如果文件打不开，检查文件状态、存储配置和浏览器访问权限。', 60],
+        ['config', '系统配置操作说明', '系统配置维护菜单权限、角色权限、组织范围、基础档案、操作说明和企业微信应用配置。', '菜单树按主菜单、业务菜单、列表、按钮维护；角色授权按树勾选；组织范围用于限制学院、专业、班级、企业等数据边界。', '如果授权后没有生效，刷新权限或重新登录；如果菜单结构异常，先检查父级是否选择为按钮节点。', 70],
+        ['profile', '个人设置操作说明', '个人设置用于维护头像资料、桌面壁纸和消息接收偏好。', '点击头像或壁纸区域上传文件，也可以在桌面右键进入壁纸设置。', '如果壁纸没有立即变化，检查浏览器缓存和上传结果，必要时重新保存个人设置。', 80],
+    ];
+
+    $stmt = $pdo->prepare(
+        "INSERT INTO `operation_guide` (`module_key`, `title`, `content`, `sort`, `status`)
+         VALUES (?, ?, ?, ?, 'enabled')
+         ON DUPLICATE KEY UPDATE
+            `title` = VALUES(`title`),
+            `sort` = VALUES(`sort`),
+            `status` = 'enabled',
+            `deleted_at` = NULL"
+    );
+
+    foreach ($guides as [$module, $title, $flow, $process, $faq, $sort]) {
+        $stmt->execute([
+            $module,
+            $title,
+            guideContent($flow, $process, $faq),
+            $sort,
+        ]);
+    }
+}
+
+function guideContent(string $flow, string $process, string $faq): string
+{
+    return '<section><h3>操作流程</h3><p>' . htmlspecialchars($flow, ENT_QUOTES, 'UTF-8') . '</p></section>'
+        . '<section><h3>流程说明</h3><p>' . htmlspecialchars($process, ENT_QUOTES, 'UTF-8') . '</p></section>'
+        . '<section><h3>常见问题</h3><p>' . htmlspecialchars($faq, ENT_QUOTES, 'UTF-8') . '</p></section>';
 }
 
 function seedConfig(PDO $pdo, string $wechatProxyUrl): void
@@ -1447,8 +1575,15 @@ function seedConfig(PDO $pdo, string $wechatProxyUrl): void
         [2, 'max_student_count', 20, '教师默认最大指导学生数', 30],
         [3, 'booking_max_days', 14, '实训室最长可预约天数', 10],
         [4, 'booking_max_days', 14, '实验室最长可预约天数', 10],
-        [5, 'proxy_url', $wechatProxyUrl, '本地转发企业微信 API 的代理地址，空值表示直连企业微信', 10],
-        [5, 'proxy_enabled', $wechatProxyUrl !== '', '是否启用企业微信代理地址', 20],
+        [5, 'app_id', '', '企业微信应用 AppID，可用于第三方应用或自建应用标识', 5],
+        [5, 'corp_id', '', '企业微信企业 ID', 10],
+        [5, 'agent_id', '', '企业微信自建应用 AgentId', 15],
+        [5, 'secret', '', '企业微信应用 Secret', 20],
+        [5, 'token', '', '企业微信回调 Token', 25],
+        [5, 'encoding_aes_key', '', '企业微信回调 EncodingAESKey', 30],
+        [5, 'proxy_url', $wechatProxyUrl, '本地转发企业微信 API 的代理地址，空值表示直连企业微信', 35],
+        [5, 'proxy_enabled', $wechatProxyUrl !== '', '是否启用企业微信代理地址', 40],
+        [5, 'menu_json', '[]', '企业微信应用菜单 JSON', 45],
         [6, 'instant_upload_enabled', false, '是否启用文件秒传', 10],
         [6, 'block', 'b1', '文件存储块标识', 20],
         [6, 'school_code', '2184', '默认学校文件隔离标识', 30],

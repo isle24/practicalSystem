@@ -42,6 +42,38 @@ export function saveWechatProxy(payload) {
   });
 }
 
+export function fetchWechatConfig() {
+  return request('/wechat/config');
+}
+
+export function saveWechatConfig(payload) {
+  return request('/wechat/save-config', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function fetchOperationLogs(params = {}) {
+  const query = new URLSearchParams(params).toString();
+  return request(`/log/list${query ? `?${query}` : ''}`);
+}
+
+export function fetchOperationGuide(module) {
+  const query = new URLSearchParams({ module }).toString();
+  return request(`/guide/current?${query}`);
+}
+
+export function fetchOperationGuides() {
+  return request('/guide/list');
+}
+
+export function saveOperationGuide(payload) {
+  return request('/guide/save', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
 export function fetchAdminRoles() {
   return request('/admin/roles');
 }

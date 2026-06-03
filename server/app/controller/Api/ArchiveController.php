@@ -86,12 +86,9 @@ class ArchiveController
             $now = date('Y-m-d H:i:s');
 
             if ($id) {
-                ChannelTable::queryTable($definition['table'])
-                    ->where($definition['id'], $id)
-                    ->whereNull('deleted_at')
-                    ->update(array_merge($values, ['updated_at' => $now]));
+                ChannelTable::updateArchiveRow($definition['table'], $definition['id'], $id, array_merge($values, ['updated_at' => $now]));
             } else {
-                ChannelTable::queryTable($definition['table'])->insert(array_merge($values, [
+                ChannelTable::insertArchiveRow($definition['table'], array_merge($values, [
                     'created_at' => $now,
                     'updated_at' => $now,
                 ]));
@@ -115,14 +112,7 @@ class ArchiveController
             $id = $this->requiredInt($request, 'id');
             $now = date('Y-m-d H:i:s');
 
-            ChannelTable::queryTable($definition['table'])
-                ->where($definition['id'], $id)
-                ->whereNull('deleted_at')
-                ->update([
-                    'flag' => 'off',
-                    'deleted_at' => $now,
-                    'updated_at' => $now,
-                ]);
+            ChannelTable::softDeleteArchiveRow($definition['table'], $definition['id'], $id, $now);
 
             return $this->ok($this->items($type), '已删除');
         } catch (Throwable $exception) {
@@ -148,17 +138,10 @@ class ArchiveController
     private function items(string $type): array
     {
         $definition = self::DEFINITIONS[$type];
-        $query = ChannelTable::queryTable($definition['table'])
-            ->whereNull('deleted_at');
-
-        foreach ($definition['order'] as $field) {
-            $query->orderBy($field);
-        }
-
         return [
             'type' => $type,
             'id_field' => $definition['id'],
-            'items' => $this->rows($query->get($definition['columns'])),
+            'items' => ChannelTable::archiveRows($definition['table'], $definition['columns'], $definition['order']),
         ];
     }
 

@@ -19,11 +19,7 @@ class RbacService
             return null;
         }
 
-        $role = Role::query()
-            ->where('id', $roleId)
-            ->where('status', 'enabled')
-            ->whereNull('deleted_at')
-            ->first(['id', 'code', 'name', 'role_type', 'sort', 'status']);
+        $role = Role::enabledById($roleId);
 
         return $role ? $role->toArray() : null;
     }
@@ -32,23 +28,7 @@ class RbacService
     {
         $this->ensureSchoolConnection();
 
-        return Role::query()
-            ->join('user_role', 'role.id', '=', 'user_role.role_id')
-            ->where('user_role.account_id', $accountId)
-            ->where('role.status', 'enabled')
-            ->whereNull('role.deleted_at')
-            ->whereNull('user_role.deleted_at')
-            ->orderByDesc('user_role.is_primary')
-            ->orderBy('role.sort')
-            ->get([
-                'role.id',
-                'role.code',
-                'role.name',
-                'role.role_type',
-                'user_role.is_primary',
-            ])
-            ->map(static fn ($role): array => $role->toArray())
-            ->all();
+        return Role::enabledForAccount($accountId);
     }
 
     public function permissionCodes(?int $roleId = null): array
@@ -60,18 +40,7 @@ class RbacService
             return [];
         }
 
-        return Menu::query()
-            ->join('role_menu', 'menu.id', '=', 'role_menu.menu_id')
-            ->where('role_menu.role_id', $roleId)
-            ->where('menu.status', 'enabled')
-            ->whereNull('menu.deleted_at')
-            ->whereNull('role_menu.deleted_at')
-            ->whereNotNull('menu.code')
-            ->where('menu.code', '<>', '')
-            ->pluck('menu.code')
-            ->unique()
-            ->values()
-            ->all();
+        return Menu::permissionCodesByRole($roleId);
     }
 
     public function menus(string $platform = 'pc', ?int $roleId = null): array
@@ -83,30 +52,7 @@ class RbacService
             return [];
         }
 
-        $items = Menu::query()
-            ->join('role_menu', 'menu.id', '=', 'role_menu.menu_id')
-            ->where('role_menu.role_id', $roleId)
-            ->where('menu.status', 'enabled')
-            ->where('menu.visible', 'true')
-            ->whereNull('menu.deleted_at')
-            ->whereNull('role_menu.deleted_at')
-            ->whereIn('menu.type', ['directory', 'menu'])
-            ->whereIn('menu.platform', [$platform, 'both'])
-            ->orderBy('menu.sort')
-            ->get([
-                'menu.id',
-                'menu.parent_id',
-                'menu.name',
-                'menu.code',
-                'menu.path',
-                'menu.url',
-                'menu.platform',
-                'menu.type',
-                'menu.sort',
-                'menu.icon',
-            ])
-            ->map(static fn ($menu): array => $menu->toArray())
-            ->all();
+        $items = Menu::visibleItemsByRole($roleId, $platform);
 
         return $this->tree($items);
     }
@@ -121,25 +67,7 @@ class RbacService
             return [];
         }
 
-        return SysOrganization::query()
-            ->where('account_id', $accountId)
-            ->where('role_id', $roleId)
-            ->where('disabled', 'false')
-            ->whereNull('deleted_at')
-            ->orderBy('organization_id')
-            ->get([
-                'organization_id',
-                'account_id',
-                'user_id',
-                'role_id',
-                'dep_id',
-                'profession_id',
-                'class_id',
-                'company_id',
-                'cate_id',
-            ])
-            ->map(static fn ($scope): array => $scope->toArray())
-            ->all();
+        return SysOrganization::activeScopes($accountId, $roleId);
     }
 
     public function ensureSchoolConnection(): void

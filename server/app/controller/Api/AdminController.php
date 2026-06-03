@@ -29,13 +29,7 @@ class AdminController
 
         try {
             return $this->ok([
-                'roles' => Role::query()
-                    ->where('status', 'enabled')
-                    ->whereNull('deleted_at')
-                    ->orderBy('sort')
-                    ->get(['id', 'code', 'name', 'role_type', 'sort', 'status'])
-                    ->map(static fn ($role): array => $role->toArray())
-                    ->all(),
+                'roles' => Role::enabledOrdered(),
             ]);
         } catch (Throwable $exception) {
             return $this->fail(50000, $exception->getMessage(), 500);
@@ -49,13 +43,7 @@ class AdminController
         }
 
         try {
-            $items = Menu::query()
-                ->where('status', 'enabled')
-                ->whereNull('deleted_at')
-                ->orderBy('sort')
-                ->get(['id', 'parent_id', 'name', 'code', 'path', 'url', 'platform', 'type', 'sort', 'icon', 'visible', 'status'])
-                ->map(static fn ($menu): array => $menu->toArray())
-                ->all();
+            $items = Menu::enabledItems();
 
             return $this->ok([
                 'items' => $items,
@@ -77,13 +65,7 @@ class AdminController
 
             return $this->ok([
                 'role_id' => $roleId,
-                'menu_ids' => RoleMenu::query()
-                    ->where('role_id', $roleId)
-                    ->whereNull('deleted_at')
-                    ->pluck('menu_id')
-                    ->map(static fn ($id): int => (int) $id)
-                    ->values()
-                    ->all(),
+                'menu_ids' => RoleMenu::activeMenuIdsByRole($roleId),
                 'permissions' => (new RbacService())->permissionCodes($roleId),
             ]);
         } catch (Throwable $exception) {
@@ -123,14 +105,14 @@ class AdminController
             ];
 
             if ($menuId) {
-                $menu = Menu::query()->where('id', $menuId)->first();
+                $menu = Menu::activeById($menuId);
                 if (!$menu) {
                     return $this->fail(40400, '菜单不存在', 404);
                 }
                 $menu->fill($values);
                 $menu->save();
             } else {
-                Menu::query()->create($values);
+                Menu::createMenu($values);
             }
 
             return $this->menus($request);
@@ -147,23 +129,15 @@ class AdminController
 
         try {
             $menuId = $this->requiredInt($request, 'id');
-            $children = Menu::query()
-                ->where('parent_id', $menuId)
-                ->whereNull('deleted_at')
-                ->count();
+            $children = Menu::activeChildrenCount($menuId);
             if ($children > 0) {
                 return $this->fail(42200, '请先删除子菜单', 422);
             }
 
             $now = date('Y-m-d H:i:s');
             ChannelTable::connection()->transaction(function () use ($menuId, $now): void {
-                Menu::query()
-                    ->where('id', $menuId)
-                    ->update(['status' => 'disabled', 'deleted_at' => $now, 'updated_at' => $now]);
-                RoleMenu::query()
-                    ->where('menu_id', $menuId)
-                    ->whereNull('deleted_at')
-                    ->update(['deleted_at' => $now, 'updated_at' => $now]);
+                Menu::disableMenu($menuId, $now);
+                RoleMenu::softDeleteByMenu($menuId, $now);
             });
 
             return $this->menus($request);
@@ -185,28 +159,10 @@ class AdminController
             $now = date('Y-m-d H:i:s');
 
             ChannelTable::connection()->transaction(function () use ($roleId, $menuIds, $now): void {
-                RoleMenu::query()
-                    ->where('role_id', $roleId)
-                    ->whereNull('deleted_at')
-                    ->update(['deleted_at' => $now, 'updated_at' => $now]);
+                RoleMenu::softDeleteByRole($roleId, $now);
 
                 foreach ($menuIds as $menuId) {
-                    $record = RoleMenu::query()
-                        ->where('role_id', $roleId)
-                        ->where('menu_id', $menuId)
-                        ->first();
-
-                    if ($record) {
-                        $record->deleted_at = null;
-                        $record->updated_at = $now;
-                        $record->save();
-                        continue;
-                    }
-
-                    RoleMenu::query()->create([
-                        'role_id' => $roleId,
-                        'menu_id' => $menuId,
-                    ]);
+                    RoleMenu::restoreOrCreate($roleId, $menuId, $now);
                 }
             });
 
@@ -239,39 +195,13 @@ class AdminController
 
         try {
             return $this->ok([
-                'roles' => Role::query()
-                    ->where('status', 'enabled')
-                    ->whereNull('deleted_at')
-                    ->orderBy('sort')
-                    ->get(['id', 'code', 'name', 'role_type'])
-                    ->map(static fn ($role): array => $role->toArray())
-                    ->all(),
+                'roles' => Role::enabledOrdered(['id', 'code', 'name', 'role_type']),
                 'accounts' => $this->accountsData(),
-                'departments' => $this->rows(ChannelTable::queryTable('department')
-                    ->where('flag', 'on')
-                    ->whereNull('deleted_at')
-                    ->orderBy('sort')
-                    ->get(['dep_id', 'dep_name', 'dep_code'])),
-                'grades' => $this->rows(ChannelTable::queryTable('grade_list')
-                    ->where('flag', 'on')
-                    ->whereNull('deleted_at')
-                    ->orderBy('sort')
-                    ->get(['grade_id', 'grade_name', 'dep_id'])),
-                'professions' => $this->rows(ChannelTable::queryTable('profession')
-                    ->where('flag', 'on')
-                    ->whereNull('deleted_at')
-                    ->orderBy('sort')
-                    ->get(['profession_id', 'profession_name', 'profession_code', 'dep_id', 'grade_id'])),
-                'classes' => $this->rows(ChannelTable::queryTable('class')
-                    ->where('flag', 'on')
-                    ->whereNull('deleted_at')
-                    ->orderBy('sort')
-                    ->get(['class_id', 'class_name', 'class_num', 'dep_id', 'profession_id', 'grade_id'])),
-                'companies' => $this->rows(ChannelTable::queryTable('companies')
-                    ->where('flag', 'on')
-                    ->whereNull('deleted_at')
-                    ->orderBy('company_id')
-                    ->get(['company_id', 'company_name', 'credit_code'])),
+                'departments' => ChannelTable::enabledOptionRows('department', ['dep_id', 'dep_name', 'dep_code'], ['sort']),
+                'grades' => ChannelTable::enabledOptionRows('grade_list', ['grade_id', 'grade_name', 'dep_id'], ['sort']),
+                'professions' => ChannelTable::enabledOptionRows('profession', ['profession_id', 'profession_name', 'profession_code', 'dep_id', 'grade_id'], ['sort']),
+                'classes' => ChannelTable::enabledOptionRows('class', ['class_id', 'class_name', 'class_num', 'dep_id', 'profession_id', 'grade_id'], ['sort']),
+                'companies' => ChannelTable::enabledOptionRows('companies', ['company_id', 'company_name', 'credit_code'], ['company_id']),
             ]);
         } catch (Throwable $exception) {
             return $this->fail(50000, $exception->getMessage(), 500);
@@ -310,25 +240,10 @@ class AdminController
             $now = date('Y-m-d H:i:s');
 
             ChannelTable::connection()->transaction(function () use ($accountId, $roleId, $scopes, $account, $now): void {
-                SysOrganization::query()
-                    ->where('account_id', $accountId)
-                    ->where('role_id', $roleId)
-                    ->where('disabled', 'false')
-                    ->whereNull('deleted_at')
-                    ->update(['disabled' => 'true', 'deleted_at' => $now, 'updated_at' => $now]);
+                SysOrganization::deactivateScopes($accountId, $roleId, $now);
 
                 foreach ($scopes as $scope) {
-                    $query = SysOrganization::query()
-                        ->where('account_id', $accountId)
-                        ->where('role_id', $roleId);
-
-                    foreach (['dep_id', 'profession_id', 'class_id', 'company_id', 'cate_id'] as $field) {
-                        $scope[$field] === null
-                            ? $query->whereNull($field)
-                            : $query->where($field, $scope[$field]);
-                    }
-
-                    $record = $query->first();
+                    $record = SysOrganization::matchingScope($accountId, $roleId, $scope);
                     $values = array_merge($scope, [
                         'account_id' => $accountId,
                         'user_id' => (int) $account->user_id,
@@ -344,7 +259,7 @@ class AdminController
                         continue;
                     }
 
-                    SysOrganization::query()->create($values);
+                    SysOrganization::createScope($values);
                 }
             });
 
@@ -419,14 +334,7 @@ class AdminController
             return [];
         }
 
-        return Menu::query()
-            ->whereIn('id', $menuIds)
-            ->where('status', 'enabled')
-            ->whereNull('deleted_at')
-            ->pluck('id')
-            ->map(static fn ($id): int => (int) $id)
-            ->values()
-            ->all();
+        return Menu::enabledIds($menuIds);
     }
 
     private function isDescendantMenu(int $parentId, int $menuId): bool
@@ -436,10 +344,7 @@ class AdminController
                 return true;
             }
 
-            $parentId = (int) (Menu::query()
-                ->where('id', $parentId)
-                ->whereNull('deleted_at')
-                ->value('parent_id') ?? 0);
+            $parentId = Menu::parentIdOfActive($parentId);
         }
 
         return false;
@@ -447,11 +352,7 @@ class AdminController
 
     private function account(int $accountId): object
     {
-        $account = Account::query()
-            ->where('id', $accountId)
-            ->where('status', 'enabled')
-            ->whereNull('deleted_at')
-            ->first(['id', 'user_id']);
+        $account = Account::enabledById($accountId, ['id', 'user_id']);
 
         if (!$account) {
             throw new \InvalidArgumentException('账号不存在或已禁用');
@@ -487,30 +388,7 @@ class AdminController
 
     private function accountsData(): array
     {
-        $rows = Account::query()
-            ->join('users', 'account.user_id', '=', 'users.id')
-            ->leftJoin('user_role', function ($join): void {
-                $join->on('account.id', '=', 'user_role.account_id')
-                    ->where('user_role.is_primary', 'true')
-                    ->whereNull('user_role.deleted_at');
-            })
-            ->leftJoin('role', 'user_role.role_id', '=', 'role.id')
-            ->where('account.status', 'enabled')
-            ->where('users.status', 'enabled')
-            ->whereNull('account.deleted_at')
-            ->whereNull('users.deleted_at')
-            ->orderBy('account.id')
-            ->get([
-                'account.id',
-                'account.user_id',
-                'account.login_name',
-                'users.name',
-                'role.id as role_id',
-                'role.name as role_name',
-                'role.role_type',
-            ]);
-
-        return $this->rows($rows);
+        return Account::enabledWithPrimaryRole();
     }
 
     private function rows(iterable $rows): array

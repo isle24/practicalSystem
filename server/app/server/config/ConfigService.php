@@ -18,18 +18,7 @@ class ConfigService
             return null;
         }
 
-        $item = ConfigItem::query()
-            ->where('group_id', $group['id'])
-            ->where('key', $key)
-            ->whereIn('college_id', [$collegeId, 0])
-            ->whereIn('user_id', [$userId, 0])
-            ->where('status', 'enabled')
-            ->whereNull('deleted_at')
-            ->orderByDesc('user_id')
-            ->orderByDesc('college_id')
-            ->first(['value']);
-
-        return $item ? json_decode((string) $item->value, true) : null;
+        return ConfigItem::enabledValue((int) $group['id'], $key, $collegeId, $userId);
     }
 
     public function list(string $groupCode): array
@@ -39,22 +28,7 @@ class ConfigService
             return [];
         }
 
-        return ConfigItem::query()
-            ->where('group_id', $group['id'])
-            ->where('status', 'enabled')
-            ->whereNull('deleted_at')
-            ->orderBy('sort')
-            ->get(['id', 'key', 'value', 'college_id', 'user_id', 'description', 'sort'])
-            ->map(static fn ($item): array => [
-                'id' => $item->id,
-                'key' => $item->key,
-                'value' => json_decode((string) $item->value, true),
-                'college_id' => (int) $item->college_id,
-                'user_id' => (int) $item->user_id,
-                'description' => $item->description,
-                'sort' => (int) $item->sort,
-            ])
-            ->all();
+        return ConfigItem::enabledList((int) $group['id']);
     }
 
     public function set(string $groupCode, string $key, mixed $value, string $description = '', int $collegeId = 0, int $userId = 0): array
@@ -68,20 +42,7 @@ class ConfigService
             throw new RuntimeException('配置分组不存在');
         }
 
-        ConfigItem::query()->updateOrCreate(
-            [
-                'group_id' => $group['id'],
-                'key' => $key,
-                'college_id' => $collegeId,
-                'user_id' => $userId,
-            ],
-            [
-                'value' => json_encode($value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
-                'description' => $description,
-                'status' => 'enabled',
-                'deleted_at' => null,
-            ]
-        );
+        ConfigItem::saveValue((int) $group['id'], $key, $value, $description, $collegeId, $userId);
 
         return [
             'group' => $groupCode,
@@ -97,11 +58,7 @@ class ConfigService
         $this->assertSchoolConnection();
         $this->assertKey($groupCode);
 
-        $group = ConfigGroup::query()
-            ->where('code', $groupCode)
-            ->where('status', 'enabled')
-            ->whereNull('deleted_at')
-            ->first(['id', 'code', 'name']);
+        $group = ConfigGroup::enabledByCode($groupCode);
 
         return $group ? $group->toArray() : null;
     }

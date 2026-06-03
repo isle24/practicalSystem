@@ -19,11 +19,7 @@ class AuthService
             throw new RuntimeException('账号或密码不能为空');
         }
 
-        $account = Account::query()
-            ->where('login_name', $loginName)
-            ->where('status', 'enabled')
-            ->whereNull('deleted_at')
-            ->first();
+        $account = Account::enabledByLoginName($loginName);
 
         if (!$account || !password_verify($password, (string) $account->password)) {
             throw new RuntimeException('账号或密码错误');
@@ -62,21 +58,13 @@ class AuthService
 
     public function contextForAccount(int $accountId, string $client = JwtToken::TOKEN_CLIENT_WEB): array
     {
-        $account = Account::query()
-            ->where('id', $accountId)
-            ->where('status', 'enabled')
-            ->whereNull('deleted_at')
-            ->first();
+        $account = Account::enabledById($accountId);
 
         if (!$account) {
             throw new RuntimeException('登录账号不存在或已禁用');
         }
 
-        $user = User::query()
-            ->where('id', (int) $account->user_id)
-            ->where('status', 'enabled')
-            ->whereNull('deleted_at')
-            ->first();
+        $user = User::enabledById((int) $account->user_id);
 
         if (!$user) {
             throw new RuntimeException('用户不存在或已禁用');

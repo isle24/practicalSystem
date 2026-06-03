@@ -38,14 +38,7 @@ class SchoolResolver
             return $cached;
         }
 
-        $record = Authorization::query()
-            ->join('databases', 'authorizations.database_id', '=', 'databases.database_id')
-            ->join('schools', 'authorizations.school_id', '=', 'schools.school_id')
-            ->where('authorizations.authorization_domain', $domain)
-            ->where('authorizations.status', 'enabled')
-            ->where('databases.status', 'enabled')
-            ->where('schools.status', 'enabled')
-            ->first($this->fields);
+        $record = Authorization::enabledSchoolDatabaseByDomain($domain, $this->fields);
 
         return $this->remember($cacheKey, $record ? $record->toArray() : null);
     }
@@ -58,15 +51,7 @@ class SchoolResolver
             return $cached;
         }
 
-        $record = Authorization::query()
-            ->join('databases', 'authorizations.database_id', '=', 'databases.database_id')
-            ->join('schools', 'authorizations.school_id', '=', 'schools.school_id')
-            ->where('authorizations.status', 'enabled')
-            ->where('databases.status', 'enabled')
-            ->where('schools.status', 'enabled')
-            ->where('databases.is_default_business_db', 'true')
-            ->orderBy('authorizations.authorization_id')
-            ->first($this->fields);
+        $record = Authorization::defaultBusinessDatabase($this->fields);
 
         return $this->remember($cacheKey, $record ? $record->toArray() : null);
     }

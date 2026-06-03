@@ -230,23 +230,8 @@
                 <p>{{ moduleDescription(win) }}</p>
               </div>
               <div class="head-actions">
-                <a v-if="win.module.id === 'config' && canManageConfig" :href="panelHref(win, 'roleMenus')" class="tool-button" data-window-panel="roleMenus" @pointerdown="activateWindowPanel(win, 'roleMenus')" @mousedown="activateWindowPanel(win, 'roleMenus')" @click="activateWindowPanel(win, 'roleMenus')">
-                  <ShieldCheck :size="16" />
-                  角色权限
-                </a>
-                <a v-if="win.module.id === 'config' && canManageConfig" :href="panelHref(win, 'menuManage')" class="tool-button" data-window-panel="menuManage" @pointerdown="activateWindowPanel(win, 'menuManage')" @mousedown="activateWindowPanel(win, 'menuManage')" @click="activateWindowPanel(win, 'menuManage')">
-                  <Settings :size="16" />
-                  菜单管理
-                </a>
-                <a v-if="win.module.id === 'config' && canManageConfig" :href="panelHref(win, 'organizationScope')" class="tool-button" data-window-panel="organizationScope" @pointerdown="activateWindowPanel(win, 'organizationScope')" @mousedown="activateWindowPanel(win, 'organizationScope')" @click="activateWindowPanel(win, 'organizationScope')">
-                  <SlidersHorizontal :size="16" />
-                  组织范围
-                </a>
-                <el-button v-if="win.module.id === 'config'" :icon="RefreshCw" :loading="permissionState.loading" @click="load">
-                  刷新权限
-                </el-button>
-                <el-button v-if="win.module.exportPermission && !isStudentRole" type="primary" :icon="Download" :disabled="!hasPermission(win.module.exportPermission)">
-                  导出
+                <el-button :icon="BookOpen" @click="openGuide(win)">
+                  操作说明
                 </el-button>
               </div>
             </div>
@@ -265,32 +250,7 @@
                   <strong>{{ panelTitle(win) }}</strong>
                 </header>
 
-                <div v-if="win.panel === 'scope'" class="scope-view">
-                  <el-descriptions :column="2" border>
-                    <el-descriptions-item label="学校数据">
-                      {{ schoolDataText }}
-                    </el-descriptions-item>
-                    <el-descriptions-item label="当前角色">
-                      {{ roleText }}
-                    </el-descriptions-item>
-                    <el-descriptions-item label="数据范围">
-                      {{ scopeText }}
-                    </el-descriptions-item>
-                  </el-descriptions>
-                </div>
-
-                <div v-else-if="win.panel === 'buttons'" class="permission-grid">
-                  <button
-                    v-for="action in actions(win)"
-                    :key="action.code"
-                    :disabled="!hasPermission(action.code)"
-                  >
-                    <component :is="action.icon" :size="18" />
-                    <span>{{ action.name }}</span>
-                  </button>
-                </div>
-
-                <div v-else-if="win.module.id === 'internship'" class="internship-panel">
+                <div v-if="win.module.id === 'internship'" class="internship-panel">
                   <div class="internship-toolbar">
                     <div class="internship-tabs">
                       <button
@@ -519,13 +479,11 @@
                     <div class="internship-list-only">
                       <DataListPanel
                         :columns="internshipListConfigs.arrangements.columns"
-                        :exportable="hasPermission('internship:export')"
                         :filters="internshipListConfigs.arrangements.filters"
                         :filter-values="internshipState.filters.arrangements"
                         :loading="internshipState.loading"
                         :pagination="internshipState.lists.arrangements.pagination"
                         :rows="internshipState.lists.arrangements.items"
-                        @export="exportInternshipList('arrangements')"
                         @filter-change="setInternshipFilter('arrangements', $event)"
                         @page-change="page => loadInternshipPanel('arrangements', page)"
                         @reset="resetInternshipFilters('arrangements')"
@@ -537,13 +495,11 @@
                   <template v-else-if="win.panel === 'applications'">
                     <DataListPanel
                       :columns="internshipListConfigs.applications.columns"
-                      :exportable="hasPermission('internship:export')"
                       :filters="internshipListConfigs.applications.filters"
                       :filter-values="internshipState.filters.applications"
                       :loading="internshipState.loading"
                       :pagination="internshipState.lists.applications.pagination"
                       :rows="internshipState.lists.applications.items"
-                      @export="exportInternshipList('applications')"
                       @filter-change="setInternshipFilter('applications', $event)"
                       @page-change="page => loadInternshipPanel('applications', page)"
                       @reset="resetInternshipFilters('applications')"
@@ -569,13 +525,11 @@
                   <template v-else-if="win.panel === 'pairs'">
                     <DataListPanel
                       :columns="internshipListConfigs.pairs.columns"
-                      :exportable="hasPermission('internship:export')"
                       :filters="internshipListConfigs.pairs.filters"
                       :filter-values="internshipState.filters.pairs"
                       :loading="internshipState.loading"
                       :pagination="internshipState.lists.pairs.pagination"
                       :rows="internshipState.lists.pairs.items"
-                      @export="exportInternshipList('pairs')"
                       @filter-change="setInternshipFilter('pairs', $event)"
                       @page-change="page => loadInternshipPanel('pairs', page)"
                       @reset="resetInternshipFilters('pairs')"
@@ -590,13 +544,11 @@
                   <template v-else-if="win.panel === 'signIns'">
                     <DataListPanel
                       :columns="internshipListConfigs.signIns.columns"
-                      :exportable="hasPermission('internship:export')"
                       :filters="internshipListConfigs.signIns.filters"
                       :filter-values="internshipState.filters.signIns"
                       :loading="internshipState.loading"
                       :pagination="internshipState.lists.signIns.pagination"
                       :rows="internshipState.lists.signIns.items"
-                      @export="exportInternshipList('signIns')"
                       @filter-change="setInternshipFilter('signIns', $event)"
                       @page-change="page => loadInternshipPanel('signIns', page)"
                       @reset="resetInternshipFilters('signIns')"
@@ -607,13 +559,11 @@
                   <template v-else-if="win.panel === 'journals'">
                     <DataListPanel
                       :columns="internshipListConfigs.journals.columns"
-                      :exportable="hasPermission('internship:export')"
                       :filters="internshipListConfigs.journals.filters"
                       :filter-values="internshipState.filters.journals"
                       :loading="internshipState.loading"
                       :pagination="internshipState.lists.journals.pagination"
                       :rows="internshipState.lists.journals.items"
-                      @export="exportInternshipList('journals')"
                       @filter-change="setInternshipFilter('journals', $event)"
                       @page-change="page => loadInternshipPanel('journals', page)"
                       @reset="resetInternshipFilters('journals')"
@@ -639,13 +589,11 @@
                   <template v-else-if="win.panel === 'reports'">
                     <DataListPanel
                       :columns="internshipListConfigs.reports.columns"
-                      :exportable="hasPermission('internship:export')"
                       :filters="internshipListConfigs.reports.filters"
                       :filter-values="internshipState.filters.reports"
                       :loading="internshipState.loading"
                       :pagination="internshipState.lists.reports.pagination"
                       :rows="internshipState.lists.reports.items"
-                      @export="exportInternshipList('reports')"
                       @filter-change="setInternshipFilter('reports', $event)"
                       @page-change="page => loadInternshipPanel('reports', page)"
                       @reset="resetInternshipFilters('reports')"
@@ -672,13 +620,11 @@
                     <div class="internship-list-only">
                       <DataListPanel
                         :columns="internshipListConfigs.scores.columns"
-                        :exportable="hasPermission('internship:export')"
                         :filters="internshipListConfigs.scores.filters"
                         :filter-values="internshipState.filters.scores"
                         :loading="internshipState.loading"
                         :pagination="internshipState.lists.scores.pagination"
                         :rows="internshipState.lists.scores.items"
-                        @export="exportInternshipList('scores')"
                         @filter-change="setInternshipFilter('scores', $event)"
                         @page-change="page => loadInternshipPanel('scores', page)"
                         @reset="resetInternshipFilters('scores')"
@@ -715,13 +661,11 @@
                         <DataListPanel
                           v-else
                           :columns="internshipListConfigs.insurances.columns"
-                          :exportable="hasPermission('internship:export')"
                           :filters="internshipListConfigs.insurances.filters"
                           :filter-values="internshipState.filters.insurances"
                           :loading="internshipState.loading"
                           :pagination="internshipState.lists.insurances.pagination"
                           :rows="internshipState.lists.insurances.items"
-                          @export="exportInternshipList('insurances')"
                           @filter-change="setInternshipFilter('insurances', $event)"
                           @page-change="page => loadInternshipPanel('insurances', page)"
                           @reset="resetInternshipFilters('insurances')"
@@ -746,13 +690,11 @@
                         <DataListPanel
                           v-else
                           :columns="internshipListConfigs.safetyLetters.columns"
-                          :exportable="hasPermission('internship:export')"
                           :filters="internshipListConfigs.safetyLetters.filters"
                           :filter-values="internshipState.filters.safetyLetters"
                           :loading="internshipState.loading"
                           :pagination="internshipState.lists.safetyLetters.pagination"
                           :rows="internshipState.lists.safetyLetters.items"
-                          @export="exportInternshipList('safetyLetters')"
                           @filter-change="setInternshipFilter('safetyLetters', $event)"
                           @page-change="page => loadInternshipPanel('safetyLetters', page)"
                           @reset="resetInternshipFilters('safetyLetters')"
@@ -780,41 +722,42 @@
                     <el-button :icon="RefreshCw" :loading="archiveState.loading" @click="loadArchiveItems">
                       读取
                     </el-button>
-                    <el-button :icon="Settings" @click="newArchiveItem">
+                    <el-button :icon="Plus" @click="openArchiveDialog()">
                       新增
                     </el-button>
-                    <el-button
-                      type="primary"
-                      :icon="Save"
-                      :loading="archiveState.loading"
-                      @click="saveArchiveConfig"
-                    >
-                      保存
+                    <el-button :icon="Edit3" :disabled="!archiveState.selected" @click="openArchiveDialog(archiveState.selected)">
+                      编辑
                     </el-button>
                     <el-button
                       type="danger"
-                      :disabled="!archiveState.editing.id"
+                      :icon="Trash2"
+                      :disabled="!archiveState.selected"
                       @click="deleteArchiveConfig"
                     >
                       删除
                     </el-button>
                   </div>
-                  <div class="archive-layout">
-                    <el-table :data="archiveState.items" height="100%" stripe @row-click="editArchiveItem">
-                      <el-table-column :prop="currentArchiveIdField" label="ID" width="76" />
-                      <el-table-column
-                        v-for="field in currentArchiveTableFields"
-                        :key="field.key"
-                        :prop="field.key"
-                        :label="field.label"
-                        min-width="120"
-                      >
-                        <template #default="{ row }">
-                          {{ archiveFieldText(field, row[field.key]) }}
-                        </template>
-                      </el-table-column>
-                    </el-table>
-                    <section class="menu-form">
+                  <el-table :data="archiveState.items" height="100%" stripe highlight-current-row @row-click="selectArchiveItem">
+                    <el-table-column :prop="currentArchiveIdField" label="ID" width="76" />
+                    <el-table-column
+                      v-for="field in currentArchiveTableFields"
+                      :key="field.key"
+                      :prop="field.key"
+                      :label="field.label"
+                      min-width="120"
+                    >
+                      <template #default="{ row }">
+                        {{ archiveFieldText(field, row[field.key]) }}
+                      </template>
+                    </el-table-column>
+                  </el-table>
+                  <div v-if="archiveState.dialogVisible" class="operation-mask" @click.self="closeArchiveDialog">
+                    <section class="operation-dialog menu-dialog">
+                      <header>
+                        <strong>{{ archiveState.editing.id ? '编辑档案' : '新增档案' }}</strong>
+                        <button type="button" @click="closeArchiveDialog">关闭</button>
+                      </header>
+                      <div class="operation-form menu-dialog-form">
                       <label
                         v-for="field in currentArchiveFields"
                         :key="field.key"
@@ -839,9 +782,83 @@
                           :type="field.inputType || 'text'"
                         >
                       </label>
+                      </div>
+                      <footer>
+                        <el-button @click="closeArchiveDialog">取消</el-button>
+                        <el-button type="primary" :icon="Save" :loading="archiveState.loading" @click="saveArchiveConfig">
+                          保存
+                        </el-button>
+                      </footer>
                     </section>
                   </div>
                   <small v-if="archiveState.message">{{ archiveState.message }}</small>
+                </div>
+
+                <div v-else-if="win.panel === 'operationGuides'" class="admin-panel guide-admin-panel">
+                  <div class="admin-toolbar">
+                    <el-button :icon="RefreshCw" :loading="guideAdminState.loading" @click="loadGuideAdminItems">
+                      读取
+                    </el-button>
+                    <el-button
+                      type="primary"
+                      :icon="Save"
+                      :disabled="!guideAdminState.selected || !hasPermission('guide:save')"
+                      :loading="guideAdminState.loading"
+                      @click="saveGuideAdminItem"
+                    >
+                      保存
+                    </el-button>
+                  </div>
+                  <div class="guide-admin-layout">
+                    <aside class="guide-admin-list">
+                      <button
+                        v-for="item in guideAdminState.items"
+                        :key="item.module_key"
+                        type="button"
+                        :class="{ active: guideAdminState.selected?.module_key === item.module_key }"
+                        @click="selectGuideAdminItem(item)"
+                      >
+                        <strong>{{ guideModuleName(item.module_key) }}</strong>
+                        <span>{{ item.title }}</span>
+                      </button>
+                    </aside>
+                    <section v-if="guideAdminState.selected" class="guide-admin-editor">
+                      <div class="guide-admin-fields">
+                        <label>
+                          <span>模块</span>
+                          <input :value="guideModuleName(guideAdminState.editing.module_key)" disabled>
+                        </label>
+                        <label>
+                          <span>标题</span>
+                          <input v-model="guideAdminState.editing.title">
+                        </label>
+                        <label>
+                          <span>排序</span>
+                          <input v-model="guideAdminState.editing.sort" type="number">
+                        </label>
+                      </div>
+                      <div class="rich-editor-toolbar">
+                        <button type="button" @click="applyGuideFormat('bold')">B</button>
+                        <button type="button" @click="applyGuideFormat('insertUnorderedList')">列表</button>
+                        <button type="button" @click="insertGuideTemplate">模板</button>
+                      </div>
+                      <div
+                        ref="guideEditorRef"
+                        class="rich-editor"
+                        contenteditable="true"
+                        @input="syncGuideEditor"
+                        v-html="guideAdminState.editing.content"
+                      />
+                      <section class="guide-preview rich-content">
+                        <strong>预览</strong>
+                        <article v-html="guideAdminState.editing.content" />
+                      </section>
+                    </section>
+                    <section v-else class="guide-admin-empty">
+                      请选择需要维护的操作说明。
+                    </section>
+                  </div>
+                  <small v-if="guideAdminState.message">{{ guideAdminState.message }}</small>
                 </div>
 
                 <div v-else-if="win.panel === 'fileManage'" class="admin-panel file-admin">
@@ -936,116 +953,141 @@
 
                 <div v-else-if="win.panel === 'menuManage'" class="admin-panel menu-admin">
                   <div class="admin-toolbar">
-                    <el-button :icon="Settings" @click="newMenu">
-                      新增菜单
+                    <el-button :icon="Plus" @click="openMenuDialog()">
+                      新增主菜单
+                    </el-button>
+                    <el-button :icon="ListTree" :disabled="!adminState.menu.selected || adminState.menu.selected.type === 'button'" @click="openMenuDialog(null, adminState.menu.selected)">
+                      新增子级
                     </el-button>
                     <el-button
-                      type="primary"
-                      :icon="Save"
-                      :loading="adminState.menu.loading"
-                      @click="saveMenuConfig"
+                      :icon="Edit3"
+                      :disabled="!adminState.menu.selected"
+                      @click="openMenuDialog(adminState.menu.selected)"
                     >
-                      保存菜单
+                      编辑
                     </el-button>
                     <el-button
                       type="danger"
-                      :disabled="!adminState.menu.editing.id"
-                      @click="deleteMenuConfig(adminState.menu.editing)"
+                      :icon="Trash2"
+                      :disabled="!adminState.menu.selected"
+                      @click="deleteMenuConfig(adminState.menu.selected)"
                     >
                       删除菜单
                     </el-button>
+                    <el-button :icon="RefreshCw" :loading="adminState.loading" @click="loadAdminFoundation">
+                      刷新
+                    </el-button>
                   </div>
-                  <div class="menu-admin-layout">
-                    <section class="menu-tree-panel">
-                      <header>
-                        <strong>菜单树</strong>
-                        <small>{{ adminState.menu.items.length }} 项</small>
-                      </header>
-                      <el-tree
-                        class="permission-tree menu-edit-tree"
-                        :data="adminState.menus"
-                        :props="treeProps"
-                        node-key="id"
-                        default-expand-all
-                        highlight-current
-                        :current-node-key="adminState.menu.editing.id"
-                        :expand-on-click-node="false"
-                        @node-click="editMenu"
-                      >
-                        <template #default="{ data }">
-                          <span class="tree-node menu-manage-node">
+                  <section class="menu-tree-panel menu-tree-full">
+                    <header>
+                      <strong>菜单树</strong>
+                      <small>{{ adminState.menu.items.length }} 项</small>
+                    </header>
+                    <el-tree
+                      class="permission-tree menu-edit-tree"
+                      :data="adminState.menus"
+                      :props="treeProps"
+                      node-key="id"
+                      default-expand-all
+                      highlight-current
+                      :current-node-key="adminState.menu.selected?.id"
+                      :expand-on-click-node="false"
+                      @node-click="selectMenu"
+                    >
+                      <template #default="{ data }">
+                        <span class="tree-node menu-manage-node">
+                          <span class="menu-node-main">
                             <strong>{{ data.name }}</strong>
-                            <small>{{ data.type }} / {{ data.platform }} / {{ data.code || '-' }}</small>
+                            <small>{{ data.code || '未配置权限码' }}</small>
                           </span>
-                        </template>
-                      </el-tree>
-                    </section>
-                    <section class="menu-form">
-                      <label>
-                        <span>名称</span>
-                        <input v-model="adminState.menu.editing.name">
-                      </label>
-                      <label>
-                        <span>权限码</span>
-                        <input v-model="adminState.menu.editing.code">
-                      </label>
-                      <label>
-                        <span>路径</span>
-                        <input v-model="adminState.menu.editing.path">
-                      </label>
-                      <label>
-                        <span>图标</span>
-                        <input v-model="adminState.menu.editing.icon">
-                      </label>
-                      <label>
-                        <span>父级</span>
-                        <el-select v-model="adminState.menu.editing.parent_id" filterable>
-                          <el-option label="根菜单" :value="0" />
-                          <el-option
-                            v-for="menu in parentMenuOptions"
-                            :key="menu.id"
-                            :label="menu.treeLabel"
-                            :value="menu.id"
+                          <span class="menu-node-meta">
+                            <em>{{ menuNodeKind(data) }}</em>
+                            <small>{{ menuNodeTypeText(data.type) }} / {{ data.platform }} / {{ data.path || '-' }}</small>
+                          </span>
+                        </span>
+                      </template>
+                    </el-tree>
+                  </section>
+                  <small v-if="adminState.menu.message">{{ adminState.menu.message }}</small>
+
+                  <div v-if="adminState.menu.dialogVisible" class="operation-mask" @click.self="closeMenuDialog">
+                    <section class="operation-dialog menu-dialog">
+                      <header>
+                        <strong>{{ adminState.menu.dialogMode === 'edit' ? '编辑菜单' : '新增菜单' }}</strong>
+                        <button type="button" @click="closeMenuDialog">关闭</button>
+                      </header>
+                      <div class="operation-form menu-dialog-form">
+                        <label>
+                          <span>名称</span>
+                          <input v-model="adminState.menu.editing.name">
+                        </label>
+                        <label>
+                          <span>权限码</span>
+                          <input v-model="adminState.menu.editing.code" placeholder="如 internship:apply">
+                        </label>
+                        <label>
+                          <span>路径</span>
+                          <input v-model="adminState.menu.editing.path" placeholder="页面菜单填写路由，按钮可为空">
+                        </label>
+                        <label>
+                          <span>图标</span>
+                          <input v-model="adminState.menu.editing.icon" placeholder="lucide 图标名">
+                        </label>
+                        <label>
+                          <span>父级</span>
+                          <el-tree-select
+                            v-model="adminState.menu.editing.parent_id"
+                            :data="parentMenuTreeOptions"
+                            :props="treeProps"
+                            check-strictly
+                            default-expand-all
+                            filterable
+                            node-key="id"
                           />
-                        </el-select>
-                      </label>
-                      <label>
-                        <span>平台</span>
-                        <el-select v-model="adminState.menu.editing.platform">
-                          <el-option label="PC" value="pc" />
-                          <el-option label="H5" value="h5" />
-                          <el-option label="双端" value="both" />
-                        </el-select>
-                      </label>
-                      <label>
-                        <span>类型</span>
-                        <el-select v-model="adminState.menu.editing.type">
-                          <el-option label="目录" value="directory" />
-                          <el-option label="菜单" value="menu" />
-                          <el-option label="按钮" value="button" />
-                        </el-select>
-                      </label>
-                      <label>
-                        <span>排序</span>
-                        <input v-model="adminState.menu.editing.sort" type="number">
-                      </label>
-                      <label>
-                        <span>可见</span>
-                        <el-select v-model="adminState.menu.editing.visible">
-                          <el-option label="是" value="true" />
-                          <el-option label="否" value="false" />
-                        </el-select>
-                      </label>
-                      <label>
-                        <span>状态</span>
-                        <el-select v-model="adminState.menu.editing.status">
-                          <el-option label="启用" value="enabled" />
-                          <el-option label="禁用" value="disabled" />
-                        </el-select>
-                      </label>
+                        </label>
+                        <label>
+                          <span>平台</span>
+                          <el-select v-model="adminState.menu.editing.platform">
+                            <el-option label="PC" value="pc" />
+                            <el-option label="H5" value="h5" />
+                            <el-option label="双端" value="both" />
+                          </el-select>
+                        </label>
+                        <label>
+                          <span>类型</span>
+                          <el-radio-group v-model="adminState.menu.editing.type" class="menu-type-radios">
+                            <el-radio-button label="directory">目录</el-radio-button>
+                            <el-radio-button label="menu">菜单/列表</el-radio-button>
+                            <el-radio-button label="button">按钮</el-radio-button>
+                          </el-radio-group>
+                        </label>
+                        <label>
+                          <span>排序</span>
+                          <input v-model="adminState.menu.editing.sort" type="number">
+                        </label>
+                        <label>
+                          <span>可见</span>
+                          <el-select v-model="adminState.menu.editing.visible">
+                            <el-option label="是" value="true" />
+                            <el-option label="否" value="false" />
+                          </el-select>
+                        </label>
+                        <label>
+                          <span>状态</span>
+                          <el-select v-model="adminState.menu.editing.status">
+                            <el-option label="启用" value="enabled" />
+                            <el-option label="禁用" value="disabled" />
+                          </el-select>
+                        </label>
+                      </div>
+                      <footer>
+                        <el-button @click="closeMenuDialog">取消</el-button>
+                        <el-button type="primary" :loading="adminState.menu.loading" @click="saveMenuConfig">
+                          保存
+                        </el-button>
+                      </footer>
                     </section>
                   </div>
-                  <small v-if="adminState.menu.message">{{ adminState.menu.message }}</small>
                 </div>
 
                 <div v-else-if="win.panel === 'roleMenus'" class="admin-panel">
@@ -1086,9 +1128,15 @@
                     default-expand-all
                   >
                     <template #default="{ data }">
-                      <span class="tree-node">
-                        <strong>{{ data.name }}</strong>
-                        <small>{{ data.type }} / {{ data.platform }} / {{ data.code || '-' }}</small>
+                      <span class="tree-node menu-manage-node">
+                        <span class="menu-node-main">
+                          <strong>{{ data.name }}</strong>
+                          <small>{{ data.code || '未配置权限码' }}</small>
+                        </span>
+                        <span class="menu-node-meta">
+                          <em>{{ menuNodeKind(data) }}</em>
+                          <small>{{ menuNodeTypeText(data.type) }} / {{ data.platform }}</small>
+                        </span>
                       </span>
                     </template>
                   </el-tree>
@@ -1196,25 +1244,196 @@
                   <small v-if="adminState.scope.message">{{ adminState.scope.message }}</small>
                 </div>
 
-                <div v-else-if="win.panel === 'wechatProxy'" class="settings-form">
-                  <label>
-                    <span>代理地址</span>
-                    <input v-model="wechatProxy.proxy_url" placeholder="http://127.0.0.1:9000/wechat-proxy">
-                  </label>
-                  <label class="check-row">
-                    <input v-model="wechatProxy.proxy_enabled" type="checkbox">
-                    <span>启用企业微信代理</span>
-                  </label>
-                  <p>本地开发时，后端会把企业微信 API 请求转发到该代理地址，用于绕过企业微信服务器 IP 白名单限制。</p>
-                  <div class="settings-actions">
-                    <button :disabled="wechatProxy.loading || !hasPermission('wechat:proxy:save')" @click="saveProxy">
-                      <Save :size="17" />
-                      保存设置
-                    </button>
-                    <button :disabled="wechatProxy.loading" @click="loadProxy">
-                      <RefreshCw :size="17" />
+                <div v-else-if="win.module.id === 'log'" class="admin-panel log-panel">
+                  <div class="admin-toolbar log-toolbar">
+                    <el-input v-model="logState.filters.keyword" clearable placeholder="关键词、账号、姓名、IP" @keyup.enter="loadLogs(1)" />
+                    <el-input v-model="logState.filters.action" clearable placeholder="动作" @keyup.enter="loadLogs(1)" />
+                    <el-input v-model="logState.filters.ip" clearable placeholder="IP" @keyup.enter="loadLogs(1)" />
+                    <input v-model="logState.filters.date_from" type="date">
+                    <input v-model="logState.filters.date_to" type="date">
+                    <el-button :icon="Search" :loading="logState.loading" @click="loadLogs(1)">
+                      查询
+                    </el-button>
+                    <el-button :icon="RefreshCw" :loading="logState.loading" @click="resetLogFilters">
+                      重置
+                    </el-button>
+                  </div>
+                  <el-table :data="logState.items" height="100%" stripe>
+                    <el-table-column prop="created_at" label="时间" width="168" />
+                    <el-table-column label="账号" min-width="150">
+                      <template #default="{ row }">
+                        {{ row.user_name || row.login_name || row.account_id || '-' }}
+                      </template>
+                    </el-table-column>
+                    <el-table-column prop="action" label="动作" min-width="150" />
+                    <el-table-column prop="ip" label="IP" width="140" />
+                    <el-table-column prop="source_table" label="来源表" width="150" />
+                    <el-table-column label="内容" min-width="260">
+                      <template #default="{ row }">
+                        <span class="log-payload" :title="payloadText(row.payload)">{{ payloadText(row.payload) }}</span>
+                      </template>
+                    </el-table-column>
+                  </el-table>
+                  <div class="file-pagination">
+                    <span>共 {{ logState.pagination.total }} 条日志，{{ logState.tables.length }} 个分表</span>
+                    <el-pagination
+                      small
+                      layout="prev, pager, next"
+                      :current-page="logState.pagination.page"
+                      :page-size="logState.pagination.page_size"
+                      :total="logState.pagination.total"
+                      @current-change="loadLogs"
+                    />
+                  </div>
+                  <small v-if="logState.message">{{ logState.message }}</small>
+                </div>
+
+                <div v-else-if="win.module.id === 'stat'" class="admin-panel stat-panel">
+                  <div class="stat-report-layout">
+                    <aside class="stat-report-menu">
+                      <button
+                        v-for="report in statReports"
+                        :key="report.key"
+                        type="button"
+                        :class="{ active: statState.report === report.key }"
+                        @click="statState.report = report.key"
+                      >
+                        <component :is="report.icon" :size="17" />
+                        <span>{{ report.name }}</span>
+                      </button>
+                    </aside>
+                    <section class="stat-report-content">
+                      <header>
+                        <div>
+                          <strong>{{ currentStatReport.name }}</strong>
+                          <small>{{ currentStatReport.description }}</small>
+                        </div>
+                        <el-button :icon="RefreshCw" :loading="internshipState.loading" @click="loadInternshipPanel('overview')">
+                          刷新
+                        </el-button>
+                      </header>
+                      <div class="stat-filter-bar">
+                        <label>
+                          <span>学期</span>
+                          <el-select v-model="statState.filters.semester" clearable filterable placeholder="全部">
+                            <el-option v-for="item in semesterOptions()" :key="item.value" :label="item.label" :value="item.value" />
+                          </el-select>
+                        </label>
+                        <label>
+                          <span>学院</span>
+                          <el-select v-model="statState.filters.dep_id" clearable filterable placeholder="全部">
+                            <el-option v-for="item in optionItems(internshipState.options.departments, 'dep_id', 'dep_name')" :key="item.value" :label="item.label" :value="item.value" />
+                          </el-select>
+                        </label>
+                        <label>
+                          <span>专业</span>
+                          <el-select v-model="statState.filters.profession_id" clearable filterable placeholder="全部">
+                            <el-option v-for="item in optionItems(internshipState.options.professions, 'profession_id', 'profession_name')" :key="item.value" :label="item.label" :value="item.value" />
+                          </el-select>
+                        </label>
+                        <label>
+                          <span>届次</span>
+                          <el-select v-model="statState.filters.grade_id" clearable filterable placeholder="全部">
+                            <el-option v-for="item in optionItems(internshipState.options.grades, 'grade_id', 'grade_name')" :key="item.value" :label="item.label" :value="item.value" />
+                          </el-select>
+                        </label>
+                        <label>
+                          <span>关键词</span>
+                          <input v-model="statState.filters.keyword" placeholder="学生、学号、企业、教师">
+                        </label>
+                      </div>
+                      <div class="stat-grid">
+                        <section v-for="item in statCards" :key="item.name" class="stat-card">
+                          <component :is="item.icon" :size="22" />
+                          <strong>{{ item.value }}</strong>
+                          <span>{{ item.name }}</span>
+                          <small>{{ item.desc }}</small>
+                        </section>
+                      </div>
+                      <section class="stat-empty-panel">
+                        <strong>{{ currentStatReport.name }}明细</strong>
+                        <p>当前展示统计框架，后续按该报表菜单接入对应聚合接口和钻取列表。</p>
+                      </section>
+                    </section>
+                  </div>
+                </div>
+
+                <div v-else-if="win.panel === 'wechatProxy'" class="admin-panel wechat-config-panel">
+                  <div class="admin-toolbar">
+                    <el-button type="primary" :icon="Save" :loading="wechatProxy.loading" :disabled="!hasPermission('wechat:proxy:save')" @click="saveProxy">
+                      保存配置
+                    </el-button>
+                    <el-button :icon="RefreshCw" :loading="wechatProxy.loading" @click="loadProxy">
                       重新读取
-                    </button>
+                    </el-button>
+                    <el-button :icon="Plus" :disabled="wechatProxy.menu.length >= 3" @click="addWechatMenu()">
+                      一级菜单
+                    </el-button>
+                    <el-button :icon="ListTree" :disabled="wechatProxy.selectedMenuIndex < 0 || (wechatProxy.menu[wechatProxy.selectedMenuIndex]?.children || []).length >= 5" @click="addWechatMenu(wechatProxy.selectedMenuIndex)">
+                      子菜单
+                    </el-button>
+                    <el-button :icon="Trash2" :disabled="wechatProxy.selectedMenuIndex < 0" @click="removeSelectedWechatMenu">
+                      删除菜单
+                    </el-button>
+                  </div>
+                  <div class="wechat-config-layout">
+                    <section class="settings-form wechat-app-form">
+                      <label><span>应用 AppID</span><input v-model="wechatProxy.app_id" placeholder="第三方应用或自建应用标识"></label>
+                      <label><span>企业 ID</span><input v-model="wechatProxy.corp_id" placeholder="wwxxxxxxxx"></label>
+                      <label><span>AgentId</span><input v-model="wechatProxy.agent_id" placeholder="1000002"></label>
+                      <label><span>应用 Secret</span><input v-model="wechatProxy.secret" placeholder="企业微信应用 Secret"></label>
+                      <label><span>回调 Token</span><input v-model="wechatProxy.token"></label>
+                      <label><span>EncodingAESKey</span><input v-model="wechatProxy.encoding_aes_key"></label>
+                      <label><span>代理地址</span><input v-model="wechatProxy.proxy_url" placeholder="http://127.0.0.1:9000/wechat-proxy"></label>
+                      <label class="check-row">
+                        <input v-model="wechatProxy.proxy_enabled" type="checkbox">
+                        <span>启用企业微信代理</span>
+                      </label>
+                    </section>
+                    <section class="wechat-menu-editor">
+                      <header>
+                        <strong>应用菜单</strong>
+                        <small>一级最多 3 个，每个一级菜单最多 5 个子菜单</small>
+                      </header>
+                      <div class="wechat-menu-board">
+                        <button
+                          v-for="(menu, index) in wechatProxy.menu"
+                          :key="`main-${index}`"
+                          type="button"
+                          :class="{ active: wechatProxy.selectedMenuIndex === index && wechatProxy.selectedSubMenuIndex < 0 }"
+                          @click="selectWechatMenu(index)"
+                        >
+                          {{ menu.name || `菜单 ${index + 1}` }}
+                        </button>
+                      </div>
+                      <div v-if="wechatProxy.selectedMenuIndex >= 0" class="wechat-submenu-board">
+                        <button
+                          v-for="(menu, index) in wechatProxy.menu[wechatProxy.selectedMenuIndex]?.children || []"
+                          :key="`sub-${index}`"
+                          type="button"
+                          :class="{ active: wechatProxy.selectedSubMenuIndex === index }"
+                          @click="selectWechatMenu(wechatProxy.selectedMenuIndex, index)"
+                        >
+                          {{ menu.name || `子菜单 ${index + 1}` }}
+                        </button>
+                      </div>
+                      <section v-if="selectedWechatMenu" class="menu-form wechat-menu-form">
+                        <label><span>菜单名称</span><input v-model="selectedWechatMenu.name"></label>
+                        <label>
+                          <span>菜单类型</span>
+                          <el-select v-model="selectedWechatMenu.type">
+                            <el-option label="跳转网页" value="view" />
+                            <el-option label="点击事件" value="click" />
+                            <el-option label="小程序" value="miniprogram" />
+                          </el-select>
+                        </label>
+                        <label v-if="selectedWechatMenu.type === 'view' || selectedWechatMenu.type === 'miniprogram'"><span>URL</span><input v-model="selectedWechatMenu.url"></label>
+                        <label v-if="selectedWechatMenu.type === 'click'"><span>Key</span><input v-model="selectedWechatMenu.key"></label>
+                        <label v-if="selectedWechatMenu.type === 'miniprogram'"><span>AppID</span><input v-model="selectedWechatMenu.appid"></label>
+                        <label v-if="selectedWechatMenu.type === 'miniprogram'"><span>页面路径</span><input v-model="selectedWechatMenu.pagepath"></label>
+                      </section>
+                      <small v-else>请先新增或选择菜单。</small>
+                    </section>
                   </div>
                   <small v-if="wechatProxy.message">{{ wechatProxy.message }}</small>
                 </div>
@@ -1262,6 +1481,23 @@
         <UserRound :size="16" />
         <span>个人设置</span>
       </button>
+    </div>
+
+    <div v-if="guideState.visible" class="operation-mask" @click.self="closeGuide">
+      <section class="operation-dialog guide-dialog">
+        <header>
+          <strong>{{ guideState.title }}</strong>
+          <button type="button" @click="closeGuide">关闭</button>
+        </header>
+        <div class="guide-content rich-content">
+          <el-alert v-if="guideState.message" type="warning" :closable="false" :title="guideState.message" />
+          <div v-if="guideState.loading" class="guide-loading">正在读取操作说明...</div>
+          <article v-else v-html="guideState.content" />
+        </div>
+        <footer>
+          <el-button type="primary" @click="closeGuide">知道了</el-button>
+        </footer>
+      </section>
     </div>
 
     <section v-if="!isLoggedIn" class="login-layer">
@@ -1320,13 +1556,14 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import {
   Bell,
+  BookOpen,
   BriefcaseBusiness,
   Building2,
   CalendarCheck,
   ChartColumn,
   CheckCircle2,
   ClipboardList,
-  Download,
+  Edit3,
   FileClock,
   FileText,
   FlaskConical,
@@ -1335,16 +1572,18 @@ import {
   HardDrive,
   ImagePlus,
   LayoutGrid,
+  ListTree,
   LogIn,
   LogOut,
   MapPin,
   MessageCircle,
+  Plus,
   RefreshCw,
   Save,
   Search,
   Settings,
-  ShieldCheck,
   SlidersHorizontal,
+  Trash2,
   UsersRound,
   UserRound,
   Workflow,
@@ -1373,9 +1612,12 @@ import {
   fetchInternshipSignIns,
   fetchInternshipTimeline,
   fetchOrganizationScopes,
+  fetchOperationGuide,
+  fetchOperationGuides,
+  fetchOperationLogs,
   fetchProfileSettings,
   fetchRolePermissions,
-  fetchWechatProxy,
+  fetchWechatConfig,
   deleteMenu as deleteMenuApi,
   login as loginApi,
   logout as logoutApi,
@@ -1388,9 +1630,10 @@ import {
   saveInternshipScore,
   saveMenu as saveMenuApi,
   saveOrganizationScopes,
+  saveOperationGuide,
   saveProfileSettings,
   saveRoleMenus,
-  saveWechatProxy,
+  saveWechatConfig,
   uploadProfileAsset,
 } from './api/system';
 
@@ -1411,10 +1654,47 @@ const loginState = reactive({
   message: '',
 });
 const wechatProxy = reactive({
+  app_id: '',
+  corp_id: '',
+  agent_id: '',
+  secret: '',
+  token: '',
+  encoding_aes_key: '',
   proxy_url: '',
   proxy_enabled: false,
+  menu: [],
+  selectedMenuIndex: -1,
+  selectedSubMenuIndex: -1,
   loading: false,
   message: '',
+});
+const logState = reactive({
+  loading: false,
+  message: '',
+  filters: {
+    keyword: '',
+    action: '',
+    ip: '',
+    date_from: '',
+    date_to: '',
+  },
+  items: [],
+  tables: [],
+  pagination: {
+    page: 1,
+    page_size: 20,
+    total: 0,
+  },
+});
+const statState = reactive({
+  report: 'overview',
+  filters: {
+    semester: '',
+    dep_id: '',
+    profession_id: '',
+    grade_id: '',
+    keyword: '',
+  },
 });
 const profileState = reactive({
   loading: false,
@@ -1428,6 +1708,21 @@ const desktopContextMenu = reactive({
   x: 0,
   y: 0,
 });
+const guideState = reactive({
+  visible: false,
+  title: '',
+  content: '',
+  loading: false,
+  message: '',
+});
+const guideAdminState = reactive({
+  items: [],
+  selected: null,
+  editing: emptyGuideForm(),
+  loading: false,
+  message: '',
+});
+const guideEditorRef = ref(null);
 const roleTreeRef = ref(null);
 const treeProps = {
   label: 'name',
@@ -1440,6 +1735,9 @@ const adminState = reactive({
   menu: {
     items: [],
     editing: emptyMenu(),
+    selected: null,
+    dialogVisible: false,
+    dialogMode: 'create',
     loading: false,
     message: '',
   },
@@ -1476,7 +1774,6 @@ const modules = [
     scope: '学院 / 专业 / 指导关系',
     viewPermission: 'internship:view',
     managePermission: 'internship:manage',
-    exportPermission: 'internship:export',
   },
   {
     id: 'training',
@@ -1486,7 +1783,6 @@ const modules = [
     scope: '流程待确认',
     viewPermission: 'training:view',
     managePermission: 'training:manage',
-    exportPermission: 'training:export',
   },
   {
     id: 'lab',
@@ -1496,7 +1792,6 @@ const modules = [
     scope: '流程待确认',
     viewPermission: 'lab:view',
     managePermission: 'lab:manage',
-    exportPermission: 'lab:export',
   },
   {
     id: 'stat',
@@ -1506,7 +1801,6 @@ const modules = [
     scope: '按数据范围聚合',
     viewPermission: 'stat:view',
     managePermission: 'stat:manage',
-    exportPermission: 'stat:export',
   },
   {
     id: 'log',
@@ -1516,7 +1810,6 @@ const modules = [
     scope: '学校业务库',
     viewPermission: 'log:view',
     managePermission: 'log:manage',
-    exportPermission: 'log:export',
   },
   {
     id: 'file',
@@ -1526,7 +1819,6 @@ const modules = [
     scope: '学校文件库',
     viewPermission: 'file:view',
     managePermission: 'file:manage',
-    exportPermission: '',
     defaultPanel: 'fileManage',
   },
   {
@@ -1537,7 +1829,6 @@ const modules = [
     scope: '学校业务库',
     viewPermission: 'config:view',
     managePermission: 'config:manage',
-    exportPermission: 'config:export',
     defaultPanel: 'menuManage',
   },
   {
@@ -1548,7 +1839,6 @@ const modules = [
     scope: '个人资料 / 桌面偏好 / 消息接收',
     viewPermission: '',
     managePermission: '',
-    exportPermission: '',
   },
 ];
 
@@ -1673,6 +1963,8 @@ const archiveState = reactive({
   type: 'department',
   items: [],
   editing: emptyArchiveItem('department'),
+  selected: null,
+  dialogVisible: false,
   loading: false,
   message: '',
 });
@@ -1752,38 +2044,45 @@ const isAdminRole = computed(() => ['super_admin', 'school_admin', 'college_admi
 const canManageConfig = computed(() => hasPermission('config:manage') && ['super_admin', 'school_admin'].includes(permissionState.context.role_type));
 const canManageInternship = computed(() => hasPermission('internship:manage'));
 const canApproveInternship = computed(() => hasPermission('internship:approve') && !isStudentRole.value);
+const statReports = [
+  { key: 'overview', name: '实习总览', description: '实习安排、申请、指导关系和过程材料汇总。', icon: ChartColumn },
+  { key: 'department', name: '学院统计', description: '按学院统计学生参与、审核进度和成绩分布。', icon: Building2 },
+  { key: 'profession', name: '专业统计', description: '按专业统计实习覆盖、提交进度和材料归档。', icon: GraduationCap },
+  { key: 'teacher', name: '指导统计', description: '按指导关系统计教师指导数量和评阅进度。', icon: UsersRound },
+  { key: 'student', name: '学生过程统计', description: '查看学生申请、签到、日志、报告、成绩的过程状态。', icon: UserRound },
+  { key: 'archive', name: '归档材料统计', description: '统计保险、安全承诺和报告归档材料完整性。', icon: FolderOpen },
+];
+const currentStatReport = computed(() => statReports.find(item => item.key === statState.report) || statReports[0]);
+const statCards = computed(() => [
+  { name: '实习安排', value: internshipState.overview.arrangements || 0, desc: '可见数据内安排数量', icon: BriefcaseBusiness },
+  { name: '待审申请', value: internshipState.overview.applications_waiting || 0, desc: '等待审核的申请', icon: ClipboardList },
+  { name: '指导关系', value: internshipState.overview.active_pairs || 0, desc: '有效师生指导关系', icon: UsersRound },
+  { name: '今日日志', value: internshipState.overview.journals_waiting || 0, desc: '待评阅实习日志', icon: FileText },
+]);
+const selectedWechatMenu = computed(() => {
+  const main = wechatProxy.menu[wechatProxy.selectedMenuIndex];
+  if (!main) {
+    return null;
+  }
+  if (wechatProxy.selectedSubMenuIndex >= 0) {
+    return (main.children || [])[wechatProxy.selectedSubMenuIndex] || null;
+  }
+  return main;
+});
 const visibleInternshipSidebarItems = computed(() => internshipSidebarItems.map((item) => ({
   ...item,
   name: internshipRolePanelName(item.key),
 })));
-const parentMenuOptions = computed(() => {
-  const options = [];
-  const walk = (nodes, prefix = '') => {
-    nodes.forEach((node) => {
-      if (node.id !== adminState.menu.editing.id && node.type !== 'button') {
-        options.push({
-          ...node,
-          treeLabel: `${prefix}${node.name}`,
-        });
-      }
-      if (node.children?.length) {
-        walk(node.children, `${prefix}${node.name} / `);
-      }
-    });
-  };
-  walk(adminState.menus);
-  return options;
-});
+const parentMenuTreeOptions = computed(() => [
+  {
+    id: 0,
+    name: '顶级',
+    children: selectableParentMenus(adminState.menus),
+  },
+]);
 const operatorName = computed(() => permissionState.context.user_name || (permissionState.context.user_id ? `用户 ${permissionState.context.user_id}` : '未登录'));
 const schoolDataText = computed(() => (isLoggedIn.value ? '当前学校业务库' : '未登录'));
 const roleText = computed(() => permissionState.context.role_name || roleTypeNames[permissionState.context.role_type] || permissionState.context.role_type || permissionState.context.role_id || '-');
-const scopeText = computed(() => {
-  const filter = permissionState.dataScope?.filter;
-  if (Array.isArray(filter) && filter.length === 0) {
-    return '全部学校数据';
-  }
-  return filter ? JSON.stringify(filter) : '未注入';
-});
 const selectedWallpaper = computed(() => wallpaperPresets.find(item => item.key === profileState.form.wallpaper) || wallpaperPresets[0]);
 const desktopStyle = computed(() => ({
   background: profileState.form.wallpaper_url
@@ -1831,7 +2130,7 @@ const internshipListConfigs = computed(() => ({
   applications: {
     listKey: 'applications',
     filename: '实习申请',
-    filters: internshipListFilters('applications', ['semester', 'grade_id', 'dep_id', 'profession_id', 'teacher_id', 'status', 'keyword']),
+    filters: internshipListFilters('applications', ['semester', 'grade_id', 'dep_id', 'profession_id', 'status', 'keyword']),
     columns: [
       { prop: 'student_name', label: '学生', width: 110 },
       { prop: 'student_num', label: '学号', width: 130 },
@@ -1847,7 +2146,7 @@ const internshipListConfigs = computed(() => ({
   pairs: {
     listKey: 'pairs',
     filename: '指导关系',
-    filters: internshipListFilters('pairs', ['semester', 'grade_id', 'dep_id', 'profession_id', 'teacher_id', 'status', 'keyword']),
+    filters: internshipListFilters('pairs', ['semester', 'grade_id', 'dep_id', 'profession_id', 'status', 'keyword']),
     columns: [
       { prop: 'student_name', label: '学生', width: 120 },
       { prop: 'student_num', label: '学号', width: 130 },
@@ -1860,7 +2159,7 @@ const internshipListConfigs = computed(() => ({
   signIns: {
     listKey: 'signIns',
     filename: '签到记录',
-    filters: internshipListFilters('signIns', ['semester', 'grade_id', 'dep_id', 'profession_id', 'teacher_id', 'arrangement_id', 'keyword']),
+    filters: internshipListFilters('signIns', ['semester', 'grade_id', 'dep_id', 'profession_id', 'arrangement_id', 'keyword']),
     columns: [
       { prop: 'student_name', label: '学生', width: 110 },
       { prop: 'student_num', label: '学号', width: 130 },
@@ -1874,7 +2173,7 @@ const internshipListConfigs = computed(() => ({
   journals: {
     listKey: 'journals',
     filename: '实习日志',
-    filters: internshipListFilters('journals', ['semester', 'grade_id', 'dep_id', 'profession_id', 'teacher_id', 'arrangement_id', 'status', 'keyword']),
+    filters: internshipListFilters('journals', ['semester', 'grade_id', 'dep_id', 'profession_id', 'arrangement_id', 'status', 'keyword']),
     columns: [
       { prop: 'student_name', label: '学生', width: 110 },
       { prop: 'title', label: '日志标题', minWidth: 180 },
@@ -1886,7 +2185,7 @@ const internshipListConfigs = computed(() => ({
   reports: {
     listKey: 'reports',
     filename: '实习报告',
-    filters: internshipListFilters('reports', ['semester', 'grade_id', 'dep_id', 'profession_id', 'teacher_id', 'arrangement_id', 'status', 'keyword']),
+    filters: internshipListFilters('reports', ['semester', 'grade_id', 'dep_id', 'profession_id', 'arrangement_id', 'status', 'keyword']),
     columns: [
       { prop: 'student_name', label: '学生', width: 110 },
       { prop: 'title', label: '报告标题', minWidth: 180 },
@@ -1898,7 +2197,7 @@ const internshipListConfigs = computed(() => ({
   scores: {
     listKey: 'scores',
     filename: '实习成绩',
-    filters: internshipListFilters('scores', ['semester', 'grade_id', 'dep_id', 'profession_id', 'teacher_id', 'arrangement_id', 'keyword']),
+    filters: internshipListFilters('scores', ['semester', 'grade_id', 'dep_id', 'profession_id', 'arrangement_id', 'keyword']),
     columns: [
       { prop: 'student_name', label: '学生', width: 110 },
       { prop: 'arrangement_title', label: '实习安排', minWidth: 180 },
@@ -1913,7 +2212,7 @@ const internshipListConfigs = computed(() => ({
   insurances: {
     listKey: 'insurances',
     filename: '保险记录',
-    filters: internshipListFilters('insurances', ['semester', 'grade_id', 'dep_id', 'profession_id', 'teacher_id', 'arrangement_id', 'keyword']),
+    filters: internshipListFilters('insurances', ['semester', 'grade_id', 'dep_id', 'profession_id', 'arrangement_id', 'keyword']),
     columns: [
       { prop: 'student_id', label: '学生ID', width: 90 },
       { prop: 'arrangement_id', label: '安排ID', width: 90 },
@@ -1926,7 +2225,7 @@ const internshipListConfigs = computed(() => ({
   safetyLetters: {
     listKey: 'safetyLetters',
     filename: '安全承诺',
-    filters: internshipListFilters('safetyLetters', ['semester', 'grade_id', 'dep_id', 'profession_id', 'teacher_id', 'arrangement_id', 'keyword']),
+    filters: internshipListFilters('safetyLetters', ['semester', 'grade_id', 'dep_id', 'profession_id', 'arrangement_id', 'keyword']),
     columns: [
       { prop: 'student_id', label: '学生ID', width: 90 },
       { prop: 'arrangement_id', label: '安排ID', width: 90 },
@@ -2097,12 +2396,6 @@ function panelTitle(win) {
   if (win.module.id === 'internship') {
     return internshipRolePanelName(win.panel);
   }
-  if (win.panel === 'scope') {
-    return '数据范围';
-  }
-  if (win.panel === 'buttons') {
-    return '按钮权限';
-  }
   if (win.panel === 'archive') {
     return '基础档案';
   }
@@ -2110,7 +2403,10 @@ function panelTitle(win) {
     return '菜单管理';
   }
   if (win.panel === 'wechatProxy') {
-    return '企业微信代理';
+    return '企业微信应用';
+  }
+  if (win.panel === 'operationGuides') {
+    return '操作说明';
   }
   if (win.panel === 'roleMenus') {
     return '角色权限';
@@ -2162,9 +2458,8 @@ function sidebarItems(win) {
       { key: 'roleMenus', name: '角色权限' },
       { key: 'organizationScope', name: '组织范围' },
       { key: 'archive', name: '基础档案' },
-      { key: 'wechatProxy', name: '企业微信代理' },
-      { key: 'scope', name: '当前范围' },
-      { key: 'buttons', name: '按钮权限' },
+      { key: 'operationGuides', name: '操作说明' },
+      { key: 'wechatProxy', name: '企业微信应用' },
     ];
   }
 
@@ -2172,14 +2467,6 @@ function sidebarItems(win) {
     { key: 'overview', name: '工作台' },
     { key: 'archive', name: '基础档案' },
     { key: 'workflow', name: '流程配置' },
-  ];
-}
-
-function actions(win) {
-  return [
-    { name: '查看', code: win.module.viewPermission, icon: ShieldCheck },
-    { name: '处理', code: win.module.managePermission, icon: SlidersHorizontal },
-    { name: '导出', code: win.module.exportPermission, icon: Download },
   ];
 }
 
@@ -2222,6 +2509,203 @@ function moduleHref(module) {
 
 function panelHref(win, panel) {
   return `#panel=${encodeURIComponent(win.module.id)}:${encodeURIComponent(panel)}`;
+}
+
+async function openGuide(win) {
+  guideState.title = `${win.module.name}操作说明`;
+  guideState.content = fallbackGuideContent(win);
+  guideState.message = '';
+  guideState.loading = true;
+  guideState.visible = true;
+  try {
+    const data = await fetchOperationGuide(win.module.id);
+    if (data.guide?.title) {
+      guideState.title = data.guide.title;
+    }
+    if (data.guide?.content) {
+      guideState.content = data.guide.content;
+    }
+  } catch (error) {
+    guideState.message = error.message;
+  } finally {
+    guideState.loading = false;
+  }
+}
+
+function closeGuide() {
+  guideState.visible = false;
+}
+
+function fallbackGuideContent(win) {
+  const common = [
+    {
+      title: '窗口操作',
+      lines: ['窗口可拖动、最小化、关闭，也可以拖拽边缘调整大小。', '底部任务栏图标用于恢复已最小化窗口。'],
+    },
+  ];
+  const map = {
+    internship: [
+      { title: '实习业务', lines: ['学生端只显示本人申请、签到、日志、报告和材料。', '教师端默认按指导关系查看学生，审核类操作会进入确认弹窗并记录流程。', '管理员端通过列表筛选、记录查看和归档材料完成过程监管。'] },
+    ],
+    config: [
+      { title: '系统配置', lines: ['菜单管理用于维护主菜单、业务菜单、列表和按钮节点。', '角色权限按菜单树授权，按钮节点用于控制页面内操作。', '组织范围用于配置学院、专业、班级、企业等数据边界。'] },
+    ],
+    log: [
+      { title: '日志审计', lines: ['默认读取当前学校业务库下所有 operation_log 分表。', '可按关键词、动作、IP 和日期范围查询。'] },
+    ],
+    stat: [
+      { title: '统计报表', lines: ['统计项按当前角色的数据范围展示。', '后续实训和实验流程确认后，可在此扩展跨模块统计卡片和报表。'] },
+    ],
+    file: [
+      { title: '文件管理', lines: ['展示学校业务库内上传文件、上传人、上传时间和设备信息。', '管理员可通过关键词、状态和分类快速定位文件。'] },
+    ],
+  };
+
+  return [...(map[win.module.id] || [{ title: '模块说明', lines: ['该模块流程确认后接入具体业务页面。'] }]), ...common]
+    .map(section => `<section><h3>${escapeHtml(section.title)}</h3>${section.lines.map(line => `<p>${escapeHtml(line)}</p>`).join('')}</section>`)
+    .join('');
+}
+
+function emptyGuideForm() {
+  return {
+    module_key: '',
+    title: '',
+    content: '',
+    sort: 0,
+  };
+}
+
+function guideModuleName(moduleKey) {
+  return modules.find(item => item.id === moduleKey)?.name || moduleKey || '-';
+}
+
+function guideTemplateHtml(title = '操作说明') {
+  return [
+    `<section><h3>${escapeHtml(title)}操作流程</h3><ol><li>进入对应模块，按角色查看可处理事项。</li><li>根据页面提示完成提交、审核、退回或查看记录。</li><li>审核类操作会写入流程记录和审核意见。</li></ol></section>`,
+    '<section><h3>流程规则</h3><p>学生仅处理本人业务，教师按指导关系处理，管理员按学院、专业等组织范围处理。</p></section>',
+    '<section><h3>常见问题</h3><ul><li>看不到数据时，先确认当前角色和组织范围是否正确。</li><li>材料或记录异常时，可通过记录查看追溯每次提交和审核。</li></ul></section>',
+  ].join('');
+}
+
+async function loadGuideAdminItems(force = false) {
+  if (!canManageConfig.value || guideAdminState.loading) {
+    return;
+  }
+  if (!force && guideAdminState.items.length) {
+    return;
+  }
+
+  guideAdminState.loading = true;
+  guideAdminState.message = '';
+  try {
+    const data = await fetchOperationGuides();
+    guideAdminState.items = data.items || [];
+    const selected = guideAdminState.items.find(item => item.module_key === guideAdminState.selected?.module_key)
+      || guideAdminState.items[0]
+      || null;
+    selectGuideAdminItem(selected);
+  } catch (error) {
+    guideAdminState.message = error.message;
+  } finally {
+    guideAdminState.loading = false;
+  }
+}
+
+function selectGuideAdminItem(item) {
+  if (!item) {
+    guideAdminState.selected = null;
+    guideAdminState.editing = emptyGuideForm();
+    nextTick(syncGuideEditorDom);
+    return;
+  }
+
+  guideAdminState.selected = item;
+  guideAdminState.editing = {
+    module_key: item.module_key || '',
+    title: item.title || '',
+    content: item.content || '',
+    sort: Number(item.sort || 0),
+  };
+  nextTick(syncGuideEditorDom);
+}
+
+function syncGuideEditorDom() {
+  const editor = activeGuideEditor();
+  if (editor && editor.innerHTML !== guideAdminState.editing.content) {
+    editor.innerHTML = guideAdminState.editing.content || '';
+  }
+}
+
+function activeGuideEditor() {
+  const editor = guideEditorRef.value;
+  return Array.isArray(editor) ? editor.at(-1) : editor;
+}
+
+function syncGuideEditor() {
+  const editor = activeGuideEditor();
+  guideAdminState.editing.content = editor?.innerHTML || '';
+}
+
+function applyGuideFormat(command) {
+  const editor = activeGuideEditor();
+  if (!editor) {
+    return;
+  }
+  editor.focus();
+  document.execCommand(command, false, null);
+  syncGuideEditor();
+}
+
+function insertGuideTemplate() {
+  const editor = activeGuideEditor();
+  const html = guideTemplateHtml(guideModuleName(guideAdminState.editing.module_key));
+  if (!editor) {
+    guideAdminState.editing.content = html;
+    return;
+  }
+
+  editor.focus();
+  if (!guideAdminState.editing.content.trim()) {
+    editor.innerHTML = html;
+  } else {
+    document.execCommand('insertHTML', false, html);
+  }
+  syncGuideEditor();
+}
+
+async function saveGuideAdminItem() {
+  if (!guideAdminState.selected || !hasPermission('guide:save')) {
+    return;
+  }
+
+  syncGuideEditor();
+  guideAdminState.loading = true;
+  guideAdminState.message = '';
+  try {
+    const data = await saveOperationGuide({
+      module_key: guideAdminState.editing.module_key,
+      title: guideAdminState.editing.title,
+      content: guideAdminState.editing.content,
+      sort: Number(guideAdminState.editing.sort || 0),
+    });
+    guideAdminState.items = data.items || [];
+    const selected = guideAdminState.items.find(item => item.module_key === guideAdminState.editing.module_key) || null;
+    selectGuideAdminItem(selected);
+    guideAdminState.message = '已保存';
+  } catch (error) {
+    guideAdminState.message = error.message;
+  } finally {
+    guideAdminState.loading = false;
+  }
+}
+
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
 }
 
 function windowHref(win) {
@@ -2428,6 +2912,9 @@ function activateWindowPanel(win, panel) {
   if (panel === 'fileManage') {
     loadFiles();
   }
+  if (panel === 'operationGuides') {
+    loadGuideAdminItems();
+  }
   if (win.module.id === 'internship') {
     loadInternshipPanel(panel);
   }
@@ -2530,13 +3017,73 @@ function emptyMenu() {
 }
 
 function applyMenusData(data) {
-  adminState.menus = data.menus || [];
+  adminState.menus = normalizeMenuTree(data.menus || []);
   adminState.menu.items = data.items || [];
 }
 
-function newMenu() {
-  const parentId = adminState.menu.editing.id && adminState.menu.editing.type !== 'button'
-    ? adminState.menu.editing.id
+function normalizeMenuTree(items, depth = 1) {
+  return items.map(item => ({
+    ...item,
+    depth,
+    children: normalizeMenuTree(item.children || [], depth + 1),
+  }));
+}
+
+function selectableParentMenus(nodes) {
+  return nodes
+    .filter(node => node.id !== adminState.menu.editing.id && node.type !== 'button')
+    .map(node => ({
+      ...node,
+      name: `${node.name}（${menuNodeKind(node)}）`,
+      children: selectableParentMenus(node.children || []),
+    }));
+}
+
+function menuNodeKind(node) {
+  if (Number(node.parent_id || 0) === 0) {
+    return '主菜单';
+  }
+  if (node.type === 'button') {
+    return '按钮';
+  }
+  if ((node.children || []).some(child => child.type === 'button')) {
+    return '列表';
+  }
+  return '菜单';
+}
+
+function menuNodeTypeText(type) {
+  const names = {
+    directory: '目录',
+    menu: '页面',
+    button: '按钮',
+  };
+  return names[type] || type || '-';
+}
+
+function selectMenu(row) {
+  adminState.menu.selected = row;
+  adminState.menu.message = '';
+}
+
+function openMenuDialog(row = null, parent = null) {
+  if (row) {
+    editMenu(row);
+    adminState.menu.dialogMode = 'edit';
+  } else {
+    newMenu(parent);
+    adminState.menu.dialogMode = 'create';
+  }
+  adminState.menu.dialogVisible = true;
+}
+
+function closeMenuDialog() {
+  adminState.menu.dialogVisible = false;
+}
+
+function newMenu(parent = null) {
+  const parentId = parent?.id && parent.type !== 'button'
+    ? parent.id
     : 0;
   adminState.menu.editing = {
     ...emptyMenu(),
@@ -2575,11 +3122,13 @@ async function saveMenuConfig() {
     applyMenusData(data);
     adminState.menu.message = '已保存';
     if (data.items?.length) {
-      const saved = data.items.find(item => item.name === payload.name && item.code === payload.code);
+      const saved = data.items.find(item => (payload.id && item.id === payload.id) || (item.name === payload.name && item.code === payload.code));
       if (saved) {
         editMenu(saved);
+        adminState.menu.selected = saved;
       }
     }
+    closeMenuDialog();
     await load();
   } catch (error) {
     adminState.menu.message = error.message;
@@ -2598,8 +3147,9 @@ async function deleteMenuConfig(row) {
   try {
     const data = await deleteMenuApi(row.id);
     applyMenusData(data);
-    if (adminState.menu.editing.id === row.id) {
-      newMenu();
+    if (adminState.menu.editing.id === row.id || adminState.menu.selected?.id === row.id) {
+      adminState.menu.selected = null;
+      newMenu(null);
     }
     adminState.menu.message = '已删除';
     await load();
@@ -2626,7 +3176,7 @@ async function loadAdminFoundation() {
     ]);
 
     adminState.roles = rolesData.roles || [];
-    adminState.menus = menusData.menus || [];
+    adminState.menus = normalizeMenuTree(menusData.menus || []);
     adminState.menu.items = menusData.items || [];
     adminState.options.accounts = optionsData.accounts || [];
     adminState.options.departments = optionsData.departments || [];
@@ -2801,12 +3351,31 @@ function emptyArchiveItem(type = archiveState?.type || 'department') {
 
 function changeArchiveType() {
   archiveState.editing = emptyArchiveItem(archiveState.type);
+  archiveState.selected = null;
   archiveState.message = '';
   loadArchiveItems();
 }
 
+function openArchiveDialog(row = null) {
+  if (row) {
+    editArchiveItem(row);
+  } else {
+    newArchiveItem();
+  }
+  archiveState.dialogVisible = true;
+}
+
+function closeArchiveDialog() {
+  archiveState.dialogVisible = false;
+}
+
 function newArchiveItem() {
   archiveState.editing = emptyArchiveItem(archiveState.type);
+  archiveState.message = '';
+}
+
+function selectArchiveItem(row) {
+  archiveState.selected = row;
   archiveState.message = '';
 }
 
@@ -2859,6 +3428,8 @@ async function saveArchiveConfig() {
     const data = await saveArchiveItem(payload);
     archiveState.items = data.items || [];
     archiveState.message = '已保存';
+    archiveState.dialogVisible = false;
+    archiveState.selected = null;
     await loadAdminFoundation();
   } catch (error) {
     archiveState.message = error.message;
@@ -2868,7 +3439,7 @@ async function saveArchiveConfig() {
 }
 
 async function deleteArchiveConfig() {
-  if (!archiveState.editing.id || !window.confirm('确认删除当前档案？')) {
+  if (!archiveState.selected || !window.confirm('确认删除当前档案？')) {
     return;
   }
 
@@ -2877,10 +3448,11 @@ async function deleteArchiveConfig() {
   try {
     const data = await deleteArchiveItem({
       type: archiveState.type,
-      id: archiveState.editing.id,
+      id: archiveState.selected[currentArchiveIdField.value],
     });
     archiveState.items = data.items || [];
     archiveState.editing = emptyArchiveItem(archiveState.type);
+    archiveState.selected = null;
     archiveState.message = '已删除';
     await loadAdminFoundation();
   } catch (error) {
@@ -2984,6 +3556,53 @@ function openFileUrl(url) {
   window.open(url, '_blank', 'noopener');
 }
 
+async function loadLogs(page = 1) {
+  if (!hasPermission('log:view') || logState.loading) {
+    return;
+  }
+
+  logState.loading = true;
+  logState.message = '';
+  try {
+    const data = await fetchOperationLogs({
+      page,
+      page_size: logState.pagination.page_size,
+      ...logState.filters,
+    });
+    logState.items = data.items || [];
+    logState.tables = data.tables || [];
+    logState.pagination = {
+      ...logState.pagination,
+      ...(data.pagination || {}),
+    };
+  } catch (error) {
+    logState.message = error.message;
+  } finally {
+    logState.loading = false;
+  }
+}
+
+function resetLogFilters() {
+  Object.assign(logState.filters, {
+    keyword: '',
+    action: '',
+    ip: '',
+    date_from: '',
+    date_to: '',
+  });
+  loadLogs(1);
+}
+
+function payloadText(payload) {
+  if (payload === null || payload === undefined || payload === '') {
+    return '-';
+  }
+  if (typeof payload === 'string') {
+    return payload;
+  }
+  return JSON.stringify(payload);
+}
+
 function emptyPagedList() {
   return {
     items: [],
@@ -3031,7 +3650,6 @@ function emptyInternshipFilters() {
     dep_id: '',
     profession_id: '',
     grade_id: '',
-    teacher_id: '',
     arrangement_id: '',
     status: '',
     type: '',
@@ -3091,13 +3709,12 @@ function setPagedList(key, data) {
 
 function internshipFilters(keys) {
   const definitions = {
-    keyword: { key: 'keyword', label: '关键词', placeholder: '学生、学号、标题' },
+    keyword: { key: 'keyword', label: '关键词', placeholder: '学生、学号、教师、标题' },
     student_keyword: { key: 'keyword', label: '学生', placeholder: '姓名或学号' },
     semester: { key: 'semester', label: '学期', type: 'select', options: semesterOptions() },
     dep_id: { key: 'dep_id', label: '学院', type: 'select', options: optionItems(internshipState.options.departments, 'dep_id', 'dep_name') },
     profession_id: { key: 'profession_id', label: '专业', type: 'select', options: optionItems(internshipState.options.professions, 'profession_id', 'profession_name') },
     grade_id: { key: 'grade_id', label: '届次', type: 'select', options: optionItems(internshipState.options.grades, 'grade_id', 'grade_name') },
-    teacher_id: { key: 'teacher_id', label: '指导老师', type: 'select', options: optionItems(internshipState.options.teachers, 'teacher_id', 'teacher_name') },
     arrangement_id: { key: 'arrangement_id', label: '实习安排', type: 'select', options: optionItems(internshipState.options.arrangements, 'id', 'title') },
     status: { key: 'status', label: '状态', type: 'select', options: statusOptions() },
     type: { key: 'type', label: '类型', type: 'select', options: internshipState.options.types.map(value => ({ value, label: arrangementTypeText(value) })) },
@@ -3169,10 +3786,6 @@ function defaultScopedFilters() {
     filters.profession_id = firstScope.profession_id ? Number(firstScope.profession_id) : internshipState.options.professions[0]?.profession_id || '';
     filters.dep_id = firstScope.dep_id ? Number(firstScope.dep_id) : internshipState.options.professions.find(item => item.profession_id === filters.profession_id)?.dep_id || '';
   }
-  if (roleType === 'teacher') {
-    filters.teacher_id = internshipState.options.teachers[0]?.teacher_id || '';
-  }
-
   return filters;
 }
 
@@ -3422,39 +4035,6 @@ function validateReviewReason(entity, status, reason) {
     return `${status === 'modify' ? '退回原因' : '审核意见'}最多 ${rule.max} 字`;
   }
   return '';
-}
-
-function exportInternshipList(listKey) {
-  const config = internshipListConfigs.value[listKey];
-  const rows = internshipState.lists[listKey]?.items || [];
-  if (!config || !rows.length) {
-    return;
-  }
-
-  const header = config.columns.map(column => column.label);
-  const body = rows.map(row => config.columns.map(column => {
-    if (typeof column.formatter === 'function') {
-      return column.formatter(row);
-    }
-    return row[column.prop];
-  }));
-  const csv = [header, ...body]
-    .map(line => line.map(csvCell).join(','))
-    .join('\n');
-  const blob = new Blob([`\ufeff${csv}`], { type: 'text/csv;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = `${config.filename || listKey}-${new Date().toISOString().slice(0, 10)}.csv`;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(url);
-}
-
-function csvCell(value) {
-  const text = value === null || value === undefined ? '' : String(value);
-  return `"${text.replace(/"/g, '""')}"`;
 }
 
 async function loadInternshipFoundation() {
@@ -3918,9 +4498,8 @@ async function loadProxy() {
   wechatProxy.loading = true;
   wechatProxy.message = '';
   try {
-    const data = await fetchWechatProxy();
-    wechatProxy.proxy_url = data.proxy_url || '';
-    wechatProxy.proxy_enabled = Boolean(data.proxy_enabled);
+    const data = await fetchWechatConfig();
+    applyWechatConfig(data);
   } catch (error) {
     wechatProxy.message = error.message;
   } finally {
@@ -3928,16 +4507,130 @@ async function loadProxy() {
   }
 }
 
+function applyWechatConfig(data) {
+  wechatProxy.app_id = data.app_id || '';
+  wechatProxy.corp_id = data.corp_id || '';
+  wechatProxy.agent_id = data.agent_id || '';
+  wechatProxy.secret = data.secret || '';
+  wechatProxy.token = data.token || '';
+  wechatProxy.encoding_aes_key = data.encoding_aes_key || '';
+  wechatProxy.proxy_url = data.proxy_url || '';
+  wechatProxy.proxy_enabled = Boolean(data.proxy_enabled);
+  wechatProxy.menu = normalizeWechatMenu(data.menu || []);
+  wechatProxy.selectedMenuIndex = wechatProxy.menu.length ? 0 : -1;
+  wechatProxy.selectedSubMenuIndex = -1;
+}
+
+function normalizeWechatMenu(items) {
+  return items.slice(0, 3).map(item => ({
+    name: item.name || '',
+    type: item.type || 'view',
+    url: item.url || '',
+    key: item.key || '',
+    appid: item.appid || '',
+    pagepath: item.pagepath || '',
+    children: Array.isArray(item.children) ? item.children.slice(0, 5).map(child => ({
+      name: child.name || '',
+      type: child.type || 'view',
+      url: child.url || '',
+      key: child.key || '',
+      appid: child.appid || '',
+      pagepath: child.pagepath || '',
+    })) : [],
+  }));
+}
+
+function wechatMenuPayload(items) {
+  return items.map((item) => {
+    const payload = {
+      name: item.name,
+      type: item.type,
+    };
+    if (item.children?.length) {
+      payload.children = wechatMenuPayload(item.children);
+      delete payload.type;
+      return payload;
+    }
+    if (item.type === 'click') {
+      payload.key = item.key;
+    } else if (item.type === 'miniprogram') {
+      payload.url = item.url;
+      payload.appid = item.appid;
+      payload.pagepath = item.pagepath;
+    } else {
+      payload.url = item.url;
+    }
+    return payload;
+  });
+}
+
+function selectWechatMenu(index, subIndex = -1) {
+  wechatProxy.selectedMenuIndex = index;
+  wechatProxy.selectedSubMenuIndex = subIndex;
+}
+
+function emptyWechatMenu() {
+  return {
+    name: '',
+    type: 'view',
+    url: '',
+    key: '',
+    appid: '',
+    pagepath: '',
+    children: [],
+  };
+}
+
+function addWechatMenu(parentIndex = null) {
+  if (parentIndex === null || parentIndex === undefined || parentIndex < 0) {
+    if (wechatProxy.menu.length >= 3) {
+      return;
+    }
+    wechatProxy.menu.push(emptyWechatMenu());
+    selectWechatMenu(wechatProxy.menu.length - 1);
+    return;
+  }
+
+  const parent = wechatProxy.menu[parentIndex];
+  if (!parent || (parent.children || []).length >= 5) {
+    return;
+  }
+  parent.children = parent.children || [];
+  parent.children.push(emptyWechatMenu());
+  selectWechatMenu(parentIndex, parent.children.length - 1);
+}
+
+function removeSelectedWechatMenu() {
+  if (wechatProxy.selectedMenuIndex < 0) {
+    return;
+  }
+  if (wechatProxy.selectedSubMenuIndex >= 0) {
+    const children = wechatProxy.menu[wechatProxy.selectedMenuIndex]?.children || [];
+    children.splice(wechatProxy.selectedSubMenuIndex, 1);
+    wechatProxy.selectedSubMenuIndex = children.length ? Math.min(wechatProxy.selectedSubMenuIndex, children.length - 1) : -1;
+    return;
+  }
+  wechatProxy.menu.splice(wechatProxy.selectedMenuIndex, 1);
+  wechatProxy.selectedMenuIndex = wechatProxy.menu.length ? Math.min(wechatProxy.selectedMenuIndex, wechatProxy.menu.length - 1) : -1;
+  wechatProxy.selectedSubMenuIndex = -1;
+}
+
 async function saveProxy() {
   wechatProxy.loading = true;
   wechatProxy.message = '';
   try {
-    const data = await saveWechatProxy({
+    const data = await saveWechatConfig({
+      app_id: wechatProxy.app_id,
+      corp_id: wechatProxy.corp_id,
+      agent_id: wechatProxy.agent_id,
+      secret: wechatProxy.secret,
+      token: wechatProxy.token,
+      encoding_aes_key: wechatProxy.encoding_aes_key,
       proxy_url: wechatProxy.proxy_url,
       proxy_enabled: wechatProxy.proxy_enabled,
+      menu: wechatMenuPayload(wechatProxy.menu),
     });
-    wechatProxy.proxy_url = data.proxy_url || '';
-    wechatProxy.proxy_enabled = Boolean(data.proxy_enabled);
+    applyWechatConfig(data);
     wechatProxy.message = '已保存';
   } catch (error) {
     wechatProxy.message = error.message;
@@ -3950,12 +4643,21 @@ watch(openWindows, (windows) => {
   if (windows.some(win => ['menuManage', 'roleMenus', 'organizationScope'].includes(win.panel))) {
     loadAdminFoundation();
   }
+  if (windows.some(win => win.panel === 'operationGuides')) {
+    loadGuideAdminItems();
+  }
   if (windows.some(win => win.panel === 'archive')) {
     loadAdminFoundation();
     loadArchiveItems();
   }
   if (windows.some(win => win.panel === 'fileManage')) {
     loadFiles(fileState.pagination.page);
+  }
+  if (windows.some(win => win.module.id === 'log')) {
+    loadLogs(logState.pagination.page);
+  }
+  if (windows.some(win => win.module.id === 'stat')) {
+    loadInternshipPanel('overview');
   }
   const internshipWindow = windows.find(win => win.module.id === 'internship' && !win.minimized);
   if (internshipWindow) {

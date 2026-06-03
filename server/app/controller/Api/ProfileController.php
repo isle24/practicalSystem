@@ -4,6 +4,7 @@ namespace app\controller\Api;
 
 use app\controller\Api\Concerns\Responds;
 use app\model\channel\TableRecord as ChannelTable;
+use app\model\channel\User;
 use app\server\CurrentContext;
 use app\server\file\FileService;
 use support\Request;
@@ -50,64 +51,21 @@ class ProfileController
             $now = date('Y-m-d H:i:s');
 
             ChannelTable::connection()->transaction(function () use ($userId, $accountId, $name, $avatar, $mobile, $email, $layout, $notify, $now): void {
-                ChannelTable::queryTable('users')
-                    ->where('id', $userId)
-                    ->whereNull('deleted_at')
-                    ->update([
-                        'name' => $name,
-                        'avatar' => $avatar,
-                        'mobile' => $mobile,
-                        'email' => $email,
-                        'updated_at' => $now,
-                    ]);
+                User::updateActiveProfile($userId, [
+                    'name' => $name,
+                    'avatar' => $avatar,
+                    'mobile' => $mobile,
+                    'email' => $email,
+                    'updated_at' => $now,
+                ]);
 
-                $desktopRow = ChannelTable::queryTable('user_desktop_config')
-                    ->where('account_id', $accountId)
-                    ->whereNull('deleted_at')
-                    ->orderByDesc('id')
-                    ->first(['id']);
-                $desktopValues = [
+                ChannelTable::saveDesktopConfig($accountId, [
                     'layout_json' => json_encode($layout, JSON_UNESCAPED_UNICODE),
                     'updated_at' => $now,
-                ];
-
-                if ($desktopRow) {
-                    ChannelTable::queryTable('user_desktop_config')
-                        ->where('id', $desktopRow->id)
-                        ->update($desktopValues);
-                } else {
-                    ChannelTable::queryTable('user_desktop_config')->insert(array_merge($desktopValues, [
-                        'account_id' => $accountId,
-                        'created_at' => $now,
-                    ]));
-                }
+                ]);
 
                 foreach ($notify as $channel => $enabled) {
-                    $row = ChannelTable::queryTable('user_notify_setting')
-                        ->where('account_id', $accountId)
-                        ->where('msg_type', 'system')
-                        ->where('channel', $channel)
-                        ->whereNull('deleted_at')
-                        ->orderByDesc('id')
-                        ->first(['id']);
-                    $values = [
-                        'enabled' => $enabled ? 'true' : 'false',
-                        'updated_at' => $now,
-                    ];
-
-                    if ($row) {
-                        ChannelTable::queryTable('user_notify_setting')
-                            ->where('id', $row->id)
-                            ->update($values);
-                        continue;
-                    }
-
-                    ChannelTable::queryTable('user_notify_setting')->insert(array_merge($values, [
-                        'account_id' => $accountId,
-                        'msg_type' => 'system',
-                        'channel' => $channel,
-                        'created_at' => $now,
-                    ]));
+                    ChannelTable::saveNotifySetting($accountId, $channel, $enabled, $now);
                 }
             });
 
@@ -149,25 +107,14 @@ class ProfileController
     {
         $accountId = CurrentContext::accountId();
         $userId = CurrentContext::userId();
-        $user = ChannelTable::queryTable('users')
-            ->where('id', $userId)
-            ->whereNull('deleted_at')
-            ->first(['id', 'name', 'avatar', 'mobile', 'email']);
-        $desktopRow = ChannelTable::queryTable('user_desktop_config')
-            ->where('account_id', $accountId)
-            ->whereNull('deleted_at')
-            ->orderByDesc('id')
-            ->first(['layout_json']);
-        $notifyRows = ChannelTable::queryTable('user_notify_setting')
-            ->where('account_id', $accountId)
-            ->where('msg_type', 'system')
-            ->whereNull('deleted_at')
-            ->get(['channel', 'enabled']);
+        $user = User::activeById((int) $userId, ['id', 'name', 'avatar', 'mobile', 'email']);
+        $desktopRow = ChannelTable::latestDesktopConfig((int) $accountId, ['layout_json']);
+        $notifyRows = ChannelTable::notifySettings((int) $accountId);
 
         $notify = ['system' => true, 'wechat' => true, 'email' => false];
         foreach ($notifyRows as $row) {
-            if (in_array($row->channel, self::NOTIFY_CHANNELS, true)) {
-                $notify[$row->channel] = $row->enabled !== 'false';
+            if (in_array($row['channel'], self::NOTIFY_CHANNELS, true)) {
+                $notify[$row['channel']] = $row['enabled'] !== 'false';
             }
         }
 
