@@ -4856,6 +4856,39 @@ function wechatMenuPayload(items) {
   });
 }
 
+function validateWechatMenus(items, allowChildren = true) {
+  if (items.length > (allowChildren ? 3 : 5)) {
+    return allowChildren ? '企业微信一级菜单最多 3 个' : '企业微信子菜单最多 5 个';
+  }
+
+  for (const item of items) {
+    if (!String(item.name || '').trim()) {
+      return '企业微信菜单名称不能为空';
+    }
+    if (item.children?.length) {
+      if (!allowChildren) {
+        return '企业微信菜单只支持两级';
+      }
+      const childError = validateWechatMenus(item.children, false);
+      if (childError) {
+        return childError;
+      }
+      continue;
+    }
+    if (item.type === 'click' && !String(item.key || '').trim()) {
+      return '点击菜单 Key 不能为空';
+    }
+    if (item.type === 'view' && !String(item.url || '').trim()) {
+      return '跳转菜单 URL 不能为空';
+    }
+    if (item.type === 'miniprogram' && (!String(item.appid || '').trim() || !String(item.pagepath || '').trim())) {
+      return '小程序菜单 AppID 和路径不能为空';
+    }
+  }
+
+  return '';
+}
+
 function selectWechatMenu(index, subIndex = -1) {
   wechatProxy.selectedMenuIndex = index;
   wechatProxy.selectedSubMenuIndex = subIndex;
@@ -4908,6 +4941,12 @@ function removeSelectedWechatMenu() {
 }
 
 async function saveProxy() {
+  const menuError = validateWechatMenus(wechatProxy.menu);
+  if (menuError) {
+    wechatProxy.message = menuError;
+    return;
+  }
+
   wechatProxy.loading = true;
   wechatProxy.message = '';
   try {
