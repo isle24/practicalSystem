@@ -62,6 +62,107 @@ class TableRecord extends BaseModel
         ];
     }
 
+    public static function operationLogPage(string $database, array $filters): array
+    {
+        $page = max(1, (int) ($filters['page'] ?? 1));
+        $pageSize = min(100, max(10, (int) ($filters['page_size'] ?? 20)));
+        if ($database === '') {
+            return [
+                'items' => [],
+                'pagination' => [
+                    'page' => $page,
+                    'page_size' => $pageSize,
+                    'total' => 0,
+                ],
+                'tables' => [],
+            ];
+        }
+
+        $tables = self::operationLogTables($database);
+        $total = 0;
+        $rows = [];
+        $limit = min(1000, $page * $pageSize);
+
+        foreach ($tables as $table) {
+            $query = self::applyOperationLogFilters(self::operationLogQuery($table), $table, $filters);
+            $total += (int) (clone $query)->count();
+            foreach ($query->orderByDesc("{$table}.id")->forPage(1, $limit)->get(self::operationLogColumns($table)) as $row) {
+                $rows[] = self::operationLogRow($row);
+            }
+        }
+
+        usort($rows, static fn (array $left, array $right): int => strcmp((string) $right['created_at'], (string) $left['created_at']));
+
+        return [
+            'items' => array_slice($rows, ($page - 1) * $pageSize, $pageSize),
+            'pagination' => [
+                'page' => $page,
+                'page_size' => $pageSize,
+                'total' => $total,
+            ],
+            'tables' => $tables,
+        ];
+    }
+
+    private static function applyOperationLogFilters(mixed $query, string $table, array $filters): mixed
+    {
+        $keyword = trim((string) ($filters['keyword'] ?? ''));
+        if ($keyword !== '') {
+            $like = '%' . str_replace(['%', '_'], ['\\%', '\\_'], $keyword) . '%';
+            $query->where(function ($builder) use ($table, $like): void {
+                $builder->where("{$table}.action", 'like', $like)
+                    ->orWhere("{$table}.ip", 'like', $like)
+                    ->orWhere('account.login_name', 'like', $like)
+                    ->orWhere('users.name', 'like', $like);
+            });
+        }
+
+        foreach (['action', 'ip'] as $field) {
+            $value = trim((string) ($filters[$field] ?? ''));
+            if ($value !== '') {
+                $query->where("{$table}.{$field}", $value);
+            }
+        }
+
+        $dateFrom = trim((string) ($filters['date_from'] ?? ''));
+        if ($dateFrom !== '') {
+            $query->where("{$table}.created_at", '>=', $dateFrom . ' 00:00:00');
+        }
+
+        $dateTo = trim((string) ($filters['date_to'] ?? ''));
+        if ($dateTo !== '') {
+            $query->where("{$table}.created_at", '<=', $dateTo . ' 23:59:59');
+        }
+
+        return $query;
+    }
+
+    private static function operationLogRow(object $row): array
+    {
+        return [
+            'id' => (int) $row->id,
+            'uuid' => $row->uuid,
+            'source_table' => $row->source_table,
+            'account_id' => $row->account_id === null ? null : (int) $row->account_id,
+            'login_name' => $row->login_name,
+            'user_name' => $row->user_name,
+            'action' => $row->action,
+            'ip' => $row->ip,
+            'payload' => self::decodeLogPayload($row->payload),
+            'created_at' => $row->created_at,
+        ];
+    }
+
+    private static function decodeLogPayload(mixed $payload): mixed
+    {
+        if (!is_string($payload) || $payload === '') {
+            return $payload;
+        }
+
+        $decoded = json_decode($payload, true);
+        return json_last_error() === JSON_ERROR_NONE ? $decoded : $payload;
+    }
+
     public static function archiveRows(string $table, array $columns, array $order): array
     {
         $query = self::queryTable($table)->whereNull('deleted_at');
