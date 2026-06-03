@@ -296,21 +296,6 @@
         </template>
 
         <template v-if="canReviewInternship && internship.panel === 'review'">
-          <section class="mobile-card form-card">
-            <header>
-              <CheckCircle2 :size="20" />
-              <strong>审核意见</strong>
-            </header>
-            <label>
-              <span>意见</span>
-              <textarea
-                v-model="internship.forms.review.opinion"
-                rows="3"
-                placeholder="可先填写通用审核意见，点击通过或退回后仍可调整"
-              />
-            </label>
-          </section>
-
           <section class="mobile-card">
             <header>
               <ClipboardList :size="20" />
@@ -326,8 +311,9 @@
               <template #right-icon>
                 <div class="cell-actions">
                   <button @click.stop="openTimelineDialog('application', row)">记录</button>
-                  <button @click.stop="openReviewDialog('application', row, 'accept')">通过</button>
-                  <button @click.stop="openReviewDialog('application', row, 'modify')">退回</button>
+                  <button v-if="canReviewRow(row)" @click.stop="openReviewDialog('application', row, 'accept')">通过</button>
+                  <button v-if="canReviewRow(row)" @click.stop="openReviewDialog('application', row, 'modify')">退回</button>
+                  <button v-if="row.status === 'accept'" @click.stop="openReopenDialog('application', row)">通过后修改</button>
                 </div>
               </template>
             </van-cell>
@@ -348,8 +334,9 @@
               <template #right-icon>
                 <div class="cell-actions">
                   <button @click.stop="openTimelineDialog('journal', row)">记录</button>
-                  <button @click.stop="openReviewDialog('journal', row, 'accept')">通过</button>
-                  <button @click.stop="openReviewDialog('journal', row, 'modify')">退回</button>
+                  <button v-if="canReviewRow(row)" @click.stop="openReviewDialog('journal', row, 'accept')">通过</button>
+                  <button v-if="canReviewRow(row)" @click.stop="openReviewDialog('journal', row, 'modify')">退回</button>
+                  <button v-if="row.status === 'accept'" @click.stop="openReopenDialog('journal', row)">通过后修改</button>
                 </div>
               </template>
             </van-cell>
@@ -370,8 +357,9 @@
               <template #right-icon>
                 <div class="cell-actions">
                   <button @click.stop="openTimelineDialog('report', row)">记录</button>
-                  <button @click.stop="openReviewDialog('report', row, 'accept')">通过</button>
-                  <button @click.stop="openReviewDialog('report', row, 'modify')">退回</button>
+                  <button v-if="canReviewRow(row)" @click.stop="openReviewDialog('report', row, 'accept')">通过</button>
+                  <button v-if="canReviewRow(row)" @click.stop="openReviewDialog('report', row, 'modify')">退回</button>
+                  <button v-if="row.status === 'accept'" @click.stop="openReopenDialog('report', row)">通过后修改</button>
                 </div>
               </template>
             </van-cell>
@@ -510,10 +498,11 @@
       <section class="review-sheet">
         <header>
           <strong>{{ reviewDialogTitle }}</strong>
-          <span>{{ reviewRuleText(internship.reviewDialog.entity, internship.reviewDialog.status) }}</span>
+          <p v-if="reviewDialogTargetText">{{ reviewDialogTargetText }}</p>
+          <span>{{ reviewDialogRuleText }}</span>
         </header>
         <label>
-          <span>{{ internship.reviewDialog.status === 'modify' ? '退回原因' : '审核意见' }}</span>
+          <span>{{ reviewDialogReasonLabel }}</span>
           <textarea
             v-model="internship.reviewDialog.reason"
             :maxlength="reviewRuleMax(internship.reviewDialog.entity, internship.reviewDialog.status) || undefined"
@@ -527,7 +516,7 @@
         <div class="sheet-actions">
           <button type="button" @click="closeReviewDialog">取消</button>
           <button type="button" :disabled="internship.loading" @click="confirmReviewDialog">
-            {{ internship.reviewDialog.status === 'modify' ? '确认退回' : '确认通过' }}
+            {{ reviewDialogConfirmText }}
           </button>
         </div>
       </section>
@@ -610,6 +599,7 @@ import {
   fetchInternshipReports,
   fetchInternshipScores,
   fetchInternshipTimeline,
+  requestInternshipModification,
   reviewInternshipApplication,
   reviewInternshipJournal,
   reviewInternshipReport,
@@ -681,9 +671,6 @@ const internship = reactive({
       title: '',
       content: '',
     },
-    review: {
-      opinion: '',
-    },
     score: {
       pair_id: null,
       student_id: null,
@@ -696,6 +683,7 @@ const internship = reactive({
   },
   reviewDialog: {
     visible: false,
+    mode: 'review',
     entity: 'application',
     status: 'accept',
     row: null,
@@ -1137,13 +1125,21 @@ async function submitReport() {
 }
 
 function openReviewDialog(entity, row, status) {
-  const useDefaultOpinion = status === 'accept';
+  internship.reviewDialog.mode = 'review';
   internship.reviewDialog.entity = entity;
   internship.reviewDialog.status = status;
   internship.reviewDialog.row = row;
-  internship.reviewDialog.reason = useDefaultOpinion
-    ? (internship.forms.review.opinion || defaultReviewOpinion(entity, status))
-    : internship.forms.review.opinion;
+  internship.reviewDialog.reason = status === 'accept' ? defaultReviewOpinion(entity, status) : '';
+  trimReviewDialogMax();
+  internship.reviewDialog.visible = true;
+}
+
+function openReopenDialog(entity, row) {
+  internship.reviewDialog.mode = 'reopen';
+  internship.reviewDialog.entity = entity;
+  internship.reviewDialog.status = 'modify';
+  internship.reviewDialog.row = row;
+  internship.reviewDialog.reason = '';
   trimReviewDialogMax();
   internship.reviewDialog.visible = true;
 }
@@ -1176,16 +1172,21 @@ function closeTimelineDialog() {
 }
 
 async function confirmReviewDialog() {
-  const { entity, status, row } = internship.reviewDialog;
+  const { entity, status, row, mode } = internship.reviewDialog;
   if (!row?.id) {
     closeReviewDialog();
     return;
   }
 
-  const error = validateReviewReason(entity, status, internship.reviewDialog.reason);
+  const error = validateReviewReason(entity, status, internship.reviewDialog.reason, reviewDialogReasonLabel.value);
   if (error) {
     internship.message = error;
     showToast(error);
+    return;
+  }
+
+  if (mode === 'reopen') {
+    await requestModification(entity, row, internship.reviewDialog.reason);
     return;
   }
 
@@ -1205,7 +1206,6 @@ async function reviewApplication(row, status, opinion) {
       status,
       opinion: opinion || defaultReviewOpinion('application', status),
     });
-    internship.forms.review.opinion = '';
     closeReviewDialog();
     await loadInternship();
   } catch (error) {
@@ -1229,7 +1229,24 @@ async function reviewWork(type, row, status, opinion) {
     } else {
       await reviewInternshipReport(payload);
     }
-    internship.forms.review.opinion = '';
+    closeReviewDialog();
+    await loadInternship();
+  } catch (error) {
+    internship.message = error.message;
+  } finally {
+    internship.loading = false;
+  }
+}
+
+async function requestModification(entity, row, opinion) {
+  internship.loading = true;
+  internship.message = '';
+  try {
+    await requestInternshipModification({
+      entity,
+      id: row.id,
+      opinion,
+    });
     closeReviewDialog();
     await loadInternship();
   } catch (error) {
@@ -1255,18 +1272,18 @@ function reviewRule(entity, status) {
     || { min: 0, max: null };
 }
 
-function reviewRuleText(entity, status) {
+function reviewRuleText(entity, status, label = '意见') {
   const rule = reviewRule(entity, status);
   if (!rule.min && !rule.max) {
-    return '意见字数不限制';
+    return `${label}字数不限制`;
   }
   if (rule.min && rule.max) {
-    return `意见需 ${rule.min}-${rule.max} 字`;
+    return `${label}需 ${rule.min}-${rule.max} 字`;
   }
   if (rule.min) {
-    return `意见至少 ${rule.min} 字`;
+    return `${label}至少 ${rule.min} 字`;
   }
-  return `意见最多 ${rule.max} 字`;
+  return `${label}最多 ${rule.max} 字`;
 }
 
 function reviewRuleMax(entity, status) {
@@ -1285,6 +1302,23 @@ function reviewEntityName(entity) {
     report: '实习报告',
   };
   return names[entity] || '审核事项';
+}
+
+function canReviewRow(row) {
+  return row?.status === 'wait';
+}
+
+function reviewTargetText(row) {
+  if (!row) {
+    return '';
+  }
+  const parts = [
+    row.student_name || row.student_num || '',
+    row.arrangement_title || row.title || '',
+    row.date || '',
+    `状态：${statusText(row.status)}`,
+  ].filter(Boolean);
+  return parts.join(' / ');
 }
 
 function workflowActionText(action) {
@@ -1321,8 +1355,31 @@ function timelineItemKey(item, index) {
 }
 
 const reviewDialogTitle = computed(() => {
+  if (internship.reviewDialog.mode === 'reopen') {
+    return `通过后修改${reviewEntityName(internship.reviewDialog.entity)}`;
+  }
   const action = internship.reviewDialog.status === 'modify' ? '退回' : '通过';
   return `${action}${reviewEntityName(internship.reviewDialog.entity)}`;
+});
+
+const reviewDialogTargetText = computed(() => reviewTargetText(internship.reviewDialog.row));
+
+const reviewDialogReasonLabel = computed(() => {
+  if (internship.reviewDialog.mode === 'reopen') {
+    return '修改理由';
+  }
+  return internship.reviewDialog.status === 'modify' ? '退回原因' : '审核意见';
+});
+
+const reviewDialogRuleText = computed(() => (
+  reviewRuleText(internship.reviewDialog.entity, internship.reviewDialog.status, reviewDialogReasonLabel.value)
+));
+
+const reviewDialogConfirmText = computed(() => {
+  if (internship.reviewDialog.mode === 'reopen') {
+    return '确认修改';
+  }
+  return internship.reviewDialog.status === 'modify' ? '确认退回' : '确认通过';
 });
 
 function textLength(value) {
@@ -1340,14 +1397,15 @@ function trimReviewDialogMax() {
   }
 }
 
-function validateReviewReason(entity, status, reason) {
+function validateReviewReason(entity, status, reason, label = null) {
   const rule = reviewRule(entity, status);
   const length = textLength(reason);
+  const fieldLabel = label || (status === 'modify' ? '退回原因' : '审核意见');
   if (rule.min && length < rule.min) {
-    return `${status === 'modify' ? '退回原因' : '审核意见'}至少 ${rule.min} 字`;
+    return `${fieldLabel}至少 ${rule.min} 字`;
   }
   if (rule.max && length > rule.max) {
-    return `${status === 'modify' ? '退回原因' : '审核意见'}最多 ${rule.max} 字`;
+    return `${fieldLabel}最多 ${rule.max} 字`;
   }
   return '';
 }

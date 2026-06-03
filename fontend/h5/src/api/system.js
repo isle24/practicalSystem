@@ -95,6 +95,10 @@ export function fetchInternshipTimeline(params = {}) {
   return internshipList('timeline', params);
 }
 
+export function requestInternshipModification(payload) {
+  return internshipPost('request-modification', payload);
+}
+
 export function saveInternshipReport(payload) {
   return internshipPost('save-report', payload);
 }
