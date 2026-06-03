@@ -263,6 +263,92 @@ class InternshipRecord extends TableRecord
         ]);
     }
 
+    public static function planPage(array $scope, array $filters): array
+    {
+        $query = self::queryTable('internship_plan')
+            ->leftJoin('department', 'internship_plan.dep_id', '=', 'department.dep_id')
+            ->leftJoin('account', 'internship_plan.submitter_id', '=', 'account.id')
+            ->leftJoin('users', 'account.user_id', '=', 'users.id')
+            ->whereNull('internship_plan.deleted_at');
+        self::applyDepProfessionScope($query, $scope, 'internship_plan.dep_id', null);
+        self::filter($query, $filters, 'internship_plan.status', 'status');
+        self::filter($query, $filters, 'internship_plan.semester', 'semester');
+
+        return self::paginate($query->orderByDesc('internship_plan.id'), $filters, [
+            'internship_plan.id', 'internship_plan.uuid', 'internship_plan.dep_id',
+            'internship_plan.semester', 'internship_plan.plan_content', 'internship_plan.status',
+            'internship_plan.submitter_id', 'internship_plan.created_at',
+            'department.dep_name', 'users.name as submitter_name',
+        ]);
+    }
+
+    public static function insertPlanApproval(int $planId, array $values, string $planStatus, string $now): int
+    {
+        $approvalId = self::insertRow('internship_plan_approval', $values);
+        self::updateById('internship_plan', $planId, [
+            'status' => $planStatus,
+            'updated_at' => $now,
+        ]);
+
+        return $approvalId;
+    }
+
+    public static function syllabusGuidePage(array $scope, array $filters): array
+    {
+        $query = self::applyArrangementScope(self::queryTable('syllabus_guide')
+            ->leftJoin('arrangement', 'syllabus_guide.arrangement_id', '=', 'arrangement.id')
+            ->whereNull('syllabus_guide.deleted_at'), $scope);
+
+        return self::paginate($query->orderByDesc('syllabus_guide.id'), $filters, ['syllabus_guide.*', 'arrangement.title as arrangement_title']);
+    }
+
+    public static function documentPage(string $table, array $columns, array $scope, array $filters): array
+    {
+        $query = self::queryTable($table)->whereNull("{$table}.deleted_at");
+        if (in_array($table, ['insurance', 'safety_letter_sign'], true)) {
+            $query->leftJoin('students', "{$table}.student_id", '=', 'students.student_id')
+                ->leftJoin('arrangement', "{$table}.arrangement_id", '=', 'arrangement.id');
+            self::applyStudentScope($query, $scope, "{$table}.student_id");
+            self::listFilters($query, $filters, [
+                'dep_id' => 'students.dep_id',
+                'profession_id' => 'students.profession_id',
+                'grade_id' => 'students.grade_id',
+                'semester' => 'arrangement.semester',
+            ]);
+            self::pairTeacherFilter($query, $filters, "{$table}.student_id", "{$table}.arrangement_id");
+            self::keyword($query, $filters, ['students.name', 'students.student_num', 'arrangement.title']);
+        }
+        if (in_array($table, ['implementation_sheet', 'teacher_work_report'], true)) {
+            self::applyArrangementIdScope($query, $scope, "{$table}.arrangement_id");
+        }
+        self::filter($query, $filters, "{$table}.arrangement_id", 'arrangement_id');
+
+        return self::paginate($query->orderByDesc("{$table}.id"), $filters, $columns);
+    }
+
+    public static function inspectionPage(array $filters): array
+    {
+        return self::paginate(self::queryTable('inspection_record')
+            ->whereNull('deleted_at')
+            ->orderByDesc('id'), $filters, ['inspection_record.*']);
+    }
+
+    public static function arrangementVisible(array $scope, int $arrangementId): bool
+    {
+        return self::applyArrangementScope(self::queryTable('arrangement')
+            ->where('arrangement.id', $arrangementId)
+            ->whereNull('arrangement.deleted_at'), $scope)
+            ->exists();
+    }
+
+    public static function applicationVisible(array $scope, int $applicationId): bool
+    {
+        return self::applyApplicationScope(self::queryTable('application')
+            ->where('application.id', $applicationId)
+            ->whereNull('application.deleted_at'), $scope)
+            ->exists();
+    }
+
     public static function teacherIdByUser(int $userId): ?int
     {
         $teacherId = self::queryTable('teacher_list')
@@ -749,6 +835,28 @@ class InternshipRecord extends TableRecord
         return $query;
     }
 
+    private static function applyDepProfessionScope(mixed $query, array $scope, ?string $depColumn, ?string $professionColumn): void
+    {
+        $roleType = (string) ($scope['role_type'] ?? '');
+        if ($roleType === 'college_admin' && $depColumn) {
+            self::whereInOrDeny($query, $depColumn, $scope['dep_ids'] ?? []);
+        }
+        if ($roleType === 'profession_admin' && $professionColumn) {
+            self::whereInOrDeny($query, $professionColumn, $scope['profession_ids'] ?? []);
+        }
+    }
+
+    private static function applyArrangementIdScope(mixed $query, array $scope, string $column): void
+    {
+        $roleType = (string) ($scope['role_type'] ?? '');
+        if (!in_array($roleType, ['teacher', 'student', 'enterprise'], true)) {
+            return;
+        }
+
+        $ids = $roleType === 'teacher' ? ($scope['visible_arrangement_ids'] ?? []) : ($scope['owned_arrangement_ids'] ?? []);
+        self::whereInOrDeny($query, $column, $ids);
+    }
+
     private static function whereInOrDeny(mixed $query, string $column, array $ids): mixed
     {
         $ids = self::ids($ids);
@@ -763,7 +871,14 @@ class InternshipRecord extends TableRecord
     {
         $items = [];
         foreach ($rows as $row) {
-            $items[] = method_exists($row, 'getAttributes') ? $row->getAttributes() : (array) $row;
+            $item = method_exists($row, 'getAttributes') ? $row->getAttributes() : (array) $row;
+            foreach (['materials', 'plan_content', 'form_schema', 'fee_detail', 'items'] as $jsonField) {
+                if (isset($item[$jsonField]) && is_string($item[$jsonField])) {
+                    $decoded = json_decode($item[$jsonField], true);
+                    $item[$jsonField] = json_last_error() === JSON_ERROR_NONE ? $decoded : $item[$jsonField];
+                }
+            }
+            $items[] = $item;
         }
 
         return $items;

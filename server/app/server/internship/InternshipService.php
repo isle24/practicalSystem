@@ -3,7 +3,6 @@
 namespace app\server\internship;
 
 use app\model\channel\InternshipRecord;
-use app\model\channel\TableRecord as ChannelTable;
 use app\server\CurrentContext;
 use InvalidArgumentException;
 use RuntimeException;
@@ -565,21 +564,10 @@ class InternshipService
     public function plans(Request $request): array
     {
         $this->requirePermission('internship:plan');
-        $query = $this->query('internship_plan')
-            ->leftJoin('department', 'internship_plan.dep_id', '=', 'department.dep_id')
-            ->leftJoin('account', 'internship_plan.submitter_id', '=', 'account.id')
-            ->leftJoin('users', 'account.user_id', '=', 'users.id')
-            ->whereNull('internship_plan.deleted_at');
-        $this->applyDepProfessionScope($query, 'internship_plan.dep_id', null);
-        $this->filter($query, $request, 'internship_plan.status', 'status');
-        $this->filter($query, $request, 'internship_plan.semester', 'semester');
 
-        return $this->paginate($query->orderByDesc('internship_plan.id'), $request, [
-            'internship_plan.id', 'internship_plan.uuid', 'internship_plan.dep_id',
-            'internship_plan.semester', 'internship_plan.plan_content', 'internship_plan.status',
-            'internship_plan.submitter_id', 'internship_plan.created_at',
-            'department.dep_name', 'users.name as submitter_name',
-        ]);
+        return InternshipRecord::planPage($this->scopeContext(), $this->requestFilters($request, [
+            'page', 'page_size', 'per_page', 'status', 'semester',
+        ]));
     }
 
     public function savePlan(Request $request): array
@@ -611,7 +599,7 @@ class InternshipService
         $level = $this->optionalInt($request, 'approval_level') ?? 1;
         $now = $this->now();
 
-        $approvalId = (int) $this->query('internship_plan_approval')->insertGetId([
+        $approvalId = InternshipRecord::insertPlanApproval($planId, [
             'uuid' => $this->uuid(),
             'plan_id' => $planId,
             'approver_id' => CurrentContext::accountId(),
@@ -621,11 +609,7 @@ class InternshipService
             'status' => $status,
             'created_at' => $now,
             'updated_at' => $now,
-        ]);
-
-        $this->query('internship_plan')
-            ->where('id', $planId)
-            ->update(['status' => $status === 'modify' ? 'modify' : 'wait', 'updated_at' => $now]);
+        ], $status === 'modify' ? 'modify' : 'wait', $now);
 
         return ['id' => $approvalId, 'plan_id' => $planId];
     }
@@ -676,10 +660,7 @@ class InternshipService
     public function syllabusGuides(Request $request): array
     {
         $this->requirePermission('internship:view');
-        return $this->paginate($this->applyArrangementScope($this->query('syllabus_guide')
-            ->leftJoin('arrangement', 'syllabus_guide.arrangement_id', '=', 'arrangement.id')
-            ->whereNull('syllabus_guide.deleted_at'))
-            ->orderByDesc('syllabus_guide.id'), $request, ['syllabus_guide.*', 'arrangement.title as arrangement_title']);
+        return InternshipRecord::syllabusGuidePage($this->scopeContext(), $this->requestFilters($request, ['page', 'page_size', 'per_page']));
     }
 
     public function saveSyllabusGuide(Request $request): array
@@ -748,9 +729,7 @@ class InternshipService
     public function inspections(Request $request): array
     {
         $this->requirePermission('internship:archive');
-        return $this->paginate($this->query('inspection_record')
-            ->whereNull('deleted_at')
-            ->orderByDesc('id'), $request, ['inspection_record.*']);
+        return InternshipRecord::inspectionPage($this->requestFilters($request, ['page', 'page_size', 'per_page']));
     }
 
     public function saveInspection(Request $request): array
@@ -802,25 +781,10 @@ class InternshipService
     private function documentList(Request $request, string $table, array $columns): array
     {
         $this->requirePermission('internship:view');
-        $query = $this->query($table)->whereNull("{$table}.deleted_at");
-        if (in_array($table, ['insurance', 'safety_letter_sign'], true)) {
-            $query->leftJoin('students', "{$table}.student_id", '=', 'students.student_id')
-                ->leftJoin('arrangement', "{$table}.arrangement_id", '=', 'arrangement.id');
-            $this->applyStudentScope($query, "{$table}.student_id");
-            $this->applyListFilters($query, $request, [
-                'dep_id' => 'students.dep_id',
-                'profession_id' => 'students.profession_id',
-                'grade_id' => 'students.grade_id',
-                'semester' => 'arrangement.semester',
-            ]);
-            $this->applyPairTeacherFilter($query, $request, "{$table}.student_id", "{$table}.arrangement_id");
-            $this->keyword($query, $request, ['students.name', 'students.student_num', 'arrangement.title']);
-        }
-        if (in_array($table, ['implementation_sheet', 'teacher_work_report'], true)) {
-            $this->applyArrangementIdScope($query, "{$table}.arrangement_id");
-        }
-        $this->filter($query, $request, "{$table}.arrangement_id", 'arrangement_id');
-        return $this->paginate($query->orderByDesc("{$table}.id"), $request, $columns);
+        return InternshipRecord::documentPage($table, $columns, $this->scopeContext(), $this->requestFilters($request, [
+            'page', 'page_size', 'per_page', 'keyword', 'arrangement_id',
+            'dep_id', 'profession_id', 'grade_id', 'teacher_id', 'semester',
+        ]));
     }
 
     private function application(int $id): array
@@ -1234,16 +1198,14 @@ class InternshipService
 
     private function assertArrangementVisible(int $arrangementId): void
     {
-        $query = $this->applyArrangementScope($this->query('arrangement')->where('arrangement.id', $arrangementId)->whereNull('arrangement.deleted_at'));
-        if (!$query->exists()) {
+        if (!InternshipRecord::arrangementVisible($this->scopeContext(), $arrangementId)) {
             throw new RuntimeException('无数据访问权限', 40301);
         }
     }
 
     private function assertApplicationVisible(int $applicationId): void
     {
-        $query = $this->applyApplicationScope($this->query('application')->where('application.id', $applicationId)->whereNull('application.deleted_at'));
-        if (!$query->exists()) {
+        if (!InternshipRecord::applicationVisible($this->scopeContext(), $applicationId)) {
             throw new RuntimeException('无数据访问权限', 40301);
         }
     }
@@ -1669,14 +1631,9 @@ class InternshipService
         return date('Y-m-d H:i:s');
     }
 
-    private function query(string $table): mixed
-    {
-        return ChannelTable::table($table);
-    }
-
     private function connection(): mixed
     {
-        return ChannelTable::connection();
+        return InternshipRecord::connection();
     }
 
     private function uuid(): string
