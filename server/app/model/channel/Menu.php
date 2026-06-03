@@ -50,7 +50,7 @@ class Menu extends BaseModel
             ->where('menu.visible', 'true')
             ->whereNull('menu.deleted_at')
             ->whereNull('role_menu.deleted_at')
-            ->whereIn('menu.type', ['directory', 'menu'])
+            ->whereIn('menu.type', ['directory', 'menu', 'list'])
             ->whereIn('menu.platform', [$platform, 'both'])
             ->orderBy('menu.sort')
             ->get([

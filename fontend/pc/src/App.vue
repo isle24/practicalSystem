@@ -1079,7 +1079,8 @@
                           <span>类型</span>
                           <el-radio-group v-model="adminState.menu.editing.type" class="menu-type-radios">
                             <el-radio-button label="directory">目录</el-radio-button>
-                            <el-radio-button label="menu">菜单/列表</el-radio-button>
+                            <el-radio-button label="menu">菜单</el-radio-button>
+                            <el-radio-button label="list">列表</el-radio-button>
                             <el-radio-button label="button">按钮</el-radio-button>
                           </el-radio-group>
                         </label>
@@ -3163,7 +3164,7 @@ function menuNodeKind(node) {
   if (node.type === 'button') {
     return '按钮';
   }
-  if ((node.children || []).some(child => child.type === 'button')) {
+  if (node.type === 'list' || (node.children || []).some(child => child.type === 'button')) {
     return '列表';
   }
   return '菜单';
@@ -3172,7 +3173,8 @@ function menuNodeKind(node) {
 function menuNodeTypeText(type) {
   const names = {
     directory: '目录',
-    menu: '页面',
+    menu: '菜单',
+    list: '列表',
     button: '按钮',
   };
   return names[type] || type || '-';
@@ -3205,8 +3207,26 @@ function newMenu(parent = null) {
   adminState.menu.editing = {
     ...emptyMenu(),
     parent_id: parentId,
+    type: defaultChildMenuType(parent),
   };
   adminState.menu.message = '';
+}
+
+function defaultChildMenuType(parent = null) {
+  if (!parent) {
+    return 'directory';
+  }
+  if (parent.type === 'directory') {
+    return 'menu';
+  }
+  if (parent.type === 'menu') {
+    return 'list';
+  }
+  if (parent.type === 'list') {
+    return 'button';
+  }
+
+  return 'menu';
 }
 
 function editMenu(row) {

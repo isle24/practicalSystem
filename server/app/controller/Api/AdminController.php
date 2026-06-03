@@ -88,6 +88,12 @@ class AdminController
             if ($menuId && $this->isDescendantMenu($parentId, $menuId)) {
                 return $this->fail(40001, '父级菜单不能选择当前菜单的子级', 400);
             }
+            $type = $this->enum($request, 'type', ['directory', 'menu', 'list', 'button'], 'menu');
+            $parent = $parentId > 0 ? Menu::activeById($parentId, ['id', 'parent_id', 'name', 'type']) : null;
+            $parentError = $this->validateMenuParent($type, $parentId, $parent);
+            if ($parentError !== '') {
+                return $this->fail(40001, $parentError, 400);
+            }
 
             $values = [
                 'parent_id' => $parentId,
@@ -96,7 +102,7 @@ class AdminController
                 'path' => $this->nullableString($request, 'path'),
                 'url' => $this->nullableString($request, 'url'),
                 'platform' => $this->enum($request, 'platform', ['h5', 'pc', 'both'], 'both'),
-                'type' => $this->enum($request, 'type', ['directory', 'menu', 'button'], 'menu'),
+                'type' => $type,
                 'sort' => $this->optionalInt($request, 'sort') ?? 0,
                 'icon' => $this->nullableString($request, 'icon'),
                 'visible' => $this->enum($request, 'visible', ['false', 'true'], 'true'),
@@ -348,6 +354,35 @@ class AdminController
         }
 
         return false;
+    }
+
+    private function validateMenuParent(string $type, int $parentId, ?Menu $parent): string
+    {
+        if ($parentId > 0 && !$parent) {
+            return '父级菜单不存在';
+        }
+        if ($type === 'directory') {
+            return $parentId === 0 ? '' : '主菜单不能选择父级';
+        }
+        if ($parentId === 0) {
+            return '非主菜单必须选择父级';
+        }
+
+        $parentType = (string) ($parent->type ?? '');
+        if ($parentType === 'button') {
+            return '按钮不能作为父级';
+        }
+        if ($type === 'button') {
+            return $parentType === 'list' ? '' : '按钮必须挂在列表下';
+        }
+        if ($type === 'list') {
+            return $parentType === 'menu' ? '' : '列表必须挂在菜单下';
+        }
+        if ($type === 'menu') {
+            return in_array($parentType, ['directory', 'menu'], true) ? '' : '菜单不能挂在列表或按钮下';
+        }
+
+        return '';
     }
 
     private function account(int $accountId): object
