@@ -312,14 +312,12 @@ class InternshipService
             throw new RuntimeException('该实习安排不可重复申请', 42201);
         }
 
-        $this->query('application')
-            ->where('id', $id)
-            ->update([
-                'status' => 'wait',
-                'teacher_status' => 'pending',
-                'admin_status' => 'pending',
-                'updated_at' => $this->now(),
-            ]);
+        InternshipRecord::updateById('application', $id, [
+            'status' => 'wait',
+            'teacher_status' => 'pending',
+            'admin_status' => 'pending',
+            'updated_at' => $this->now(),
+        ]);
         $this->recordWorkflow('application_recording', 'application', $id, 'submit', (string) $row->status, 'wait', '提交实习申请', 'wait');
 
         return ['id' => $id, 'item' => $this->application($id)];
@@ -333,8 +331,8 @@ class InternshipService
         $opinion = $this->reviewOpinionInput($request, 'application', $status);
 
         return $this->connection()->transaction(function () use ($id, $status, $opinion): array {
-            $row = $this->query('application')->where('id', $id)->lockForUpdate()->first();
-            if (!$row || $row->deleted_at !== null) {
+            $row = InternshipRecord::lockActiveRowById('application', $id);
+            if (!$row) {
                 throw new RuntimeException('实习申请不存在');
             }
             $this->assertApplicationVisible((int) $row->id);
@@ -355,8 +353,8 @@ class InternshipService
                 $updates['status'] = 'modify';
             }
 
-            $this->query('application')->where('id', $id)->update($updates);
-            $fresh = $this->query('application')->where('id', $id)->first();
+            InternshipRecord::updateById('application', $id, $updates);
+            $fresh = InternshipRecord::rowById('application', $id);
             $finalStatus = $this->refreshApplicationFinalStatus($fresh);
             $this->recordWorkflow('application_recording', 'application', $id, $action, (string) $row->status, $finalStatus, $opinion ?: '审核处理', $status);
 
@@ -373,19 +371,8 @@ class InternshipService
         $row = $this->row($config['table'], $id);
         $this->assertReviewEntityVisible($entity, $row);
 
-        $records = $this->rows($this->query($config['recording'])
-            ->where('parent_id', $id)
-            ->whereNull('deleted_at')
-            ->orderBy('created_at')
-            ->orderBy('id')
-            ->get(['id', 'uuid', 'parent_id', 'entity_type', 'entity_id', 'action', 'operator_id', 'from_status', 'to_status', 'opinion', 'content', 'status', 'created_at']));
-        $reviews = $this->rows($this->query('review_opinion')
-            ->where('entity_type', $entity)
-            ->where('entity_id', $id)
-            ->whereNull('deleted_at')
-            ->orderBy('created_at')
-            ->orderBy('id')
-            ->get(['id', 'uuid', 'entity_type', 'entity_id', 'recording_id', 'teacher_id', 'reviewer_id', 'opinion', 'score', 'status', 'created_at']));
+        $records = InternshipRecord::recordingRows($config['recording'], $id);
+        $reviews = InternshipRecord::reviewOpinionRows($entity, $id);
 
         return [
             'entity' => $entity,
@@ -405,7 +392,7 @@ class InternshipService
         $opinion = $this->reviewOpinionInput($request, $entity, 'modify');
 
         return $this->connection()->transaction(function () use ($entity, $config, $id, $opinion): array {
-            $row = $this->query($config['table'])->where('id', $id)->whereNull('deleted_at')->lockForUpdate()->first();
+            $row = InternshipRecord::lockActiveRowById($config['table'], $id);
             if (!$row) {
                 throw new RuntimeException('数据不存在');
             }
@@ -430,7 +417,7 @@ class InternshipService
                 $updates['reviewed_at'] = $this->now();
             }
 
-            $this->query($config['table'])->where('id', $id)->update($updates);
+            InternshipRecord::updateById($config['table'], $id, $updates);
             $this->recordWorkflow($config['recording'], $entity, $id, 'modify_after_accept', 'accept', 'modify', $opinion ?: '通过后要求修改', 'modify');
 
             return ['id' => $id, 'status' => 'modify'];
@@ -503,13 +490,11 @@ class InternshipService
         $id = $this->requiredRowId($request, 'pair');
         $reason = $this->nullableString($request, 'remove_reason', 255);
 
-        $this->query('pair')
-            ->where('id', $id)
-            ->update([
-                'status' => 'removed',
-                'remove_reason' => $reason,
-                'updated_at' => $this->now(),
-            ]);
+        InternshipRecord::updateById('pair', $id, [
+            'status' => 'removed',
+            'remove_reason' => $reason,
+            'updated_at' => $this->now(),
+        ]);
 
         return ['id' => $id];
     }
@@ -994,7 +979,7 @@ class InternshipService
             $updates['reviewed_at'] = $now;
         }
 
-        $this->query($table)->where('id', $id)->update($updates);
+        InternshipRecord::updateById($table, $id, $updates);
         $this->recordWorkflow($recordingTable, $table, $id, 'review', $from, $status, $opinion ?: '评阅处理', $status, $score, $teacherId);
 
         return ['id' => $id, 'status' => $status];
@@ -1627,7 +1612,7 @@ class InternshipService
 
     private function record(string $table, int $parentId, string $action, ?string $from, string $to, ?string $content): int
     {
-        return (int) $this->query($table)->insertGetId([
+        return InternshipRecord::insertRow($table, [
             'uuid' => $this->uuid(),
             'parent_id' => $parentId,
             'entity_type' => str_replace('_recording', '', $table),
@@ -1646,7 +1631,7 @@ class InternshipService
 
     private function reviewOpinion(string $entityType, int $entityId, ?int $recordingId, string $status, ?string $opinion, ?float $score = null, ?int $teacherId = null): void
     {
-        $this->query('review_opinion')->insert([
+        InternshipRecord::insertRow('review_opinion', [
             'uuid' => $this->uuid(),
             'entity_type' => $entityType,
             'entity_id' => $entityId,

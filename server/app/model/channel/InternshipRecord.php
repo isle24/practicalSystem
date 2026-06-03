@@ -221,9 +221,58 @@ class InternshipRecord extends TableRecord
             ->first();
     }
 
+    public static function lockActiveRowById(string $table, int $id): ?object
+    {
+        return self::queryTable($table)
+            ->where('id', $id)
+            ->whereNull('deleted_at')
+            ->lockForUpdate()
+            ->first();
+    }
+
+    public static function rowById(string $table, int $id): ?object
+    {
+        return self::queryTable($table)->where('id', $id)->first();
+    }
+
+    public static function updateById(string $table, int $id, array $values): int
+    {
+        return self::queryTable($table)->where('id', $id)->update($values);
+    }
+
+    public static function insertRow(string $table, array $values): int
+    {
+        return (int) self::queryTable($table)->insertGetId($values);
+    }
+
     public static function idByUuid(string $table, string $uuid): int
     {
         return (int) (self::queryTable($table)->where('uuid', $uuid)->value('id') ?: 0);
+    }
+
+    public static function recordingRows(string $table, int $parentId): array
+    {
+        return self::queryTable($table)
+            ->where('parent_id', $parentId)
+            ->whereNull('deleted_at')
+            ->orderBy('created_at')
+            ->orderBy('id')
+            ->get(['id', 'uuid', 'parent_id', 'entity_type', 'entity_id', 'action', 'operator_id', 'from_status', 'to_status', 'opinion', 'content', 'status', 'created_at'])
+            ->map(static fn ($row): array => $row->getAttributes())
+            ->all();
+    }
+
+    public static function reviewOpinionRows(string $entityType, int $entityId): array
+    {
+        return self::queryTable('review_opinion')
+            ->where('entity_type', $entityType)
+            ->where('entity_id', $entityId)
+            ->whereNull('deleted_at')
+            ->orderBy('created_at')
+            ->orderBy('id')
+            ->get(['id', 'uuid', 'entity_type', 'entity_id', 'recording_id', 'teacher_id', 'reviewer_id', 'opinion', 'score', 'status', 'created_at'])
+            ->map(static fn ($row): array => $row->getAttributes())
+            ->all();
     }
 
     private static function intValues(mixed $values): array
