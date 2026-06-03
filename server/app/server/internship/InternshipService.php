@@ -36,6 +36,11 @@ class InternshipService
             'modify' => ['min' => 8, 'max' => 800],
         ],
     ];
+    private const REVIEW_ENTITY_CONFIG = [
+        'application' => ['table' => 'application', 'recording' => 'application_recording'],
+        'journal' => ['table' => 'journal', 'recording' => 'journal_recording'],
+        'report' => ['table' => 'report', 'recording' => 'report_recording'],
+    ];
 
     public function overview(Request $request): array
     {
@@ -254,17 +259,22 @@ class InternshipService
         $arrangementId = $this->requiredInt($request, 'arrangement_id');
         $status = $this->enum($request, 'status', ['draft', 'wait'], 'draft');
         $now = $this->now();
+        $existingId = $this->inputRowId($request, 'application');
 
         $this->assertStudentVisible($studentId);
         $this->assertArrangementVisible($arrangementId);
 
-        if ($this->isStudent()) {
-            $existingStatus = $this->db()->table('application')
+        if (!$existingId) {
+            $existingId = (int) ($this->db()->table('application')
                 ->where('student_id', $studentId)
                 ->where('arrangement_id', $arrangementId)
                 ->whereNull('deleted_at')
-                ->value('status');
-            if ((string) $existingStatus === 'accept') {
+                ->value('id') ?: 0);
+        }
+        $fromStatus = $existingId ? (string) ($this->db()->table('application')->where('id', $existingId)->value('status') ?: 'draft') : 'draft';
+
+        if ($this->isStudent()) {
+            if ($fromStatus === 'accept') {
                 throw new RuntimeException('该实习安排不可重复申请', 42201);
             }
         }
@@ -287,7 +297,7 @@ class InternshipService
         ])['id'];
         $this->syncJoinTeachers($id, $studentId, $arrangementId, $this->intArray($request->input('teacher_ids', [])));
         if ($status === 'wait') {
-            $this->record('application_recording', $id, 'submit', 'draft', 'wait', '提交实习申请');
+            $this->recordWorkflow('application_recording', 'application', $id, 'submit', $fromStatus, 'wait', '提交实习申请', 'wait');
         }
 
         return ['id' => $id, 'item' => $this->application($id)];
@@ -305,8 +315,13 @@ class InternshipService
 
         $this->db()->table('application')
             ->where('id', $id)
-            ->update(['status' => 'wait', 'updated_at' => $this->now()]);
-        $this->record('application_recording', $id, 'submit', (string) $row->status, 'wait', '提交实习申请');
+            ->update([
+                'status' => 'wait',
+                'teacher_status' => 'pending',
+                'admin_status' => 'pending',
+                'updated_at' => $this->now(),
+            ]);
+        $this->recordWorkflow('application_recording', 'application', $id, 'submit', (string) $row->status, 'wait', '提交实习申请', 'wait');
 
         return ['id' => $id, 'item' => $this->application($id)];
     }
@@ -345,10 +360,83 @@ class InternshipService
             $db->table('application')->where('id', $id)->update($updates);
             $fresh = $db->table('application')->where('id', $id)->first();
             $finalStatus = $this->refreshApplicationFinalStatus($fresh);
-            $this->record('application_recording', $id, $action, (string) $row->status, $finalStatus, $opinion ?: '审核处理');
-            $this->reviewOpinion('application', $id, null, $status, $opinion);
+            $this->recordWorkflow('application_recording', 'application', $id, $action, (string) $row->status, $finalStatus, $opinion ?: '审核处理', $status);
 
             return ['id' => $id, 'item' => $this->application($id)];
+        });
+    }
+
+    public function timeline(Request $request): array
+    {
+        $this->requirePermission('internship:view');
+        $entity = $this->reviewEntity($request);
+        $config = self::REVIEW_ENTITY_CONFIG[$entity];
+        $id = $this->requiredRowId($request, $config['table']);
+        $row = $this->row($config['table'], $id);
+        $this->assertReviewEntityVisible($entity, $row);
+
+        $records = $this->rows($this->db()->table($config['recording'])
+            ->where('parent_id', $id)
+            ->whereNull('deleted_at')
+            ->orderBy('created_at')
+            ->orderBy('id')
+            ->get(['id', 'uuid', 'parent_id', 'entity_type', 'entity_id', 'action', 'operator_id', 'from_status', 'to_status', 'opinion', 'content', 'status', 'created_at']));
+        $reviews = $this->rows($this->db()->table('review_opinion')
+            ->where('entity_type', $entity)
+            ->where('entity_id', $id)
+            ->whereNull('deleted_at')
+            ->orderBy('created_at')
+            ->orderBy('id')
+            ->get(['id', 'uuid', 'entity_type', 'entity_id', 'recording_id', 'teacher_id', 'reviewer_id', 'opinion', 'score', 'status', 'created_at']));
+
+        return [
+            'entity' => $entity,
+            'id' => $id,
+            'records' => $records,
+            'reviews' => $reviews,
+            'items' => $this->timelineItems($records, $reviews),
+        ];
+    }
+
+    public function requestModification(Request $request): array
+    {
+        $this->requirePermission('internship:approve');
+        $entity = $this->reviewEntity($request);
+        $config = self::REVIEW_ENTITY_CONFIG[$entity];
+        $id = $this->requiredRowId($request, $config['table']);
+        $opinion = $this->reviewOpinionInput($request, $entity, 'modify');
+        $db = $this->db();
+
+        return $db->transaction(function () use ($db, $entity, $config, $id, $opinion): array {
+            $row = $db->table($config['table'])->where('id', $id)->whereNull('deleted_at')->lockForUpdate()->first();
+            if (!$row) {
+                throw new RuntimeException('数据不存在');
+            }
+            $this->assertReviewEntityVisible($entity, $row);
+            if ((string) $row->status !== 'accept') {
+                throw new InvalidArgumentException('仅已通过数据可改回修改', 42203);
+            }
+
+            $updates = [
+                'status' => 'modify',
+                'updated_at' => $this->now(),
+            ];
+            if ($entity === 'application') {
+                if ($this->isTeacher()) {
+                    $updates['teacher_status'] = 'modify';
+                } else {
+                    $this->requireAdminRole();
+                    $updates['admin_status'] = 'modify';
+                }
+            }
+            if ($entity === 'report') {
+                $updates['reviewed_at'] = $this->now();
+            }
+
+            $db->table($config['table'])->where('id', $id)->update($updates);
+            $this->recordWorkflow($config['recording'], $entity, $id, 'modify_after_accept', 'accept', 'modify', $opinion ?: '通过后要求修改', 'modify');
+
+            return ['id' => $id, 'status' => 'modify'];
         });
     }
 
@@ -517,6 +605,8 @@ class InternshipService
         $studentId = $this->isStudent() ? $this->currentStudentId(true) : $this->requiredInt($request, 'student_id');
         $arrangementId = $this->requiredInt($request, 'arrangement_id');
         $status = $this->enum($request, 'status', ['draft', 'wait'], 'draft');
+        $existingId = $this->inputRowId($request, 'journal');
+        $fromStatus = $existingId ? (string) ($this->db()->table('journal')->where('id', $existingId)->value('status') ?: 'draft') : 'draft';
         $this->assertStudentVisible($studentId);
         $this->assertArrangementVisible($arrangementId);
 
@@ -534,7 +624,7 @@ class InternshipService
 
         $result = $this->saveRow('journal', $request, $values);
         if ($status === 'wait') {
-            $this->record('journal_recording', (int) $result['id'], 'submit', 'draft', 'wait', '提交实习日志');
+            $this->recordWorkflow('journal_recording', 'journal', (int) $result['id'], 'submit', $fromStatus, 'wait', '提交实习日志', 'wait');
         }
 
         return $result;
@@ -579,6 +669,8 @@ class InternshipService
         $studentId = $this->isStudent() ? $this->currentStudentId(true) : $this->requiredInt($request, 'student_id');
         $arrangementId = $this->requiredInt($request, 'arrangement_id');
         $status = $this->enum($request, 'status', ['draft', 'wait'], 'draft');
+        $existingId = $this->inputRowId($request, 'report');
+        $fromStatus = $existingId ? (string) ($this->db()->table('report')->where('id', $existingId)->value('status') ?: 'draft') : 'draft';
         $this->assertStudentVisible($studentId);
         $this->assertArrangementVisible($arrangementId);
 
@@ -596,7 +688,7 @@ class InternshipService
 
         $result = $this->saveRow('report', $request, $values);
         if ($status === 'wait') {
-            $this->record('report_recording', (int) $result['id'], 'submit', 'draft', 'wait', '提交实习报告');
+            $this->recordWorkflow('report_recording', 'report', (int) $result['id'], 'submit', $fromStatus, 'wait', '提交实习报告', 'wait');
         }
 
         return $result;
@@ -906,8 +998,7 @@ class InternshipService
         }
 
         $this->db()->table($table)->where('id', $id)->update($updates);
-        $recordingId = $this->record($recordingTable, $id, 'review', $from, $status, $opinion ?: '评阅处理');
-        $this->reviewOpinion($table, $id, $recordingId, $status, $opinion, $score, $teacherId);
+        $this->recordWorkflow($recordingTable, $table, $id, 'review', $from, $status, $opinion ?: '评阅处理', $status, $score, $teacherId);
 
         return ['id' => $id, 'status' => $status];
     }
@@ -1530,20 +1621,97 @@ class InternshipService
 
     private function requiredRowId(Request $request, string $table): int
     {
-        $id = $this->optionalInt($request, 'id');
+        $id = $this->inputRowId($request, $table);
         if ($id) {
             return $id;
         }
 
+        throw new InvalidArgumentException('id 无效');
+    }
+
+    private function inputRowId(Request $request, string $table): ?int
+    {
+        $id = $this->optionalInt($request, 'id');
+        if ($id) {
+            return $id;
+        }
         $uuid = $this->nullableString($request, 'uuid', 36);
         if ($uuid) {
             $id = (int) ($this->db()->table($table)->where('uuid', $uuid)->value('id') ?: 0);
         }
-        if (!$id) {
-            throw new InvalidArgumentException('id 无效');
+
+        return $id ?: null;
+    }
+
+    private function reviewEntity(Request $request): string
+    {
+        $entity = (string) $request->input('entity', '');
+        if (!isset(self::REVIEW_ENTITY_CONFIG[$entity])) {
+            throw new InvalidArgumentException('entity 无效');
         }
 
-        return $id;
+        return $entity;
+    }
+
+    private function assertReviewEntityVisible(string $entity, object $row): void
+    {
+        if ($entity === 'application') {
+            $this->assertApplicationVisible((int) $row->id);
+            return;
+        }
+        $this->assertStudentVisible((int) $row->student_id);
+    }
+
+    private function timelineItems(array $records, array $reviews): array
+    {
+        $reviewsByRecording = [];
+        $standaloneReviews = [];
+        foreach ($reviews as $review) {
+            $recordingId = (int) ($review['recording_id'] ?? 0);
+            if ($recordingId > 0) {
+                $reviewsByRecording[$recordingId][] = $review;
+            } else {
+                $standaloneReviews[] = [
+                    'kind' => 'review',
+                    'created_at' => $review['created_at'] ?? null,
+                    'review' => $review,
+                ];
+            }
+        }
+
+        $items = [];
+        foreach ($records as $record) {
+            $recordId = (int) ($record['id'] ?? 0);
+            $items[] = [
+                'kind' => 'recording',
+                'created_at' => $record['created_at'] ?? null,
+                'record' => $record,
+                'reviews' => $reviewsByRecording[$recordId] ?? [],
+            ];
+        }
+
+        $items = array_merge($items, $standaloneReviews);
+        usort($items, fn (array $left, array $right): int => strcmp((string) ($left['created_at'] ?? ''), (string) ($right['created_at'] ?? '')));
+
+        return $items;
+    }
+
+    private function recordWorkflow(
+        string $recordingTable,
+        string $entityType,
+        int $entityId,
+        string $action,
+        ?string $fromStatus,
+        string $toStatus,
+        ?string $content,
+        string $reviewStatus,
+        ?float $score = null,
+        ?int $teacherId = null
+    ): int {
+        $recordingId = $this->record($recordingTable, $entityId, $action, $fromStatus, $toStatus, $content);
+        $this->reviewOpinion($entityType, $entityId, $recordingId, $reviewStatus, $content, $score, $teacherId);
+
+        return $recordingId;
     }
 
     private function record(string $table, int $parentId, string $action, ?string $from, string $to, ?string $content): int

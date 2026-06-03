@@ -197,6 +197,14 @@ export function reviewInternshipApplication(payload) {
   return internshipPost('review-application', payload);
 }
 
+export function fetchInternshipTimeline(params = {}) {
+  return internshipList('timeline', params);
+}
+
+export function requestInternshipModification(payload) {
+  return internshipPost('request-modification', payload);
+}
+
 export function fetchInternshipPairs(params = {}) {
   return internshipList('pairs', params);
 }

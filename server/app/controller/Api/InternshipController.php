@@ -72,6 +72,16 @@ class InternshipController
         return $this->handle(fn (): array => $this->service()->reviewApplication($request));
     }
 
+    public function timeline(Request $request): Response
+    {
+        return $this->handle(fn (): array => $this->service()->timeline($request));
+    }
+
+    public function requestModification(Request $request): Response
+    {
+        return $this->handle(fn (): array => $this->service()->requestModification($request));
+    }
+
     public function pairs(Request $request): Response
     {
         return $this->handle(fn (): array => $this->service()->pairs($request));

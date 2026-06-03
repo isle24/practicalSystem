@@ -385,10 +385,10 @@
                         <label><span>评语</span><input v-model="internshipState.scoreForm.comment"></label>
                       </div>
 
-                      <div v-else-if="internshipState.dialog.type === 'review'" class="operation-form single">
+                      <div v-else-if="['review', 'reopen'].includes(internshipState.dialog.type)" class="operation-form single">
                         <p>{{ internshipState.dialog.description }}</p>
                         <label>
-                          <span>{{ internshipState.dialog.status === 'modify' ? '退回原因' : '审核意见' }}</span>
+                          <span>{{ internshipState.dialog.type === 'reopen' ? '修改理由' : (internshipState.dialog.status === 'modify' ? '退回原因' : '审核意见') }}</span>
                           <textarea
                             v-model="internshipState.dialog.reason"
                             rows="5"
@@ -402,9 +402,29 @@
                         </label>
                       </div>
 
+                      <div v-else-if="internshipState.dialog.type === 'timeline'" class="operation-form single">
+                        <div class="timeline-view">
+                          <section v-for="item in internshipState.dialog.timeline" :key="`${item.kind}-${item.record?.id || item.review?.id}`" class="timeline-item">
+                            <span />
+                            <div>
+                              <strong>{{ timelineTitle(item) }}</strong>
+                              <small>{{ item.created_at || '-' }}</small>
+                              <p>{{ timelineContent(item) }}</p>
+                              <p v-for="review in item.reviews || []" :key="review.id">
+                                审核意见：{{ review.opinion || '-' }}<template v-if="review.score">，评分：{{ review.score }}</template>
+                              </p>
+                              <p v-if="item.review">
+                                审核意见：{{ item.review.opinion || '-' }}<template v-if="item.review.score">，评分：{{ item.review.score }}</template>
+                              </p>
+                            </div>
+                          </section>
+                          <small v-if="!internshipState.dialog.timeline.length">暂无流程记录</small>
+                        </div>
+                      </div>
+
                       <footer>
                         <el-button @click="closeInternshipDialog">取消</el-button>
-                        <el-button type="primary" :loading="internshipState.loading" @click="confirmInternshipDialog">
+                        <el-button v-if="internshipState.dialog.type !== 'timeline'" type="primary" :loading="internshipState.loading" @click="confirmInternshipDialog">
                           确认
                         </el-button>
                       </footer>
@@ -505,6 +525,12 @@
                         <el-button link type="warning" :disabled="!hasPermission('internship:approve')" @click="openReviewDialog('application', row, 'modify')">
                           退回
                         </el-button>
+                        <el-button v-if="row.status === 'accept'" link type="danger" :disabled="!hasPermission('internship:approve')" @click="openReopenDialog('application', row)">
+                          通过后修改
+                        </el-button>
+                        <el-button link type="info" @click="openTimelineDialog('application', row)">
+                          记录
+                        </el-button>
                       </template>
                     </DataListPanel>
                   </template>
@@ -572,6 +598,12 @@
                         <el-button link type="warning" :disabled="!hasPermission('internship:approve')" @click="openReviewDialog('journal', row, 'modify')">
                           退回
                         </el-button>
+                        <el-button v-if="row.status === 'accept'" link type="danger" :disabled="!hasPermission('internship:approve')" @click="openReopenDialog('journal', row)">
+                          通过后修改
+                        </el-button>
+                        <el-button link type="info" @click="openTimelineDialog('journal', row)">
+                          记录
+                        </el-button>
                       </template>
                     </DataListPanel>
                   </template>
@@ -600,6 +632,12 @@
                         </el-button>
                         <el-button link type="warning" :disabled="!hasPermission('internship:approve')" @click="openReviewDialog('report', row, 'modify')">
                           退回
+                        </el-button>
+                        <el-button v-if="row.status === 'accept'" link type="danger" :disabled="!hasPermission('internship:approve')" @click="openReopenDialog('report', row)">
+                          通过后修改
+                        </el-button>
+                        <el-button link type="info" @click="openTimelineDialog('report', row)">
+                          记录
                         </el-button>
                       </template>
                     </DataListPanel>
@@ -1260,6 +1298,7 @@ import {
   fetchInternshipSafetyLetters,
   fetchInternshipScores,
   fetchInternshipSignIns,
+  fetchInternshipTimeline,
   fetchOrganizationScopes,
   fetchProfileSettings,
   fetchRolePermissions,
@@ -1270,6 +1309,7 @@ import {
   reviewInternshipApplication,
   reviewInternshipJournal,
   reviewInternshipReport,
+  requestInternshipModification,
   saveArchiveItem,
   saveInternshipArrangement,
   saveInternshipScore,
@@ -2752,6 +2792,7 @@ function emptyOperationDialog() {
     status: '',
     row: null,
     reason: '',
+    timeline: [],
   };
 }
 
@@ -2921,21 +2962,51 @@ function openScoreDialog(row = null) {
 
 function openReviewDialog(entity, row, status) {
   const actionText = status === 'accept' ? '通过' : '退回';
-  const entityNames = {
-    application: '实习申请',
-    journal: '实习日志',
-    report: '实习报告',
-  };
   internshipState.dialog = {
     ...emptyOperationDialog(),
     type: 'review',
-    title: `${actionText}${entityNames[entity] || '审核'}`,
+    title: `${actionText}${reviewEntityName(entity)}`,
     description: `请确认是否${actionText}「${row.title || row.arrangement_title || row.student_name || row.id}」。`,
     entity,
     status,
     row,
     reason: status === 'accept' ? '同意' : '',
   };
+}
+
+function openReopenDialog(entity, row) {
+  internshipState.dialog = {
+    ...emptyOperationDialog(),
+    type: 'reopen',
+    title: `通过后修改${reviewEntityName(entity)}`,
+    description: `此操作会新增审核记录，并将「${row.title || row.arrangement_title || row.student_name || row.id}」改为待学生重新提交的修改状态。`,
+    entity,
+    status: 'modify',
+    row,
+    reason: '',
+  };
+}
+
+async function openTimelineDialog(entity, row) {
+  internshipState.dialog = {
+    ...emptyOperationDialog(),
+    type: 'timeline',
+    title: `${reviewEntityName(entity)}流程记录`,
+    description: row.title || row.arrangement_title || row.student_name || String(row.id),
+    entity,
+    row,
+    timeline: [],
+  };
+  internshipState.loading = true;
+  internshipState.message = '';
+  try {
+    const data = await fetchInternshipTimeline({ entity, id: row.id });
+    internshipState.dialog.timeline = data.items || [];
+  } catch (error) {
+    internshipState.message = error.message;
+  } finally {
+    internshipState.loading = false;
+  }
 }
 
 function closeInternshipDialog() {
@@ -2962,6 +3033,14 @@ async function confirmInternshipDialog() {
       return;
     }
     await reviewStudentWork(internshipState.dialog.entity, internshipState.dialog.row, internshipState.dialog.status, internshipState.dialog.reason);
+  }
+  if (internshipState.dialog.type === 'reopen') {
+    const error = validateReviewReason(internshipState.dialog.entity, 'modify', internshipState.dialog.reason);
+    if (error) {
+      internshipState.message = error;
+      return;
+    }
+    await requestModification();
   }
 }
 
@@ -2992,6 +3071,40 @@ function reviewRuleMax(entity, status) {
 
 function reviewRuleMaxText(entity, status) {
   return reviewRuleMax(entity, status) || '不限';
+}
+
+function reviewEntityName(entity) {
+  const names = {
+    application: '实习申请',
+    journal: '实习日志',
+    report: '实习报告',
+  };
+  return names[entity] || '审核事项';
+}
+
+function workflowActionText(action) {
+  const names = {
+    submit: '提交',
+    review: '审核',
+    teacher_review: '教师审核',
+    admin_review: '管理员审核',
+    modify_after_accept: '通过后修改',
+  };
+  return names[action] || action || '记录';
+}
+
+function timelineTitle(item) {
+  if (item.record) {
+    return `${workflowActionText(item.record.action)}：${statusText(item.record.from_status)} -> ${statusText(item.record.to_status)}`;
+  }
+  return `审核：${statusText(item.review?.status)}`;
+}
+
+function timelineContent(item) {
+  if (item.record) {
+    return item.record.content || item.record.opinion || '-';
+  }
+  return item.review?.opinion || '-';
 }
 
 function textLength(value) {
@@ -3212,6 +3325,26 @@ async function reviewStudentWork(type, row, status, opinion = '') {
       await loadInternshipPanel('reports');
     }
     closeInternshipDialog();
+  } catch (error) {
+    internshipState.message = error.message;
+  } finally {
+    internshipState.loading = false;
+  }
+}
+
+async function requestModification() {
+  internshipState.loading = true;
+  internshipState.message = '';
+  try {
+    const entity = internshipState.dialog.entity;
+    await requestInternshipModification({
+      entity,
+      id: internshipState.dialog.row.id,
+      opinion: internshipState.dialog.reason,
+    });
+    closeInternshipDialog();
+    const panel = entity === 'application' ? 'applications' : `${entity}s`;
+    await loadInternshipPanel(panel);
   } catch (error) {
     internshipState.message = error.message;
   } finally {
