@@ -266,6 +266,89 @@ class InternshipRecord extends TableRecord
         ]));
     }
 
+    public static function applicationWithTeachers(int $id): ?array
+    {
+        $row = self::queryTable('application')
+            ->leftJoin('students', 'application.student_id', '=', 'students.student_id')
+            ->leftJoin('arrangement', 'application.arrangement_id', '=', 'arrangement.id')
+            ->where('application.id', $id)
+            ->first([
+                'application.*',
+                'students.name as student_name',
+                'students.student_num',
+                'arrangement.title as arrangement_title',
+            ]);
+        if (!$row) {
+            return null;
+        }
+
+        $item = $row->getAttributes();
+        $item['teachers'] = self::joinTeacherRows($id);
+
+        return $item;
+    }
+
+    public static function applicationIdByStudentArrangement(int $studentId, int $arrangementId): int
+    {
+        return (int) (self::queryTable('application')
+            ->where('student_id', $studentId)
+            ->where('arrangement_id', $arrangementId)
+            ->whereNull('deleted_at')
+            ->value('id') ?: 0);
+    }
+
+    public static function statusById(string $table, int $id, string $default = 'draft'): string
+    {
+        return (string) (self::queryTable($table)->where('id', $id)->value('status') ?: $default);
+    }
+
+    public static function studentProfile(int $studentId): ?object
+    {
+        return self::queryTable('students')->where('student_id', $studentId)->first();
+    }
+
+    public static function teacherProfile(int $teacherId): ?object
+    {
+        return self::queryTable('teacher_list')->where('teacher_id', $teacherId)->first();
+    }
+
+    public static function joinTeacherExists(int $applicationId, int $teacherId): bool
+    {
+        return self::queryTable('student_join_teacher')
+            ->where('application_id', $applicationId)
+            ->where('teacher_id', $teacherId)
+            ->whereNull('deleted_at')
+            ->exists();
+    }
+
+    public static function insertJoinTeacher(array $values): int
+    {
+        return self::insertRow('student_join_teacher', $values);
+    }
+
+    public static function updateJoinTeacherStatus(int $applicationId, int $teacherId, string $status, string $now): int
+    {
+        return self::queryTable('student_join_teacher')
+            ->where('application_id', $applicationId)
+            ->where('teacher_id', $teacherId)
+            ->whereNull('deleted_at')
+            ->update([
+                'application_status' => $status,
+                'updated_at' => $now,
+            ]);
+    }
+
+    public static function acceptedJoinTeachers(int $applicationId): array
+    {
+        return self::queryTable('student_join_teacher')
+            ->where('application_id', $applicationId)
+            ->where('application_status', 'accept')
+            ->whereNull('deleted_at')
+            ->orderBy('id')
+            ->get()
+            ->all();
+    }
+
     public static function idByUuid(string $table, string $uuid): int
     {
         return (int) (self::queryTable($table)->where('uuid', $uuid)->value('id') ?: 0);
@@ -308,6 +391,17 @@ class InternshipRecord extends TableRecord
             ->orderBy('created_at')
             ->orderBy('id')
             ->get(['id', 'uuid', 'entity_type', 'entity_id', 'recording_id', 'teacher_id', 'reviewer_id', 'opinion', 'score', 'status', 'created_at'])
+            ->map(static fn ($row): array => $row->getAttributes())
+            ->all();
+    }
+
+    private static function joinTeacherRows(int $applicationId): array
+    {
+        return self::queryTable('student_join_teacher')
+            ->where('application_id', $applicationId)
+            ->whereNull('deleted_at')
+            ->orderBy('id')
+            ->get()
             ->map(static fn ($row): array => $row->getAttributes())
             ->all();
     }

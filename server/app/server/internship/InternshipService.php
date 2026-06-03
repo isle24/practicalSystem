@@ -264,13 +264,9 @@ class InternshipService
         $this->assertArrangementVisible($arrangementId);
 
         if (!$existingId) {
-            $existingId = (int) ($this->query('application')
-                ->where('student_id', $studentId)
-                ->where('arrangement_id', $arrangementId)
-                ->whereNull('deleted_at')
-                ->value('id') ?: 0);
+            $existingId = InternshipRecord::applicationIdByStudentArrangement($studentId, $arrangementId);
         }
-        $fromStatus = $existingId ? (string) ($this->query('application')->where('id', $existingId)->value('status') ?: 'draft') : 'draft';
+        $fromStatus = $existingId ? InternshipRecord::statusById('application', $existingId) : 'draft';
 
         if ($this->isStudent()) {
             if ($fromStatus === 'accept') {
@@ -1011,53 +1007,32 @@ class InternshipService
 
     private function application(int $id): array
     {
-        $row = $this->query('application')
-            ->leftJoin('students', 'application.student_id', '=', 'students.student_id')
-            ->leftJoin('arrangement', 'application.arrangement_id', '=', 'arrangement.id')
-            ->where('application.id', $id)
-            ->first([
-                'application.*',
-                'students.name as student_name',
-                'students.student_num',
-                'arrangement.title as arrangement_title',
-            ]);
-        if (!$row) {
+        $item = InternshipRecord::applicationWithTeachers($id);
+        if (!$item) {
             throw new RuntimeException('实习申请不存在');
         }
-
-        $item = (array) $row;
-        $item['teachers'] = $this->rows($this->query('student_join_teacher')
-            ->where('application_id', $id)
-            ->whereNull('deleted_at')
-            ->orderBy('id')
-            ->get());
 
         return $item;
     }
 
     private function syncJoinTeachers(int $applicationId, int $studentId, int $arrangementId, array $teacherIds): void
     {
-        $student = $this->query('students')->where('student_id', $studentId)->first();
+        $student = InternshipRecord::studentProfile($studentId);
         if (!$teacherIds) {
             return;
         }
 
         foreach (array_slice(array_values(array_unique($teacherIds)), 0, 3) as $teacherId) {
-            $teacher = $this->query('teacher_list')->where('teacher_id', $teacherId)->first();
+            $teacher = InternshipRecord::teacherProfile($teacherId);
             if (!$teacher) {
                 continue;
             }
 
-            $exists = $this->query('student_join_teacher')
-                ->where('application_id', $applicationId)
-                ->where('teacher_id', $teacherId)
-                ->whereNull('deleted_at')
-                ->first();
-            if ($exists) {
+            if (InternshipRecord::joinTeacherExists($applicationId, $teacherId)) {
                 continue;
             }
 
-            $this->query('student_join_teacher')->insert([
+            InternshipRecord::insertJoinTeacher([
                 'uuid' => $this->uuid(),
                 'student_id' => $studentId,
                 'teacher_id' => $teacherId,
@@ -1079,14 +1054,7 @@ class InternshipService
     {
         $teacherId = $this->currentTeacherId(true);
         $joinStatus = $status === 'accept' ? 'accept' : 'refuse';
-        $this->query('student_join_teacher')
-            ->where('application_id', $applicationId)
-            ->where('teacher_id', $teacherId)
-            ->whereNull('deleted_at')
-            ->update([
-                'application_status' => $joinStatus,
-                'updated_at' => $this->now(),
-            ]);
+        InternshipRecord::updateJoinTeacherStatus($applicationId, $teacherId, $joinStatus, $this->now());
     }
 
     private function refreshApplicationFinalStatus(object $application): string
@@ -1097,9 +1065,7 @@ class InternshipService
             return (string) $application->status;
         }
 
-        $this->query('application')
-            ->where('id', $application->id)
-            ->update(['status' => 'accept', 'updated_at' => $this->now()]);
+        InternshipRecord::updateById('application', (int) $application->id, ['status' => 'accept', 'updated_at' => $this->now()]);
         $this->createPairFromApplication((int) $application->id);
 
         return 'accept';
@@ -1107,18 +1073,12 @@ class InternshipService
 
     private function createPairFromApplication(int $applicationId): void
     {
-        $application = $this->query('application')->where('id', $applicationId)->first();
+        $application = InternshipRecord::rowById('application', $applicationId);
         if (!$application) {
             return;
         }
 
-        $joins = $this->query('student_join_teacher')
-            ->where('application_id', $applicationId)
-            ->where('application_status', 'accept')
-            ->whereNull('deleted_at')
-            ->orderBy('id')
-            ->get()
-            ->all();
+        $joins = InternshipRecord::acceptedJoinTeachers($applicationId);
         if (!$joins) {
             return;
         }
