@@ -2304,8 +2304,9 @@ const internshipListConfigs = computed(() => ({
     filename: '保险记录',
     filters: internshipListFilters('insurances', ['semester', 'grade_id', 'dep_id', 'profession_id', 'arrangement_id', 'keyword']),
     columns: [
-      { prop: 'student_id', label: '学生ID', width: 90 },
-      { prop: 'arrangement_id', label: '安排ID', width: 90 },
+      { prop: 'student_name', label: '学生', width: 110 },
+      { prop: 'student_num', label: '学号', width: 130 },
+      { prop: 'arrangement_title', label: '实习安排', minWidth: 180 },
       { prop: 'insurance_company', label: '保险公司', minWidth: 160 },
       { prop: 'policy_number', label: '保单号', minWidth: 150 },
       { prop: 'start_date', label: '开始', width: 110 },
@@ -2317,8 +2318,9 @@ const internshipListConfigs = computed(() => ({
     filename: '安全承诺',
     filters: internshipListFilters('safetyLetters', ['semester', 'grade_id', 'dep_id', 'profession_id', 'arrangement_id', 'keyword']),
     columns: [
-      { prop: 'student_id', label: '学生ID', width: 90 },
-      { prop: 'arrangement_id', label: '安排ID', width: 90 },
+      { prop: 'student_name', label: '学生', width: 110 },
+      { prop: 'student_num', label: '学号', width: 130 },
+      { prop: 'arrangement_title', label: '实习安排', minWidth: 180 },
       { prop: 'signed_at', label: '签署时间', minWidth: 160 },
       { key: 'status', label: '状态', width: 90, formatter: row => statusText(row.status) },
     ],
@@ -2478,14 +2480,14 @@ function studentPanelFields(panel) {
       { key: 'final_score', label: '总评' },
     ],
     insurances: [
-      { key: 'arrangement_id', label: '安排ID' },
+      { key: 'arrangement_title', label: '实习安排' },
       { key: 'insurance_company', label: '保险公司' },
       { key: 'policy_number', label: '保单号' },
       { key: 'start_date', label: '开始日期' },
       { key: 'end_date', label: '结束日期' },
     ],
     safetyLetters: [
-      { key: 'arrangement_id', label: '安排ID' },
+      { key: 'arrangement_title', label: '实习安排' },
       { key: 'signed_at', label: '签署时间' },
     ],
   };

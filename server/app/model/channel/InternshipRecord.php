@@ -350,7 +350,12 @@ class InternshipRecord extends TableRecord
                 'grade_id' => 'students.grade_id',
                 'semester' => 'arrangement.semester',
             ]);
-            self::keyword($query, $filters, ['students.name', 'students.student_num', 'arrangement.title'], [
+            $keywordColumns = ['students.name', 'students.student_num', 'arrangement.title'];
+            if ($table === 'insurance') {
+                $keywordColumns[] = 'insurance.insurance_company';
+                $keywordColumns[] = 'insurance.policy_number';
+            }
+            self::keyword($query, $filters, $keywordColumns, [
                 self::pairTeacherKeyword("{$table}.student_id", "{$table}.arrangement_id"),
             ]);
         }
@@ -358,6 +363,7 @@ class InternshipRecord extends TableRecord
             self::applyArrangementIdScope($query, $scope, "{$table}.arrangement_id");
         }
         self::filter($query, $filters, "{$table}.arrangement_id", 'arrangement_id');
+        self::filter($query, $filters, "{$table}.status", 'status');
 
         return self::paginate($query->orderByDesc("{$table}.id"), $filters, $columns);
     }

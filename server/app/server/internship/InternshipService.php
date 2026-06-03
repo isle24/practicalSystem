@@ -42,6 +42,12 @@ class InternshipService
         'journal' => ['table' => 'journal', 'recording' => 'journal_recording'],
         'report' => ['table' => 'report', 'recording' => 'report_recording'],
     ];
+    private const STUDENT_DOCUMENT_COLUMNS = [
+        'students.name as student_name',
+        'students.student_num',
+        'arrangement.title as arrangement_title',
+        'arrangement.semester as arrangement_semester',
+    ];
 
     public function overview(Request $request): array
     {
@@ -630,7 +636,7 @@ class InternshipService
 
     public function insurances(Request $request): array
     {
-        return $this->documentList($request, 'insurance', ['insurance.*']);
+        return $this->documentList($request, 'insurance', array_merge(['insurance.*'], self::STUDENT_DOCUMENT_COLUMNS));
     }
 
     public function saveInsurance(Request $request): array
@@ -653,7 +659,7 @@ class InternshipService
 
     public function safetyLetters(Request $request): array
     {
-        return $this->documentList($request, 'safety_letter_sign', ['safety_letter_sign.*']);
+        return $this->documentList($request, 'safety_letter_sign', array_merge(['safety_letter_sign.*'], self::STUDENT_DOCUMENT_COLUMNS));
     }
 
     public function saveSafetyLetter(Request $request): array
@@ -796,7 +802,7 @@ class InternshipService
     {
         $this->requirePermission('internship:view');
         return InternshipRecord::documentPage($table, $columns, $this->scopeContext(), $this->requestFilters($request, [
-            'page', 'page_size', 'per_page', 'keyword', 'arrangement_id',
+            'page', 'page_size', 'per_page', 'keyword', 'arrangement_id', 'status',
             'dep_id', 'profession_id', 'grade_id', 'semester',
         ]));
     }
