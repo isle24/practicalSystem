@@ -478,6 +478,7 @@
                         :loading="internshipState.loading"
                         :pagination="internshipState.lists.arrangements.pagination"
                         :rows="internshipState.lists.arrangements.items"
+                        @export="exportInternshipList('arrangements')"
                         @filter-change="setInternshipFilter('arrangements', $event)"
                         @page-change="page => loadInternshipPanel('arrangements', page)"
                         @reset="resetInternshipFilters('arrangements')"
@@ -494,6 +495,7 @@
                       :loading="internshipState.loading"
                       :pagination="internshipState.lists.applications.pagination"
                       :rows="internshipState.lists.applications.items"
+                      @export="exportInternshipList('applications')"
                       @filter-change="setInternshipFilter('applications', $event)"
                       @page-change="page => loadInternshipPanel('applications', page)"
                       @reset="resetInternshipFilters('applications')"
@@ -524,6 +526,7 @@
                       :loading="internshipState.loading"
                       :pagination="internshipState.lists.pairs.pagination"
                       :rows="internshipState.lists.pairs.items"
+                      @export="exportInternshipList('pairs')"
                       @filter-change="setInternshipFilter('pairs', $event)"
                       @page-change="page => loadInternshipPanel('pairs', page)"
                       @reset="resetInternshipFilters('pairs')"
@@ -543,6 +546,7 @@
                       :loading="internshipState.loading"
                       :pagination="internshipState.lists.signIns.pagination"
                       :rows="internshipState.lists.signIns.items"
+                      @export="exportInternshipList('signIns')"
                       @filter-change="setInternshipFilter('signIns', $event)"
                       @page-change="page => loadInternshipPanel('signIns', page)"
                       @reset="resetInternshipFilters('signIns')"
@@ -558,6 +562,7 @@
                       :loading="internshipState.loading"
                       :pagination="internshipState.lists.journals.pagination"
                       :rows="internshipState.lists.journals.items"
+                      @export="exportInternshipList('journals')"
                       @filter-change="setInternshipFilter('journals', $event)"
                       @page-change="page => loadInternshipPanel('journals', page)"
                       @reset="resetInternshipFilters('journals')"
@@ -588,6 +593,7 @@
                       :loading="internshipState.loading"
                       :pagination="internshipState.lists.reports.pagination"
                       :rows="internshipState.lists.reports.items"
+                      @export="exportInternshipList('reports')"
                       @filter-change="setInternshipFilter('reports', $event)"
                       @page-change="page => loadInternshipPanel('reports', page)"
                       @reset="resetInternshipFilters('reports')"
@@ -619,6 +625,7 @@
                         :loading="internshipState.loading"
                         :pagination="internshipState.lists.scores.pagination"
                         :rows="internshipState.lists.scores.items"
+                        @export="exportInternshipList('scores')"
                         @filter-change="setInternshipFilter('scores', $event)"
                         @page-change="page => loadInternshipPanel('scores', page)"
                         @reset="resetInternshipFilters('scores')"
@@ -660,6 +667,7 @@
                           :loading="internshipState.loading"
                           :pagination="internshipState.lists.insurances.pagination"
                           :rows="internshipState.lists.insurances.items"
+                          @export="exportInternshipList('insurances')"
                           @filter-change="setInternshipFilter('insurances', $event)"
                           @page-change="page => loadInternshipPanel('insurances', page)"
                           @reset="resetInternshipFilters('insurances')"
@@ -689,6 +697,7 @@
                           :loading="internshipState.loading"
                           :pagination="internshipState.lists.safetyLetters.pagination"
                           :rows="internshipState.lists.safetyLetters.items"
+                          @export="exportInternshipList('safetyLetters')"
                           @filter-change="setInternshipFilter('safetyLetters', $event)"
                           @page-change="page => loadInternshipPanel('safetyLetters', page)"
                           @reset="resetInternshipFilters('safetyLetters')"
@@ -1339,6 +1348,9 @@
                         <el-button :icon="RefreshCw" :loading="statState.loading" @click="resetStatFilters">
                           重置
                         </el-button>
+                        <el-button :icon="Download" :disabled="!statState.rows.length" @click="exportStatReport">
+                          导出
+                        </el-button>
                       </div>
                     </div>
                     <el-alert
@@ -1579,6 +1591,7 @@ import {
   ChartColumn,
   CheckCircle2,
   ClipboardList,
+  Download,
   Edit3,
   FileClock,
   FileText,
@@ -3882,6 +3895,131 @@ function optionItems(items, valueKey, labelKey) {
 
 function statCellText(value) {
   return value === null || value === undefined || value === '' ? '-' : value;
+}
+
+async function exportInternshipList(listKey) {
+  const config = internshipListConfigs.value[listKey];
+  const fetcher = internshipExportFetchers()[listKey];
+  if (!config || !fetcher || internshipState.loading) {
+    return;
+  }
+  internshipState.loading = true;
+  internshipState.message = '';
+  try {
+    const rows = await collectPagedRows(fetcher, internshipState.filters[listKey] || {});
+    exportRowsToCsv(config.filename || '实习列表', config.columns, rows);
+  } catch (error) {
+    internshipState.message = error.message;
+  } finally {
+    internshipState.loading = false;
+  }
+}
+
+async function exportStatReport() {
+  if (statState.loading) {
+    return;
+  }
+  statState.loading = true;
+  statState.message = '';
+  let rows = [];
+  try {
+    rows = await collectPagedRows(fetchInternshipStats, {
+      report: statState.report,
+      ...statState.filters,
+    });
+  } catch (error) {
+    statState.message = error.message;
+  } finally {
+    statState.loading = false;
+  }
+  if (!rows.length) {
+    return;
+  }
+  const columns = currentStatColumns.value.map(column => ({
+    ...column,
+    prop: column.key,
+    formatter: row => (column.type === 'status' ? statusText(row[column.key]) : statCellText(row[column.key])),
+  }));
+  exportRowsToCsv(currentStatReport.value.name, columns, rows);
+}
+
+function internshipExportFetchers() {
+  return {
+    arrangements: fetchInternshipArrangements,
+    applications: fetchInternshipApplications,
+    pairs: fetchInternshipPairs,
+    signIns: fetchInternshipSignIns,
+    journals: fetchInternshipJournals,
+    reports: fetchInternshipReports,
+    scores: fetchInternshipScores,
+    insurances: fetchInternshipInsurances,
+    safetyLetters: fetchInternshipSafetyLetters,
+  };
+}
+
+async function collectPagedRows(fetcher, params = {}) {
+  const rows = [];
+  let page = 1;
+  let total = 0;
+  do {
+    const data = await fetcher({
+      ...params,
+      page,
+      page_size: 100,
+    });
+    const items = data.items || data.rows || [];
+    rows.push(...items);
+    total = data.pagination?.total || rows.length;
+    page += 1;
+  } while (rows.length < total && page <= 200);
+
+  return rows;
+}
+
+function exportRowsToCsv(filename, columns, rows) {
+  const exportColumns = (columns || []).filter(column => column.label && (column.prop || column.key));
+  if (!exportColumns.length || !rows.length) {
+    return;
+  }
+  const lines = [
+    exportColumns.map(column => csvCell(column.label)).join(','),
+    ...rows.map(row => exportColumns.map(column => csvCell(exportCellValue(column, row))).join(',')),
+  ];
+  const name = `${safeFilename(filename)}_${dateStamp()}.csv`;
+  downloadTextFile(name, `\uFEFF${lines.join('\n')}`, 'text/csv;charset=utf-8');
+}
+
+function exportCellValue(column, row) {
+  if (typeof column.formatter === 'function') {
+    return column.formatter(row);
+  }
+  const key = column.prop || column.key;
+  return statCellText(row[key]);
+}
+
+function csvCell(value) {
+  const text = String(value ?? '').replace(/"/g, '""');
+  return `"${text}"`;
+}
+
+function safeFilename(value) {
+  return String(value || '导出数据').replace(/[\\/:*?"<>|]+/g, '_').slice(0, 80);
+}
+
+function dateStamp() {
+  const now = new Date();
+  const pad = value => String(value).padStart(2, '0');
+  return `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}`;
+}
+
+function downloadTextFile(filename, content, mimeType) {
+  const blob = new Blob([content], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
 }
 
 function semesterOptions() {
