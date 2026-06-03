@@ -190,6 +190,13 @@
                 </div>
               </template>
             </van-cell>
+            <div v-if="!internship.lists.applications.items.length" class="mobile-empty">暂无申请记录</div>
+            <div class="mobile-list-footer">
+              <span>共 {{ internship.lists.applications.pagination.total || 0 }} 条</span>
+              <button v-if="canLoadMore('applications')" :disabled="internship.loading" @click="loadMoreInternshipList('applications')">
+                加载更多
+              </button>
+            </div>
           </section>
         </template>
 
@@ -214,6 +221,27 @@
             <van-button block type="primary" :loading="internship.loading" @click="submitSignIn">
               提交签到
             </van-button>
+          </section>
+
+          <section class="mobile-card">
+            <header>
+              <MapPin :size="20" />
+              <strong>签到记录</strong>
+            </header>
+            <van-cell
+              v-for="row in internship.lists.signIns.items"
+              :key="row.id"
+              :title="row.arrangement_title || '实习签到'"
+              :label="`${row.date || '-'} / ${row.sign_time || '-'} / ${row.location || '-'}`"
+              :value="signTypeText(row.sign_type)"
+            />
+            <div v-if="!internship.lists.signIns.items.length" class="mobile-empty">暂无签到记录</div>
+            <div class="mobile-list-footer">
+              <span>共 {{ internship.lists.signIns.pagination.total || 0 }} 条</span>
+              <button v-if="canLoadMore('signIns')" :disabled="internship.loading" @click="loadMoreInternshipList('signIns')">
+                加载更多
+              </button>
+            </div>
           </section>
 
           <section class="mobile-card form-card">
@@ -271,6 +299,12 @@
               </template>
             </van-cell>
             <div v-if="!internship.lists.journals.items.length" class="mobile-empty">暂无日志记录</div>
+            <div class="mobile-list-footer">
+              <span>共 {{ internship.lists.journals.pagination.total || 0 }} 条</span>
+              <button v-if="canLoadMore('journals')" :disabled="internship.loading" @click="loadMoreInternshipList('journals')">
+                加载更多
+              </button>
+            </div>
           </section>
 
           <section class="mobile-card">
@@ -292,6 +326,12 @@
               </template>
             </van-cell>
             <div v-if="!internship.lists.reports.items.length" class="mobile-empty">暂无报告记录</div>
+            <div class="mobile-list-footer">
+              <span>共 {{ internship.lists.reports.pagination.total || 0 }} 条</span>
+              <button v-if="canLoadMore('reports')" :disabled="internship.loading" @click="loadMoreInternshipList('reports')">
+                加载更多
+              </button>
+            </div>
           </section>
         </template>
 
@@ -301,6 +341,16 @@
               <ClipboardList :size="20" />
               <strong>实习申请</strong>
             </header>
+            <section class="mobile-list-tools">
+              <input v-model="internship.filters.applications.keyword" placeholder="学生、学号、实习安排" @keyup.enter="reloadInternshipList('applications')">
+              <select v-model="internship.filters.applications.status" @change="reloadInternshipList('applications')">
+                <option value="">全部状态</option>
+                <option value="wait">待审核</option>
+                <option value="accept">已通过</option>
+                <option value="modify">需修改</option>
+              </select>
+              <button type="button" :disabled="internship.loading" @click="reloadInternshipList('applications')">查询</button>
+            </section>
             <van-cell
               v-for="row in internship.lists.applications.items"
               :key="row.id"
@@ -317,6 +367,13 @@
                 </div>
               </template>
             </van-cell>
+            <div v-if="!internship.lists.applications.items.length" class="mobile-empty">暂无实习申请</div>
+            <div class="mobile-list-footer">
+              <span>共 {{ internship.lists.applications.pagination.total || 0 }} 条</span>
+              <button v-if="canLoadMore('applications')" :disabled="internship.loading" @click="loadMoreInternshipList('applications')">
+                加载更多
+              </button>
+            </div>
           </section>
 
           <section v-if="isTeacherRole" class="mobile-card">
@@ -324,6 +381,16 @@
               <FileClock :size="20" />
               <strong>日志评阅</strong>
             </header>
+            <section class="mobile-list-tools">
+              <input v-model="internship.filters.journals.keyword" placeholder="学生、标题、内容" @keyup.enter="reloadInternshipList('journals')">
+              <select v-model="internship.filters.journals.status" @change="reloadInternshipList('journals')">
+                <option value="">全部状态</option>
+                <option value="wait">待审核</option>
+                <option value="accept">已通过</option>
+                <option value="modify">需修改</option>
+              </select>
+              <button type="button" :disabled="internship.loading" @click="reloadInternshipList('journals')">查询</button>
+            </section>
             <van-cell
               v-for="row in internship.lists.journals.items"
               :key="row.id"
@@ -340,6 +407,13 @@
                 </div>
               </template>
             </van-cell>
+            <div v-if="!internship.lists.journals.items.length" class="mobile-empty">暂无日志记录</div>
+            <div class="mobile-list-footer">
+              <span>共 {{ internship.lists.journals.pagination.total || 0 }} 条</span>
+              <button v-if="canLoadMore('journals')" :disabled="internship.loading" @click="loadMoreInternshipList('journals')">
+                加载更多
+              </button>
+            </div>
           </section>
 
           <section v-if="isTeacherRole" class="mobile-card">
@@ -347,6 +421,16 @@
               <FileText :size="20" />
               <strong>报告评阅</strong>
             </header>
+            <section class="mobile-list-tools">
+              <input v-model="internship.filters.reports.keyword" placeholder="学生、标题、内容" @keyup.enter="reloadInternshipList('reports')">
+              <select v-model="internship.filters.reports.status" @change="reloadInternshipList('reports')">
+                <option value="">全部状态</option>
+                <option value="wait">待审核</option>
+                <option value="accept">已通过</option>
+                <option value="modify">需修改</option>
+              </select>
+              <button type="button" :disabled="internship.loading" @click="reloadInternshipList('reports')">查询</button>
+            </section>
             <van-cell
               v-for="row in internship.lists.reports.items"
               :key="row.id"
@@ -363,6 +447,13 @@
                 </div>
               </template>
             </van-cell>
+            <div v-if="!internship.lists.reports.items.length" class="mobile-empty">暂无报告记录</div>
+            <div class="mobile-list-footer">
+              <span>共 {{ internship.lists.reports.pagination.total || 0 }} 条</span>
+              <button v-if="canLoadMore('reports')" :disabled="internship.loading" @click="loadMoreInternshipList('reports')">
+                加载更多
+              </button>
+            </div>
           </section>
         </template>
 
@@ -388,6 +479,31 @@
               保存成绩
             </van-button>
           </section>
+
+          <section class="mobile-card">
+            <header>
+              <GraduationCap :size="20" />
+              <strong>成绩记录</strong>
+            </header>
+            <section class="mobile-list-tools">
+              <input v-model="internship.filters.scores.keyword" placeholder="学生、学号、安排" @keyup.enter="reloadInternshipList('scores')">
+              <button type="button" :disabled="internship.loading" @click="reloadInternshipList('scores')">查询</button>
+            </section>
+            <van-cell
+              v-for="row in internship.lists.scores.items"
+              :key="row.id"
+              :title="row.student_name || row.student_num"
+              :label="`${row.arrangement_title || '-'} / 总评 ${row.final_score ?? '-'}`"
+              :value="row.teacher_name || '-'"
+            />
+            <div v-if="!internship.lists.scores.items.length" class="mobile-empty">暂无成绩记录</div>
+            <div class="mobile-list-footer">
+              <span>共 {{ internship.lists.scores.pagination.total || 0 }} 条</span>
+              <button v-if="canLoadMore('scores')" :disabled="internship.loading" @click="loadMoreInternshipList('scores')">
+                加载更多
+              </button>
+            </div>
+          </section>
         </template>
 
         <template v-if="isAdminRole && internship.panel === 'manage'">
@@ -396,6 +512,15 @@
               <CalendarCheck :size="20" />
               <strong>实习安排</strong>
             </header>
+            <section class="mobile-list-tools">
+              <input v-model="internship.filters.arrangements.keyword" placeholder="安排、学院、专业" @keyup.enter="reloadInternshipList('arrangements')">
+              <select v-model="internship.filters.arrangements.status" @change="reloadInternshipList('arrangements')">
+                <option value="">全部状态</option>
+                <option value="enabled">启用</option>
+                <option value="disabled">停用</option>
+              </select>
+              <button type="button" :disabled="internship.loading" @click="reloadInternshipList('arrangements')">查询</button>
+            </section>
             <van-cell
               v-for="row in internship.lists.arrangements.items"
               :key="row.id"
@@ -403,12 +528,28 @@
               :label="`${row.semester || '-'} / ${row.dep_name || '全校'}`"
               :value="statusText(row.status)"
             />
+            <div v-if="!internship.lists.arrangements.items.length" class="mobile-empty">暂无实习安排</div>
+            <div class="mobile-list-footer">
+              <span>共 {{ internship.lists.arrangements.pagination.total || 0 }} 条</span>
+              <button v-if="canLoadMore('arrangements')" :disabled="internship.loading" @click="loadMoreInternshipList('arrangements')">
+                加载更多
+              </button>
+            </div>
           </section>
           <section class="mobile-card">
             <header>
               <UsersRound :size="20" />
               <strong>指导关系</strong>
             </header>
+            <section class="mobile-list-tools">
+              <input v-model="internship.filters.pairs.keyword" placeholder="学生、学号、教师、安排" @keyup.enter="reloadInternshipList('pairs')">
+              <select v-model="internship.filters.pairs.status" @change="reloadInternshipList('pairs')">
+                <option value="">全部状态</option>
+                <option value="active">有效</option>
+                <option value="removed">已移除</option>
+              </select>
+              <button type="button" :disabled="internship.loading" @click="reloadInternshipList('pairs')">查询</button>
+            </section>
             <van-cell
               v-for="row in internship.lists.pairs.items"
               :key="row.id"
@@ -416,6 +557,13 @@
               :label="`${row.teacher_name || '-'} / ${row.arrangement_title || '-'}`"
               :value="statusText(row.status)"
             />
+            <div v-if="!internship.lists.pairs.items.length" class="mobile-empty">暂无指导关系</div>
+            <div class="mobile-list-footer">
+              <span>共 {{ internship.lists.pairs.pagination.total || 0 }} 条</span>
+              <button v-if="canLoadMore('pairs')" :disabled="internship.loading" @click="loadMoreInternshipList('pairs')">
+                加载更多
+              </button>
+            </div>
           </section>
         </template>
 
@@ -598,6 +746,7 @@ import {
   fetchInternshipPairs,
   fetchInternshipReports,
   fetchInternshipScores,
+  fetchInternshipSignIns,
   fetchInternshipTimeline,
   requestInternshipModification,
   reviewInternshipApplication,
@@ -649,9 +798,19 @@ const internship = reactive({
     arrangements: emptyPagedList(),
     applications: emptyPagedList(),
     pairs: emptyPagedList(),
+    signIns: emptyPagedList(),
     journals: emptyPagedList(),
     reports: emptyPagedList(),
     scores: emptyPagedList(),
+  },
+  filters: {
+    arrangements: emptyInternshipFilters(),
+    applications: emptyInternshipFilters(),
+    pairs: emptyInternshipFilters(),
+    signIns: emptyInternshipFilters(),
+    journals: emptyInternshipFilters(),
+    reports: emptyInternshipFilters(),
+    scores: emptyInternshipFilters(),
   },
   forms: {
     application: {
@@ -901,9 +1060,21 @@ function emptyPagedList() {
     items: [],
     pagination: {
       page: 1,
-      page_size: 20,
+      page_size: 10,
       total: 0,
     },
+  };
+}
+
+function emptyInternshipFilters() {
+  return {
+    semester: '',
+    grade_id: '',
+    dep_id: '',
+    profession_id: '',
+    arrangement_id: '',
+    status: '',
+    keyword: '',
   };
 }
 
@@ -927,12 +1098,85 @@ function emptyInternshipOptions() {
   };
 }
 
-function setPagedList(key, data) {
-  internship.lists[key].items = data.items || [];
+function setPagedList(key, data, append = false) {
+  const items = data.items || [];
+  internship.lists[key].items = append ? [...internship.lists[key].items, ...items] : items;
   internship.lists[key].pagination = {
     ...internship.lists[key].pagination,
     ...(data.pagination || {}),
   };
+}
+
+function internshipQueryParams(key, page = 1) {
+  const filters = internship.filters[key] || {};
+  const params = {
+    page,
+    page_size: internship.lists[key]?.pagination.page_size || 10,
+  };
+  Object.entries(filters).forEach(([filterKey, value]) => {
+    if (value !== '' && value !== null && value !== undefined) {
+      params[filterKey] = value;
+    }
+  });
+  return params;
+}
+
+function internshipFetcher(key) {
+  const fetchers = {
+    arrangements: fetchInternshipArrangements,
+    applications: fetchInternshipApplications,
+    pairs: fetchInternshipPairs,
+    signIns: fetchInternshipSignIns,
+    journals: fetchInternshipJournals,
+    reports: fetchInternshipReports,
+    scores: fetchInternshipScores,
+  };
+  return fetchers[key] || null;
+}
+
+async function loadInternshipList(key, page = 1, append = false) {
+  const fetcher = internshipFetcher(key);
+  if (!fetcher) {
+    return;
+  }
+  const data = await fetcher(internshipQueryParams(key, page));
+  setPagedList(key, data, append);
+}
+
+async function reloadInternshipList(key) {
+  internship.loading = true;
+  internship.message = '';
+  try {
+    await loadInternshipList(key, 1);
+  } catch (error) {
+    internship.message = error.message;
+  } finally {
+    internship.loading = false;
+  }
+}
+
+async function loadMoreInternshipList(key) {
+  const pagination = internship.lists[key]?.pagination || {};
+  if (!canLoadMore(key)) {
+    return;
+  }
+  internship.loading = true;
+  internship.message = '';
+  try {
+    await loadInternshipList(key, (pagination.page || 1) + 1, true);
+  } catch (error) {
+    internship.message = error.message;
+  } finally {
+    internship.loading = false;
+  }
+}
+
+function canLoadMore(key) {
+  const list = internship.lists[key];
+  if (!list) {
+    return false;
+  }
+  return list.items.length < (list.pagination.total || 0);
 }
 
 function applyDefaultInternshipSelection() {
@@ -977,47 +1221,39 @@ async function loadInternship() {
 }
 
 async function loadInternshipPanelData() {
-  const params = { page: 1, page_size: 20 };
   if (internship.panel === 'workbench') {
-    const [applications, pairs] = await Promise.all([
-      fetchInternshipApplications(params),
-      fetchInternshipPairs(params),
+    await Promise.all([
+      loadInternshipList('applications'),
+      loadInternshipList('pairs'),
     ]);
-    setPagedList('applications', applications);
-    setPagedList('pairs', pairs);
     return;
   }
   if (internship.panel === 'apply') {
-    setPagedList('applications', await fetchInternshipApplications(params));
+    await loadInternshipList('applications');
     return;
   }
   if (internship.panel === 'submit') {
-    const [journals, reports] = await Promise.all([
-      fetchInternshipJournals(params),
-      fetchInternshipReports(params),
+    await Promise.all([
+      loadInternshipList('signIns'),
+      loadInternshipList('journals'),
+      loadInternshipList('reports'),
     ]);
-    setPagedList('journals', journals);
-    setPagedList('reports', reports);
     return;
   }
   if (internship.panel === 'review') {
-    const [applications, journals, reports] = await Promise.all([
-      fetchInternshipApplications(params),
-      fetchInternshipJournals(params),
-      fetchInternshipReports(params),
+    await Promise.all([
+      loadInternshipList('applications'),
+      loadInternshipList('journals'),
+      loadInternshipList('reports'),
     ]);
-    setPagedList('applications', applications);
-    setPagedList('journals', journals);
-    setPagedList('reports', reports);
     return;
   }
   if (internship.panel === 'score') {
-    const [pairs, scores] = await Promise.all([
+    const [pairs] = await Promise.all([
       fetchInternshipPairs({ page: 1, page_size: 100 }),
-      fetchInternshipScores(params),
+      loadInternshipList('scores'),
     ]);
     setPagedList('pairs', pairs);
-    setPagedList('scores', scores);
     const firstPair = internship.lists.pairs.items[0];
     if (firstPair && !internship.forms.score.pair_id) {
       internship.forms.score.pair_id = firstPair.id;
@@ -1026,14 +1262,11 @@ async function loadInternshipPanelData() {
     return;
   }
   if (internship.panel === 'manage') {
-    const [arrangements, applications, pairs] = await Promise.all([
-      fetchInternshipArrangements(params),
-      fetchInternshipApplications(params),
-      fetchInternshipPairs(params),
+    await Promise.all([
+      loadInternshipList('arrangements'),
+      loadInternshipList('applications'),
+      loadInternshipList('pairs'),
     ]);
-    setPagedList('arrangements', arrangements);
-    setPagedList('applications', applications);
-    setPagedList('pairs', pairs);
   }
 }
 
@@ -1450,6 +1683,15 @@ function numericOrNull(value) {
   return value === '' || value === null || value === undefined ? null : Number(value);
 }
 
+function signTypeText(value) {
+  const names = {
+    gps: '定位',
+    qrcode: '扫码',
+    manual: '补录',
+  };
+  return names[value] || value || '-';
+}
+
 function statusText(value) {
   const names = {
     draft: '草稿',
@@ -1460,6 +1702,7 @@ function statusText(value) {
     disabled: '停用',
     pending: '待处理',
     active: '有效',
+    removed: '已移除',
     signed: '已签署',
   };
   return names[value] || value || '-';

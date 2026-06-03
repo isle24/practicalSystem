@@ -374,6 +374,55 @@ input {
   font-size: 15px;
 }
 
+.mobile-list-tools {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 108px 58px;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+  background: #fff;
+}
+
+.mobile-list-tools:has(> button:nth-child(2):last-child) {
+  grid-template-columns: minmax(0, 1fr) 58px;
+}
+
+.mobile-list-tools input,
+.mobile-list-tools select {
+  width: 100%;
+  height: 34px;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 9px;
+  color: var(--text);
+  background: #fff;
+  outline: none;
+}
+
+.mobile-list-tools button,
+.mobile-list-footer button {
+  height: 34px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 10px;
+  color: var(--primary);
+  background: #fff;
+}
+
+.mobile-list-footer {
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 12px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 12px;
+  background: #fbfcfe;
+}
+
 .form-card {
   display: grid;
   gap: 11px;
