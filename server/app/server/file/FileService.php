@@ -2,10 +2,11 @@
 
 namespace app\server\file;
 
-use app\model\channel\TableRecord as ChannelTable;
+use app\model\channel\FileBlob;
+use app\model\channel\FileRecord;
+use app\model\channel\FileRelation;
 use app\server\config\ConfigService;
 use app\server\CurrentContext;
-use Illuminate\Database\Query\Expression;
 use Illuminate\Database\QueryException;
 use InvalidArgumentException;
 use RuntimeException;
@@ -72,31 +73,20 @@ class FileService
         if (!$this->instantUploadEnabled()) {
             return $this->uploadRequired($md5);
         }
-        $blob = $this->query('file_blob')
-            ->where('md5', $md5)
-            ->whereNull('deleted_at')
-            ->first();
+        $blob = FileBlob::activeByMd5($md5);
 
         if (!$blob || !$this->blobFileExists($blob)) {
             return $this->uploadRequired($md5);
         }
 
         return $this->connection()->transaction(function () use ($blob, $name, $category, $isTemporary, $accountId, $device): array {
-            $lockedBlob = $this->query('file_blob')
-                ->where('id', $blob->id)
-                ->lockForUpdate()
-                ->first();
+            $lockedBlob = FileBlob::lockById((int) $blob->id);
 
             if (!$lockedBlob || $lockedBlob->deleted_at !== null) {
                 return $this->uploadRequired((string) $blob->md5);
             }
 
-            $this->query('file_blob')
-                ->where('id', $lockedBlob->id)
-                ->update([
-                    'ref_count' => new Expression('COALESCE(`ref_count`, 0) + 1'),
-                    'updated_at' => $this->now(),
-                ]);
+            FileBlob::incrementRefCount((int) $lockedBlob->id, $this->now());
 
             $fileId = $this->insertFile($lockedBlob, $name, $category, $isTemporary, $accountId, null, $device);
 
@@ -194,34 +184,7 @@ class FileService
             throw new InvalidArgumentException('file_id 无效');
         }
 
-        $row = $this->query('file')
-            ->join('file_blob', 'file.blob_id', '=', 'file_blob.id')
-            ->where('file.id', $fileId)
-            ->whereNull('file.deleted_at')
-            ->first([
-                'file.id',
-                'file.uuid',
-                'file.blob_id',
-                'file.name',
-                'file.download_name',
-                'file.url',
-                'file.is_temporary',
-                'file.uploader_id',
-                'file.client',
-                'file.client_ip',
-                'file.user_agent',
-                'file.category',
-                'file.created_at',
-                'file_blob.md5',
-                'file_blob.sha1',
-                'file_blob.path',
-                'file_blob.ext',
-                'file_blob.size',
-                'file_blob.mime_type',
-                'file_blob.disk',
-                'file_blob.block',
-                'file_blob.ref_count',
-            ]);
+        $row = FileRecord::detailById($fileId);
 
         if (!$row) {
             throw new RuntimeException('文件不存在');
@@ -238,42 +201,7 @@ class FileService
             throw new InvalidArgumentException('entity_id 无效');
         }
 
-        $query = $this->query('file_relation')
-            ->join('file', 'file_relation.file_id', '=', 'file.id')
-            ->join('file_blob', 'file.blob_id', '=', 'file_blob.id')
-            ->where('file_relation.entity_type', $entityType)
-            ->where('file_relation.entity_id', $entityId)
-            ->whereNull('file_relation.deleted_at')
-            ->whereNull('file.deleted_at')
-            ->orderBy('file_relation.id');
-
-        if ($tag !== null && $tag !== '') {
-            $query->where('file_relation.tag', $this->tag($tag));
-        }
-
-        return $query->get([
-            'file_relation.id as relation_id',
-            'file_relation.tag',
-            'file.id',
-            'file.uuid',
-            'file.blob_id',
-            'file.name',
-            'file.download_name',
-            'file.url',
-            'file.is_temporary',
-            'file.uploader_id',
-            'file.category',
-            'file.created_at',
-            'file_blob.md5',
-            'file_blob.sha1',
-            'file_blob.path',
-            'file_blob.ext',
-            'file_blob.size',
-            'file_blob.mime_type',
-            'file_blob.disk',
-            'file_blob.block',
-            'file_blob.ref_count',
-        ])->map(fn ($row): array => array_merge(
+        return FileRelation::rowsForEntity($entityType, $entityId, $tag === null ? null : $this->tag($tag))->map(fn ($row): array => array_merge(
             ['relation_id' => (int) $row->relation_id, 'tag' => $row->tag],
             $this->fileInfo($row)
         ))->all();
@@ -289,21 +217,12 @@ class FileService
         }
 
         return $this->connection()->transaction(function () use ($fileId, $entityType, $entityId, $tag): array {
-            $file = $this->query('file')
-                ->where('id', $fileId)
-                ->whereNull('deleted_at')
-                ->first(['id']);
+            $file = FileRecord::activeId($fileId);
             if (!$file) {
                 throw new RuntimeException('文件不存在');
             }
 
-            $query = $this->query('file_relation')
-                ->where('file_id', $fileId)
-                ->where('entity_type', $entityType)
-                ->where('entity_id', $entityId)
-                ->whereNull('deleted_at');
-            $tag === '' ? $query->whereNull('tag') : $query->where('tag', $tag);
-            $relation = $query->first(['id']);
+            $relation = FileRelation::activeByUnique($fileId, $entityType, $entityId, $tag);
             if ($relation) {
                 return [
                     'relation_id' => (int) $relation->id,
@@ -314,14 +233,7 @@ class FileService
                 ];
             }
 
-            $relationId = (int) $this->query('file_relation')->insertGetId([
-                'file_id' => $fileId,
-                'entity_type' => $entityType,
-                'entity_id' => $entityId,
-                'tag' => $tag === '' ? null : $tag,
-                'created_at' => $this->now(),
-                'updated_at' => $this->now(),
-            ]);
+            $relationId = FileRelation::createRelation($fileId, $entityType, $entityId, $tag, $this->now());
 
             return [
                 'relation_id' => $relationId,
@@ -340,12 +252,7 @@ class FileService
         $now = $this->now();
 
         if ($relationId > 0) {
-            $affected = $this->query('file_relation')
-                ->where('id', $relationId)
-                ->whereNull('deleted_at')
-                ->update(['deleted_at' => $now, 'updated_at' => $now]);
-
-            return ['affected' => $affected];
+            return ['affected' => FileRelation::softDeleteById($relationId, $now)];
         }
 
         $fileId = $this->intInput($request, 'file_id');
@@ -357,15 +264,8 @@ class FileService
             throw new InvalidArgumentException('解除关联参数无效');
         }
 
-        $query = $this->query('file_relation')
-            ->where('file_id', $fileId)
-            ->where('entity_type', $entityType)
-            ->where('entity_id', $entityId)
-            ->whereNull('deleted_at');
-        $tag === '' ? $query->whereNull('tag') : $query->where('tag', $this->tag($tag));
-
         return [
-            'affected' => $query->update(['deleted_at' => $now, 'updated_at' => $now]),
+            'affected' => FileRelation::softDeleteByUnique($fileId, $entityType, $entityId, $tag === '' ? '' : $this->tag($tag), $now),
         ];
     }
 
@@ -379,61 +279,33 @@ class FileService
         $deletePath = null;
         $result = $this->connection()->transaction(function () use ($fileId, $force, &$deletePath): array {
             $now = $this->now();
-            $file = $this->query('file')
-                ->where('id', $fileId)
-                ->whereNull('deleted_at')
-                ->lockForUpdate()
-                ->first();
+            $file = FileRecord::lockActiveById($fileId);
 
             if (!$file) {
                 throw new RuntimeException('文件不存在');
             }
 
-            $relationCount = (int) $this->query('file_relation')
-                ->where('file_id', $fileId)
-                ->whereNull('deleted_at')
-                ->count();
+            $relationCount = FileRelation::activeCountByFile($fileId);
 
             if ($relationCount > 0 && !$force) {
                 throw new RuntimeException('文件仍有关联，请先解除关联');
             }
 
             if ($force) {
-                $this->query('file_relation')
-                    ->where('file_id', $fileId)
-                    ->whereNull('deleted_at')
-                    ->update(['deleted_at' => $now, 'updated_at' => $now]);
+                FileRelation::softDeleteByFile($fileId, $now);
             }
 
-            $this->query('file')
-                ->where('id', $fileId)
-                ->update(['deleted_at' => $now, 'updated_at' => $now, 'status' => 'deleted']);
+            FileRecord::softDeleteById($fileId, $now);
+            FileBlob::decrementRefCount((int) $file->blob_id, $now);
 
-            $this->query('file_blob')
-                ->where('id', $file->blob_id)
-                ->update([
-                    'ref_count' => new Expression('GREATEST(COALESCE(`ref_count`, 0) - 1, 0)'),
-                    'updated_at' => $now,
-                ]);
+            $blob = FileBlob::lockById((int) $file->blob_id);
 
-            $blob = $this->query('file_blob')
-                ->where('id', $file->blob_id)
-                ->lockForUpdate()
-                ->first();
-
-            $activeRelationCount = (int) $this->query('file_relation')
-                ->join('file', 'file_relation.file_id', '=', 'file.id')
-                ->where('file.blob_id', $file->blob_id)
-                ->whereNull('file_relation.deleted_at')
-                ->whereNull('file.deleted_at')
-                ->count();
+            $activeRelationCount = FileRelation::activeCountByBlob((int) $file->blob_id);
 
             $physicalDeleted = false;
             if ($blob && (int) $blob->ref_count <= 0 && $activeRelationCount === 0) {
                 $deletePath = $this->absolutePublicPath((string) $blob->path);
-                $this->query('file_blob')
-                    ->where('id', $blob->id)
-                    ->update(['deleted_at' => $now, 'updated_at' => $now, 'ref_count' => 0]);
+                FileBlob::softDeleteById((int) $blob->id, $now);
                 $physicalDeleted = true;
             }
 
@@ -474,61 +346,16 @@ class FileService
         $category = trim((string) $request->input('category', ''));
         $status = (string) $request->input('status', 'all');
 
-        $query = $this->query('file')
-            ->join('file_blob', 'file.blob_id', '=', 'file_blob.id')
-            ->leftJoin('account', 'file.uploader_id', '=', 'account.id')
-            ->leftJoin('users', 'account.user_id', '=', 'users.id');
-
-        if (!$this->isFileAdmin()) {
-            $query->where('file.uploader_id', $accountId);
-        }
-        if ($status === 'active') {
-            $query->whereNull('file.deleted_at');
-        } elseif ($status === 'deleted') {
-            $query->whereNotNull('file.deleted_at');
-        }
-        if ($category !== '') {
-            $query->where('file.category', $this->category($category));
-        }
-        if ($keyword !== '') {
-            $query->where(function ($builder) use ($keyword): void {
-                $like = '%' . str_replace(['%', '_'], ['\\%', '\\_'], $keyword) . '%';
-                $builder->where('file.name', 'like', $like)
-                    ->orWhere('file.download_name', 'like', $like)
-                    ->orWhere('file_blob.md5', 'like', $like)
-                    ->orWhere('users.name', 'like', $like)
-                    ->orWhere('account.login_name', 'like', $like);
-            });
-        }
-
-        $total = (int) (clone $query)->count();
-        $rows = $query
-            ->orderByDesc('file.id')
-            ->forPage($page, $pageSize)
-            ->get([
-                'file.id',
-                'file.uuid',
-                'file.blob_id',
-                'file.name',
-                'file.download_name',
-                'file.url',
-                'file.is_temporary',
-                'file.uploader_id',
-                'file.client',
-                'file.client_ip',
-                'file.user_agent',
-                'file.category',
-                'file.status',
-                'file.created_at',
-                'file.deleted_at',
-                'file_blob.md5',
-                'file_blob.ext',
-                'file_blob.size',
-                'file_blob.mime_type',
-                'file_blob.ref_count',
-                'account.login_name',
-                'users.name as uploader_name',
-            ]);
+        $result = FileRecord::pagedRows([
+            'account_id' => $accountId,
+            'is_admin' => $this->isFileAdmin(),
+            'page' => $page,
+            'page_size' => $pageSize,
+            'keyword' => $keyword,
+            'category' => $category === '' ? '' : $this->category($category),
+            'status' => $status,
+        ]);
+        $rows = $result['rows'];
 
         return [
             'items' => $rows->map(fn ($row): array => [
@@ -564,7 +391,7 @@ class FileService
             'pagination' => [
                 'page' => $page,
                 'page_size' => $pageSize,
-                'total' => $total,
+                'total' => $result['total'],
             ],
         ];
     }
@@ -575,32 +402,22 @@ class FileService
 
         $result = $this->connection()->transaction(function () use ($blobData, $fileData, &$removeSavedFile): array {
             $now = $this->now();
-            $blob = $this->query('file_blob')
-                ->where('md5', $blobData['md5'])
-                ->lockForUpdate()
-                ->first();
+            $blob = FileBlob::lockByMd5($blobData['md5']);
 
             if ($blob && $blob->deleted_at === null && $this->blobFileExists($blob)) {
                 $removeSavedFile = true;
-                $this->query('file_blob')
-                    ->where('id', $blob->id)
-                    ->update([
-                        'ref_count' => new Expression('COALESCE(`ref_count`, 0) + 1'),
-                        'updated_at' => $now,
-                    ]);
+                FileBlob::incrementRefCount((int) $blob->id, $now);
                 $activeBlob = $blob;
             } elseif ($blob) {
-                $this->query('file_blob')
-                    ->where('id', $blob->id)
-                    ->update(array_merge($blobData, [
-                        'ref_count' => 1,
-                        'deleted_at' => null,
-                        'updated_at' => $now,
-                    ]));
+                FileBlob::updateBlob((int) $blob->id, array_merge($blobData, [
+                    'ref_count' => 1,
+                    'deleted_at' => null,
+                    'updated_at' => $now,
+                ]));
                 $activeBlob = (object) array_merge((array) $blob, $blobData, ['deleted_at' => null, 'ref_count' => 1]);
             } else {
                 try {
-                    $blobId = (int) $this->query('file_blob')->insertGetId(array_merge($blobData, [
+                    $blobId = FileBlob::createBlob(array_merge($blobData, [
                         'ref_count' => 1,
                         'created_at' => $now,
                         'updated_at' => $now,
@@ -611,21 +428,12 @@ class FileService
                         throw $exception;
                     }
 
-                    $activeBlob = $this->query('file_blob')
-                        ->where('md5', $blobData['md5'])
-                        ->lockForUpdate()
-                        ->first();
+                    $activeBlob = FileBlob::lockByMd5($blobData['md5']);
                     if (!$activeBlob) {
                         throw $exception;
                     }
                     $removeSavedFile = true;
-                    $this->query('file_blob')
-                        ->where('id', $activeBlob->id)
-                        ->update([
-                            'ref_count' => new Expression('COALESCE(`ref_count`, 0) + 1'),
-                            'deleted_at' => null,
-                            'updated_at' => $now,
-                        ]);
+                    FileBlob::incrementRefCount((int) $activeBlob->id, $now, true);
                 }
             }
 
@@ -669,19 +477,16 @@ class FileService
         ?string $downloadName = null,
         array $device = []
     ): int {
-        return (int) $this->query('file')->insertGetId([
+        return FileRecord::createFromBlob($blob, [
             'uuid' => $this->uuid(),
-            'blob_id' => (int) $blob->id,
             'name' => $name,
             'download_name' => $downloadName ?: $name,
-            'url' => (string) $blob->url,
             'is_temporary' => $isTemporary ? 1 : 0,
             'uploader_id' => $accountId,
             'client' => $device['client'] ?? null,
             'client_ip' => $device['client_ip'] ?? null,
             'user_agent' => $device['user_agent'] ?? null,
             'category' => $category,
-            'status' => 'enabled',
             'created_at' => $this->now(),
             'updated_at' => $this->now(),
         ]);
@@ -1226,14 +1031,9 @@ class FileService
         return date('Y-m-d H:i:s');
     }
 
-    private function query(string $table): mixed
-    {
-        return ChannelTable::table($table);
-    }
-
     private function connection(): mixed
     {
-        return ChannelTable::connection();
+        return FileRecord::connection();
     }
 
     private function limit(string $value, int $maxLength): string
