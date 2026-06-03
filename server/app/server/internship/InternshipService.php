@@ -1141,23 +1141,7 @@ class InternshipService
 
     private function upsertActivePair(array $values): int
     {
-        $existing = $this->query('pair')
-            ->where('student_id', $values['student_id'])
-            ->where('arrangement_id', $values['arrangement_id'])
-            ->where('type', 'internship')
-            ->where('status', 'active')
-            ->whereNull('deleted_at')
-            ->first();
-
-        if ($existing) {
-            $this->query('pair')->where('id', $existing->id)->update($values);
-            return (int) $existing->id;
-        }
-
-        return (int) $this->query('pair')->insertGetId(array_merge($values, [
-            'uuid' => $this->uuid(),
-            'created_at' => $this->now(),
-        ]));
+        return InternshipRecord::upsertActivePair($values, $this->uuid(), $this->now());
     }
 
     private function saveRow(string $table, Request $request, array $values, array $unique = []): array
@@ -1167,24 +1151,19 @@ class InternshipService
         $now = $this->now();
 
         if (!$id && $uuid) {
-            $id = (int) ($this->query($table)->where('uuid', $uuid)->value('id') ?: 0);
+            $id = InternshipRecord::idByUuid($table, $uuid);
         }
         if (!$id && $unique) {
-            $query = $this->query($table);
-            foreach ($unique as $field => $value) {
-                $query->where($field, $value);
-            }
-            $query->whereNull('deleted_at');
-            $id = (int) ($query->value('id') ?: 0);
+            $id = InternshipRecord::activeIdByFields($table, $unique);
         }
 
         if ($id) {
-            $this->query($table)->where('id', $id)->update($values);
-            return ['id' => $id, 'uuid' => $uuid ?: (string) $this->query($table)->where('id', $id)->value('uuid')];
+            InternshipRecord::updateById($table, $id, $values);
+            return ['id' => $id, 'uuid' => $uuid ?: (string) InternshipRecord::uuidById($table, $id)];
         }
 
         $uuid = $uuid ?: $this->uuid();
-        $id = (int) $this->query($table)->insertGetId(array_merge($values, [
+        $id = InternshipRecord::insertRow($table, array_merge($values, [
             'uuid' => $uuid,
             'created_at' => $now,
         ]));

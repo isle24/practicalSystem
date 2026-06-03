@@ -245,9 +245,46 @@ class InternshipRecord extends TableRecord
         return (int) self::queryTable($table)->insertGetId($values);
     }
 
+    public static function upsertActivePair(array $values, string $uuid, string $now): int
+    {
+        $existing = self::queryTable('pair')
+            ->where('student_id', $values['student_id'])
+            ->where('arrangement_id', $values['arrangement_id'])
+            ->where('type', 'internship')
+            ->where('status', 'active')
+            ->whereNull('deleted_at')
+            ->first(['id']);
+
+        if ($existing) {
+            self::updateById('pair', (int) $existing->id, $values);
+            return (int) $existing->id;
+        }
+
+        return self::insertRow('pair', array_merge($values, [
+            'uuid' => $uuid,
+            'created_at' => $now,
+        ]));
+    }
+
     public static function idByUuid(string $table, string $uuid): int
     {
         return (int) (self::queryTable($table)->where('uuid', $uuid)->value('id') ?: 0);
+    }
+
+    public static function uuidById(string $table, int $id): ?string
+    {
+        $uuid = self::queryTable($table)->where('id', $id)->value('uuid');
+        return $uuid ? (string) $uuid : null;
+    }
+
+    public static function activeIdByFields(string $table, array $fields): int
+    {
+        $query = self::queryTable($table);
+        foreach ($fields as $field => $value) {
+            $query->where($field, $value);
+        }
+
+        return (int) ($query->whereNull('deleted_at')->value('id') ?: 0);
     }
 
     public static function recordingRows(string $table, int $parentId): array
