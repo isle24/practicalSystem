@@ -4,22 +4,22 @@
 
 核心架构决策：
 - PHP 8.4 + Webman + illuminate/database (Laravel Eloquent)，严格 MVC
-- 独立数据库租户：每学校一库，库名由 databases.database_db 指定（命名建议 practical_{school_code}），主库 practical_master 存 schools/databases/authorizations 绑定关系
-- 域名路由 → TenantMiddleware 解析租户 → TenantConnectionManager 注册动态连接名 → BaseModel 使用 tenant_connection
+- 独立数据库学校：每学校一库，库名由 databases.database_db 指定（命名建议 practical_{school_code}），主库 practical_master 存 schools/databases/authorizations 绑定关系
+- 域名路由 → SchoolMiddleware 解析学校 → SchoolConnectionManager 注册动态连接名 → BaseModel 使用 school_connection
 - 前端双端独立：fontend/h5 (Vant 4) + fontend/pc (Element Plus)，编译输出到 server/public/h5 和 server/public/pc
 - 文件存储 public/files/{block}/{school_code}/{category}/{yyyymmdd}/{uuid}.{ext}，block 支持多盘扩容
 - 默认 URL 直接访问，?n= 参数改名下载，X-Accel-Redirect API 备选
-- UUID 混淆层：对外 UUID，内部 ID，Redis 双向缓存 tenant:{database_id}:uuid:*
+- UUID 混淆层：对外 UUID，内部 ID，Redis 双向缓存 school:{database_id}:uuid:*
 - 配置三级覆盖：个人 > 学院 > 系统默认
 - 工作流主状态优先使用 draft / wait / accept / modify，特殊状态按表定义
-- 租户业务主表默认含 created_at / updated_at / deleted_at，主库元数据、日志分表、归档表和纯关联表按表定义处理
+- 学校业务主表默认含 created_at / updated_at / deleted_at，主库元数据、日志分表、归档表和纯关联表按表定义处理
 - API 对外使用 UUID，内部使用自增 ID，通过 UuidService 双向转换
 - 消息 channel 驱动架构：internal / wechat / sms / edu / dingtalk / email
 - 全局幂等：前端 v-prevent-duplicate + 后端 IdempotentMiddleware + X-Request-Token
 - 字段命名：dep_id 与 college_id 等价（sys_organization 与业务表用 dep_id，config_item 用 college_id）
 
 设计文档索引：
-- 00-总体架构设计：项目结构、技术栈、多租户、UUID 混淆层、Agent 预留
+- 00-总体架构设计：项目结构、技术栈、多学校、UUID 混淆层、Agent 预留
 - 01-权限系统设计：RBAC 三层、菜单/按钮/接口权限、数据过滤
 - 02-用户服务设计：users/account/students/teacher_list、企业微信绑定、2FA、教务对接
 - 03-消息服务设计：渠道驱动架构、message/message_target/message_template、消息中心

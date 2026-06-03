@@ -52,9 +52,9 @@ class AuthService
             throw new RuntimeException('登录凭证缺少账号信息');
         }
 
-        $tenantId = (int) ($extend['tenant_database_id'] ?? 0);
-        if ($tenantId > 0 && CurrentContext::tenantDatabaseId() && $tenantId !== CurrentContext::tenantDatabaseId()) {
-            throw new RuntimeException('登录租户与当前租户不一致');
+        $schoolDatabaseId = (int) ($extend['school_database_id'] ?? 0);
+        if ($schoolDatabaseId > 0 && CurrentContext::schoolDatabaseId() && $schoolDatabaseId !== CurrentContext::schoolDatabaseId()) {
+            throw new RuntimeException('登录学校与当前学校不一致');
         }
 
         return $this->contextForAccount($accountId, (string) ($extend['client'] ?? JwtToken::TOKEN_CLIENT_WEB));
@@ -91,9 +91,9 @@ class AuthService
 
         $roleId = (int) $role['id'];
         $context = [
-            'tenant_database_id' => CurrentContext::tenantDatabaseId(),
-            'tenant_database' => CurrentContext::tenantDatabase(),
-            'tenant_connection' => CurrentContext::tenantConnection(),
+            'school_database_id' => CurrentContext::schoolDatabaseId(),
+            'school_database' => CurrentContext::schoolDatabase(),
+            'school_connection' => CurrentContext::schoolConnection(),
             'school_id' => CurrentContext::get('school_id'),
             'school_code' => CurrentContext::schoolCode(),
             'school_name' => CurrentContext::get('school_name'),
@@ -146,9 +146,9 @@ class AuthService
             'login_name' => $context['login_name'],
             'role_id' => $context['role_id'],
             'role_type' => $context['role_type'],
-            'tenant_database_id' => $context['tenant_database_id'],
-            'tenant_database' => $context['tenant_database'],
-            'tenant_connection' => $context['tenant_connection'],
+            'school_database_id' => $context['school_database_id'],
+            'school_database' => $context['school_database'],
+            'school_connection' => $context['school_connection'],
             'school_id' => $context['school_id'],
             'school_code' => $context['school_code'],
             'school_name' => $context['school_name'],

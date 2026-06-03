@@ -1,5 +1,5 @@
 <template>
-  <main class="desktop-shell" :style="desktopStyle">
+  <main class="desktop-shell" :style="desktopStyle" @click.left="closeDesktopContextMenu" @contextmenu.prevent="openDesktopContextMenu">
     <header class="topbar">
       <div class="brand">
         <span class="brand-mark">实</span>
@@ -88,20 +88,20 @@
             <div class="profile-settings">
               <section class="profile-panel-card profile-card-main">
                 <div class="avatar-edit">
-                  <button
-                    type="button"
+                  <label
+                    for="profile-avatar-file"
                     class="avatar-upload-button"
-                    :disabled="profileState.loading"
+                    :class="{ disabled: profileState.loading }"
                     aria-label="上传头像"
-                    @click="pickProfileAsset('avatar')"
+                    @click="guardProfileAssetClick"
                   >
                     <span class="avatar-preview" :style="avatarStyle">
                       <UserRound v-if="!profileState.form.avatar" :size="42" />
                     </span>
                     <span class="asset-action"><ImagePlus :size="15" /></span>
-                  </button>
+                  </label>
                   <input
-                    ref="avatarFileInput"
+                    id="profile-avatar-file"
                     class="hidden-file"
                     type="file"
                     accept="image/jpeg,image/png,image/webp,image/gif"
@@ -128,7 +128,11 @@
                 </div>
               </section>
 
-              <section class="profile-panel-card">
+              <section
+                ref="wallpaperSectionRef"
+                class="profile-panel-card"
+                :class="{ focused: profileState.focus === 'wallpaper' }"
+              >
                 <header>
                   <strong>桌面壁纸</strong>
                   <small>保存后立即应用到 PC 工作台。</small>
@@ -145,20 +149,19 @@
                     <span>{{ preset.name }}</span>
                   </button>
                 </div>
-                <button
-                  type="button"
+                <label
+                  for="profile-wallpaper-file"
                   class="wallpaper-upload-button"
-                  :class="{ active: Boolean(profileState.form.wallpaper_url) }"
-                  :disabled="profileState.loading"
+                  :class="{ active: Boolean(profileState.form.wallpaper_url), disabled: profileState.loading }"
                   :style="wallpaperUploadStyle"
                   aria-label="上传壁纸"
-                  @click="pickProfileAsset('wallpaper')"
+                  @click="guardProfileAssetClick"
                 >
                   <ImagePlus v-if="!profileState.form.wallpaper_url" :size="22" />
                   <span class="asset-action"><ImagePlus :size="15" /></span>
-                </button>
+                </label>
                 <input
-                  ref="wallpaperFileInput"
+                  id="profile-wallpaper-file"
                   class="hidden-file"
                   type="file"
                   accept="image/jpeg,image/png,image/webp,image/gif"
@@ -242,7 +245,7 @@
                 <el-button v-if="win.module.id === 'config'" :icon="RefreshCw" :loading="permissionState.loading" @click="load">
                   刷新权限
                 </el-button>
-                <el-button type="primary" :icon="Download" :disabled="!hasPermission(win.module.exportPermission)">
+                <el-button v-if="win.module.exportPermission && !isStudentRole" type="primary" :icon="Download" :disabled="!hasPermission(win.module.exportPermission)">
                   导出
                 </el-button>
               </div>
@@ -291,7 +294,7 @@
                   <div class="internship-toolbar">
                     <div class="internship-tabs">
                       <button
-                        v-for="item in internshipSidebarItems"
+                        v-for="item in visibleInternshipSidebarItems"
                         :key="item.key"
                         :class="{ active: win.panel === item.key }"
                         @click="activateWindowPanel(win, item.key)"
@@ -439,7 +442,23 @@
                         <span>{{ item.name }}</span>
                       </section>
                     </div>
-                    <div class="internship-split">
+                    <StudentOwnPanel
+                      v-if="isStudentRole"
+                      :description="studentPanelMeta('applications').description"
+                      :empty-text="studentPanelMeta('applications').emptyText"
+                      :fields="studentPanelFields('applications')"
+                      :loading="internshipState.loading"
+                      :pagination="studentPanelList('applications').pagination"
+                      :rows="studentPanelList('applications').items"
+                      :status-formatter="statusText"
+                      :status-tag-type="statusTagType"
+                      timeline-entity="application"
+                      :title="studentPanelMeta('applications').title"
+                      @page-change="page => loadInternshipPanel('applications', page)"
+                      @refresh="loadInternshipPanel('applications')"
+                      @timeline="row => openTimelineDialog('application', row)"
+                    />
+                    <div v-else class="internship-split">
                       <section class="internship-card">
                         <header>
                           <strong>近期安排</strong>
@@ -478,6 +497,24 @@
                     </div>
                   </template>
 
+                  <template v-else-if="isStudentOwnPanel(win.panel)">
+                    <StudentOwnPanel
+                      :description="studentPanelMeta(win.panel).description"
+                      :empty-text="studentPanelMeta(win.panel).emptyText"
+                      :fields="studentPanelFields(win.panel)"
+                      :loading="internshipState.loading"
+                      :pagination="studentPanelList(win.panel).pagination"
+                      :rows="studentPanelList(win.panel).items"
+                      :status-formatter="statusText"
+                      :status-tag-type="statusTagType"
+                      :timeline-entity="studentTimelineEntity(win.panel)"
+                      :title="studentPanelMeta(win.panel).title"
+                      @page-change="page => loadInternshipPanel(win.panel, page)"
+                      @refresh="loadInternshipPanel(win.panel)"
+                      @timeline="row => openTimelineDialog(studentTimelineEntity(win.panel), row)"
+                    />
+                  </template>
+
                   <template v-else-if="win.panel === 'arrangements'">
                     <div class="internship-list-only">
                       <DataListPanel
@@ -498,12 +535,6 @@
                   </template>
 
                   <template v-else-if="win.panel === 'applications'">
-                    <div class="internship-reviewbar">
-                      <el-input v-model="internshipState.reviewOpinion" clearable placeholder="审核意见" />
-                      <el-button :icon="RefreshCw" :loading="internshipState.loading" @click="loadInternshipPanel('applications')">
-                        读取申请
-                      </el-button>
-                    </div>
                     <DataListPanel
                       :columns="internshipListConfigs.applications.columns"
                       :exportable="hasPermission('internship:export')"
@@ -519,13 +550,13 @@
                       @search="loadInternshipPanel('applications', 1)"
                     >
                       <template #actions="{ row }">
-                        <el-button link type="primary" :disabled="!hasPermission('internship:approve')" @click="openReviewDialog('application', row, 'accept')">
+                        <el-button v-if="canApproveInternship" link type="primary" @click="openReviewDialog('application', row, 'accept')">
                           通过
                         </el-button>
-                        <el-button link type="warning" :disabled="!hasPermission('internship:approve')" @click="openReviewDialog('application', row, 'modify')">
+                        <el-button v-if="canApproveInternship" link type="warning" @click="openReviewDialog('application', row, 'modify')">
                           退回
                         </el-button>
-                        <el-button v-if="row.status === 'accept'" link type="danger" :disabled="!hasPermission('internship:approve')" @click="openReopenDialog('application', row)">
+                        <el-button v-if="row.status === 'accept' && canApproveInternship" link type="danger" @click="openReopenDialog('application', row)">
                           通过后修改
                         </el-button>
                         <el-button link type="info" @click="openTimelineDialog('application', row)">
@@ -574,9 +605,6 @@
                   </template>
 
                   <template v-else-if="win.panel === 'journals'">
-                    <div class="internship-reviewbar">
-                      <el-input v-model="internshipState.reviewOpinion" clearable placeholder="评阅意见" />
-                    </div>
                     <DataListPanel
                       :columns="internshipListConfigs.journals.columns"
                       :exportable="hasPermission('internship:export')"
@@ -592,13 +620,13 @@
                       @search="loadInternshipPanel('journals', 1)"
                     >
                       <template #actions="{ row }">
-                        <el-button link type="primary" :disabled="!hasPermission('internship:approve')" @click="openReviewDialog('journal', row, 'accept')">
+                        <el-button v-if="canApproveInternship" link type="primary" @click="openReviewDialog('journal', row, 'accept')">
                           通过
                         </el-button>
-                        <el-button link type="warning" :disabled="!hasPermission('internship:approve')" @click="openReviewDialog('journal', row, 'modify')">
+                        <el-button v-if="canApproveInternship" link type="warning" @click="openReviewDialog('journal', row, 'modify')">
                           退回
                         </el-button>
-                        <el-button v-if="row.status === 'accept'" link type="danger" :disabled="!hasPermission('internship:approve')" @click="openReopenDialog('journal', row)">
+                        <el-button v-if="row.status === 'accept' && canApproveInternship" link type="danger" @click="openReopenDialog('journal', row)">
                           通过后修改
                         </el-button>
                         <el-button link type="info" @click="openTimelineDialog('journal', row)">
@@ -609,9 +637,6 @@
                   </template>
 
                   <template v-else-if="win.panel === 'reports'">
-                    <div class="internship-reviewbar">
-                      <el-input v-model="internshipState.reviewOpinion" clearable placeholder="评阅意见" />
-                    </div>
                     <DataListPanel
                       :columns="internshipListConfigs.reports.columns"
                       :exportable="hasPermission('internship:export')"
@@ -627,13 +652,13 @@
                       @search="loadInternshipPanel('reports', 1)"
                     >
                       <template #actions="{ row }">
-                        <el-button link type="primary" :disabled="!hasPermission('internship:approve')" @click="openReviewDialog('report', row, 'accept')">
+                        <el-button v-if="canApproveInternship" link type="primary" @click="openReviewDialog('report', row, 'accept')">
                           通过
                         </el-button>
-                        <el-button link type="warning" :disabled="!hasPermission('internship:approve')" @click="openReviewDialog('report', row, 'modify')">
+                        <el-button v-if="canApproveInternship" link type="warning" @click="openReviewDialog('report', row, 'modify')">
                           退回
                         </el-button>
-                        <el-button v-if="row.status === 'accept'" link type="danger" :disabled="!hasPermission('internship:approve')" @click="openReopenDialog('report', row)">
+                        <el-button v-if="row.status === 'accept' && canApproveInternship" link type="danger" @click="openReopenDialog('report', row)">
                           通过后修改
                         </el-button>
                         <el-button link type="info" @click="openTimelineDialog('report', row)">
@@ -673,7 +698,22 @@
                         </button>
                       </div>
                       <section v-if="internshipState.documentTab === 'insurances'" class="internship-card-list">
+                        <StudentOwnPanel
+                          v-if="isStudentRole"
+                          :description="studentPanelMeta('insurances').description"
+                          :empty-text="studentPanelMeta('insurances').emptyText"
+                          :fields="studentPanelFields('insurances')"
+                          :loading="internshipState.loading"
+                          :pagination="studentPanelList('insurances').pagination"
+                          :rows="studentPanelList('insurances').items"
+                          :status-formatter="statusText"
+                          :status-tag-type="statusTagType"
+                          :title="studentPanelMeta('insurances').title"
+                          @page-change="page => loadInternshipPanel('insurances', page)"
+                          @refresh="loadInternshipPanel('insurances')"
+                        />
                         <DataListPanel
+                          v-else
                           :columns="internshipListConfigs.insurances.columns"
                           :exportable="hasPermission('internship:export')"
                           :filters="internshipListConfigs.insurances.filters"
@@ -689,7 +729,22 @@
                         />
                       </section>
                       <section v-else class="internship-card-list">
+                        <StudentOwnPanel
+                          v-if="isStudentRole"
+                          :description="studentPanelMeta('safetyLetters').description"
+                          :empty-text="studentPanelMeta('safetyLetters').emptyText"
+                          :fields="studentPanelFields('safetyLetters')"
+                          :loading="internshipState.loading"
+                          :pagination="studentPanelList('safetyLetters').pagination"
+                          :rows="studentPanelList('safetyLetters').items"
+                          :status-formatter="statusText"
+                          :status-tag-type="statusTagType"
+                          :title="studentPanelMeta('safetyLetters').title"
+                          @page-change="page => loadInternshipPanel('safetyLetters', page)"
+                          @refresh="loadInternshipPanel('safetyLetters')"
+                        />
                         <DataListPanel
+                          v-else
                           :columns="internshipListConfigs.safetyLetters.columns"
                           :exportable="hasPermission('internship:export')"
                           :filters="internshipListConfigs.safetyLetters.filters"
@@ -1192,6 +1247,23 @@
       </DesktopWindow>
     </section>
 
+    <div
+      v-if="desktopContextMenu.visible"
+      class="desktop-context-menu"
+      :style="{ left: `${desktopContextMenu.x}px`, top: `${desktopContextMenu.y}px` }"
+      @click.stop
+      @contextmenu.prevent
+    >
+      <button type="button" @click="openWallpaperSettings">
+        <ImagePlus :size="16" />
+        <span>更换壁纸</span>
+      </button>
+      <button type="button" @click="openProfile">
+        <UserRound :size="16" />
+        <span>个人设置</span>
+      </button>
+    </div>
+
     <section v-if="!isLoggedIn" class="login-layer">
       <form class="login-panel" @submit.prevent="submitLogin">
         <header>
@@ -1279,6 +1351,7 @@ import {
 } from '@lucide/vue';
 import DesktopWindow from './components/DesktopWindow.vue';
 import DataListPanel from './components/DataListPanel.vue';
+import StudentOwnPanel from './components/StudentOwnPanel.vue';
 import { usePermissions } from './composables/usePermissions';
 import {
   deleteArchiveItem,
@@ -1325,8 +1398,7 @@ const { state: permissionState, hasPermission, load } = usePermissions();
 const keyword = ref('');
 const clock = ref('');
 const loginNameInput = ref(null);
-const avatarFileInput = ref(null);
-const wallpaperFileInput = ref(null);
+const wallpaperSectionRef = ref(null);
 const focusedWindowId = ref(null);
 const zIndexSeed = ref(20);
 const wallpaperCacheKey = 'practical_pc_wallpaper';
@@ -1348,7 +1420,13 @@ const profileState = reactive({
   loading: false,
   message: '',
   saved: false,
+  focus: '',
   form: emptyProfile(),
+});
+const desktopContextMenu = reactive({
+  visible: false,
+  x: 0,
+  y: 0,
 });
 const roleTreeRef = ref(null);
 const treeProps = {
@@ -1667,8 +1745,17 @@ const openWindows = reactive([]);
 const visibleModules = computed(() => modules.filter(item => (item.id === 'profile' ? isLoggedIn.value : hasPermission(item.viewPermission))));
 const visibleWindows = computed(() => openWindows.filter(win => !win.minimized));
 const isLoggedIn = computed(() => Boolean(permissionState.context.account_id));
+const currentRoleType = computed(() => permissionState.context.role_type || '');
+const isStudentRole = computed(() => currentRoleType.value === 'student');
+const isTeacherRole = computed(() => currentRoleType.value === 'teacher');
+const isAdminRole = computed(() => ['super_admin', 'school_admin', 'college_admin', 'profession_admin'].includes(currentRoleType.value));
 const canManageConfig = computed(() => hasPermission('config:manage') && ['super_admin', 'school_admin'].includes(permissionState.context.role_type));
 const canManageInternship = computed(() => hasPermission('internship:manage'));
+const canApproveInternship = computed(() => hasPermission('internship:approve') && !isStudentRole.value);
+const visibleInternshipSidebarItems = computed(() => internshipSidebarItems.map((item) => ({
+  ...item,
+  name: internshipRolePanelName(item.key),
+})));
 const parentMenuOptions = computed(() => {
   const options = [];
   const walk = (nodes, prefix = '') => {
@@ -1730,7 +1817,7 @@ const internshipListConfigs = computed(() => ({
   arrangements: {
     listKey: 'arrangements',
     filename: '实习安排',
-    filters: internshipFilters(['semester', 'dep_id', 'profession_id', 'type', 'organize_mode', 'status', 'keyword']),
+    filters: internshipListFilters('arrangements', ['semester', 'dep_id', 'profession_id', 'type', 'organize_mode', 'status', 'keyword']),
     columns: [
       { prop: 'title', label: '实习安排', minWidth: 180 },
       { prop: 'semester', label: '学期', width: 130 },
@@ -1744,7 +1831,7 @@ const internshipListConfigs = computed(() => ({
   applications: {
     listKey: 'applications',
     filename: '实习申请',
-    filters: internshipFilters(['semester', 'grade_id', 'dep_id', 'profession_id', 'teacher_id', 'status', 'keyword']),
+    filters: internshipListFilters('applications', ['semester', 'grade_id', 'dep_id', 'profession_id', 'teacher_id', 'status', 'keyword']),
     columns: [
       { prop: 'student_name', label: '学生', width: 110 },
       { prop: 'student_num', label: '学号', width: 130 },
@@ -1760,7 +1847,7 @@ const internshipListConfigs = computed(() => ({
   pairs: {
     listKey: 'pairs',
     filename: '指导关系',
-    filters: internshipFilters(['semester', 'grade_id', 'dep_id', 'profession_id', 'teacher_id', 'status', 'keyword']),
+    filters: internshipListFilters('pairs', ['semester', 'grade_id', 'dep_id', 'profession_id', 'teacher_id', 'status', 'keyword']),
     columns: [
       { prop: 'student_name', label: '学生', width: 120 },
       { prop: 'student_num', label: '学号', width: 130 },
@@ -1773,7 +1860,7 @@ const internshipListConfigs = computed(() => ({
   signIns: {
     listKey: 'signIns',
     filename: '签到记录',
-    filters: internshipFilters(['semester', 'grade_id', 'dep_id', 'profession_id', 'teacher_id', 'arrangement_id', 'keyword']),
+    filters: internshipListFilters('signIns', ['semester', 'grade_id', 'dep_id', 'profession_id', 'teacher_id', 'arrangement_id', 'keyword']),
     columns: [
       { prop: 'student_name', label: '学生', width: 110 },
       { prop: 'student_num', label: '学号', width: 130 },
@@ -1787,7 +1874,7 @@ const internshipListConfigs = computed(() => ({
   journals: {
     listKey: 'journals',
     filename: '实习日志',
-    filters: internshipFilters(['semester', 'grade_id', 'dep_id', 'profession_id', 'teacher_id', 'arrangement_id', 'status', 'keyword']),
+    filters: internshipListFilters('journals', ['semester', 'grade_id', 'dep_id', 'profession_id', 'teacher_id', 'arrangement_id', 'status', 'keyword']),
     columns: [
       { prop: 'student_name', label: '学生', width: 110 },
       { prop: 'title', label: '日志标题', minWidth: 180 },
@@ -1799,7 +1886,7 @@ const internshipListConfigs = computed(() => ({
   reports: {
     listKey: 'reports',
     filename: '实习报告',
-    filters: internshipFilters(['semester', 'grade_id', 'dep_id', 'profession_id', 'teacher_id', 'arrangement_id', 'status', 'keyword']),
+    filters: internshipListFilters('reports', ['semester', 'grade_id', 'dep_id', 'profession_id', 'teacher_id', 'arrangement_id', 'status', 'keyword']),
     columns: [
       { prop: 'student_name', label: '学生', width: 110 },
       { prop: 'title', label: '报告标题', minWidth: 180 },
@@ -1811,7 +1898,7 @@ const internshipListConfigs = computed(() => ({
   scores: {
     listKey: 'scores',
     filename: '实习成绩',
-    filters: internshipFilters(['semester', 'grade_id', 'dep_id', 'profession_id', 'teacher_id', 'arrangement_id', 'keyword']),
+    filters: internshipListFilters('scores', ['semester', 'grade_id', 'dep_id', 'profession_id', 'teacher_id', 'arrangement_id', 'keyword']),
     columns: [
       { prop: 'student_name', label: '学生', width: 110 },
       { prop: 'arrangement_title', label: '实习安排', minWidth: 180 },
@@ -1826,7 +1913,7 @@ const internshipListConfigs = computed(() => ({
   insurances: {
     listKey: 'insurances',
     filename: '保险记录',
-    filters: internshipFilters(['semester', 'grade_id', 'dep_id', 'profession_id', 'teacher_id', 'arrangement_id', 'keyword']),
+    filters: internshipListFilters('insurances', ['semester', 'grade_id', 'dep_id', 'profession_id', 'teacher_id', 'arrangement_id', 'keyword']),
     columns: [
       { prop: 'student_id', label: '学生ID', width: 90 },
       { prop: 'arrangement_id', label: '安排ID', width: 90 },
@@ -1839,7 +1926,7 @@ const internshipListConfigs = computed(() => ({
   safetyLetters: {
     listKey: 'safetyLetters',
     filename: '安全承诺',
-    filters: internshipFilters(['semester', 'grade_id', 'dep_id', 'profession_id', 'teacher_id', 'arrangement_id', 'keyword']),
+    filters: internshipListFilters('safetyLetters', ['semester', 'grade_id', 'dep_id', 'profession_id', 'teacher_id', 'arrangement_id', 'keyword']),
     columns: [
       { prop: 'student_id', label: '学生ID', width: 90 },
       { prop: 'arrangement_id', label: '安排ID', width: 90 },
@@ -1848,9 +1935,167 @@ const internshipListConfigs = computed(() => ({
     ],
   },
 }));
+
+function internshipRolePanelName(key) {
+  if (!isStudentRole.value) {
+    return internshipSidebarItems.find(item => item.key === key)?.name || '实习管理';
+  }
+
+  const names = {
+    overview: '我的实习',
+    arrangements: '可申请安排',
+    applications: '我的申请',
+    pairs: '指导教师',
+    signIns: '我的签到',
+    journals: '我的日志',
+    reports: '我的报告',
+    scores: '我的成绩',
+    documents: '我的材料',
+  };
+  return names[key] || '我的实习';
+}
+
+function internshipListFilters(listKey, adminKeys) {
+  if (isStudentRole.value) {
+    return [];
+  }
+  if (isTeacherRole.value) {
+    return listKey === 'arrangements' ? [] : internshipFilters(['student_keyword']);
+  }
+  return internshipFilters(adminKeys);
+}
+
+function isStudentOwnPanel(panel) {
+  return isStudentRole.value && ['arrangements', 'applications', 'pairs', 'signIns', 'journals', 'reports', 'scores'].includes(panel);
+}
+
+function studentPanelList(panel) {
+  return internshipState.lists[panel] || emptyPagedList();
+}
+
+function studentTimelineEntity(panel) {
+  const map = {
+    applications: 'application',
+    journals: 'journal',
+    reports: 'report',
+  };
+  return map[panel] || '';
+}
+
+function studentPanelMeta(panel) {
+  const metas = {
+    arrangements: {
+      title: '可申请安排',
+      description: '展示与本人学院、专业匹配的实习安排。',
+      emptyText: '暂无可申请实习安排',
+    },
+    applications: {
+      title: '我的申请',
+      description: '只展示当前学生本人的实习申请和审核状态。',
+      emptyText: '暂无实习申请',
+    },
+    pairs: {
+      title: '指导教师',
+      description: '展示当前学生本人的指导关系。',
+      emptyText: '暂无指导关系',
+    },
+    signIns: {
+      title: '我的签到',
+      description: '只展示当前学生本人的签到记录。',
+      emptyText: '暂无签到记录',
+    },
+    journals: {
+      title: '我的日志',
+      description: '只展示当前学生本人的实习日志和评阅状态。',
+      emptyText: '暂无实习日志',
+    },
+    reports: {
+      title: '我的报告',
+      description: '只展示当前学生本人的实习报告和评阅状态。',
+      emptyText: '暂无实习报告',
+    },
+    scores: {
+      title: '我的成绩',
+      description: '展示当前学生本人的实习成绩。',
+      emptyText: '暂无成绩记录',
+    },
+    insurances: {
+      title: '保险记录',
+      description: '只展示当前学生本人的保险材料。',
+      emptyText: '暂无保险记录',
+    },
+    safetyLetters: {
+      title: '安全承诺',
+      description: '只展示当前学生本人的安全承诺签署记录。',
+      emptyText: '暂无安全承诺记录',
+    },
+  };
+  return metas[panel] || { title: '我的实习', description: '', emptyText: '暂无数据' };
+}
+
+function studentPanelFields(panel) {
+  const fields = {
+    arrangements: [
+      { key: 'semester', label: '学期' },
+      { key: 'type', label: '类型', formatter: row => arrangementTypeText(row.type) },
+      { key: 'organize_mode', label: '组织方式', formatter: row => organizeModeText(row.organize_mode) },
+      { key: 'date', label: '时间', formatter: row => `${row.start_date || '-'} 至 ${row.end_date || '-'}` },
+      { key: 'location', label: '地点' },
+    ],
+    applications: [
+      { key: 'arrangement_title', label: '实习安排' },
+      { key: 'teacher_status', label: '教师审核', formatter: row => statusText(row.teacher_status) },
+      { key: 'admin_status', label: '管理审核', formatter: row => statusText(row.admin_status) },
+      { key: 'created_at', label: '提交时间' },
+    ],
+    pairs: [
+      { key: 'teacher_name', label: '指导教师' },
+      { key: 'arrangement_title', label: '实习安排' },
+      { key: 'created_at', label: '创建时间' },
+    ],
+    signIns: [
+      { key: 'arrangement_title', label: '实习安排' },
+      { key: 'date', label: '日期' },
+      { key: 'sign_time', label: '签到时间' },
+      { key: 'sign_type', label: '方式', formatter: row => signTypeText(row.sign_type) },
+      { key: 'location', label: '地点' },
+    ],
+    journals: [
+      { key: 'arrangement_title', label: '实习安排' },
+      { key: 'date', label: '日期' },
+      { key: 'content', label: '内容' },
+    ],
+    reports: [
+      { key: 'arrangement_title', label: '实习安排' },
+      { key: 'submitted_at', label: '提交时间' },
+      { key: 'content', label: '内容' },
+    ],
+    scores: [
+      { key: 'arrangement_title', label: '实习安排' },
+      { key: 'sign_in_score', label: '签到' },
+      { key: 'journal_score', label: '日志' },
+      { key: 'report_score', label: '报告' },
+      { key: 'enterprise_score', label: '企业' },
+      { key: 'final_score', label: '总评' },
+    ],
+    insurances: [
+      { key: 'arrangement_id', label: '安排ID' },
+      { key: 'insurance_company', label: '保险公司' },
+      { key: 'policy_number', label: '保单号' },
+      { key: 'start_date', label: '开始日期' },
+      { key: 'end_date', label: '结束日期' },
+    ],
+    safetyLetters: [
+      { key: 'arrangement_id', label: '安排ID' },
+      { key: 'signed_at', label: '签署时间' },
+    ],
+  };
+  return fields[panel] || [];
+}
+
 function panelTitle(win) {
   if (win.module.id === 'internship') {
-    return internshipSidebarItems.find(item => item.key === win.panel)?.name || '实习管理';
+    return internshipRolePanelName(win.panel);
   }
   if (win.panel === 'scope') {
     return '数据范围';
@@ -1881,6 +2126,12 @@ function panelTitle(win) {
 
 function moduleDescription(win) {
   if (win.module.id === 'internship') {
+    if (isStudentRole.value) {
+      return '当前学生本人的实习申请、签到、日志、报告、成绩和归档材料。';
+    }
+    if (isTeacherRole.value) {
+      return '指导学生的申请审核、日志评阅、报告评阅和过程记录。';
+    }
     return '实习安排、申请审核、签到、日志、报告、成绩和材料归档。';
   }
   if (win.module.id === 'file') {
@@ -1903,7 +2154,7 @@ function sidebarItems(win) {
     return [{ key: 'fileManage', name: '文件列表' }];
   }
   if (win.module.id === 'internship') {
-    return internshipSidebarItems;
+    return visibleInternshipSidebarItems.value;
   }
   if (win.module.id === 'config') {
     return [
@@ -2004,11 +2255,45 @@ function openModuleWindow(module, options = {}) {
   }
 }
 
-function openProfile() {
+function openProfile(section = '') {
   const profileModule = modules.find(item => item.id === 'profile');
   if (profileModule) {
     openModuleWindow(profileModule, { reuse: true });
   }
+  if (section === 'wallpaper') {
+    profileState.focus = 'wallpaper';
+    nextTick(() => {
+      window.setTimeout(() => {
+        wallpaperSectionRef.value?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      }, 80);
+      window.setTimeout(() => {
+        if (profileState.focus === 'wallpaper') {
+          profileState.focus = '';
+        }
+      }, 1800);
+    });
+  }
+}
+
+function openDesktopContextMenu(event) {
+  const target = event.target instanceof Element ? event.target : event.target?.parentElement;
+  if (!isLoggedIn.value || target?.closest('.desktop-window, .topbar, .taskbar, .login-layer, .desktop-context-menu')) {
+    return;
+  }
+  const width = 172;
+  const height = 92;
+  desktopContextMenu.x = Math.min(event.clientX, window.innerWidth - width - 8);
+  desktopContextMenu.y = Math.min(event.clientY, window.innerHeight - height - 8);
+  desktopContextMenu.visible = true;
+}
+
+function closeDesktopContextMenu() {
+  desktopContextMenu.visible = false;
+}
+
+function openWallpaperSettings() {
+  closeDesktopContextMenu();
+  openProfile('wallpaper');
 }
 
 function focusWindow(id) {
@@ -2807,6 +3092,7 @@ function setPagedList(key, data) {
 function internshipFilters(keys) {
   const definitions = {
     keyword: { key: 'keyword', label: '关键词', placeholder: '学生、学号、标题' },
+    student_keyword: { key: 'keyword', label: '学生', placeholder: '姓名或学号' },
     semester: { key: 'semester', label: '学期', type: 'select', options: semesterOptions() },
     dep_id: { key: 'dep_id', label: '学院', type: 'select', options: optionItems(internshipState.options.departments, 'dep_id', 'dep_name') },
     profession_id: { key: 'profession_id', label: '专业', type: 'select', options: optionItems(internshipState.options.professions, 'profession_id', 'profession_name') },
@@ -3211,9 +3497,12 @@ async function loadInternshipPanel(panel = 'overview', page = 1) {
     await loadInternshipFoundation();
     const params = (key) => internshipQueryParams(key, page);
     if (panel === 'overview') {
+      const applicationParams = isStudentRole.value
+        ? { ...internshipQueryParams('applications', 1), page_size: 8 }
+        : { ...internshipQueryParams('applications', 1), page_size: 8, status: 'wait' };
       const [arrangements, applications] = await Promise.all([
         fetchInternshipArrangements({ ...internshipQueryParams('arrangements', 1), page_size: 8 }),
-        fetchInternshipApplications({ ...internshipQueryParams('applications', 1), page_size: 8, status: 'wait' }),
+        fetchInternshipApplications(applicationParams),
       ]);
       setPagedList('arrangements', arrangements);
       setPagedList('applications', applications);
@@ -3570,12 +3859,10 @@ function selectWallpaper(key) {
   cacheWallpaper();
 }
 
-function pickProfileAsset(type) {
-  if (type === 'avatar') {
-    avatarFileInput.value?.click();
-    return;
+function guardProfileAssetClick(event) {
+  if (profileState.loading) {
+    event.preventDefault();
   }
-  wallpaperFileInput.value?.click();
 }
 
 async function handleAssetSelected(type, event) {

@@ -3,13 +3,14 @@
 namespace app\controller\Api;
 
 use app\controller\Api\Concerns\Responds;
+use app\model\channel\Account;
 use app\model\channel\Menu;
 use app\model\channel\Role;
 use app\model\channel\RoleMenu;
 use app\model\channel\SysOrganization;
+use app\model\channel\TableRecord as ChannelTable;
 use app\server\CurrentContext;
 use app\server\rbac\RbacService;
-use support\Db;
 use support\Request;
 use support\Response;
 use Throwable;
@@ -155,7 +156,7 @@ class AdminController
             }
 
             $now = date('Y-m-d H:i:s');
-            Db::connection(CurrentContext::tenantConnection())->transaction(function () use ($menuId, $now): void {
+            ChannelTable::connection()->transaction(function () use ($menuId, $now): void {
                 Menu::query()
                     ->where('id', $menuId)
                     ->update(['status' => 'disabled', 'deleted_at' => $now, 'updated_at' => $now]);
@@ -183,7 +184,7 @@ class AdminController
             $menuIds = $this->existingMenuIds($menuIds);
             $now = date('Y-m-d H:i:s');
 
-            Db::connection(CurrentContext::tenantConnection())->transaction(function () use ($roleId, $menuIds, $now): void {
+            ChannelTable::connection()->transaction(function () use ($roleId, $menuIds, $now): void {
                 RoleMenu::query()
                     ->where('role_id', $roleId)
                     ->whereNull('deleted_at')
@@ -237,8 +238,6 @@ class AdminController
         }
 
         try {
-            $db = Db::connection(CurrentContext::tenantConnection());
-
             return $this->ok([
                 'roles' => Role::query()
                     ->where('status', 'enabled')
@@ -248,27 +247,27 @@ class AdminController
                     ->map(static fn ($role): array => $role->toArray())
                     ->all(),
                 'accounts' => $this->accountsData(),
-                'departments' => $this->rows($db->table('department')
+                'departments' => $this->rows(ChannelTable::queryTable('department')
                     ->where('flag', 'on')
                     ->whereNull('deleted_at')
                     ->orderBy('sort')
                     ->get(['dep_id', 'dep_name', 'dep_code'])),
-                'grades' => $this->rows($db->table('grade_list')
+                'grades' => $this->rows(ChannelTable::queryTable('grade_list')
                     ->where('flag', 'on')
                     ->whereNull('deleted_at')
                     ->orderBy('sort')
                     ->get(['grade_id', 'grade_name', 'dep_id'])),
-                'professions' => $this->rows($db->table('profession')
+                'professions' => $this->rows(ChannelTable::queryTable('profession')
                     ->where('flag', 'on')
                     ->whereNull('deleted_at')
                     ->orderBy('sort')
                     ->get(['profession_id', 'profession_name', 'profession_code', 'dep_id', 'grade_id'])),
-                'classes' => $this->rows($db->table('class')
+                'classes' => $this->rows(ChannelTable::queryTable('class')
                     ->where('flag', 'on')
                     ->whereNull('deleted_at')
                     ->orderBy('sort')
                     ->get(['class_id', 'class_name', 'class_num', 'dep_id', 'profession_id', 'grade_id'])),
-                'companies' => $this->rows($db->table('companies')
+                'companies' => $this->rows(ChannelTable::queryTable('companies')
                     ->where('flag', 'on')
                     ->whereNull('deleted_at')
                     ->orderBy('company_id')
@@ -310,7 +309,7 @@ class AdminController
             $account = $this->account($accountId);
             $now = date('Y-m-d H:i:s');
 
-            Db::connection(CurrentContext::tenantConnection())->transaction(function () use ($accountId, $roleId, $scopes, $account, $now): void {
+            ChannelTable::connection()->transaction(function () use ($accountId, $roleId, $scopes, $account, $now): void {
                 SysOrganization::query()
                     ->where('account_id', $accountId)
                     ->where('role_id', $roleId)
@@ -448,8 +447,7 @@ class AdminController
 
     private function account(int $accountId): object
     {
-        $account = Db::connection(CurrentContext::tenantConnection())
-            ->table('account')
+        $account = Account::query()
             ->where('id', $accountId)
             ->where('status', 'enabled')
             ->whereNull('deleted_at')
@@ -489,8 +487,7 @@ class AdminController
 
     private function accountsData(): array
     {
-        $rows = Db::connection(CurrentContext::tenantConnection())
-            ->table('account')
+        $rows = Account::query()
             ->join('users', 'account.user_id', '=', 'users.id')
             ->leftJoin('user_role', function ($join): void {
                 $join->on('account.id', '=', 'user_role.account_id')

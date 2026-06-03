@@ -59,7 +59,7 @@ class ConfigService
 
     public function set(string $groupCode, string $key, mixed $value, string $description = '', int $collegeId = 0, int $userId = 0): array
     {
-        $this->assertTenant();
+        $this->assertSchoolConnection();
         $this->assertKey($groupCode);
         $this->assertKey($key);
 
@@ -94,7 +94,7 @@ class ConfigService
 
     private function group(string $groupCode): ?array
     {
-        $this->assertTenant();
+        $this->assertSchoolConnection();
         $this->assertKey($groupCode);
 
         $group = ConfigGroup::query()
@@ -126,10 +126,10 @@ class ConfigService
         }
     }
 
-    private function assertTenant(): void
+    private function assertSchoolConnection(): void
     {
-        if (!CurrentContext::get('tenant_connection')) {
-            throw new RuntimeException('租户连接未解析');
+        if (!CurrentContext::get('school_connection')) {
+            throw new RuntimeException('学校业务库连接未解析');
         }
     }
 }

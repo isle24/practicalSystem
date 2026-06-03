@@ -18,11 +18,13 @@ use app\process\Http;
 
 global $argv;
 
+$workerCount = max(1, (int) (getenv('WEBMAN_WORKER_COUNT') ?: 16));
+
 return [
     'webman' => [
         'handler' => Http::class,
         'listen' => 'http://0.0.0.0:8787',
-        'count' => cpu_count() * 4,
+        'count' => $workerCount,
         'user' => '',
         'group' => '',
         'reusePort' => false,

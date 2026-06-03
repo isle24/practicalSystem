@@ -202,7 +202,7 @@ Cookie 必须使用 host-only，不设置父域 `Domain=.example.com`，避免�
 ## 6. 权限校验流程
 
 ```
-请求 → TenantMiddleware（库切换）
+请求 → SchoolMiddleware（库切换）
      → UuidMiddleware（UUID→ID 转换）
      → webman/limiter（通用限流，config/plugin/webman/limiter/app.php 配置）
      → IdempotentMiddleware（幂等校验）

@@ -2,10 +2,10 @@
 
 namespace app\server\internship;
 
+use app\model\channel\TableRecord as ChannelTable;
 use app\server\CurrentContext;
 use InvalidArgumentException;
 use RuntimeException;
-use support\Db;
 use support\Request;
 use Throwable;
 
@@ -45,29 +45,27 @@ class InternshipService
     public function overview(Request $request): array
     {
         $this->requirePermission('internship:view');
-        $db = $this->db();
 
         return [
-            'arrangements' => (int) $this->applyArrangementScope($db->table('arrangement')->whereNull('deleted_at'))->count(),
-            'applications_waiting' => (int) $this->applyApplicationScope($db->table('application')->whereNull('deleted_at')->where('status', 'wait'))->count(),
-            'active_pairs' => (int) $this->applyStudentScope($db->table('pair')->where('type', 'internship')->where('status', 'active')->whereNull('deleted_at'))->count(),
-            'journals_waiting' => (int) $this->applyStudentScope($db->table('journal')->where('entity_type', 'internship')->where('status', 'wait')->whereNull('deleted_at'))->count(),
-            'reports_waiting' => (int) $this->applyStudentScope($db->table('report')->where('status', 'wait')->whereNull('deleted_at'))->count(),
-            'today_sign_ins' => (int) $this->applyStudentScope($db->table('sign_in')->where('entity_type', 'internship')->where('date', date('Y-m-d'))->whereNull('deleted_at'))->count(),
+            'arrangements' => (int) $this->applyArrangementScope($this->query('arrangement')->whereNull('deleted_at'))->count(),
+            'applications_waiting' => (int) $this->applyApplicationScope($this->query('application')->whereNull('deleted_at')->where('status', 'wait'))->count(),
+            'active_pairs' => (int) $this->applyStudentScope($this->query('pair')->where('type', 'internship')->where('status', 'active')->whereNull('deleted_at'))->count(),
+            'journals_waiting' => (int) $this->applyStudentScope($this->query('journal')->where('entity_type', 'internship')->where('status', 'wait')->whereNull('deleted_at'))->count(),
+            'reports_waiting' => (int) $this->applyStudentScope($this->query('report')->where('status', 'wait')->whereNull('deleted_at'))->count(),
+            'today_sign_ins' => (int) $this->applyStudentScope($this->query('sign_in')->where('entity_type', 'internship')->where('date', date('Y-m-d'))->whereNull('deleted_at'))->count(),
         ];
     }
 
     public function options(Request $request): array
     {
         $this->requirePermission('internship:view');
-        $db = $this->db();
-        $departments = $db->table('department')->where('flag', 'on')->whereNull('deleted_at');
-        $grades = $db->table('grade_list')->where('flag', 'on')->whereNull('deleted_at');
-        $professions = $db->table('profession')->where('flag', 'on')->whereNull('deleted_at');
-        $classes = $db->table('class')->where('flag', 'on')->whereNull('deleted_at');
-        $companies = $db->table('companies')->where('flag', 'on')->whereNull('deleted_at');
-        $teachers = $db->table('teacher_list')->where('status', 'enabled')->whereNull('deleted_at');
-        $students = $db->table('students')->where('status', 'enabled')->whereNull('deleted_at');
+        $departments = $this->query('department')->where('flag', 'on')->whereNull('deleted_at');
+        $grades = $this->query('grade_list')->where('flag', 'on')->whereNull('deleted_at');
+        $professions = $this->query('profession')->where('flag', 'on')->whereNull('deleted_at');
+        $classes = $this->query('class')->where('flag', 'on')->whereNull('deleted_at');
+        $companies = $this->query('companies')->where('flag', 'on')->whereNull('deleted_at');
+        $teachers = $this->query('teacher_list')->where('status', 'enabled')->whereNull('deleted_at');
+        $students = $this->query('students')->where('status', 'enabled')->whereNull('deleted_at');
 
         $this->applyOptionScope($departments, 'dep_id', null);
         $this->applyOptionScope($grades, 'dep_id', null);
@@ -90,9 +88,9 @@ class InternshipService
             'companies' => $this->rows($companies->orderBy('company_id')->get(['company_id', 'company_name', 'contact_name', 'contact_mobile'])),
             'teachers' => $this->rows($teachers->orderBy('teacher_id')->get(['teacher_id', 'teacher_name', 'teacher_num', 'dep_id', 'profession_id'])),
             'students' => $this->rows($students->orderBy('student_id')->get(['student_id', 'name', 'student_num', 'grade_id', 'dep_id', 'profession_id', 'class_id'])),
-            'bases' => $this->rows($this->applyBaseScope($db->table('base')->where('base.status', 'enabled')->whereNull('base.deleted_at'))->orderBy('base.id')->get(['base.id', 'base.name', 'base.company_id', 'base.dep_id'])),
-            'arrangements' => $this->rows($this->applyArrangementScope($db->table('arrangement')->whereNull('deleted_at'))->orderByDesc('id')->get(['id', 'uuid', 'title', 'name', 'type', 'organize_mode', 'semester', 'dep_id', 'profession_id', 'status'])),
-            'report_templates' => $this->rows($db->table('report_template')->where('status', 'enabled')->whereNull('deleted_at')->orderBy('id')->get(['id', 'uuid', 'name', 'code', 'version', 'online_enabled'])),
+            'bases' => $this->rows($this->applyBaseScope($this->query('base')->where('base.status', 'enabled')->whereNull('base.deleted_at'))->orderBy('base.id')->get(['base.id', 'base.name', 'base.company_id', 'base.dep_id'])),
+            'arrangements' => $this->rows($this->applyArrangementScope($this->query('arrangement')->whereNull('deleted_at'))->orderByDesc('id')->get(['id', 'uuid', 'title', 'name', 'type', 'organize_mode', 'semester', 'dep_id', 'profession_id', 'status'])),
+            'report_templates' => $this->rows($this->query('report_template')->where('status', 'enabled')->whereNull('deleted_at')->orderBy('id')->get(['id', 'uuid', 'name', 'code', 'version', 'online_enabled'])),
             'review_rules' => self::REVIEW_OPINION_RULES,
         ];
     }
@@ -100,7 +98,7 @@ class InternshipService
     public function bases(Request $request): array
     {
         $this->requirePermission('internship:view');
-        $query = $this->applyBaseScope($this->db()->table('base')
+        $query = $this->applyBaseScope($this->query('base')
             ->leftJoin('companies', 'base.company_id', '=', 'companies.company_id')
             ->leftJoin('department', 'base.dep_id', '=', 'department.dep_id')
             ->whereNull('base.deleted_at'));
@@ -137,7 +135,7 @@ class InternshipService
     public function mentors(Request $request): array
     {
         $this->requirePermission('internship:view');
-        $query = $this->db()->table('enterprise_mentor')
+        $query = $this->query('enterprise_mentor')
             ->leftJoin('companies', 'enterprise_mentor.company_id', '=', 'companies.company_id')
             ->whereNull('enterprise_mentor.deleted_at');
         $this->applyCompanyScope($query, 'enterprise_mentor.company_id');
@@ -169,7 +167,7 @@ class InternshipService
     public function arrangements(Request $request): array
     {
         $this->requirePermission('internship:view');
-        $query = $this->applyArrangementScope($this->db()->table('arrangement')
+        $query = $this->applyArrangementScope($this->query('arrangement')
             ->leftJoin('base', 'arrangement.base_id', '=', 'base.id')
             ->leftJoin('department', 'arrangement.dep_id', '=', 'department.dep_id')
             ->leftJoin('profession', 'arrangement.profession_id', '=', 'profession.profession_id')
@@ -225,7 +223,7 @@ class InternshipService
     public function applications(Request $request): array
     {
         $this->requirePermission('internship:view');
-        $query = $this->applyApplicationScope($this->db()->table('application')
+        $query = $this->applyApplicationScope($this->query('application')
             ->leftJoin('students', 'application.student_id', '=', 'students.student_id')
             ->leftJoin('arrangement', 'application.arrangement_id', '=', 'arrangement.id')
             ->leftJoin('department', 'students.dep_id', '=', 'department.dep_id')
@@ -265,13 +263,13 @@ class InternshipService
         $this->assertArrangementVisible($arrangementId);
 
         if (!$existingId) {
-            $existingId = (int) ($this->db()->table('application')
+            $existingId = (int) ($this->query('application')
                 ->where('student_id', $studentId)
                 ->where('arrangement_id', $arrangementId)
                 ->whereNull('deleted_at')
                 ->value('id') ?: 0);
         }
-        $fromStatus = $existingId ? (string) ($this->db()->table('application')->where('id', $existingId)->value('status') ?: 'draft') : 'draft';
+        $fromStatus = $existingId ? (string) ($this->query('application')->where('id', $existingId)->value('status') ?: 'draft') : 'draft';
 
         if ($this->isStudent()) {
             if ($fromStatus === 'accept') {
@@ -313,7 +311,7 @@ class InternshipService
             throw new RuntimeException('该实习安排不可重复申请', 42201);
         }
 
-        $this->db()->table('application')
+        $this->query('application')
             ->where('id', $id)
             ->update([
                 'status' => 'wait',
@@ -332,10 +330,9 @@ class InternshipService
         $id = $this->requiredRowId($request, 'application');
         $status = $this->enum($request, 'status', self::APPLICATION_REVIEW_STATUS, 'accept');
         $opinion = $this->reviewOpinionInput($request, 'application', $status);
-        $db = $this->db();
 
-        return $db->transaction(function () use ($db, $id, $status, $opinion): array {
-            $row = $db->table('application')->where('id', $id)->lockForUpdate()->first();
+        return $this->connection()->transaction(function () use ($id, $status, $opinion): array {
+            $row = $this->query('application')->where('id', $id)->lockForUpdate()->first();
             if (!$row || $row->deleted_at !== null) {
                 throw new RuntimeException('实习申请不存在');
             }
@@ -357,8 +354,8 @@ class InternshipService
                 $updates['status'] = 'modify';
             }
 
-            $db->table('application')->where('id', $id)->update($updates);
-            $fresh = $db->table('application')->where('id', $id)->first();
+            $this->query('application')->where('id', $id)->update($updates);
+            $fresh = $this->query('application')->where('id', $id)->first();
             $finalStatus = $this->refreshApplicationFinalStatus($fresh);
             $this->recordWorkflow('application_recording', 'application', $id, $action, (string) $row->status, $finalStatus, $opinion ?: '审核处理', $status);
 
@@ -375,13 +372,13 @@ class InternshipService
         $row = $this->row($config['table'], $id);
         $this->assertReviewEntityVisible($entity, $row);
 
-        $records = $this->rows($this->db()->table($config['recording'])
+        $records = $this->rows($this->query($config['recording'])
             ->where('parent_id', $id)
             ->whereNull('deleted_at')
             ->orderBy('created_at')
             ->orderBy('id')
             ->get(['id', 'uuid', 'parent_id', 'entity_type', 'entity_id', 'action', 'operator_id', 'from_status', 'to_status', 'opinion', 'content', 'status', 'created_at']));
-        $reviews = $this->rows($this->db()->table('review_opinion')
+        $reviews = $this->rows($this->query('review_opinion')
             ->where('entity_type', $entity)
             ->where('entity_id', $id)
             ->whereNull('deleted_at')
@@ -405,10 +402,9 @@ class InternshipService
         $config = self::REVIEW_ENTITY_CONFIG[$entity];
         $id = $this->requiredRowId($request, $config['table']);
         $opinion = $this->reviewOpinionInput($request, $entity, 'modify');
-        $db = $this->db();
 
-        return $db->transaction(function () use ($db, $entity, $config, $id, $opinion): array {
-            $row = $db->table($config['table'])->where('id', $id)->whereNull('deleted_at')->lockForUpdate()->first();
+        return $this->connection()->transaction(function () use ($entity, $config, $id, $opinion): array {
+            $row = $this->query($config['table'])->where('id', $id)->whereNull('deleted_at')->lockForUpdate()->first();
             if (!$row) {
                 throw new RuntimeException('数据不存在');
             }
@@ -433,7 +429,7 @@ class InternshipService
                 $updates['reviewed_at'] = $this->now();
             }
 
-            $db->table($config['table'])->where('id', $id)->update($updates);
+            $this->query($config['table'])->where('id', $id)->update($updates);
             $this->recordWorkflow($config['recording'], $entity, $id, 'modify_after_accept', 'accept', 'modify', $opinion ?: '通过后要求修改', 'modify');
 
             return ['id' => $id, 'status' => 'modify'];
@@ -443,7 +439,7 @@ class InternshipService
     public function pairs(Request $request): array
     {
         $this->requirePermission('internship:view');
-        $query = $this->applyStudentScope($this->db()->table('pair')
+        $query = $this->applyStudentScope($this->query('pair')
             ->leftJoin('students', 'pair.student_id', '=', 'students.student_id')
             ->leftJoin('teacher_list', 'pair.teacher_id', '=', 'teacher_list.teacher_id')
             ->leftJoin('arrangement', 'pair.arrangement_id', '=', 'arrangement.id')
@@ -506,7 +502,7 @@ class InternshipService
         $id = $this->requiredRowId($request, 'pair');
         $reason = $this->nullableString($request, 'remove_reason', 255);
 
-        $this->db()->table('pair')
+        $this->query('pair')
             ->where('id', $id)
             ->update([
                 'status' => 'removed',
@@ -520,7 +516,7 @@ class InternshipService
     public function signIns(Request $request): array
     {
         $this->requirePermission('internship:view');
-        $query = $this->applyStudentScope($this->db()->table('sign_in')
+        $query = $this->applyStudentScope($this->query('sign_in')
             ->leftJoin('students', 'sign_in.student_id', '=', 'students.student_id')
             ->leftJoin('arrangement', 'sign_in.entity_id', '=', 'arrangement.id')
             ->where('sign_in.entity_type', 'internship')
@@ -574,7 +570,7 @@ class InternshipService
     public function journals(Request $request): array
     {
         $this->requirePermission('internship:view');
-        $query = $this->applyStudentScope($this->db()->table('journal')
+        $query = $this->applyStudentScope($this->query('journal')
             ->leftJoin('students', 'journal.student_id', '=', 'students.student_id')
             ->leftJoin('arrangement', 'journal.entity_id', '=', 'arrangement.id')
             ->leftJoin('teacher_list', 'journal.teacher_id', '=', 'teacher_list.teacher_id')
@@ -606,7 +602,7 @@ class InternshipService
         $arrangementId = $this->requiredInt($request, 'arrangement_id');
         $status = $this->enum($request, 'status', ['draft', 'wait'], 'draft');
         $existingId = $this->inputRowId($request, 'journal');
-        $fromStatus = $existingId ? (string) ($this->db()->table('journal')->where('id', $existingId)->value('status') ?: 'draft') : 'draft';
+        $fromStatus = $existingId ? (string) ($this->query('journal')->where('id', $existingId)->value('status') ?: 'draft') : 'draft';
         $this->assertStudentVisible($studentId);
         $this->assertArrangementVisible($arrangementId);
 
@@ -638,7 +634,7 @@ class InternshipService
     public function reports(Request $request): array
     {
         $this->requirePermission('internship:view');
-        $query = $this->applyStudentScope($this->db()->table('report')
+        $query = $this->applyStudentScope($this->query('report')
             ->leftJoin('students', 'report.student_id', '=', 'students.student_id')
             ->leftJoin('arrangement', 'report.arrangement_id', '=', 'arrangement.id')
             ->leftJoin('teacher_list', 'report.teacher_id', '=', 'teacher_list.teacher_id')
@@ -670,7 +666,7 @@ class InternshipService
         $arrangementId = $this->requiredInt($request, 'arrangement_id');
         $status = $this->enum($request, 'status', ['draft', 'wait'], 'draft');
         $existingId = $this->inputRowId($request, 'report');
-        $fromStatus = $existingId ? (string) ($this->db()->table('report')->where('id', $existingId)->value('status') ?: 'draft') : 'draft';
+        $fromStatus = $existingId ? (string) ($this->query('report')->where('id', $existingId)->value('status') ?: 'draft') : 'draft';
         $this->assertStudentVisible($studentId);
         $this->assertArrangementVisible($arrangementId);
 
@@ -702,7 +698,7 @@ class InternshipService
     public function scores(Request $request): array
     {
         $this->requirePermission('internship:view');
-        $query = $this->applyStudentScope($this->db()->table('score')
+        $query = $this->applyStudentScope($this->query('score')
             ->leftJoin('students', 'score.student_id', '=', 'students.student_id')
             ->leftJoin('arrangement', 'score.arrangement_id', '=', 'arrangement.id')
             ->leftJoin('teacher_list', 'score.teacher_id', '=', 'teacher_list.teacher_id')
@@ -769,7 +765,7 @@ class InternshipService
     public function plans(Request $request): array
     {
         $this->requirePermission('internship:plan');
-        $query = $this->db()->table('internship_plan')
+        $query = $this->query('internship_plan')
             ->leftJoin('department', 'internship_plan.dep_id', '=', 'department.dep_id')
             ->leftJoin('account', 'internship_plan.submitter_id', '=', 'account.id')
             ->leftJoin('users', 'account.user_id', '=', 'users.id')
@@ -815,7 +811,7 @@ class InternshipService
         $level = $this->optionalInt($request, 'approval_level') ?? 1;
         $now = $this->now();
 
-        $approvalId = (int) $this->db()->table('internship_plan_approval')->insertGetId([
+        $approvalId = (int) $this->query('internship_plan_approval')->insertGetId([
             'uuid' => $this->uuid(),
             'plan_id' => $planId,
             'approver_id' => CurrentContext::accountId(),
@@ -827,7 +823,7 @@ class InternshipService
             'updated_at' => $now,
         ]);
 
-        $this->db()->table('internship_plan')
+        $this->query('internship_plan')
             ->where('id', $planId)
             ->update(['status' => $status === 'modify' ? 'modify' : 'wait', 'updated_at' => $now]);
 
@@ -880,7 +876,7 @@ class InternshipService
     public function syllabusGuides(Request $request): array
     {
         $this->requirePermission('internship:view');
-        return $this->paginate($this->applyArrangementScope($this->db()->table('syllabus_guide')
+        return $this->paginate($this->applyArrangementScope($this->query('syllabus_guide')
             ->leftJoin('arrangement', 'syllabus_guide.arrangement_id', '=', 'arrangement.id')
             ->whereNull('syllabus_guide.deleted_at'))
             ->orderByDesc('syllabus_guide.id'), $request, ['syllabus_guide.*', 'arrangement.title as arrangement_title']);
@@ -952,7 +948,7 @@ class InternshipService
     public function inspections(Request $request): array
     {
         $this->requirePermission('internship:archive');
-        return $this->paginate($this->db()->table('inspection_record')
+        return $this->paginate($this->query('inspection_record')
             ->whereNull('deleted_at')
             ->orderByDesc('id'), $request, ['inspection_record.*']);
     }
@@ -997,7 +993,7 @@ class InternshipService
             $updates['reviewed_at'] = $now;
         }
 
-        $this->db()->table($table)->where('id', $id)->update($updates);
+        $this->query($table)->where('id', $id)->update($updates);
         $this->recordWorkflow($recordingTable, $table, $id, 'review', $from, $status, $opinion ?: '评阅处理', $status, $score, $teacherId);
 
         return ['id' => $id, 'status' => $status];
@@ -1006,7 +1002,7 @@ class InternshipService
     private function documentList(Request $request, string $table, array $columns): array
     {
         $this->requirePermission('internship:view');
-        $query = $this->db()->table($table)->whereNull("{$table}.deleted_at");
+        $query = $this->query($table)->whereNull("{$table}.deleted_at");
         if (in_array($table, ['insurance', 'safety_letter_sign'], true)) {
             $query->leftJoin('students', "{$table}.student_id", '=', 'students.student_id')
                 ->leftJoin('arrangement', "{$table}.arrangement_id", '=', 'arrangement.id');
@@ -1029,7 +1025,7 @@ class InternshipService
 
     private function application(int $id): array
     {
-        $row = $this->db()->table('application')
+        $row = $this->query('application')
             ->leftJoin('students', 'application.student_id', '=', 'students.student_id')
             ->leftJoin('arrangement', 'application.arrangement_id', '=', 'arrangement.id')
             ->where('application.id', $id)
@@ -1044,7 +1040,7 @@ class InternshipService
         }
 
         $item = (array) $row;
-        $item['teachers'] = $this->rows($this->db()->table('student_join_teacher')
+        $item['teachers'] = $this->rows($this->query('student_join_teacher')
             ->where('application_id', $id)
             ->whereNull('deleted_at')
             ->orderBy('id')
@@ -1055,19 +1051,18 @@ class InternshipService
 
     private function syncJoinTeachers(int $applicationId, int $studentId, int $arrangementId, array $teacherIds): void
     {
-        $db = $this->db();
-        $student = $db->table('students')->where('student_id', $studentId)->first();
+        $student = $this->query('students')->where('student_id', $studentId)->first();
         if (!$teacherIds) {
             return;
         }
 
         foreach (array_slice(array_values(array_unique($teacherIds)), 0, 3) as $teacherId) {
-            $teacher = $db->table('teacher_list')->where('teacher_id', $teacherId)->first();
+            $teacher = $this->query('teacher_list')->where('teacher_id', $teacherId)->first();
             if (!$teacher) {
                 continue;
             }
 
-            $exists = $db->table('student_join_teacher')
+            $exists = $this->query('student_join_teacher')
                 ->where('application_id', $applicationId)
                 ->where('teacher_id', $teacherId)
                 ->whereNull('deleted_at')
@@ -1076,7 +1071,7 @@ class InternshipService
                 continue;
             }
 
-            $db->table('student_join_teacher')->insert([
+            $this->query('student_join_teacher')->insert([
                 'uuid' => $this->uuid(),
                 'student_id' => $studentId,
                 'teacher_id' => $teacherId,
@@ -1098,7 +1093,7 @@ class InternshipService
     {
         $teacherId = $this->currentTeacherId(true);
         $joinStatus = $status === 'accept' ? 'accept' : 'refuse';
-        $this->db()->table('student_join_teacher')
+        $this->query('student_join_teacher')
             ->where('application_id', $applicationId)
             ->where('teacher_id', $teacherId)
             ->whereNull('deleted_at')
@@ -1116,7 +1111,7 @@ class InternshipService
             return (string) $application->status;
         }
 
-        $this->db()->table('application')
+        $this->query('application')
             ->where('id', $application->id)
             ->update(['status' => 'accept', 'updated_at' => $this->now()]);
         $this->createPairFromApplication((int) $application->id);
@@ -1126,13 +1121,12 @@ class InternshipService
 
     private function createPairFromApplication(int $applicationId): void
     {
-        $db = $this->db();
-        $application = $db->table('application')->where('id', $applicationId)->first();
+        $application = $this->query('application')->where('id', $applicationId)->first();
         if (!$application) {
             return;
         }
 
-        $joins = $db->table('student_join_teacher')
+        $joins = $this->query('student_join_teacher')
             ->where('application_id', $applicationId)
             ->where('application_status', 'accept')
             ->whereNull('deleted_at')
@@ -1161,8 +1155,7 @@ class InternshipService
 
     private function upsertActivePair(array $values): int
     {
-        $db = $this->db();
-        $existing = $db->table('pair')
+        $existing = $this->query('pair')
             ->where('student_id', $values['student_id'])
             ->where('arrangement_id', $values['arrangement_id'])
             ->where('type', 'internship')
@@ -1171,11 +1164,11 @@ class InternshipService
             ->first();
 
         if ($existing) {
-            $db->table('pair')->where('id', $existing->id)->update($values);
+            $this->query('pair')->where('id', $existing->id)->update($values);
             return (int) $existing->id;
         }
 
-        return (int) $db->table('pair')->insertGetId(array_merge($values, [
+        return (int) $this->query('pair')->insertGetId(array_merge($values, [
             'uuid' => $this->uuid(),
             'created_at' => $this->now(),
         ]));
@@ -1183,16 +1176,15 @@ class InternshipService
 
     private function saveRow(string $table, Request $request, array $values, array $unique = []): array
     {
-        $db = $this->db();
         $id = $this->optionalInt($request, 'id');
         $uuid = $this->nullableString($request, 'uuid', 36);
         $now = $this->now();
 
         if (!$id && $uuid) {
-            $id = (int) ($db->table($table)->where('uuid', $uuid)->value('id') ?: 0);
+            $id = (int) ($this->query($table)->where('uuid', $uuid)->value('id') ?: 0);
         }
         if (!$id && $unique) {
-            $query = $db->table($table);
+            $query = $this->query($table);
             foreach ($unique as $field => $value) {
                 $query->where($field, $value);
             }
@@ -1201,12 +1193,12 @@ class InternshipService
         }
 
         if ($id) {
-            $db->table($table)->where('id', $id)->update($values);
-            return ['id' => $id, 'uuid' => $uuid ?: (string) $db->table($table)->where('id', $id)->value('uuid')];
+            $this->query($table)->where('id', $id)->update($values);
+            return ['id' => $id, 'uuid' => $uuid ?: (string) $this->query($table)->where('id', $id)->value('uuid')];
         }
 
         $uuid = $uuid ?: $this->uuid();
-        $id = (int) $db->table($table)->insertGetId(array_merge($values, [
+        $id = (int) $this->query($table)->insertGetId(array_merge($values, [
             'uuid' => $uuid,
             'created_at' => $now,
         ]));
@@ -1343,7 +1335,7 @@ class InternshipService
             return [];
         }
 
-        return $this->db()->table('profession')
+        return $this->query('profession')
             ->whereIn('profession_id', $professionIds)
             ->whereNull('deleted_at')
             ->pluck('dep_id')
@@ -1370,16 +1362,14 @@ class InternshipService
         if (in_array($roleType, ['super_admin', 'school_admin'], true)) {
             return null;
         }
-
-        $db = $this->db();
         if ($roleType === 'college_admin') {
-            return $db->table('students')->whereIn('dep_id', $this->scopeIds('dep_id'))->whereNull('deleted_at')->pluck('student_id')->map(fn ($id): int => (int) $id)->all();
+            return $this->query('students')->whereIn('dep_id', $this->scopeIds('dep_id'))->whereNull('deleted_at')->pluck('student_id')->map(fn ($id): int => (int) $id)->all();
         }
         if ($roleType === 'profession_admin') {
-            return $db->table('students')->whereIn('profession_id', $this->scopeIds('profession_id'))->whereNull('deleted_at')->pluck('student_id')->map(fn ($id): int => (int) $id)->all();
+            return $this->query('students')->whereIn('profession_id', $this->scopeIds('profession_id'))->whereNull('deleted_at')->pluck('student_id')->map(fn ($id): int => (int) $id)->all();
         }
         if ($roleType === 'teacher') {
-            return $db->table('pair')->where('teacher_id', $this->currentTeacherId(false))->where('type', 'internship')->where('status', 'active')->whereNull('deleted_at')->pluck('student_id')->map(fn ($id): int => (int) $id)->all();
+            return $this->query('pair')->where('teacher_id', $this->currentTeacherId(false))->where('type', 'internship')->where('status', 'active')->whereNull('deleted_at')->pluck('student_id')->map(fn ($id): int => (int) $id)->all();
         }
         if ($roleType === 'student') {
             $studentId = $this->currentStudentId(false);
@@ -1396,7 +1386,7 @@ class InternshipService
             return [];
         }
 
-        return $this->db()->table('pair')
+        return $this->query('pair')
             ->where('teacher_id', $teacherId)
             ->where('type', 'internship')
             ->where('status', 'active')
@@ -1415,13 +1405,13 @@ class InternshipService
             return [];
         }
 
-        $applicationIds = $this->db()->table('application')
+        $applicationIds = $this->query('application')
             ->where('student_id', $studentId)
             ->whereNull('deleted_at')
             ->pluck('arrangement_id')
             ->map(fn ($id): int => (int) $id)
             ->all();
-        $pairIds = $this->db()->table('pair')
+        $pairIds = $this->query('pair')
             ->where('student_id', $studentId)
             ->where('type', 'internship')
             ->whereNull('deleted_at')
@@ -1439,7 +1429,7 @@ class InternshipService
             return [];
         }
 
-        $student = $this->db()->table('students')
+        $student = $this->query('students')
             ->where('student_id', $studentId)
             ->whereNull('deleted_at')
             ->first(['dep_id', 'profession_id']);
@@ -1447,7 +1437,7 @@ class InternshipService
             return [];
         }
 
-        $query = $this->db()->table('arrangement')
+        $query = $this->query('arrangement')
             ->whereNull('deleted_at')
             ->whereIn('status', ['enabled', 'wait', 'accept']);
         $query->where(function ($builder) use ($student): void {
@@ -1470,7 +1460,7 @@ class InternshipService
             return [];
         }
 
-        return $this->db()->table('student_join_teacher')
+        return $this->query('student_join_teacher')
             ->where('teacher_id', $teacherId)
             ->where('application_type', 'internship')
             ->whereNull('deleted_at')
@@ -1483,7 +1473,7 @@ class InternshipService
 
     private function enterpriseBaseIds(): array
     {
-        return $this->db()->table('base')
+        return $this->query('base')
             ->whereIn('company_id', $this->scopeIds('company_id'))
             ->whereNull('deleted_at')
             ->pluck('id')
@@ -1493,7 +1483,7 @@ class InternshipService
 
     private function enterpriseArrangementIds(): array
     {
-        return $this->db()->table('arrangement')
+        return $this->query('arrangement')
             ->whereIn('base_id', $this->enterpriseBaseIds())
             ->whereNull('deleted_at')
             ->pluck('id')
@@ -1533,7 +1523,7 @@ class InternshipService
 
     private function assertArrangementVisible(int $arrangementId): void
     {
-        $query = $this->applyArrangementScope($this->db()->table('arrangement')->where('arrangement.id', $arrangementId)->whereNull('arrangement.deleted_at'));
+        $query = $this->applyArrangementScope($this->query('arrangement')->where('arrangement.id', $arrangementId)->whereNull('arrangement.deleted_at'));
         if (!$query->exists()) {
             throw new RuntimeException('无数据访问权限', 40301);
         }
@@ -1541,7 +1531,7 @@ class InternshipService
 
     private function assertApplicationVisible(int $applicationId): void
     {
-        $query = $this->applyApplicationScope($this->db()->table('application')->where('application.id', $applicationId)->whereNull('application.deleted_at'));
+        $query = $this->applyApplicationScope($this->query('application')->where('application.id', $applicationId)->whereNull('application.deleted_at'));
         if (!$query->exists()) {
             throw new RuntimeException('无数据访问权限', 40301);
         }
@@ -1579,7 +1569,7 @@ class InternshipService
 
     private function currentTeacherId(bool $required): ?int
     {
-        $teacherId = $this->db()->table('teacher_list')
+        $teacherId = $this->query('teacher_list')
             ->where('user_id', CurrentContext::userId())
             ->whereNull('deleted_at')
             ->value('teacher_id');
@@ -1592,7 +1582,7 @@ class InternshipService
 
     private function currentStudentId(bool $required): ?int
     {
-        $studentId = $this->db()->table('students')
+        $studentId = $this->query('students')
             ->where('user_id', CurrentContext::userId())
             ->whereNull('deleted_at')
             ->value('student_id');
@@ -1605,13 +1595,13 @@ class InternshipService
 
     private function studentDepId(int $studentId): ?int
     {
-        $depId = $this->db()->table('students')->where('student_id', $studentId)->value('dep_id');
+        $depId = $this->query('students')->where('student_id', $studentId)->value('dep_id');
         return $depId ? (int) $depId : null;
     }
 
     private function row(string $table, int $id): object
     {
-        $row = $this->db()->table($table)->where('id', $id)->whereNull('deleted_at')->first();
+        $row = $this->query($table)->where('id', $id)->whereNull('deleted_at')->first();
         if (!$row) {
             throw new RuntimeException('数据不存在');
         }
@@ -1637,7 +1627,7 @@ class InternshipService
         }
         $uuid = $this->nullableString($request, 'uuid', 36);
         if ($uuid) {
-            $id = (int) ($this->db()->table($table)->where('uuid', $uuid)->value('id') ?: 0);
+            $id = (int) ($this->query($table)->where('uuid', $uuid)->value('id') ?: 0);
         }
 
         return $id ?: null;
@@ -1716,7 +1706,7 @@ class InternshipService
 
     private function record(string $table, int $parentId, string $action, ?string $from, string $to, ?string $content): int
     {
-        return (int) $this->db()->table($table)->insertGetId([
+        return (int) $this->query($table)->insertGetId([
             'uuid' => $this->uuid(),
             'parent_id' => $parentId,
             'entity_type' => str_replace('_recording', '', $table),
@@ -1735,7 +1725,7 @@ class InternshipService
 
     private function reviewOpinion(string $entityType, int $entityId, ?int $recordingId, string $status, ?string $opinion, ?float $score = null, ?int $teacherId = null): void
     {
-        $this->db()->table('review_opinion')->insert([
+        $this->query('review_opinion')->insert([
             'uuid' => $this->uuid(),
             'entity_type' => $entityType,
             'entity_id' => $entityId,
@@ -1817,7 +1807,7 @@ class InternshipService
             return;
         }
 
-        $applicationIds = $this->db()->table('student_join_teacher')
+        $applicationIds = $this->query('student_join_teacher')
             ->where('teacher_id', $teacherId)
             ->where('application_type', 'internship')
             ->whereNull('deleted_at')
@@ -1834,7 +1824,7 @@ class InternshipService
             return;
         }
 
-        $pairs = $this->db()->table('pair')
+        $pairs = $this->query('pair')
             ->where('teacher_id', $teacherId)
             ->where('type', 'internship')
             ->where('status', 'active')
@@ -1987,9 +1977,14 @@ class InternshipService
         return date('Y-m-d H:i:s');
     }
 
-    private function db(): mixed
+    private function query(string $table): mixed
     {
-        return Db::connection(CurrentContext::tenantConnection());
+        return ChannelTable::queryTable($table);
+    }
+
+    private function connection(): mixed
+    {
+        return ChannelTable::connection();
     }
 
     private function uuid(): string

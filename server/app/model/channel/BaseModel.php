@@ -9,6 +9,6 @@ abstract class BaseModel extends Model
 {
     public function getConnectionName()
     {
-        return CurrentContext::tenantConnection();
+        return CurrentContext::schoolConnection();
     }
 }

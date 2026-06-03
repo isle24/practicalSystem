@@ -3,9 +3,9 @@
 namespace app\controller\Api;
 
 use app\controller\Api\Concerns\Responds;
+use app\model\channel\TableRecord as ChannelTable;
 use app\server\CurrentContext;
 use app\server\file\FileService;
-use support\Db;
 use support\Request;
 use support\Response;
 use Throwable;
@@ -48,10 +48,9 @@ class ProfileController
             ];
             $notify = $this->notifyInput((array) $request->input('notify', []));
             $now = date('Y-m-d H:i:s');
-            $db = Db::connection(CurrentContext::tenantConnection());
 
-            $db->transaction(function () use ($db, $userId, $accountId, $name, $avatar, $mobile, $email, $layout, $notify, $now): void {
-                $db->table('users')
+            ChannelTable::connection()->transaction(function () use ($userId, $accountId, $name, $avatar, $mobile, $email, $layout, $notify, $now): void {
+                ChannelTable::queryTable('users')
                     ->where('id', $userId)
                     ->whereNull('deleted_at')
                     ->update([
@@ -62,7 +61,7 @@ class ProfileController
                         'updated_at' => $now,
                     ]);
 
-                $desktopRow = $db->table('user_desktop_config')
+                $desktopRow = ChannelTable::queryTable('user_desktop_config')
                     ->where('account_id', $accountId)
                     ->whereNull('deleted_at')
                     ->orderByDesc('id')
@@ -73,18 +72,18 @@ class ProfileController
                 ];
 
                 if ($desktopRow) {
-                    $db->table('user_desktop_config')
+                    ChannelTable::queryTable('user_desktop_config')
                         ->where('id', $desktopRow->id)
                         ->update($desktopValues);
                 } else {
-                    $db->table('user_desktop_config')->insert(array_merge($desktopValues, [
+                    ChannelTable::queryTable('user_desktop_config')->insert(array_merge($desktopValues, [
                         'account_id' => $accountId,
                         'created_at' => $now,
                     ]));
                 }
 
                 foreach ($notify as $channel => $enabled) {
-                    $row = $db->table('user_notify_setting')
+                    $row = ChannelTable::queryTable('user_notify_setting')
                         ->where('account_id', $accountId)
                         ->where('msg_type', 'system')
                         ->where('channel', $channel)
@@ -97,13 +96,13 @@ class ProfileController
                     ];
 
                     if ($row) {
-                        $db->table('user_notify_setting')
+                        ChannelTable::queryTable('user_notify_setting')
                             ->where('id', $row->id)
                             ->update($values);
                         continue;
                     }
 
-                    $db->table('user_notify_setting')->insert(array_merge($values, [
+                    ChannelTable::queryTable('user_notify_setting')->insert(array_merge($values, [
                         'account_id' => $accountId,
                         'msg_type' => 'system',
                         'channel' => $channel,
@@ -150,17 +149,16 @@ class ProfileController
     {
         $accountId = CurrentContext::accountId();
         $userId = CurrentContext::userId();
-        $db = Db::connection(CurrentContext::tenantConnection());
-        $user = $db->table('users')
+        $user = ChannelTable::queryTable('users')
             ->where('id', $userId)
             ->whereNull('deleted_at')
             ->first(['id', 'name', 'avatar', 'mobile', 'email']);
-        $desktopRow = $db->table('user_desktop_config')
+        $desktopRow = ChannelTable::queryTable('user_desktop_config')
             ->where('account_id', $accountId)
             ->whereNull('deleted_at')
             ->orderByDesc('id')
             ->first(['layout_json']);
-        $notifyRows = $db->table('user_notify_setting')
+        $notifyRows = ChannelTable::queryTable('user_notify_setting')
             ->where('account_id', $accountId)
             ->where('msg_type', 'system')
             ->whereNull('deleted_at')

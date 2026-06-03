@@ -3,8 +3,8 @@
 namespace app\controller\Api;
 
 use app\controller\Api\Concerns\Responds;
+use app\model\channel\TableRecord as ChannelTable;
 use app\server\CurrentContext;
-use support\Db;
 use support\Request;
 use support\Response;
 use Throwable;
@@ -84,15 +84,14 @@ class ArchiveController
             $id = $this->optionalInt($request, $definition['id']) ?? $this->optionalInt($request, 'id');
             $values = $this->values($request, $definition);
             $now = date('Y-m-d H:i:s');
-            $db = Db::connection(CurrentContext::tenantConnection());
 
             if ($id) {
-                $db->table($definition['table'])
+                ChannelTable::queryTable($definition['table'])
                     ->where($definition['id'], $id)
                     ->whereNull('deleted_at')
                     ->update(array_merge($values, ['updated_at' => $now]));
             } else {
-                $db->table($definition['table'])->insert(array_merge($values, [
+                ChannelTable::queryTable($definition['table'])->insert(array_merge($values, [
                     'created_at' => $now,
                     'updated_at' => $now,
                 ]));
@@ -116,8 +115,7 @@ class ArchiveController
             $id = $this->requiredInt($request, 'id');
             $now = date('Y-m-d H:i:s');
 
-            Db::connection(CurrentContext::tenantConnection())
-                ->table($definition['table'])
+            ChannelTable::queryTable($definition['table'])
                 ->where($definition['id'], $id)
                 ->whereNull('deleted_at')
                 ->update([
@@ -150,8 +148,7 @@ class ArchiveController
     private function items(string $type): array
     {
         $definition = self::DEFINITIONS[$type];
-        $query = Db::connection(CurrentContext::tenantConnection())
-            ->table($definition['table'])
+        $query = ChannelTable::queryTable($definition['table'])
             ->whereNull('deleted_at');
 
         foreach ($definition['order'] as $field) {

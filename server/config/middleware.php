@@ -14,7 +14,7 @@
 
 return [
     '@' => [
-        app\middleware\TenantMiddleware::class,
+        app\middleware\SchoolMiddleware::class,
         app\middleware\AuthMiddleware::class,
     ],
 ];

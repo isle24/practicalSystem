@@ -17,9 +17,9 @@ $user = (string) $env('DB_USER', 'root');
 $pass = (string) $env('DB_PASS', '');
 $charset = (string) $env('DB_CHARSET', 'utf8mb4');
 $masterDb = (string) $env('DB_NAME', 'practical_master');
-$templateDb = (string) $env('TENANT_TEMPLATE_DB', 'practical_template');
-$defaultTenantDb = (string) $env('DEFAULT_TENANT_DB', 'practical_default');
-$defaultDomain = (string) $env('DEFAULT_TENANT_DOMAIN', '127.0.0.1');
+$templateDb = (string) $env('SCHOOL_TEMPLATE_DB', 'practical_template');
+$defaultSchoolDb = (string) $env('DEFAULT_SCHOOL_DB', 'practical_default');
+$defaultDomain = (string) $env('DEFAULT_SCHOOL_DOMAIN', '127.0.0.1');
 $wechatProxyUrl = (string) $env('WECHAT_PROXY_URL', '');
 
 $pdo = new PDO(
@@ -34,7 +34,7 @@ $pdo = new PDO(
 
 createDatabase($pdo, $masterDb, $charset);
 createDatabase($pdo, $templateDb, $charset);
-createDatabase($pdo, $defaultTenantDb, $charset);
+createDatabase($pdo, $defaultSchoolDb, $charset);
 
 $master = databasePdo($host, $port, $user, $pass, $masterDb, $charset);
 createMasterSchema($master);
@@ -44,20 +44,20 @@ seedMaster($master, [
     'user' => $user,
     'pass' => $pass,
     'charset' => $charset,
-    'defaultTenantDb' => $defaultTenantDb,
+    'defaultSchoolDb' => $defaultSchoolDb,
     'defaultDomain' => $defaultDomain,
 ]);
 
-foreach ([$templateDb, $defaultTenantDb] as $tenantDb) {
-    $tenant = databasePdo($host, $port, $user, $pass, $tenantDb, $charset);
-    createTenantSchema($tenant);
-    seedTenant($tenant, $wechatProxyUrl);
+foreach ([$templateDb, $defaultSchoolDb] as $schoolDb) {
+    $school = databasePdo($host, $port, $user, $pass, $schoolDb, $charset);
+    createSchoolSchema($school);
+    seedSchool($school, $wechatProxyUrl);
 }
 
 echo "database initialized\n";
 echo "master={$masterDb}\n";
 echo "template={$templateDb}\n";
-echo "default_tenant={$defaultTenantDb}\n";
+echo "default_school={$defaultSchoolDb}\n";
 
 function databasePdo(string $host, int $port, string $user, string $pass, string $db, string $charset): PDO
 {
@@ -200,7 +200,7 @@ function seedMaster(PDO $pdo, array $config): void
         $config['port'],
         $config['user'],
         $config['pass'],
-        $config['defaultTenantDb'],
+        $config['defaultSchoolDb'],
         $config['charset'],
     ]);
 
@@ -213,10 +213,10 @@ function seedMaster(PDO $pdo, array $config): void
     }
 }
 
-function createTenantSchema(PDO $pdo): void
+function createSchoolSchema(PDO $pdo): void
 {
-    execSql($pdo, tenantCoreStatements());
-    execSql($pdo, tenantBusinessStatements());
+    execSql($pdo, schoolCoreStatements());
+    execSql($pdo, schoolBusinessStatements());
 
     ensureColumn($pdo, 'account', 'login_name', "ALTER TABLE `account` ADD COLUMN `login_name` VARCHAR(80) DEFAULT NULL AFTER `user_id`");
     ensureIndex($pdo, 'account', 'uk_login_name', "ALTER TABLE `account` ADD UNIQUE KEY `uk_login_name` (`login_name`)");
@@ -224,7 +224,7 @@ function createTenantSchema(PDO $pdo): void
     ensureInternshipSchema($pdo);
 }
 
-function tenantCoreStatements(): array
+function schoolCoreStatements(): array
 {
     return [
         "CREATE TABLE IF NOT EXISTS `department` (
@@ -545,7 +545,7 @@ function tenantCoreStatements(): array
     ];
 }
 
-function tenantBusinessStatements(): array
+function schoolBusinessStatements(): array
 {
     $statements = [
         simpleTable('user_device', ['`account_id` BIGINT UNSIGNED DEFAULT NULL', '`jti` VARCHAR(120) DEFAULT NULL', '`device_name` VARCHAR(120) DEFAULT NULL', '`ip` VARCHAR(80) DEFAULT NULL', '`user_agent` VARCHAR(255) DEFAULT NULL', '`last_active_at` DATETIME DEFAULT NULL']),
@@ -1011,7 +1011,7 @@ function recordingColumns(): array
     ];
 }
 
-function seedTenant(PDO $pdo, string $wechatProxyUrl): void
+function seedSchool(PDO $pdo, string $wechatProxyUrl): void
 {
     seedRoles($pdo);
     seedArchives($pdo);

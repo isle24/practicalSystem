@@ -1,11 +1,11 @@
 import { computed, reactive } from 'vue';
-import { fetchContext, fetchDataScope, fetchMenus, fetchTenant } from '../api/system';
+import { fetchContext, fetchDataScope, fetchMenus, fetchSchool } from '../api/system';
 
 const state = reactive({
   loading: false,
   error: '',
   context: {},
-  tenant: {},
+  school: {},
   menus: [],
   permissions: [],
   dataScope: null,
@@ -26,9 +26,9 @@ export function usePermissions() {
     state.error = '';
 
     try {
-      const [context, tenant] = await Promise.all([fetchContext(), fetchTenant()]);
+      const [context, school] = await Promise.all([fetchContext(), fetchSchool()]);
       state.context = context;
-      state.tenant = tenant;
+      state.school = school;
 
       if (!context.role_id) {
         state.error = context.auth_error || '';

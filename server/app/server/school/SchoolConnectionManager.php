@@ -1,15 +1,15 @@
 <?php
 
-namespace app\server\tenant;
+namespace app\server\school;
 
+use app\model\system\TableRecord as SystemTable;
 use app\server\CurrentContext;
 use Illuminate\Container\Container;
+use Illuminate\Database\Eloquent\Model as EloquentModel;
 use InvalidArgumentException;
-use ReflectionClass;
-use support\Db;
 use Throwable;
 
-class TenantConnectionManager
+class SchoolConnectionManager
 {
     private const DEFAULT_MAX_SIZE = 16;
 
@@ -21,7 +21,9 @@ class TenantConnectionManager
             throw new InvalidArgumentException('database_id 无效');
         }
 
-        $name = 'tenant_' . $databaseId;
+        $this->ensureDatabaseInitialized();
+
+        $name = 'school_' . $databaseId;
         $connection = $this->buildConfig($config);
         $signature = $this->signature($connection, $config['config_version'] ?? $config['updated_at'] ?? null);
         $currentSignature = self::$active[$name]['signature'] ?? null;
@@ -39,9 +41,9 @@ class TenantConnectionManager
         ];
 
         CurrentContext::set([
-            'tenant_database_id' => $databaseId,
-            'tenant_database' => $connection['database'],
-            'tenant_connection' => $name,
+            'school_database_id' => $databaseId,
+            'school_database' => $connection['database'],
+            'school_connection' => $name,
             'school_id' => isset($config['school_id']) ? (int) $config['school_id'] : null,
             'school_code' => $config['school_code'] ?? null,
             'school_name' => $config['school_name'] ?? null,
@@ -59,7 +61,7 @@ class TenantConnectionManager
 
     private function buildConfig(array $config): array
     {
-        $template = (array) config('database.connections.tenant_template', config('database.connections.mysql', []));
+        $template = (array) config('database.connections.school_template', config('database.connections.mysql', []));
 
         $template['driver'] = $template['driver'] ?? 'mysql';
         $template['host'] = $config['database_host'] ?? $config['host'] ?? $template['host'] ?? '127.0.0.1';
@@ -85,19 +87,25 @@ class TenantConnectionManager
         $container['config']['database.connections'] = $connections;
     }
 
+    private function ensureDatabaseInitialized(): void
+    {
+        class_exists(SystemTable::class);
+    }
+
     private function purge(string $name): void
     {
         try {
-            $reflection = new ReflectionClass(Db::class);
-            $capsule = $reflection->getStaticPropertyValue('instance');
-            $capsule?->getDatabaseManager()?->purge($name);
+            $resolver = EloquentModel::getConnectionResolver();
+            if ($resolver && method_exists($resolver, 'purge')) {
+                $resolver->purge($name);
+            }
         } catch (Throwable) {
         }
     }
 
     private function evict(): void
     {
-        $maxSize = (int) (getenv('TENANT_CONNECTION_MAX_SIZE') ?: self::DEFAULT_MAX_SIZE);
+        $maxSize = (int) (getenv('SCHOOL_CONNECTION_MAX_SIZE') ?: self::DEFAULT_MAX_SIZE);
         $maxSize = max(3, $maxSize);
 
         if (count(self::$active) <= $maxSize) {
@@ -108,7 +116,7 @@ class TenantConnectionManager
 
         while (count(self::$active) > $maxSize) {
             $name = array_key_first(self::$active);
-            if ($name === CurrentContext::tenantConnection()) {
+            if ($name === CurrentContext::schoolConnection()) {
                 break;
             }
             $this->purge($name);

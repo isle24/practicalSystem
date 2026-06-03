@@ -23,9 +23,9 @@ class CurrentContext
     public static function all(): array
     {
         $keys = [
-            'tenant_database_id',
-            'tenant_database',
-            'tenant_connection',
+            'school_database_id',
+            'school_database',
+            'school_connection',
             'school_id',
             'school_code',
             'school_name',
@@ -51,14 +51,14 @@ class CurrentContext
         return $context;
     }
 
-    public static function tenantDatabaseId(): ?int
+    public static function schoolDatabaseId(): ?int
     {
-        return self::intValue('tenant_database_id');
+        return self::intValue('school_database_id');
     }
 
-    public static function tenantDatabase(): ?string
+    public static function schoolDatabase(): ?string
     {
-        $database = self::get('tenant_database');
+        $database = self::get('school_database');
         return $database === null || $database === '' ? null : (string) $database;
     }
 
@@ -68,9 +68,9 @@ class CurrentContext
         return $code === null || $code === '' ? null : (string) $code;
     }
 
-    public static function tenantConnection(): string
+    public static function schoolConnection(): string
     {
-        $connection = self::get('tenant_connection');
+        $connection = self::get('school_connection');
         return $connection === null || $connection === '' ? (string) config('database.default', 'mysql') : (string) $connection;
     }
 

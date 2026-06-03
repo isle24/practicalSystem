@@ -2,25 +2,25 @@
 
 namespace app\middleware;
 
-use app\server\tenant\TenantConnectionManager;
-use app\server\tenant\TenantResolver;
+use app\server\school\SchoolConnectionManager;
+use app\server\school\SchoolResolver;
 use Throwable;
 use Webman\Http\Request;
 use Webman\Http\Response;
 use Webman\MiddlewareInterface;
 
-class TenantMiddleware implements MiddlewareInterface
+class SchoolMiddleware implements MiddlewareInterface
 {
     public function process(Request $request, callable $handler): Response
     {
         try {
             $domain = $request->host(true) ?: '';
-            $tenant = (new TenantResolver())->resolveByDomainOrDefault($domain);
-            if (!$tenant) {
-                return json(['code' => 40400, 'message' => '租户不存在或未启用', 'data' => null])->withStatus(404);
+            $school = (new SchoolResolver())->resolveByDomainOrDefault($domain);
+            if (!$school) {
+                return json(['code' => 40400, 'message' => '学校不存在或未启用', 'data' => null])->withStatus(404);
             }
 
-            (new TenantConnectionManager())->ensureConnection((int) $tenant['database_id'], $tenant);
+            (new SchoolConnectionManager())->ensureConnection((int) $school['database_id'], $school);
 
             return $handler($request);
         } catch (Throwable $exception) {

@@ -17,8 +17,8 @@ export function logout() {
   });
 }
 
-export function fetchTenant() {
-  return request('/tenant/current');
+export function fetchSchool() {
+  return request('/school/current');
 }
 
 export function fetchMenus(params = {}) {

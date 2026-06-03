@@ -12,7 +12,7 @@ class RbacService
 {
     public function role(?int $roleId = null): ?array
     {
-        $this->ensureTenant();
+        $this->ensureSchoolConnection();
 
         $roleId ??= CurrentContext::roleId();
         if (!$roleId) {
@@ -30,7 +30,7 @@ class RbacService
 
     public function roles(int $accountId): array
     {
-        $this->ensureTenant();
+        $this->ensureSchoolConnection();
 
         return Role::query()
             ->join('user_role', 'role.id', '=', 'user_role.role_id')
@@ -53,7 +53,7 @@ class RbacService
 
     public function permissionCodes(?int $roleId = null): array
     {
-        $this->ensureTenant();
+        $this->ensureSchoolConnection();
 
         $roleId ??= CurrentContext::roleId();
         if (!$roleId) {
@@ -76,7 +76,7 @@ class RbacService
 
     public function menus(string $platform = 'pc', ?int $roleId = null): array
     {
-        $this->ensureTenant();
+        $this->ensureSchoolConnection();
 
         $roleId ??= CurrentContext::roleId();
         if (!$roleId) {
@@ -113,7 +113,7 @@ class RbacService
 
     public function organizationScopes(?int $accountId = null, ?int $roleId = null): array
     {
-        $this->ensureTenant();
+        $this->ensureSchoolConnection();
 
         $accountId ??= CurrentContext::accountId();
         $roleId ??= CurrentContext::roleId();
@@ -142,10 +142,10 @@ class RbacService
             ->all();
     }
 
-    public function ensureTenant(): void
+    public function ensureSchoolConnection(): void
     {
-        if (!CurrentContext::get('tenant_connection')) {
-            throw new RuntimeException('租户连接未解析');
+        if (!CurrentContext::get('school_connection')) {
+            throw new RuntimeException('学校业务库连接未解析');
         }
     }
 
