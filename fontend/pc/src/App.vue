@@ -244,19 +244,16 @@
               :title="permissionState.error"
             />
 
-            <div class="work-grid">
-              <section class="panel list-panel">
+            <div class="module-workspace">
+              <section class="module-content-panel">
                 <div v-if="win.module.id === 'internship'" class="internship-panel">
-                  <div class="internship-toolbar action-only">
+                  <div v-if="hasInternshipToolbarActions(win.panel)" class="internship-toolbar action-only">
                     <div class="data-list-actions">
                       <el-button v-if="win.panel === 'arrangements' && canManageInternship" :icon="CalendarCheck" @click="openArrangementDialog">
                         新增安排
                       </el-button>
                       <el-button v-if="win.panel === 'scores' && canManageInternship" :icon="GraduationCap" @click="openScoreDialog">
                         录入成绩
-                      </el-button>
-                      <el-button :icon="RefreshCw" :loading="internshipState.loading" @click="loadInternshipPanel(win.panel)">
-                        刷新
                       </el-button>
                     </div>
                   </div>
@@ -380,49 +377,43 @@
                   </div>
 
                   <template v-if="win.panel === 'overview'">
-                    <div class="internship-overview">
-                      <section v-for="item in internshipOverviewCards" :key="item.name" class="internship-stat" :class="item.theme">
-                        <component :is="item.icon" :size="21" />
-                        <strong>{{ item.value }}</strong>
-                        <span>{{ item.name }}</span>
-                      </section>
-                    </div>
-                    <StudentOwnPanel
-                      v-if="isStudentRole"
-                      :description="studentPanelMeta('applications').description"
-                      :empty-text="studentPanelMeta('applications').emptyText"
-                      :fields="studentPanelFields('applications')"
-                      :loading="internshipState.loading"
-                      :pagination="studentPanelList('applications').pagination"
-                      :rows="studentPanelList('applications').items"
-                      :status-formatter="statusText"
-                      :status-tag-type="statusTagType"
-                      timeline-entity="application"
-                      :title="studentPanelMeta('applications').title"
-                      @page-change="page => loadInternshipPanel('applications', page)"
-                      @refresh="loadInternshipPanel('applications')"
-                      @timeline="row => openTimelineDialog('application', row)"
-                    />
-                    <div v-else class="internship-overview-work">
+                    <div class="internship-overview-work">
                       <div class="overview-switch">
                         <button
+                          v-for="item in internshipOverviewTabs"
+                          :key="item.key"
                           type="button"
-                          :class="{ active: internshipState.overviewTab === 'arrangements' }"
-                          @click="internshipState.overviewTab = 'arrangements'"
+                          :class="{ active: activeOverviewTab === item.key }"
+                          @click="internshipState.overviewTab = item.key"
                         >
-                          <span>近期安排</span>
-                          <small>{{ internshipState.lists.arrangements.pagination.total || 0 }}</small>
-                        </button>
-                        <button
-                          type="button"
-                          :class="{ active: internshipState.overviewTab === 'applications' }"
-                          @click="internshipState.overviewTab = 'applications'"
-                        >
-                          <span>待处理申请</span>
-                          <small>{{ internshipState.overview.applications_waiting || 0 }}</small>
+                          <span>{{ item.name }}</span>
+                          <small>{{ item.count }}</small>
                         </button>
                       </div>
-                      <section v-if="internshipState.overviewTab === 'arrangements'" class="internship-card overview-card-single">
+                      <div v-if="activeOverviewTab === 'metrics'" class="internship-overview">
+                        <section v-for="item in internshipOverviewCards" :key="item.name" class="internship-stat" :class="item.theme">
+                          <component :is="item.icon" :size="21" />
+                          <strong>{{ item.value }}</strong>
+                          <span>{{ item.name }}</span>
+                        </section>
+                      </div>
+                      <StudentOwnPanel
+                        v-else-if="isStudentRole"
+                        :description="studentPanelMeta('applications').description"
+                        :empty-text="studentPanelMeta('applications').emptyText"
+                        :fields="studentPanelFields('applications')"
+                        :loading="internshipState.loading"
+                        :pagination="studentPanelList('applications').pagination"
+                        :rows="studentPanelList('applications').items"
+                        :status-formatter="statusText"
+                        :status-tag-type="statusTagType"
+                        timeline-entity="application"
+                        :title="studentPanelMeta('applications').title"
+                        @page-change="page => loadInternshipPanel('applications', page)"
+                        @refresh="loadInternshipPanel('applications')"
+                        @timeline="row => openTimelineDialog('application', row)"
+                      />
+                      <section v-else-if="activeOverviewTab === 'arrangements'" class="internship-card overview-card-single">
                         <header>
                           <strong>近期安排</strong>
                           <small>{{ internshipState.lists.arrangements.pagination.total || 0 }} 条</small>
@@ -1312,15 +1303,6 @@
 
                 <div v-else-if="win.module.id === 'stat'" class="admin-panel stat-panel">
                   <section class="stat-report-content">
-                    <header>
-                      <div>
-                        <strong>{{ currentStatReport.name }}</strong>
-                        <small>{{ currentStatReport.description }}</small>
-                      </div>
-                      <el-button :icon="RefreshCw" :loading="internshipState.loading" @click="loadInternshipPanel('overview')">
-                        刷新
-                      </el-button>
-                    </header>
                     <div class="stat-filter-bar">
                       <label>
                         <span>学期</span>
@@ -1360,8 +1342,8 @@
                       </section>
                     </div>
                     <section class="stat-empty-panel">
-                      <strong>{{ currentStatReport.name }}明细</strong>
-                      <p>当前展示统计框架，后续按该报表菜单接入对应聚合接口和钻取列表。</p>
+                      <strong>统计明细</strong>
+                      <p>{{ currentStatReport.description }}</p>
                     </section>
                   </section>
                 </div>
@@ -1446,26 +1428,10 @@
                   <small v-if="wechatProxy.message">{{ wechatProxy.message }}</small>
                 </div>
 
-                <el-table v-else :data="rows(win)" height="100%" stripe>
-                  <el-table-column prop="name" label="事项" min-width="150" />
-                  <el-table-column prop="owner" label="负责人" width="110" />
-                  <el-table-column prop="scope" label="范围" min-width="160" />
-                  <el-table-column prop="status" label="状态" width="110">
-                    <template #default="{ row }">
-                      <el-tag :type="row.type">{{ row.status }}</el-tag>
-                    </template>
-                  </el-table-column>
-                  <el-table-column label="操作" width="160" fixed="right">
-                    <template #default>
-                      <el-button link type="primary" :disabled="!hasPermission(win.module.viewPermission)">
-                        查看
-                      </el-button>
-                      <el-button link type="primary" :disabled="!hasPermission(win.module.managePermission)">
-                        处理
-                      </el-button>
-                    </template>
-                  </el-table-column>
-                </el-table>
+                <div v-else class="module-empty-state">
+                  <strong>当前页面待接入</strong>
+                  <span>请选择左侧已开放的功能菜单。</span>
+                </div>
               </section>
 
             </div>
@@ -2014,7 +1980,7 @@ const internshipState = reactive({
   savedMessage: '',
   reviewOpinion: '',
   documentTab: 'insurances',
-  overviewTab: 'arrangements',
+  overviewTab: 'metrics',
   dialog: emptyOperationDialog(),
   overview: emptyInternshipOverview(),
   options: emptyInternshipOptions(),
@@ -2128,6 +2094,36 @@ const internshipOverviewCards = computed(() => [
   { name: '待评报告', value: internshipState.overview.reports_waiting || 0, theme: 'primary', icon: FileText },
   { name: '今日签到', value: internshipState.overview.today_sign_ins || 0, theme: 'green', icon: MapPin },
 ]);
+const internshipOverviewTabs = computed(() => {
+  const tabs = [
+    { key: 'metrics', name: '数据概览', count: `${internshipOverviewCards.value.length} 项` },
+  ];
+  if (isStudentRole.value) {
+    tabs.push({
+      key: 'applications',
+      name: '我的申请',
+      count: studentPanelList('applications').pagination.total || 0,
+    });
+    return tabs;
+  }
+  tabs.push(
+    {
+      key: 'arrangements',
+      name: '近期安排',
+      count: internshipState.lists.arrangements.pagination.total || 0,
+    },
+    {
+      key: 'applications',
+      name: '待处理申请',
+      count: internshipState.overview.applications_waiting || 0,
+    },
+  );
+  return tabs;
+});
+const activeOverviewTab = computed(() => {
+  const keys = new Set(internshipOverviewTabs.value.map(item => item.key));
+  return keys.has(internshipState.overviewTab) ? internshipState.overviewTab : internshipOverviewTabs.value[0]?.key || 'metrics';
+});
 const internshipListConfigs = computed(() => ({
   arrangements: {
     listKey: 'arrangements',
@@ -2278,6 +2274,16 @@ function internshipListFilters(listKey, adminKeys) {
     return listKey === 'arrangements' ? [] : internshipFilters(['student_keyword']);
   }
   return internshipFilters(adminKeys);
+}
+
+function hasInternshipToolbarActions(panel) {
+  if (panel === 'arrangements') {
+    return canManageInternship.value;
+  }
+  if (panel === 'scores') {
+    return canManageInternship.value;
+  }
+  return false;
 }
 
 function isStudentOwnPanel(panel) {
@@ -2458,12 +2464,6 @@ function sidebarItems(win) {
     { key: 'overview', name: '工作台' },
     { key: 'archive', name: '基础档案' },
     { key: 'workflow', name: '流程配置' },
-  ];
-}
-
-function rows(win) {
-  return [
-    { name: `${win.module.name}事项`, owner: '业务部门', scope: schoolDataText.value, status: win.module.id === 'internship' ? '运行中' : '待确认', type: win.module.id === 'internship' ? 'success' : 'warning' },
   ];
 }
 

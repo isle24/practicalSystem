@@ -357,11 +357,11 @@ a {
 
 .content {
   min-height: 0;
-  display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr);
+  display: flex;
+  flex-direction: column;
   padding: 16px 18px;
   gap: 14px;
-  overflow: auto;
+  overflow: hidden;
 }
 
 .content-head {
@@ -409,10 +409,12 @@ a {
   background: var(--primary-soft);
 }
 
-.work-grid {
+.module-workspace {
   min-height: 0;
+  flex: 1 1 auto;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
+  overflow: hidden;
 }
 
 .panel {
@@ -426,6 +428,29 @@ a {
 .list-panel {
   display: grid;
   grid-template-rows: minmax(0, 1fr);
+}
+
+.module-content-panel {
+  min-height: 0;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+  overflow: hidden;
+}
+
+.module-empty-state {
+  min-height: 220px;
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 8px;
+  color: var(--muted);
+  background: #fbfcfe;
+}
+
+.module-empty-state strong {
+  color: var(--text);
 }
 
 .scope-view {
@@ -647,7 +672,7 @@ a {
 .stat-report-content {
   min-height: 0;
   display: grid;
-  grid-template-rows: auto auto auto minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr);
   gap: 12px;
   overflow: auto;
 }
@@ -996,11 +1021,25 @@ a {
 .internship-panel {
   position: relative;
   min-height: 0;
-  display: grid;
-  grid-template-rows: auto auto 1fr;
+  display: flex;
+  flex-direction: column;
   gap: 10px;
   padding: 12px;
-  overflow: auto;
+  overflow: hidden;
+}
+
+.internship-panel > .el-alert,
+.internship-panel > .internship-toolbar {
+  flex: 0 0 auto;
+}
+
+.internship-panel > .internship-overview-work,
+.internship-panel > .internship-list-only,
+.internship-panel > .internship-document-panel,
+.internship-panel > .data-list-panel,
+.internship-panel > .student-own-panel {
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .internship-toolbar,
@@ -1194,7 +1233,7 @@ a {
 }
 
 .data-list-panel {
-  min-height: 360px;
+  min-height: 0;
   display: grid;
   grid-template-rows: auto 1fr auto;
   gap: 10px;
@@ -1303,6 +1342,16 @@ a {
   overflow: hidden;
   background: #fff;
   box-shadow: var(--shadow);
+}
+
+.operation-dialog.menu-dialog {
+  width: min(720px, calc(100vw - 48px));
+}
+
+.operation-dialog.guide-edit-dialog {
+  width: min(860px, calc(100vw - 48px));
+  max-height: min(720px, calc(100vh - 72px));
+  grid-template-rows: auto auto auto minmax(260px, 1fr) auto;
 }
 
 .operation-dialog header,
@@ -2042,7 +2091,7 @@ a {
 }
 
 .student-own-panel {
-  min-height: 360px;
+  min-height: 0;
   display: grid;
   grid-template-rows: auto 1fr auto;
   gap: 10px;
@@ -2192,7 +2241,7 @@ a {
     flex-wrap: wrap;
   }
 
-  .work-grid,
+  .module-workspace,
   .menu-admin-layout,
   .archive-layout,
   .profile-settings {
