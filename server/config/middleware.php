@@ -16,5 +16,6 @@ return [
     '@' => [
         app\middleware\SchoolMiddleware::class,
         app\middleware\AuthMiddleware::class,
+        app\middleware\OperationLogMiddleware::class,
     ],
 ];

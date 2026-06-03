@@ -104,6 +104,52 @@ class TableRecord extends BaseModel
         ];
     }
 
+    public static function writeOperationLog(array $values, ?string $datetime = null): void
+    {
+        $datetime = $datetime ?: date('Y-m-d H:i:s');
+        $table = 'operation_log_' . date('Ym', strtotime($datetime) ?: time());
+        self::ensureOperationLogTable($table);
+        self::queryTable($table)->insert([
+            'uuid' => self::uuid(),
+            'account_id' => $values['account_id'] ?? null,
+            'action' => $values['action'] ?? null,
+            'ip' => $values['ip'] ?? null,
+            'payload' => json_encode($values['payload'] ?? [], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+            'created_at' => $datetime,
+            'updated_at' => $datetime,
+            'deleted_at' => null,
+        ]);
+    }
+
+    public static function ensureOperationLogTable(string $table): void
+    {
+        if (!preg_match('/^operation_log_\d{6}$/', $table)) {
+            return;
+        }
+
+        self::connection()->statement("CREATE TABLE IF NOT EXISTS `{$table}` (
+            `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            `uuid` CHAR(36) DEFAULT NULL,
+            `name` VARCHAR(180) DEFAULT NULL,
+            `code` VARCHAR(120) DEFAULT NULL,
+            `status` VARCHAR(40) DEFAULT 'enabled',
+            `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+            `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            `deleted_at` DATETIME DEFAULT NULL,
+            `account_id` BIGINT UNSIGNED DEFAULT NULL,
+            `action` VARCHAR(120) DEFAULT NULL,
+            `ip` VARCHAR(80) DEFAULT NULL,
+            `payload` JSON DEFAULT NULL,
+            PRIMARY KEY (`id`),
+            UNIQUE KEY `uk_uuid` (`uuid`),
+            KEY `idx_status` (`status`),
+            KEY `idx_created_at` (`created_at`),
+            KEY `idx_account_id` (`account_id`),
+            KEY `idx_action` (`action`),
+            KEY `idx_ip` (`ip`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    }
+
     private static function applyOperationLogFilters(mixed $query, string $table, array $filters): mixed
     {
         $keyword = trim((string) ($filters['keyword'] ?? ''));
@@ -161,6 +207,14 @@ class TableRecord extends BaseModel
 
         $decoded = json_decode($payload, true);
         return json_last_error() === JSON_ERROR_NONE ? $decoded : $payload;
+    }
+
+    private static function uuid(): string
+    {
+        $data = random_bytes(16);
+        $data[6] = chr((ord($data[6]) & 0x0f) | 0x40);
+        $data[8] = chr((ord($data[8]) & 0x3f) | 0x80);
+        return vsprintf('%s%s-%s-%s-%s-%s%s%s', str_split(bin2hex($data), 4));
     }
 
     public static function archiveRows(string $table, array $columns, array $order): array
