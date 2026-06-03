@@ -927,23 +927,6 @@ class InternshipService
         return ['id' => $id, 'uuid' => $uuid];
     }
 
-    private function paginate(mixed $query, Request $request, array $columns): array
-    {
-        $page = max(1, $this->optionalInt($request, 'page') ?? 1);
-        $pageSize = min(100, max(1, $this->optionalInt($request, 'page_size') ?? $this->optionalInt($request, 'per_page') ?? 20));
-        $total = (int) (clone $query)->count();
-        $items = $query->forPage($page, $pageSize)->get($columns);
-
-        return [
-            'items' => $this->rows($items),
-            'pagination' => [
-                'page' => $page,
-                'page_size' => $pageSize,
-                'total' => $total,
-            ],
-        ];
-    }
-
     private function scopeContext(): array
     {
         $roleType = CurrentContext::roleType();
@@ -985,126 +968,9 @@ class InternshipService
         return $filters;
     }
 
-    private function applyBaseScope(mixed $query): mixed
-    {
-        $roleType = CurrentContext::roleType();
-        if ($roleType === 'college_admin') {
-            return $this->whereInOrDeny($query, 'base.dep_id', $this->scopeIds('dep_id'));
-        }
-        if ($roleType === 'enterprise') {
-            return $this->whereInOrDeny($query, 'base.company_id', $this->scopeIds('company_id'));
-        }
-
-        return $query;
-    }
-
-    private function applyArrangementScope(mixed $query): mixed
-    {
-        $roleType = CurrentContext::roleType();
-        if (in_array($roleType, ['super_admin', 'school_admin'], true)) {
-            return $query;
-        }
-        if ($roleType === 'college_admin') {
-            return $this->whereInOrDeny($query, 'arrangement.dep_id', $this->scopeIds('dep_id'));
-        }
-        if ($roleType === 'profession_admin') {
-            return $this->whereInOrDeny($query, 'arrangement.profession_id', $this->scopeIds('profession_id'));
-        }
-        if ($roleType === 'teacher') {
-            return $this->whereInOrDeny($query, 'arrangement.id', $this->teacherArrangementIds());
-        }
-        if ($roleType === 'student') {
-            return $this->whereInOrDeny($query, 'arrangement.id', $this->studentVisibleArrangementIds());
-        }
-        if ($roleType === 'enterprise') {
-            return $this->whereInOrDeny($query, 'arrangement.base_id', $this->enterpriseBaseIds());
-        }
-
-        return $query->whereRaw('1 = 0');
-    }
-
-    private function applyApplicationScope(mixed $query): mixed
-    {
-        if ($this->isTeacher()) {
-            return $this->whereInOrDeny($query, 'application.id', $this->teacherApplicationIds());
-        }
-        $this->applyStudentScope($query);
-        $this->applyArrangementIdScope($query, 'application.arrangement_id');
-        return $query;
-    }
-
-    private function applyStudentScope(mixed $query, ?string $column = null): mixed
-    {
-        $ids = $this->visibleStudentIds();
-        if ($ids !== null) {
-            $this->whereInOrDeny($query, $column ?: $this->studentColumnForQuery($query), $ids);
-        }
-
-        return $query;
-    }
-
-    private function applyArrangementIdScope(mixed $query, string $column): mixed
-    {
-        $roleType = CurrentContext::roleType();
-        if (in_array($roleType, ['teacher', 'student', 'enterprise'], true)) {
-            $ids = match ($roleType) {
-                'teacher' => $this->teacherArrangementIds(),
-                'student' => $this->studentArrangementIds(),
-                'enterprise' => $this->enterpriseArrangementIds(),
-                default => [],
-            };
-            $this->whereInOrDeny($query, $column, $ids);
-        }
-
-        return $query;
-    }
-
-    private function applyDepProfessionScope(mixed $query, ?string $depColumn, ?string $professionColumn): void
-    {
-        if (CurrentContext::roleType() === 'college_admin' && $depColumn) {
-            $this->whereInOrDeny($query, $depColumn, $this->scopeIds('dep_id'));
-        }
-        if (CurrentContext::roleType() === 'profession_admin' && $professionColumn) {
-            $this->whereInOrDeny($query, $professionColumn, $this->scopeIds('profession_id'));
-        }
-    }
-
-    private function applyCompanyScope(mixed $query, string $column): void
-    {
-        if (CurrentContext::roleType() === 'enterprise') {
-            $this->whereInOrDeny($query, $column, $this->scopeIds('company_id'));
-        }
-    }
-
-    private function applyOptionScope(mixed $query, ?string $depColumn, ?string $professionColumn): void
-    {
-        $roleType = CurrentContext::roleType();
-        if ($roleType === 'college_admin' && $depColumn) {
-            $this->whereInOrDeny($query, $depColumn, $this->scopeIds('dep_id'));
-        }
-        if ($roleType === 'profession_admin' && $professionColumn) {
-            $this->whereInOrDeny($query, $professionColumn, $this->scopeIds('profession_id'));
-        }
-        if ($roleType === 'profession_admin' && !$professionColumn && $depColumn) {
-            $depIds = $this->professionDepIds($this->scopeIds('profession_id'));
-            $this->whereInOrDeny($query, $depColumn, $depIds);
-        }
-    }
-
     private function professionDepIds(array $professionIds): array
     {
         return InternshipRecord::depIdsByProfessionIds($professionIds);
-    }
-
-    private function studentColumnForQuery(mixed $query): string
-    {
-        $from = (string) ($query->from ?? '');
-        return str_contains($from, 'pair') ? 'pair.student_id'
-            : (str_contains($from, 'sign_in') ? 'sign_in.student_id'
-                : (str_contains($from, 'journal') ? 'journal.student_id'
-                    : (str_contains($from, 'report') ? 'report.student_id'
-                        : (str_contains($from, 'score') ? 'score.student_id'
-                            : 'application.student_id'))));
     }
 
     private function visibleStudentIds(): ?array
@@ -1178,16 +1044,6 @@ class InternshipService
     private function enterpriseArrangementIds(): array
     {
         return InternshipRecord::arrangementIdsByBases($this->enterpriseBaseIds());
-    }
-
-    private function whereInOrDeny(mixed $query, string $column, array $ids): mixed
-    {
-        $ids = array_values(array_unique(array_filter(array_map('intval', $ids))));
-        if (!$ids) {
-            return $query->whereRaw('1 = 0');
-        }
-
-        return $query->whereIn($column, $ids);
     }
 
     private function scopeIds(string $field): array
@@ -1432,98 +1288,6 @@ class InternshipService
         }
 
         return round($base, 2);
-    }
-
-    private function keyword(mixed $query, Request $request, array $columns): void
-    {
-        $keyword = trim((string) $request->input('keyword', ''));
-        if ($keyword === '') {
-            return;
-        }
-
-        $query->where(function ($builder) use ($columns, $keyword): void {
-            $like = '%' . str_replace(['%', '_'], ['\\%', '\\_'], $keyword) . '%';
-            foreach ($columns as $index => $column) {
-                $index === 0 ? $builder->where($column, 'like', $like) : $builder->orWhere($column, 'like', $like);
-            }
-        });
-    }
-
-    private function filter(mixed $query, Request $request, string $column, string $key): void
-    {
-        $value = $request->input($key);
-        if ($value !== null && $value !== '') {
-            $query->where($column, $value);
-        }
-    }
-
-    private function applyListFilters(mixed $query, Request $request, array $columns): void
-    {
-        foreach (['dep_id', 'profession_id', 'grade_id', 'teacher_id'] as $key) {
-            if (!isset($columns[$key])) {
-                continue;
-            }
-            $value = $this->optionalInt($request, $key);
-            if ($value) {
-                $query->where($columns[$key], $value);
-            }
-        }
-
-        foreach (['semester'] as $key) {
-            if (!isset($columns[$key])) {
-                continue;
-            }
-            $value = $this->stringInput($request, $key, 80);
-            if ($value !== '') {
-                $query->where($columns[$key], $value);
-            }
-        }
-    }
-
-    private function applyJoinTeacherFilter(mixed $query, Request $request, string $applicationColumn): void
-    {
-        $teacherId = $this->optionalInt($request, 'teacher_id');
-        if (!$teacherId) {
-            return;
-        }
-
-        $this->whereInOrDeny($query, $applicationColumn, InternshipRecord::applicationIdsByJoinTeacher($teacherId));
-    }
-
-    private function applyPairTeacherFilter(mixed $query, Request $request, string $studentColumn, string $arrangementColumn): void
-    {
-        $teacherId = $this->optionalInt($request, 'teacher_id');
-        if (!$teacherId) {
-            return;
-        }
-
-        $pairs = InternshipRecord::pairsByTeacher($teacherId);
-        $studentIds = [];
-        $arrangementIds = [];
-        foreach ($pairs as $pair) {
-            $studentIds[] = (int) $pair['student_id'];
-            $arrangementIds[] = (int) $pair['arrangement_id'];
-        }
-
-        $this->whereInOrDeny($query, $studentColumn, $studentIds);
-        $this->whereInOrDeny($query, $arrangementColumn, $arrangementIds);
-    }
-
-    private function rows(iterable $rows): array
-    {
-        $items = [];
-        foreach ($rows as $row) {
-            $item = method_exists($row, 'getAttributes') ? $row->getAttributes() : (array) $row;
-            foreach (['materials', 'plan_content', 'form_schema', 'fee_detail', 'items'] as $jsonField) {
-                if (isset($item[$jsonField]) && is_string($item[$jsonField])) {
-                    $decoded = json_decode($item[$jsonField], true);
-                    $item[$jsonField] = json_last_error() === JSON_ERROR_NONE ? $decoded : $item[$jsonField];
-                }
-            }
-            $items[] = $item;
-        }
-
-        return $items;
     }
 
     private function accountId(): int
