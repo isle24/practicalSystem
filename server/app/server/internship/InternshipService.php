@@ -41,6 +41,7 @@ class InternshipService
         'application' => ['table' => 'application', 'recording' => 'application_recording'],
         'journal' => ['table' => 'journal', 'recording' => 'journal_recording'],
         'report' => ['table' => 'report', 'recording' => 'report_recording'],
+        'plan' => ['table' => 'internship_plan', 'recording' => 'plan_recording'],
     ];
     private const STUDENT_DOCUMENT_COLUMNS = [
         'students.name as student_name',
@@ -594,6 +595,8 @@ class InternshipService
     {
         $this->requirePermission('internship:plan');
         $this->requireAdminRole();
+        $existingId = $this->inputRowId($request, 'internship_plan');
+        $fromStatus = $existingId ? InternshipRecord::statusById('internship_plan', $existingId) : 'draft';
 
         $values = [
             'dep_id' => $this->requiredInt($request, 'dep_id'),
@@ -605,7 +608,12 @@ class InternshipService
             'deleted_at' => null,
         ];
 
-        return $this->saveRow('internship_plan', $request, $values);
+        $result = $this->saveRow('internship_plan', $request, $values);
+        if ($values['status'] === 'wait') {
+            $this->recordWorkflow('plan_recording', 'plan', (int) $result['id'], 'submit', $fromStatus, 'wait', '提交实习计划', 'wait');
+        }
+
+        return $result;
     }
 
     public function reviewPlan(Request $request): array
@@ -618,6 +626,9 @@ class InternshipService
         $opinion = $this->reviewOpinionInput($request, 'plan', $status);
         $level = $this->optionalInt($request, 'approval_level') ?? 1;
         $now = $this->now();
+        $row = $this->row('internship_plan', $planId);
+        $this->assertPlanVisible($planId);
+        $from = (string) $row->status;
 
         $approvalId = InternshipRecord::insertPlanApproval($planId, [
             'uuid' => $this->uuid(),
@@ -629,7 +640,8 @@ class InternshipService
             'status' => $status,
             'created_at' => $now,
             'updated_at' => $now,
-        ], $status === 'modify' ? 'modify' : 'wait', $now);
+        ], $status, $now);
+        $this->recordWorkflow('plan_recording', 'plan', $planId, 'review', $from, $status, $opinion ?: '实习计划审核', $status);
 
         return ['id' => $approvalId, 'plan_id' => $planId];
     }
@@ -1086,6 +1098,13 @@ class InternshipService
         }
     }
 
+    private function assertPlanVisible(int $planId): void
+    {
+        if (!InternshipRecord::planVisible($this->scopeContext(), $planId)) {
+            throw new RuntimeException('无数据访问权限', 40301);
+        }
+    }
+
     private function requirePermission(string $code): void
     {
         $this->accountId();
@@ -1189,6 +1208,10 @@ class InternshipService
     {
         if ($entity === 'application') {
             $this->assertApplicationVisible((int) $row->id);
+            return;
+        }
+        if ($entity === 'plan') {
+            $this->assertPlanVisible((int) $row->id);
             return;
         }
         $this->assertStudentVisible((int) $row->student_id);

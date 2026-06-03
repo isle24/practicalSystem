@@ -391,6 +391,15 @@ class InternshipRecord extends TableRecord
             ->exists();
     }
 
+    public static function planVisible(array $scope, int $planId): bool
+    {
+        $query = self::queryTable('internship_plan')
+            ->where('internship_plan.id', $planId)
+            ->whereNull('internship_plan.deleted_at');
+        self::applyDepProfessionScope($query, $scope, 'internship_plan.dep_id', null);
+        return $query->exists();
+    }
+
     public static function teacherIdByUser(int $userId): ?int
     {
         $teacherId = self::queryTable('teacher_list')

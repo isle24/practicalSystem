@@ -1818,6 +1818,7 @@ function reviewEntityName(entity) {
     application: '实习申请',
     journal: '实习日志',
     report: '实习报告',
+    plan: '实习计划',
   };
   return names[entity] || '审核事项';
 }

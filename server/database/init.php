@@ -596,6 +596,7 @@ function schoolBusinessStatements(): array
         simpleTable('score', entityColumns(['`student_id` BIGINT UNSIGNED DEFAULT NULL', '`score_value` DECIMAL(5,2) DEFAULT NULL'])),
         simpleTable('internship_plan', ['`dep_id` BIGINT UNSIGNED DEFAULT NULL', '`semester` VARCHAR(80) DEFAULT NULL', '`plan_json` JSON DEFAULT NULL']),
         simpleTable('internship_plan_approval', ['`plan_id` BIGINT UNSIGNED DEFAULT NULL', '`reviewer_id` BIGINT UNSIGNED DEFAULT NULL']),
+        simpleTable('plan_recording', recordingColumns()),
         simpleTable('insurance', ['`student_id` BIGINT UNSIGNED DEFAULT NULL', '`company_id` BIGINT UNSIGNED DEFAULT NULL', '`policy_no` VARCHAR(120) DEFAULT NULL']),
         simpleTable('safety_letter_sign', ['`student_id` BIGINT UNSIGNED DEFAULT NULL', '`signed_at` DATETIME DEFAULT NULL']),
         simpleTable('syllabus_guide', ['`dep_id` BIGINT UNSIGNED DEFAULT NULL', '`file_id` BIGINT UNSIGNED DEFAULT NULL']),
@@ -970,7 +971,7 @@ function ensureInternshipSchema(PDO $pdo): void
         }
     }
 
-    foreach (['application_recording', 'journal_recording', 'report_recording', 'join_recording', 'apply_report_delay_recording'] as $table) {
+    foreach (['application_recording', 'journal_recording', 'report_recording', 'join_recording', 'apply_report_delay_recording', 'plan_recording'] as $table) {
         ensureColumn($pdo, $table, 'parent_id', "ALTER TABLE `{$table}` ADD COLUMN `parent_id` BIGINT UNSIGNED DEFAULT NULL AFTER `code`");
         ensureColumn($pdo, $table, 'action', "ALTER TABLE `{$table}` ADD COLUMN `action` VARCHAR(40) DEFAULT NULL AFTER `parent_id`");
         ensureColumn($pdo, $table, 'operator_id', "ALTER TABLE `{$table}` ADD COLUMN `operator_id` BIGINT UNSIGNED DEFAULT NULL AFTER `action`");
@@ -1475,7 +1476,16 @@ function seedMenus(PDO $pdo): void
             `deleted_at` = NULL"
     );
 
+    $dedupeCode = $pdo->prepare(
+        "UPDATE `menu`
+         SET `code` = NULL
+         WHERE `code` = ? AND `id` <> ?"
+    );
+
     foreach ($menus as $menu) {
+        if ($menu[3] !== null) {
+            $dedupeCode->execute([$menu[3], $menu[0]]);
+        }
         $stmt->execute($menu);
     }
 
