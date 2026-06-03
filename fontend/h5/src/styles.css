@@ -296,25 +296,6 @@ input {
   margin-bottom: 12px;
 }
 
-.action-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
-  margin-bottom: 12px;
-}
-
-.action-grid .van-button {
-  height: 58px;
-  border-radius: 8px;
-}
-
-.action-grid .van-button__text {
-  display: grid;
-  place-items: center;
-  gap: 4px;
-  font-size: 12px;
-}
-
 .internship-action-tabs {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

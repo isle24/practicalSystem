@@ -593,24 +593,6 @@
           </div>
         </section>
 
-        <section class="action-grid">
-          <van-button
-            v-for="action in moduleActions"
-            :key="action.code"
-            block
-            :disabled="!hasPermission(action.code)"
-          >
-            <component :is="action.icon" :size="18" />
-            <span>{{ action.name }}</span>
-          </van-button>
-        </section>
-
-        <van-cell-group inset>
-          <van-cell title="模块权限" :value="hasPermission(currentPage.permission) ? '允许访问' : '无权限'" />
-          <van-cell title="业务流程" :value="currentPage.flow" />
-          <van-cell title="数据来源" value="学校数据" />
-          <van-cell title="范围策略" :value="scopeText" />
-        </van-cell-group>
       </template>
     </section>
 
@@ -903,12 +885,6 @@ const summaries = computed(() => [
   { name: '学校', value: schoolShortText.value },
   { name: '角色', value: roleDisplayText.value },
   { name: '范围', value: scopeText.value },
-]);
-
-const moduleActions = computed(() => [
-  { name: '查看', code: currentPage.value.permission, icon: ClipboardList },
-  { name: '提交', code: `${currentPage.value.key}:submit`, icon: Send },
-  { name: '确认', code: `${currentPage.value.key}:confirm`, icon: CheckCircle2 },
 ]);
 
 const isLoggedIn = computed(() => Boolean(state.context.account_id));
