@@ -35,9 +35,6 @@
         <el-button @click="emit('reset')">
           重置
         </el-button>
-        <el-button v-if="exportable" :icon="Download" :disabled="!rows.length" @click="emit('export')">
-          导出
-        </el-button>
       </div>
     </div>
 
@@ -96,7 +93,7 @@
 </template>
 
 <script setup>
-import { Download, RefreshCw } from '@lucide/vue';
+import { RefreshCw } from '@lucide/vue';
 
 const props = defineProps({
   actions: {
@@ -119,10 +116,6 @@ const props = defineProps({
     type: Object,
     default: () => ({}),
   },
-  exportable: {
-    type: Boolean,
-    default: false,
-  },
   loading: {
     type: Boolean,
     default: false,
@@ -137,7 +130,7 @@ const props = defineProps({
   },
 });
 
-const emit = defineEmits(['export', 'filter-change', 'page-change', 'reset', 'row-action', 'search']);
+const emit = defineEmits(['filter-change', 'page-change', 'reset', 'row-action', 'search']);
 let lastActionAt = 0;
 
 function updateFilter(key, value) {

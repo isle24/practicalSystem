@@ -477,7 +477,6 @@
                         :loading="internshipState.loading"
                         :pagination="internshipState.lists.arrangements.pagination"
                         :rows="internshipState.lists.arrangements.items"
-                        @export="exportInternshipList('arrangements')"
                         @filter-change="setInternshipFilter('arrangements', $event)"
                         @page-change="page => loadInternshipPanel('arrangements', page)"
                         @reset="resetInternshipFilters('arrangements')"
@@ -494,7 +493,6 @@
                       :loading="internshipState.loading"
                       :pagination="internshipState.lists.applications.pagination"
                       :rows="internshipState.lists.applications.items"
-                      @export="exportInternshipList('applications')"
                       @filter-change="setInternshipFilter('applications', $event)"
                       @page-change="page => loadInternshipPanel('applications', page)"
                       @reset="resetInternshipFilters('applications')"
@@ -525,7 +523,6 @@
                       :loading="internshipState.loading"
                       :pagination="internshipState.lists.pairs.pagination"
                       :rows="internshipState.lists.pairs.items"
-                      @export="exportInternshipList('pairs')"
                       @filter-change="setInternshipFilter('pairs', $event)"
                       @page-change="page => loadInternshipPanel('pairs', page)"
                       @reset="resetInternshipFilters('pairs')"
@@ -545,7 +542,6 @@
                       :loading="internshipState.loading"
                       :pagination="internshipState.lists.signIns.pagination"
                       :rows="internshipState.lists.signIns.items"
-                      @export="exportInternshipList('signIns')"
                       @filter-change="setInternshipFilter('signIns', $event)"
                       @page-change="page => loadInternshipPanel('signIns', page)"
                       @reset="resetInternshipFilters('signIns')"
@@ -561,7 +557,6 @@
                       :loading="internshipState.loading"
                       :pagination="internshipState.lists.journals.pagination"
                       :rows="internshipState.lists.journals.items"
-                      @export="exportInternshipList('journals')"
                       @filter-change="setInternshipFilter('journals', $event)"
                       @page-change="page => loadInternshipPanel('journals', page)"
                       @reset="resetInternshipFilters('journals')"
@@ -592,7 +587,6 @@
                       :loading="internshipState.loading"
                       :pagination="internshipState.lists.reports.pagination"
                       :rows="internshipState.lists.reports.items"
-                      @export="exportInternshipList('reports')"
                       @filter-change="setInternshipFilter('reports', $event)"
                       @page-change="page => loadInternshipPanel('reports', page)"
                       @reset="resetInternshipFilters('reports')"
@@ -624,7 +618,6 @@
                         :loading="internshipState.loading"
                         :pagination="internshipState.lists.scores.pagination"
                         :rows="internshipState.lists.scores.items"
-                        @export="exportInternshipList('scores')"
                         @filter-change="setInternshipFilter('scores', $event)"
                         @page-change="page => loadInternshipPanel('scores', page)"
                         @reset="resetInternshipFilters('scores')"
@@ -666,7 +659,6 @@
                           :loading="internshipState.loading"
                           :pagination="internshipState.lists.insurances.pagination"
                           :rows="internshipState.lists.insurances.items"
-                          @export="exportInternshipList('insurances')"
                           @filter-change="setInternshipFilter('insurances', $event)"
                           @page-change="page => loadInternshipPanel('insurances', page)"
                           @reset="resetInternshipFilters('insurances')"
@@ -696,7 +688,6 @@
                           :loading="internshipState.loading"
                           :pagination="internshipState.lists.safetyLetters.pagination"
                           :rows="internshipState.lists.safetyLetters.items"
-                          @export="exportInternshipList('safetyLetters')"
                           @filter-change="setInternshipFilter('safetyLetters', $event)"
                           @page-change="page => loadInternshipPanel('safetyLetters', page)"
                           @reset="resetInternshipFilters('safetyLetters')"
@@ -3907,24 +3898,6 @@ function statCellText(value) {
   return value === null || value === undefined || value === '' ? '-' : value;
 }
 
-async function exportInternshipList(listKey) {
-  const config = internshipListConfigs.value[listKey];
-  const fetcher = internshipExportFetchers()[listKey];
-  if (!config || !fetcher || internshipState.loading) {
-    return;
-  }
-  internshipState.loading = true;
-  internshipState.message = '';
-  try {
-    const rows = await collectPagedRows(fetcher, internshipState.filters[listKey] || {});
-    exportRowsToCsv(config.filename || '实习列表', config.columns, rows);
-  } catch (error) {
-    internshipState.message = error.message;
-  } finally {
-    internshipState.loading = false;
-  }
-}
-
 async function exportStatReport() {
   if (statState.loading) {
     return;
@@ -3951,20 +3924,6 @@ async function exportStatReport() {
     formatter: row => (column.type === 'status' ? statusText(row[column.key]) : statCellText(row[column.key])),
   }));
   exportRowsToCsv(currentStatReport.value.name, columns, rows);
-}
-
-function internshipExportFetchers() {
-  return {
-    arrangements: fetchInternshipArrangements,
-    applications: fetchInternshipApplications,
-    pairs: fetchInternshipPairs,
-    signIns: fetchInternshipSignIns,
-    journals: fetchInternshipJournals,
-    reports: fetchInternshipReports,
-    scores: fetchInternshipScores,
-    insurances: fetchInternshipInsurances,
-    safetyLetters: fetchInternshipSafetyLetters,
-  };
 }
 
 async function collectPagedRows(fetcher, params = {}) {
