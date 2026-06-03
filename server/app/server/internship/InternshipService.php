@@ -65,18 +65,8 @@ class InternshipService
     public function bases(Request $request): array
     {
         $this->requirePermission('internship:view');
-        $query = $this->applyBaseScope($this->query('base')
-            ->leftJoin('companies', 'base.company_id', '=', 'companies.company_id')
-            ->leftJoin('department', 'base.dep_id', '=', 'department.dep_id')
-            ->whereNull('base.deleted_at'));
 
-        $this->keyword($query, $request, ['base.name', 'base.code', 'companies.company_name']);
-
-        return $this->paginate($query->orderByDesc('base.id'), $request, [
-            'base.id', 'base.uuid', 'base.name', 'base.code', 'base.company_id', 'base.dep_id',
-            'base.address', 'base.capacity', 'base.used_count', 'base.status', 'base.created_at',
-            'companies.company_name', 'department.dep_name',
-        ]);
+        return InternshipRecord::basePage($this->scopeContext(), $this->requestFilters($request, ['page', 'page_size', 'per_page', 'keyword']));
     }
 
     public function saveBase(Request $request): array
@@ -102,17 +92,8 @@ class InternshipService
     public function mentors(Request $request): array
     {
         $this->requirePermission('internship:view');
-        $query = $this->query('enterprise_mentor')
-            ->leftJoin('companies', 'enterprise_mentor.company_id', '=', 'companies.company_id')
-            ->whereNull('enterprise_mentor.deleted_at');
-        $this->applyCompanyScope($query, 'enterprise_mentor.company_id');
-        $this->keyword($query, $request, ['enterprise_mentor.name', 'enterprise_mentor.phone', 'companies.company_name']);
 
-        return $this->paginate($query->orderByDesc('enterprise_mentor.id'), $request, [
-            'enterprise_mentor.id', 'enterprise_mentor.uuid', 'enterprise_mentor.company_id',
-            'enterprise_mentor.name', 'enterprise_mentor.phone', 'enterprise_mentor.position',
-            'enterprise_mentor.status', 'companies.company_name',
-        ]);
+        return InternshipRecord::mentorPage($this->scopeContext(), $this->requestFilters($request, ['page', 'page_size', 'per_page', 'keyword']));
     }
 
     public function saveMentor(Request $request): array
@@ -134,30 +115,11 @@ class InternshipService
     public function arrangements(Request $request): array
     {
         $this->requirePermission('internship:view');
-        $query = $this->applyArrangementScope($this->query('arrangement')
-            ->leftJoin('base', 'arrangement.base_id', '=', 'base.id')
-            ->leftJoin('department', 'arrangement.dep_id', '=', 'department.dep_id')
-            ->leftJoin('profession', 'arrangement.profession_id', '=', 'profession.profession_id')
-            ->whereNull('arrangement.deleted_at'));
 
-        $this->filter($query, $request, 'arrangement.status', 'status');
-        $this->filter($query, $request, 'arrangement.type', 'type');
-        $this->filter($query, $request, 'arrangement.organize_mode', 'organize_mode');
-        $this->applyListFilters($query, $request, [
-            'dep_id' => 'arrangement.dep_id',
-            'profession_id' => 'arrangement.profession_id',
-            'semester' => 'arrangement.semester',
-        ]);
-        $this->keyword($query, $request, ['arrangement.title', 'arrangement.name', 'base.name', 'department.dep_name', 'profession.profession_name']);
-
-        return $this->paginate($query->orderByDesc('arrangement.id'), $request, [
-            'arrangement.id', 'arrangement.uuid', 'arrangement.name', 'arrangement.base_id',
-            'arrangement.dep_id', 'arrangement.profession_id', 'arrangement.semester',
-            'arrangement.type', 'arrangement.organize_mode', 'arrangement.title',
-            'arrangement.start_date', 'arrangement.end_date', 'arrangement.location',
-            'arrangement.description', 'arrangement.status', 'arrangement.created_at',
-            'base.name as base_name', 'department.dep_name', 'profession.profession_name',
-        ]);
+        return InternshipRecord::arrangementPage($this->scopeContext(), $this->requestFilters($request, [
+            'page', 'page_size', 'per_page', 'keyword', 'status', 'type', 'organize_mode',
+            'dep_id', 'profession_id', 'semester',
+        ]));
     }
 
     public function saveArrangement(Request $request): array
@@ -190,31 +152,11 @@ class InternshipService
     public function applications(Request $request): array
     {
         $this->requirePermission('internship:view');
-        $query = $this->applyApplicationScope($this->query('application')
-            ->leftJoin('students', 'application.student_id', '=', 'students.student_id')
-            ->leftJoin('arrangement', 'application.arrangement_id', '=', 'arrangement.id')
-            ->leftJoin('department', 'students.dep_id', '=', 'department.dep_id')
-            ->leftJoin('profession', 'students.profession_id', '=', 'profession.profession_id')
-            ->whereNull('application.deleted_at'));
 
-        $this->filter($query, $request, 'application.status', 'status');
-        $this->filter($query, $request, 'application.arrangement_id', 'arrangement_id');
-        $this->applyListFilters($query, $request, [
-            'dep_id' => 'students.dep_id',
-            'profession_id' => 'students.profession_id',
-            'grade_id' => 'students.grade_id',
-            'semester' => 'arrangement.semester',
-        ]);
-        $this->applyJoinTeacherFilter($query, $request, 'application.id');
-        $this->keyword($query, $request, ['students.name', 'students.student_num', 'arrangement.title']);
-
-        return $this->paginate($query->orderByDesc('application.id'), $request, [
-            'application.id', 'application.uuid', 'application.student_id', 'application.arrangement_id',
-            'application.type', 'application.status', 'application.teacher_status', 'application.admin_status',
-            'application.remark', 'application.created_at', 'students.name as student_name',
-            'students.student_num', 'department.dep_name', 'profession.profession_name',
-            'arrangement.title as arrangement_title', 'arrangement.type as arrangement_type',
-        ]);
+        return InternshipRecord::applicationPage($this->scopeContext(), $this->requestFilters($request, [
+            'page', 'page_size', 'per_page', 'keyword', 'status', 'arrangement_id',
+            'dep_id', 'profession_id', 'grade_id', 'semester', 'teacher_id',
+        ]));
     }
 
     public function saveApplication(Request $request): array
@@ -1143,6 +1085,16 @@ class InternshipService
             'application_ids' => $roleType === 'teacher' ? $this->teacherApplicationIds() : [],
             'base_ids' => $roleType === 'enterprise' ? $this->enterpriseBaseIds() : [],
         ];
+    }
+
+    private function requestFilters(Request $request, array $keys): array
+    {
+        $filters = [];
+        foreach ($keys as $key) {
+            $filters[$key] = $request->input($key);
+        }
+
+        return $filters;
     }
 
     private function applyBaseScope(mixed $query): mixed

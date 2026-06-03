@@ -43,6 +43,91 @@ class InternshipRecord extends TableRecord
         ];
     }
 
+    public static function basePage(array $scope, array $filters): array
+    {
+        $query = self::applyBaseScope(self::queryTable('base')
+            ->leftJoin('companies', 'base.company_id', '=', 'companies.company_id')
+            ->leftJoin('department', 'base.dep_id', '=', 'department.dep_id')
+            ->whereNull('base.deleted_at'), $scope);
+        self::keyword($query, $filters, ['base.name', 'base.code', 'companies.company_name']);
+
+        return self::paginate($query->orderByDesc('base.id'), $filters, [
+            'base.id', 'base.uuid', 'base.name', 'base.code', 'base.company_id', 'base.dep_id',
+            'base.address', 'base.capacity', 'base.used_count', 'base.status', 'base.created_at',
+            'companies.company_name', 'department.dep_name',
+        ]);
+    }
+
+    public static function mentorPage(array $scope, array $filters): array
+    {
+        $query = self::queryTable('enterprise_mentor')
+            ->leftJoin('companies', 'enterprise_mentor.company_id', '=', 'companies.company_id')
+            ->whereNull('enterprise_mentor.deleted_at');
+        self::applyCompanyScope($query, $scope, 'enterprise_mentor.company_id');
+        self::keyword($query, $filters, ['enterprise_mentor.name', 'enterprise_mentor.phone', 'companies.company_name']);
+
+        return self::paginate($query->orderByDesc('enterprise_mentor.id'), $filters, [
+            'enterprise_mentor.id', 'enterprise_mentor.uuid', 'enterprise_mentor.company_id',
+            'enterprise_mentor.name', 'enterprise_mentor.phone', 'enterprise_mentor.position',
+            'enterprise_mentor.status', 'companies.company_name',
+        ]);
+    }
+
+    public static function arrangementPage(array $scope, array $filters): array
+    {
+        $query = self::applyArrangementScope(self::queryTable('arrangement')
+            ->leftJoin('base', 'arrangement.base_id', '=', 'base.id')
+            ->leftJoin('department', 'arrangement.dep_id', '=', 'department.dep_id')
+            ->leftJoin('profession', 'arrangement.profession_id', '=', 'profession.profession_id')
+            ->whereNull('arrangement.deleted_at'), $scope);
+        self::filter($query, $filters, 'arrangement.status', 'status');
+        self::filter($query, $filters, 'arrangement.type', 'type');
+        self::filter($query, $filters, 'arrangement.organize_mode', 'organize_mode');
+        self::listFilters($query, $filters, [
+            'dep_id' => 'arrangement.dep_id',
+            'profession_id' => 'arrangement.profession_id',
+            'semester' => 'arrangement.semester',
+        ]);
+        self::keyword($query, $filters, ['arrangement.title', 'arrangement.name', 'base.name', 'department.dep_name', 'profession.profession_name']);
+
+        return self::paginate($query->orderByDesc('arrangement.id'), $filters, [
+            'arrangement.id', 'arrangement.uuid', 'arrangement.name', 'arrangement.base_id',
+            'arrangement.dep_id', 'arrangement.profession_id', 'arrangement.semester',
+            'arrangement.type', 'arrangement.organize_mode', 'arrangement.title',
+            'arrangement.start_date', 'arrangement.end_date', 'arrangement.location',
+            'arrangement.description', 'arrangement.status', 'arrangement.created_at',
+            'base.name as base_name', 'department.dep_name', 'profession.profession_name',
+        ]);
+    }
+
+    public static function applicationPage(array $scope, array $filters): array
+    {
+        $query = self::applyApplicationScope(self::queryTable('application')
+            ->leftJoin('students', 'application.student_id', '=', 'students.student_id')
+            ->leftJoin('arrangement', 'application.arrangement_id', '=', 'arrangement.id')
+            ->leftJoin('department', 'students.dep_id', '=', 'department.dep_id')
+            ->leftJoin('profession', 'students.profession_id', '=', 'profession.profession_id')
+            ->whereNull('application.deleted_at'), $scope);
+        self::filter($query, $filters, 'application.status', 'status');
+        self::filter($query, $filters, 'application.arrangement_id', 'arrangement_id');
+        self::listFilters($query, $filters, [
+            'dep_id' => 'students.dep_id',
+            'profession_id' => 'students.profession_id',
+            'grade_id' => 'students.grade_id',
+            'semester' => 'arrangement.semester',
+        ]);
+        self::joinTeacherFilter($query, $filters, 'application.id');
+        self::keyword($query, $filters, ['students.name', 'students.student_num', 'arrangement.title']);
+
+        return self::paginate($query->orderByDesc('application.id'), $filters, [
+            'application.id', 'application.uuid', 'application.student_id', 'application.arrangement_id',
+            'application.type', 'application.status', 'application.teacher_status', 'application.admin_status',
+            'application.remark', 'application.created_at', 'students.name as student_name',
+            'students.student_num', 'department.dep_name', 'profession.profession_name',
+            'arrangement.title as arrangement_title', 'arrangement.type as arrangement_type',
+        ]);
+    }
+
     public static function teacherIdByUser(int $userId): ?int
     {
         $teacherId = self::queryTable('teacher_list')
@@ -549,9 +634,83 @@ class InternshipRecord extends TableRecord
         return $items;
     }
 
+    private static function paginate(mixed $query, array $filters, array $columns): array
+    {
+        $page = max(1, (int) ($filters['page'] ?? 1));
+        $pageSize = min(100, max(1, (int) ($filters['page_size'] ?? $filters['per_page'] ?? 20)));
+        $total = (int) (clone $query)->count();
+
+        return [
+            'items' => self::rows($query->forPage($page, $pageSize)->get($columns)),
+            'pagination' => [
+                'page' => $page,
+                'page_size' => $pageSize,
+                'total' => $total,
+            ],
+        ];
+    }
+
+    private static function keyword(mixed $query, array $filters, array $columns): void
+    {
+        $keyword = trim((string) ($filters['keyword'] ?? ''));
+        if ($keyword === '') {
+            return;
+        }
+
+        $query->where(function ($builder) use ($columns, $keyword): void {
+            $like = '%' . str_replace(['%', '_'], ['\\%', '\\_'], $keyword) . '%';
+            foreach ($columns as $index => $column) {
+                $index === 0 ? $builder->where($column, 'like', $like) : $builder->orWhere($column, 'like', $like);
+            }
+        });
+    }
+
+    private static function filter(mixed $query, array $filters, string $column, string $key): void
+    {
+        $value = $filters[$key] ?? null;
+        if ($value !== null && $value !== '') {
+            $query->where($column, $value);
+        }
+    }
+
+    private static function listFilters(mixed $query, array $filters, array $columns): void
+    {
+        foreach (['dep_id', 'profession_id', 'grade_id', 'teacher_id'] as $key) {
+            if (!isset($columns[$key])) {
+                continue;
+            }
+            $value = self::optionalInt($filters[$key] ?? null);
+            if ($value) {
+                $query->where($columns[$key], $value);
+            }
+        }
+
+        if (isset($columns['semester'])) {
+            $semester = trim((string) ($filters['semester'] ?? ''));
+            if ($semester !== '') {
+                $query->where($columns['semester'], $semester);
+            }
+        }
+    }
+
+    private static function joinTeacherFilter(mixed $query, array $filters, string $applicationColumn): void
+    {
+        $teacherId = self::optionalInt($filters['teacher_id'] ?? null);
+        if (!$teacherId) {
+            return;
+        }
+
+        self::whereInOrDeny($query, $applicationColumn, self::applicationIdsByJoinTeacher($teacherId));
+    }
+
     private static function intValues(mixed $values): array
     {
         return self::ids($values->map(static fn ($id): int => (int) $id)->all());
+    }
+
+    private static function optionalInt(mixed $value): ?int
+    {
+        return is_numeric($value) ? (int) $value : null;
     }
 
     private static function ids(array $ids): array
