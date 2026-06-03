@@ -62,16 +62,19 @@
       <el-table-column v-if="actions.length || $slots.actions" label="操作" width="150">
         <template #default="{ row }">
           <template v-if="actions.length">
-            <a
+            <button
               v-for="action in actions"
               :key="action.key"
+              type="button"
               class="table-action"
               :class="action.theme"
-              :href="isActionDisabled(action, row) ? '#' : actionHref(action, row)"
-              :aria-disabled="isActionDisabled(action, row)"
+              :disabled="isActionDisabled(action, row)"
+              @pointerdown.stop.prevent="handleAction($event, action, row)"
+              @mousedown.stop.prevent="handleAction($event, action, row)"
+              @click.stop.prevent="handleAction($event, action, row)"
             >
               {{ action.label }}
-            </a>
+            </button>
           </template>
           <slot v-else name="actions" :row="row" />
         </template>
@@ -135,6 +138,7 @@ const props = defineProps({
 });
 
 const emit = defineEmits(['export', 'filter-change', 'page-change', 'reset', 'row-action', 'search']);
+let lastActionAt = 0;
 
 function updateFilter(key, value) {
   emit('filter-change', { key, value });
@@ -152,11 +156,22 @@ function isActionDisabled(action, row) {
   return typeof action.disabled === 'function' ? action.disabled(row) : Boolean(action.disabled);
 }
 
-function actionHref(action, row) {
-  if (typeof action.href === 'function') {
-    return action.href(row);
+function handleAction(event, action, row) {
+  const now = Date.now();
+  if (now - lastActionAt < 80) {
+    return;
   }
-  return action.href || '#';
+  lastActionAt = now;
+  if (isActionDisabled(action, row)) {
+    event.preventDefault();
+    return;
+  }
+  if (props.actionHandler) {
+    event.preventDefault();
+    props.actionHandler({ action: action.key, row });
+    return;
+  }
+  emit('row-action', { action: action.key, row });
 }
 
 </script>

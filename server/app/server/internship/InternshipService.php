@@ -17,6 +17,25 @@ class InternshipService
     private const JOIN_STATUS = ['applying', 'accept', 'refuse'];
     private const ARRANGEMENT_TYPES = ['cognition_internal', 'cognition_external', 'major_internal', 'major_external', 'production', 'graduation'];
     private const ORGANIZE_MODES = ['centralized', 'distributed', 'autonomous'];
+    private const REVIEW_OPINION_RULES = [
+        'application' => [
+            'accept' => ['min' => 0, 'max' => 200],
+            'modify' => ['min' => 5, 'max' => 500],
+            'skipped' => ['min' => 0, 'max' => 200],
+        ],
+        'journal' => [
+            'accept' => ['min' => 0, 'max' => 200],
+            'modify' => ['min' => 5, 'max' => 500],
+        ],
+        'report' => [
+            'accept' => ['min' => 0, 'max' => 300],
+            'modify' => ['min' => 8, 'max' => 800],
+        ],
+        'plan' => [
+            'accept' => ['min' => 0, 'max' => 300],
+            'modify' => ['min' => 8, 'max' => 800],
+        ],
+    ];
 
     public function overview(Request $request): array
     {
@@ -69,6 +88,7 @@ class InternshipService
             'bases' => $this->rows($this->applyBaseScope($db->table('base')->where('base.status', 'enabled')->whereNull('base.deleted_at'))->orderBy('base.id')->get(['base.id', 'base.name', 'base.company_id', 'base.dep_id'])),
             'arrangements' => $this->rows($this->applyArrangementScope($db->table('arrangement')->whereNull('deleted_at'))->orderByDesc('id')->get(['id', 'uuid', 'title', 'name', 'type', 'organize_mode', 'semester', 'dep_id', 'profession_id', 'status'])),
             'report_templates' => $this->rows($db->table('report_template')->where('status', 'enabled')->whereNull('deleted_at')->orderBy('id')->get(['id', 'uuid', 'name', 'code', 'version', 'online_enabled'])),
+            'review_rules' => self::REVIEW_OPINION_RULES,
         ];
     }
 
@@ -296,7 +316,7 @@ class InternshipService
         $this->requirePermission('internship:approve');
         $id = $this->requiredRowId($request, 'application');
         $status = $this->enum($request, 'status', self::APPLICATION_REVIEW_STATUS, 'accept');
-        $opinion = $this->nullableString($request, 'opinion', 2000);
+        $opinion = $this->reviewOpinionInput($request, 'application', $status);
         $db = $this->db();
 
         return $db->transaction(function () use ($db, $id, $status, $opinion): array {
@@ -699,6 +719,7 @@ class InternshipService
 
         $planId = $this->requiredRowId($request, 'internship_plan');
         $status = $this->enum($request, 'status', ['accept', 'modify'], 'accept');
+        $opinion = $this->reviewOpinionInput($request, 'plan', $status);
         $level = $this->optionalInt($request, 'approval_level') ?? 1;
         $now = $this->now();
 
@@ -708,7 +729,7 @@ class InternshipService
             'approver_id' => CurrentContext::accountId(),
             'approval_level' => $level,
             'level_name' => $this->nullableString($request, 'level_name', 80),
-            'opinion' => $this->nullableString($request, 'opinion', 2000),
+            'opinion' => $opinion,
             'status' => $status,
             'created_at' => $now,
             'updated_at' => $now,
@@ -867,7 +888,7 @@ class InternshipService
         $this->requirePermission('internship:approve');
         $id = $this->requiredRowId($request, $table);
         $status = $this->enum($request, 'status', ['accept', 'modify'], 'accept');
-        $opinion = $this->nullableString($request, 'opinion', 2000);
+        $opinion = $this->reviewOpinionInput($request, $table, $status);
         $score = $this->decimalInput($request, 'score');
         $teacherId = $this->isTeacher() ? $this->currentTeacherId(true) : $this->optionalInt($request, 'teacher_id');
         $now = $this->now();
@@ -1727,6 +1748,25 @@ class InternshipService
     private function nullableString(Request $request, string $key, int $maxLength): ?string
     {
         $value = $this->stringInput($request, $key, $maxLength);
+        return $value === '' ? null : $value;
+    }
+
+    private function reviewOpinionInput(Request $request, string $entity, string $status): ?string
+    {
+        $value = trim((string) $request->input('opinion', ''));
+        $rule = self::REVIEW_OPINION_RULES[$entity][$status] ?? ['min' => 0, 'max' => null];
+        $length = function_exists('mb_strlen') ? mb_strlen($value) : strlen($value);
+        $label = $status === 'modify' ? '退回原因' : '审核意见';
+        $min = (int) ($rule['min'] ?? 0);
+        $max = $rule['max'] ?? null;
+
+        if ($min > 0 && $length < $min) {
+            throw new InvalidArgumentException("{$label}至少 {$min} 字", 42201);
+        }
+        if ($max !== null && $length > (int) $max) {
+            throw new InvalidArgumentException("{$label}最多 {$max} 字", 42202);
+        }
+
         return $value === '' ? null : $value;
     }
 

@@ -534,7 +534,7 @@ const internship = reactive({
       content: '',
     },
     review: {
-      opinion: '同意',
+      opinion: '',
     },
     score: {
       pair_id: null,
@@ -916,7 +916,7 @@ async function reviewApplication(row, status) {
     await reviewInternshipApplication({
       id: row.id,
       status,
-      opinion: internship.forms.review.opinion || (status === 'accept' ? '同意' : '请修改'),
+      opinion: internship.forms.review.opinion || defaultReviewOpinion('application', status),
     });
     await loadInternship();
   } catch (error) {
@@ -933,7 +933,7 @@ async function reviewWork(type, row, status) {
     const payload = {
       id: row.id,
       status,
-      opinion: internship.forms.review.opinion || (status === 'accept' ? '通过' : '请修改'),
+      opinion: internship.forms.review.opinion || defaultReviewOpinion(type, status),
     };
     if (type === 'journal') {
       await reviewInternshipJournal(payload);
@@ -946,6 +946,16 @@ async function reviewWork(type, row, status) {
   } finally {
     internship.loading = false;
   }
+}
+
+function defaultReviewOpinion(type, status) {
+  if (status === 'accept') {
+    return '同意';
+  }
+  if (type === 'report') {
+    return '请补充完善报告内容';
+  }
+  return '请补充修改后再提交';
 }
 
 function selectScorePair() {

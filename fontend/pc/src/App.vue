@@ -256,18 +256,10 @@
               :title="permissionState.error"
             />
 
-            <div class="metrics">
-              <section v-for="metric in metrics" :key="metric.name" class="metric" :class="metric.theme">
-                <strong>{{ metric.value }}</strong>
-                <span>{{ metric.name }}</span>
-              </section>
-            </div>
-
             <div class="work-grid">
               <section class="panel list-panel">
                 <header class="panel-head">
                   <strong>{{ panelTitle(win) }}</strong>
-                  <el-tag type="primary">{{ win.module.scope }}</el-tag>
                 </header>
 
                 <div v-if="win.panel === 'scope'" class="scope-view">
@@ -280,9 +272,6 @@
                     </el-descriptions-item>
                     <el-descriptions-item label="数据范围">
                       {{ scopeText }}
-                    </el-descriptions-item>
-                    <el-descriptions-item label="菜单来源">
-                      {{ permissionState.permissions.length ? '后端权限接口' : '本地框架菜单' }}
                     </el-descriptions-item>
                   </el-descriptions>
                 </div>
@@ -400,8 +389,16 @@
                         <p>{{ internshipState.dialog.description }}</p>
                         <label>
                           <span>{{ internshipState.dialog.status === 'modify' ? '退回原因' : '审核意见' }}</span>
-                          <textarea v-model="internshipState.dialog.reason" rows="5" />
-                          <small>{{ reviewRuleText(internshipState.dialog.entity, internshipState.dialog.status) }}</small>
+                          <textarea
+                            v-model="internshipState.dialog.reason"
+                            rows="5"
+                            :maxlength="reviewRuleMax(internshipState.dialog.entity, internshipState.dialog.status)"
+                            @input="trimReviewReasonMax"
+                          />
+                          <small class="review-counter">
+                            <span>{{ reviewRuleText(internshipState.dialog.entity, internshipState.dialog.status) }}</span>
+                            <span>{{ reviewReasonLength }}/{{ reviewRuleMaxText(internshipState.dialog.entity, internshipState.dialog.status) }}</span>
+                          </small>
                         </label>
                       </div>
 
@@ -488,8 +485,6 @@
                       </el-button>
                     </div>
                     <DataListPanel
-                      :action-handler="event => handleInternshipRowAction('applications', event)"
-                      :actions="internshipListActions('applications')"
                       :columns="internshipListConfigs.applications.columns"
                       :exportable="hasPermission('internship:export')"
                       :filters="internshipListConfigs.applications.filters"
@@ -501,24 +496,21 @@
                       @filter-change="setInternshipFilter('applications', $event)"
                       @page-change="page => loadInternshipPanel('applications', page)"
                       @reset="resetInternshipFilters('applications')"
-                      @row-action="event => handleInternshipRowAction('applications', event)"
                       @search="loadInternshipPanel('applications', 1)"
                     >
                       <template #actions="{ row }">
-                        <button class="table-action" :disabled="!hasPermission('internship:approve')" @pointerdown.stop.prevent="openReviewDialog('application', row, 'accept')" @mousedown.stop.prevent="openReviewDialog('application', row, 'accept')" @click.stop="openReviewDialog('application', row, 'accept')">
+                        <el-button link type="primary" :disabled="!hasPermission('internship:approve')" @click="openReviewDialog('application', row, 'accept')">
                           通过
-                        </button>
-                        <button class="table-action warning" :disabled="!hasPermission('internship:approve')" @pointerdown.stop.prevent="openReviewDialog('application', row, 'modify')" @mousedown.stop.prevent="openReviewDialog('application', row, 'modify')" @click.stop="openReviewDialog('application', row, 'modify')">
+                        </el-button>
+                        <el-button link type="warning" :disabled="!hasPermission('internship:approve')" @click="openReviewDialog('application', row, 'modify')">
                           退回
-                        </button>
+                        </el-button>
                       </template>
                     </DataListPanel>
                   </template>
 
                   <template v-else-if="win.panel === 'pairs'">
                     <DataListPanel
-                      :action-handler="event => handleInternshipRowAction('pairs', event)"
-                      :actions="internshipListActions('pairs')"
                       :columns="internshipListConfigs.pairs.columns"
                       :exportable="hasPermission('internship:export')"
                       :filters="internshipListConfigs.pairs.filters"
@@ -530,11 +522,10 @@
                       @filter-change="setInternshipFilter('pairs', $event)"
                       @page-change="page => loadInternshipPanel('pairs', page)"
                       @reset="resetInternshipFilters('pairs')"
-                      @row-action="event => handleInternshipRowAction('pairs', event)"
                       @search="loadInternshipPanel('pairs', 1)"
                     >
                       <template #actions="{ row }">
-                        <button v-if="canManageInternship" class="table-action" @pointerdown.stop.prevent="prepareScore(row)" @mousedown.stop.prevent="prepareScore(row)" @click.stop="prepareScore(row)">录入</button>
+                        <el-button v-if="canManageInternship" link type="primary" @click="prepareScore(row)">录入</el-button>
                       </template>
                     </DataListPanel>
                   </template>
@@ -561,8 +552,6 @@
                       <el-input v-model="internshipState.reviewOpinion" clearable placeholder="评阅意见" />
                     </div>
                     <DataListPanel
-                      :action-handler="event => handleInternshipRowAction('journals', event)"
-                      :actions="internshipListActions('journals')"
                       :columns="internshipListConfigs.journals.columns"
                       :exportable="hasPermission('internship:export')"
                       :filters="internshipListConfigs.journals.filters"
@@ -574,16 +563,15 @@
                       @filter-change="setInternshipFilter('journals', $event)"
                       @page-change="page => loadInternshipPanel('journals', page)"
                       @reset="resetInternshipFilters('journals')"
-                      @row-action="event => handleInternshipRowAction('journals', event)"
                       @search="loadInternshipPanel('journals', 1)"
                     >
                       <template #actions="{ row }">
-                        <button class="table-action" :disabled="!hasPermission('internship:approve')" @pointerdown.stop.prevent="openReviewDialog('journal', row, 'accept')" @mousedown.stop.prevent="openReviewDialog('journal', row, 'accept')" @click.stop="openReviewDialog('journal', row, 'accept')">
+                        <el-button link type="primary" :disabled="!hasPermission('internship:approve')" @click="openReviewDialog('journal', row, 'accept')">
                           通过
-                        </button>
-                        <button class="table-action warning" :disabled="!hasPermission('internship:approve')" @pointerdown.stop.prevent="openReviewDialog('journal', row, 'modify')" @mousedown.stop.prevent="openReviewDialog('journal', row, 'modify')" @click.stop="openReviewDialog('journal', row, 'modify')">
+                        </el-button>
+                        <el-button link type="warning" :disabled="!hasPermission('internship:approve')" @click="openReviewDialog('journal', row, 'modify')">
                           退回
-                        </button>
+                        </el-button>
                       </template>
                     </DataListPanel>
                   </template>
@@ -593,8 +581,6 @@
                       <el-input v-model="internshipState.reviewOpinion" clearable placeholder="评阅意见" />
                     </div>
                     <DataListPanel
-                      :action-handler="event => handleInternshipRowAction('reports', event)"
-                      :actions="internshipListActions('reports')"
                       :columns="internshipListConfigs.reports.columns"
                       :exportable="hasPermission('internship:export')"
                       :filters="internshipListConfigs.reports.filters"
@@ -606,16 +592,15 @@
                       @filter-change="setInternshipFilter('reports', $event)"
                       @page-change="page => loadInternshipPanel('reports', page)"
                       @reset="resetInternshipFilters('reports')"
-                      @row-action="event => handleInternshipRowAction('reports', event)"
                       @search="loadInternshipPanel('reports', 1)"
                     >
                       <template #actions="{ row }">
-                        <button class="table-action" :disabled="!hasPermission('internship:approve')" @pointerdown.stop.prevent="openReviewDialog('report', row, 'accept')" @mousedown.stop.prevent="openReviewDialog('report', row, 'accept')" @click.stop="openReviewDialog('report', row, 'accept')">
+                        <el-button link type="primary" :disabled="!hasPermission('internship:approve')" @click="openReviewDialog('report', row, 'accept')">
                           通过
-                        </button>
-                        <button class="table-action warning" :disabled="!hasPermission('internship:approve')" @pointerdown.stop.prevent="openReviewDialog('report', row, 'modify')" @mousedown.stop.prevent="openReviewDialog('report', row, 'modify')" @click.stop="openReviewDialog('report', row, 'modify')">
+                        </el-button>
+                        <el-button link type="warning" :disabled="!hasPermission('internship:approve')" @click="openReviewDialog('report', row, 'modify')">
                           退回
-                        </button>
+                        </el-button>
                       </template>
                     </DataListPanel>
                   </template>
@@ -1163,34 +1148,6 @@
                 </el-table>
               </section>
 
-              <aside class="right-pane">
-                <section class="info-box">
-                  <h2>当前上下文</h2>
-                  <dl>
-                    <dt>账号</dt>
-                    <dd>{{ permissionState.context.account_id || '-' }}</dd>
-                    <dt>角色</dt>
-                    <dd>{{ roleText }}</dd>
-                    <dt>学校</dt>
-                    <dd>{{ schoolDataText }}</dd>
-                    <dt>权限码</dt>
-                    <dd>{{ permissionState.permissions.length || '未加载' }}</dd>
-                  </dl>
-                </section>
-
-                <section class="info-box">
-                  <h2>模块状态</h2>
-                  <div class="timeline">
-                    <div v-for="step in moduleSteps(win)" :key="step.name" class="step" :class="step.state">
-                      <span />
-                      <div>
-                        <strong>{{ step.name }}</strong>
-                        <small>{{ step.desc }}</small>
-                      </div>
-                    </div>
-                  </div>
-                </section>
-              </aside>
             </div>
           </section>
         </div>
@@ -1574,16 +1531,21 @@ const archiveDefinitions = [
   },
 ];
 
-const internshipReviewRules = {
+const defaultInternshipReviewRules = {
   application: {
     accept: { min: 0, max: 200 },
     modify: { min: 5, max: 500 },
+    skipped: { min: 0, max: 200 },
   },
   journal: {
     accept: { min: 0, max: 200 },
     modify: { min: 5, max: 500 },
   },
   report: {
+    accept: { min: 0, max: 300 },
+    modify: { min: 8, max: 800 },
+  },
+  plan: {
     accept: { min: 0, max: 300 },
     modify: { min: 8, max: 800 },
   },
@@ -1715,6 +1677,7 @@ const currentArchiveDefinition = computed(() => archiveDefinitions.find(item => 
 const currentArchiveFields = computed(() => currentArchiveDefinition.value.fields);
 const currentArchiveIdField = computed(() => currentArchiveDefinition.value.idField);
 const currentArchiveTableFields = computed(() => currentArchiveFields.value.filter(field => field.key !== 'sort'));
+const reviewReasonLength = computed(() => textLength(internshipState.dialog.reason));
 const internshipOverviewCards = computed(() => [
   { name: '实习安排', value: internshipState.overview.arrangements || 0, theme: 'primary', icon: CalendarCheck },
   { name: '待审申请', value: internshipState.overview.applications_waiting || 0, theme: 'amber', icon: ClipboardList },
@@ -1877,7 +1840,22 @@ function panelTitle(win) {
 }
 
 function moduleDescription(win) {
-  return `${win.module.scope}，权限由学校业务库角色配置控制。`;
+  if (win.module.id === 'internship') {
+    return '实习安排、申请审核、签到、日志、报告、成绩和材料归档。';
+  }
+  if (win.module.id === 'file') {
+    return '学校文件、上传记录、设备信息和业务关联管理。';
+  }
+  if (win.module.id === 'config') {
+    return '菜单、角色、组织范围、基础档案和系统连接配置。';
+  }
+  if (win.module.id === 'stat') {
+    return '按学院、专业、届次和实践环节查看统计数据。';
+  }
+  if (win.module.id === 'log') {
+    return '查看系统操作记录和关键业务留痕。';
+  }
+  return '流程确认后接入对应业务功能。';
 }
 
 function sidebarItems(win) {
@@ -1914,27 +1892,9 @@ function actions(win) {
   ];
 }
 
-const metrics = computed(() => [
-  { name: '已加载菜单', value: permissionState.menus.length, theme: 'primary' },
-  { name: '权限码', value: permissionState.permissions.length || '-', theme: 'teal' },
-  { name: '当前角色', value: roleText.value === '-' ? '-' : '已识别', theme: 'amber' },
-  { name: '学校数据', value: isLoggedIn.value ? '已接入' : '-', theme: 'green' },
-]);
-
 function rows(win) {
   return [
-  { name: `${win.module.name}入口`, owner: '系统', scope: win.module.scope, status: '可配置', type: 'primary' },
-  { name: '菜单权限', owner: '权限系统', scope: 'role_menu', status: '已接入', type: 'success' },
-  { name: '数据范围', owner: '权限系统', scope: 'sys_organization', status: '已接入', type: 'success' },
-  { name: '业务流程', owner: '模块服务', scope: win.module.scope, status: win.module.id === 'internship' ? '已接入' : '待确认', type: win.module.id === 'internship' ? 'success' : 'warning' },
-  ];
-}
-
-function moduleSteps(win) {
-  return [
-  { name: '学校数据', desc: isLoggedIn.value ? '业务库已接入' : '等待登录', state: isLoggedIn.value ? 'done' : '' },
-  { name: '角色权限', desc: permissionState.permissions.length ? '后端已返回权限码' : '使用前端框架菜单', state: permissionState.permissions.length ? 'done' : 'current' },
-  { name: '业务模块', desc: win.module.id === 'internship' ? '实习接口已接入' : `${win.module.name}框架已就绪`, state: win.module.id === 'internship' ? 'done' : 'current' },
+    { name: `${win.module.name}事项`, owner: '业务部门', scope: schoolDataText.value, status: win.module.id === 'internship' ? '运行中' : '待确认', type: win.module.id === 'internship' ? 'success' : 'warning' },
   ];
 }
 
@@ -2055,7 +2015,7 @@ function toggleTaskWindow(id) {
   focusWindow(id);
 }
 
-function handleHashNavigation() {
+async function handleHashNavigation() {
   const hash = window.location.hash.slice(1);
   if (!hash) {
     return;
@@ -2063,8 +2023,8 @@ function handleHashNavigation() {
 
   if (hash.startsWith('internship-action=')) {
     const [listKey, action, id] = hash.slice(18).split(':').map(value => decodeURIComponent(value || ''));
-    handleInternshipHashAction(listKey, action, id);
-    window.setTimeout(clearNavigationHash, 0);
+    await handleInternshipHashAction(listKey, action, id);
+    clearNavigationHash();
     return;
   }
 
@@ -2735,6 +2695,7 @@ function emptyInternshipOptions() {
     bases: [],
     arrangements: [],
     report_templates: [],
+    review_rules: defaultInternshipReviewRules,
   };
 }
 
@@ -2847,45 +2808,12 @@ function statusOptions() {
   }));
 }
 
-function internshipListActions(listKey) {
-  if (listKey === 'applications') {
-    return [
-      { key: 'accept', label: '通过', href: row => internshipActionHref(listKey, 'accept', row), disabled: () => !hasPermission('internship:approve') },
-      { key: 'modify', label: '退回', theme: 'warning', href: row => internshipActionHref(listKey, 'modify', row), disabled: () => !hasPermission('internship:approve') },
-    ];
+async function handleInternshipHashAction(listKey, action, id) {
+  let row = internshipState.lists[listKey]?.items.find(item => String(item.id) === String(id));
+  if (!row && internshipState.lists[listKey]) {
+    await loadInternshipPanel(listKey, internshipState.lists[listKey].pagination.page || 1);
+    row = internshipState.lists[listKey]?.items.find(item => String(item.id) === String(id));
   }
-  if (listKey === 'journals' || listKey === 'reports') {
-    return [
-      { key: 'accept', label: '通过', href: row => internshipActionHref(listKey, 'accept', row), disabled: () => !hasPermission('internship:approve') },
-      { key: 'modify', label: '退回', theme: 'warning', href: row => internshipActionHref(listKey, 'modify', row), disabled: () => !hasPermission('internship:approve') },
-    ];
-  }
-  if (listKey === 'pairs') {
-    return [
-      { key: 'score', label: '录入', href: row => internshipActionHref(listKey, 'score', row), disabled: () => !canManageInternship.value },
-    ];
-  }
-  return [];
-}
-
-function internshipActionHref(listKey, action, row) {
-  return `#internship-action=${encodeURIComponent(listKey)}:${encodeURIComponent(action)}:${encodeURIComponent(row.id)}`;
-}
-
-function handleInternshipRowAction(listKey, event) {
-  if (listKey === 'applications') {
-    openReviewDialog('application', event.row, event.action);
-  } else if (listKey === 'journals') {
-    openReviewDialog('journal', event.row, event.action);
-  } else if (listKey === 'reports') {
-    openReviewDialog('report', event.row, event.action);
-  } else if (listKey === 'pairs' && event.action === 'score') {
-    prepareScore(event.row);
-  }
-}
-
-function handleInternshipHashAction(listKey, action, id) {
-  const row = internshipState.lists[listKey]?.items.find(item => String(item.id) === String(id));
   if (!row) {
     internshipState.message = '当前列表数据已刷新，请重新点击操作';
     return;
@@ -3038,7 +2966,9 @@ async function confirmInternshipDialog() {
 }
 
 function reviewRule(entity, status) {
-  return internshipReviewRules[entity]?.[status] || { min: 0, max: null };
+  return internshipState.options.review_rules?.[entity]?.[status]
+    || defaultInternshipReviewRules[entity]?.[status]
+    || { min: 0, max: null };
 }
 
 function reviewRuleText(entity, status) {
@@ -3055,10 +2985,37 @@ function reviewRuleText(entity, status) {
   return `意见最多 ${rule.max} 字`;
 }
 
+function reviewRuleMax(entity, status) {
+  const max = reviewRule(entity, status).max;
+  return max || null;
+}
+
+function reviewRuleMaxText(entity, status) {
+  return reviewRuleMax(entity, status) || '不限';
+}
+
+function textLength(value) {
+  return Array.from(String(value || '').trim()).length;
+}
+
+function trimReviewReasonMax(event) {
+  const max = reviewRuleMax(internshipState.dialog.entity, internshipState.dialog.status);
+  if (!max) {
+    return;
+  }
+  const chars = Array.from(String(event.target.value || ''));
+  if (chars.length <= max) {
+    return;
+  }
+  const value = chars.slice(0, max).join('');
+  event.target.value = value;
+  internshipState.dialog.reason = value;
+}
+
 function validateReviewReason(entity, status, reason) {
   const rule = reviewRule(entity, status);
   const text = String(reason || '').trim();
-  const length = Array.from(text).length;
+  const length = textLength(text);
   if (rule.min && length < rule.min) {
     return `${status === 'modify' ? '退回原因' : '审核意见'}至少 ${rule.min} 字`;
   }
