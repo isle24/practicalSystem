@@ -95,10 +95,12 @@
         </section>
 
         <van-cell-group inset>
-          <van-cell title="账号 ID" :value="state.context.account_id || '-'" />
-          <van-cell title="角色 ID" :value="state.context.role_id || '-'" />
-          <van-cell title="权限码数量" :value="state.permissions.length || '-'" />
-          <van-cell title="菜单数量" :value="state.menus.length || '-'" />
+          <van-cell title="姓名" :value="userText" />
+          <van-cell title="登录账号" :value="accountText" />
+          <van-cell title="当前角色" :value="roleDisplayText" />
+          <van-cell title="所属学校" :value="schoolText" />
+          <van-cell title="学校代码" :value="schoolCodeText" />
+          <van-cell title="数据范围" :label="scopeDetailText" :value="scopeText" />
         </van-cell-group>
       </template>
 
@@ -253,7 +255,11 @@
             </header>
             <label>
               <span>意见</span>
-              <input v-model="internship.forms.review.opinion">
+              <textarea
+                v-model="internship.forms.review.opinion"
+                rows="3"
+                placeholder="可先填写通用审核意见，点击通过或退回后仍可调整"
+              />
             </label>
           </section>
 
@@ -271,8 +277,8 @@
             >
               <template #right-icon>
                 <div class="cell-actions">
-                  <button @click.stop="reviewApplication(row, 'accept')">通过</button>
-                  <button @click.stop="reviewApplication(row, 'modify')">退回</button>
+                  <button @click.stop="openReviewDialog('application', row, 'accept')">通过</button>
+                  <button @click.stop="openReviewDialog('application', row, 'modify')">退回</button>
                 </div>
               </template>
             </van-cell>
@@ -292,8 +298,8 @@
             >
               <template #right-icon>
                 <div class="cell-actions">
-                  <button @click.stop="reviewWork('journal', row, 'accept')">通过</button>
-                  <button @click.stop="reviewWork('journal', row, 'modify')">退回</button>
+                  <button @click.stop="openReviewDialog('journal', row, 'accept')">通过</button>
+                  <button @click.stop="openReviewDialog('journal', row, 'modify')">退回</button>
                 </div>
               </template>
             </van-cell>
@@ -313,8 +319,8 @@
             >
               <template #right-icon>
                 <div class="cell-actions">
-                  <button @click.stop="reviewWork('report', row, 'accept')">通过</button>
-                  <button @click.stop="reviewWork('report', row, 'modify')">退回</button>
+                  <button @click.stop="openReviewDialog('report', row, 'accept')">通过</button>
+                  <button @click.stop="openReviewDialog('report', row, 'modify')">退回</button>
                 </div>
               </template>
             </van-cell>
@@ -443,11 +449,44 @@
         我的
       </van-tabbar-item>
     </van-tabbar>
+
+    <van-popup
+      v-model:show="internship.reviewDialog.visible"
+      round
+      position="bottom"
+      safe-area-inset-bottom
+    >
+      <section class="review-sheet">
+        <header>
+          <strong>{{ reviewDialogTitle }}</strong>
+          <span>{{ reviewRuleText(internship.reviewDialog.entity, internship.reviewDialog.status) }}</span>
+        </header>
+        <label>
+          <span>{{ internship.reviewDialog.status === 'modify' ? '退回原因' : '审核意见' }}</span>
+          <textarea
+            v-model="internship.reviewDialog.reason"
+            :maxlength="reviewRuleMax(internship.reviewDialog.entity, internship.reviewDialog.status) || undefined"
+            rows="5"
+            @input="trimReviewDialogMax"
+          />
+          <small>
+            {{ textLength(internship.reviewDialog.reason) }} / {{ reviewRuleMaxText(internship.reviewDialog.entity, internship.reviewDialog.status) }}
+          </small>
+        </label>
+        <div class="sheet-actions">
+          <button type="button" @click="closeReviewDialog">取消</button>
+          <button type="button" :disabled="internship.loading" @click="confirmReviewDialog">
+            {{ internship.reviewDialog.status === 'modify' ? '确认退回' : '确认通过' }}
+          </button>
+        </div>
+      </section>
+    </van-popup>
   </main>
 </template>
 
 <script setup>
 import { computed, onMounted, reactive, ref, watch } from 'vue';
+import { showToast } from 'vant';
 import {
   BriefcaseBusiness,
   CalendarCheck,
@@ -501,6 +540,22 @@ const loginState = reactive({
   message: '',
 });
 
+const defaultInternshipReviewRules = {
+  application: {
+    accept: { min: 0, max: 200 },
+    modify: { min: 5, max: 500 },
+    skipped: { min: 0, max: 200 },
+  },
+  journal: {
+    accept: { min: 0, max: 200 },
+    modify: { min: 5, max: 500 },
+  },
+  report: {
+    accept: { min: 0, max: 300 },
+    modify: { min: 8, max: 800 },
+  },
+};
+
 const internship = reactive({
   loading: false,
   message: '',
@@ -546,6 +601,13 @@ const internship = reactive({
       enterprise_score: '',
     },
   },
+  reviewDialog: {
+    visible: false,
+    entity: 'application',
+    status: 'accept',
+    row: null,
+    reason: '',
+  },
 });
 
 const modules = [
@@ -583,15 +645,15 @@ const currentPage = computed(() => {
     return { title: '首页', desc: '移动端工作台', theme: 'blue', icon: Home, permission: '', flow: '-' };
   }
   if (activeTab.value === 'mine') {
-    return { title: '我的', desc: '账号与权限上下文', theme: 'gray', icon: UserRound, permission: '', flow: '-' };
+    return { title: '我的', desc: '个人信息', theme: 'gray', icon: UserRound, permission: '', flow: '-' };
   }
   return modules.find(item => item.key === activeTab.value) || modules[0];
 });
 
 const summaries = computed(() => [
-  { name: '菜单', value: state.menus.length || '-' },
-  { name: '权限码', value: state.permissions.length || '-' },
-  { name: '角色', value: state.context.role_type ? '已识别' : '-' },
+  { name: '学校', value: schoolShortText.value },
+  { name: '角色', value: roleDisplayText.value },
+  { name: '范围', value: scopeText.value },
 ]);
 
 const moduleActions = computed(() => [
@@ -606,15 +668,68 @@ const isStudentRole = computed(() => roleType.value === 'student');
 const isTeacherRole = computed(() => roleType.value === 'teacher');
 const isAdminRole = computed(() => ['super_admin', 'school_admin', 'college_admin', 'profession_admin'].includes(roleType.value));
 const canReviewInternship = computed(() => hasPermission('internship:approve'));
-const roleText = computed(() => state.context.role_type || state.context.role_id || '未登录');
-const userText = computed(() => state.context.user_name || (state.context.user_id ? `用户 ${state.context.user_id}` : '未登录'));
-const schoolText = computed(() => (isLoggedIn.value ? '学校业务库' : '学校业务系统'));
+const roleNameMap = {
+  super_admin: '系统管理员',
+  school_admin: '学校管理员',
+  college_admin: '学院管理员',
+  profession_admin: '专业管理员',
+  teacher: '指导老师',
+  student: '学生',
+  enterprise: '企业导师',
+};
+const scopeNameMap = {
+  dep_id: '学院',
+  profession_id: '专业',
+  company_id: '企业',
+  teacher_user_id: '本人指导学生',
+  student_user_id: '本人实习数据',
+};
+const roleDisplayText = computed(() => state.context.role_name || roleNameMap[roleType.value] || state.context.role_id || '未登录');
+const roleText = computed(() => roleDisplayText.value);
+const userText = computed(() => state.context.user_name || state.context.name || state.context.login_name || '未登录');
+const accountText = computed(() => state.context.login_name || '-');
+const schoolText = computed(() => state.context.school_name || '成都锦城学院');
+const schoolCodeText = computed(() => state.context.school_code || '2184');
+const schoolShortText = computed(() => schoolText.value.replace('成都', '').replace('学院', '') || schoolText.value);
 const scopeText = computed(() => {
-  if (!state.dataScope?.filter) {
-    return '未注入';
+  if (!isLoggedIn.value) {
+    return '未登录';
   }
-  const keys = Object.keys(state.dataScope.filter);
-  return keys.length ? keys.join(' / ') : '全校';
+  const filter = scopeFilter.value;
+  if (!filter) {
+    return '全校';
+  }
+  if (filter.deny_all) {
+    return '无权限';
+  }
+  const names = activeScopeEntries.value.map(([key]) => scopeNameMap[key] || key);
+  return names.length ? names.join(' / ') : '全校';
+});
+const scopeDetailText = computed(() => {
+  const entries = activeScopeEntries.value;
+  if (!isLoggedIn.value) {
+    return '登录后显示当前账号可查看的数据范围';
+  }
+  if (!entries.length) {
+    return '可查看全校数据';
+  }
+  return entries.map(([key, value]) => {
+    const name = scopeNameMap[key] || key;
+    return Array.isArray(value) ? `${name} ${value.length} 项` : name;
+  }).join('，');
+});
+const scopeFilter = computed(() => state.dataScope?.filter || state.context.data_scope?.filter || null);
+const activeScopeEntries = computed(() => {
+  const filter = scopeFilter.value;
+  if (!filter || filter.deny_all) {
+    return [];
+  }
+  return Object.entries(filter).filter(([, value]) => {
+    if (Array.isArray(value)) {
+      return value.length > 0;
+    }
+    return value !== null && value !== undefined && value !== '' && value !== false;
+  });
 });
 const internshipRoleTitle = computed(() => {
   if (isStudentRole.value) {
@@ -718,6 +833,7 @@ function emptyInternshipOptions() {
     arrangements: [],
     teachers: [],
     report_templates: [],
+    review_rules: defaultInternshipReviewRules,
   };
 }
 
@@ -909,15 +1025,55 @@ async function submitReport() {
   }
 }
 
-async function reviewApplication(row, status) {
+function openReviewDialog(entity, row, status) {
+  const useDefaultOpinion = status === 'accept';
+  internship.reviewDialog.entity = entity;
+  internship.reviewDialog.status = status;
+  internship.reviewDialog.row = row;
+  internship.reviewDialog.reason = useDefaultOpinion
+    ? (internship.forms.review.opinion || defaultReviewOpinion(entity, status))
+    : internship.forms.review.opinion;
+  trimReviewDialogMax();
+  internship.reviewDialog.visible = true;
+}
+
+function closeReviewDialog() {
+  internship.reviewDialog.visible = false;
+  internship.reviewDialog.row = null;
+}
+
+async function confirmReviewDialog() {
+  const { entity, status, row } = internship.reviewDialog;
+  if (!row?.id) {
+    closeReviewDialog();
+    return;
+  }
+
+  const error = validateReviewReason(entity, status, internship.reviewDialog.reason);
+  if (error) {
+    internship.message = error;
+    showToast(error);
+    return;
+  }
+
+  if (entity === 'application') {
+    await reviewApplication(row, status, internship.reviewDialog.reason);
+    return;
+  }
+  await reviewWork(entity, row, status, internship.reviewDialog.reason);
+}
+
+async function reviewApplication(row, status, opinion) {
   internship.loading = true;
   internship.message = '';
   try {
     await reviewInternshipApplication({
       id: row.id,
       status,
-      opinion: internship.forms.review.opinion || defaultReviewOpinion('application', status),
+      opinion: opinion || defaultReviewOpinion('application', status),
     });
+    internship.forms.review.opinion = '';
+    closeReviewDialog();
     await loadInternship();
   } catch (error) {
     internship.message = error.message;
@@ -926,20 +1082,22 @@ async function reviewApplication(row, status) {
   }
 }
 
-async function reviewWork(type, row, status) {
+async function reviewWork(type, row, status, opinion) {
   internship.loading = true;
   internship.message = '';
   try {
     const payload = {
       id: row.id,
       status,
-      opinion: internship.forms.review.opinion || defaultReviewOpinion(type, status),
+      opinion: opinion || defaultReviewOpinion(type, status),
     };
     if (type === 'journal') {
       await reviewInternshipJournal(payload);
     } else {
       await reviewInternshipReport(payload);
     }
+    internship.forms.review.opinion = '';
+    closeReviewDialog();
     await loadInternship();
   } catch (error) {
     internship.message = error.message;
@@ -956,6 +1114,76 @@ function defaultReviewOpinion(type, status) {
     return '请补充完善报告内容';
   }
   return '请补充修改后再提交';
+}
+
+function reviewRule(entity, status) {
+  return internship.options.review_rules?.[entity]?.[status]
+    || defaultInternshipReviewRules[entity]?.[status]
+    || { min: 0, max: null };
+}
+
+function reviewRuleText(entity, status) {
+  const rule = reviewRule(entity, status);
+  if (!rule.min && !rule.max) {
+    return '意见字数不限制';
+  }
+  if (rule.min && rule.max) {
+    return `意见需 ${rule.min}-${rule.max} 字`;
+  }
+  if (rule.min) {
+    return `意见至少 ${rule.min} 字`;
+  }
+  return `意见最多 ${rule.max} 字`;
+}
+
+function reviewRuleMax(entity, status) {
+  const max = reviewRule(entity, status).max;
+  return max || null;
+}
+
+function reviewRuleMaxText(entity, status) {
+  return reviewRuleMax(entity, status) || '不限';
+}
+
+function reviewEntityName(entity) {
+  const names = {
+    application: '实习申请',
+    journal: '实习日志',
+    report: '实习报告',
+  };
+  return names[entity] || '审核事项';
+}
+
+const reviewDialogTitle = computed(() => {
+  const action = internship.reviewDialog.status === 'modify' ? '退回' : '通过';
+  return `${action}${reviewEntityName(internship.reviewDialog.entity)}`;
+});
+
+function textLength(value) {
+  return Array.from(String(value || '').trim()).length;
+}
+
+function trimReviewDialogMax() {
+  const max = reviewRuleMax(internship.reviewDialog.entity, internship.reviewDialog.status);
+  if (!max) {
+    return;
+  }
+  const chars = Array.from(String(internship.reviewDialog.reason || ''));
+  if (chars.length > max) {
+    internship.reviewDialog.reason = chars.slice(0, max).join('');
+  }
+}
+
+function validateReviewReason(entity, status, reason) {
+  const rule = reviewRule(entity, status);
+  const length = textLength(reason);
+  if (rule.min && length < rule.min) {
+    return `${status === 'modify' ? '退回原因' : '审核意见'}至少 ${rule.min} 字`;
+  }
+  if (rule.max && length > rule.max) {
+    return `${status === 'modify' ? '退回原因' : '审核意见'}最多 ${rule.max} 字`;
+  }
+  return '';
 }
 
 function selectScorePair() {

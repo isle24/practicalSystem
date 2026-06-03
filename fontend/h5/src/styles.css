@@ -216,6 +216,9 @@ input {
 
 .summary-band strong {
   display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 23px;
   line-height: 1.15;
 }
@@ -439,6 +442,75 @@ input {
   border: 1px solid var(--line);
   border-radius: 8px;
   overflow: hidden;
+}
+
+.review-sheet {
+  display: grid;
+  gap: 14px;
+  padding: 18px 16px calc(18px + env(safe-area-inset-bottom));
+  background: #fff;
+}
+
+.review-sheet header {
+  display: grid;
+  gap: 5px;
+}
+
+.review-sheet header strong {
+  font-size: 17px;
+  line-height: 1.3;
+}
+
+.review-sheet header span,
+.review-sheet label span,
+.review-sheet small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.review-sheet label {
+  display: grid;
+  gap: 7px;
+}
+
+.review-sheet textarea {
+  width: 100%;
+  min-height: 112px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  color: var(--text);
+  background: #fff;
+  outline: none;
+  resize: none;
+}
+
+.review-sheet small {
+  text-align: right;
+}
+
+.sheet-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.sheet-actions button {
+  height: 40px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--text);
+  background: #fff;
+}
+
+.sheet-actions button:last-child {
+  border-color: var(--primary);
+  color: #fff;
+  background: var(--primary);
+}
+
+.sheet-actions button:disabled {
+  opacity: .58;
 }
 
 .van-tabbar {
