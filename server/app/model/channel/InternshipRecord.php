@@ -128,6 +128,141 @@ class InternshipRecord extends TableRecord
         ]);
     }
 
+    public static function pairPage(array $scope, array $filters): array
+    {
+        $query = self::applyStudentScope(self::queryTable('pair')
+            ->leftJoin('students', 'pair.student_id', '=', 'students.student_id')
+            ->leftJoin('teacher_list', 'pair.teacher_id', '=', 'teacher_list.teacher_id')
+            ->leftJoin('arrangement', 'pair.arrangement_id', '=', 'arrangement.id')
+            ->where('pair.type', 'internship')
+            ->whereNull('pair.deleted_at'), $scope, 'pair.student_id');
+        self::filter($query, $filters, 'pair.status', 'status');
+        self::filter($query, $filters, 'pair.arrangement_id', 'arrangement_id');
+        self::listFilters($query, $filters, [
+            'dep_id' => 'students.dep_id',
+            'profession_id' => 'students.profession_id',
+            'grade_id' => 'students.grade_id',
+            'teacher_id' => 'pair.teacher_id',
+            'semester' => 'arrangement.semester',
+        ]);
+        self::keyword($query, $filters, ['students.name', 'students.student_num', 'teacher_list.teacher_name', 'arrangement.title']);
+
+        return self::paginate($query->orderByDesc('pair.id'), $filters, [
+            'pair.id', 'pair.uuid', 'pair.student_id', 'pair.teacher_id', 'pair.dep_id',
+            'pair.second_teacher_id', 'pair.enterprise_mentor_id', 'pair.arrangement_id',
+            'pair.application_id', 'pair.status', 'pair.remove_reason', 'pair.created_at',
+            'students.name as student_name', 'students.student_num',
+            'teacher_list.teacher_name', 'arrangement.title as arrangement_title',
+        ]);
+    }
+
+    public static function signInPage(array $scope, array $filters): array
+    {
+        $query = self::applyStudentScope(self::queryTable('sign_in')
+            ->leftJoin('students', 'sign_in.student_id', '=', 'students.student_id')
+            ->leftJoin('arrangement', 'sign_in.entity_id', '=', 'arrangement.id')
+            ->where('sign_in.entity_type', 'internship')
+            ->whereNull('sign_in.deleted_at'), $scope, 'sign_in.student_id');
+        self::filter($query, $filters, 'sign_in.entity_id', 'arrangement_id');
+        self::filter($query, $filters, 'sign_in.date', 'date');
+        self::listFilters($query, $filters, [
+            'dep_id' => 'students.dep_id',
+            'profession_id' => 'students.profession_id',
+            'grade_id' => 'students.grade_id',
+            'semester' => 'arrangement.semester',
+        ]);
+        self::pairTeacherFilter($query, $filters, 'sign_in.student_id', 'sign_in.entity_id');
+        self::keyword($query, $filters, ['students.name', 'students.student_num', 'arrangement.title', 'sign_in.location']);
+
+        return self::paginate($query->orderByDesc('sign_in.sign_time'), $filters, [
+            'sign_in.id', 'sign_in.uuid', 'sign_in.student_id', 'sign_in.entity_id as arrangement_id',
+            'sign_in.date', 'sign_in.sign_time', 'sign_in.sign_type', 'sign_in.location',
+            'sign_in.longitude', 'sign_in.latitude', 'sign_in.remark', 'sign_in.status',
+            'students.name as student_name', 'students.student_num', 'arrangement.title as arrangement_title',
+        ]);
+    }
+
+    public static function journalPage(array $scope, array $filters): array
+    {
+        $query = self::applyStudentScope(self::queryTable('journal')
+            ->leftJoin('students', 'journal.student_id', '=', 'students.student_id')
+            ->leftJoin('arrangement', 'journal.entity_id', '=', 'arrangement.id')
+            ->leftJoin('teacher_list', 'journal.teacher_id', '=', 'teacher_list.teacher_id')
+            ->where('journal.entity_type', 'internship')
+            ->whereNull('journal.deleted_at'), $scope, 'journal.student_id');
+        self::filter($query, $filters, 'journal.status', 'status');
+        self::filter($query, $filters, 'journal.entity_id', 'arrangement_id');
+        self::listFilters($query, $filters, [
+            'dep_id' => 'students.dep_id',
+            'profession_id' => 'students.profession_id',
+            'grade_id' => 'students.grade_id',
+            'semester' => 'arrangement.semester',
+        ]);
+        self::pairTeacherFilter($query, $filters, 'journal.student_id', 'journal.entity_id');
+        self::keyword($query, $filters, ['journal.title', 'students.name', 'students.student_num']);
+
+        return self::paginate($query->orderByDesc('journal.date')->orderByDesc('journal.id'), $filters, [
+            'journal.id', 'journal.uuid', 'journal.student_id', 'journal.entity_id as arrangement_id',
+            'journal.title', 'journal.content', 'journal.date', 'journal.status', 'journal.teacher_id',
+            'journal.created_at', 'students.name as student_name', 'students.student_num',
+            'teacher_list.teacher_name', 'arrangement.title as arrangement_title',
+        ]);
+    }
+
+    public static function reportPage(array $scope, array $filters): array
+    {
+        $query = self::applyStudentScope(self::queryTable('report')
+            ->leftJoin('students', 'report.student_id', '=', 'students.student_id')
+            ->leftJoin('arrangement', 'report.arrangement_id', '=', 'arrangement.id')
+            ->leftJoin('teacher_list', 'report.teacher_id', '=', 'teacher_list.teacher_id')
+            ->whereNull('report.deleted_at'), $scope, 'report.student_id');
+        self::filter($query, $filters, 'report.status', 'status');
+        self::filter($query, $filters, 'report.arrangement_id', 'arrangement_id');
+        self::listFilters($query, $filters, [
+            'dep_id' => 'students.dep_id',
+            'profession_id' => 'students.profession_id',
+            'grade_id' => 'students.grade_id',
+            'semester' => 'arrangement.semester',
+        ]);
+        self::pairTeacherFilter($query, $filters, 'report.student_id', 'report.arrangement_id');
+        self::keyword($query, $filters, ['report.title', 'students.name', 'students.student_num']);
+
+        return self::paginate($query->orderByDesc('report.id'), $filters, [
+            'report.id', 'report.uuid', 'report.student_id', 'report.arrangement_id', 'report.template_id',
+            'report.title', 'report.content', 'report.status', 'report.teacher_id',
+            'report.submitted_at', 'report.reviewed_at', 'report.created_at',
+            'students.name as student_name', 'students.student_num',
+            'teacher_list.teacher_name', 'arrangement.title as arrangement_title',
+        ]);
+    }
+
+    public static function scorePage(array $scope, array $filters): array
+    {
+        $query = self::applyStudentScope(self::queryTable('score')
+            ->leftJoin('students', 'score.student_id', '=', 'students.student_id')
+            ->leftJoin('arrangement', 'score.arrangement_id', '=', 'arrangement.id')
+            ->leftJoin('teacher_list', 'score.teacher_id', '=', 'teacher_list.teacher_id')
+            ->whereNull('score.deleted_at'), $scope, 'score.student_id');
+        self::filter($query, $filters, 'score.arrangement_id', 'arrangement_id');
+        self::listFilters($query, $filters, [
+            'dep_id' => 'students.dep_id',
+            'profession_id' => 'students.profession_id',
+            'grade_id' => 'students.grade_id',
+            'teacher_id' => 'score.teacher_id',
+            'semester' => 'arrangement.semester',
+        ]);
+        self::keyword($query, $filters, ['students.name', 'students.student_num', 'arrangement.title']);
+
+        return self::paginate($query->orderByDesc('score.id'), $filters, [
+            'score.id', 'score.uuid', 'score.student_id', 'score.arrangement_id',
+            'score.sign_in_score', 'score.journal_score', 'score.report_score',
+            'score.sign_in_weight', 'score.journal_weight', 'score.report_weight',
+            'score.enterprise_score', 'score.enterprise_comment', 'score.final_score',
+            'score.teacher_id', 'score.comment', 'students.name as student_name',
+            'students.student_num', 'teacher_list.teacher_name', 'arrangement.title as arrangement_title',
+        ]);
+    }
+
     public static function teacherIdByUser(int $userId): ?int
     {
         $teacherId = self::queryTable('teacher_list')
@@ -701,6 +836,24 @@ class InternshipRecord extends TableRecord
         }
 
         self::whereInOrDeny($query, $applicationColumn, self::applicationIdsByJoinTeacher($teacherId));
+    }
+
+    private static function pairTeacherFilter(mixed $query, array $filters, string $studentColumn, string $arrangementColumn): void
+    {
+        $teacherId = self::optionalInt($filters['teacher_id'] ?? null);
+        if (!$teacherId) {
+            return;
+        }
+
+        $studentIds = [];
+        $arrangementIds = [];
+        foreach (self::pairsByTeacher($teacherId) as $pair) {
+            $studentIds[] = (int) $pair['student_id'];
+            $arrangementIds[] = (int) $pair['arrangement_id'];
+        }
+
+        self::whereInOrDeny($query, $studentColumn, $studentIds);
+        self::whereInOrDeny($query, $arrangementColumn, $arrangementIds);
     }
 
     private static function intValues(mixed $values): array
