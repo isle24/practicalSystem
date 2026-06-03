@@ -74,6 +74,13 @@ export function saveOperationGuide(payload) {
   });
 }
 
+export function deleteOperationGuide(id) {
+  return request('/guide/delete', {
+    method: 'POST',
+    body: JSON.stringify({ id }),
+  });
+}
+
 export function fetchAdminRoles() {
   return request('/admin/roles');
 }

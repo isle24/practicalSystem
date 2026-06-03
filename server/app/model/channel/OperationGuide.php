@@ -44,4 +44,20 @@ class OperationGuide extends BaseModel
 
         return self::query()->create($values);
     }
+
+    public static function softDeleteById(int $id): bool
+    {
+        $guide = self::query()
+            ->where('id', $id)
+            ->whereNull('deleted_at')
+            ->first();
+
+        if (!$guide) {
+            return false;
+        }
+
+        $guide->status = 'disabled';
+        $guide->deleted_at = date('Y-m-d H:i:s');
+        return $guide->save();
+    }
 }

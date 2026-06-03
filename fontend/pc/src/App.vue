@@ -246,23 +246,8 @@
 
             <div class="work-grid">
               <section class="panel list-panel">
-                <header class="panel-head">
-                  <strong>{{ panelTitle(win) }}</strong>
-                </header>
-
                 <div v-if="win.module.id === 'internship'" class="internship-panel">
-                  <div class="internship-toolbar">
-                    <div class="internship-tabs">
-                      <button
-                        v-for="item in visibleInternshipSidebarItems"
-                        :key="item.key"
-                        :class="{ active: win.panel === item.key }"
-                        @click="activateWindowPanel(win, item.key)"
-                      >
-                        <component :is="item.icon" :size="15" />
-                        <span>{{ item.name }}</span>
-                      </button>
-                    </div>
+                  <div class="internship-toolbar action-only">
                     <div class="data-list-actions">
                       <el-button v-if="win.panel === 'arrangements' && canManageInternship" :icon="CalendarCheck" @click="openArrangementDialog">
                         新增安排
@@ -418,8 +403,26 @@
                       @refresh="loadInternshipPanel('applications')"
                       @timeline="row => openTimelineDialog('application', row)"
                     />
-                    <div v-else class="internship-split">
-                      <section class="internship-card">
+                    <div v-else class="internship-overview-work">
+                      <div class="overview-switch">
+                        <button
+                          type="button"
+                          :class="{ active: internshipState.overviewTab === 'arrangements' }"
+                          @click="internshipState.overviewTab = 'arrangements'"
+                        >
+                          <span>近期安排</span>
+                          <small>{{ internshipState.lists.arrangements.pagination.total || 0 }}</small>
+                        </button>
+                        <button
+                          type="button"
+                          :class="{ active: internshipState.overviewTab === 'applications' }"
+                          @click="internshipState.overviewTab = 'applications'"
+                        >
+                          <span>待处理申请</span>
+                          <small>{{ internshipState.overview.applications_waiting || 0 }}</small>
+                        </button>
+                      </div>
+                      <section v-if="internshipState.overviewTab === 'arrangements'" class="internship-card overview-card-single">
                         <header>
                           <strong>近期安排</strong>
                           <small>{{ internshipState.lists.arrangements.pagination.total || 0 }} 条</small>
@@ -439,7 +442,7 @@
                           </el-table-column>
                         </el-table>
                       </section>
-                      <section class="internship-card">
+                      <section v-else class="internship-card overview-card-single">
                         <header>
                           <strong>待处理申请</strong>
                           <small>{{ internshipState.overview.applications_waiting || 0 }} 条</small>
@@ -705,7 +708,7 @@
                   </template>
                 </div>
 
-                <div v-else-if="win.panel === 'archive'" class="admin-panel archive-panel">
+                <div v-else-if="win.module.id === 'config' && win.panel === 'archive'" class="admin-panel archive-panel">
                   <div class="admin-toolbar">
                     <el-select
                       v-model="archiveState.type"
@@ -794,39 +797,54 @@
                   <small v-if="archiveState.message">{{ archiveState.message }}</small>
                 </div>
 
-                <div v-else-if="win.panel === 'operationGuides'" class="admin-panel guide-admin-panel">
+                <div v-else-if="win.module.id === 'config' && win.panel === 'operationGuides'" class="admin-panel guide-admin-panel">
                   <div class="admin-toolbar">
-                    <el-button :icon="RefreshCw" :loading="guideAdminState.loading" @click="loadGuideAdminItems">
+                    <el-button type="primary" :icon="Plus" :disabled="!hasPermission('guide:save')" @click="openGuideAdminDialog()">
+                      新增
+                    </el-button>
+                    <el-button :icon="RefreshCw" :loading="guideAdminState.loading" @click="loadGuideAdminItems(true)">
                       读取
                     </el-button>
-                    <el-button
-                      type="primary"
-                      :icon="Save"
-                      :disabled="!guideAdminState.selected || !hasPermission('guide:save')"
-                      :loading="guideAdminState.loading"
-                      @click="saveGuideAdminItem"
-                    >
-                      保存
-                    </el-button>
                   </div>
-                  <div class="guide-admin-layout">
-                    <aside class="guide-admin-list">
-                      <button
-                        v-for="item in guideAdminState.items"
-                        :key="item.module_key"
-                        type="button"
-                        :class="{ active: guideAdminState.selected?.module_key === item.module_key }"
-                        @click="selectGuideAdminItem(item)"
-                      >
-                        <strong>{{ guideModuleName(item.module_key) }}</strong>
-                        <span>{{ item.title }}</span>
-                      </button>
-                    </aside>
-                    <section v-if="guideAdminState.selected" class="guide-admin-editor">
+                  <el-table :data="guideAdminState.items" height="100%" stripe>
+                    <el-table-column label="模块" width="150">
+                      <template #default="{ row }">
+                        {{ guideModuleName(row.module_key) }}
+                      </template>
+                    </el-table-column>
+                    <el-table-column prop="title" label="标题" min-width="180" />
+                    <el-table-column prop="sort" label="排序" width="90" />
+                    <el-table-column prop="updated_at" label="更新时间" width="168" />
+                    <el-table-column label="操作" width="150" fixed="right">
+                      <template #default="{ row }">
+                        <el-button link type="primary" :disabled="!hasPermission('guide:save')" @click="openGuideAdminDialog(row)">
+                          编辑
+                        </el-button>
+                        <el-button link type="danger" :disabled="!hasPermission('guide:delete')" @click="deleteGuideAdminItem(row)">
+                          删除
+                        </el-button>
+                      </template>
+                    </el-table-column>
+                  </el-table>
+                  <small v-if="guideAdminState.message">{{ guideAdminState.message }}</small>
+
+                  <div v-if="guideAdminState.dialogVisible" class="operation-mask" @click.self="closeGuideAdminDialog">
+                    <section class="operation-dialog guide-edit-dialog">
+                      <header>
+                        <strong>{{ guideAdminState.dialogMode === 'edit' ? '编辑操作说明' : '新增操作说明' }}</strong>
+                        <button type="button" @click="closeGuideAdminDialog">关闭</button>
+                      </header>
                       <div class="guide-admin-fields">
                         <label>
                           <span>模块</span>
-                          <input :value="guideModuleName(guideAdminState.editing.module_key)" disabled>
+                          <el-select v-model="guideAdminState.editing.module_key" filterable placeholder="选择模块">
+                            <el-option
+                              v-for="item in guideModuleOptions"
+                              :key="item.value"
+                              :label="item.label"
+                              :value="item.value"
+                            />
+                          </el-select>
                         </label>
                         <label>
                           <span>标题</span>
@@ -849,19 +867,23 @@
                         @input="syncGuideEditor"
                         v-html="guideAdminState.editing.content"
                       />
-                      <section class="guide-preview rich-content">
-                        <strong>预览</strong>
-                        <article v-html="guideAdminState.editing.content" />
-                      </section>
-                    </section>
-                    <section v-else class="guide-admin-empty">
-                      请选择需要维护的操作说明。
+                      <footer>
+                        <el-button @click="closeGuideAdminDialog">取消</el-button>
+                        <el-button
+                          type="primary"
+                          :icon="Save"
+                          :disabled="!hasPermission('guide:save')"
+                          :loading="guideAdminState.loading"
+                          @click="saveGuideAdminItem"
+                        >
+                          保存
+                        </el-button>
+                      </footer>
                     </section>
                   </div>
-                  <small v-if="guideAdminState.message">{{ guideAdminState.message }}</small>
                 </div>
 
-                <div v-else-if="win.panel === 'fileManage'" class="admin-panel file-admin">
+                <div v-else-if="win.module.id === 'file' && win.panel === 'fileManage'" class="admin-panel file-admin">
                   <div class="admin-toolbar file-toolbar">
                     <el-input
                       v-model="fileState.filters.keyword"
@@ -951,7 +973,7 @@
                   <small v-if="fileState.message">{{ fileState.message }}</small>
                 </div>
 
-                <div v-else-if="win.panel === 'menuManage'" class="admin-panel menu-admin">
+                <div v-else-if="win.module.id === 'config' && win.panel === 'menuManage'" class="admin-panel menu-admin">
                   <div class="admin-toolbar">
                     <el-button :icon="Plus" @click="openMenuDialog()">
                       新增主菜单
@@ -1090,7 +1112,7 @@
                   </div>
                 </div>
 
-                <div v-else-if="win.panel === 'roleMenus'" class="admin-panel">
+                <div v-else-if="win.module.id === 'config' && win.panel === 'roleMenus'" class="admin-panel">
                   <div class="admin-toolbar">
                     <el-select
                       v-model="adminState.roleMenus.role_id"
@@ -1143,7 +1165,7 @@
                   <small v-if="adminState.roleMenus.message">{{ adminState.roleMenus.message }}</small>
                 </div>
 
-                <div v-else-if="win.panel === 'organizationScope'" class="admin-panel">
+                <div v-else-if="win.module.id === 'config' && win.panel === 'organizationScope'" class="admin-panel">
                   <div class="admin-toolbar scope-toolbar">
                     <el-select
                       v-model="adminState.scope.account_id"
@@ -1289,76 +1311,62 @@
                 </div>
 
                 <div v-else-if="win.module.id === 'stat'" class="admin-panel stat-panel">
-                  <div class="stat-report-layout">
-                    <aside class="stat-report-menu">
-                      <button
-                        v-for="report in statReports"
-                        :key="report.key"
-                        type="button"
-                        :class="{ active: statState.report === report.key }"
-                        @click="statState.report = report.key"
-                      >
-                        <component :is="report.icon" :size="17" />
-                        <span>{{ report.name }}</span>
-                      </button>
-                    </aside>
-                    <section class="stat-report-content">
-                      <header>
-                        <div>
-                          <strong>{{ currentStatReport.name }}</strong>
-                          <small>{{ currentStatReport.description }}</small>
-                        </div>
-                        <el-button :icon="RefreshCw" :loading="internshipState.loading" @click="loadInternshipPanel('overview')">
-                          刷新
-                        </el-button>
-                      </header>
-                      <div class="stat-filter-bar">
-                        <label>
-                          <span>学期</span>
-                          <el-select v-model="statState.filters.semester" clearable filterable placeholder="全部">
-                            <el-option v-for="item in semesterOptions()" :key="item.value" :label="item.label" :value="item.value" />
-                          </el-select>
-                        </label>
-                        <label>
-                          <span>学院</span>
-                          <el-select v-model="statState.filters.dep_id" clearable filterable placeholder="全部">
-                            <el-option v-for="item in optionItems(internshipState.options.departments, 'dep_id', 'dep_name')" :key="item.value" :label="item.label" :value="item.value" />
-                          </el-select>
-                        </label>
-                        <label>
-                          <span>专业</span>
-                          <el-select v-model="statState.filters.profession_id" clearable filterable placeholder="全部">
-                            <el-option v-for="item in optionItems(internshipState.options.professions, 'profession_id', 'profession_name')" :key="item.value" :label="item.label" :value="item.value" />
-                          </el-select>
-                        </label>
-                        <label>
-                          <span>届次</span>
-                          <el-select v-model="statState.filters.grade_id" clearable filterable placeholder="全部">
-                            <el-option v-for="item in optionItems(internshipState.options.grades, 'grade_id', 'grade_name')" :key="item.value" :label="item.label" :value="item.value" />
-                          </el-select>
-                        </label>
-                        <label>
-                          <span>关键词</span>
-                          <input v-model="statState.filters.keyword" placeholder="学生、学号、企业、教师">
-                        </label>
+                  <section class="stat-report-content">
+                    <header>
+                      <div>
+                        <strong>{{ currentStatReport.name }}</strong>
+                        <small>{{ currentStatReport.description }}</small>
                       </div>
-                      <div class="stat-grid">
-                        <section v-for="item in statCards" :key="item.name" class="stat-card">
-                          <component :is="item.icon" :size="22" />
-                          <strong>{{ item.value }}</strong>
-                          <span>{{ item.name }}</span>
-                          <small>{{ item.desc }}</small>
-                        </section>
-                      </div>
-                      <section class="stat-empty-panel">
-                        <strong>{{ currentStatReport.name }}明细</strong>
-                        <p>当前展示统计框架，后续按该报表菜单接入对应聚合接口和钻取列表。</p>
+                      <el-button :icon="RefreshCw" :loading="internshipState.loading" @click="loadInternshipPanel('overview')">
+                        刷新
+                      </el-button>
+                    </header>
+                    <div class="stat-filter-bar">
+                      <label>
+                        <span>学期</span>
+                        <el-select v-model="statState.filters.semester" clearable filterable placeholder="全部">
+                          <el-option v-for="item in semesterOptions()" :key="item.value" :label="item.label" :value="item.value" />
+                        </el-select>
+                      </label>
+                      <label>
+                        <span>学院</span>
+                        <el-select v-model="statState.filters.dep_id" clearable filterable placeholder="全部">
+                          <el-option v-for="item in optionItems(internshipState.options.departments, 'dep_id', 'dep_name')" :key="item.value" :label="item.label" :value="item.value" />
+                        </el-select>
+                      </label>
+                      <label>
+                        <span>专业</span>
+                        <el-select v-model="statState.filters.profession_id" clearable filterable placeholder="全部">
+                          <el-option v-for="item in optionItems(internshipState.options.professions, 'profession_id', 'profession_name')" :key="item.value" :label="item.label" :value="item.value" />
+                        </el-select>
+                      </label>
+                      <label>
+                        <span>届次</span>
+                        <el-select v-model="statState.filters.grade_id" clearable filterable placeholder="全部">
+                          <el-option v-for="item in optionItems(internshipState.options.grades, 'grade_id', 'grade_name')" :key="item.value" :label="item.label" :value="item.value" />
+                        </el-select>
+                      </label>
+                      <label>
+                        <span>关键词</span>
+                        <input v-model="statState.filters.keyword" placeholder="学生、学号、企业、教师">
+                      </label>
+                    </div>
+                    <div class="stat-grid">
+                      <section v-for="item in statCards" :key="item.name" class="stat-card">
+                        <component :is="item.icon" :size="22" />
+                        <strong>{{ item.value }}</strong>
+                        <span>{{ item.name }}</span>
+                        <small>{{ item.desc }}</small>
                       </section>
+                    </div>
+                    <section class="stat-empty-panel">
+                      <strong>{{ currentStatReport.name }}明细</strong>
+                      <p>当前展示统计框架，后续按该报表菜单接入对应聚合接口和钻取列表。</p>
                     </section>
-                  </div>
+                  </section>
                 </div>
 
-                <div v-else-if="win.panel === 'wechatProxy'" class="admin-panel wechat-config-panel">
+                <div v-else-if="win.module.id === 'config' && win.panel === 'wechatProxy'" class="admin-panel wechat-config-panel">
                   <div class="admin-toolbar">
                     <el-button type="primary" :icon="Save" :loading="wechatProxy.loading" :disabled="!hasPermission('wechat:proxy:save')" @click="saveProxy">
                       保存配置
@@ -1619,6 +1627,7 @@ import {
   fetchRolePermissions,
   fetchWechatConfig,
   deleteMenu as deleteMenuApi,
+  deleteOperationGuide,
   login as loginApi,
   logout as logoutApi,
   reviewInternshipApplication,
@@ -1719,6 +1728,8 @@ const guideAdminState = reactive({
   items: [],
   selected: null,
   editing: emptyGuideForm(),
+  dialogVisible: false,
+  dialogMode: 'create',
   loading: false,
   message: '',
 });
@@ -2003,6 +2014,7 @@ const internshipState = reactive({
   savedMessage: '',
   reviewOpinion: '',
   documentTab: 'insurances',
+  overviewTab: 'arrangements',
   dialog: emptyOperationDialog(),
   overview: emptyInternshipOverview(),
   options: emptyInternshipOptions(),
@@ -2053,6 +2065,10 @@ const statReports = [
   { key: 'archive', name: '归档材料统计', description: '统计保险、安全承诺和报告归档材料完整性。', icon: FolderOpen },
 ];
 const currentStatReport = computed(() => statReports.find(item => item.key === statState.report) || statReports[0]);
+const guideModuleOptions = computed(() => modules.map(item => ({
+  label: item.name,
+  value: item.id,
+})));
 const statCards = computed(() => [
   { name: '实习安排', value: internshipState.overview.arrangements || 0, desc: '可见数据内安排数量', icon: BriefcaseBusiness },
   { name: '待审申请', value: internshipState.overview.applications_waiting || 0, desc: '等待审核的申请', icon: ClipboardList },
@@ -2392,34 +2408,6 @@ function studentPanelFields(panel) {
   return fields[panel] || [];
 }
 
-function panelTitle(win) {
-  if (win.module.id === 'internship') {
-    return internshipRolePanelName(win.panel);
-  }
-  if (win.panel === 'archive') {
-    return '基础档案';
-  }
-  if (win.panel === 'menuManage') {
-    return '菜单管理';
-  }
-  if (win.panel === 'wechatProxy') {
-    return '企业微信应用';
-  }
-  if (win.panel === 'operationGuides') {
-    return '操作说明';
-  }
-  if (win.panel === 'roleMenus') {
-    return '角色权限';
-  }
-  if (win.panel === 'organizationScope') {
-    return '组织范围';
-  }
-  if (win.panel === 'fileManage') {
-    return '文件列表';
-  }
-  return '工作列表';
-}
-
 function moduleDescription(win) {
   if (win.module.id === 'internship') {
     if (isStudentRole.value) {
@@ -2461,6 +2449,9 @@ function sidebarItems(win) {
       { key: 'operationGuides', name: '操作说明' },
       { key: 'wechatProxy', name: '企业微信应用' },
     ];
+  }
+  if (win.module.id === 'stat') {
+    return statReports;
   }
 
   return [
@@ -2600,10 +2591,6 @@ async function loadGuideAdminItems(force = false) {
   try {
     const data = await fetchOperationGuides();
     guideAdminState.items = data.items || [];
-    const selected = guideAdminState.items.find(item => item.module_key === guideAdminState.selected?.module_key)
-      || guideAdminState.items[0]
-      || null;
-    selectGuideAdminItem(selected);
   } catch (error) {
     guideAdminState.message = error.message;
   } finally {
@@ -2611,10 +2598,16 @@ async function loadGuideAdminItems(force = false) {
   }
 }
 
-function selectGuideAdminItem(item) {
+function openGuideAdminDialog(item = null) {
   if (!item) {
     guideAdminState.selected = null;
-    guideAdminState.editing = emptyGuideForm();
+    guideAdminState.editing = {
+      ...emptyGuideForm(),
+      module_key: defaultGuideModuleKey(),
+      content: guideTemplateHtml('操作说明'),
+    };
+    guideAdminState.dialogMode = 'create';
+    guideAdminState.dialogVisible = true;
     nextTick(syncGuideEditorDom);
     return;
   }
@@ -2626,7 +2619,19 @@ function selectGuideAdminItem(item) {
     content: item.content || '',
     sort: Number(item.sort || 0),
   };
+  guideAdminState.dialogMode = 'edit';
+  guideAdminState.dialogVisible = true;
   nextTick(syncGuideEditorDom);
+}
+
+function closeGuideAdminDialog() {
+  guideAdminState.dialogVisible = false;
+}
+
+function defaultGuideModuleKey() {
+  const usedKeys = new Set(guideAdminState.items.map(item => item.module_key));
+  const unused = guideModuleOptions.value.find(item => !usedKeys.has(item.value));
+  return unused?.value || guideModuleOptions.value[0]?.value || '';
 }
 
 function syncGuideEditorDom() {
@@ -2674,7 +2679,7 @@ function insertGuideTemplate() {
 }
 
 async function saveGuideAdminItem() {
-  if (!guideAdminState.selected || !hasPermission('guide:save')) {
+  if (!guideAdminState.editing.module_key || !hasPermission('guide:save')) {
     return;
   }
 
@@ -2689,9 +2694,34 @@ async function saveGuideAdminItem() {
       sort: Number(guideAdminState.editing.sort || 0),
     });
     guideAdminState.items = data.items || [];
-    const selected = guideAdminState.items.find(item => item.module_key === guideAdminState.editing.module_key) || null;
-    selectGuideAdminItem(selected);
+    guideAdminState.selected = guideAdminState.items.find(item => item.module_key === guideAdminState.editing.module_key) || null;
     guideAdminState.message = '已保存';
+    closeGuideAdminDialog();
+  } catch (error) {
+    guideAdminState.message = error.message;
+  } finally {
+    guideAdminState.loading = false;
+  }
+}
+
+async function deleteGuideAdminItem(row) {
+  if (!row?.id || !hasPermission('guide:delete')) {
+    return;
+  }
+  if (!window.confirm(`确认删除「${guideModuleName(row.module_key)}」的操作说明？`)) {
+    return;
+  }
+
+  guideAdminState.loading = true;
+  guideAdminState.message = '';
+  try {
+    const data = await deleteOperationGuide(row.id);
+    guideAdminState.items = data.items || [];
+    if (guideAdminState.selected?.id === row.id) {
+      guideAdminState.selected = null;
+      guideAdminState.editing = emptyGuideForm();
+    }
+    guideAdminState.message = '已删除';
   } catch (error) {
     guideAdminState.message = error.message;
   } finally {
@@ -2717,6 +2747,9 @@ function openModuleWindow(module, options = {}) {
   if (existing) {
     existing.minimized = false;
     focusWindow(existing.id);
+    if (module.id === 'stat') {
+      statState.report = statReports.some(item => item.key === existing.panel) ? existing.panel : 'overview';
+    }
     return;
   }
 
@@ -2736,6 +2769,9 @@ function openModuleWindow(module, options = {}) {
   focusedWindowId.value = win.id;
   if (module.id === 'internship') {
     loadInternshipPanel(win.panel);
+  }
+  if (module.id === 'stat') {
+    statState.report = win.panel;
   }
 }
 
@@ -2905,15 +2941,19 @@ function activateWindowPanel(win, panel) {
   win.panel = panel;
   focusWindow(win.id);
 
-  if (panel === 'archive') {
+  if (win.module.id === 'config' && panel === 'archive') {
     loadAdminFoundation();
     loadArchiveItems();
   }
-  if (panel === 'fileManage') {
+  if (win.module.id === 'file' && panel === 'fileManage') {
     loadFiles();
   }
-  if (panel === 'operationGuides') {
+  if (win.module.id === 'config' && panel === 'operationGuides') {
     loadGuideAdminItems();
+  }
+  if (win.module.id === 'stat') {
+    statState.report = statReports.some(item => item.key === panel) ? panel : 'overview';
+    loadInternshipPanel('overview');
   }
   if (win.module.id === 'internship') {
     loadInternshipPanel(panel);

@@ -358,7 +358,7 @@ a {
 .content {
   min-height: 0;
   display: grid;
-  grid-template-rows: auto auto auto 1fr;
+  grid-template-rows: auto auto minmax(0, 1fr);
   padding: 16px 18px;
   gap: 14px;
   overflow: auto;
@@ -423,20 +423,9 @@ a {
   overflow: hidden;
 }
 
-.panel-head {
-  min-height: 44px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--line);
-  background: #fbfcfe;
-}
-
 .list-panel {
   display: grid;
-  grid-template-rows: auto 1fr;
+  grid-template-rows: minmax(0, 1fr);
 }
 
 .scope-view {
@@ -653,46 +642,6 @@ a {
 .stat-panel,
 .wechat-config-panel {
   min-height: 0;
-}
-
-.stat-report-layout {
-  min-height: 0;
-  display: grid;
-  grid-template-columns: 180px minmax(0, 1fr);
-  gap: 12px;
-  overflow: hidden;
-}
-
-.stat-report-menu {
-  min-height: 0;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  display: grid;
-  align-content: start;
-  gap: 6px;
-  padding: 8px;
-  overflow: auto;
-  background: #fff;
-}
-
-.stat-report-menu button {
-  min-width: 0;
-  min-height: 36px;
-  border: 1px solid transparent;
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 0 10px;
-  color: var(--text);
-  background: transparent;
-}
-
-.stat-report-menu button.active,
-.stat-report-menu button:hover {
-  color: var(--primary);
-  border-color: #bfd8f4;
-  background: var(--primary-soft);
 }
 
 .stat-report-content {
@@ -958,69 +907,20 @@ a {
   grid-template-rows: auto minmax(0, 1fr) auto;
 }
 
-.guide-admin-layout {
-  min-height: 0;
-  display: grid;
-  grid-template-columns: 220px minmax(0, 1fr);
-  gap: 12px;
-  overflow: hidden;
-}
-
-.guide-admin-list {
-  min-height: 0;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  display: grid;
-  align-content: start;
-  gap: 6px;
-  padding: 8px;
-  overflow: auto;
-  background: #fff;
-}
-
-.guide-admin-list button {
-  min-width: 0;
-  border: 1px solid transparent;
-  border-radius: 8px;
-  display: grid;
-  gap: 4px;
-  padding: 10px;
-  color: var(--text);
-  text-align: left;
-  background: transparent;
-}
-
-.guide-admin-list button:hover,
-.guide-admin-list button.active {
-  border-color: #bfd8f4;
-  background: var(--primary-soft);
-}
-
-.guide-admin-list strong,
-.guide-admin-list span {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.guide-admin-list span {
-  color: var(--muted);
-  font-size: 12px;
-}
-
-.guide-admin-editor {
-  min-height: 0;
-  display: grid;
-  grid-template-rows: auto auto minmax(180px, 1fr) minmax(120px, .7fr);
-  gap: 10px;
-  overflow: hidden;
+.guide-edit-dialog {
+  width: min(860px, calc(100vw - 48px));
+  max-height: min(720px, calc(100vh - 72px));
+  grid-template-rows: auto auto auto minmax(260px, 1fr) auto;
 }
 
 .guide-admin-fields {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 110px;
   gap: 10px;
+}
+
+.guide-edit-dialog .guide-admin-fields {
+  padding: 14px 16px 0;
 }
 
 .guide-admin-fields label {
@@ -1043,6 +943,14 @@ a {
 .guide-admin-fields input:disabled {
   color: var(--muted);
   background: #f3f5f8;
+}
+
+.guide-admin-fields .el-select {
+  width: 100%;
+}
+
+.guide-edit-dialog .rich-editor-toolbar {
+  padding: 10px 16px 0;
 }
 
 .rich-editor-toolbar {
@@ -1077,39 +985,12 @@ a {
   line-height: 1.6;
 }
 
+.guide-edit-dialog .rich-editor {
+  margin: 10px 16px 16px;
+}
+
 .rich-editor:focus {
   border-color: #8dbdea;
-}
-
-.guide-preview {
-  min-height: 0;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
-  gap: 8px;
-  padding: 12px;
-  overflow: auto;
-  background: #fbfcfe;
-}
-
-.guide-preview > strong {
-  color: var(--muted);
-  font-size: 12px;
-}
-
-.guide-preview article {
-  display: grid;
-  gap: 10px;
-}
-
-.guide-admin-empty {
-  border: 1px dashed var(--line);
-  border-radius: 8px;
-  display: grid;
-  place-items: center;
-  color: var(--muted);
-  background: #fbfcfe;
 }
 
 .internship-panel {
@@ -1131,36 +1012,12 @@ a {
   gap: 10px;
 }
 
+.internship-toolbar.action-only {
+  justify-content: flex-end;
+}
+
 .internship-reviewbar .el-input {
   max-width: 360px;
-}
-
-.internship-tabs {
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  overflow-x: auto;
-}
-
-.internship-tabs button {
-  height: 32px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 0 10px;
-  color: var(--text);
-  background: #fff;
-  white-space: nowrap;
-}
-
-.internship-tabs button.active,
-.internship-tabs button:hover {
-  color: var(--primary);
-  border-color: #bfd8f4;
-  background: var(--primary-soft);
 }
 
 .internship-overview {
@@ -1198,7 +1055,7 @@ a {
 .internship-stat.amber { background: var(--amber-soft); border-color: #f0d49b; }
 .internship-stat.green { background: var(--green-soft); border-color: #bdddc8; }
 
-.internship-split,
+.internship-overview-work,
 .internship-score-layout,
 .internship-main-grid,
 .internship-list-only {
@@ -1207,9 +1064,47 @@ a {
   gap: 12px;
 }
 
-.internship-split {
-  grid-template-columns: minmax(0, 1fr);
-  grid-auto-rows: minmax(240px, 1fr);
+.internship-overview-work {
+  grid-template-rows: auto minmax(260px, 1fr);
+}
+
+.overview-switch {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow-x: auto;
+}
+
+.overview-switch button {
+  min-width: 132px;
+  height: 34px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 0 10px;
+  color: var(--text);
+  background: #fff;
+}
+
+.overview-switch button.active,
+.overview-switch button:hover {
+  color: var(--primary);
+  border-color: #bfd8f4;
+  background: var(--primary-soft);
+}
+
+.overview-switch small {
+  min-width: 22px;
+  border-radius: 999px;
+  padding: 2px 7px;
+  color: var(--primary);
+  background: #fff;
+  font-size: 12px;
+  text-align: center;
 }
 
 .internship-main-grid,
@@ -1228,6 +1123,10 @@ a {
   display: grid;
   grid-template-rows: auto 1fr;
   overflow: hidden;
+}
+
+.overview-card-single {
+  min-height: 260px;
 }
 
 .internship-card-list {
@@ -1699,11 +1598,6 @@ a {
   .guide-dialog {
     width: calc(100vw - 36px);
     max-height: calc(100vh - 36px);
-  }
-
-  .guide-admin-layout,
-  .stat-report-layout {
-    grid-template-columns: 1fr;
   }
 
   .guide-admin-fields,

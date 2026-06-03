@@ -1433,6 +1433,7 @@ function seedMenus(PDO $pdo): void
         [63, 6, '操作说明', null, null, 'pc', 'menu', 63, 'BookOpen'],
         [631, 63, '列表', 'guide:view', '/config/guides', 'pc', 'menu', 631, 'List'],
         [6311, 631, '保存', 'guide:save', null, 'pc', 'button', 631, null],
+        [6312, 631, '删除', 'guide:delete', null, 'pc', 'button', 632, null],
         [7, 6, '企业微信应用', 'wechat:proxy', '/config/wechat-proxy', 'pc', 'menu', 62, 'Network'],
         [701, 7, '企业微信应用保存', 'wechat:proxy:save', null, 'pc', 'button', 701, null],
         [8, 0, '文件管理', null, null, 'pc', 'directory', 70, 'FolderOpen'],

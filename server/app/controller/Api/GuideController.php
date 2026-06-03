@@ -77,6 +77,25 @@ class GuideController
         }
     }
 
+    public function delete(Request $request): Response
+    {
+        if (!in_array('guide:delete', CurrentContext::permissionCodes(), true)) {
+            return $this->fail(40300, '无操作权限', 403);
+        }
+
+        try {
+            $id = $this->intInput($request, 'id');
+            if ($id <= 0) {
+                return $this->fail(40001, 'id 不能为空', 400);
+            }
+
+            OperationGuide::softDeleteById($id);
+            return $this->list($request);
+        } catch (Throwable $exception) {
+            return $this->fail(40001, $exception->getMessage(), 400);
+        }
+    }
+
     private function stringInput(Request $request, string $key, int $maxLength): string
     {
         $value = trim((string) $request->input($key, ''));
