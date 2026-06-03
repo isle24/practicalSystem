@@ -1332,7 +1332,22 @@
                         <span>关键词</span>
                         <input v-model="statState.filters.keyword" placeholder="学生、学号、企业、教师">
                       </label>
+                      <div class="stat-filter-actions">
+                        <el-button :icon="Search" :loading="statState.loading" @click="loadStats(1)">
+                          查询
+                        </el-button>
+                        <el-button :icon="RefreshCw" :loading="statState.loading" @click="resetStatFilters">
+                          重置
+                        </el-button>
+                      </div>
                     </div>
+                    <el-alert
+                      v-if="statState.message"
+                      type="warning"
+                      :closable="false"
+                      show-icon
+                      :title="statState.message"
+                    />
                     <div class="stat-grid">
                       <section v-for="item in statCards" :key="item.name" class="stat-card">
                         <component :is="item.icon" :size="22" />
@@ -1341,9 +1356,36 @@
                         <small>{{ item.desc }}</small>
                       </section>
                     </div>
-                    <section class="stat-empty-panel">
-                      <strong>统计明细</strong>
-                      <p>{{ currentStatReport.description }}</p>
+                    <section class="stat-detail-panel">
+                      <el-table :data="statState.rows" height="100%" stripe v-loading="statState.loading">
+                        <el-table-column
+                          v-for="column in currentStatColumns"
+                          :key="column.key"
+                          :label="column.label"
+                          :prop="column.key"
+                          :width="column.width"
+                          :min-width="column.min_width"
+                          show-overflow-tooltip
+                        >
+                          <template #default="{ row }">
+                            <el-tag v-if="column.type === 'status'" :type="statusTagType(row[column.key])">
+                              {{ statusText(row[column.key]) }}
+                            </el-tag>
+                            <span v-else>{{ statCellText(row[column.key]) }}</span>
+                          </template>
+                        </el-table-column>
+                      </el-table>
+                      <div class="file-pagination">
+                        <span>共 {{ statState.pagination.total }} 条，生成时间 {{ statState.generated_at || '-' }}</span>
+                        <el-pagination
+                          small
+                          layout="prev, pager, next"
+                          :current-page="statState.pagination.page"
+                          :page-size="statState.pagination.page_size"
+                          :total="statState.pagination.total"
+                          @current-change="loadStats"
+                        />
+                      </div>
                     </section>
                   </section>
                 </div>
@@ -1429,7 +1471,7 @@
                 </div>
 
                 <div v-else class="module-empty-state">
-                  <strong>当前页面待接入</strong>
+                  <strong>功能未开放</strong>
                   <span>请选择左侧已开放的功能菜单。</span>
                 </div>
               </section>
@@ -1584,6 +1626,7 @@ import {
   fetchInternshipSafetyLetters,
   fetchInternshipScores,
   fetchInternshipSignIns,
+  fetchInternshipStats,
   fetchInternshipTimeline,
   fetchOrganizationScopes,
   fetchOperationGuide,
@@ -1670,6 +1713,17 @@ const statState = reactive({
     grade_id: '',
     keyword: '',
   },
+  cards: [],
+  columns: [],
+  rows: [],
+  pagination: {
+    page: 1,
+    page_size: 20,
+    total: 0,
+  },
+  generated_at: '',
+  loading: false,
+  message: '',
 });
 const profileState = reactive({
   loading: false,
@@ -2031,16 +2085,24 @@ const statReports = [
   { key: 'archive', name: '归档材料统计', description: '统计保险、安全承诺和报告归档材料完整性。', icon: FolderOpen },
 ];
 const currentStatReport = computed(() => statReports.find(item => item.key === statState.report) || statReports[0]);
+const statCardIcons = [UserRound, ClipboardList, CheckCircle2, UsersRound, GraduationCap, MapPin];
 const guideModuleOptions = computed(() => modules.map(item => ({
   label: item.name,
   value: item.id,
 })));
-const statCards = computed(() => [
-  { name: '实习安排', value: internshipState.overview.arrangements || 0, desc: '可见数据内安排数量', icon: BriefcaseBusiness },
-  { name: '待审申请', value: internshipState.overview.applications_waiting || 0, desc: '等待审核的申请', icon: ClipboardList },
-  { name: '指导关系', value: internshipState.overview.active_pairs || 0, desc: '有效师生指导关系', icon: UsersRound },
-  { name: '今日日志', value: internshipState.overview.journals_waiting || 0, desc: '待评阅实习日志', icon: FileText },
-]);
+const statCards = computed(() => {
+  const cards = statState.cards.length ? statState.cards : [
+    { name: '实习安排', value: internshipState.overview.arrangements || 0, desc: '可见数据内安排数量' },
+    { name: '待审申请', value: internshipState.overview.applications_waiting || 0, desc: '等待审核的申请' },
+    { name: '指导关系', value: internshipState.overview.active_pairs || 0, desc: '有效师生指导关系' },
+    { name: '今日日志', value: internshipState.overview.journals_waiting || 0, desc: '待评阅实习日志' },
+  ];
+  return cards.map((item, index) => ({
+    ...item,
+    icon: statCardIcons[index % statCardIcons.length],
+  }));
+});
+const currentStatColumns = computed(() => statState.columns || []);
 const selectedWechatMenu = computed(() => {
   const main = wechatProxy.menu[wechatProxy.selectedMenuIndex];
   if (!main) {
@@ -2749,6 +2811,7 @@ function openModuleWindow(module, options = {}) {
     focusWindow(existing.id);
     if (module.id === 'stat') {
       statState.report = statReports.some(item => item.key === existing.panel) ? existing.panel : 'overview';
+      loadStats(statState.pagination.page || 1);
     }
     return;
   }
@@ -2772,6 +2835,7 @@ function openModuleWindow(module, options = {}) {
   }
   if (module.id === 'stat') {
     statState.report = win.panel;
+    loadStats(1);
   }
 }
 
@@ -2953,7 +3017,7 @@ function activateWindowPanel(win, panel) {
   }
   if (win.module.id === 'stat') {
     statState.report = statReports.some(item => item.key === panel) ? panel : 'overview';
-    loadInternshipPanel('overview');
+    loadStats(1);
   }
   if (win.module.id === 'internship') {
     loadInternshipPanel(panel);
@@ -3622,6 +3686,41 @@ async function loadLogs(page = 1) {
   }
 }
 
+async function loadStats(page = 1) {
+  if (!hasPermission('stat:view') || statState.loading) {
+    return;
+  }
+
+  statState.loading = true;
+  statState.message = '';
+  try {
+    await loadInternshipFoundation();
+    const data = await fetchInternshipStats(statQueryParams(page));
+    statState.cards = data.cards || [];
+    statState.columns = data.columns || [];
+    statState.rows = data.rows || [];
+    statState.pagination = {
+      page: data.pagination?.page || page,
+      page_size: data.pagination?.page_size || statState.pagination.page_size,
+      total: data.pagination?.total || 0,
+    };
+    statState.generated_at = data.generated_at || '';
+  } catch (error) {
+    statState.message = error.message;
+  } finally {
+    statState.loading = false;
+  }
+}
+
+function statQueryParams(page = 1) {
+  return {
+    report: statState.report,
+    page,
+    page_size: statState.pagination.page_size,
+    ...statState.filters,
+  };
+}
+
 function resetLogFilters() {
   Object.assign(logState.filters, {
     keyword: '',
@@ -3631,6 +3730,17 @@ function resetLogFilters() {
     date_to: '',
   });
   loadLogs(1);
+}
+
+function resetStatFilters() {
+  Object.assign(statState.filters, {
+    semester: '',
+    dep_id: '',
+    profession_id: '',
+    grade_id: '',
+    keyword: '',
+  });
+  loadStats(1);
 }
 
 function payloadText(payload) {
@@ -3768,6 +3878,10 @@ function optionItems(items, valueKey, labelKey) {
     value: item[valueKey],
     label: item[labelKey] || item[valueKey],
   }));
+}
+
+function statCellText(value) {
+  return value === null || value === undefined || value === '' ? '-' : value;
 }
 
 function semesterOptions() {
@@ -4697,7 +4811,7 @@ watch(openWindows, (windows) => {
     loadLogs(logState.pagination.page);
   }
   if (windows.some(win => win.module.id === 'stat')) {
-    loadInternshipPanel('overview');
+    loadStats(statState.pagination.page || 1);
   }
   const internshipWindow = windows.find(win => win.module.id === 'internship' && !win.minimized);
   if (internshipWindow) {

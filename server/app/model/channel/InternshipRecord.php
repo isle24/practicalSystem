@@ -4,6 +4,16 @@ namespace app\model\channel;
 
 class InternshipRecord extends TableRecord
 {
+    private const STAT_DATA_LIMIT = 20000;
+    private const STAT_REPORT_NAMES = [
+        'overview' => '实习总览',
+        'department' => '学院统计',
+        'profession' => '专业统计',
+        'teacher' => '指导统计',
+        'student' => '学生过程统计',
+        'archive' => '归档材料统计',
+    ];
+
     public static function overviewRows(array $scope, string $today): array
     {
         return [
@@ -261,6 +271,31 @@ class InternshipRecord extends TableRecord
             'score.teacher_id', 'score.comment', 'students.name as student_name',
             'students.student_num', 'teacher_list.teacher_name', 'arrangement.title as arrangement_title',
         ]);
+    }
+
+    public static function statReport(array $scope, array $filters, string $today): array
+    {
+        $report = self::statReportKey($filters);
+        $data = self::statData($scope, $filters);
+        [$columns, $rows] = match ($report) {
+            'department' => [self::departmentStatColumns(), self::groupStatRows($data, 'dep_id', 'dep_name', '未分配学院')],
+            'profession' => [self::professionStatColumns(), self::groupStatRows($data, 'profession_id', 'profession_name', '未分配专业')],
+            'teacher' => [self::teacherStatColumns(), self::teacherStatRows($data)],
+            'student' => [self::studentStatColumns(), self::studentStatRows($data)],
+            'archive' => [self::archiveStatColumns(), self::archiveStatRows($data)],
+            default => [self::overviewStatColumns(), self::overviewStatRows($data)],
+        };
+        $paged = self::paginateArrayRows($rows, $filters);
+
+        return [
+            'report' => $report,
+            'title' => self::STAT_REPORT_NAMES[$report] ?? self::STAT_REPORT_NAMES['overview'],
+            'generated_at' => date('Y-m-d H:i:s'),
+            'cards' => self::statCards($data, $today),
+            'columns' => $columns,
+            'rows' => $paged['items'],
+            'pagination' => $paged['pagination'],
+        ];
     }
 
     public static function planPage(array $scope, array $filters): array
@@ -749,6 +784,743 @@ class InternshipRecord extends TableRecord
             ->get()
             ->map(static fn ($row): array => $row->getAttributes())
             ->all();
+    }
+
+    private static function statData(array $scope, array $filters): array
+    {
+        $students = self::statStudents($scope, $filters);
+        $arrangements = self::statArrangements($scope, $filters);
+        $teachers = self::statTeachers($scope);
+        $applications = self::statApplications($scope, $filters);
+        $pairs = self::statPairs($scope, $filters);
+        $signIns = self::statSignIns($scope, $filters);
+        $journals = self::statJournals($scope, $filters);
+        $reports = self::statReports($scope, $filters);
+        $scores = self::statScores($scope, $filters);
+        $insurances = self::statInsurances($scope, $filters);
+        $safetyLetters = self::statSafetyLetters($scope, $filters);
+
+        return [
+            'students' => $students,
+            'student_map' => self::indexRows($students, 'student_id'),
+            'arrangements' => $arrangements,
+            'arrangement_map' => self::indexRows($arrangements, 'id'),
+            'teachers' => $teachers,
+            'teacher_map' => self::indexRows($teachers, 'teacher_id'),
+            'applications' => $applications,
+            'pairs' => $pairs,
+            'sign_ins' => $signIns,
+            'journals' => $journals,
+            'reports' => $reports,
+            'scores' => $scores,
+            'insurances' => $insurances,
+            'safety_letters' => $safetyLetters,
+        ];
+    }
+
+    private static function statStudents(array $scope, array $filters): array
+    {
+        $query = self::applyStudentScope(self::queryTable('students')
+            ->leftJoin('department', 'students.dep_id', '=', 'department.dep_id')
+            ->leftJoin('profession', 'students.profession_id', '=', 'profession.profession_id')
+            ->leftJoin('grade_list', 'students.grade_id', '=', 'grade_list.grade_id')
+            ->whereNull('students.deleted_at'), $scope, 'students.student_id');
+        self::listFilters($query, $filters, [
+            'dep_id' => 'students.dep_id',
+            'profession_id' => 'students.profession_id',
+            'grade_id' => 'students.grade_id',
+        ]);
+        self::keyword($query, $filters, ['students.name', 'students.student_num', 'department.dep_name', 'profession.profession_name']);
+
+        return self::statRows($query->orderBy('students.student_id'), [
+            'students.student_id', 'students.name', 'students.student_num', 'students.dep_id',
+            'students.profession_id', 'students.grade_id', 'students.class_id',
+            'department.dep_name', 'profession.profession_name', 'grade_list.grade_name',
+        ]);
+    }
+
+    private static function statTeachers(array $scope): array
+    {
+        $query = self::applyOptionScope(self::queryTable('teacher_list')
+            ->leftJoin('department', 'teacher_list.dep_id', '=', 'department.dep_id')
+            ->leftJoin('profession', 'teacher_list.profession_id', '=', 'profession.profession_id')
+            ->whereNull('teacher_list.deleted_at'), $scope, 'teacher_list.dep_id', 'teacher_list.profession_id');
+
+        return self::statRows($query->orderBy('teacher_list.teacher_id'), [
+            'teacher_list.teacher_id', 'teacher_list.teacher_name', 'teacher_list.teacher_num',
+            'teacher_list.dep_id', 'teacher_list.profession_id',
+            'department.dep_name', 'profession.profession_name',
+        ]);
+    }
+
+    private static function statArrangements(array $scope, array $filters): array
+    {
+        $query = self::applyArrangementScope(self::queryTable('arrangement')
+            ->leftJoin('department', 'arrangement.dep_id', '=', 'department.dep_id')
+            ->leftJoin('profession', 'arrangement.profession_id', '=', 'profession.profession_id')
+            ->whereNull('arrangement.deleted_at'), $scope);
+        self::listFilters($query, $filters, [
+            'dep_id' => 'arrangement.dep_id',
+            'profession_id' => 'arrangement.profession_id',
+            'semester' => 'arrangement.semester',
+        ]);
+        self::keyword($query, $filters, ['arrangement.title', 'arrangement.name', 'department.dep_name', 'profession.profession_name']);
+
+        return self::statRows($query->orderByDesc('arrangement.id'), [
+            'arrangement.id', 'arrangement.title', 'arrangement.name', 'arrangement.semester',
+            'arrangement.dep_id', 'arrangement.profession_id', 'arrangement.status',
+            'department.dep_name', 'profession.profession_name',
+        ]);
+    }
+
+    private static function statApplications(array $scope, array $filters): array
+    {
+        $query = self::applyApplicationScope(self::queryTable('application')
+            ->leftJoin('students', 'application.student_id', '=', 'students.student_id')
+            ->leftJoin('arrangement', 'application.arrangement_id', '=', 'arrangement.id')
+            ->leftJoin('department', 'students.dep_id', '=', 'department.dep_id')
+            ->leftJoin('profession', 'students.profession_id', '=', 'profession.profession_id')
+            ->whereNull('application.deleted_at'), $scope);
+        self::statStudentListFilters($query, $filters, 'students', 'arrangement');
+        self::keyword($query, $filters, ['students.name', 'students.student_num', 'arrangement.title', 'department.dep_name', 'profession.profession_name']);
+
+        return self::statRows($query->orderByDesc('application.id'), [
+            'application.id', 'application.student_id', 'application.arrangement_id',
+            'application.status', 'application.teacher_status', 'application.admin_status',
+            'students.name as student_name', 'students.student_num',
+            'students.dep_id', 'students.profession_id', 'students.grade_id',
+            'department.dep_name', 'profession.profession_name',
+            'arrangement.title as arrangement_title', 'arrangement.semester',
+        ]);
+    }
+
+    private static function statPairs(array $scope, array $filters): array
+    {
+        $query = self::applyStudentScope(self::queryTable('pair')
+            ->leftJoin('students', 'pair.student_id', '=', 'students.student_id')
+            ->leftJoin('arrangement', 'pair.arrangement_id', '=', 'arrangement.id')
+            ->leftJoin('teacher_list', 'pair.teacher_id', '=', 'teacher_list.teacher_id')
+            ->where('pair.type', 'internship')
+            ->whereNull('pair.deleted_at'), $scope, 'pair.student_id');
+        self::statStudentListFilters($query, $filters, 'students', 'arrangement');
+        self::keyword($query, $filters, ['students.name', 'students.student_num', 'arrangement.title', 'teacher_list.teacher_name']);
+
+        return self::statRows($query->orderByDesc('pair.id'), [
+            'pair.id', 'pair.student_id', 'pair.teacher_id', 'pair.arrangement_id', 'pair.status',
+            'students.name as student_name', 'students.student_num',
+            'students.dep_id', 'students.profession_id', 'students.grade_id',
+            'teacher_list.teacher_name', 'arrangement.title as arrangement_title', 'arrangement.semester',
+        ]);
+    }
+
+    private static function statSignIns(array $scope, array $filters): array
+    {
+        $query = self::applyStudentScope(self::queryTable('sign_in')
+            ->leftJoin('students', 'sign_in.student_id', '=', 'students.student_id')
+            ->leftJoin('arrangement', 'sign_in.entity_id', '=', 'arrangement.id')
+            ->where('sign_in.entity_type', 'internship')
+            ->whereNull('sign_in.deleted_at'), $scope, 'sign_in.student_id');
+        self::statStudentListFilters($query, $filters, 'students', 'arrangement');
+        self::keyword($query, $filters, ['students.name', 'students.student_num', 'arrangement.title', 'sign_in.location']);
+
+        return self::statRows($query->orderByDesc('sign_in.sign_time'), [
+            'sign_in.id', 'sign_in.student_id', 'sign_in.entity_id as arrangement_id',
+            'sign_in.date', 'sign_in.status', 'students.dep_id', 'students.profession_id',
+            'students.grade_id', 'arrangement.title as arrangement_title', 'arrangement.semester',
+        ]);
+    }
+
+    private static function statJournals(array $scope, array $filters): array
+    {
+        $query = self::applyStudentScope(self::queryTable('journal')
+            ->leftJoin('students', 'journal.student_id', '=', 'students.student_id')
+            ->leftJoin('arrangement', 'journal.entity_id', '=', 'arrangement.id')
+            ->where('journal.entity_type', 'internship')
+            ->whereNull('journal.deleted_at'), $scope, 'journal.student_id');
+        self::statStudentListFilters($query, $filters, 'students', 'arrangement');
+        self::keyword($query, $filters, ['students.name', 'students.student_num', 'journal.title', 'arrangement.title']);
+
+        return self::statRows($query->orderByDesc('journal.date')->orderByDesc('journal.id'), [
+            'journal.id', 'journal.student_id', 'journal.entity_id as arrangement_id',
+            'journal.teacher_id', 'journal.status', 'journal.date',
+            'students.dep_id', 'students.profession_id', 'students.grade_id',
+            'arrangement.title as arrangement_title', 'arrangement.semester',
+        ]);
+    }
+
+    private static function statReports(array $scope, array $filters): array
+    {
+        $query = self::applyStudentScope(self::queryTable('report')
+            ->leftJoin('students', 'report.student_id', '=', 'students.student_id')
+            ->leftJoin('arrangement', 'report.arrangement_id', '=', 'arrangement.id')
+            ->whereNull('report.deleted_at'), $scope, 'report.student_id');
+        self::statStudentListFilters($query, $filters, 'students', 'arrangement');
+        self::keyword($query, $filters, ['students.name', 'students.student_num', 'report.title', 'arrangement.title']);
+
+        return self::statRows($query->orderByDesc('report.id'), [
+            'report.id', 'report.student_id', 'report.arrangement_id', 'report.teacher_id',
+            'report.title', 'report.status', 'report.submitted_at',
+            'students.dep_id', 'students.profession_id', 'students.grade_id',
+            'arrangement.title as arrangement_title', 'arrangement.semester',
+        ]);
+    }
+
+    private static function statScores(array $scope, array $filters): array
+    {
+        $query = self::applyStudentScope(self::queryTable('score')
+            ->leftJoin('students', 'score.student_id', '=', 'students.student_id')
+            ->leftJoin('arrangement', 'score.arrangement_id', '=', 'arrangement.id')
+            ->leftJoin('teacher_list', 'score.teacher_id', '=', 'teacher_list.teacher_id')
+            ->whereNull('score.deleted_at'), $scope, 'score.student_id');
+        self::statStudentListFilters($query, $filters, 'students', 'arrangement');
+        self::keyword($query, $filters, ['students.name', 'students.student_num', 'arrangement.title', 'teacher_list.teacher_name']);
+
+        return self::statRows($query->orderByDesc('score.id'), [
+            'score.id', 'score.student_id', 'score.arrangement_id', 'score.teacher_id',
+            'score.sign_in_score', 'score.journal_score', 'score.report_score',
+            'score.enterprise_score', 'score.final_score',
+            'students.dep_id', 'students.profession_id', 'students.grade_id',
+            'teacher_list.teacher_name', 'arrangement.title as arrangement_title', 'arrangement.semester',
+        ]);
+    }
+
+    private static function statInsurances(array $scope, array $filters): array
+    {
+        $query = self::applyStudentScope(self::queryTable('insurance')
+            ->leftJoin('students', 'insurance.student_id', '=', 'students.student_id')
+            ->leftJoin('arrangement', 'insurance.arrangement_id', '=', 'arrangement.id')
+            ->whereNull('insurance.deleted_at'), $scope, 'insurance.student_id');
+        self::statStudentListFilters($query, $filters, 'students', 'arrangement');
+        self::keyword($query, $filters, ['students.name', 'students.student_num', 'insurance.insurance_company', 'insurance.policy_number', 'arrangement.title']);
+
+        return self::statRows($query->orderByDesc('insurance.id'), [
+            'insurance.id', 'insurance.student_id', 'insurance.arrangement_id',
+            'insurance.insurance_company', 'insurance.policy_number',
+            'students.dep_id', 'students.profession_id', 'students.grade_id',
+            'arrangement.title as arrangement_title', 'arrangement.semester',
+        ]);
+    }
+
+    private static function statSafetyLetters(array $scope, array $filters): array
+    {
+        $query = self::applyStudentScope(self::queryTable('safety_letter_sign')
+            ->leftJoin('students', 'safety_letter_sign.student_id', '=', 'students.student_id')
+            ->leftJoin('arrangement', 'safety_letter_sign.arrangement_id', '=', 'arrangement.id')
+            ->whereNull('safety_letter_sign.deleted_at'), $scope, 'safety_letter_sign.student_id');
+        self::statStudentListFilters($query, $filters, 'students', 'arrangement');
+        self::keyword($query, $filters, ['students.name', 'students.student_num', 'arrangement.title']);
+
+        return self::statRows($query->orderByDesc('safety_letter_sign.id'), [
+            'safety_letter_sign.id', 'safety_letter_sign.student_id',
+            'safety_letter_sign.arrangement_id', 'safety_letter_sign.signed_at',
+            'students.dep_id', 'students.profession_id', 'students.grade_id',
+            'arrangement.title as arrangement_title', 'arrangement.semester',
+        ]);
+    }
+
+    private static function statRows(mixed $query, array $columns): array
+    {
+        return self::rows($query->limit(self::STAT_DATA_LIMIT)->get($columns));
+    }
+
+    private static function statStudentListFilters(mixed $query, array $filters, string $studentTable, string $arrangementTable): void
+    {
+        self::listFilters($query, $filters, [
+            'dep_id' => "{$studentTable}.dep_id",
+            'profession_id' => "{$studentTable}.profession_id",
+            'grade_id' => "{$studentTable}.grade_id",
+            'semester' => "{$arrangementTable}.semester",
+        ]);
+    }
+
+    private static function statReportKey(array $filters): string
+    {
+        $report = (string) ($filters['report'] ?? 'overview');
+        return array_key_exists($report, self::STAT_REPORT_NAMES) ? $report : 'overview';
+    }
+
+    private static function statCards(array $data, string $today): array
+    {
+        $participantIds = self::participantStudentIds($data);
+        $accepted = self::countRows($data['applications'], static fn (array $row): bool => (string) ($row['status'] ?? '') === 'accept');
+        $todaySignIns = self::countRows($data['sign_ins'], static fn (array $row): bool => (string) ($row['date'] ?? '') === $today);
+
+        return [
+            ['name' => '参与学生', 'value' => count($participantIds), 'desc' => '当前筛选范围内有过程记录的学生'],
+            ['name' => '申请总数', 'value' => count($data['applications']), 'desc' => '学生提交的实习申请数量'],
+            ['name' => '通过申请', 'value' => $accepted, 'desc' => '状态为通过的申请数量'],
+            ['name' => '指导关系', 'value' => self::countRows($data['pairs'], static fn (array $row): bool => (string) ($row['status'] ?? '') === 'active'), 'desc' => '有效师生指导关系'],
+            ['name' => '平均成绩', 'value' => self::averageText(self::scoreValues($data['scores'])), 'desc' => '已录入总评成绩平均值'],
+            ['name' => '今日签到', 'value' => $todaySignIns, 'desc' => '今天完成的实习签到'],
+        ];
+    }
+
+    private static function overviewStatRows(array $data): array
+    {
+        $rows = [];
+        foreach ($data['arrangements'] as $arrangement) {
+            $arrangementId = (int) ($arrangement['id'] ?? 0);
+            $applications = self::filterRows($data['applications'], static fn (array $row): bool => (int) ($row['arrangement_id'] ?? 0) === $arrangementId);
+            $scores = self::filterRows($data['scores'], static fn (array $row): bool => (int) ($row['arrangement_id'] ?? 0) === $arrangementId);
+            $rows[] = [
+                'arrangement_title' => $arrangement['title'] ?: ($arrangement['name'] ?? '-'),
+                'semester' => $arrangement['semester'] ?: '-',
+                'scope' => ($arrangement['dep_name'] ?: '全校') . ' / ' . ($arrangement['profession_name'] ?: '全部专业'),
+                'applications' => count($applications),
+                'accepted_applications' => self::countRows($applications, static fn (array $row): bool => (string) ($row['status'] ?? '') === 'accept'),
+                'active_pairs' => self::countRows($data['pairs'], static fn (array $row): bool => (int) ($row['arrangement_id'] ?? 0) === $arrangementId && (string) ($row['status'] ?? '') === 'active'),
+                'sign_ins' => self::countRows($data['sign_ins'], static fn (array $row): bool => (int) ($row['arrangement_id'] ?? 0) === $arrangementId),
+                'journals' => self::countRows($data['journals'], static fn (array $row): bool => (int) ($row['arrangement_id'] ?? 0) === $arrangementId),
+                'reports' => self::countRows($data['reports'], static fn (array $row): bool => (int) ($row['arrangement_id'] ?? 0) === $arrangementId),
+                'avg_score' => self::averageText(self::scoreValues($scores)),
+            ];
+        }
+
+        return $rows;
+    }
+
+    private static function groupStatRows(array $data, string $idKey, string $nameKey, string $fallbackName): array
+    {
+        $groups = [];
+        foreach (self::participantKeys($data) as $key) {
+            [$studentId, $arrangementId] = self::splitPairKey($key);
+            $student = $data['student_map'][$studentId] ?? [];
+            $groupId = (string) ($student[$idKey] ?? 0);
+            $groupName = (string) ($student[$nameKey] ?? $fallbackName);
+            $groups[$groupId] ??= self::emptyStatGroup($groupName);
+            $groups[$groupId]['students'][$studentId] = true;
+            if ($arrangementId > 0) {
+                $groups[$groupId]['arrangements'][$arrangementId] = true;
+            }
+        }
+
+        foreach ($data['applications'] as $row) {
+            self::appendGroupApplication($groups, $data, $row, $idKey, $nameKey, $fallbackName);
+        }
+        foreach ($data['pairs'] as $row) {
+            if ((string) ($row['status'] ?? '') !== 'active') {
+                continue;
+            }
+            self::appendGroupValue($groups, $data, $row, $idKey, $nameKey, $fallbackName, 'active_pairs');
+        }
+        foreach ($data['scores'] as $row) {
+            $groupId = self::groupIdByRow($data, $row, $idKey);
+            if ($groupId === null) {
+                continue;
+            }
+            $groups[$groupId] ??= self::emptyStatGroup(self::groupNameByRow($data, $row, $nameKey, $fallbackName));
+            if (is_numeric($row['final_score'] ?? null)) {
+                $groups[$groupId]['scores'][] = (float) $row['final_score'];
+            }
+        }
+
+        $rows = [];
+        foreach ($groups as $group) {
+            $applications = (int) $group['applications'];
+            $rows[] = [
+                'name' => $group['name'],
+                'students' => count($group['students']),
+                'arrangements' => count($group['arrangements']),
+                'applications' => $applications,
+                'accepted_applications' => (int) $group['accepted_applications'],
+                'accept_rate' => self::percentText((int) $group['accepted_applications'], $applications),
+                'active_pairs' => (int) $group['active_pairs'],
+                'avg_score' => self::averageText($group['scores']),
+            ];
+        }
+
+        usort($rows, static fn (array $left, array $right): int => strcmp((string) $left['name'], (string) $right['name']));
+        return $rows;
+    }
+
+    private static function teacherStatRows(array $data): array
+    {
+        $groups = [];
+        foreach ($data['pairs'] as $row) {
+            $teacherId = (int) ($row['teacher_id'] ?? 0);
+            if ($teacherId <= 0) {
+                continue;
+            }
+            $groups[$teacherId] ??= self::emptyTeacherGroup($teacherId, $data);
+            $groups[$teacherId]['students'][(int) ($row['student_id'] ?? 0)] = true;
+            $groups[$teacherId]['arrangements'][(int) ($row['arrangement_id'] ?? 0)] = true;
+            if ((string) ($row['status'] ?? '') === 'active') {
+                $groups[$teacherId]['active_pairs']++;
+            }
+        }
+        foreach ($data['journals'] as $row) {
+            $teacherId = (int) ($row['teacher_id'] ?? 0);
+            if ($teacherId <= 0) {
+                continue;
+            }
+            $groups[$teacherId] ??= self::emptyTeacherGroup($teacherId, $data);
+            if ((string) ($row['status'] ?? '') === 'wait') {
+                $groups[$teacherId]['journals_waiting']++;
+            }
+        }
+        foreach ($data['reports'] as $row) {
+            $teacherId = (int) ($row['teacher_id'] ?? 0);
+            if ($teacherId <= 0) {
+                continue;
+            }
+            $groups[$teacherId] ??= self::emptyTeacherGroup($teacherId, $data);
+            if ((string) ($row['status'] ?? '') === 'wait') {
+                $groups[$teacherId]['reports_waiting']++;
+            }
+        }
+        foreach ($data['scores'] as $row) {
+            $teacherId = (int) ($row['teacher_id'] ?? 0);
+            if ($teacherId <= 0 || !is_numeric($row['final_score'] ?? null)) {
+                continue;
+            }
+            $groups[$teacherId] ??= self::emptyTeacherGroup($teacherId, $data);
+            $groups[$teacherId]['scores'][] = (float) $row['final_score'];
+        }
+
+        $rows = [];
+        foreach ($groups as $group) {
+            $rows[] = [
+                'teacher_name' => $group['teacher_name'],
+                'teacher_num' => $group['teacher_num'],
+                'students' => count($group['students']),
+                'arrangements' => count($group['arrangements']),
+                'active_pairs' => $group['active_pairs'],
+                'journals_waiting' => $group['journals_waiting'],
+                'reports_waiting' => $group['reports_waiting'],
+                'avg_score' => self::averageText($group['scores']),
+            ];
+        }
+
+        usort($rows, static fn (array $left, array $right): int => strcmp((string) $left['teacher_name'], (string) $right['teacher_name']));
+        return $rows;
+    }
+
+    private static function studentStatRows(array $data): array
+    {
+        $rows = [];
+        foreach (self::participantKeys($data) as $key) {
+            [$studentId, $arrangementId] = self::splitPairKey($key);
+            $student = $data['student_map'][$studentId] ?? [];
+            $arrangement = $data['arrangement_map'][$arrangementId] ?? [];
+            $application = self::firstByPair($data['applications'], $studentId, $arrangementId);
+            $pair = self::firstByPair($data['pairs'], $studentId, $arrangementId);
+            $report = self::firstByPair($data['reports'], $studentId, $arrangementId);
+            $score = self::firstByPair($data['scores'], $studentId, $arrangementId);
+            $rows[] = [
+                'student_name' => $student['name'] ?? '-',
+                'student_num' => $student['student_num'] ?? '-',
+                'dep_name' => $student['dep_name'] ?? '-',
+                'profession_name' => $student['profession_name'] ?? '-',
+                'arrangement_title' => $arrangement['title'] ?? ($application['arrangement_title'] ?? '-'),
+                'application_status' => $application['status'] ?? '-',
+                'pair_status' => $pair['status'] ?? '-',
+                'sign_ins' => self::countByPair($data['sign_ins'], $studentId, $arrangementId),
+                'journals' => self::countByPair($data['journals'], $studentId, $arrangementId),
+                'report_status' => $report['status'] ?? '-',
+                'final_score' => $score['final_score'] ?? '-',
+            ];
+        }
+
+        return $rows;
+    }
+
+    private static function archiveStatRows(array $data): array
+    {
+        $rows = [];
+        foreach (self::participantKeys($data) as $key) {
+            [$studentId, $arrangementId] = self::splitPairKey($key);
+            $student = $data['student_map'][$studentId] ?? [];
+            $arrangement = $data['arrangement_map'][$arrangementId] ?? [];
+            $insurance = self::firstByPair($data['insurances'], $studentId, $arrangementId);
+            $safety = self::firstByPair($data['safety_letters'], $studentId, $arrangementId);
+            $report = self::firstByPair($data['reports'], $studentId, $arrangementId);
+            $complete = $insurance && $safety && (($report['status'] ?? '') === 'accept');
+            $rows[] = [
+                'student_name' => $student['name'] ?? '-',
+                'student_num' => $student['student_num'] ?? '-',
+                'arrangement_title' => $arrangement['title'] ?? ($report['arrangement_title'] ?? '-'),
+                'insurance' => $insurance ? '已上传' : '未上传',
+                'policy_number' => $insurance['policy_number'] ?? '-',
+                'safety_letter' => $safety ? '已签署' : '未签署',
+                'report_status' => $report['status'] ?? '-',
+                'archive_complete' => $complete ? '完整' : '待补齐',
+            ];
+        }
+
+        return $rows;
+    }
+
+    private static function participantKeys(array $data): array
+    {
+        $keys = [];
+        foreach (['applications', 'pairs', 'sign_ins', 'journals', 'reports', 'scores', 'insurances', 'safety_letters'] as $name) {
+            foreach ($data[$name] as $row) {
+                $key = self::pairKey((int) ($row['student_id'] ?? 0), (int) ($row['arrangement_id'] ?? 0));
+                if ($key !== '') {
+                    $keys[$key] = true;
+                }
+            }
+        }
+
+        ksort($keys);
+        return array_keys($keys);
+    }
+
+    private static function participantStudentIds(array $data): array
+    {
+        $ids = [];
+        foreach (self::participantKeys($data) as $key) {
+            [$studentId] = self::splitPairKey($key);
+            if ($studentId > 0) {
+                $ids[$studentId] = true;
+            }
+        }
+
+        return array_keys($ids);
+    }
+
+    private static function pairKey(int $studentId, int $arrangementId): string
+    {
+        return $studentId > 0 && $arrangementId > 0 ? "{$studentId}:{$arrangementId}" : '';
+    }
+
+    private static function splitPairKey(string $key): array
+    {
+        [$studentId, $arrangementId] = array_pad(explode(':', $key, 2), 2, 0);
+        return [(int) $studentId, (int) $arrangementId];
+    }
+
+    private static function firstByPair(array $rows, int $studentId, int $arrangementId): ?array
+    {
+        foreach ($rows as $row) {
+            if ((int) ($row['student_id'] ?? 0) === $studentId && (int) ($row['arrangement_id'] ?? 0) === $arrangementId) {
+                return $row;
+            }
+        }
+
+        return null;
+    }
+
+    private static function countByPair(array $rows, int $studentId, int $arrangementId): int
+    {
+        return self::countRows($rows, static fn (array $row): bool => (int) ($row['student_id'] ?? 0) === $studentId && (int) ($row['arrangement_id'] ?? 0) === $arrangementId);
+    }
+
+    private static function emptyStatGroup(string $name): array
+    {
+        return [
+            'name' => $name,
+            'students' => [],
+            'arrangements' => [],
+            'applications' => 0,
+            'accepted_applications' => 0,
+            'active_pairs' => 0,
+            'scores' => [],
+        ];
+    }
+
+    private static function emptyTeacherGroup(int $teacherId, array $data): array
+    {
+        $teacher = $data['teacher_map'][$teacherId] ?? [];
+        return [
+            'teacher_name' => $teacher['teacher_name'] ?? '未分配教师',
+            'teacher_num' => $teacher['teacher_num'] ?? '-',
+            'students' => [],
+            'arrangements' => [],
+            'active_pairs' => 0,
+            'journals_waiting' => 0,
+            'reports_waiting' => 0,
+            'scores' => [],
+        ];
+    }
+
+    private static function appendGroupApplication(array &$groups, array $data, array $row, string $idKey, string $nameKey, string $fallbackName): void
+    {
+        $groupId = self::groupIdByRow($data, $row, $idKey);
+        if ($groupId === null) {
+            return;
+        }
+        $groups[$groupId] ??= self::emptyStatGroup(self::groupNameByRow($data, $row, $nameKey, $fallbackName));
+        $groups[$groupId]['applications']++;
+        if ((string) ($row['status'] ?? '') === 'accept') {
+            $groups[$groupId]['accepted_applications']++;
+        }
+    }
+
+    private static function appendGroupValue(array &$groups, array $data, array $row, string $idKey, string $nameKey, string $fallbackName, string $field): void
+    {
+        $groupId = self::groupIdByRow($data, $row, $idKey);
+        if ($groupId === null) {
+            return;
+        }
+        $groups[$groupId] ??= self::emptyStatGroup(self::groupNameByRow($data, $row, $nameKey, $fallbackName));
+        $groups[$groupId][$field]++;
+    }
+
+    private static function groupIdByRow(array $data, array $row, string $idKey): ?string
+    {
+        $studentId = (int) ($row['student_id'] ?? 0);
+        $student = $data['student_map'][$studentId] ?? $row;
+        $value = $student[$idKey] ?? null;
+        return $value === null || $value === '' ? '0' : (string) $value;
+    }
+
+    private static function groupNameByRow(array $data, array $row, string $nameKey, string $fallbackName): string
+    {
+        $studentId = (int) ($row['student_id'] ?? 0);
+        $student = $data['student_map'][$studentId] ?? $row;
+        return (string) ($student[$nameKey] ?? $fallbackName);
+    }
+
+    private static function overviewStatColumns(): array
+    {
+        return [
+            ['key' => 'arrangement_title', 'label' => '实习安排', 'min_width' => 180],
+            ['key' => 'semester', 'label' => '学期', 'width' => 120],
+            ['key' => 'scope', 'label' => '范围', 'min_width' => 180],
+            ['key' => 'applications', 'label' => '申请', 'width' => 90],
+            ['key' => 'accepted_applications', 'label' => '通过', 'width' => 90],
+            ['key' => 'active_pairs', 'label' => '指导关系', 'width' => 100],
+            ['key' => 'sign_ins', 'label' => '签到', 'width' => 90],
+            ['key' => 'journals', 'label' => '日志', 'width' => 90],
+            ['key' => 'reports', 'label' => '报告', 'width' => 90],
+            ['key' => 'avg_score', 'label' => '平均分', 'width' => 100],
+        ];
+    }
+
+    private static function departmentStatColumns(): array
+    {
+        return self::groupStatColumns('学院');
+    }
+
+    private static function professionStatColumns(): array
+    {
+        return self::groupStatColumns('专业');
+    }
+
+    private static function groupStatColumns(string $name): array
+    {
+        return [
+            ['key' => 'name', 'label' => $name, 'min_width' => 160],
+            ['key' => 'students', 'label' => '参与学生', 'width' => 100],
+            ['key' => 'arrangements', 'label' => '关联安排', 'width' => 100],
+            ['key' => 'applications', 'label' => '申请', 'width' => 90],
+            ['key' => 'accepted_applications', 'label' => '通过', 'width' => 90],
+            ['key' => 'accept_rate', 'label' => '通过率', 'width' => 100],
+            ['key' => 'active_pairs', 'label' => '指导关系', 'width' => 100],
+            ['key' => 'avg_score', 'label' => '平均分', 'width' => 100],
+        ];
+    }
+
+    private static function teacherStatColumns(): array
+    {
+        return [
+            ['key' => 'teacher_name', 'label' => '指导教师', 'min_width' => 150],
+            ['key' => 'teacher_num', 'label' => '工号', 'width' => 120],
+            ['key' => 'students', 'label' => '学生', 'width' => 90],
+            ['key' => 'arrangements', 'label' => '安排', 'width' => 90],
+            ['key' => 'active_pairs', 'label' => '指导关系', 'width' => 100],
+            ['key' => 'journals_waiting', 'label' => '待评日志', 'width' => 100],
+            ['key' => 'reports_waiting', 'label' => '待评报告', 'width' => 100],
+            ['key' => 'avg_score', 'label' => '平均分', 'width' => 100],
+        ];
+    }
+
+    private static function studentStatColumns(): array
+    {
+        return [
+            ['key' => 'student_name', 'label' => '学生', 'width' => 120],
+            ['key' => 'student_num', 'label' => '学号', 'width' => 130],
+            ['key' => 'dep_name', 'label' => '学院', 'min_width' => 150],
+            ['key' => 'profession_name', 'label' => '专业', 'min_width' => 150],
+            ['key' => 'arrangement_title', 'label' => '实习安排', 'min_width' => 180],
+            ['key' => 'application_status', 'label' => '申请', 'width' => 90, 'type' => 'status'],
+            ['key' => 'pair_status', 'label' => '指导', 'width' => 90, 'type' => 'status'],
+            ['key' => 'sign_ins', 'label' => '签到', 'width' => 80],
+            ['key' => 'journals', 'label' => '日志', 'width' => 80],
+            ['key' => 'report_status', 'label' => '报告', 'width' => 90, 'type' => 'status'],
+            ['key' => 'final_score', 'label' => '总评', 'width' => 90],
+        ];
+    }
+
+    private static function archiveStatColumns(): array
+    {
+        return [
+            ['key' => 'student_name', 'label' => '学生', 'width' => 120],
+            ['key' => 'student_num', 'label' => '学号', 'width' => 130],
+            ['key' => 'arrangement_title', 'label' => '实习安排', 'min_width' => 180],
+            ['key' => 'insurance', 'label' => '保险记录', 'width' => 100],
+            ['key' => 'policy_number', 'label' => '保单号', 'min_width' => 150],
+            ['key' => 'safety_letter', 'label' => '安全承诺', 'width' => 100],
+            ['key' => 'report_status', 'label' => '报告', 'width' => 90, 'type' => 'status'],
+            ['key' => 'archive_complete', 'label' => '归档状态', 'width' => 100],
+        ];
+    }
+
+    private static function paginateArrayRows(array $rows, array $filters): array
+    {
+        $page = max(1, (int) ($filters['page'] ?? 1));
+        $pageSize = min(100, max(1, (int) ($filters['page_size'] ?? $filters['per_page'] ?? 20)));
+        $total = count($rows);
+
+        return [
+            'items' => array_slice($rows, ($page - 1) * $pageSize, $pageSize),
+            'pagination' => [
+                'page' => $page,
+                'page_size' => $pageSize,
+                'total' => $total,
+            ],
+        ];
+    }
+
+    private static function indexRows(array $rows, string $key): array
+    {
+        $map = [];
+        foreach ($rows as $row) {
+            $map[(int) ($row[$key] ?? 0)] = $row;
+        }
+
+        return $map;
+    }
+
+    private static function filterRows(array $rows, callable $callback): array
+    {
+        return array_values(array_filter($rows, $callback));
+    }
+
+    private static function countRows(array $rows, callable $callback): int
+    {
+        return count(self::filterRows($rows, $callback));
+    }
+
+    private static function scoreValues(array $rows): array
+    {
+        $values = [];
+        foreach ($rows as $row) {
+            if (is_numeric($row['final_score'] ?? null)) {
+                $values[] = (float) $row['final_score'];
+            }
+        }
+
+        return $values;
+    }
+
+    private static function averageText(array $values): string
+    {
+        if (!$values) {
+            return '-';
+        }
+
+        return (string) round(array_sum($values) / count($values), 1);
+    }
+
+    private static function percentText(int $numerator, int $denominator): string
+    {
+        if ($denominator <= 0) {
+            return '-';
+        }
+
+        return round($numerator * 100 / $denominator, 1) . '%';
     }
 
     private static function applyBaseScope(mixed $query, array $scope): mixed

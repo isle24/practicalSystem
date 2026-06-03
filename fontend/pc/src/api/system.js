@@ -292,6 +292,10 @@ export function fetchInternshipScores(params = {}) {
   return internshipList('scores', params);
 }
 
+export function fetchInternshipStats(params = {}) {
+  return internshipList('stats', params);
+}
+
 export function saveInternshipScore(payload) {
   return internshipPost('save-score', payload);
 }

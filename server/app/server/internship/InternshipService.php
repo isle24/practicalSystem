@@ -17,6 +17,7 @@ class InternshipService
     private const JOIN_STATUS = ['applying', 'accept', 'refuse'];
     private const ARRANGEMENT_TYPES = ['cognition_internal', 'cognition_external', 'major_internal', 'major_external', 'production', 'graduation'];
     private const ORGANIZE_MODES = ['centralized', 'distributed', 'autonomous'];
+    private const STAT_REPORTS = ['overview', 'department', 'profession', 'teacher', 'student', 'archive'];
     private const REVIEW_OPINION_RULES = [
         'application' => [
             'accept' => ['min' => 0, 'max' => 200],
@@ -520,6 +521,19 @@ class InternshipService
             'page', 'page_size', 'per_page', 'keyword', 'arrangement_id',
             'dep_id', 'profession_id', 'grade_id', 'teacher_id', 'semester',
         ]));
+    }
+
+    public function stats(Request $request): array
+    {
+        $this->requirePermission('stat:view');
+        $filters = $this->requestFilters($request, [
+            'report', 'page', 'page_size', 'per_page', 'keyword',
+            'dep_id', 'profession_id', 'grade_id', 'semester',
+        ]);
+        $report = trim((string) ($filters['report'] ?? 'overview'));
+        $filters['report'] = in_array($report, self::STAT_REPORTS, true) ? $report : 'overview';
+
+        return InternshipRecord::statReport($this->scopeContext(), $filters, date('Y-m-d'));
     }
 
     public function saveScore(Request $request): array

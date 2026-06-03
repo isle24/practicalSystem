@@ -671,10 +671,10 @@ a {
 
 .stat-report-content {
   min-height: 0;
-  display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr);
+  display: flex;
+  flex-direction: column;
   gap: 12px;
-  overflow: auto;
+  overflow: hidden;
 }
 
 .stat-report-content > header {
@@ -703,7 +703,8 @@ a {
   border: 1px solid var(--line);
   border-radius: 8px;
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(120px, 1fr)) auto;
+  align-items: end;
   gap: 10px;
   padding: 12px;
   background: #fff;
@@ -724,6 +725,13 @@ a {
   padding: 0 9px;
   color: var(--text);
   outline: none;
+}
+
+.stat-filter-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: flex-end;
 }
 
 .log-toolbar {
@@ -772,6 +780,19 @@ a {
 
 .stat-card small {
   color: var(--muted);
+}
+
+.stat-detail-panel {
+  min-height: 0;
+  flex: 1 1 auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 10px;
+  padding: 10px;
+  overflow: hidden;
+  background: #fff;
 }
 
 .stat-settings {
