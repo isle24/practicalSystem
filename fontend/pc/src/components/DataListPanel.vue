@@ -84,7 +84,7 @@
     <div class="data-list-pagination">
       <span>共 {{ pagination.total || 0 }} 条</span>
       <el-pagination
-        small
+        size="small"
         layout="prev, pager, next"
         :current-page="pagination.page || 1"
         :page-size="pagination.page_size || 20"

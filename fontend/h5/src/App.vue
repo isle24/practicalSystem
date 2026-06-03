@@ -421,7 +421,7 @@
         <van-cell-group inset>
           <van-cell title="模块权限" :value="hasPermission(currentPage.permission) ? '允许访问' : '无权限'" />
           <van-cell title="业务流程" :value="currentPage.flow" />
-          <van-cell title="数据来源" value="学校业务库" />
+          <van-cell title="数据来源" value="学校数据" />
           <van-cell title="范围策略" :value="scopeText" />
         </van-cell-group>
       </template>

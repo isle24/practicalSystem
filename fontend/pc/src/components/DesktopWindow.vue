@@ -41,7 +41,7 @@ import { Minus, Square, X } from '@lucide/vue';
 
 const props = defineProps({
   title: { type: String, required: true },
-  icon: { type: Object, required: true },
+  icon: { type: [Object, Function], required: true },
   zIndex: { type: Number, default: 1 },
   initialLeft: { type: Number, default: 184 },
   initialTop: { type: Number, default: 70 },

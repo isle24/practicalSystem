@@ -962,7 +962,7 @@
                   <div class="file-pagination">
                     <span>共 {{ fileState.pagination.total }} 个文件</span>
                     <el-pagination
-                      small
+                      size="small"
                       layout="prev, pager, next"
                       :current-page="fileState.pagination.page"
                       :page-size="fileState.pagination.page_size"
@@ -1299,7 +1299,7 @@
                   <div class="file-pagination">
                     <span>共 {{ logState.pagination.total }} 条日志，{{ logState.tables.length }} 个分表</span>
                     <el-pagination
-                      small
+                      size="small"
                       layout="prev, pager, next"
                       :current-page="logState.pagination.page"
                       :page-size="logState.pagination.page_size"
@@ -1390,7 +1390,7 @@
                       <div class="file-pagination">
                         <span>共 {{ statState.pagination.total }} 条，生成时间 {{ statState.generated_at || '-' }}</span>
                         <el-pagination
-                          small
+                          size="small"
                           layout="prev, pager, next"
                           :current-page="statState.pagination.page"
                           :page-size="statState.pagination.page_size"
@@ -1534,7 +1534,7 @@
           <UserRound :size="26" />
           <div>
             <strong>账号登录</strong>
-            <span>学校业务库登录</span>
+            <span>成都锦城学院</span>
           </div>
         </header>
         <label>
@@ -1851,7 +1851,7 @@ const modules = [
     name: '日志审计',
     icon: FileClock,
     color: 'red',
-    scope: '学校业务库',
+    scope: '学校日志',
     viewPermission: 'log:view',
     managePermission: 'log:manage',
   },
@@ -1870,7 +1870,7 @@ const modules = [
     name: '系统配置',
     icon: Settings,
     color: 'gray',
-    scope: '学校业务库',
+    scope: '学校设置',
     viewPermission: 'config:view',
     managePermission: 'config:manage',
     defaultPanel: 'menuManage',
@@ -2138,7 +2138,7 @@ const parentMenuTreeOptions = computed(() => [
   },
 ]);
 const operatorName = computed(() => permissionState.context.user_name || (permissionState.context.user_id ? `用户 ${permissionState.context.user_id}` : '未登录'));
-const schoolDataText = computed(() => (isLoggedIn.value ? '当前学校业务库' : '未登录'));
+const schoolDataText = computed(() => (isLoggedIn.value ? '成都锦城学院' : '未登录'));
 const roleText = computed(() => permissionState.context.role_name || roleTypeNames[permissionState.context.role_type] || permissionState.context.role_type || permissionState.context.role_id || '-');
 const selectedWallpaper = computed(() => wallpaperPresets.find(item => item.key === profileState.form.wallpaper) || wallpaperPresets[0]);
 const desktopStyle = computed(() => ({
@@ -2617,13 +2617,13 @@ function fallbackGuideContent(win) {
       { title: '系统配置', lines: ['菜单管理用于维护主菜单、业务菜单、列表和按钮节点。', '角色权限按菜单树授权，按钮节点用于控制页面内操作。', '组织范围用于配置学院、专业、班级、企业等数据边界。'] },
     ],
     log: [
-      { title: '日志审计', lines: ['默认读取当前学校业务库下所有 operation_log 分表。', '可按关键词、动作、IP 和日期范围查询。'] },
+      { title: '日志审计', lines: ['默认读取当前学校下所有操作日志。', '可按关键词、动作、IP 和日期范围查询。'] },
     ],
     stat: [
       { title: '统计报表', lines: ['统计项按当前角色的数据范围展示。', '后续实训和实验流程确认后，可在此扩展跨模块统计卡片和报表。'] },
     ],
     file: [
-      { title: '文件管理', lines: ['展示学校业务库内上传文件、上传人、上传时间和设备信息。', '管理员可通过关键词、状态和分类快速定位文件。'] },
+      { title: '文件管理', lines: ['展示学校上传文件、上传人、上传时间和设备信息。', '管理员可通过关键词、状态和分类快速定位文件。'] },
     ],
   };
 
