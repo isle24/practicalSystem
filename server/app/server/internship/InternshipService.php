@@ -155,7 +155,7 @@ class InternshipService
 
         return InternshipRecord::applicationPage($this->scopeContext(), $this->requestFilters($request, [
             'page', 'page_size', 'per_page', 'keyword', 'status', 'arrangement_id',
-            'dep_id', 'profession_id', 'grade_id', 'semester', 'teacher_id',
+            'dep_id', 'profession_id', 'grade_id', 'semester',
         ]));
     }
 
@@ -334,7 +334,7 @@ class InternshipService
 
         return InternshipRecord::pairPage($this->scopeContext(), $this->requestFilters($request, [
             'page', 'page_size', 'per_page', 'keyword', 'status', 'arrangement_id',
-            'dep_id', 'profession_id', 'grade_id', 'teacher_id', 'semester',
+            'dep_id', 'profession_id', 'grade_id', 'semester',
         ]));
     }
 
@@ -390,7 +390,7 @@ class InternshipService
 
         return InternshipRecord::signInPage($this->scopeContext(), $this->requestFilters($request, [
             'page', 'page_size', 'per_page', 'keyword', 'arrangement_id', 'date',
-            'dep_id', 'profession_id', 'grade_id', 'teacher_id', 'semester',
+            'dep_id', 'profession_id', 'grade_id', 'semester',
         ]));
     }
 
@@ -427,7 +427,7 @@ class InternshipService
 
         return InternshipRecord::journalPage($this->scopeContext(), $this->requestFilters($request, [
             'page', 'page_size', 'per_page', 'keyword', 'status', 'arrangement_id',
-            'dep_id', 'profession_id', 'grade_id', 'teacher_id', 'semester',
+            'dep_id', 'profession_id', 'grade_id', 'semester',
         ]));
     }
 
@@ -473,7 +473,7 @@ class InternshipService
 
         return InternshipRecord::reportPage($this->scopeContext(), $this->requestFilters($request, [
             'page', 'page_size', 'per_page', 'keyword', 'status', 'arrangement_id',
-            'dep_id', 'profession_id', 'grade_id', 'teacher_id', 'semester',
+            'dep_id', 'profession_id', 'grade_id', 'semester',
         ]));
     }
 
@@ -519,7 +519,7 @@ class InternshipService
 
         return InternshipRecord::scorePage($this->scopeContext(), $this->requestFilters($request, [
             'page', 'page_size', 'per_page', 'keyword', 'arrangement_id',
-            'dep_id', 'profession_id', 'grade_id', 'teacher_id', 'semester',
+            'dep_id', 'profession_id', 'grade_id', 'semester',
         ]));
     }
 
@@ -797,7 +797,7 @@ class InternshipService
         $this->requirePermission('internship:view');
         return InternshipRecord::documentPage($table, $columns, $this->scopeContext(), $this->requestFilters($request, [
             'page', 'page_size', 'per_page', 'keyword', 'arrangement_id',
-            'dep_id', 'profession_id', 'grade_id', 'teacher_id', 'semester',
+            'dep_id', 'profession_id', 'grade_id', 'semester',
         ]));
     }
 

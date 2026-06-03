@@ -126,8 +126,7 @@ class InternshipRecord extends TableRecord
             'grade_id' => 'students.grade_id',
             'semester' => 'arrangement.semester',
         ]);
-        self::joinTeacherFilter($query, $filters, 'application.id');
-        self::keyword($query, $filters, ['students.name', 'students.student_num', 'arrangement.title']);
+        self::applicationKeyword($query, $filters, ['students.name', 'students.student_num', 'arrangement.title']);
 
         return self::paginate($query->orderByDesc('application.id'), $filters, [
             'application.id', 'application.uuid', 'application.student_id', 'application.arrangement_id',
@@ -152,10 +151,9 @@ class InternshipRecord extends TableRecord
             'dep_id' => 'students.dep_id',
             'profession_id' => 'students.profession_id',
             'grade_id' => 'students.grade_id',
-            'teacher_id' => 'pair.teacher_id',
             'semester' => 'arrangement.semester',
         ]);
-        self::keyword($query, $filters, ['students.name', 'students.student_num', 'teacher_list.teacher_name', 'arrangement.title']);
+        self::keyword($query, $filters, ['students.name', 'students.student_num', 'teacher_list.teacher_name', 'teacher_list.teacher_num', 'arrangement.title']);
 
         return self::paginate($query->orderByDesc('pair.id'), $filters, [
             'pair.id', 'pair.uuid', 'pair.student_id', 'pair.teacher_id', 'pair.dep_id',
@@ -181,8 +179,9 @@ class InternshipRecord extends TableRecord
             'grade_id' => 'students.grade_id',
             'semester' => 'arrangement.semester',
         ]);
-        self::pairTeacherFilter($query, $filters, 'sign_in.student_id', 'sign_in.entity_id');
-        self::keyword($query, $filters, ['students.name', 'students.student_num', 'arrangement.title', 'sign_in.location']);
+        self::keyword($query, $filters, ['students.name', 'students.student_num', 'arrangement.title', 'sign_in.location'], [
+            self::pairTeacherKeyword('sign_in.student_id', 'sign_in.entity_id'),
+        ]);
 
         return self::paginate($query->orderByDesc('sign_in.sign_time'), $filters, [
             'sign_in.id', 'sign_in.uuid', 'sign_in.student_id', 'sign_in.entity_id as arrangement_id',
@@ -208,8 +207,9 @@ class InternshipRecord extends TableRecord
             'grade_id' => 'students.grade_id',
             'semester' => 'arrangement.semester',
         ]);
-        self::pairTeacherFilter($query, $filters, 'journal.student_id', 'journal.entity_id');
-        self::keyword($query, $filters, ['journal.title', 'students.name', 'students.student_num']);
+        self::keyword($query, $filters, ['journal.title', 'students.name', 'students.student_num', 'teacher_list.teacher_name', 'teacher_list.teacher_num'], [
+            self::pairTeacherKeyword('journal.student_id', 'journal.entity_id'),
+        ]);
 
         return self::paginate($query->orderByDesc('journal.date')->orderByDesc('journal.id'), $filters, [
             'journal.id', 'journal.uuid', 'journal.student_id', 'journal.entity_id as arrangement_id',
@@ -234,8 +234,9 @@ class InternshipRecord extends TableRecord
             'grade_id' => 'students.grade_id',
             'semester' => 'arrangement.semester',
         ]);
-        self::pairTeacherFilter($query, $filters, 'report.student_id', 'report.arrangement_id');
-        self::keyword($query, $filters, ['report.title', 'students.name', 'students.student_num']);
+        self::keyword($query, $filters, ['report.title', 'students.name', 'students.student_num', 'teacher_list.teacher_name', 'teacher_list.teacher_num'], [
+            self::pairTeacherKeyword('report.student_id', 'report.arrangement_id'),
+        ]);
 
         return self::paginate($query->orderByDesc('report.id'), $filters, [
             'report.id', 'report.uuid', 'report.student_id', 'report.arrangement_id', 'report.template_id',
@@ -258,10 +259,9 @@ class InternshipRecord extends TableRecord
             'dep_id' => 'students.dep_id',
             'profession_id' => 'students.profession_id',
             'grade_id' => 'students.grade_id',
-            'teacher_id' => 'score.teacher_id',
             'semester' => 'arrangement.semester',
         ]);
-        self::keyword($query, $filters, ['students.name', 'students.student_num', 'arrangement.title']);
+        self::keyword($query, $filters, ['students.name', 'students.student_num', 'arrangement.title', 'teacher_list.teacher_name', 'teacher_list.teacher_num']);
 
         return self::paginate($query->orderByDesc('score.id'), $filters, [
             'score.id', 'score.uuid', 'score.student_id', 'score.arrangement_id',
@@ -350,8 +350,9 @@ class InternshipRecord extends TableRecord
                 'grade_id' => 'students.grade_id',
                 'semester' => 'arrangement.semester',
             ]);
-            self::pairTeacherFilter($query, $filters, "{$table}.student_id", "{$table}.arrangement_id");
-            self::keyword($query, $filters, ['students.name', 'students.student_num', 'arrangement.title']);
+            self::keyword($query, $filters, ['students.name', 'students.student_num', 'arrangement.title'], [
+                self::pairTeacherKeyword("{$table}.student_id", "{$table}.arrangement_id"),
+            ]);
         }
         if (in_array($table, ['implementation_sheet', 'teacher_work_report'], true)) {
             self::applyArrangementIdScope($query, $scope, "{$table}.arrangement_id");
@@ -541,30 +542,6 @@ class InternshipRecord extends TableRecord
             ->where('application_type', 'internship')
             ->whereNull('deleted_at')
             ->pluck('application_id'));
-    }
-
-    public static function applicationIdsByJoinTeacher(int $teacherId): array
-    {
-        return self::applicationIdsByTeacher($teacherId);
-    }
-
-    public static function pairsByTeacher(int $teacherId): array
-    {
-        if ($teacherId <= 0) {
-            return [];
-        }
-
-        return self::queryTable('pair')
-            ->where('teacher_id', $teacherId)
-            ->where('type', 'internship')
-            ->where('status', 'active')
-            ->whereNull('deleted_at')
-            ->get(['student_id', 'arrangement_id'])
-            ->map(static fn ($row): array => [
-                'student_id' => (int) $row->student_id,
-                'arrangement_id' => (int) $row->arrangement_id,
-            ])
-            ->all();
     }
 
     public static function baseIdsByCompanies(array $companyIds): array
@@ -882,7 +859,7 @@ class InternshipRecord extends TableRecord
             ->leftJoin('profession', 'students.profession_id', '=', 'profession.profession_id')
             ->whereNull('application.deleted_at'), $scope);
         self::statStudentListFilters($query, $filters, 'students', 'arrangement');
-        self::keyword($query, $filters, ['students.name', 'students.student_num', 'arrangement.title', 'department.dep_name', 'profession.profession_name']);
+        self::applicationKeyword($query, $filters, ['students.name', 'students.student_num', 'arrangement.title', 'department.dep_name', 'profession.profession_name']);
 
         return self::statRows($query->orderByDesc('application.id'), [
             'application.id', 'application.student_id', 'application.arrangement_id',
@@ -921,7 +898,9 @@ class InternshipRecord extends TableRecord
             ->where('sign_in.entity_type', 'internship')
             ->whereNull('sign_in.deleted_at'), $scope, 'sign_in.student_id');
         self::statStudentListFilters($query, $filters, 'students', 'arrangement');
-        self::keyword($query, $filters, ['students.name', 'students.student_num', 'arrangement.title', 'sign_in.location']);
+        self::keyword($query, $filters, ['students.name', 'students.student_num', 'arrangement.title', 'sign_in.location'], [
+            self::pairTeacherKeyword('sign_in.student_id', 'sign_in.entity_id'),
+        ]);
 
         return self::statRows($query->orderByDesc('sign_in.sign_time'), [
             'sign_in.id', 'sign_in.student_id', 'sign_in.entity_id as arrangement_id',
@@ -938,7 +917,9 @@ class InternshipRecord extends TableRecord
             ->where('journal.entity_type', 'internship')
             ->whereNull('journal.deleted_at'), $scope, 'journal.student_id');
         self::statStudentListFilters($query, $filters, 'students', 'arrangement');
-        self::keyword($query, $filters, ['students.name', 'students.student_num', 'journal.title', 'arrangement.title']);
+        self::keyword($query, $filters, ['students.name', 'students.student_num', 'journal.title', 'arrangement.title'], [
+            self::pairTeacherKeyword('journal.student_id', 'journal.entity_id'),
+        ]);
 
         return self::statRows($query->orderByDesc('journal.date')->orderByDesc('journal.id'), [
             'journal.id', 'journal.student_id', 'journal.entity_id as arrangement_id',
@@ -955,7 +936,9 @@ class InternshipRecord extends TableRecord
             ->leftJoin('arrangement', 'report.arrangement_id', '=', 'arrangement.id')
             ->whereNull('report.deleted_at'), $scope, 'report.student_id');
         self::statStudentListFilters($query, $filters, 'students', 'arrangement');
-        self::keyword($query, $filters, ['students.name', 'students.student_num', 'report.title', 'arrangement.title']);
+        self::keyword($query, $filters, ['students.name', 'students.student_num', 'report.title', 'arrangement.title'], [
+            self::pairTeacherKeyword('report.student_id', 'report.arrangement_id'),
+        ]);
 
         return self::statRows($query->orderByDesc('report.id'), [
             'report.id', 'report.student_id', 'report.arrangement_id', 'report.teacher_id',
@@ -973,7 +956,7 @@ class InternshipRecord extends TableRecord
             ->leftJoin('teacher_list', 'score.teacher_id', '=', 'teacher_list.teacher_id')
             ->whereNull('score.deleted_at'), $scope, 'score.student_id');
         self::statStudentListFilters($query, $filters, 'students', 'arrangement');
-        self::keyword($query, $filters, ['students.name', 'students.student_num', 'arrangement.title', 'teacher_list.teacher_name']);
+        self::keyword($query, $filters, ['students.name', 'students.student_num', 'arrangement.title', 'teacher_list.teacher_name', 'teacher_list.teacher_num']);
 
         return self::statRows($query->orderByDesc('score.id'), [
             'score.id', 'score.student_id', 'score.arrangement_id', 'score.teacher_id',
@@ -991,7 +974,9 @@ class InternshipRecord extends TableRecord
             ->leftJoin('arrangement', 'insurance.arrangement_id', '=', 'arrangement.id')
             ->whereNull('insurance.deleted_at'), $scope, 'insurance.student_id');
         self::statStudentListFilters($query, $filters, 'students', 'arrangement');
-        self::keyword($query, $filters, ['students.name', 'students.student_num', 'insurance.insurance_company', 'insurance.policy_number', 'arrangement.title']);
+        self::keyword($query, $filters, ['students.name', 'students.student_num', 'insurance.insurance_company', 'insurance.policy_number', 'arrangement.title'], [
+            self::pairTeacherKeyword('insurance.student_id', 'insurance.arrangement_id'),
+        ]);
 
         return self::statRows($query->orderByDesc('insurance.id'), [
             'insurance.id', 'insurance.student_id', 'insurance.arrangement_id',
@@ -1008,7 +993,9 @@ class InternshipRecord extends TableRecord
             ->leftJoin('arrangement', 'safety_letter_sign.arrangement_id', '=', 'arrangement.id')
             ->whereNull('safety_letter_sign.deleted_at'), $scope, 'safety_letter_sign.student_id');
         self::statStudentListFilters($query, $filters, 'students', 'arrangement');
-        self::keyword($query, $filters, ['students.name', 'students.student_num', 'arrangement.title']);
+        self::keyword($query, $filters, ['students.name', 'students.student_num', 'arrangement.title'], [
+            self::pairTeacherKeyword('safety_letter_sign.student_id', 'safety_letter_sign.arrangement_id'),
+        ]);
 
         return self::statRows($query->orderByDesc('safety_letter_sign.id'), [
             'safety_letter_sign.id', 'safety_letter_sign.student_id',
@@ -1672,19 +1659,72 @@ class InternshipRecord extends TableRecord
         ];
     }
 
-    private static function keyword(mixed $query, array $filters, array $columns): void
+    private static function applicationKeyword(mixed $query, array $filters, array $columns): void
+    {
+        self::keyword($query, $filters, $columns, [self::applicationTeacherKeyword()]);
+    }
+
+    private static function keyword(mixed $query, array $filters, array $columns, array $callbacks = []): void
     {
         $keyword = trim((string) ($filters['keyword'] ?? ''));
         if ($keyword === '') {
             return;
         }
 
-        $query->where(function ($builder) use ($columns, $keyword): void {
+        $query->where(function ($builder) use ($columns, $callbacks, $keyword): void {
             $like = '%' . str_replace(['%', '_'], ['\\%', '\\_'], $keyword) . '%';
-            foreach ($columns as $index => $column) {
-                $index === 0 ? $builder->where($column, 'like', $like) : $builder->orWhere($column, 'like', $like);
+            $hasCondition = false;
+            foreach ($columns as $column) {
+                $hasCondition ? $builder->orWhere($column, 'like', $like) : $builder->where($column, 'like', $like);
+                $hasCondition = true;
+            }
+            foreach ($callbacks as $callback) {
+                $callback($builder, $like, $hasCondition);
+                $hasCondition = true;
             }
         });
+    }
+
+    private static function applicationTeacherKeyword(): callable
+    {
+        return static function (mixed $builder, string $like, bool $hasCondition): void {
+            $method = $hasCondition ? 'orWhereExists' : 'whereExists';
+            $builder->{$method}(function ($subQuery) use ($like): void {
+                $subQuery->selectRaw('1')
+                    ->from('student_join_teacher')
+                    ->join('teacher_list', 'student_join_teacher.teacher_id', '=', 'teacher_list.teacher_id')
+                    ->whereColumn('student_join_teacher.application_id', 'application.id')
+                    ->where('student_join_teacher.application_type', 'internship')
+                    ->whereNull('student_join_teacher.deleted_at')
+                    ->whereNull('teacher_list.deleted_at')
+                    ->where(function ($teacherQuery) use ($like): void {
+                        $teacherQuery->where('teacher_list.teacher_name', 'like', $like)
+                            ->orWhere('teacher_list.teacher_num', 'like', $like);
+                    });
+            });
+        };
+    }
+
+    private static function pairTeacherKeyword(string $studentColumn, string $arrangementColumn): callable
+    {
+        return static function (mixed $builder, string $like, bool $hasCondition) use ($studentColumn, $arrangementColumn): void {
+            $method = $hasCondition ? 'orWhereExists' : 'whereExists';
+            $builder->{$method}(function ($subQuery) use ($arrangementColumn, $like, $studentColumn): void {
+                $subQuery->selectRaw('1')
+                    ->from('pair')
+                    ->join('teacher_list', 'pair.teacher_id', '=', 'teacher_list.teacher_id')
+                    ->whereColumn('pair.student_id', $studentColumn)
+                    ->whereColumn('pair.arrangement_id', $arrangementColumn)
+                    ->where('pair.type', 'internship')
+                    ->where('pair.status', 'active')
+                    ->whereNull('pair.deleted_at')
+                    ->whereNull('teacher_list.deleted_at')
+                    ->where(function ($teacherQuery) use ($like): void {
+                        $teacherQuery->where('teacher_list.teacher_name', 'like', $like)
+                            ->orWhere('teacher_list.teacher_num', 'like', $like);
+                    });
+            });
+        };
     }
 
     private static function filter(mixed $query, array $filters, string $column, string $key): void
@@ -1697,7 +1737,7 @@ class InternshipRecord extends TableRecord
 
     private static function listFilters(mixed $query, array $filters, array $columns): void
     {
-        foreach (['dep_id', 'profession_id', 'grade_id', 'teacher_id'] as $key) {
+        foreach (['dep_id', 'profession_id', 'grade_id'] as $key) {
             if (!isset($columns[$key])) {
                 continue;
             }
@@ -1713,34 +1753,6 @@ class InternshipRecord extends TableRecord
                 $query->where($columns['semester'], $semester);
             }
         }
-    }
-
-    private static function joinTeacherFilter(mixed $query, array $filters, string $applicationColumn): void
-    {
-        $teacherId = self::optionalInt($filters['teacher_id'] ?? null);
-        if (!$teacherId) {
-            return;
-        }
-
-        self::whereInOrDeny($query, $applicationColumn, self::applicationIdsByJoinTeacher($teacherId));
-    }
-
-    private static function pairTeacherFilter(mixed $query, array $filters, string $studentColumn, string $arrangementColumn): void
-    {
-        $teacherId = self::optionalInt($filters['teacher_id'] ?? null);
-        if (!$teacherId) {
-            return;
-        }
-
-        $studentIds = [];
-        $arrangementIds = [];
-        foreach (self::pairsByTeacher($teacherId) as $pair) {
-            $studentIds[] = (int) $pair['student_id'];
-            $arrangementIds[] = (int) $pair['arrangement_id'];
-        }
-
-        self::whereInOrDeny($query, $studentColumn, $studentIds);
-        self::whereInOrDeny($query, $arrangementColumn, $arrangementIds);
     }
 
     private static function intValues(mixed $values): array
