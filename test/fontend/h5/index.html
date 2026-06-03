@@ -1,0 +1,762 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>实践管理系统 H5 Demo</title>
+  <style>
+    :root {
+      --page: #f2f5f8;
+      --surface: #ffffff;
+      --line: #d9e2ea;
+      --text: #1e2a36;
+      --muted: #667584;
+      --primary: #1f73d2;
+      --primary-soft: #e7f0fb;
+      --teal: #0f8f7e;
+      --teal-soft: #e4f5f2;
+      --amber: #b96d08;
+      --amber-soft: #fff2d7;
+      --danger: #c74350;
+      --danger-soft: #fde8ec;
+      --green: #2e7d4f;
+      --green-soft: #e8f4ed;
+      --shadow: 0 16px 40px rgba(32, 46, 64, .16);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      color: var(--text);
+      background:
+        linear-gradient(135deg, rgba(31, 115, 210, .12), transparent 35%),
+        linear-gradient(225deg, rgba(15, 143, 126, .12), transparent 35%),
+        var(--page);
+      min-height: 100vh;
+    }
+
+    button,
+    input {
+      font: inherit;
+    }
+
+    button {
+      border: 0;
+      cursor: pointer;
+    }
+
+    .phone-wrap {
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 22px;
+    }
+
+    .phone {
+      width: min(420px, 100%);
+      height: min(820px, calc(100vh - 44px));
+      min-height: 680px;
+      display: grid;
+      grid-template-rows: auto 1fr 58px;
+      border: 1px solid rgba(130, 148, 166, .34);
+      border-radius: 8px;
+      background: var(--page);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .statusbar {
+      padding: 14px 14px 10px;
+      background: #fff;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .topline {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .brand {
+      min-width: 0;
+    }
+
+    .brand h1 {
+      margin: 0;
+      font-size: 20px;
+      line-height: 1.25;
+      letter-spacing: 0;
+    }
+
+    .brand p {
+      margin: 3px 0 0;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .avatar {
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+      display: grid;
+      place-items: center;
+      color: #fff;
+      background: linear-gradient(135deg, #1f73d2, #0f8f7e);
+      font-weight: 700;
+      flex: 0 0 auto;
+    }
+
+    .role-row {
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      padding-bottom: 1px;
+    }
+
+    .role-chip {
+      height: 30px;
+      padding: 0 10px;
+      border-radius: 999px;
+      white-space: nowrap;
+      color: var(--muted);
+      background: #f1f4f7;
+    }
+
+    .role-chip.active {
+      color: var(--primary);
+      background: var(--primary-soft);
+      font-weight: 700;
+    }
+
+    .content {
+      min-height: 0;
+      overflow: auto;
+      padding: 12px;
+    }
+
+    .screen {
+      display: none;
+    }
+
+    .screen.active {
+      display: block;
+    }
+
+    .section-title {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      margin: 14px 2px 8px;
+    }
+
+    .section-title h2 {
+      margin: 0;
+      font-size: 15px;
+      letter-spacing: 0;
+    }
+
+    .section-title span {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .panel {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface);
+      overflow: hidden;
+    }
+
+    .summary {
+      padding: 14px;
+      background:
+        linear-gradient(135deg, rgba(31, 115, 210, .12), transparent 55%),
+        #fff;
+    }
+
+    .summary-top {
+      display: flex;
+      justify-content: space-between;
+      gap: 14px;
+      align-items: flex-start;
+    }
+
+    .summary h2 {
+      margin: 0;
+      font-size: 17px;
+      letter-spacing: 0;
+    }
+
+    .summary p {
+      margin: 5px 0 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      height: 24px;
+      padding: 0 8px;
+      border-radius: 999px;
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    .tag.wait { color: var(--amber); background: var(--amber-soft); }
+    .tag.done { color: var(--green); background: var(--green-soft); }
+    .tag.info { color: var(--primary); background: var(--primary-soft); }
+    .tag.warn { color: var(--danger); background: var(--danger-soft); }
+
+    .progress {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 6px;
+      margin-top: 14px;
+    }
+
+    .progress-item {
+      min-height: 52px;
+      padding: 8px 6px;
+      border-radius: 8px;
+      background: #f6f8fb;
+      text-align: center;
+      font-size: 12px;
+    }
+
+    .progress-item b {
+      display: block;
+      margin-bottom: 4px;
+      color: var(--primary);
+    }
+
+    .quick-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .quick {
+      min-height: 92px;
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface);
+      text-align: left;
+    }
+
+    .quick strong {
+      display: block;
+      font-size: 15px;
+      margin-bottom: 6px;
+    }
+
+    .quick span {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .quick.primary {
+      border-color: #bfd8f4;
+      background: var(--primary-soft);
+    }
+
+    .quick.teal {
+      border-color: #b9ded7;
+      background: var(--teal-soft);
+    }
+
+    .list {
+      display: grid;
+      gap: 10px;
+    }
+
+    .list-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 10px;
+      align-items: center;
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+    }
+
+    .list-row strong {
+      display: block;
+      margin-bottom: 4px;
+      font-size: 14px;
+    }
+
+    .list-row p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .segmented {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 6px;
+      padding: 6px;
+      border-radius: 8px;
+      border: 1px solid var(--line);
+      background: #fff;
+    }
+
+    .segmented button {
+      height: 34px;
+      border-radius: 7px;
+      color: var(--muted);
+      background: transparent;
+    }
+
+    .segmented button.active {
+      color: var(--primary);
+      background: var(--primary-soft);
+      font-weight: 700;
+    }
+
+    .check-panel {
+      padding: 14px;
+    }
+
+    .check-map {
+      height: 142px;
+      border-radius: 8px;
+      border: 1px solid #b9ded7;
+      background:
+        linear-gradient(90deg, rgba(15, 143, 126, .12) 1px, transparent 1px),
+        linear-gradient(0deg, rgba(15, 143, 126, .12) 1px, transparent 1px),
+        #edf8f6;
+      background-size: 26px 26px;
+      margin: 12px 0;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .pin {
+      position: absolute;
+      left: 48%;
+      top: 44%;
+      width: 18px;
+      height: 18px;
+      border-radius: 999px;
+      background: var(--teal);
+      box-shadow: 0 0 0 10px rgba(15, 143, 126, .14);
+    }
+
+    .check-meta {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 8px;
+      margin: 10px 0 14px;
+    }
+
+    .meta {
+      min-height: 56px;
+      padding: 9px;
+      border-radius: 8px;
+      background: #f6f8fb;
+      font-size: 12px;
+    }
+
+    .meta b {
+      display: block;
+      margin-top: 3px;
+      color: var(--text);
+      font-size: 14px;
+    }
+
+    .primary-button,
+    .plain-button {
+      height: 42px;
+      display: inline-flex;
+      justify-content: center;
+      align-items: center;
+      gap: 8px;
+      border-radius: 8px;
+      width: 100%;
+    }
+
+    .primary-button {
+      color: #fff;
+      background: var(--primary);
+    }
+
+    .plain-button {
+      color: var(--text);
+      border: 1px solid var(--line);
+      background: #fff;
+    }
+
+    .form {
+      display: grid;
+      gap: 10px;
+    }
+
+    .field {
+      display: grid;
+      gap: 6px;
+      font-size: 13px;
+    }
+
+    .field span {
+      color: var(--muted);
+    }
+
+    .input,
+    .textarea {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      color: var(--text);
+      outline: none;
+      padding: 0 10px;
+    }
+
+    .input {
+      height: 40px;
+    }
+
+    .textarea {
+      min-height: 112px;
+      padding-top: 10px;
+      resize: none;
+    }
+
+    .profile-head {
+      display: grid;
+      grid-template-columns: 48px 1fr;
+      gap: 12px;
+      align-items: center;
+      padding: 14px;
+    }
+
+    .profile-avatar {
+      width: 48px;
+      height: 48px;
+      border-radius: 8px;
+      display: grid;
+      place-items: center;
+      color: #fff;
+      background: linear-gradient(135deg, #1f73d2, #0f8f7e);
+      font-weight: 700;
+    }
+
+    .profile-head strong {
+      display: block;
+      margin-bottom: 4px;
+    }
+
+    .profile-head span {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .menu-list {
+      border-top: 1px solid var(--line);
+    }
+
+    .menu-list button {
+      width: 100%;
+      height: 46px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 14px;
+      background: #fff;
+      border-bottom: 1px solid var(--line);
+      color: var(--text);
+    }
+
+    .menu-list span {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .tabs {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      border-top: 1px solid var(--line);
+      background: #fff;
+    }
+
+    .tab {
+      display: grid;
+      grid-template-rows: 19px 1fr;
+      place-items: center;
+      gap: 2px;
+      padding: 7px 0 5px;
+      color: var(--muted);
+      background: transparent;
+      font-size: 12px;
+    }
+
+    .tab b {
+      width: 18px;
+      height: 18px;
+      border-radius: 6px;
+      display: grid;
+      place-items: center;
+      border: 1px solid currentColor;
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    .tab.active {
+      color: var(--primary);
+      font-weight: 700;
+    }
+
+    @media (max-width: 480px) {
+      .phone-wrap {
+        display: block;
+        padding: 0;
+      }
+
+      .phone {
+        width: 100%;
+        height: 100vh;
+        min-height: 0;
+        border: 0;
+        border-radius: 0;
+        box-shadow: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="phone-wrap">
+    <section class="phone" aria-label="H5 移动端">
+      <header class="statusbar">
+        <div class="topline">
+          <div class="brand">
+            <h1>实践管理</h1>
+            <p>计算机学院 2026 春季学期</p>
+          </div>
+          <span class="avatar">陈</span>
+        </div>
+        <div class="role-row" aria-label="角色切换">
+          <button class="role-chip active">学生</button>
+          <button class="role-chip">指导教师</button>
+          <button class="role-chip">学院管理员</button>
+        </div>
+      </header>
+
+      <section class="content">
+        <div class="screen active" data-screen="home">
+          <section class="panel summary">
+            <div class="summary-top">
+              <div>
+                <h2>毕业实习进行中</h2>
+                <p>云启软件实习基地，指导教师赵老师。今日需完成签到和日志。</p>
+              </div>
+              <span class="tag wait">待日志</span>
+            </div>
+            <div class="progress">
+              <div class="progress-item"><b>已过</b>申请</div>
+              <div class="progress-item"><b>已签</b>承诺书</div>
+              <div class="progress-item"><b>12/16</b>签到</div>
+              <div class="progress-item"><b>8/12</b>日志</div>
+            </div>
+          </section>
+
+          <div class="section-title">
+            <h2>今日事项</h2>
+            <span>2 项待处理</span>
+          </div>
+          <div class="quick-grid">
+            <button class="quick primary" data-jump="signin">
+              <strong>实习签到</strong>
+              <span>GPS 签到范围 300 米，当前定位可用。</span>
+            </button>
+            <button class="quick teal" data-jump="journal">
+              <strong>提交日志</strong>
+              <span>今日日志尚未提交，可先保存草稿。</span>
+            </button>
+          </div>
+
+          <div class="section-title">
+            <h2>审核进度</h2>
+            <span>最近更新</span>
+          </div>
+          <div class="list">
+            <article class="list-row">
+              <div>
+                <strong>实习申请</strong>
+                <p>教师审核通过，等待学院管理员终审。</p>
+              </div>
+              <span class="tag wait">待终审</span>
+            </article>
+            <article class="list-row">
+              <div>
+                <strong>安全承诺书</strong>
+                <p>指导教师已确认签字文件。</p>
+              </div>
+              <span class="tag done">已签署</span>
+            </article>
+            <article class="list-row">
+              <div>
+                <strong>实习保险</strong>
+                <p>保险期限覆盖当前实习安排。</p>
+              </div>
+              <span class="tag done">有效</span>
+            </article>
+          </div>
+        </div>
+
+        <div class="screen" data-screen="signin">
+          <div class="section-title">
+            <h2>实习签到</h2>
+            <span>云启软件实习基地</span>
+          </div>
+          <section class="panel check-panel">
+            <div class="segmented">
+              <button class="active">GPS</button>
+              <button>二维码</button>
+              <button>手工</button>
+            </div>
+            <div class="check-map">
+              <span class="pin" aria-hidden="true">&nbsp;</span>
+            </div>
+            <div class="check-meta">
+              <div class="meta">当前位置<b>基地范围内</b></div>
+              <div class="meta">签到时间<b>08:30-18:00</b></div>
+              <div class="meta">定位精度<b>28 米</b></div>
+              <div class="meta">今日状态<b>未签到</b></div>
+            </div>
+            <button class="primary-button">立即签到</button>
+          </section>
+
+          <div class="section-title">
+            <h2>本周记录</h2>
+            <span>5 天</span>
+          </div>
+          <div class="list">
+            <article class="list-row">
+              <div><strong>周一</strong><p>08:46 签到，18:02 签退。</p></div>
+              <span class="tag done">正常</span>
+            </article>
+            <article class="list-row">
+              <div><strong>周二</strong><p>08:52 签到，17:58 签退。</p></div>
+              <span class="tag done">正常</span>
+            </article>
+            <article class="list-row">
+              <div><strong>周三</strong><p>未检测到签退记录。</p></div>
+              <span class="tag warn">异常</span>
+            </article>
+          </div>
+        </div>
+
+        <div class="screen" data-screen="journal">
+          <div class="section-title">
+            <h2>日志报告</h2>
+            <span>草稿自动保存</span>
+          </div>
+          <section class="panel check-panel">
+            <div class="form">
+              <label class="field">
+                <span>标题</span>
+                <input class="input" value="接口联调与缺陷记录">
+              </label>
+              <label class="field">
+                <span>实习内容</span>
+                <textarea class="textarea">今日参与登录接口联调，整理异常返回码，补充了接口调用记录。</textarea>
+              </label>
+              <label class="field">
+                <span>附件</span>
+                <input class="input" value="联调记录截图 2 张">
+              </label>
+              <button class="primary-button">提交日志</button>
+              <button class="plain-button">保存草稿</button>
+            </div>
+          </section>
+
+          <div class="section-title">
+            <h2>最近评阅</h2>
+            <span>review_opinion</span>
+          </div>
+          <div class="list">
+            <article class="list-row">
+              <div><strong>第 8 篇日志</strong><p>赵老师：内容完整，注意补充问题分析。</p></div>
+              <span class="tag done">通过</span>
+            </article>
+            <article class="list-row">
+              <div><strong>中期报告</strong><p>格式需调整后重新提交。</p></div>
+              <span class="tag warn">修改</span>
+            </article>
+          </div>
+        </div>
+
+        <div class="screen" data-screen="profile">
+          <section class="panel">
+            <div class="profile-head">
+              <span class="profile-avatar">陈</span>
+              <div>
+                <strong>陈思远</strong>
+                <span>学生 / 软件工程 / 2022040132</span>
+              </div>
+            </div>
+            <div class="menu-list">
+              <button>账号管理 <span>2 个绑定</span></button>
+              <button>设备管理 <span>当前设备</span></button>
+              <button>消息通知 <span>站内 + 企微</span></button>
+              <button>模板库 <span>安全承诺书</span></button>
+              <button>帮助中心 <span>常见问题</span></button>
+              <button>主题设置 <span>标准字体</span></button>
+            </div>
+          </section>
+
+          <div class="section-title">
+            <h2>账号安全</h2>
+            <span>Cookie JWT</span>
+          </div>
+          <div class="list">
+            <article class="list-row">
+              <div><strong>登录设备</strong><p>H5 与 PC 在同一浏览器登录态下共享认证。</p></div>
+              <span class="tag info">正常</span>
+            </article>
+            <article class="list-row">
+              <div><strong>API Key</strong><p>当前角色未开启个人 API Key。</p></div>
+              <span class="tag wait">未开启</span>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <nav class="tabs" aria-label="底部导航">
+        <button class="tab active" data-tab="home"><b>首</b><span>首页</span></button>
+        <button class="tab" data-tab="signin"><b>签</b><span>签到</span></button>
+        <button class="tab" data-tab="journal"><b>志</b><span>日志</span></button>
+        <button class="tab" data-tab="profile"><b>我</b><span>我的</span></button>
+      </nav>
+    </section>
+  </main>
+
+  <script>
+    const tabs = Array.from(document.querySelectorAll('[data-tab]'));
+    const screens = Array.from(document.querySelectorAll('[data-screen]'));
+    const activate = name => {
+      tabs.forEach(tab => tab.classList.toggle('active', tab.dataset.tab === name));
+      screens.forEach(screen => screen.classList.toggle('active', screen.dataset.screen === name));
+    };
+
+    tabs.forEach(tab => tab.addEventListener('click', () => activate(tab.dataset.tab)));
+    document.querySelectorAll('[data-jump]').forEach(button => {
+      button.addEventListener('click', () => activate(button.dataset.jump));
+    });
+  </script>
+</body>
+</html>

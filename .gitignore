@@ -1,0 +1,22 @@
+.DS_Store
+
+# local environment
+server/.env
+server/.env.*
+!server/.env.example
+
+# dependencies
+server/vendor/
+fontend/**/node_modules/
+
+# build output
+fontend/**/dist/
+
+# runtime/cache/logs/uploads
+server/runtime/
+server/public/files/
+
+# editor/system
+.idea/
+.vscode/
+*.log

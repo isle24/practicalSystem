@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>实习管理流程图 - 完整还原版</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif; background: #f5f7fa; padding: 30px; }
+        .container { max-width: 1400px; margin: 0 auto; background: white; border-radius: 16px; padding: 40px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); }
+        h1 { text-align: center; color: #1a202c; font-size: 28px; margin-bottom: 10px; }
+        .subtitle { text-align: center; color: #718096; font-size: 14px; margin-bottom: 40px; }
+        
+        .stage { margin-bottom: 36px; }
+        .stage-header { display: flex; align-items: center; margin-bottom: 16px; padding: 12px 20px; border-radius: 10px; }
+        .stage-header.plan { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+        .stage-header.prepare { background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); }
+        .stage-header.execute { background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); }
+        .stage-header.summary { background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%); }
+        .stage-header.archive { background: linear-gradient(135deg, #fa709a 0%, #fee140 100%); }
+        .stage-header h2 { color: white; font-size: 18px; font-weight: 600; }
+        .stage-header .time { color: rgba(255,255,255,0.9); font-size: 13px; margin-left: auto; }
+        
+        .flow-container { display: flex; flex-direction: column; gap: 12px; padding-left: 20px; }
+        
+        .step-card { display: flex; align-items: center; background: #fefefe; border: 1.5px solid #e2e8f0; border-radius: 10px; padding: 14px 18px; transition: all 0.2s; }
+        .step-card:hover { border-color: #667eea; box-shadow: 0 2px 12px rgba(102,126,234,0.15); }
+        
+        .step-num { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 13px; font-weight: 700; margin-right: 14px; flex-shrink: 0; }
+        .step-num.plan { background: #667eea; }
+        .step-num.prepare { background: #f5576c; }
+        .step-num.execute { background: #00f2fe; color: #1a202c; }
+        .step-num.summary { background: #43e97b; color: #1a202c; }
+        .step-num.archive { background: #fa709a; }
+        
+        .step-content { flex: 1; }
+        .step-title { font-size: 14px; font-weight: 600; color: #2d3748; margin-bottom: 3px; }
+        .step-desc { font-size: 12px; color: #718096; line-height: 1.5; }
+        .step-role { font-size: 11px; color: #667eea; background: #ebf4ff; padding: 2px 8px; border-radius: 4px; margin-left: auto; flex-shrink: 0; }
+        .step-role.prepare-role { color: #f5576c; background: #fff0f3; }
+        .step-role.execute-role { color: #00a8cc; background: #e6f9ff; }
+        .step-role.summary-role { color: #38b2ac; background: #e6fffe; }
+        .step-role.archive-role { color: #fa709a; background: #fff0f6; }
+        
+        .arrow { color: #cbd5e0; font-size: 18px; padding: 0 8px; text-align: center; }
+        
+        .review-chain { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+        .review-node { background: #ebf4ff; border: 1.5px solid #667eea; border-radius: 8px; padding: 8px 14px; font-size: 12px; color: #2d3748; font-weight: 500; }
+        .review-arrow { color: #667eea; font-size: 16px; }
+        
+        .matrix-table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 13px; }
+        .matrix-table th { background: #f7fafc; color: #4a5568; font-weight: 600; padding: 10px 12px; border: 1px solid #e2e8f0; text-align: center; }
+        .matrix-table td { padding: 9px 12px; border: 1px solid #e2e8f0; text-align: center; }
+        .matrix-table tr:hover { background: #f7fafc; }
+        .matrix-table .label-col { text-align: left; font-weight: 500; color: #2d3748; background: #f7fafc; }
+        .check-mark { color: #48bb78; font-size: 16px; }
+        .cross-mark { color: #e2e8f0; font-size: 16px; }
+        
+        .legend { display: flex; gap: 20px; flex-wrap: wrap; margin-top: 30px; padding: 16px 20px; background: #f7fafc; border-radius: 10px; }
+        .legend-item { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #4a5568; }
+        .legend-dot { width: 12px; height: 12px; border-radius: 3px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>成都锦城学院实习管理流程图</h1>
+        <p class="subtitle">依据《成都锦城学院实习教学档案清单2025（征求意见）》设计 · 完整还原版</p>
+        
+        <!-- 阶段1：计划阶段 -->
+        <div class="stage">
+            <div class="stage-header plan">
+                <h2>阶段一：计划阶段</h2>
+                <span class="time">时间节点：每学期第18周提交下学期实习计划</span>
+            </div>
+            <div class="flow-container">
+                <div class="step-card">
+                    <div class="step-num plan">1</div>
+                    <div class="step-content">
+                        <div class="step-title">填写学期实习计划表</div>
+                        <div class="step-desc">各系填写学期实习计划，包含实习类型、专业、人数、时间、地点、指导教师等信息</div>
+                    </div>
+                    <div class="step-role">系主任</div>
+                </div>
+                <div class="arrow">↓</div>
+                <div class="step-card">
+                    <div class="step-num plan">2</div>
+                    <div class="step-content">
+                        <div class="step-title">多级审核流程</div>
+                        <div class="step-desc">实习计划需依次通过5级审核，全部通过后方可执行</div>
+                        <div class="review-chain">
+                            <div class="review-node">系主任审核</div>
+                            <span class="review-arrow">→</span>
+                            <div class="review-node">教务科审核</div>
+                            <span class="review-arrow">→</span>
+                            <div class="review-node">主管院长审核</div>
+                            <span class="review-arrow">→</span>
+                            <div class="review-node">教务处审核</div>
+                            <span class="review-arrow">→</span>
+                            <div class="review-node">处领导审核</div>
+                        </div>
+                    </div>
+                    <div class="step-role">多级审核</div>
+                </div>
+                <div class="arrow">↓</div>
+                <div class="step-card">
+                    <div class="step-num plan">3</div>
+                    <div class="step-content">
+                        <div class="step-title">计划发布与执行</div>
+                        <div class="step-desc">审核通过后，计划自动发布至各系，指导教师可按计划开展实习准备工作</div>
+                    </div>
+                    <div class="step-role">教务处</div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 阶段2：准备阶段 -->
+        <div class="stage">
+            <div class="stage-header prepare">
+                <h2>阶段二：准备阶段</h2>
+                <span class="time">时间节点：实习前5个工作日完成</span>
+            </div>
+            <div class="flow-container">
+                <div class="step-card">
+                    <div class="step-num prepare">1</div>
+                    <div class="step-content">
+                        <div class="step-title">制定实习大纲及指导书</div>
+                        <div class="step-desc">按专业制定，包含实习目标、内容、考核标准、成绩评定标准等，按课程存档一份</div>
+                    </div>
+                    <div class="step-role prepare-role">指导教师</div>
+                </div>
+                <div class="arrow">↓</div>
+                <div class="step-card">
+                    <div class="step-num prepare">2</div>
+                    <div class="step-content">
+                        <div class="step-title">购买保险（仅校外实习）</div>
+                        <div class="step-desc">校外实习必须为每位学生购买实习保险，保险单扫描件上传系统存档</div>
+                    </div>
+                    <div class="step-role prepare-role">教务科</div>
+                </div>
+                <div class="arrow">↓</div>
+                <div class="step-card">
+                    <div class="step-num prepare">3</div>
+                    <div class="step-content">
+                        <div class="step-title">签署校外实习安全承诺书</div>
+                        <div class="step-desc">学生在实习开始前签署安全承诺书，签字后提交指导教师存档（认识/专业/生产校外、毕业实习均需）</div>
+                    </div>
+                    <div class="step-role prepare-role">学生</div>
+                </div>
+                <div class="arrow">↓</div>
+                <div class="step-card">
+                    <div class="step-num prepare">4</div>
+                    <div class="step-content">
+                        <div class="step-title">填写教学实习实施表</div>
+                        <div class="step-desc">在企业微信上打印后按课程存档一份。引用数据：计划表、大纲、承诺书、保险、经费等</div>
+                    </div>
+                    <div class="step-role prepare-role">指导教师</div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 阶段3：实施阶段 -->
+        <div class="stage">
+            <div class="stage-header execute">
+                <h2>阶段三：实施阶段</h2>
+                <span class="time">时间节点：实习进行中</span>
+            </div>
+            <div class="flow-container">
+                <div class="step-card">
+                    <div class="step-num execute">1</div>
+                    <div class="step-content">
+                        <div class="step-title">按实习大纲及指导书开展实习</div>
+                        <div class="step-desc">学生按大纲要求开展实习，校内实习由指导教师现场指导，校外实习由企业导师+校内教师双指导</div>
+                    </div>
+                    <div class="step-role execute-role">师生</div>
+                </div>
+                <div class="arrow">↓</div>
+                <div class="step-card">
+                    <div class="step-num execute">2</div>
+                    <div class="step-content">
+                        <div class="step-title">校外实习打卡（仅校外实习）</div>
+                        <div class="step-desc">学生通过手机APP/小程序进行每日定位打卡，系统自动记录实习时长、地点，异常未打卡系统自动提醒</div>
+                    </div>
+                    <div class="step-role execute-role">学生</div>
+                </div>
+                <div class="arrow">↓</div>
+                <div class="step-card">
+                    <div class="step-num execute">3</div>
+                    <div class="step-content">
+                        <div class="step-title">批阅周志（仅毕业实习）</div>
+                        <div class="step-desc">毕业实习需填写周志，周志不少于实习周数，学生每周提交，指导教师在线批阅并打分，系统自动汇总周志成绩</div>
+                    </div>
+                    <div class="step-role execute-role">指导教师</div>
+                </div>
+                <div class="arrow">↓</div>
+                <div class="step-card">
+                    <div class="step-num execute">4</div>
+                    <div class="step-content">
+                        <div class="step-title">实习简报生成</div>
+                        <div class="step-desc">系统根据实习数据自动生成实习简报，包含实习人数、企业分布、问题汇总等，供教务科和学院查阅</div>
+                    </div>
+                    <div class="step-role execute-role">系统自动</div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 阶段4：总结阶段 -->
+        <div class="stage">
+            <div class="stage-header summary">
+                <h2>阶段四：总结阶段</h2>
+                <span class="time">时间节点：实习结束后</span>
+            </div>
+            <div class="flow-container">
+                <div class="step-card">
+                    <div class="step-num summary">1</div>
+                    <div class="step-content">
+                        <div class="step-title">提交实习/实训报告</div>
+                        <div class="step-desc">学生填写《实习/实训报告》，学院或专业有另外要求的可以附后，按课程存档</div>
+                    </div>
+                    <div class="step-role summary-role">学生</div>
+                </div>
+                <div class="arrow">↓</div>
+                <div class="step-card">
+                    <div class="step-num summary">2</div>
+                    <div class="step-content">
+                        <div class="step-title">填写实习情况及成绩汇总表</div>
+                        <div class="step-desc">实习结束后，按课程（盒）存档。系统自动汇总所有学生成绩，生成汇总表供打印存档</div>
+                    </div>
+                    <div class="step-role summary-role">指导教师</div>
+                </div>
+                <div class="arrow">↓</div>
+                <div class="step-card">
+                    <div class="step-num summary">3</div>
+                    <div class="step-content">
+                        <div class="step-title">实习报告及成绩鉴定表（仅毕业实习）</div>
+                        <div class="step-desc">鉴定表需实习单位盖完章，学生打印后提交指导教师存档。含实习单位评分+校内导师评分</div>
+                    </div>
+                    <div class="step-role summary-role">学生+单位</div>
+                </div>
+                <div class="arrow">↓</div>
+                <div class="step-card">
+                    <div class="step-num summary">4</div>
+                    <div class="step-content">
+                        <div class="step-title">实习指导教师工作报告</div>
+                        <div class="step-desc">在实习结束后进行课程和指导工作总结，按课程存档一份。含指导人数、发现问题、改进建议等</div>
+                    </div>
+                    <div class="step-role summary-role">指导教师</div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 阶段5：归档阶段 -->
+        <div class="stage">
+            <div class="stage-header archive">
+                <h2>阶段五：归档阶段</h2>
+                <span class="time">时间节点：每学期末</span>
+            </div>
+            <div class="flow-container">
+                <div class="step-card">
+                    <div class="step-num archive">1</div>
+                    <div class="step-content">
+                        <div class="step-title">成绩汇总与材料整理</div>
+                        <div class="step-desc">系统按课程自动汇总所有学生成绩，生成《实习情况及成绩汇总表》。同时按档案清单整理所有电子材料，生成档案目录清单</div>
+                    </div>
+                    <div class="step-role archive-role">系统+教师</div>
+                </div>
+                <div class="arrow">↓</div>
+                <div class="step-card">
+                    <div class="step-num archive">2</div>
+                    <div class="step-content">
+                        <div class="step-title">教务处抽检</div>
+                        <div class="step-desc">教务处随机抽取一定比例档案，检查：①材料完整性 ②时间合规性（是否按计划时间）③成绩评定合规性 ④承诺书签字等</div>
+                    </div>
+                    <div class="step-role archive-role">教务处</div>
+                </div>
+                <div class="arrow">↓</div>
+                <div class="step-card">
+                    <div class="step-num archive">3</div>
+                    <div class="step-content">
+                        <div class="step-title">电子归档</div>
+                        <div class="step-desc">所有档案上传系统，按课程/学期/类型自动归类，支持按学生姓名、学号、课程名称快速查询与借阅</div>
+                    </div>
+                    <div class="step-role archive-role">系统自动</div>
+                </div>
+                <div class="arrow">↓</div>
+                <div class="step-card">
+                    <div class="step-num archive">4</div>
+                    <div class="step-content">
+                        <div class="step-title">纸质归档（如需）</div>
+                        <div class="step-desc">需要纸质存档的材料（实施表、汇总表、承诺书、鉴定表等）打印，按课程（盒）存档至学院档案室</div>
+                    </div>
+                    <div class="step-role archive-role">教务科</div>
+                </div>
+                <div class="arrow">↓</div>
+                <div class="step-card">
+                    <div class="step-num archive">5</div>
+                    <div class="step-content">
+                        <div class="step-title">数据统计分析</div>
+                        <div class="step-desc">系统自动生成实习覆盖率、成绩分布、档案完整率、基地利用率等统计报表，供教学评估使用</div>
+                    </div>
+                    <div class="step-role archive-role">系统自动</div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 档案类型覆盖矩阵 -->
+        <div class="stage">
+            <div class="stage-header plan" style="background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);">
+                <h2 style="color: #2d3748;">档案类型覆盖矩阵</h2>
+                <span class="time" style="color: #718096;">依据《实习教学档案清单2025》</span>
+            </div>
+            <table class="matrix-table">
+                <thead>
+                    <tr>
+                        <th style="min-width: 180px;">档案名称</th>
+                        <th>认识校内</th>
+                        <th>认识校外</th>
+                        <th>专业校内</th>
+                        <th>专业校外</th>
+                        <th>生产实习</th>
+                        <th>毕业实习</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td class="label-col">1. 学院学期实习计划表</td>
+                        <td><span class="check-mark">✓</span></td>
+                        <td><span class="check-mark">✓</span></td>
+                        <td><span class="check-mark">✓</span></td>
+                        <td><span class="check-mark">✓</span></td>
+                        <td><span class="check-mark">✓</span></td>
+                        <td><span class="check-mark">✓</span></td>
+                    </tr>
+                    <tr>
+                        <td class="label-col">2. 教学实习实施表</td>
+                        <td></td>
+                        <td><span class="check-mark">✓</span></td>
+                        <td></td>
+                        <td><span class="check-mark">✓</span></td>
+                        <td><span class="check-mark">✓</span></td>
+                        <td></td>
+                    </tr>
+                    <tr>
+                        <td class="label-col">3. 实习大纲及指导书</td>
+                        <td><span class="check-mark">✓</span></td>
+                        <td><span class="check-mark">✓</span></td>
+                        <td><span class="check-mark">✓</span></td>
+                        <td><span class="check-mark">✓</span></td>
+                        <td><span class="check-mark">✓</span></td>
+                        <td><span class="check-mark">✓</span></td>
+                    </tr>
+                    <tr>
+                        <td class="label-col">5. 实习情况及成绩汇总表</td>
+                        <td></td>
+                        <td><span class="check-mark">✓</span></td>
+                        <td></td>
+                        <td><span class="check-mark">✓</span></td>
+                        <td><span class="check-mark">✓</span></td>
+                        <td><span class="check-mark">✓</span></td>
+                    </tr>
+                    <tr>
+                        <td class="label-col">6. 校外实习安全承诺书</td>
+                        <td></td>
+                        <td><span class="check-mark">✓</span></td>
+                        <td></td>
+                        <td><span class="check-mark">✓</span></td>
+                        <td><span class="check-mark">✓</span></td>
+                        <td><span class="check-mark">✓</span></td>
+                    </tr>
+                    <tr>
+                        <td class="label-col">保险单</td>
+                        <td></td>
+                        <td><span class="check-mark">✓</span></td>
+                        <td></td>
+                        <td><span class="check-mark">✓</span></td>
+                        <td><span class="check-mark">✓</span></td>
+                        <td><span class="check-mark">✓</span></td>
+                    </tr>
+                    <tr>
+                        <td class="label-col">7. 实习周志</td>
+                        <td></td>
+                        <td></td>
+                        <td></td>
+                        <td></td>
+                        <td></td>
+                        <td><span class="check-mark">✓</span></td>
+                    </tr>
+                    <tr>
+                        <td class="label-col">8. 实习/实训报告</td>
+                        <td><span class="check-mark">✓</span></td>
+                        <td><span class="check-mark">✓</span></td>
+                        <td><span class="check-mark">✓</span></td>
+                        <td><span class="check-mark">✓</span></td>
+                        <td><span class="check-mark">✓</span></td>
+                        <td><span class="check-mark">✓</span></td>
+                    </tr>
+                    <tr>
+                        <td class="label-col">10. 毕业实习报告及成绩鉴定表</td>
+                        <td></td>
+                        <td></td>
+                        <td></td>
+                        <td></td>
+                        <td></td>
+                        <td><span class="check-mark">✓</span></td>
+                    </tr>
+                    <tr>
+                        <td class="label-col">12. 实习指导教师工作报告</td>
+                        <td></td>
+                        <td><span class="check-mark">✓</span></td>
+                        <td></td>
+                        <td><span class="check-mark">✓</span></td>
+                        <td><span class="check-mark">✓</span></td>
+                        <td><span class="check-mark">✓</span></td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        
+        <div class="legend">
+            <div class="legend-item"><div class="legend-dot" style="background: #667eea;"></div>计划阶段</div>
+            <div class="legend-item"><div class="legend-dot" style="background: #f5576c;"></div>准备阶段</div>
+            <div class="legend-item"><div class="legend-dot" style="background: #00f2fe;"></div>实施阶段</div>
+            <div class="legend-item"><div class="legend-dot" style="background: #43e97b;"></div>总结阶段</div>
+            <div class="legend-item"><div class="legend-dot" style="background: #fa709a;"></div>归档阶段</div>
+            <div class="legend-item"><span class="check-mark">✓</span> 需要存档</div>
+        </div>
+    </div>
+</body>
+</html>
