@@ -734,7 +734,7 @@
                 <strong>{{ timelineTitle(item) }}</strong>
                 <small>{{ timelineTime(item) }}</small>
                 <p>{{ timelineContent(item) }}</p>
-                <p v-for="review in item.reviews || []" :key="review.id" class="timeline-review">
+                <p v-for="review in timelineReviews(item)" :key="review.id" class="timeline-review">
                   审核意见：{{ review.opinion || '-' }}<template v-if="review.score !== null && review.score !== undefined">，评分：{{ review.score }}</template>
                 </p>
                 <p v-if="item.review" class="timeline-review">
@@ -778,6 +778,7 @@ import {
 } from '@lucide/vue';
 import { useMobilePermissions } from './composables/useMobilePermissions';
 import {
+  fetchInternshipArchiveMaterials,
   fetchInternshipApplications,
   fetchInternshipArrangements,
   fetchInternshipDelays,
@@ -840,6 +841,7 @@ const defaultInternshipReviewRules = {
   delay: {
     accept: { min: 0, max: 300 },
     refuse: { min: 5, max: 500 },
+    modify: { min: 5, max: 500 },
   },
 };
 
@@ -861,6 +863,7 @@ const internship = reactive({
     reports: emptyPagedList(),
     delays: emptyPagedList(),
     scores: emptyPagedList(),
+    archiveMaterials: emptyPagedList(),
     insurances: emptyPagedList(),
     safetyLetters: emptyPagedList(),
   },
@@ -874,6 +877,7 @@ const internship = reactive({
     reports: emptyInternshipFilters(),
     delays: emptyInternshipFilters(),
     scores: emptyInternshipFilters(),
+    archiveMaterials: emptyInternshipFilters(),
     insurances: emptyInternshipFilters(),
     safetyLetters: emptyInternshipFilters(),
   },
@@ -923,6 +927,7 @@ const internship = reactive({
     visible: false,
     loading: false,
     entity: 'application',
+    row: null,
     title: '',
     subtitle: '',
     items: [],
@@ -1201,6 +1206,19 @@ const mobileListConfigs = computed(() => ({
     statusOptions: [],
     emptyText: '暂无成绩记录',
   },
+  archiveMaterials: {
+    key: 'archiveMaterials',
+    entity: '',
+    title: '归档材料',
+    shortTitle: '归档',
+    icon: FileText,
+    keywordPlaceholder: '学生、学号、安排、材料',
+    statusOptions: [
+      { value: 'complete', label: '完整' },
+      { value: 'incomplete', label: '待补齐' },
+    ],
+    emptyText: '暂无归档材料',
+  },
   insurances: {
     key: 'insurances',
     entity: '',
@@ -1241,8 +1259,7 @@ const manageListTabs = computed(() => [
   'reports',
   'delays',
   'scores',
-  'insurances',
-  'safetyLetters',
+  'archiveMaterials',
 ].map(getMobileListConfig).filter(Boolean));
 const currentReviewListConfig = computed(() => getMobileListConfig(internship.reviewList) || reviewListTabs.value[0] || null);
 const currentManageListConfig = computed(() => getMobileListConfig(internship.manageList) || manageListTabs.value[0] || null);
@@ -1353,6 +1370,7 @@ function mobileListTitle(key, row) {
     reports: row.title || student || `报告ID ${row.id}`,
     delays: joinFact([student, delayConfigText(row.config_key)]) || `延期ID ${row.id}`,
     scores: student || `成绩ID ${row.id}`,
+    archiveMaterials: student || arrangement || `归档ID ${row.id}`,
     insurances: student || row.insurance_company || `保险ID ${row.id}`,
     safetyLetters: student || `承诺ID ${row.id}`,
   };
@@ -1368,6 +1386,9 @@ function mobileListValue(key, row) {
   }
   if (key === 'insurances') {
     return row.policy_number || statusText(row.status);
+  }
+  if (key === 'archiveMaterials') {
+    return row.archive_status_text || row.material_progress || statusText(row.archive_status);
   }
   return statusText(row.status);
 }
@@ -1433,6 +1454,13 @@ function mobileListFacts(key, row) {
       namedFact('评分人', row.teacher_name || row.teacher_num),
       namedFact('分项', scoreBreakdownText(row)),
     ],
+    archiveMaterials: [
+      namedFact('学生', student || (row.student_id ? `学生ID ${row.student_id}` : '')),
+      namedFact('安排', arrangement),
+      namedFact('类型', row.arrangement_type_text),
+      namedFact('进度', row.material_progress),
+      namedFact('缺失', row.missing_materials),
+    ],
     insurances: [
       namedFact('学生', student || (row.student_id ? `学生ID ${row.student_id}` : '')),
       namedFact('安排', arrangement),
@@ -1456,14 +1484,14 @@ function mobileListActions(key, row, context) {
 
   const actions = [{ key: 'timeline', label: '记录', type: 'timeline', entity: config.entity }];
   if (context === 'review' && canReviewEntity(config.entity)) {
-    if (canReviewRow(row)) {
+    if (canReviewRow(row, config.entity)) {
       const rejectStatus = config.entity === 'delay' ? 'refuse' : 'modify';
       actions.push(
         { key: 'accept', label: '通过', type: 'review', entity: config.entity, status: 'accept' },
         { key: rejectStatus, label: '退回', type: 'review', entity: config.entity, status: rejectStatus },
       );
     }
-    if (row.status === 'accept' && config.entity !== 'delay') {
+    if (canRequestModification(row, config.entity)) {
       actions.push({ key: 'reopen', label: '通过后修改', type: 'reopen', entity: config.entity });
     }
   }
@@ -1573,6 +1601,7 @@ function internshipFetcher(key) {
     reports: fetchInternshipReports,
     delays: fetchInternshipDelays,
     scores: fetchInternshipScores,
+    archiveMaterials: fetchInternshipArchiveMaterials,
     insurances: fetchInternshipInsurances,
     safetyLetters: fetchInternshipSafetyLetters,
   };
@@ -1846,6 +1875,11 @@ async function submitDelay() {
 }
 
 function openReviewDialog(entity, row, status) {
+  if (!canReviewRow(row, entity)) {
+    internship.message = '仅待审核数据可处理';
+    showToast(internship.message);
+    return;
+  }
   internship.reviewDialog.mode = 'review';
   internship.reviewDialog.entity = entity;
   internship.reviewDialog.status = status;
@@ -1856,6 +1890,11 @@ function openReviewDialog(entity, row, status) {
 }
 
 function openReopenDialog(entity, row) {
+  if (!canRequestModification(row, entity)) {
+    internship.message = '仅已通过数据可发起通过后修改';
+    showToast(internship.message);
+    return;
+  }
   internship.reviewDialog.mode = 'reopen';
   internship.reviewDialog.entity = entity;
   internship.reviewDialog.status = 'modify';
@@ -1874,6 +1913,7 @@ async function openTimelineDialog(entity, row) {
   internship.timelineDialog.visible = true;
   internship.timelineDialog.loading = true;
   internship.timelineDialog.entity = entity;
+  internship.timelineDialog.row = row;
   internship.timelineDialog.title = `${reviewEntityName(entity)}流程记录`;
   internship.timelineDialog.subtitle = row.title || row.arrangement_title || row.student_name || String(row.id);
   internship.timelineDialog.items = [];
@@ -1907,7 +1947,17 @@ async function confirmReviewDialog() {
   }
 
   if (mode === 'reopen') {
+    if (!canRequestModification(row, entity)) {
+      internship.message = '仅已通过数据可发起通过后修改';
+      showToast(internship.message);
+      return;
+    }
     await requestModification(entity, row, internship.reviewDialog.reason);
+    return;
+  }
+  if (!canReviewRow(row, entity)) {
+    internship.message = '仅待审核数据可处理';
+    showToast(internship.message);
     return;
   }
 
@@ -2078,8 +2128,36 @@ function isRejectReviewStatus(status) {
   return ['modify', 'refuse'].includes(status);
 }
 
-function canReviewRow(row) {
-  return row?.status === 'wait';
+function canReviewRow(row, entity) {
+  if (!row || row.status !== 'wait') {
+    return false;
+  }
+  if (entity === 'plan') {
+    return canReviewInternshipPlan.value;
+  }
+  if (entity === 'application') {
+    if (!canReviewInternship.value) {
+      return false;
+    }
+    if (isTeacherRole.value) {
+      return ['pending', 'wait'].includes(row.teacher_status);
+    }
+    if (isAdminRole.value) {
+      return ['pending', 'wait'].includes(row.admin_status);
+    }
+    return false;
+  }
+  return canReviewInternship.value;
+}
+
+function canRequestModification(row, entity) {
+  if (!row || row.status !== 'accept') {
+    return false;
+  }
+  if (entity === 'plan') {
+    return canReviewInternshipPlan.value;
+  }
+  return canReviewInternship.value;
 }
 
 function detailItem(label, value) {
@@ -2160,9 +2238,40 @@ function timelineTitle(item) {
 
 function timelineContent(item) {
   if (item.record) {
+    if (item.record.action === 'submit' && isGenericSubmitContent(item.record.content)) {
+      return submissionSnapshotText(internship.timelineDialog.entity, internship.timelineDialog.row);
+    }
     return item.record.content || item.record.opinion || '-';
   }
   return item.review?.opinion || '-';
+}
+
+function timelineReviews(item) {
+  return item.record ? [] : (item.reviews || []);
+}
+
+function isGenericSubmitContent(value) {
+  return [
+    '提交实习申请',
+    '提交实习日志',
+    '提交实习报告',
+    '提交延期申请',
+    '提交实习计划',
+  ].includes(String(value || '').trim());
+}
+
+function submissionSnapshotText(entity, row) {
+  if (!row) {
+    return '-';
+  }
+  const textMap = {
+    application: row.remark || row.arrangement_title,
+    journal: [row.title, row.content].filter(Boolean).join('：'),
+    report: [row.title, row.content].filter(Boolean).join('：'),
+    plan: planContentText(row.plan_content, 120),
+    delay: row.reason,
+  };
+  return previewText(textMap[entity] || '', 160) || '-';
 }
 
 function timelineTime(item) {
@@ -2324,6 +2433,11 @@ function statusText(value) {
     signed: '已签署',
     published: '已发布',
     confirmed: '已确认',
+    complete: '完整',
+    incomplete: '待补齐',
+    archived: '已归档',
+    missing: '待补齐',
+    not_required: '不适用',
   };
   return names[value] || value || '-';
 }

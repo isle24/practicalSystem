@@ -381,7 +381,7 @@
                               <strong>{{ timelineTitle(item) }}</strong>
                               <small>{{ item.created_at || '-' }}</small>
                               <p>{{ timelineContent(item) }}</p>
-                              <p v-for="review in item.reviews || []" :key="review.id">
+                              <p v-for="review in timelineReviews(item)" :key="review.id">
                                 审核意见：{{ review.opinion || '-' }}<template v-if="review.score">，评分：{{ review.score }}</template>
                               </p>
                               <p v-if="item.review">
@@ -526,13 +526,13 @@
                       @search="loadInternshipPanel('plans', 1)"
                     >
                       <template #actions="{ row }">
-                        <el-button v-if="canManageInternshipPlan && row.status === 'wait'" link type="primary" @click="openReviewDialog('plan', row, 'accept')">
+                        <el-button v-if="canReviewRow(row, 'plan')" link type="primary" @click="openReviewDialog('plan', row, 'accept')">
                           通过
                         </el-button>
-                        <el-button v-if="canManageInternshipPlan && row.status === 'wait'" link type="warning" @click="openReviewDialog('plan', row, 'modify')">
+                        <el-button v-if="canReviewRow(row, 'plan')" link type="warning" @click="openReviewDialog('plan', row, 'modify')">
                           退回
                         </el-button>
-                        <el-button v-if="canManageInternshipPlan && row.status === 'accept'" link type="danger" @click="openReopenDialog('plan', row)">
+                        <el-button v-if="canRequestModification(row, 'plan')" link type="danger" @click="openReopenDialog('plan', row)">
                           通过后修改
                         </el-button>
                         <el-button link type="info" @click="openTimelineDialog('plan', row)">
@@ -556,13 +556,13 @@
                       @search="loadInternshipPanel('applications', 1)"
                     >
                       <template #actions="{ row }">
-                        <el-button v-if="canApproveInternship" link type="primary" @click="openReviewDialog('application', row, 'accept')">
+                        <el-button v-if="canReviewRow(row, 'application')" link type="primary" @click="openReviewDialog('application', row, 'accept')">
                           通过
                         </el-button>
-                        <el-button v-if="canApproveInternship" link type="warning" @click="openReviewDialog('application', row, 'modify')">
+                        <el-button v-if="canReviewRow(row, 'application')" link type="warning" @click="openReviewDialog('application', row, 'modify')">
                           退回
                         </el-button>
-                        <el-button v-if="row.status === 'accept' && canApproveInternship" link type="danger" @click="openReopenDialog('application', row)">
+                        <el-button v-if="canRequestModification(row, 'application')" link type="danger" @click="openReopenDialog('application', row)">
                           通过后修改
                         </el-button>
                         <el-button link type="info" @click="openTimelineDialog('application', row)">
@@ -620,13 +620,13 @@
                       @search="loadInternshipPanel('journals', 1)"
                     >
                       <template #actions="{ row }">
-                        <el-button v-if="canApproveInternship" link type="primary" @click="openReviewDialog('journal', row, 'accept')">
+                        <el-button v-if="canReviewRow(row, 'journal')" link type="primary" @click="openReviewDialog('journal', row, 'accept')">
                           通过
                         </el-button>
-                        <el-button v-if="canApproveInternship" link type="warning" @click="openReviewDialog('journal', row, 'modify')">
+                        <el-button v-if="canReviewRow(row, 'journal')" link type="warning" @click="openReviewDialog('journal', row, 'modify')">
                           退回
                         </el-button>
-                        <el-button v-if="row.status === 'accept' && canApproveInternship" link type="danger" @click="openReopenDialog('journal', row)">
+                        <el-button v-if="canRequestModification(row, 'journal')" link type="danger" @click="openReopenDialog('journal', row)">
                           通过后修改
                         </el-button>
                         <el-button link type="info" @click="openTimelineDialog('journal', row)">
@@ -650,13 +650,13 @@
                       @search="loadInternshipPanel('reports', 1)"
                     >
                       <template #actions="{ row }">
-                        <el-button v-if="canApproveInternship" link type="primary" @click="openReviewDialog('report', row, 'accept')">
+                        <el-button v-if="canReviewRow(row, 'report')" link type="primary" @click="openReviewDialog('report', row, 'accept')">
                           通过
                         </el-button>
-                        <el-button v-if="canApproveInternship" link type="warning" @click="openReviewDialog('report', row, 'modify')">
+                        <el-button v-if="canReviewRow(row, 'report')" link type="warning" @click="openReviewDialog('report', row, 'modify')">
                           退回
                         </el-button>
-                        <el-button v-if="row.status === 'accept' && canApproveInternship" link type="danger" @click="openReopenDialog('report', row)">
+                        <el-button v-if="canRequestModification(row, 'report')" link type="danger" @click="openReopenDialog('report', row)">
                           通过后修改
                         </el-button>
                         <el-button link type="info" @click="openTimelineDialog('report', row)">
@@ -680,11 +680,14 @@
                       @search="loadInternshipPanel('delays', 1)"
                     >
                       <template #actions="{ row }">
-                        <el-button v-if="canApproveInternship && row.status === 'wait'" link type="primary" @click="openReviewDialog('delay', row, 'accept')">
+                        <el-button v-if="canReviewRow(row, 'delay')" link type="primary" @click="openReviewDialog('delay', row, 'accept')">
                           通过
                         </el-button>
-                        <el-button v-if="canApproveInternship && row.status === 'wait'" link type="warning" @click="openReviewDialog('delay', row, 'refuse')">
+                        <el-button v-if="canReviewRow(row, 'delay')" link type="warning" @click="openReviewDialog('delay', row, 'refuse')">
                           退回
+                        </el-button>
+                        <el-button v-if="canRequestModification(row, 'delay')" link type="danger" @click="openReopenDialog('delay', row)">
+                          通过后修改
                         </el-button>
                         <el-button link type="info" @click="openTimelineDialog('delay', row)">
                           记录
@@ -711,74 +714,33 @@
                   </template>
 
                   <template v-else-if="win.panel === 'documents'">
-                    <div class="internship-document-panel">
-                      <div class="internship-document-tabs">
-                        <button :class="{ active: internshipState.documentTab === 'insurances' }" @click="internshipState.documentTab = 'insurances'">
-                          保险记录
-                        </button>
-                        <button :class="{ active: internshipState.documentTab === 'safetyLetters' }" @click="internshipState.documentTab = 'safetyLetters'">
-                          安全承诺
-                        </button>
-                      </div>
-                      <section v-if="internshipState.documentTab === 'insurances'" class="internship-card-list">
-                        <StudentOwnPanel
-                          v-if="isStudentRole"
-                          :description="studentPanelMeta('insurances').description"
-                          :empty-text="studentPanelMeta('insurances').emptyText"
-                          :fields="studentPanelFields('insurances')"
-                          :loading="internshipState.loading"
-                          :pagination="studentPanelList('insurances').pagination"
-                          :rows="studentPanelList('insurances').items"
-                          :status-formatter="statusText"
-                          :status-tag-type="statusTagType"
-                          :title="studentPanelMeta('insurances').title"
-                          @page-change="page => loadInternshipPanel('insurances', page)"
-                          @refresh="loadInternshipPanel('insurances')"
-                        />
-                        <DataListPanel
-                          v-else
-                          :columns="internshipListConfigs.insurances.columns"
-                          :filters="internshipListConfigs.insurances.filters"
-                          :filter-values="internshipState.filters.insurances"
-                          :loading="internshipState.loading"
-                          :pagination="internshipState.lists.insurances.pagination"
-                          :rows="internshipState.lists.insurances.items"
-                          @filter-change="setInternshipFilter('insurances', $event)"
-                          @page-change="page => loadInternshipPanel('insurances', page)"
-                          @reset="resetInternshipFilters('insurances')"
-                          @search="loadInternshipPanel('insurances', 1)"
-                        />
-                      </section>
-                      <section v-else class="internship-card-list">
-                        <StudentOwnPanel
-                          v-if="isStudentRole"
-                          :description="studentPanelMeta('safetyLetters').description"
-                          :empty-text="studentPanelMeta('safetyLetters').emptyText"
-                          :fields="studentPanelFields('safetyLetters')"
-                          :loading="internshipState.loading"
-                          :pagination="studentPanelList('safetyLetters').pagination"
-                          :rows="studentPanelList('safetyLetters').items"
-                          :status-formatter="statusText"
-                          :status-tag-type="statusTagType"
-                          :title="studentPanelMeta('safetyLetters').title"
-                          @page-change="page => loadInternshipPanel('safetyLetters', page)"
-                          @refresh="loadInternshipPanel('safetyLetters')"
-                        />
-                        <DataListPanel
-                          v-else
-                          :columns="internshipListConfigs.safetyLetters.columns"
-                          :filters="internshipListConfigs.safetyLetters.filters"
-                          :filter-values="internshipState.filters.safetyLetters"
-                          :loading="internshipState.loading"
-                          :pagination="internshipState.lists.safetyLetters.pagination"
-                          :rows="internshipState.lists.safetyLetters.items"
-                          @filter-change="setInternshipFilter('safetyLetters', $event)"
-                          @page-change="page => loadInternshipPanel('safetyLetters', page)"
-                          @reset="resetInternshipFilters('safetyLetters')"
-                          @search="loadInternshipPanel('safetyLetters', 1)"
-                        />
-                      </section>
-                    </div>
+                    <StudentOwnPanel
+                      v-if="isStudentRole"
+                      :description="studentPanelMeta('archiveMaterials').description"
+                      :empty-text="studentPanelMeta('archiveMaterials').emptyText"
+                      :fields="studentPanelFields('archiveMaterials')"
+                      :loading="internshipState.loading"
+                      :pagination="studentPanelList('archiveMaterials').pagination"
+                      :rows="studentPanelList('archiveMaterials').items"
+                      :status-formatter="statusText"
+                      :status-tag-type="statusTagType"
+                      :title="studentPanelMeta('archiveMaterials').title"
+                      @page-change="page => loadInternshipPanel('documents', page)"
+                      @refresh="loadInternshipPanel('documents')"
+                    />
+                    <DataListPanel
+                      v-else
+                      :columns="internshipListConfigs.archiveMaterials.columns"
+                      :filters="internshipListConfigs.archiveMaterials.filters"
+                      :filter-values="internshipState.filters.archiveMaterials"
+                      :loading="internshipState.loading"
+                      :pagination="internshipState.lists.archiveMaterials.pagination"
+                      :rows="internshipState.lists.archiveMaterials.items"
+                      @filter-change="setInternshipFilter('archiveMaterials', $event)"
+                      @page-change="page => loadInternshipPanel('documents', page)"
+                      @reset="resetInternshipFilters('archiveMaterials')"
+                      @search="loadInternshipPanel('documents', 1)"
+                    />
                   </template>
                 </div>
 
@@ -1224,7 +1186,7 @@
                   </div>
                   <el-tree
                     ref="roleTreeRef"
-                    class="permission-tree"
+                    class="permission-tree role-permission-tree"
                     :data="adminState.menus"
                     :props="treeProps"
                     node-key="id"
@@ -1706,6 +1668,7 @@ import {
   fetchAdminRoles,
   fetchArchiveList,
   fetchFileList,
+  fetchInternshipArchiveMaterials,
   fetchInternshipApplications,
   fetchInternshipArrangements,
   fetchInternshipDelays,
@@ -2136,7 +2099,6 @@ const internshipState = reactive({
   message: '',
   savedMessage: '',
   reviewOpinion: '',
-  documentTab: 'insurances',
   overviewTab: 'metrics',
   dialog: emptyOperationDialog(),
   overview: emptyInternshipOverview(),
@@ -2154,6 +2116,7 @@ const internshipState = reactive({
     reports: emptyInternshipFilters(),
     delays: emptyInternshipFilters(),
     scores: emptyInternshipFilters(),
+    archiveMaterials: emptyInternshipFilters(),
     insurances: emptyInternshipFilters(),
     safetyLetters: emptyInternshipFilters(),
   },
@@ -2167,6 +2130,7 @@ const internshipState = reactive({
     reports: emptyPagedList(),
     delays: emptyPagedList(),
     scores: emptyPagedList(),
+    archiveMaterials: emptyPagedList(),
     insurances: emptyPagedList(),
     safetyLetters: emptyPagedList(),
   },
@@ -2422,6 +2386,33 @@ const internshipListConfigs = computed(() => ({
       { prop: 'teacher_name', label: '评分人', width: 110 },
     ],
   },
+  archiveMaterials: {
+    listKey: 'archiveMaterials',
+    filename: '归档材料',
+    filters: internshipListFilters('archiveMaterials', ['semester', 'grade_id', 'dep_id', 'profession_id', 'arrangement_id', 'archive_status', 'keyword']),
+    columns: [
+      { prop: 'student_name', label: '学生', width: 110 },
+      { prop: 'student_num', label: '学号', width: 130 },
+      { prop: 'dep_name', label: '学院', minWidth: 130 },
+      { prop: 'profession_name', label: '专业', minWidth: 130 },
+      { prop: 'arrangement_title', label: '实习安排', minWidth: 190 },
+      { prop: 'arrangement_type_text', label: '实习类型', width: 110 },
+      { prop: 'semester', label: '学期', width: 120 },
+      { prop: 'material_progress', label: '归档进度', width: 100 },
+      { prop: 'plan_status', label: '计划表', width: 95 },
+      { prop: 'implementation_sheet_status', label: '实施表', width: 95 },
+      { prop: 'syllabus_guide_status', label: '大纲指导书', width: 110 },
+      { prop: 'score_summary_status', label: '成绩汇总', width: 95 },
+      { prop: 'safety_letter_status', label: '安全承诺', width: 95 },
+      { prop: 'journal_status', label: '实习周志', width: 95 },
+      { prop: 'report_status', label: '实习报告', width: 95 },
+      { prop: 'graduation_appraisal_status', label: '鉴定表', width: 95 },
+      { prop: 'teacher_work_report_status', label: '教师工作报告', width: 120 },
+      { prop: 'insurance_status', label: '保险单', width: 95 },
+      { prop: 'missing_materials', label: '缺失材料', minWidth: 240 },
+      { prop: 'archive_status_text', label: '归档状态', width: 100 },
+    ],
+  },
   insurances: {
     listKey: 'insurances',
     filename: '保险记录',
@@ -2554,6 +2545,11 @@ function studentPanelMeta(panel) {
       description: '展示当前学生本人的实习成绩。',
       emptyText: '暂无成绩记录',
     },
+    archiveMaterials: {
+      title: '我的归档材料',
+      description: '展示当前学生本人各项实习归档材料的完整性。',
+      emptyText: '暂无归档材料',
+    },
     insurances: {
       title: '保险记录',
       description: '只展示当前学生本人的保险材料。',
@@ -2619,6 +2615,13 @@ function studentPanelFields(panel) {
       { key: 'report_score', label: '报告' },
       { key: 'enterprise_score', label: '企业' },
       { key: 'final_score', label: '总评' },
+    ],
+    archiveMaterials: [
+      { key: 'arrangement_title', label: '实习安排' },
+      { key: 'arrangement_type_text', label: '实习类型' },
+      { key: 'semester', label: '学期' },
+      { key: 'material_progress', label: '归档进度' },
+      { key: 'missing_materials', label: '缺失材料' },
     ],
     insurances: [
       { key: 'arrangement_title', label: '实习安排' },
@@ -3967,6 +3970,7 @@ function emptyInternshipFilters() {
     arrangement_id: '',
     config_key: '',
     status: '',
+    archive_status: '',
     type: '',
     organize_mode: '',
   };
@@ -4042,6 +4046,7 @@ function internshipFilters(keys) {
     arrangement_id: { key: 'arrangement_id', label: '实习安排', type: 'select', options: optionItems(internshipState.options.arrangements, 'id', 'title') },
     config_key: { key: 'config_key', label: '延期类型', type: 'select', options: delayConfigOptions() },
     status: { key: 'status', label: '状态', type: 'select', options: statusOptions() },
+    archive_status: { key: 'archive_status', label: '归档状态', type: 'select', options: archiveStatusOptions() },
     type: { key: 'type', label: '类型', type: 'select', options: internshipState.options.types.map(value => ({ value, label: arrangementTypeText(value) })) },
     organize_mode: { key: 'organize_mode', label: '组织方式', type: 'select', options: internshipState.options.organize_modes.map(value => ({ value, label: organizeModeText(value) })) },
   };
@@ -4195,6 +4200,16 @@ function statusOptions() {
   }));
 }
 
+function archiveStatusOptions() {
+  return [
+    { value: 'complete', label: '完整' },
+    { value: 'incomplete', label: '待补齐' },
+    { value: 'archived', label: '已归档' },
+    { value: 'missing', label: '待补齐' },
+    { value: 'not_required', label: '不适用' },
+  ];
+}
+
 function delayConfigOptions() {
   return [
     { value: 'journal_deadline', label: '日志截止' },
@@ -4330,6 +4345,10 @@ function openScoreDialog(row = null) {
 }
 
 function openReviewDialog(entity, row, status) {
+  if (!canReviewRow(row, entity)) {
+    internshipState.message = '仅待审核数据可处理';
+    return;
+  }
   const actionText = status === 'accept' ? '通过' : '退回';
   internshipState.dialog = {
     ...emptyOperationDialog(),
@@ -4344,6 +4363,10 @@ function openReviewDialog(entity, row, status) {
 }
 
 function openReopenDialog(entity, row) {
+  if (!canRequestModification(row, entity)) {
+    internshipState.message = '仅已通过数据可发起通过后修改';
+    return;
+  }
   internshipState.dialog = {
     ...emptyOperationDialog(),
     type: 'reopen',
@@ -4490,9 +4513,73 @@ function timelineTitle(item) {
 
 function timelineContent(item) {
   if (item.record) {
+    if (item.record.action === 'submit' && isGenericSubmitContent(item.record.content)) {
+      return submissionSnapshotText(internshipState.dialog.entity, internshipState.dialog.row);
+    }
     return item.record.content || item.record.opinion || '-';
   }
   return item.review?.opinion || '-';
+}
+
+function timelineReviews(item) {
+  return item.record ? [] : (item.reviews || []);
+}
+
+function isGenericSubmitContent(value) {
+  return [
+    '提交实习申请',
+    '提交实习日志',
+    '提交实习报告',
+    '提交延期申请',
+    '提交实习计划',
+  ].includes(String(value || '').trim());
+}
+
+function submissionSnapshotText(entity, row) {
+  if (!row) {
+    return '-';
+  }
+  const textMap = {
+    application: row.remark || row.arrangement_title,
+    journal: [row.title, row.content].filter(Boolean).join('：'),
+    report: [row.title, row.content].filter(Boolean).join('：'),
+    plan: planContentText(row.plan_content),
+    delay: row.reason,
+  };
+  const text = String(textMap[entity] || '').replace(/\s+/g, ' ').trim();
+  return text ? (text.length > 180 ? `${text.slice(0, 180)}...` : text) : '-';
+}
+
+function canReviewRow(row, entity) {
+  if (!row || row.status !== 'wait') {
+    return false;
+  }
+  if (entity === 'plan') {
+    return canManageInternshipPlan.value;
+  }
+  if (entity === 'application') {
+    if (!canApproveInternship.value) {
+      return false;
+    }
+    if (isTeacherRole.value) {
+      return ['pending', 'wait'].includes(row.teacher_status);
+    }
+    if (isAdminRole.value) {
+      return ['pending', 'wait'].includes(row.admin_status);
+    }
+    return false;
+  }
+  return canApproveInternship.value;
+}
+
+function canRequestModification(row, entity) {
+  if (!row || row.status !== 'accept') {
+    return false;
+  }
+  if (entity === 'plan') {
+    return canManageInternshipPlan.value;
+  }
+  return canApproveInternship.value;
 }
 
 function textLength(value) {
@@ -4599,12 +4686,7 @@ async function loadInternshipPanel(panel = 'overview', page = 1) {
       setPagedList('scores', scores);
       setPagedList('pairs', pairs);
     } else if (panel === 'documents') {
-      const [insurances, safetyLetters] = await Promise.all([
-        fetchInternshipInsurances(params('insurances')),
-        fetchInternshipSafetyLetters(params('safetyLetters')),
-      ]);
-      setPagedList('insurances', insurances);
-      setPagedList('safetyLetters', safetyLetters);
+      setPagedList('archiveMaterials', await fetchInternshipArchiveMaterials(params('archiveMaterials')));
     } else if (panel === 'insurances') {
       setPagedList('insurances', await fetchInternshipInsurances(params('insurances')));
     } else if (panel === 'safetyLetters') {
@@ -4875,21 +4957,28 @@ function statusText(value) {
     active: '有效',
     removed: '已解除',
     signed: '已签署',
+    complete: '完整',
+    incomplete: '待补齐',
+    archived: '已归档',
+    missing: '待补齐',
+    not_required: '不适用',
+    confirmed: '已确认',
+    published: '已发布',
   };
   return names[value] || value || '-';
 }
 
 function statusTagType(value) {
-  if (['accept', 'enabled', 'active', 'signed'].includes(value)) {
+  if (['accept', 'enabled', 'active', 'signed', 'complete', 'archived', 'confirmed', 'published'].includes(value)) {
     return 'success';
   }
   if (['wait', 'pending', 'draft'].includes(value)) {
     return 'warning';
   }
-  if (['modify', 'removed', 'disabled'].includes(value)) {
+  if (['modify', 'removed', 'disabled', 'not_required'].includes(value)) {
     return 'info';
   }
-  if (['refuse'].includes(value)) {
+  if (['refuse', 'incomplete', 'missing'].includes(value)) {
     return 'danger';
   }
   return 'primary';

@@ -5,6 +5,26 @@ namespace app\model\channel;
 class InternshipRecord extends TableRecord
 {
     private const STAT_DATA_LIMIT = 20000;
+    private const ARCHIVE_MATERIALS = [
+        'plan' => '学期实习计划表',
+        'implementation_sheet' => '教学实习实施表',
+        'syllabus_guide' => '实习大纲及指导书',
+        'score_summary' => '实习情况及成绩汇总表',
+        'safety_letter' => '校外实习安全承诺书',
+        'journal' => '实习周志',
+        'report' => '实习/实训报告',
+        'graduation_appraisal' => '毕业实习报告及成绩鉴定表',
+        'teacher_work_report' => '实习指导教师工作报告',
+        'insurance' => '保险单',
+    ];
+    private const ARCHIVE_REQUIREMENTS = [
+        'cognition_internal' => ['plan', 'syllabus_guide', 'report'],
+        'cognition_external' => ['plan', 'implementation_sheet', 'syllabus_guide', 'score_summary', 'safety_letter', 'report', 'teacher_work_report', 'insurance'],
+        'major_internal' => ['plan', 'syllabus_guide', 'report'],
+        'major_external' => ['plan', 'implementation_sheet', 'syllabus_guide', 'score_summary', 'safety_letter', 'report', 'teacher_work_report', 'insurance'],
+        'production' => ['plan', 'implementation_sheet', 'syllabus_guide', 'score_summary', 'safety_letter', 'report', 'teacher_work_report', 'insurance'],
+        'graduation' => ['plan', 'syllabus_guide', 'score_summary', 'safety_letter', 'journal', 'report', 'graduation_appraisal', 'teacher_work_report', 'insurance'],
+    ];
     private const STAT_REPORT_NAMES = [
         'overview' => '实习总览',
         'department' => '学院统计',
@@ -414,6 +434,22 @@ class InternshipRecord extends TableRecord
         return self::paginate(self::queryTable('inspection_record')
             ->whereNull('deleted_at')
             ->orderByDesc('id'), $filters, ['inspection_record.*']);
+    }
+
+    public static function archiveMaterialPage(array $scope, array $filters): array
+    {
+        $dataFilters = $filters;
+        unset($dataFilters['keyword'], $dataFilters['archive_status'], $dataFilters['status']);
+        $data = self::statData($scope, $dataFilters);
+        $rows = self::filterArchiveRows(self::archiveMaterialRows($data), $filters);
+        $paged = self::paginateArrayRows($rows, $filters);
+
+        return [
+            'items' => $paged['items'],
+            'pagination' => $paged['pagination'],
+            'columns' => self::archiveMaterialColumns(),
+            'materials' => self::archiveMaterialDefinitions(),
+        ];
     }
 
     public static function arrangementVisible(array $scope, int $arrangementId): bool
@@ -851,6 +887,10 @@ class InternshipRecord extends TableRecord
         $scores = self::statScores($scope, $filters);
         $insurances = self::statInsurances($scope, $filters);
         $safetyLetters = self::statSafetyLetters($scope, $filters);
+        $plans = self::statPlans($scope, $filters);
+        $syllabusGuides = self::statSyllabusGuides($scope, $filters);
+        $implementationSheets = self::statImplementationSheets($scope, $filters);
+        $teacherWorkReports = self::statTeacherWorkReports($scope, $filters);
 
         return [
             'students' => $students,
@@ -867,6 +907,10 @@ class InternshipRecord extends TableRecord
             'scores' => $scores,
             'insurances' => $insurances,
             'safety_letters' => $safetyLetters,
+            'plans' => $plans,
+            'syllabus_guides' => $syllabusGuides,
+            'implementation_sheets' => $implementationSheets,
+            'teacher_work_reports' => $teacherWorkReports,
         ];
     }
 
@@ -920,7 +964,7 @@ class InternshipRecord extends TableRecord
 
         return self::statRows($query->orderByDesc('arrangement.id'), [
             'arrangement.id', 'arrangement.title', 'arrangement.name', 'arrangement.semester',
-            'arrangement.dep_id', 'arrangement.profession_id', 'arrangement.status',
+            'arrangement.dep_id', 'arrangement.profession_id', 'arrangement.type', 'arrangement.status',
             'department.dep_name', 'profession.profession_name',
         ]);
     }
@@ -1074,9 +1118,70 @@ class InternshipRecord extends TableRecord
 
         return self::statRows($query->orderByDesc('safety_letter_sign.id'), [
             'safety_letter_sign.id', 'safety_letter_sign.student_id',
-            'safety_letter_sign.arrangement_id', 'safety_letter_sign.signed_at',
+            'safety_letter_sign.arrangement_id', 'safety_letter_sign.signed_at', 'safety_letter_sign.status',
             'students.dep_id', 'students.profession_id', 'students.grade_id',
             'arrangement.title as arrangement_title', 'arrangement.semester',
+        ]);
+    }
+
+    private static function statPlans(array $scope, array $filters): array
+    {
+        $query = self::queryTable('internship_plan')
+            ->leftJoin('department', 'internship_plan.dep_id', '=', 'department.dep_id')
+            ->whereNull('internship_plan.deleted_at');
+        self::applyDepProfessionScope($query, $scope, 'internship_plan.dep_id', null);
+        self::filter($query, $filters, 'internship_plan.semester', 'semester');
+        self::filter($query, $filters, 'internship_plan.dep_id', 'dep_id');
+        self::keyword($query, $filters, ['internship_plan.semester', 'department.dep_name']);
+
+        return self::statRows($query->orderByDesc('internship_plan.id'), [
+            'internship_plan.id', 'internship_plan.dep_id', 'internship_plan.semester',
+            'internship_plan.status', 'department.dep_name',
+        ]);
+    }
+
+    private static function statSyllabusGuides(array $scope, array $filters): array
+    {
+        $query = self::applyArrangementScope(self::queryTable('syllabus_guide')
+            ->leftJoin('arrangement', 'syllabus_guide.arrangement_id', '=', 'arrangement.id')
+            ->whereNull('syllabus_guide.deleted_at'), $scope);
+        self::statArrangementListFilters($query, $filters, 'arrangement');
+        self::keyword($query, $filters, ['syllabus_guide.title', 'arrangement.title']);
+
+        return self::statRows($query->orderByDesc('syllabus_guide.id'), [
+            'syllabus_guide.id', 'syllabus_guide.arrangement_id', 'syllabus_guide.status',
+            'syllabus_guide.title', 'arrangement.title as arrangement_title',
+        ]);
+    }
+
+    private static function statImplementationSheets(array $scope, array $filters): array
+    {
+        $query = self::applyArrangementScope(self::queryTable('implementation_sheet')
+            ->leftJoin('arrangement', 'implementation_sheet.arrangement_id', '=', 'arrangement.id')
+            ->whereNull('implementation_sheet.deleted_at'), $scope);
+        self::statArrangementListFilters($query, $filters, 'arrangement');
+        self::keyword($query, $filters, ['arrangement.title']);
+
+        return self::statRows($query->orderByDesc('implementation_sheet.id'), [
+            'implementation_sheet.id', 'implementation_sheet.arrangement_id',
+            'implementation_sheet.status', 'implementation_sheet.insurance_verified',
+            'arrangement.title as arrangement_title',
+        ]);
+    }
+
+    private static function statTeacherWorkReports(array $scope, array $filters): array
+    {
+        $query = self::applyArrangementScope(self::queryTable('teacher_work_report')
+            ->leftJoin('arrangement', 'teacher_work_report.arrangement_id', '=', 'arrangement.id')
+            ->leftJoin('teacher_list', 'teacher_work_report.teacher_id', '=', 'teacher_list.teacher_id')
+            ->whereNull('teacher_work_report.deleted_at'), $scope);
+        self::statArrangementListFilters($query, $filters, 'arrangement');
+        self::keyword($query, $filters, ['arrangement.title', 'teacher_list.teacher_name', 'teacher_list.teacher_num']);
+
+        return self::statRows($query->orderByDesc('teacher_work_report.id'), [
+            'teacher_work_report.id', 'teacher_work_report.arrangement_id',
+            'teacher_work_report.teacher_id', 'teacher_work_report.status',
+            'arrangement.title as arrangement_title', 'teacher_list.teacher_name',
         ]);
     }
 
@@ -1092,6 +1197,17 @@ class InternshipRecord extends TableRecord
             'profession_id' => "{$studentTable}.profession_id",
             'grade_id' => "{$studentTable}.grade_id",
             'semester' => "{$arrangementTable}.semester",
+            'arrangement_id' => "{$arrangementTable}.id",
+        ]);
+    }
+
+    private static function statArrangementListFilters(mixed $query, array $filters, string $arrangementTable): void
+    {
+        self::listFilters($query, $filters, [
+            'dep_id' => "{$arrangementTable}.dep_id",
+            'profession_id' => "{$arrangementTable}.profession_id",
+            'semester' => "{$arrangementTable}.semester",
+            'arrangement_id' => "{$arrangementTable}.id",
         ]);
     }
 
@@ -1291,25 +1407,298 @@ class InternshipRecord extends TableRecord
         $rows = [];
         foreach (self::participantKeys($data) as $key) {
             [$studentId, $arrangementId] = self::splitPairKey($key);
-            $student = $data['student_map'][$studentId] ?? [];
-            $arrangement = $data['arrangement_map'][$arrangementId] ?? [];
-            $insurance = self::firstByPair($data['insurances'], $studentId, $arrangementId);
-            $safety = self::firstByPair($data['safety_letters'], $studentId, $arrangementId);
-            $report = self::firstByPair($data['reports'], $studentId, $arrangementId);
-            $complete = $insurance && $safety && (($report['status'] ?? '') === 'accept');
+            $row = self::archiveMaterialRow($data, $studentId, $arrangementId);
             $rows[] = [
-                'student_name' => $student['name'] ?? '-',
-                'student_num' => $student['student_num'] ?? '-',
-                'arrangement_title' => $arrangement['title'] ?? ($report['arrangement_title'] ?? '-'),
-                'insurance' => $insurance ? '已上传' : '未上传',
-                'policy_number' => $insurance['policy_number'] ?? '-',
-                'safety_letter' => $safety ? '已签署' : '未签署',
-                'report_status' => $report['status'] ?? '-',
-                'archive_complete' => $complete ? '完整' : '待补齐',
+                'student_name' => $row['student_name'],
+                'student_num' => $row['student_num'],
+                'arrangement_title' => $row['arrangement_title'],
+                'required_count' => $row['required_count'],
+                'archived_count' => $row['archived_count'],
+                'material_progress' => $row['material_progress'],
+                'missing_materials' => $row['missing_materials'],
+                'archive_complete' => $row['archive_status_text'],
             ];
         }
 
         return $rows;
+    }
+
+    private static function archiveMaterialRows(array $data): array
+    {
+        $rows = [];
+        foreach (self::participantKeys($data) as $key) {
+            [$studentId, $arrangementId] = self::splitPairKey($key);
+            $rows[] = self::archiveMaterialRow($data, $studentId, $arrangementId);
+        }
+
+        usort($rows, static function (array $left, array $right): int {
+            return strcmp((string) $left['arrangement_title'], (string) $right['arrangement_title'])
+                ?: strcmp((string) $left['student_num'], (string) $right['student_num']);
+        });
+
+        return $rows;
+    }
+
+    private static function archiveMaterialRow(array $data, int $studentId, int $arrangementId): array
+    {
+        $student = $data['student_map'][$studentId] ?? [];
+        $arrangement = $data['arrangement_map'][$arrangementId] ?? [];
+        $required = self::archiveRequiredKeys((string) ($arrangement['type'] ?? ''));
+        $materials = self::archiveMaterialStates($data, $studentId, $arrangementId, $arrangement, $required);
+        $requiredCount = 0;
+        $archivedCount = 0;
+        $missing = [];
+        foreach ($materials as $material) {
+            if (!$material['required']) {
+                continue;
+            }
+            $requiredCount++;
+            if ($material['archived']) {
+                $archivedCount++;
+            } else {
+                $missing[] = $material['label'];
+            }
+        }
+        $complete = $requiredCount > 0 && $requiredCount === $archivedCount;
+        $materialColumns = [];
+        foreach ($materials as $material) {
+            $materialColumns[$material['key'] . '_status'] = $material['text'];
+        }
+
+        return array_merge([
+            'id' => $studentId . '-' . $arrangementId,
+            'student_id' => $studentId,
+            'student_name' => $student['name'] ?? '-',
+            'student_num' => $student['student_num'] ?? '-',
+            'dep_name' => $student['dep_name'] ?? '-',
+            'profession_name' => $student['profession_name'] ?? '-',
+            'arrangement_id' => $arrangementId,
+            'arrangement_title' => $arrangement['title'] ?? '-',
+            'arrangement_type' => $arrangement['type'] ?? '',
+            'arrangement_type_text' => self::arrangementTypeText((string) ($arrangement['type'] ?? '')),
+            'semester' => $arrangement['semester'] ?? '-',
+            'required_count' => $requiredCount,
+            'archived_count' => $archivedCount,
+            'missing_count' => count($missing),
+            'material_progress' => $requiredCount > 0 ? "{$archivedCount}/{$requiredCount}" : '-',
+            'missing_materials' => $missing ? implode('、', $missing) : '无',
+            'materials' => $materials,
+            'archive_status' => $complete ? 'complete' : 'incomplete',
+            'archive_status_text' => $complete ? '完整' : '待补齐',
+            'status' => $complete ? 'complete' : 'incomplete',
+        ], $materialColumns);
+    }
+
+    private static function archiveMaterialStates(array $data, int $studentId, int $arrangementId, array $arrangement, array $required): array
+    {
+        $states = [];
+        foreach (self::ARCHIVE_MATERIALS as $key => $label) {
+            $isRequired = in_array($key, $required, true);
+            $state = self::archiveMaterialState($key, $data, $studentId, $arrangementId, $arrangement);
+            $states[] = [
+                'key' => $key,
+                'label' => $label,
+                'required' => $isRequired,
+                'archived' => $isRequired && $state['archived'],
+                'status' => $isRequired ? ($state['archived'] ? 'archived' : 'missing') : 'not_required',
+                'text' => $isRequired ? ($state['archived'] ? $state['text'] : '待补齐') : '不适用',
+                'source_status' => $state['source_status'],
+            ];
+        }
+
+        return $states;
+    }
+
+    private static function archiveMaterialState(string $key, array $data, int $studentId, int $arrangementId, array $arrangement): array
+    {
+        return match ($key) {
+            'plan' => self::archivePlanState($data['plans'], $arrangement),
+            'implementation_sheet' => self::archiveArrangementState($data['implementation_sheets'], $arrangementId, ['confirmed', 'accept', 'enabled']),
+            'syllabus_guide' => self::archiveArrangementState($data['syllabus_guides'], $arrangementId, ['published', 'enabled', 'accept']),
+            'score_summary' => self::archiveScoreState($data['scores'], $studentId, $arrangementId),
+            'safety_letter' => self::archiveSafetyState($data['safety_letters'], $studentId, $arrangementId),
+            'journal' => self::archiveJournalState($data['journals'], $studentId, $arrangementId),
+            'report' => self::archiveReportState($data['reports'], $studentId, $arrangementId),
+            'graduation_appraisal' => self::archiveGraduationAppraisalState($data, $studentId, $arrangementId),
+            'teacher_work_report' => self::archiveArrangementState($data['teacher_work_reports'], $arrangementId, ['accept', 'enabled']),
+            'insurance' => self::archiveInsuranceState($data['insurances'], $studentId, $arrangementId),
+            default => ['archived' => false, 'text' => '待补齐', 'source_status' => null],
+        };
+    }
+
+    private static function archivePlanState(array $plans, array $arrangement): array
+    {
+        foreach ($plans as $plan) {
+            $sameSemester = (string) ($plan['semester'] ?? '') === (string) ($arrangement['semester'] ?? '');
+            $sameDepartment = (int) ($plan['dep_id'] ?? 0) === 0 || (int) ($plan['dep_id'] ?? 0) === (int) ($arrangement['dep_id'] ?? 0);
+            if ($sameSemester && $sameDepartment) {
+                $status = (string) ($plan['status'] ?? '');
+                return [
+                    'archived' => in_array($status, ['accept', 'enabled'], true),
+                    'text' => self::archiveSourceText($status),
+                    'source_status' => $status,
+                ];
+            }
+        }
+
+        return ['archived' => false, 'text' => '待补齐', 'source_status' => null];
+    }
+
+    private static function archiveArrangementState(array $rows, int $arrangementId, array $acceptedStatuses): array
+    {
+        foreach ($rows as $row) {
+            if ((int) ($row['arrangement_id'] ?? 0) !== $arrangementId) {
+                continue;
+            }
+            $status = (string) ($row['status'] ?? '');
+            return [
+                'archived' => in_array($status, $acceptedStatuses, true),
+                'text' => self::archiveSourceText($status),
+                'source_status' => $status,
+            ];
+        }
+
+        return ['archived' => false, 'text' => '待补齐', 'source_status' => null];
+    }
+
+    private static function archiveScoreState(array $scores, int $studentId, int $arrangementId): array
+    {
+        $score = self::firstByPair($scores, $studentId, $arrangementId);
+        $archived = $score && is_numeric($score['final_score'] ?? null);
+        return [
+            'archived' => $archived,
+            'text' => $archived ? '已归档' : '待补齐',
+            'source_status' => $archived ? 'enabled' : null,
+        ];
+    }
+
+    private static function archiveSafetyState(array $rows, int $studentId, int $arrangementId): array
+    {
+        $row = self::firstByPair($rows, $studentId, $arrangementId);
+        $signed = $row && ((string) ($row['status'] ?? '') === 'signed' || !empty($row['signed_at']));
+        return [
+            'archived' => $signed,
+            'text' => $signed ? '已签署' : '待补齐',
+            'source_status' => $row['status'] ?? null,
+        ];
+    }
+
+    private static function archiveJournalState(array $rows, int $studentId, int $arrangementId): array
+    {
+        $count = 0;
+        foreach ($rows as $row) {
+            if ((int) ($row['student_id'] ?? 0) === $studentId && (int) ($row['arrangement_id'] ?? 0) === $arrangementId && in_array((string) ($row['status'] ?? ''), ['accept', 'enabled'], true)) {
+                $count++;
+            }
+        }
+
+        return [
+            'archived' => $count > 0,
+            'text' => $count > 0 ? "已归档{$count}篇" : '待补齐',
+            'source_status' => $count > 0 ? 'accept' : null,
+        ];
+    }
+
+    private static function archiveReportState(array $rows, int $studentId, int $arrangementId): array
+    {
+        $row = self::firstByPair($rows, $studentId, $arrangementId);
+        $status = (string) ($row['status'] ?? '');
+        return [
+            'archived' => $status === 'accept',
+            'text' => self::archiveSourceText($status),
+            'source_status' => $status ?: null,
+        ];
+    }
+
+    private static function archiveGraduationAppraisalState(array $data, int $studentId, int $arrangementId): array
+    {
+        $report = self::archiveReportState($data['reports'], $studentId, $arrangementId);
+        $score = self::archiveScoreState($data['scores'], $studentId, $arrangementId);
+        $archived = $report['archived'] && $score['archived'];
+
+        return [
+            'archived' => $archived,
+            'text' => $archived ? '已归档' : '待补齐',
+            'source_status' => $archived ? 'accept' : null,
+        ];
+    }
+
+    private static function archiveInsuranceState(array $rows, int $studentId, int $arrangementId): array
+    {
+        $row = self::firstByPair($rows, $studentId, $arrangementId);
+        $archived = (bool) $row;
+        return [
+            'archived' => $archived,
+            'text' => $archived ? '已归档' : '待补齐',
+            'source_status' => $archived ? 'enabled' : null,
+        ];
+    }
+
+    private static function archiveRequiredKeys(string $type): array
+    {
+        return self::ARCHIVE_REQUIREMENTS[$type] ?? self::ARCHIVE_REQUIREMENTS['major_external'];
+    }
+
+    private static function arrangementTypeText(string $type): string
+    {
+        return match ($type) {
+            'cognition_internal' => '认识校内',
+            'cognition_external' => '认识校外',
+            'major_internal' => '专业校内',
+            'major_external' => '专业校外',
+            'production' => '生产实习',
+            'graduation' => '毕业实习',
+            default => $type ?: '-',
+        };
+    }
+
+    private static function archiveSourceText(?string $status): string
+    {
+        return match ((string) $status) {
+            'accept', 'enabled', 'published', 'confirmed' => '已归档',
+            'signed' => '已签署',
+            'wait' => '待审核',
+            'modify' => '需修改',
+            'draft' => '草稿',
+            default => '待补齐',
+        };
+    }
+
+    private static function filterArchiveRows(array $rows, array $filters): array
+    {
+        $status = (string) ($filters['archive_status'] ?? $filters['status'] ?? '');
+        if ($status !== '') {
+            $rows = self::filterRows($rows, static fn (array $row): bool => (string) ($row['archive_status'] ?? '') === $status);
+        }
+        $keyword = trim((string) ($filters['keyword'] ?? ''));
+        if ($keyword === '') {
+            return $rows;
+        }
+        $keyword = mb_strtolower($keyword, 'UTF-8');
+
+        return self::filterRows($rows, static function (array $row) use ($keyword): bool {
+            $text = implode(' ', [
+                $row['student_name'] ?? '',
+                $row['student_num'] ?? '',
+                $row['dep_name'] ?? '',
+                $row['profession_name'] ?? '',
+                $row['arrangement_title'] ?? '',
+                $row['arrangement_type_text'] ?? '',
+                $row['semester'] ?? '',
+                $row['missing_materials'] ?? '',
+            ]);
+            return str_contains(mb_strtolower($text, 'UTF-8'), $keyword);
+        });
+    }
+
+    private static function archiveMaterialDefinitions(): array
+    {
+        $items = [];
+        foreach (self::ARCHIVE_MATERIALS as $key => $label) {
+            $items[] = ['key' => $key, 'label' => $label];
+        }
+
+        return $items;
     }
 
     private static function participantKeys(array $data): array
@@ -1511,11 +1900,35 @@ class InternshipRecord extends TableRecord
             ['key' => 'student_name', 'label' => '学生', 'width' => 120],
             ['key' => 'student_num', 'label' => '学号', 'width' => 130],
             ['key' => 'arrangement_title', 'label' => '实习安排', 'min_width' => 180],
-            ['key' => 'insurance', 'label' => '保险记录', 'width' => 100],
-            ['key' => 'policy_number', 'label' => '保单号', 'min_width' => 150],
-            ['key' => 'safety_letter', 'label' => '安全承诺', 'width' => 100],
-            ['key' => 'report_status', 'label' => '报告', 'width' => 90, 'type' => 'status'],
+            ['key' => 'material_progress', 'label' => '归档进度', 'width' => 100],
+            ['key' => 'missing_materials', 'label' => '缺失材料', 'min_width' => 260],
             ['key' => 'archive_complete', 'label' => '归档状态', 'width' => 100],
+        ];
+    }
+
+    private static function archiveMaterialColumns(): array
+    {
+        return [
+            ['key' => 'student_name', 'label' => '学生', 'width' => 120],
+            ['key' => 'student_num', 'label' => '学号', 'width' => 130],
+            ['key' => 'dep_name', 'label' => '学院', 'min_width' => 150],
+            ['key' => 'profession_name', 'label' => '专业', 'min_width' => 150],
+            ['key' => 'arrangement_title', 'label' => '实习安排', 'min_width' => 190],
+            ['key' => 'arrangement_type_text', 'label' => '实习类型', 'width' => 120],
+            ['key' => 'semester', 'label' => '学期', 'width' => 120],
+            ['key' => 'material_progress', 'label' => '归档进度', 'width' => 100],
+            ['key' => 'plan_status', 'label' => '计划表', 'width' => 100],
+            ['key' => 'implementation_sheet_status', 'label' => '实施表', 'width' => 100],
+            ['key' => 'syllabus_guide_status', 'label' => '大纲指导书', 'width' => 110],
+            ['key' => 'score_summary_status', 'label' => '成绩汇总', 'width' => 100],
+            ['key' => 'safety_letter_status', 'label' => '安全承诺', 'width' => 100],
+            ['key' => 'journal_status', 'label' => '实习周志', 'width' => 110],
+            ['key' => 'report_status', 'label' => '实习报告', 'width' => 100],
+            ['key' => 'graduation_appraisal_status', 'label' => '鉴定表', 'width' => 100],
+            ['key' => 'teacher_work_report_status', 'label' => '教师工作报告', 'width' => 120],
+            ['key' => 'insurance_status', 'label' => '保险单', 'width' => 100],
+            ['key' => 'missing_materials', 'label' => '缺失材料', 'min_width' => 260],
+            ['key' => 'archive_status_text', 'label' => '归档状态', 'width' => 100],
         ];
     }
 

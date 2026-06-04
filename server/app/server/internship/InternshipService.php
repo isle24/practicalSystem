@@ -215,7 +215,7 @@ class InternshipService
         ])['id'];
         $this->syncJoinTeachers($id, $studentId, $arrangementId, $this->intArray($request->input('teacher_ids', [])));
         if ($status === 'wait') {
-            $this->recordWorkflow('application_recording', 'application', $id, 'submit', $fromStatus, 'wait', '提交实习申请', 'wait');
+            $this->recordWorkflow('application_recording', 'application', $id, 'submit', $fromStatus, 'wait', $values['remark'] ?: '提交实习申请', 'wait');
         }
 
         return ['id' => $id, 'item' => $this->application($id)];
@@ -237,7 +237,7 @@ class InternshipService
             'admin_status' => 'pending',
             'updated_at' => $this->now(),
         ]);
-        $this->recordWorkflow('application_recording', 'application', $id, 'submit', (string) $row->status, 'wait', '提交实习申请', 'wait');
+        $this->recordWorkflow('application_recording', 'application', $id, 'submit', (string) $row->status, 'wait', (string) ($row->remark ?: '提交实习申请'), 'wait');
 
         return ['id' => $id, 'item' => $this->application($id)];
     }
@@ -255,15 +255,24 @@ class InternshipService
                 throw new RuntimeException('实习申请不存在');
             }
             $this->assertApplicationVisible((int) $row->id);
+            if ((string) $row->status !== 'wait') {
+                throw new InvalidArgumentException('仅待审核实习申请可处理', 42204);
+            }
 
             $updates = ['updated_at' => $this->now()];
             $action = 'review';
             if ($this->isTeacher()) {
+                if (!in_array((string) $row->teacher_status, ['pending', 'wait'], true)) {
+                    throw new InvalidArgumentException('当前教师审核节点已处理', 42204);
+                }
                 $updates['teacher_status'] = $status;
                 $action = 'teacher_review';
                 $this->reviewJoinTeacher($id, $status);
             } else {
                 $this->requireAdminRole();
+                if (!in_array((string) $row->admin_status, ['pending', 'wait'], true)) {
+                    throw new InvalidArgumentException('当前管理审核节点已处理', 42204);
+                }
                 $updates['admin_status'] = $status === 'skipped' ? 'accept' : $status;
                 $action = 'admin_review';
             }
@@ -471,7 +480,7 @@ class InternshipService
 
         $result = $this->saveRow('journal', $request, $values);
         if ($status === 'wait') {
-            $this->recordWorkflow('journal_recording', 'journal', (int) $result['id'], 'submit', $fromStatus, 'wait', '提交实习日志', 'wait');
+            $this->recordWorkflow('journal_recording', 'journal', (int) $result['id'], 'submit', $fromStatus, 'wait', $values['content'], 'wait');
         }
 
         return $result;
@@ -517,7 +526,7 @@ class InternshipService
 
         $result = $this->saveRow('report', $request, $values);
         if ($status === 'wait') {
-            $this->recordWorkflow('report_recording', 'report', (int) $result['id'], 'submit', $fromStatus, 'wait', '提交实习报告', 'wait');
+            $this->recordWorkflow('report_recording', 'report', (int) $result['id'], 'submit', $fromStatus, 'wait', $values['content'], 'wait');
         }
 
         return $result;
@@ -570,7 +579,7 @@ class InternshipService
         ];
 
         $result = $this->saveRow('apply_report_delay', $request, $values);
-        $this->recordWorkflow('apply_report_delay_recording', 'delay', (int) $result['id'], 'submit', $fromStatus, 'wait', '提交延期申请', 'wait');
+        $this->recordWorkflow('apply_report_delay_recording', 'delay', (int) $result['id'], 'submit', $fromStatus, 'wait', $values['reason'], 'wait');
 
         return $result;
     }
@@ -628,6 +637,16 @@ class InternshipService
         $filters['report'] = in_array($report, self::STAT_REPORTS, true) ? $report : 'overview';
 
         return InternshipRecord::statReport($this->scopeContext(), $filters, date('Y-m-d'));
+    }
+
+    public function archiveMaterials(Request $request): array
+    {
+        $this->requirePermission('internship:view');
+
+        return InternshipRecord::archiveMaterialPage($this->scopeContext(), $this->requestFilters($request, [
+            'page', 'page_size', 'per_page', 'keyword', 'archive_status',
+            'arrangement_id', 'dep_id', 'profession_id', 'grade_id', 'semester',
+        ]));
     }
 
     public function saveScore(Request $request): array
@@ -699,7 +718,7 @@ class InternshipService
 
         $result = $this->saveRow('internship_plan', $request, $values);
         if ($values['status'] === 'wait') {
-            $this->recordWorkflow('plan_recording', 'plan', (int) $result['id'], 'submit', $fromStatus, 'wait', '提交实习计划', 'wait');
+            $this->recordWorkflow('plan_recording', 'plan', (int) $result['id'], 'submit', $fromStatus, 'wait', $this->planWorkflowContent($values['plan_content']), 'wait');
         }
 
         return $result;
@@ -714,25 +733,35 @@ class InternshipService
         $status = $this->enum($request, 'status', ['accept', 'modify'], 'accept');
         $opinion = $this->reviewOpinionInput($request, 'plan', $status);
         $level = $this->optionalInt($request, 'approval_level') ?? 1;
-        $now = $this->now();
-        $row = $this->row('internship_plan', $planId);
-        $this->assertPlanVisible($planId);
-        $from = (string) $row->status;
+        $levelName = $this->nullableString($request, 'level_name', 80);
 
-        $approvalId = InternshipRecord::insertPlanApproval($planId, [
-            'uuid' => $this->uuid(),
-            'plan_id' => $planId,
-            'approver_id' => CurrentContext::accountId(),
-            'approval_level' => $level,
-            'level_name' => $this->nullableString($request, 'level_name', 80),
-            'opinion' => $opinion,
-            'status' => $status,
-            'created_at' => $now,
-            'updated_at' => $now,
-        ], $status, $now);
-        $this->recordWorkflow('plan_recording', 'plan', $planId, 'review', $from, $status, $opinion ?: '实习计划审核', $status);
+        return $this->connection()->transaction(function () use ($planId, $status, $opinion, $level, $levelName): array {
+            $now = $this->now();
+            $row = InternshipRecord::lockActiveRowById('internship_plan', $planId);
+            if (!$row) {
+                throw new RuntimeException('实习计划不存在');
+            }
+            $this->assertPlanVisible($planId);
+            if ((string) $row->status !== 'wait') {
+                throw new InvalidArgumentException('仅待审核实习计划可处理', 42204);
+            }
+            $from = (string) $row->status;
 
-        return ['id' => $approvalId, 'plan_id' => $planId];
+            $approvalId = InternshipRecord::insertPlanApproval($planId, [
+                'uuid' => $this->uuid(),
+                'plan_id' => $planId,
+                'approver_id' => CurrentContext::accountId(),
+                'approval_level' => $level,
+                'level_name' => $levelName,
+                'opinion' => $opinion,
+                'status' => $status,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ], $status, $now);
+            $this->recordWorkflow('plan_recording', 'plan', $planId, 'review', $from, $status, $opinion ?: '实习计划审核', $status);
+
+            return ['id' => $approvalId, 'plan_id' => $planId];
+        });
     }
 
     public function insurances(Request $request): array
@@ -881,22 +910,30 @@ class InternshipService
         $teacherId = $this->isTeacher() ? $this->currentTeacherId(true) : $this->optionalInt($request, 'teacher_id');
         $now = $this->now();
 
-        $row = $this->row($table, $id);
-        $this->assertStudentVisible((int) $row->student_id);
-        $from = (string) $row->status;
-        $updates = [
-            'status' => $status,
-            'teacher_id' => $teacherId,
-            'updated_at' => $now,
-        ];
-        if ($table === 'report') {
-            $updates['reviewed_at'] = $now;
-        }
+        return $this->connection()->transaction(function () use ($table, $recordingTable, $id, $status, $opinion, $score, $teacherId, $now): array {
+            $row = InternshipRecord::lockActiveRowById($table, $id);
+            if (!$row) {
+                throw new RuntimeException('数据不存在');
+            }
+            $this->assertStudentVisible((int) $row->student_id);
+            if ((string) $row->status !== 'wait') {
+                throw new InvalidArgumentException('仅待审核数据可评阅', 42204);
+            }
+            $from = (string) $row->status;
+            $updates = [
+                'status' => $status,
+                'teacher_id' => $teacherId,
+                'updated_at' => $now,
+            ];
+            if ($table === 'report') {
+                $updates['reviewed_at'] = $now;
+            }
 
-        InternshipRecord::updateById($table, $id, $updates);
-        $this->recordWorkflow($recordingTable, $table, $id, 'review', $from, $status, $opinion ?: '评阅处理', $status, $score, $teacherId);
+            InternshipRecord::updateById($table, $id, $updates);
+            $this->recordWorkflow($recordingTable, $table, $id, 'review', $from, $status, $opinion ?: '评阅处理', $status, $score, $teacherId);
 
-        return ['id' => $id, 'status' => $status];
+            return ['id' => $id, 'status' => $status];
+        });
     }
 
     private function documentList(Request $request, string $table, array $columns): array
@@ -1537,6 +1574,17 @@ class InternshipService
     private function jsonValue(mixed $value): string
     {
         return json_encode(is_string($value) ? (json_decode($value, true) ?: $value) : $value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    }
+
+    private function planWorkflowContent(string $planContent): string
+    {
+        $decoded = json_decode($planContent, true);
+        if (is_array($decoded)) {
+            $text = (string) ($decoded['content'] ?? $decoded['summary'] ?? '');
+            return trim($text) ?: '提交实习计划';
+        }
+
+        return trim($planContent) ?: '提交实习计划';
     }
 
     private function now(): string

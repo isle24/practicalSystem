@@ -1108,32 +1108,42 @@ a {
 
 .internship-overview {
   display: grid;
-  grid-template-columns: repeat(6, minmax(110px, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(136px, 1fr));
+  gap: 8px;
+  align-content: start;
 }
 
 .internship-stat {
-  min-height: 86px;
+  min-height: 58px;
   border: 1px solid var(--line);
   border-radius: 8px;
   display: grid;
-  gap: 4px;
-  padding: 11px;
+  grid-template-columns: auto 1fr;
+  grid-template-areas:
+    "icon name"
+    "value value";
+  align-items: center;
+  gap: 4px 8px;
+  padding: 8px 10px;
   background: #fff;
 }
 
 .internship-stat svg {
+  grid-area: icon;
   color: var(--primary);
 }
 
 .internship-stat strong {
-  font-size: 24px;
+  grid-area: value;
+  font-size: 20px;
   line-height: 1.1;
 }
 
 .internship-stat span {
+  grid-area: name;
   color: var(--muted);
   font-size: 12px;
+  line-height: 1.25;
 }
 
 .internship-stat.primary { background: var(--primary-soft); border-color: #bfd8f4; }
@@ -1619,7 +1629,19 @@ a {
 .permission-tree .el-tree-node__label {
   flex: 1;
   min-width: 0;
-  overflow: hidden;
+  overflow: visible;
+}
+
+.role-permission-tree .el-tree-node__content {
+  height: auto;
+  min-height: 56px;
+  align-items: flex-start;
+  padding-top: 6px;
+  padding-bottom: 6px;
+}
+
+.role-permission-tree .el-checkbox {
+  margin-top: 8px;
 }
 
 .menu-manage-node {
@@ -1636,7 +1658,8 @@ a {
 .permission-tree .menu-node-main {
   justify-content: flex-start;
   align-items: flex-start;
-  gap: 12px;
+  flex-wrap: wrap;
+  gap: 6px 10px;
 }
 
 .permission-tree .menu-node-main strong {
@@ -1647,6 +1670,7 @@ a {
 
 .permission-tree .menu-node-main small {
   flex: 1 1 auto;
+  min-width: 180px;
 }
 
 .permission-tree .menu-node-meta {

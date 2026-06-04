@@ -141,7 +141,7 @@ function columnText(column, row) {
   if (typeof column.formatter === 'function') {
     return column.formatter(row);
   }
-  const value = row[column.prop];
+  const value = row[column.prop || column.key];
   return value === null || value === undefined || value === '' ? '-' : value;
 }
 

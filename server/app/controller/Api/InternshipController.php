@@ -162,6 +162,11 @@ class InternshipController
         return $this->handle(fn (): array => $this->service()->stats($request));
     }
 
+    public function archiveMaterials(Request $request): Response
+    {
+        return $this->handle(fn (): array => $this->service()->archiveMaterials($request));
+    }
+
     public function saveScore(Request $request): Response
     {
         return $this->handle(fn (): array => $this->service()->saveScore($request));

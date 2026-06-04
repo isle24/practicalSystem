@@ -167,6 +167,10 @@ export function fetchInternshipStats(params = {}) {
   return internshipList('stats', params);
 }
 
+export function fetchInternshipArchiveMaterials(params = {}) {
+  return internshipList('archive-materials', params);
+}
+
 export function saveInternshipScore(payload) {
   return internshipPost('save-score', payload);
 }
