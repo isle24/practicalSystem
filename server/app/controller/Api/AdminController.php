@@ -185,9 +185,13 @@ class AdminController
         }
 
         try {
-            return $this->ok([
-                'accounts' => $this->accountsData(),
-            ]);
+            return $this->ok(Account::adminPage([
+                'page' => $this->optionalInt($request, 'page') ?? 1,
+                'page_size' => $this->optionalInt($request, 'page_size') ?? 20,
+                'keyword' => $this->nullableString($request, 'keyword') ?? '',
+                'role_type' => $this->nullableString($request, 'role_type') ?? '',
+                'status' => $this->enum($request, 'status', ['all', 'enabled', 'disabled'], 'all'),
+            ]));
         } catch (Throwable $exception) {
             return $this->fail(50000, $exception->getMessage(), 500);
         }

@@ -832,20 +832,25 @@
                   </template>
                 </div>
 
-                <div v-else-if="win.module.id === 'config' && win.panel === 'archive'" class="admin-panel archive-panel">
+                <div v-else-if="win.module.id === 'config' && win.panel === 'userManage'" class="admin-panel user-admin-panel">
+                  <DataListPanel
+                    :columns="userListColumns"
+                    :filters="userListFilters"
+                    :filter-values="userAdminState.filters"
+                    :loading="userAdminState.loading"
+                    :pagination="userAdminState.pagination"
+                    :rows="userAdminState.items"
+                    @filter-change="setUserFilter"
+                    @page-change="page => loadUserAccounts(page)"
+                    @reset="resetUserFilters"
+                    @search="loadUserAccounts(1)"
+                  />
+                  <small v-if="userAdminState.message">{{ userAdminState.message }}</small>
+                </div>
+
+                <div v-else-if="win.module.id === 'config' && isArchiveManagePanel(win.panel)" class="admin-panel archive-panel">
                   <div class="admin-toolbar">
-                    <el-select
-                      v-model="archiveState.type"
-                      filterable
-                      @change="changeArchiveType"
-                    >
-                      <el-option
-                        v-for="archive in archiveDefinitions"
-                        :key="archive.type"
-                        :label="archive.name"
-                        :value="archive.type"
-                      />
-                    </el-select>
+                    <strong class="admin-toolbar-title">{{ currentArchiveDefinition.name }}管理</strong>
                     <el-button :icon="RefreshCw" :loading="archiveState.loading" @click="loadArchiveItems">
                       读取
                     </el-button>
@@ -1729,6 +1734,7 @@ import StudentOwnPanel from './components/StudentOwnPanel.vue';
 import { usePermissions } from './composables/usePermissions';
 import {
   deleteArchiveItem,
+  fetchAdminAccounts,
   fetchAdminMenus,
   fetchAdminOptions,
   fetchAdminRoles,
@@ -1929,6 +1935,21 @@ const adminState = reactive({
     message: '',
   },
 });
+const userAdminState = reactive({
+  items: [],
+  filters: {
+    keyword: '',
+    role_type: '',
+    status: 'all',
+  },
+  pagination: {
+    page: 1,
+    page_size: 20,
+    total: 0,
+  },
+  loading: false,
+  message: '',
+});
 
 const modules = [
   {
@@ -1994,7 +2015,7 @@ const modules = [
     scope: '学校设置',
     viewPermission: 'config:view',
     managePermission: 'config:manage',
-    defaultPanel: 'menuManage',
+    defaultPanel: 'userManage',
   },
   {
     id: 'profile',
@@ -2053,10 +2074,10 @@ const archiveDefinitions = [
   },
   {
     type: 'grade',
-    name: '年级',
+    name: '届次',
     idField: 'grade_id',
     fields: [
-      { key: 'grade_name', label: '年级名称', required: true },
+      { key: 'grade_name', label: '届次名称', required: true },
       { key: 'dep_id', label: '所属学院', options: 'departments' },
       { key: 'sort', label: '排序', inputType: 'number' },
       { key: 'flag', label: '状态', options: 'flag' },
@@ -2070,7 +2091,7 @@ const archiveDefinitions = [
       { key: 'profession_name', label: '专业名称', required: true },
       { key: 'profession_code', label: '专业代码' },
       { key: 'dep_id', label: '所属学院', options: 'departments' },
-      { key: 'grade_id', label: '所属年级', options: 'grades' },
+      { key: 'grade_id', label: '所属届次', options: 'grades' },
       { key: 'sort', label: '排序', inputType: 'number' },
       { key: 'flag', label: '状态', options: 'flag' },
     ],
@@ -2084,7 +2105,7 @@ const archiveDefinitions = [
       { key: 'class_num', label: '班号' },
       { key: 'dep_id', label: '所属学院', options: 'departments' },
       { key: 'profession_id', label: '所属专业', options: 'professions' },
-      { key: 'grade_id', label: '所属年级', options: 'grades' },
+      { key: 'grade_id', label: '所属届次', options: 'grades' },
       { key: 'sort', label: '排序', inputType: 'number' },
       { key: 'flag', label: '状态', options: 'flag' },
     ],
@@ -2103,6 +2124,46 @@ const archiveDefinitions = [
     ],
   },
 ];
+const archiveManagePanels = {
+  archive: 'department',
+  departmentManage: 'department',
+  gradeManage: 'grade',
+  professionManage: 'profession',
+  classManage: 'class',
+  companyManage: 'company',
+};
+const userListColumns = [
+  { key: 'id', label: 'ID', width: 76 },
+  { key: 'name', label: '姓名', minWidth: 130 },
+  { key: 'login_name', label: '登录账号', minWidth: 130 },
+  { key: 'role_name', label: '当前角色', minWidth: 150, formatter: row => row.role_name || roleTypeNames[row.role_type] || '-' },
+  { key: 'mobile', label: '手机', minWidth: 130 },
+  { key: 'email', label: '邮箱', minWidth: 170 },
+  { key: 'status', label: '账号状态', width: 100, tag: true, tagType: row => statusTagType(row.status), formatter: row => statusText(row.status) },
+  { key: 'created_at', label: '创建时间', minWidth: 160 },
+];
+const userListFilters = computed(() => [
+  { key: 'keyword', label: '关键词', placeholder: '姓名/账号/手机/邮箱/角色' },
+  {
+    key: 'role_type',
+    label: '角色',
+    type: 'select',
+    options: uniqueRoleOptions().map(role => ({
+      label: role.name || roleTypeNames[role.role_type] || role.role_type,
+      value: role.role_type,
+    })),
+  },
+  {
+    key: 'status',
+    label: '状态',
+    type: 'select',
+    options: [
+      { label: '全部', value: 'all' },
+      { label: '启用', value: 'enabled' },
+      { label: '停用', value: 'disabled' },
+    ],
+  },
+]);
 
 const defaultInternshipReviewRules = {
   application: {
@@ -2785,10 +2846,15 @@ function sidebarItems(win) {
   }
   if (win.module.id === 'config') {
     return [
+      { key: 'userManage', name: '用户管理' },
+      { key: 'gradeManage', name: '届次管理' },
+      { key: 'departmentManage', name: '学院管理' },
+      { key: 'professionManage', name: '专业管理' },
+      { key: 'classManage', name: '班级管理' },
+      { key: 'companyManage', name: '企业管理' },
       { key: 'menuManage', name: '菜单管理' },
       { key: 'roleMenus', name: '角色权限' },
       { key: 'organizationScope', name: '组织范围' },
-      { key: 'archive', name: '基础档案' },
       { key: 'operationGuides', name: '操作说明' },
       { key: 'wechatProxy', name: '企业微信应用' },
     ];
@@ -3099,6 +3165,9 @@ function openModuleWindow(module, options = {}) {
       statState.report = statReports.some(item => item.key === existing.panel) ? existing.panel : 'overview';
       loadStats(statState.pagination.page || 1);
     }
+    if (module.id === 'config') {
+      activateWindowPanel(existing, existing.panel);
+    }
     return;
   }
 
@@ -3122,6 +3191,9 @@ function openModuleWindow(module, options = {}) {
   if (module.id === 'stat') {
     statState.report = win.panel;
     loadStats(1);
+  }
+  if (module.id === 'config') {
+    activateWindowPanel(win, win.panel);
   }
 }
 
@@ -3291,7 +3363,12 @@ function activateWindowPanel(win, panel) {
   win.panel = panel;
   focusWindow(win.id);
 
-  if (win.module.id === 'config' && panel === 'archive') {
+  if (win.module.id === 'config' && panel === 'userManage') {
+    loadAdminFoundation();
+    loadUserAccounts();
+  }
+  if (win.module.id === 'config' && isArchiveManagePanel(panel)) {
+    syncArchiveTypeWithPanel(panel);
     loadAdminFoundation();
     loadArchiveItems();
   }
@@ -3471,6 +3548,55 @@ function openMenuDialog(row = null, parent = null) {
 
 function closeMenuDialog() {
   adminState.menu.dialogVisible = false;
+}
+
+function uniqueRoleOptions() {
+  const roles = [];
+  const seen = new Set();
+  adminState.roles.forEach((role) => {
+    if (!role.role_type || seen.has(role.role_type)) {
+      return;
+    }
+    seen.add(role.role_type);
+    roles.push(role);
+  });
+  return roles;
+}
+
+function setUserFilter({ key, value }) {
+  userAdminState.filters[key] = value ?? '';
+}
+
+function resetUserFilters() {
+  userAdminState.filters.keyword = '';
+  userAdminState.filters.role_type = '';
+  userAdminState.filters.status = 'all';
+  loadUserAccounts(1);
+}
+
+async function loadUserAccounts(page = 1) {
+  if (!canManageConfig.value || userAdminState.loading) {
+    return;
+  }
+
+  userAdminState.loading = true;
+  userAdminState.message = '';
+  try {
+    const data = await fetchAdminAccounts({
+      page,
+      page_size: userAdminState.pagination.page_size,
+      ...userAdminState.filters,
+    });
+    userAdminState.items = data.accounts || [];
+    userAdminState.pagination = {
+      ...userAdminState.pagination,
+      ...(data.pagination || {}),
+    };
+  } catch (error) {
+    userAdminState.message = error.message;
+  } finally {
+    userAdminState.loading = false;
+  }
 }
 
 function newMenu(parent = null) {
@@ -3757,6 +3883,22 @@ function emptyArchiveItem(type = archiveState?.type || 'department') {
   });
 
   return item;
+}
+
+function isArchiveManagePanel(panel) {
+  return Boolean(archiveManagePanels[panel]);
+}
+
+function syncArchiveTypeWithPanel(panel) {
+  const type = archiveManagePanels[panel] || 'department';
+  if (archiveState.type === type) {
+    return;
+  }
+
+  archiveState.type = type;
+  archiveState.editing = emptyArchiveItem(type);
+  archiveState.selected = null;
+  archiveState.message = '';
 }
 
 function changeArchiveType() {
@@ -5353,6 +5495,13 @@ function resetAdminState() {
   adminState.scope.role_id = null;
   adminState.scope.scopes = [];
   adminState.scope.message = '';
+  userAdminState.items = [];
+  userAdminState.filters.keyword = '';
+  userAdminState.filters.role_type = '';
+  userAdminState.filters.status = 'all';
+  userAdminState.pagination.page = 1;
+  userAdminState.pagination.total = 0;
+  userAdminState.message = '';
   archiveState.type = 'department';
   archiveState.items = [];
   archiveState.editing = emptyArchiveItem('department');

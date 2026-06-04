@@ -476,6 +476,13 @@ a {
   min-width: 0;
 }
 
+.admin-toolbar-title {
+  min-width: 96px;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 700;
+}
+
 .admin-toolbar input[type="date"] {
   height: 32px;
   border: 1px solid var(--line);

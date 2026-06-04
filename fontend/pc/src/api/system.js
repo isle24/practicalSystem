@@ -85,6 +85,11 @@ export function fetchAdminRoles() {
   return request('/admin/roles');
 }
 
+export function fetchAdminAccounts(params = {}) {
+  const query = new URLSearchParams(params).toString();
+  return request(`/admin/accounts${query ? `?${query}` : ''}`);
+}
+
 export function fetchAdminMenus() {
   return request('/admin/menus');
 }
