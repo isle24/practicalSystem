@@ -716,6 +716,7 @@ import {
   fetchInternshipOptions,
   fetchInternshipOverview,
   fetchInternshipPairs,
+  fetchInternshipPlans,
   fetchInternshipReports,
   fetchInternshipSafetyLetters,
   fetchInternshipScores,
@@ -724,6 +725,7 @@ import {
   requestInternshipModification,
   reviewInternshipApplication,
   reviewInternshipJournal,
+  reviewInternshipPlan,
   reviewInternshipReport,
   saveInternshipApplication,
   saveInternshipJournal,
@@ -759,6 +761,10 @@ const defaultInternshipReviewRules = {
     accept: { min: 0, max: 300 },
     modify: { min: 8, max: 800 },
   },
+  plan: {
+    accept: { min: 0, max: 300 },
+    modify: { min: 8, max: 800 },
+  },
 };
 
 const internship = reactive({
@@ -771,6 +777,7 @@ const internship = reactive({
   options: emptyInternshipOptions(),
   lists: {
     arrangements: emptyPagedList(),
+    plans: emptyPagedList(),
     applications: emptyPagedList(),
     pairs: emptyPagedList(),
     signIns: emptyPagedList(),
@@ -782,6 +789,7 @@ const internship = reactive({
   },
   filters: {
     arrangements: emptyInternshipFilters(),
+    plans: emptyInternshipFilters(),
     applications: emptyInternshipFilters(),
     pairs: emptyInternshipFilters(),
     signIns: emptyInternshipFilters(),
@@ -890,6 +898,7 @@ const isStudentRole = computed(() => roleType.value === 'student');
 const isTeacherRole = computed(() => roleType.value === 'teacher');
 const isAdminRole = computed(() => ['super_admin', 'school_admin', 'college_admin', 'profession_admin'].includes(roleType.value));
 const canReviewInternship = computed(() => hasPermission('internship:approve'));
+const canReviewInternshipPlan = computed(() => hasPermission('internship:plan') && isAdminRole.value);
 const roleNameMap = {
   super_admin: '系统管理员',
   school_admin: '学校管理员',
@@ -1020,6 +1029,16 @@ const mobileListConfigs = computed(() => ({
     ],
     emptyText: '暂无实习安排',
   },
+  plans: {
+    key: 'plans',
+    entity: 'plan',
+    title: '实习计划',
+    shortTitle: '计划',
+    icon: FileText,
+    keywordPlaceholder: '学期、学院、提交人',
+    statusOptions: reviewStatusOptions,
+    emptyText: '暂无实习计划',
+  },
   applications: {
     key: 'applications',
     entity: 'application',
@@ -1109,10 +1128,14 @@ const mobileListConfigs = computed(() => ({
 }));
 const reviewListTabs = computed(() => {
   const keys = isTeacherRole.value ? ['applications', 'journals', 'reports'] : ['applications'];
+  if (canReviewInternshipPlan.value) {
+    keys.push('plans');
+  }
   return keys.map(getMobileListConfig).filter(Boolean);
 });
 const manageListTabs = computed(() => [
   'arrangements',
+  'plans',
   'pairs',
   'signIns',
   'journals',
@@ -1222,6 +1245,7 @@ function mobileListTitle(key, row) {
   const arrangement = row.arrangement_title || (row.arrangement_id ? `安排ID ${row.arrangement_id}` : '');
   const titles = {
     arrangements: row.title || row.name || `安排ID ${row.id}`,
+    plans: joinFact([row.semester, row.dep_name]) || `计划ID ${row.id}`,
     applications: student || arrangement || `申请ID ${row.id}`,
     pairs: student || `关系ID ${row.id}`,
     signIns: student || arrangement || `签到ID ${row.id}`,
@@ -1257,6 +1281,12 @@ function mobileListFacts(key, row) {
       namedFact('方式', organizeModeText(row.organize_mode)),
       namedFact('时间', dateRangeText(row.start_date, row.end_date)),
       namedFact('范围', joinFact([row.dep_name || '全校', row.profession_name || '全部专业'])),
+    ],
+    plans: [
+      namedFact('学期', row.semester),
+      namedFact('学院', row.dep_name),
+      namedFact('提交人', row.submitter_name),
+      namedFact('内容', planContentText(row.plan_content, 48)),
     ],
     applications: [
       namedFact('学号', row.student_num),
@@ -1317,7 +1347,7 @@ function mobileListActions(key, row, context) {
   }
 
   const actions = [{ key: 'timeline', label: '记录', type: 'timeline', entity: config.entity }];
-  if (context === 'review') {
+  if (context === 'review' && canReviewEntity(config.entity)) {
     if (canReviewRow(row)) {
       actions.push(
         { key: 'accept', label: '通过', type: 'review', entity: config.entity, status: 'accept' },
@@ -1329,6 +1359,13 @@ function mobileListActions(key, row, context) {
     }
   }
   return actions;
+}
+
+function canReviewEntity(entity) {
+  if (entity === 'plan') {
+    return canReviewInternshipPlan.value;
+  }
+  return canReviewInternship.value;
 }
 
 function handleMobileListAction(action, row) {
@@ -1369,6 +1406,21 @@ function previewText(value, length = 40) {
   return `${text.slice(0, length)}...`;
 }
 
+function planContentText(value, length = 48) {
+  let text = '';
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value);
+      text = parsed?.content || parsed?.summary || value;
+    } catch {
+      text = value;
+    }
+  } else {
+    text = value?.content || value?.summary || JSON.stringify(value || {});
+  }
+  return previewText(text, length);
+}
+
 function scoreBreakdownText(row) {
   return [
     `签到 ${row.sign_in_score ?? '-'}`,
@@ -1404,6 +1456,7 @@ function internshipQueryParams(key, page = 1) {
 function internshipFetcher(key) {
   const fetchers = {
     arrangements: fetchInternshipArrangements,
+    plans: fetchInternshipPlans,
     applications: fetchInternshipApplications,
     pairs: fetchInternshipPairs,
     signIns: fetchInternshipSignIns,
@@ -1712,6 +1765,10 @@ async function confirmReviewDialog() {
     await reviewApplication(row, status, internship.reviewDialog.reason);
     return;
   }
+  if (entity === 'plan') {
+    await reviewPlan(row, status, internship.reviewDialog.reason);
+    return;
+  }
   await reviewWork(entity, row, status, internship.reviewDialog.reason);
 }
 
@@ -1747,6 +1804,24 @@ async function reviewWork(type, row, status, opinion) {
     } else {
       await reviewInternshipReport(payload);
     }
+    closeReviewDialog();
+    await loadInternship();
+  } catch (error) {
+    internship.message = error.message;
+  } finally {
+    internship.loading = false;
+  }
+}
+
+async function reviewPlan(row, status, opinion) {
+  internship.loading = true;
+  internship.message = '';
+  try {
+    await reviewInternshipPlan({
+      id: row.id,
+      status,
+      opinion: opinion || defaultReviewOpinion('plan', status),
+    });
     closeReviewDialog();
     await loadInternship();
   } catch (error) {

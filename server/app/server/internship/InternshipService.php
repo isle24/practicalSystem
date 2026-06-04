@@ -587,7 +587,7 @@ class InternshipService
         $this->requirePermission('internship:plan');
 
         return InternshipRecord::planPage($this->scopeContext(), $this->requestFilters($request, [
-            'page', 'page_size', 'per_page', 'status', 'semester',
+            'page', 'page_size', 'per_page', 'status', 'semester', 'dep_id', 'keyword',
         ]));
     }
 
@@ -597,9 +597,11 @@ class InternshipService
         $this->requireAdminRole();
         $existingId = $this->inputRowId($request, 'internship_plan');
         $fromStatus = $existingId ? InternshipRecord::statusById('internship_plan', $existingId) : 'draft';
+        $depId = $this->requiredInt($request, 'dep_id');
+        $this->assertDepartmentVisible($depId);
 
         $values = [
-            'dep_id' => $this->requiredInt($request, 'dep_id'),
+            'dep_id' => $depId,
             'semester' => $this->requiredString($request, 'semester', 80),
             'plan_content' => $this->jsonValue($request->input('plan_content', [])),
             'submitter_id' => CurrentContext::accountId(),
@@ -1101,6 +1103,13 @@ class InternshipService
     private function assertPlanVisible(int $planId): void
     {
         if (!InternshipRecord::planVisible($this->scopeContext(), $planId)) {
+            throw new RuntimeException('无数据访问权限', 40301);
+        }
+    }
+
+    private function assertDepartmentVisible(int $depId): void
+    {
+        if (!InternshipRecord::departmentVisible($this->scopeContext(), $depId)) {
             throw new RuntimeException('无数据访问权限', 40301);
         }
     }

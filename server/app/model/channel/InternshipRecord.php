@@ -308,6 +308,8 @@ class InternshipRecord extends TableRecord
         self::applyDepProfessionScope($query, $scope, 'internship_plan.dep_id', null);
         self::filter($query, $filters, 'internship_plan.status', 'status');
         self::filter($query, $filters, 'internship_plan.semester', 'semester');
+        self::filter($query, $filters, 'internship_plan.dep_id', 'dep_id');
+        self::keyword($query, $filters, ['internship_plan.semester', 'department.dep_name', 'users.name']);
 
         return self::paginate($query->orderByDesc('internship_plan.id'), $filters, [
             'internship_plan.id', 'internship_plan.uuid', 'internship_plan.dep_id',
@@ -397,6 +399,15 @@ class InternshipRecord extends TableRecord
             ->where('internship_plan.id', $planId)
             ->whereNull('internship_plan.deleted_at');
         self::applyDepProfessionScope($query, $scope, 'internship_plan.dep_id', null);
+        return $query->exists();
+    }
+
+    public static function departmentVisible(array $scope, int $depId): bool
+    {
+        $query = self::queryTable('department')
+            ->where('department.dep_id', $depId)
+            ->whereNull('department.deleted_at');
+        self::applyDepProfessionScope($query, $scope, 'department.dep_id', null);
         return $query->exists();
     }
 
@@ -1617,6 +1628,9 @@ class InternshipRecord extends TableRecord
         }
         if ($roleType === 'profession_admin' && $professionColumn) {
             self::whereInOrDeny($query, $professionColumn, $scope['profession_ids'] ?? []);
+        }
+        if ($roleType === 'profession_admin' && !$professionColumn && $depColumn) {
+            self::whereInOrDeny($query, $depColumn, $scope['profession_dep_ids'] ?? []);
         }
     }
 

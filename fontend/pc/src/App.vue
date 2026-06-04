@@ -251,6 +251,9 @@
                       <el-button v-if="win.panel === 'arrangements' && canManageInternship" :icon="CalendarCheck" @click="openArrangementDialog">
                         新增安排
                       </el-button>
+                      <el-button v-if="win.panel === 'plans' && canManageInternshipPlan" :icon="FileText" @click="openPlanDialog">
+                        新增计划
+                      </el-button>
                       <el-button v-if="win.panel === 'scores' && canManageInternship" :icon="GraduationCap" @click="openScoreDialog">
                         录入成绩
                       </el-button>
@@ -308,6 +311,30 @@
                         <label><span>开始日期</span><input v-model="internshipState.arrangementForm.start_date" type="date"></label>
                         <label><span>结束日期</span><input v-model="internshipState.arrangementForm.end_date" type="date"></label>
                         <label><span>地点</span><input v-model="internshipState.arrangementForm.location"></label>
+                      </div>
+
+                      <div v-else-if="internshipState.dialog.type === 'plan'" class="operation-form single">
+                        <label>
+                          <span>学期</span>
+                          <input v-model="internshipState.planForm.semester">
+                        </label>
+                        <label>
+                          <span>学院</span>
+                          <el-select v-model="internshipState.planForm.dep_id" filterable>
+                            <el-option v-for="dep in internshipState.options.departments" :key="dep.dep_id" :label="dep.dep_name" :value="dep.dep_id" />
+                          </el-select>
+                        </label>
+                        <label>
+                          <span>计划内容</span>
+                          <textarea v-model="internshipState.planForm.content" rows="8" />
+                        </label>
+                        <label>
+                          <span>状态</span>
+                          <el-select v-model="internshipState.planForm.status">
+                            <el-option label="保存草稿" value="draft" />
+                            <el-option label="提交审核" value="wait" />
+                          </el-select>
+                        </label>
                       </div>
 
                       <div v-else-if="internshipState.dialog.type === 'score'" class="operation-form">
@@ -483,6 +510,36 @@
                         @search="loadInternshipPanel('arrangements', 1)"
                       />
                     </div>
+                  </template>
+
+                  <template v-else-if="win.panel === 'plans'">
+                    <DataListPanel
+                      :columns="internshipListConfigs.plans.columns"
+                      :filters="internshipListConfigs.plans.filters"
+                      :filter-values="internshipState.filters.plans"
+                      :loading="internshipState.loading"
+                      :pagination="internshipState.lists.plans.pagination"
+                      :rows="internshipState.lists.plans.items"
+                      @filter-change="setInternshipFilter('plans', $event)"
+                      @page-change="page => loadInternshipPanel('plans', page)"
+                      @reset="resetInternshipFilters('plans')"
+                      @search="loadInternshipPanel('plans', 1)"
+                    >
+                      <template #actions="{ row }">
+                        <el-button v-if="canManageInternshipPlan && row.status === 'wait'" link type="primary" @click="openReviewDialog('plan', row, 'accept')">
+                          通过
+                        </el-button>
+                        <el-button v-if="canManageInternshipPlan && row.status === 'wait'" link type="warning" @click="openReviewDialog('plan', row, 'modify')">
+                          退回
+                        </el-button>
+                        <el-button v-if="canManageInternshipPlan && row.status === 'accept'" link type="danger" @click="openReopenDialog('plan', row)">
+                          通过后修改
+                        </el-button>
+                        <el-button link type="info" @click="openTimelineDialog('plan', row)">
+                          记录
+                        </el-button>
+                      </template>
+                    </DataListPanel>
                   </template>
 
                   <template v-else-if="win.panel === 'applications'">
@@ -1629,6 +1686,7 @@ import {
   fetchInternshipOptions,
   fetchInternshipOverview,
   fetchInternshipPairs,
+  fetchInternshipPlans,
   fetchInternshipReports,
   fetchInternshipSafetyLetters,
   fetchInternshipScores,
@@ -1648,10 +1706,12 @@ import {
   logout as logoutApi,
   reviewInternshipApplication,
   reviewInternshipJournal,
+  reviewInternshipPlan,
   reviewInternshipReport,
   requestInternshipModification,
   saveArchiveItem,
   saveInternshipArrangement,
+  saveInternshipPlan,
   saveInternshipScore,
   saveMenu as saveMenuApi,
   saveOrganizationScopes,
@@ -2026,6 +2086,7 @@ const fileState = reactive({
 const internshipSidebarItems = [
   { key: 'overview', name: '总览', icon: ChartColumn },
   { key: 'arrangements', name: '实习安排', icon: CalendarCheck },
+  { key: 'plans', name: '实习计划', icon: FileText, permission: 'internship:plan' },
   { key: 'applications', name: '申请审核', icon: ClipboardList },
   { key: 'pairs', name: '指导关系', icon: UsersRound },
   { key: 'signIns', name: '签到记录', icon: MapPin },
@@ -2046,9 +2107,11 @@ const internshipState = reactive({
   overview: emptyInternshipOverview(),
   options: emptyInternshipOptions(),
   arrangementForm: emptyArrangementForm(),
+  planForm: emptyPlanForm(),
   scoreForm: emptyScoreForm(),
   filters: {
     arrangements: emptyInternshipFilters(),
+    plans: emptyInternshipFilters(),
     applications: emptyInternshipFilters(),
     pairs: emptyInternshipFilters(),
     signIns: emptyInternshipFilters(),
@@ -2060,6 +2123,7 @@ const internshipState = reactive({
   },
   lists: {
     arrangements: emptyPagedList(),
+    plans: emptyPagedList(),
     applications: emptyPagedList(),
     pairs: emptyPagedList(),
     signIns: emptyPagedList(),
@@ -2082,6 +2146,7 @@ const isTeacherRole = computed(() => currentRoleType.value === 'teacher');
 const isAdminRole = computed(() => ['super_admin', 'school_admin', 'college_admin', 'profession_admin'].includes(currentRoleType.value));
 const canManageConfig = computed(() => hasPermission('config:manage') && ['super_admin', 'school_admin'].includes(permissionState.context.role_type));
 const canManageInternship = computed(() => hasPermission('internship:manage'));
+const canManageInternshipPlan = computed(() => hasPermission('internship:plan') && isAdminRole.value);
 const canApproveInternship = computed(() => hasPermission('internship:approve') && !isStudentRole.value);
 const statReports = [
   { key: 'overview', name: '实习总览', description: '实习安排、申请、指导关系和过程材料汇总。', icon: ChartColumn },
@@ -2120,10 +2185,12 @@ const selectedWechatMenu = computed(() => {
   }
   return main;
 });
-const visibleInternshipSidebarItems = computed(() => internshipSidebarItems.map((item) => ({
-  ...item,
-  name: internshipRolePanelName(item.key),
-})));
+const visibleInternshipSidebarItems = computed(() => internshipSidebarItems
+  .filter(item => !item.permission || hasPermission(item.permission))
+  .map((item) => ({
+    ...item,
+    name: internshipRolePanelName(item.key),
+  })));
 const parentMenuTreeOptions = computed(() => [
   {
     id: 0,
@@ -2221,6 +2288,19 @@ const internshipListConfigs = computed(() => ({
       { prop: 'status', label: '申请状态', width: 100, tag: true, tagType: row => statusTagType(row.status), formatter: row => statusText(row.status) },
       { key: 'teacher_status', label: '教师审核', width: 100, formatter: row => statusText(row.teacher_status) },
       { key: 'admin_status', label: '管理审核', width: 100, formatter: row => statusText(row.admin_status) },
+      { prop: 'created_at', label: '提交时间', width: 168 },
+    ],
+  },
+  plans: {
+    listKey: 'plans',
+    filename: '实习计划',
+    filters: internshipListFilters('plans', ['semester', 'dep_id', 'status', 'keyword']),
+    columns: [
+      { prop: 'semester', label: '学期', width: 130 },
+      { prop: 'dep_name', label: '学院', minWidth: 150 },
+      { key: 'content', label: '计划内容', minWidth: 260, formatter: row => planContentText(row.plan_content) },
+      { prop: 'submitter_name', label: '提交人', width: 120 },
+      { prop: 'status', label: '状态', width: 90, tag: true, tagType: row => statusTagType(row.status), formatter: row => statusText(row.status) },
       { prop: 'created_at', label: '提交时间', width: 168 },
     ],
   },
@@ -2326,6 +2406,7 @@ function internshipRolePanelName(key) {
   const names = {
     overview: '我的实习',
     arrangements: '可申请安排',
+    plans: '实习计划',
     applications: '我的申请',
     pairs: '指导教师',
     signIns: '我的签到',
@@ -2350,6 +2431,9 @@ function internshipListFilters(listKey, adminKeys) {
 function hasInternshipToolbarActions(panel) {
   if (panel === 'arrangements') {
     return canManageInternship.value;
+  }
+  if (panel === 'plans') {
+    return canManageInternshipPlan.value;
   }
   if (panel === 'scores') {
     return canManageInternship.value;
@@ -3837,6 +3921,15 @@ function emptyArrangementForm() {
   };
 }
 
+function emptyPlanForm() {
+  return {
+    semester: '2025-2026-2',
+    dep_id: null,
+    content: '',
+    status: 'wait',
+  };
+}
+
 function emptyScoreForm() {
   return {
     pair_id: null,
@@ -3896,6 +3989,22 @@ function optionItems(items, valueKey, labelKey) {
 
 function statCellText(value) {
   return value === null || value === undefined || value === '' ? '-' : value;
+}
+
+function planContentText(value) {
+  let text = '';
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value);
+      text = parsed?.content || parsed?.summary || value;
+    } catch {
+      text = value;
+    }
+  } else {
+    text = value?.content || value?.summary || JSON.stringify(value || {});
+  }
+  text = String(text || '').replace(/\s+/g, ' ').trim();
+  return text ? (text.length > 80 ? `${text.slice(0, 80)}...` : text) : '-';
 }
 
 async function exportStatReport() {
@@ -3998,6 +4107,11 @@ function semesterOptions() {
       values.add(item.semester);
     }
   });
+  internshipState.lists.plans.items.forEach((item) => {
+    if (item.semester) {
+      values.add(item.semester);
+    }
+  });
   internshipState.options.students.forEach((item) => {
     if (item.semester) {
       values.add(item.semester);
@@ -4025,6 +4139,8 @@ async function handleInternshipHashAction(listKey, action, id) {
   }
   if (listKey === 'applications') {
     openReviewDialog('application', row, action);
+  } else if (listKey === 'plans') {
+    openReviewDialog('plan', row, action);
   } else if (listKey === 'journals') {
     openReviewDialog('journal', row, action);
   } else if (listKey === 'reports') {
@@ -4103,6 +4219,18 @@ function openArrangementDialog() {
   };
 }
 
+function openPlanDialog() {
+  internshipState.planForm = {
+    ...emptyPlanForm(),
+    dep_id: defaultScopedFilters().dep_id || internshipState.options.departments[0]?.dep_id || null,
+  };
+  internshipState.dialog = {
+    ...emptyOperationDialog(),
+    type: 'plan',
+    title: '新增实习计划',
+  };
+}
+
 function openScoreDialog(row = null) {
   internshipState.scoreForm = emptyScoreForm();
   if (row) {
@@ -4178,6 +4306,10 @@ async function confirmInternshipDialog() {
     await saveArrangement();
     return;
   }
+  if (internshipState.dialog.type === 'plan') {
+    await savePlan();
+    return;
+  }
   if (internshipState.dialog.type === 'score') {
     await saveScore();
     return;
@@ -4190,6 +4322,10 @@ async function confirmInternshipDialog() {
     }
     if (internshipState.dialog.entity === 'application') {
       await reviewApplication(internshipState.dialog.row, internshipState.dialog.status, internshipState.dialog.reason);
+      return;
+    }
+    if (internshipState.dialog.entity === 'plan') {
+      await reviewPlan(internshipState.dialog.row, internshipState.dialog.status, internshipState.dialog.reason);
       return;
     }
     await reviewStudentWork(internshipState.dialog.entity, internshipState.dialog.row, internshipState.dialog.status, internshipState.dialog.reason);
@@ -4350,6 +4486,8 @@ async function loadInternshipPanel(panel = 'overview', page = 1) {
       setPagedList('applications', applications);
     } else if (panel === 'arrangements') {
       setPagedList('arrangements', await fetchInternshipArrangements(params('arrangements')));
+    } else if (panel === 'plans') {
+      setPagedList('plans', await fetchInternshipPlans(params('plans')));
     } else if (panel === 'applications') {
       setPagedList('applications', await fetchInternshipApplications(params('applications')));
     } else if (panel === 'pairs') {
@@ -4432,6 +4570,54 @@ async function reviewApplication(row, status, opinion = '') {
       loadInternshipPanel('applications'),
       loadInternshipPanel('pairs'),
     ]);
+  } catch (error) {
+    internshipState.message = error.message;
+  } finally {
+    internshipState.loading = false;
+  }
+}
+
+async function savePlan() {
+  if (!canManageInternshipPlan.value) {
+    return;
+  }
+  if (!internshipState.planForm.dep_id) {
+    internshipState.message = '请选择学院';
+    return;
+  }
+
+  internshipState.loading = true;
+  internshipState.message = '';
+  try {
+    await saveInternshipPlan({
+      dep_id: internshipState.planForm.dep_id,
+      semester: internshipState.planForm.semester,
+      plan_content: {
+        content: internshipState.planForm.content,
+      },
+      status: internshipState.planForm.status,
+    });
+    internshipState.planForm = emptyPlanForm();
+    closeInternshipDialog();
+    await loadInternshipPanel('plans');
+  } catch (error) {
+    internshipState.message = error.message;
+  } finally {
+    internshipState.loading = false;
+  }
+}
+
+async function reviewPlan(row, status, opinion = '') {
+  internshipState.loading = true;
+  internshipState.message = '';
+  try {
+    await reviewInternshipPlan({
+      id: row.id,
+      status,
+      opinion: opinion || (status === 'accept' ? '同意' : '请修改后重新提交'),
+    });
+    closeInternshipDialog();
+    await loadInternshipPanel('plans');
   } catch (error) {
     internshipState.message = error.message;
   } finally {
@@ -4632,6 +4818,7 @@ function resetInternshipState() {
   internshipState.overview = emptyInternshipOverview();
   internshipState.options = emptyInternshipOptions();
   internshipState.arrangementForm = emptyArrangementForm();
+  internshipState.planForm = emptyPlanForm();
   internshipState.scoreForm = emptyScoreForm();
   Object.keys(internshipState.filters).forEach((key) => {
     internshipState.filters[key] = emptyInternshipFilters();
