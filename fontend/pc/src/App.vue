@@ -1,5 +1,30 @@
 <template>
-  <main class="desktop-shell" :style="desktopStyle" @click.left="closeDesktopContextMenu" @contextmenu.prevent="openDesktopContextMenu">
+  <main v-if="!isLoggedIn" class="login-shell" :style="loginPageStyle">
+    <form class="login-panel" @submit.prevent="submitLogin">
+      <header>
+        <UserRound :size="26" />
+        <div>
+          <strong>实践管理系统</strong>
+          <span>{{ loginSchoolName }}</span>
+        </div>
+      </header>
+      <label>
+        <span>账号</span>
+        <input ref="loginNameInput" v-model="loginForm.login_name" autocomplete="username" placeholder="admin">
+      </label>
+      <label>
+        <span>密码</span>
+        <input v-model="loginForm.password" autocomplete="current-password" placeholder="admin123456" type="password">
+      </label>
+      <button type="submit" :disabled="loginState.loading">
+        <LogIn :size="17" />
+        登录
+      </button>
+      <small v-if="loginState.message">{{ loginState.message }}</small>
+    </form>
+  </main>
+
+  <main v-else class="desktop-shell" :style="desktopStyle" @click.left="closeDesktopContextMenu" @contextmenu.prevent="openDesktopContextMenu">
     <header class="topbar">
       <div class="brand">
         <span class="brand-mark">实</span>
@@ -167,6 +192,32 @@
                   accept="image/jpeg,image/png,image/webp,image/gif"
                   @change="event => handleAssetSelected('wallpaper', event)"
                 >
+              </section>
+
+              <section v-if="canManageLoginBackground" class="profile-panel-card">
+                <header>
+                  <strong>学校登录背景</strong>
+                  <small>用于未登录页面，上传后全校 PC 登录页立即生效。</small>
+                </header>
+                <label
+                  for="school-login-background-file"
+                  class="login-background-upload-button"
+                  :class="{ active: Boolean(loginPageState.login_background_url), disabled: loginPageState.loading }"
+                  :style="loginBackgroundUploadStyle"
+                  aria-label="上传学校登录背景"
+                  @click="guardLoginBackgroundClick"
+                >
+                  <ImagePlus v-if="!loginPageState.login_background_url" :size="22" />
+                  <span>{{ loginPageState.login_background_url ? '点击更换背景' : '点击上传背景' }}</span>
+                </label>
+                <input
+                  id="school-login-background-file"
+                  class="hidden-file"
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/gif"
+                  @change="handleLoginBackgroundSelected"
+                >
+                <small v-if="loginPageState.message" class="profile-inline-message">{{ loginPageState.message }}</small>
               </section>
 
               <section class="profile-panel-card">
@@ -1603,31 +1654,6 @@
       </section>
     </div>
 
-    <section v-if="!isLoggedIn" class="login-layer">
-      <form class="login-panel" @submit.prevent="submitLogin">
-        <header>
-          <UserRound :size="26" />
-          <div>
-            <strong>账号登录</strong>
-            <span>成都锦城学院</span>
-          </div>
-        </header>
-        <label>
-          <span>账号</span>
-          <input ref="loginNameInput" v-model="loginForm.login_name" autocomplete="username" placeholder="admin">
-        </label>
-        <label>
-          <span>密码</span>
-          <input v-model="loginForm.password" autocomplete="current-password" placeholder="admin123456" type="password">
-        </label>
-        <button type="submit" :disabled="loginState.loading">
-          <LogIn :size="17" />
-          登录
-        </button>
-        <small v-if="loginState.message">{{ loginState.message }}</small>
-      </form>
-    </section>
-
     <footer class="taskbar">
       <button class="taskbar-icon-button" title="开始" aria-label="开始">
         <LayoutGrid :size="18" />
@@ -1718,6 +1744,7 @@ import {
   fetchInternshipSignIns,
   fetchInternshipStats,
   fetchInternshipTimeline,
+  fetchLoginPageSettings,
   fetchOrganizationScopes,
   fetchOperationGuide,
   fetchOperationGuides,
@@ -1745,6 +1772,7 @@ import {
   saveProfileSettings,
   saveRoleMenus,
   saveWechatConfig,
+  uploadLoginBackground,
   uploadProfileAsset,
 } from './api/system';
 
@@ -1763,6 +1791,13 @@ const loginForm = reactive({
 const loginState = reactive({
   loading: false,
   message: '',
+});
+const loginPageState = reactive({
+  loading: false,
+  message: '',
+  school_code: '2184',
+  school_name: '成都锦城学院',
+  login_background_url: '',
 });
 const wechatProxy = reactive({
   app_id: '',
@@ -2241,6 +2276,14 @@ const schoolDataText = computed(() => {
   return permissionState.context.school_name || permissionState.context.school?.school_name || '成都锦城学院';
 });
 const roleText = computed(() => permissionState.context.role_name || roleTypeNames[permissionState.context.role_type] || permissionState.context.role_type || permissionState.context.role_id || '-');
+const loginSchoolName = computed(() => loginPageState.school_name || '成都锦城学院');
+const canManageLoginBackground = computed(() => ['super_admin', 'school_admin'].includes(permissionState.context.role_type));
+const defaultLoginBackground = 'linear-gradient(135deg, rgba(31, 115, 210, .22), rgba(15, 143, 126, .14)), #eaf1f7';
+const loginPageStyle = computed(() => ({
+  background: loginPageState.login_background_url
+    ? `linear-gradient(135deg, rgba(20, 31, 43, .42), rgba(20, 31, 43, .24)), url("${safeCssUrl(loginPageState.login_background_url)}") center / cover no-repeat`
+    : defaultLoginBackground,
+}));
 const selectedWallpaper = computed(() => wallpaperPresets.find(item => item.key === profileState.form.wallpaper) || wallpaperPresets[0]);
 const desktopStyle = computed(() => ({
   background: profileState.form.wallpaper_url
@@ -2255,6 +2298,9 @@ const topAvatarStyle = computed(() => (profileState.form.avatar ? {
 } : {}));
 const wallpaperUploadStyle = computed(() => (profileState.form.wallpaper_url ? {
   backgroundImage: `url("${safeCssUrl(profileState.form.wallpaper_url)}")`,
+} : {}));
+const loginBackgroundUploadStyle = computed(() => (loginPageState.login_background_url ? {
+  backgroundImage: `url("${safeCssUrl(loginPageState.login_background_url)}")`,
 } : {}));
 const profileAlertType = computed(() => (profileState.saved ? 'success' : 'warning'));
 const currentArchiveDefinition = computed(() => archiveDefinitions.find(item => item.type === archiveState.type) || archiveDefinitions[0]);
@@ -3294,6 +3340,7 @@ async function submitLogout() {
     openWindows.splice(0);
     focusedWindowId.value = null;
     await load();
+    await loadLoginPageSettings();
   } catch (error) {
     loginState.message = error.message;
   } finally {
@@ -5248,6 +5295,24 @@ function applyProfileData(data) {
   cacheWallpaper();
 }
 
+function applyLoginPageData(data) {
+  loginPageState.school_code = data.school_code || '2184';
+  loginPageState.school_name = data.school_name || '成都锦城学院';
+  loginPageState.login_background_url = data.login_background_url || '';
+}
+
+async function loadLoginPageSettings() {
+  loginPageState.loading = true;
+  loginPageState.message = '';
+  try {
+    applyLoginPageData(await fetchLoginPageSettings());
+  } catch (error) {
+    loginPageState.message = error.message;
+  } finally {
+    loginPageState.loading = false;
+  }
+}
+
 function resetProfileState() {
   Object.assign(profileState.form, emptyProfile());
   profileState.message = '';
@@ -5301,6 +5366,12 @@ function guardProfileAssetClick(event) {
   }
 }
 
+function guardLoginBackgroundClick(event) {
+  if (loginPageState.loading || !canManageLoginBackground.value) {
+    event.preventDefault();
+  }
+}
+
 async function handleAssetSelected(type, event) {
   const file = event.target.files?.[0];
   event.target.value = '';
@@ -5330,6 +5401,25 @@ async function handleAssetSelected(type, event) {
   }
 }
 
+async function handleLoginBackgroundSelected(event) {
+  const file = event.target.files?.[0];
+  event.target.value = '';
+  if (!file || !canManageLoginBackground.value) {
+    return;
+  }
+
+  loginPageState.loading = true;
+  loginPageState.message = '';
+  try {
+    applyLoginPageData(await uploadLoginBackground(file));
+    loginPageState.message = '登录背景已更新';
+  } catch (error) {
+    loginPageState.message = error.message;
+  } finally {
+    loginPageState.loading = false;
+  }
+}
+
 async function persistProfileSettings(message) {
   const data = await saveProfileSettings({
     name: profileState.form.name,
@@ -5351,6 +5441,10 @@ function safeCssUrl(value) {
 }
 
 async function loadProxy() {
+  if (!isLoggedIn.value) {
+    return;
+  }
+
   wechatProxy.loading = true;
   wechatProxy.message = '';
   try {
@@ -5578,6 +5672,7 @@ onMounted(async () => {
   window.addEventListener('hashchange', handleHashNavigation);
   renderClock();
   setInterval(renderClock, 30000);
+  await loadLoginPageSettings();
   await load();
   await loadProfile();
   await loadProxy();

@@ -107,6 +107,19 @@ export function fetchProfileSettings() {
   return request('/profile/settings');
 }
 
+export function fetchLoginPageSettings() {
+  return request('/config/login-page');
+}
+
+export function uploadLoginBackground(file) {
+  const body = new FormData();
+  body.append('file', file);
+  return request('/config/upload-login-background', {
+    method: 'POST',
+    body,
+  });
+}
+
 export function saveProfileSettings(payload) {
   return request('/profile/save-settings', {
     method: 'POST',

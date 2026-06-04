@@ -224,7 +224,7 @@ class TableRecord extends BaseModel
             $query->orderBy($field);
         }
 
-        return $query->get($columns)->map(static fn ($row): array => (array) $row)->all();
+        return $query->get($columns)->map(static fn ($row): array => $row->toArray())->all();
     }
 
     public static function updateArchiveRow(string $table, string $idField, int $id, array $values): int
@@ -262,7 +262,7 @@ class TableRecord extends BaseModel
             $query->orderBy($field);
         }
 
-        return $query->get($columns)->map(static fn ($row): array => (array) $row)->all();
+        return $query->get($columns)->map(static fn ($row): array => $row->toArray())->all();
     }
 
     public static function latestDesktopConfig(int $accountId, array $columns = ['id', 'layout_json']): ?object
@@ -297,7 +297,7 @@ class TableRecord extends BaseModel
             ->where('msg_type', 'system')
             ->whereNull('deleted_at')
             ->get(['channel', 'enabled'])
-            ->map(static fn ($row): array => (array) $row)
+            ->map(static fn ($row): array => $row->toArray())
             ->all();
     }
 
