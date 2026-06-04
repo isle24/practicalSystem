@@ -1399,19 +1399,19 @@
                       -->
                       <label :class="{ 'filter-active': hasFilterValue(statState.filters.dep_id) }">
                         <span>学院</span>
-                        <el-select v-model="statState.filters.dep_id" clearable filterable placeholder="全部">
+                        <el-select v-model="statState.filters.dep_id" class="filter-select" :class="{ 'is-filter-active': hasFilterValue(statState.filters.dep_id) }" clearable filterable placeholder="全部">
                           <el-option v-for="item in optionItems(internshipState.options.departments, 'dep_id', 'dep_name')" :key="item.value" :label="item.label" :value="item.value" />
                         </el-select>
                       </label>
                       <label :class="{ 'filter-active': hasFilterValue(statState.filters.profession_id) }">
                         <span>专业</span>
-                        <el-select v-model="statState.filters.profession_id" clearable filterable placeholder="全部">
+                        <el-select v-model="statState.filters.profession_id" class="filter-select" :class="{ 'is-filter-active': hasFilterValue(statState.filters.profession_id) }" clearable filterable placeholder="全部">
                           <el-option v-for="item in optionItems(internshipState.options.professions, 'profession_id', 'profession_name')" :key="item.value" :label="item.label" :value="item.value" />
                         </el-select>
                       </label>
                       <label :class="{ 'filter-active': hasFilterValue(statState.filters.grade_id) }">
                         <span>届次</span>
-                        <el-select v-model="statState.filters.grade_id" clearable filterable placeholder="全部">
+                        <el-select v-model="statState.filters.grade_id" class="filter-select" :class="{ 'is-filter-active': hasFilterValue(statState.filters.grade_id) }" clearable filterable placeholder="全部">
                           <el-option v-for="item in optionItems(internshipState.options.grades, 'grade_id', 'grade_name')" :key="item.value" :label="item.label" :value="item.value" />
                         </el-select>
                       </label>

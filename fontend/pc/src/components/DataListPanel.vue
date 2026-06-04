@@ -5,12 +5,14 @@
         <label
           v-for="filter in filters"
           :key="filter.key"
-          :class="{ 'filter-active': hasFilterValue(filterValues[filter.key]) }"
+          :class="{ 'filter-active': hasFilterValue(filterValue(filter.key)) }"
         >
           <span>{{ filter.label }}</span>
           <el-select
             v-if="filter.type === 'select'"
-            :model-value="filterValues[filter.key]"
+            class="filter-select"
+            :class="{ 'is-filter-active': hasFilterValue(filterValue(filter.key)) }"
+            :model-value="filterValue(filter.key)"
             clearable
             filterable
             :placeholder="filter.placeholder || '全部'"
@@ -25,7 +27,7 @@
           </el-select>
           <input
             v-else
-            :value="filterValues[filter.key]"
+            :value="filterValue(filter.key)"
             :placeholder="filter.placeholder || ''"
             @input="event => updateFilter(filter.key, event.target.value)"
             @keyup.enter="emit('search')"
@@ -97,6 +99,7 @@
 </template>
 
 <script setup>
+import { reactive, watch } from 'vue';
 import { RefreshCw } from '@lucide/vue';
 
 const props = defineProps({
@@ -135,9 +138,32 @@ const props = defineProps({
 });
 
 const emit = defineEmits(['filter-change', 'page-change', 'reset', 'row-action', 'search']);
+const localFilterValues = reactive({});
 let lastActionAt = 0;
 
+watch(
+  () => props.filterValues,
+  (values = {}) => {
+    Object.keys(localFilterValues).forEach((key) => {
+      if (!Object.prototype.hasOwnProperty.call(values, key)) {
+        delete localFilterValues[key];
+      }
+    });
+    Object.entries(values).forEach(([key, value]) => {
+      localFilterValues[key] = value;
+    });
+  },
+  { immediate: true, deep: true },
+);
+
+function filterValue(key) {
+  return Object.prototype.hasOwnProperty.call(localFilterValues, key)
+    ? localFilterValues[key]
+    : props.filterValues[key];
+}
+
 function updateFilter(key, value) {
+  localFilterValues[key] = value ?? '';
   emit('filter-change', { key, value });
 }
 
