@@ -192,6 +192,16 @@ export function deleteArchiveItem(payload) {
   });
 }
 
+export function importArchiveExcel(type, file) {
+  const body = new FormData();
+  body.append('type', type);
+  body.append('file', file);
+  return request('/archive/import-excel', {
+    method: 'POST',
+    body,
+  });
+}
+
 export function fetchRolePermissions(roleId) {
   const query = new URLSearchParams({ role_id: roleId }).toString();
   return request(`/admin/role-permissions?${query}`);

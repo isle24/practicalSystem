@@ -286,6 +286,205 @@ class TableRecord extends BaseModel
         return $query->get($columns)->map(static fn ($row): array => $row->toArray())->all();
     }
 
+    public static function importAcademicArchiveRows(string $type, array $rows, string $now): array
+    {
+        $summary = [
+            'type' => $type,
+            'total' => count($rows),
+            'created' => 0,
+            'skipped' => 0,
+            'failed' => 0,
+            'created_dependencies' => [
+                'departments' => 0,
+                'grades' => 0,
+                'professions' => 0,
+            ],
+            'errors' => [],
+        ];
+
+        self::connection()->transaction(function () use (&$summary, $now, $rows, $type): void {
+            foreach ($rows as $row) {
+                try {
+                    if (!empty($row['invalid_message'])) {
+                        throw new \InvalidArgumentException((string) $row['invalid_message']);
+                    }
+
+                    $departmentName = self::importArchiveRequiredValue($row, 'dep_name', '学院');
+                    $gradeName = self::importArchiveRequiredValue($row, 'grade_name', '届次');
+                    $professionName = self::importArchiveRequiredValue($row, 'profession_name', '专业');
+                    $department = self::findOrCreateImportDepartment($departmentName, $now);
+                    $grade = self::findOrCreateImportGrade($gradeName, (int) $department['id'], $now);
+                    $profession = self::findOrCreateImportProfession($professionName, (int) $department['id'], (int) $grade['id'], $now);
+
+                    if ($department['created']) {
+                        $summary['created_dependencies']['departments']++;
+                    }
+                    if ($grade['created']) {
+                        $summary['created_dependencies']['grades']++;
+                    }
+
+                    if ($type === 'profession') {
+                        if ($profession['created']) {
+                            $summary['created']++;
+                        } else {
+                            $summary['skipped']++;
+                        }
+                        continue;
+                    }
+
+                    if ($profession['created']) {
+                        $summary['created_dependencies']['professions']++;
+                    }
+
+                    $className = self::importArchiveRequiredValue($row, 'class_name', '班级');
+                    $class = self::findOrCreateImportClass($className, (int) $department['id'], (int) $grade['id'], (int) $profession['id'], $now);
+                    if ($class['created']) {
+                        $summary['created']++;
+                    } else {
+                        $summary['skipped']++;
+                    }
+                } catch (\Throwable $exception) {
+                    $summary['failed']++;
+                    if (count($summary['errors']) < 30) {
+                        $summary['errors'][] = [
+                            'row' => (int) ($row['row_number'] ?? 0),
+                            'message' => $exception->getMessage(),
+                        ];
+                    }
+                }
+            }
+        });
+
+        return $summary;
+    }
+
+    private static function importArchiveRequiredValue(array $row, string $field, string $label): string
+    {
+        $value = trim((string) ($row[$field] ?? ''));
+        if ($value === '') {
+            throw new \InvalidArgumentException("缺少{$label}");
+        }
+
+        return $value;
+    }
+
+    private static function findOrCreateImportDepartment(string $name, string $now): array
+    {
+        $row = self::activeArchiveNameRow('department', 'dep_id', 'dep_name', $name);
+        if ($row) {
+            return ['id' => (int) $row->dep_id, 'created' => false];
+        }
+
+        return [
+            'id' => (int) self::queryTable('department')->insertGetId([
+                'dep_name' => $name,
+                'dep_short_name' => null,
+                'dep_code' => null,
+                'parent_id' => 0,
+                'sort' => 0,
+                'flag' => 'on',
+                'created_at' => $now,
+                'updated_at' => $now,
+            ], 'dep_id'),
+            'created' => true,
+        ];
+    }
+
+    private static function findOrCreateImportGrade(string $name, int $departmentId, string $now): array
+    {
+        $row = self::activeArchiveNameRow('grade_list', 'grade_id', 'grade_name', $name, [
+            'dep_id' => $departmentId,
+        ]);
+        if ($row) {
+            return ['id' => (int) $row->grade_id, 'created' => false];
+        }
+
+        return [
+            'id' => (int) self::queryTable('grade_list')->insertGetId([
+                'grade_name' => $name,
+                'dep_id' => $departmentId,
+                'is_current' => 'false',
+                'sort' => 0,
+                'flag' => 'on',
+                'created_at' => $now,
+                'updated_at' => $now,
+            ], 'grade_id'),
+            'created' => true,
+        ];
+    }
+
+    private static function findOrCreateImportProfession(string $name, int $departmentId, int $gradeId, string $now): array
+    {
+        $row = self::activeArchiveNameRow('profession', 'profession_id', 'profession_name', $name, [
+            'dep_id' => $departmentId,
+            'grade_id' => $gradeId,
+        ]);
+        if ($row) {
+            return ['id' => (int) $row->profession_id, 'created' => false];
+        }
+
+        return [
+            'id' => (int) self::queryTable('profession')->insertGetId([
+                'profession_name' => $name,
+                'profession_short_name' => null,
+                'profession_code' => null,
+                'dep_id' => $departmentId,
+                'grade_id' => $gradeId,
+                'sort' => 0,
+                'flag' => 'on',
+                'created_at' => $now,
+                'updated_at' => $now,
+            ], 'profession_id'),
+            'created' => true,
+        ];
+    }
+
+    private static function findOrCreateImportClass(string $name, int $departmentId, int $gradeId, int $professionId, string $now): array
+    {
+        $row = self::activeArchiveNameRow('class', 'class_id', 'class_name', $name, [
+            'dep_id' => $departmentId,
+            'grade_id' => $gradeId,
+            'profession_id' => $professionId,
+        ]);
+        if ($row) {
+            return ['id' => (int) $row->class_id, 'created' => false];
+        }
+
+        return [
+            'id' => (int) self::queryTable('class')->insertGetId([
+                'class_name' => $name,
+                'class_short_name' => null,
+                'class_num' => null,
+                'dep_id' => $departmentId,
+                'grade_id' => $gradeId,
+                'profession_id' => $professionId,
+                'sort' => 0,
+                'flag' => 'on',
+                'created_at' => $now,
+                'updated_at' => $now,
+            ], 'class_id'),
+            'created' => true,
+        ];
+    }
+
+    private static function activeArchiveNameRow(string $table, string $idField, string $nameField, string $name, array $conditions = []): ?object
+    {
+        $query = self::queryTable($table)
+            ->where($nameField, $name)
+            ->whereNull('deleted_at');
+
+        foreach ($conditions as $field => $value) {
+            if ($value === null) {
+                $query->whereNull($field);
+                continue;
+            }
+
+            $query->where($field, $value);
+        }
+
+        return $query->first([$idField]);
+    }
+
     public static function latestDesktopConfig(int $accountId, array $columns = ['id', 'layout_json']): ?object
     {
         return self::queryTable('user_desktop_config')

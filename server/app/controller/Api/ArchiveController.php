@@ -5,15 +5,27 @@ namespace app\controller\Api;
 use app\controller\Api\Concerns\Responds;
 use app\model\channel\TableRecord as ChannelTable;
 use app\server\CurrentContext;
+use PhpOffice\PhpSpreadsheet\IOFactory;
 use support\Request;
 use support\Response;
 use Throwable;
+use Webman\Http\UploadFile;
 
 class ArchiveController
 {
     use Responds;
 
     private const ADMIN_ROLE_TYPES = ['super_admin', 'school_admin'];
+    private const EXCEL_IMPORT_TYPES = ['profession', 'class'];
+    private const EXCEL_EXTENSIONS = ['xls', 'xlsx'];
+    private const EXCEL_MAX_SIZE = 10485760;
+    private const EXCEL_MAX_ROWS = 5000;
+    private const EXCEL_HEADER_ALIASES = [
+        'grade_name' => ['届次', '届次名称', '年级', '年级名称', 'grade', 'grade_name'],
+        'dep_name' => ['学院', '学院名称', '院系', '院系名称', 'department', 'department_name', 'dep_name'],
+        'profession_name' => ['专业', '专业名称', 'profession', 'profession_name', 'major', 'major_name'],
+        'class_name' => ['班级', '班级名称', 'class', 'class_name'],
+    ];
 
     private const DEFINITIONS = [
         'department' => [
@@ -127,6 +139,23 @@ class ArchiveController
         }
     }
 
+    public function importExcel(Request $request): Response
+    {
+        if (!$this->isAdmin()) {
+            return $this->fail(40300, '无操作权限', 403);
+        }
+
+        try {
+            $type = $this->importType($request);
+            $rows = $this->excelRows($this->excelFile($request), $type);
+            $summary = ChannelTable::importAcademicArchiveRows($type, $rows, date('Y-m-d H:i:s'));
+
+            return $this->ok(array_merge($summary, $this->items($type)), '导入完成');
+        } catch (Throwable $exception) {
+            return $this->fail(40001, $exception->getMessage(), 400);
+        }
+    }
+
     private function isAdmin(): bool
     {
         return in_array(CurrentContext::roleType(), self::ADMIN_ROLE_TYPES, true);
@@ -137,6 +166,16 @@ class ArchiveController
         $type = (string) $request->input('type', 'department');
         if (!isset(self::DEFINITIONS[$type])) {
             throw new \InvalidArgumentException('档案类型无效');
+        }
+
+        return $type;
+    }
+
+    private function importType(Request $request): string
+    {
+        $type = $this->type($request);
+        if (!in_array($type, self::EXCEL_IMPORT_TYPES, true)) {
+            throw new \InvalidArgumentException('当前档案类型不支持 Excel 导入');
         }
 
         return $type;
@@ -210,6 +249,172 @@ class ArchiveController
     {
         $value = $this->stringInput($request, $key, $maxLength);
         return $value === '' ? null : $value;
+    }
+
+    private function excelFile(Request $request): UploadFile
+    {
+        $file = $request->file('file');
+        if (!$file instanceof UploadFile || !$file->isValid()) {
+            throw new \InvalidArgumentException('上传文件无效');
+        }
+
+        $extension = strtolower($file->getUploadExtension());
+        if (!in_array($extension, self::EXCEL_EXTENSIONS, true)) {
+            throw new \InvalidArgumentException('仅支持 xls、xlsx 文件');
+        }
+
+        if ($file->getSize() > self::EXCEL_MAX_SIZE) {
+            throw new \InvalidArgumentException('文件大小不能超过 10MB');
+        }
+
+        return $file;
+    }
+
+    private function excelRows(UploadFile $file, string $type): array
+    {
+        $spreadsheet = IOFactory::load($file->getPathname());
+
+        try {
+            $sheetRows = $spreadsheet->getActiveSheet()->toArray(null, false, true, true);
+            [$mapping, $startRow] = $this->excelHeader($sheetRows, $type);
+            $required = $this->excelRequiredFields($type);
+            $items = [];
+
+            foreach ($sheetRows as $rowNumber => $row) {
+                if ((int) $rowNumber < $startRow) {
+                    continue;
+                }
+
+                $item = ['row_number' => (int) $rowNumber];
+                foreach ($mapping as $key => $column) {
+                    $item[$key] = $this->excelCellString($row[$column] ?? '');
+                }
+
+                if ($this->excelRowEmpty($item, $required)) {
+                    continue;
+                }
+
+                $missing = [];
+                foreach ($required as $field) {
+                    if (($item[$field] ?? '') === '') {
+                        $missing[] = $this->excelFieldLabel($field);
+                    }
+                }
+                if ($missing) {
+                    $item['invalid_message'] = '缺少' . implode('、', $missing);
+                }
+
+                $items[] = $item;
+                if (count($items) > self::EXCEL_MAX_ROWS) {
+                    throw new \InvalidArgumentException('单次最多导入 5000 行');
+                }
+            }
+
+            if (!$items) {
+                throw new \InvalidArgumentException('Excel 中没有可导入的数据');
+            }
+
+            return $items;
+        } finally {
+            $spreadsheet->disconnectWorksheets();
+        }
+    }
+
+    private function excelHeader(array $sheetRows, string $type): array
+    {
+        $required = $this->excelRequiredFields($type);
+        foreach (array_slice($sheetRows, 0, 5, true) as $rowNumber => $row) {
+            $mapping = [];
+            foreach ($row as $column => $value) {
+                $key = $this->excelHeaderKey($value);
+                if ($key && !isset($mapping[$key])) {
+                    $mapping[$key] = $column;
+                }
+            }
+
+            if (count(array_intersect($required, array_keys($mapping))) === count($required)) {
+                return [$mapping, (int) $rowNumber + 1];
+            }
+        }
+
+        return [[
+            'grade_name' => 'A',
+            'dep_name' => 'B',
+            'profession_name' => 'C',
+            'class_name' => 'D',
+        ], 1];
+    }
+
+    private function excelHeaderKey(mixed $value): ?string
+    {
+        $header = $this->normalizeExcelText((string) $value);
+        if ($header === '') {
+            return null;
+        }
+
+        foreach (self::EXCEL_HEADER_ALIASES as $key => $aliases) {
+            foreach ($aliases as $alias) {
+                if ($header === $this->normalizeExcelText($alias)) {
+                    return $key;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private function excelRequiredFields(string $type): array
+    {
+        return $type === 'class'
+            ? ['grade_name', 'dep_name', 'profession_name', 'class_name']
+            : ['grade_name', 'dep_name', 'profession_name'];
+    }
+
+    private function excelRowEmpty(array $row, array $fields): bool
+    {
+        foreach ($fields as $field) {
+            if (($row[$field] ?? '') !== '') {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private function excelFieldLabel(string $field): string
+    {
+        return match ($field) {
+            'grade_name' => '届次',
+            'dep_name' => '学院',
+            'profession_name' => '专业',
+            'class_name' => '班级',
+            default => '字段',
+        };
+    }
+
+    private function excelCellString(mixed $value): string
+    {
+        if ($value instanceof \DateTimeInterface) {
+            $value = $value->format('Y-m-d');
+        } elseif (is_float($value) && floor($value) === $value) {
+            $value = (string) (int) $value;
+        } else {
+            $value = (string) $value;
+        }
+
+        $value = trim((string) preg_replace('/\s+/u', ' ', $value));
+        if (function_exists('mb_substr')) {
+            return mb_substr($value, 0, 180);
+        }
+
+        return substr($value, 0, 180);
+    }
+
+    private function normalizeExcelText(string $value): string
+    {
+        $value = trim($value);
+        $value = function_exists('mb_strtolower') ? mb_strtolower($value) : strtolower($value);
+        return (string) preg_replace('/[\s　_\-:：()（）]+/u', '', $value);
     }
 
     private function rows(iterable $rows): array

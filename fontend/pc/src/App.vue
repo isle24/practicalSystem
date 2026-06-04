@@ -1013,6 +1013,14 @@
                     <el-button :icon="Plus" @click="openArchiveDialog(archiveTypeForWindow(win))">
                       新增
                     </el-button>
+                    <el-button
+                      v-if="canImportArchiveExcel(archiveTypeForWindow(win))"
+                      :icon="Upload"
+                      :loading="archiveStateForWindow(win).importing"
+                      @click="chooseArchiveExcel(archiveTypeForWindow(win))"
+                    >
+                      导入Excel
+                    </el-button>
                     <el-button :icon="Edit3" :disabled="!archiveStateForWindow(win).selected" @click="openArchiveDialog(archiveTypeForWindow(win), archiveStateForWindow(win).selected)">
                       编辑
                     </el-button>
@@ -1845,6 +1853,13 @@
       </div>
       <span>在线</span>
     </footer>
+    <input
+      ref="archiveImportInputRef"
+      type="file"
+      accept=".xls,.xlsx"
+      hidden
+      @change="handleArchiveImportFile"
+    >
   </main>
 </template>
 
@@ -1880,6 +1895,7 @@ import {
   Settings,
   SlidersHorizontal,
   Trash2,
+  Upload,
   UsersRound,
   UserRound,
   Workflow,
@@ -1922,6 +1938,7 @@ import {
   fetchProfileSettings,
   fetchRolePermissions,
   fetchWechatConfig,
+  importArchiveExcel,
   deleteMenu as deleteMenuApi,
   deleteOperationGuide,
   login as loginApi,
@@ -1953,6 +1970,8 @@ const keyword = ref('');
 const clock = ref('');
 const loginNameInput = ref(null);
 const wallpaperSectionRef = ref(null);
+const archiveImportInputRef = ref(null);
+const archiveImportType = ref('');
 const focusedWindowId = ref(null);
 const zIndexSeed = ref(20);
 const wallpaperCacheKey = 'practical_pc_wallpaper';
@@ -4293,6 +4312,7 @@ function createArchiveState(type) {
     selected: null,
     dialogVisible: false,
     loading: false,
+    importing: false,
     message: '',
   };
 }
@@ -4469,6 +4489,52 @@ async function deleteArchiveConfig(type) {
     state.message = error.message;
   } finally {
     state.loading = false;
+  }
+}
+
+function canImportArchiveExcel(type) {
+  return type === 'profession' || type === 'class';
+}
+
+function chooseArchiveExcel(type) {
+  if (!canManageConfig.value || !canImportArchiveExcel(type)) {
+    return;
+  }
+
+  archiveImportType.value = type;
+  if (archiveImportInputRef.value) {
+    archiveImportInputRef.value.value = '';
+    archiveImportInputRef.value.click();
+  }
+}
+
+async function handleArchiveImportFile(event) {
+  const file = event.target?.files?.[0];
+  const type = archiveImportType.value;
+  if (!file || !canImportArchiveExcel(type)) {
+    return;
+  }
+
+  const state = archiveStateByType(type);
+  state.importing = true;
+  state.message = '';
+  try {
+    const data = await importArchiveExcel(type, file);
+    state.items = data.items || [];
+    state.selected = null;
+    state.editing = emptyArchiveItem(type);
+    const failedText = data.failed ? `，失败 ${data.failed} 条` : '';
+    const firstError = data.errors?.[0]?.message ? `；首条错误：${data.errors[0].message}` : '';
+    state.message = `导入完成：新增 ${data.created || 0} 条，跳过 ${data.skipped || 0} 条${failedText}${firstError}`;
+    await loadAdminFoundation();
+  } catch (error) {
+    state.message = error.message;
+  } finally {
+    state.importing = false;
+    archiveImportType.value = '';
+    if (event.target) {
+      event.target.value = '';
+    }
   }
 }
 
