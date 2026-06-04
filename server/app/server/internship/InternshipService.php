@@ -307,6 +307,7 @@ class InternshipService
             'id' => $id,
             'records' => $records,
             'reviews' => $reviews,
+            'cycles' => $this->timelineCycles($records, $reviews),
             'items' => $this->timelineItems($records, $reviews),
         ];
     }
@@ -1350,19 +1351,116 @@ class InternshipService
         $this->assertStudentVisible((int) $row->student_id);
     }
 
+    private function timelineCycles(array $records, array $reviews): array
+    {
+        $reviewsByRecording = $this->reviewsByRecording($reviews);
+        $events = [];
+        foreach ($records as $record) {
+            $events[] = [
+                'kind' => 'recording',
+                'created_at' => $record['created_at'] ?? null,
+                'order' => (int) ($record['id'] ?? 0),
+                'record' => $record,
+            ];
+        }
+        foreach ($reviews as $review) {
+            if ((int) ($review['recording_id'] ?? 0) === 0) {
+                $events[] = [
+                    'kind' => 'review',
+                    'created_at' => $review['created_at'] ?? null,
+                    'order' => (int) ($review['id'] ?? 0),
+                    'review' => $review,
+                ];
+            }
+        }
+
+        usort($events, static function (array $left, array $right): int {
+            $time = strcmp((string) ($left['created_at'] ?? ''), (string) ($right['created_at'] ?? ''));
+            if ($time !== 0) {
+                return $time;
+            }
+            $kindOrder = ['recording' => 0, 'review' => 1];
+            $kind = ($kindOrder[$left['kind']] ?? 9) <=> ($kindOrder[$right['kind']] ?? 9);
+            return $kind !== 0 ? $kind : ((int) ($left['order'] ?? 0) <=> (int) ($right['order'] ?? 0));
+        });
+
+        $cycles = [];
+        $current = null;
+        $sequence = 0;
+        foreach ($events as $event) {
+            if ($event['kind'] === 'recording') {
+                $record = $event['record'];
+                $recordId = (int) ($record['id'] ?? 0);
+                if (($record['action'] ?? '') === 'submit') {
+                    $sequence++;
+                    $cycles[] = [
+                        'kind' => 'cycle',
+                        'sequence' => $sequence,
+                        'created_at' => $record['created_at'] ?? null,
+                        'record' => $record,
+                        'branches' => [],
+                    ];
+                    $current = count($cycles) - 1;
+                    continue;
+                }
+
+                $index = $this->timelineCycleIndex($cycles, $current, $sequence, $record['created_at'] ?? null);
+                $cycles[$index]['branches'][] = [
+                    'kind' => 'branch',
+                    'type' => 'recording',
+                    'created_at' => $record['created_at'] ?? null,
+                    'record' => $record,
+                    'review' => null,
+                    'reviews' => $this->workflowReviewsForRecord($record, $reviewsByRecording[$recordId] ?? []),
+                ];
+                continue;
+            }
+
+            $index = $this->timelineCycleIndex($cycles, $current, $sequence, $event['created_at'] ?? null);
+            $review = $event['review'];
+            $cycles[$index]['branches'][] = [
+                'kind' => 'branch',
+                'type' => 'review',
+                'created_at' => $review['created_at'] ?? null,
+                'record' => null,
+                'review' => $review,
+                'reviews' => [$review],
+            ];
+        }
+
+        return $cycles;
+    }
+
+    private function timelineCycleIndex(array &$cycles, ?int &$current, int &$sequence, ?string $createdAt): int
+    {
+        if ($current !== null) {
+            return $current;
+        }
+
+        $sequence++;
+        $cycles[] = [
+            'kind' => 'cycle',
+            'sequence' => $sequence,
+            'created_at' => $createdAt,
+            'record' => null,
+            'branches' => [],
+        ];
+        $current = count($cycles) - 1;
+
+        return $current;
+    }
+
     private function timelineItems(array $records, array $reviews): array
     {
-        $reviewsByRecording = [];
+        $reviewsByRecording = $this->reviewsByRecording($reviews);
         $standaloneReviews = [];
         foreach ($reviews as $review) {
-            $recordingId = (int) ($review['recording_id'] ?? 0);
-            if ($recordingId > 0) {
-                $reviewsByRecording[$recordingId][] = $review;
-            } else {
+            if ((int) ($review['recording_id'] ?? 0) === 0) {
                 $standaloneReviews[] = [
                     'kind' => 'review',
                     'created_at' => $review['created_at'] ?? null,
                     'review' => $review,
+                    'reviews' => [$review],
                 ];
             }
         }
@@ -1374,7 +1472,7 @@ class InternshipService
                 'kind' => 'recording',
                 'created_at' => $record['created_at'] ?? null,
                 'record' => $record,
-                'reviews' => $reviewsByRecording[$recordId] ?? [],
+                'reviews' => $this->workflowReviewsForRecord($record, $reviewsByRecording[$recordId] ?? []),
             ];
         }
 
@@ -1382,6 +1480,28 @@ class InternshipService
         usort($items, fn (array $left, array $right): int => strcmp((string) ($left['created_at'] ?? ''), (string) ($right['created_at'] ?? '')));
 
         return $items;
+    }
+
+    private function reviewsByRecording(array $reviews): array
+    {
+        $grouped = [];
+        foreach ($reviews as $review) {
+            $recordingId = (int) ($review['recording_id'] ?? 0);
+            if ($recordingId > 0) {
+                $grouped[$recordingId][] = $review;
+            }
+        }
+
+        return $grouped;
+    }
+
+    private function workflowReviewsForRecord(array $record, array $reviews): array
+    {
+        if (($record['action'] ?? '') === 'submit') {
+            return [];
+        }
+
+        return array_values($reviews);
     }
 
     private function recordWorkflow(

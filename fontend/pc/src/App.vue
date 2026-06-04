@@ -375,21 +375,43 @@
 
                       <div v-else-if="internshipState.dialog.type === 'timeline'" class="operation-form single">
                         <div class="timeline-view">
-                          <section v-for="item in internshipState.dialog.timeline" :key="`${item.kind}-${item.record?.id || item.review?.id}`" class="timeline-item">
+                          <section
+                            v-for="(cycle, index) in internshipTimelineCycles"
+                            :key="timelineCycleKey(cycle, index)"
+                            class="timeline-cycle"
+                          >
                             <span />
                             <div>
-                              <strong>{{ timelineTitle(item) }}</strong>
-                              <small>{{ item.created_at || '-' }}</small>
-                              <p>{{ timelineContent(item) }}</p>
-                              <p v-for="review in timelineReviews(item)" :key="review.id">
-                                审核意见：{{ review.opinion || '-' }}<template v-if="review.score">，评分：{{ review.score }}</template>
-                              </p>
-                              <p v-if="item.review">
-                                审核意见：{{ item.review.opinion || '-' }}<template v-if="item.review.score">，评分：{{ item.review.score }}</template>
-                              </p>
+                              <header class="timeline-node-head">
+                                <strong>{{ timelineCycleTitle(cycle) }}</strong>
+                                <small>{{ timelineCycleTime(cycle) }}</small>
+                              </header>
+                              <p>{{ timelineCycleContent(cycle) }}</p>
+                              <div v-if="cycle.branches?.length" class="timeline-branches">
+                                <article
+                                  v-for="(branch, branchIndex) in cycle.branches"
+                                  :key="timelineBranchKey(branch, branchIndex)"
+                                  class="timeline-branch"
+                                  :class="{ reopen: isModifyAfterAcceptBranch(branch) }"
+                                >
+                                  <span />
+                                  <div>
+                                    <header class="timeline-node-head">
+                                      <strong>{{ timelineBranchTitle(branch) }}</strong>
+                                      <small>{{ timelineBranchTime(branch) }}</small>
+                                    </header>
+                                    <p v-if="timelineBranchContent(branch)">{{ timelineBranchContent(branch) }}</p>
+                                    <p v-for="review in timelineBranchReviews(branch)" :key="review.id" class="timeline-review">
+                                      <span>状态：{{ statusText(review.status) }}</span>
+                                      <span>审核意见：{{ review.opinion || '-' }}</span>
+                                      <span v-if="review.score !== null && review.score !== undefined">评分：{{ review.score }}</span>
+                                    </p>
+                                  </div>
+                                </article>
+                              </div>
                             </div>
                           </section>
-                          <small v-if="!internshipState.dialog.timeline.length">暂无流程记录</small>
+                          <small v-if="!internshipTimelineCycles.length">暂无流程记录</small>
                         </div>
                       </div>
 
@@ -535,7 +557,7 @@
                         <el-button v-if="canRequestModification(row, 'plan')" link type="danger" @click="openReopenDialog('plan', row)">
                           通过后修改
                         </el-button>
-                        <el-button link type="info" @click="openTimelineDialog('plan', row)">
+                        <el-button size="small" type="primary" plain @click="openTimelineDialog('plan', row)">
                           记录
                         </el-button>
                       </template>
@@ -565,7 +587,7 @@
                         <el-button v-if="canRequestModification(row, 'application')" link type="danger" @click="openReopenDialog('application', row)">
                           通过后修改
                         </el-button>
-                        <el-button link type="info" @click="openTimelineDialog('application', row)">
+                        <el-button size="small" type="primary" plain @click="openTimelineDialog('application', row)">
                           记录
                         </el-button>
                       </template>
@@ -629,7 +651,7 @@
                         <el-button v-if="canRequestModification(row, 'journal')" link type="danger" @click="openReopenDialog('journal', row)">
                           通过后修改
                         </el-button>
-                        <el-button link type="info" @click="openTimelineDialog('journal', row)">
+                        <el-button size="small" type="primary" plain @click="openTimelineDialog('journal', row)">
                           记录
                         </el-button>
                       </template>
@@ -659,7 +681,7 @@
                         <el-button v-if="canRequestModification(row, 'report')" link type="danger" @click="openReopenDialog('report', row)">
                           通过后修改
                         </el-button>
-                        <el-button link type="info" @click="openTimelineDialog('report', row)">
+                        <el-button size="small" type="primary" plain @click="openTimelineDialog('report', row)">
                           记录
                         </el-button>
                       </template>
@@ -689,7 +711,7 @@
                         <el-button v-if="canRequestModification(row, 'delay')" link type="danger" @click="openReopenDialog('delay', row)">
                           通过后修改
                         </el-button>
-                        <el-button link type="info" @click="openTimelineDialog('delay', row)">
+                        <el-button size="small" type="primary" plain @click="openTimelineDialog('delay', row)">
                           记录
                         </el-button>
                       </template>
@@ -2200,7 +2222,12 @@ const parentMenuTreeOptions = computed(() => [
   },
 ]);
 const operatorName = computed(() => permissionState.context.user_name || (permissionState.context.user_id ? `用户 ${permissionState.context.user_id}` : '未登录'));
-const schoolDataText = computed(() => (isLoggedIn.value ? '成都锦城学院' : '未登录'));
+const schoolDataText = computed(() => {
+  if (!isLoggedIn.value) {
+    return '未登录';
+  }
+  return permissionState.context.school_name || permissionState.context.school?.school_name || '成都锦城学院';
+});
 const roleText = computed(() => permissionState.context.role_name || roleTypeNames[permissionState.context.role_type] || permissionState.context.role_type || permissionState.context.role_id || '-');
 const selectedWallpaper = computed(() => wallpaperPresets.find(item => item.key === profileState.form.wallpaper) || wallpaperPresets[0]);
 const desktopStyle = computed(() => ({
@@ -2223,6 +2250,10 @@ const currentArchiveFields = computed(() => currentArchiveDefinition.value.field
 const currentArchiveIdField = computed(() => currentArchiveDefinition.value.idField);
 const currentArchiveTableFields = computed(() => currentArchiveFields.value.filter(field => field.key !== 'sort'));
 const reviewReasonLength = computed(() => textLength(internshipState.dialog.reason));
+const internshipTimelineCycles = computed(() => normalizeTimelineCycles(
+  internshipState.dialog.cycles || [],
+  internshipState.dialog.timeline || [],
+));
 const internshipOverviewCards = computed(() => [
   { name: '实习安排', value: internshipState.overview.arrangements || 0, theme: 'primary', icon: CalendarCheck },
   { name: '待审申请', value: internshipState.overview.applications_waiting || 0, theme: 'amber', icon: ClipboardList },
@@ -4024,6 +4055,7 @@ function emptyOperationDialog() {
     row: null,
     reason: '',
     timeline: [],
+    cycles: [],
   };
 }
 
@@ -4388,11 +4420,13 @@ async function openTimelineDialog(entity, row) {
     entity,
     row,
     timeline: [],
+    cycles: [],
   };
   internshipState.loading = true;
   internshipState.message = '';
   try {
     const data = await fetchInternshipTimeline({ entity, id: row.id });
+    internshipState.dialog.cycles = data.cycles || [];
     internshipState.dialog.timeline = data.items || [];
   } catch (error) {
     internshipState.message = error.message;
@@ -4504,11 +4538,116 @@ function workflowActionText(action) {
   return names[action] || action || '记录';
 }
 
-function timelineTitle(item) {
-  if (item.record) {
-    return `${workflowActionText(item.record.action)}：${statusText(item.record.from_status)} -> ${statusText(item.record.to_status)}`;
+function normalizeTimelineCycles(cycles, items) {
+  if (Array.isArray(cycles) && cycles.length) {
+    return cycles;
   }
-  return `审核：${statusText(item.review?.status)}`;
+
+  if (!Array.isArray(items) || !items.length) {
+    return [];
+  }
+
+  const normalized = [];
+  let current = null;
+  let sequence = 0;
+
+  items.forEach((item) => {
+    if (item.record && item.record.action === 'submit') {
+      sequence += 1;
+      current = {
+        kind: 'cycle',
+        sequence,
+        created_at: item.created_at,
+        record: item.record,
+        branches: [],
+      };
+      normalized.push(current);
+      return;
+    }
+
+    if (!current) {
+      sequence += 1;
+      current = {
+        kind: 'cycle',
+        sequence,
+        created_at: item.created_at,
+        record: null,
+        branches: [],
+      };
+      normalized.push(current);
+    }
+
+    current.branches.push({
+      kind: 'branch',
+      type: item.kind || 'recording',
+      created_at: item.created_at,
+      record: item.record || null,
+      review: item.review || null,
+      reviews: item.reviews || (item.review ? [item.review] : []),
+    });
+  });
+
+  return normalized;
+}
+
+function timelineCycleKey(cycle, index) {
+  return `cycle-${cycle.record?.id || cycle.sequence || index}`;
+}
+
+function timelineCycleTitle(cycle) {
+  const prefix = cycle.sequence ? `第 ${cycle.sequence} 次提交` : '提交记录';
+  if (cycle.record) {
+    return `${prefix}：${statusText(cycle.record.from_status)} -> ${statusText(cycle.record.to_status)}`;
+  }
+  return cycle.sequence ? `第 ${cycle.sequence} 次流程记录` : '流程记录';
+}
+
+function timelineCycleTime(cycle) {
+  return cycle.created_at || cycle.record?.created_at || '-';
+}
+
+function timelineCycleContent(cycle) {
+  if (!cycle.record) {
+    return '无提交内容';
+  }
+  return timelineContent({ record: cycle.record });
+}
+
+function timelineBranchKey(branch, index) {
+  return `branch-${branch.record?.id || branch.review?.id || index}`;
+}
+
+function timelineBranchTitle(branch) {
+  if (branch.record) {
+    return `${workflowActionText(branch.record.action)}：${statusText(branch.record.from_status)} -> ${statusText(branch.record.to_status)}`;
+  }
+  const review = branch.review || branch.reviews?.[0];
+  return `审核：${statusText(review?.status)}`;
+}
+
+function timelineBranchTime(branch) {
+  return branch.created_at || branch.record?.created_at || branch.review?.created_at || '-';
+}
+
+function timelineBranchReviews(branch) {
+  if (Array.isArray(branch.reviews) && branch.reviews.length) {
+    return branch.reviews;
+  }
+  return branch.review ? [branch.review] : [];
+}
+
+function timelineBranchContent(branch) {
+  if (timelineBranchReviews(branch).length) {
+    return '';
+  }
+  if (branch.record) {
+    return branch.record.content || branch.record.opinion || '';
+  }
+  return branch.review?.opinion || '';
+}
+
+function isModifyAfterAcceptBranch(branch) {
+  return branch.record?.action === 'modify_after_accept' || branch.review?.status === 'modify';
 }
 
 function timelineContent(item) {
@@ -4519,10 +4658,6 @@ function timelineContent(item) {
     return item.record.content || item.record.opinion || '-';
   }
   return item.review?.opinion || '-';
-}
-
-function timelineReviews(item) {
-  return item.record ? [] : (item.reviews || []);
 }
 
 function isGenericSubmitContent(value) {

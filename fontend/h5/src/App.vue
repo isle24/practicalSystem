@@ -723,23 +723,41 @@
         </header>
         <div class="timeline-list">
           <div v-if="internship.timelineDialog.loading" class="timeline-empty">正在读取流程记录...</div>
-          <template v-else-if="internship.timelineDialog.items.length">
+          <template v-else-if="internshipTimelineCycles.length">
             <section
-              v-for="(item, index) in internship.timelineDialog.items"
-              :key="timelineItemKey(item, index)"
-              class="timeline-entry"
+              v-for="(cycle, index) in internshipTimelineCycles"
+              :key="timelineCycleKey(cycle, index)"
+              class="timeline-cycle"
             >
               <span />
               <div>
-                <strong>{{ timelineTitle(item) }}</strong>
-                <small>{{ timelineTime(item) }}</small>
-                <p>{{ timelineContent(item) }}</p>
-                <p v-for="review in timelineReviews(item)" :key="review.id" class="timeline-review">
-                  审核意见：{{ review.opinion || '-' }}<template v-if="review.score !== null && review.score !== undefined">，评分：{{ review.score }}</template>
-                </p>
-                <p v-if="item.review" class="timeline-review">
-                  审核意见：{{ item.review.opinion || '-' }}<template v-if="item.review.score !== null && item.review.score !== undefined">，评分：{{ item.review.score }}</template>
-                </p>
+                <header class="timeline-node-head">
+                  <strong>{{ timelineCycleTitle(cycle) }}</strong>
+                  <small>{{ timelineCycleTime(cycle) }}</small>
+                </header>
+                <p>{{ timelineCycleContent(cycle) }}</p>
+                <div v-if="cycle.branches?.length" class="timeline-branches">
+                  <article
+                    v-for="(branch, branchIndex) in cycle.branches"
+                    :key="timelineBranchKey(branch, branchIndex)"
+                    class="timeline-branch"
+                    :class="{ reopen: isModifyAfterAcceptBranch(branch) }"
+                  >
+                    <span />
+                    <div>
+                      <header class="timeline-node-head">
+                        <strong>{{ timelineBranchTitle(branch) }}</strong>
+                        <small>{{ timelineBranchTime(branch) }}</small>
+                      </header>
+                      <p v-if="timelineBranchContent(branch)">{{ timelineBranchContent(branch) }}</p>
+                      <p v-for="review in timelineBranchReviews(branch)" :key="review.id" class="timeline-review">
+                        <span>状态：{{ statusText(review.status) }}</span>
+                        <span>审核意见：{{ review.opinion || '-' }}</span>
+                        <span v-if="review.score !== null && review.score !== undefined">评分：{{ review.score }}</span>
+                      </p>
+                    </div>
+                  </article>
+                </div>
               </div>
             </section>
           </template>
@@ -931,6 +949,7 @@ const internship = reactive({
     title: '',
     subtitle: '',
     items: [],
+    cycles: [],
     message: '',
   },
 });
@@ -1917,9 +1936,11 @@ async function openTimelineDialog(entity, row) {
   internship.timelineDialog.title = `${reviewEntityName(entity)}流程记录`;
   internship.timelineDialog.subtitle = row.title || row.arrangement_title || row.student_name || String(row.id);
   internship.timelineDialog.items = [];
+  internship.timelineDialog.cycles = [];
   internship.timelineDialog.message = '';
   try {
     const data = await fetchInternshipTimeline({ entity, id: row.id });
+    internship.timelineDialog.cycles = data.cycles || [];
     internship.timelineDialog.items = data.items || [];
   } catch (error) {
     internship.timelineDialog.message = error.message;
@@ -2217,6 +2238,10 @@ function reviewTargetDetails(entity, row) {
 const reviewDialogTargetDetails = computed(() => (
   reviewTargetDetails(internship.reviewDialog.entity, internship.reviewDialog.row)
 ));
+const internshipTimelineCycles = computed(() => normalizeTimelineCycles(
+  internship.timelineDialog.cycles || [],
+  internship.timelineDialog.items || [],
+));
 
 function workflowActionText(action) {
   const names = {
@@ -2229,11 +2254,116 @@ function workflowActionText(action) {
   return names[action] || action || '记录';
 }
 
-function timelineTitle(item) {
-  if (item.record) {
-    return `${workflowActionText(item.record.action)}：${statusText(item.record.from_status)} -> ${statusText(item.record.to_status)}`;
+function normalizeTimelineCycles(cycles, items) {
+  if (Array.isArray(cycles) && cycles.length) {
+    return cycles;
   }
-  return `审核：${statusText(item.review?.status)}`;
+
+  if (!Array.isArray(items) || !items.length) {
+    return [];
+  }
+
+  const normalized = [];
+  let current = null;
+  let sequence = 0;
+
+  items.forEach((item) => {
+    if (item.record && item.record.action === 'submit') {
+      sequence += 1;
+      current = {
+        kind: 'cycle',
+        sequence,
+        created_at: item.created_at,
+        record: item.record,
+        branches: [],
+      };
+      normalized.push(current);
+      return;
+    }
+
+    if (!current) {
+      sequence += 1;
+      current = {
+        kind: 'cycle',
+        sequence,
+        created_at: item.created_at,
+        record: null,
+        branches: [],
+      };
+      normalized.push(current);
+    }
+
+    current.branches.push({
+      kind: 'branch',
+      type: item.kind || 'recording',
+      created_at: item.created_at,
+      record: item.record || null,
+      review: item.review || null,
+      reviews: item.reviews || (item.review ? [item.review] : []),
+    });
+  });
+
+  return normalized;
+}
+
+function timelineCycleKey(cycle, index) {
+  return `cycle-${cycle.record?.id || cycle.sequence || index}`;
+}
+
+function timelineCycleTitle(cycle) {
+  const prefix = cycle.sequence ? `第 ${cycle.sequence} 次提交` : '提交记录';
+  if (cycle.record) {
+    return `${prefix}：${statusText(cycle.record.from_status)} -> ${statusText(cycle.record.to_status)}`;
+  }
+  return cycle.sequence ? `第 ${cycle.sequence} 次流程记录` : '流程记录';
+}
+
+function timelineCycleTime(cycle) {
+  return cycle.created_at || cycle.record?.created_at || '-';
+}
+
+function timelineCycleContent(cycle) {
+  if (!cycle.record) {
+    return '无提交内容';
+  }
+  return timelineContent({ record: cycle.record });
+}
+
+function timelineBranchKey(branch, index) {
+  return `branch-${branch.record?.id || branch.review?.id || index}`;
+}
+
+function timelineBranchTitle(branch) {
+  if (branch.record) {
+    return `${workflowActionText(branch.record.action)}：${statusText(branch.record.from_status)} -> ${statusText(branch.record.to_status)}`;
+  }
+  const review = branch.review || branch.reviews?.[0];
+  return `审核：${statusText(review?.status)}`;
+}
+
+function timelineBranchTime(branch) {
+  return branch.created_at || branch.record?.created_at || branch.review?.created_at || '-';
+}
+
+function timelineBranchReviews(branch) {
+  if (Array.isArray(branch.reviews) && branch.reviews.length) {
+    return branch.reviews;
+  }
+  return branch.review ? [branch.review] : [];
+}
+
+function timelineBranchContent(branch) {
+  if (timelineBranchReviews(branch).length) {
+    return '';
+  }
+  if (branch.record) {
+    return branch.record.content || branch.record.opinion || '';
+  }
+  return branch.review?.opinion || '';
+}
+
+function isModifyAfterAcceptBranch(branch) {
+  return branch.record?.action === 'modify_after_accept' || branch.review?.status === 'modify';
 }
 
 function timelineContent(item) {
@@ -2244,10 +2374,6 @@ function timelineContent(item) {
     return item.record.content || item.record.opinion || '-';
   }
   return item.review?.opinion || '-';
-}
-
-function timelineReviews(item) {
-  return item.record ? [] : (item.reviews || []);
 }
 
 function isGenericSubmitContent(value) {
@@ -2272,14 +2398,6 @@ function submissionSnapshotText(entity, row) {
     delay: row.reason,
   };
   return previewText(textMap[entity] || '', 160) || '-';
-}
-
-function timelineTime(item) {
-  return item.created_at || item.record?.created_at || item.review?.created_at || '-';
-}
-
-function timelineItemKey(item, index) {
-  return `${item.kind || 'timeline'}-${item.record?.id || item.review?.id || index}`;
 }
 
 const reviewDialogTitle = computed(() => {

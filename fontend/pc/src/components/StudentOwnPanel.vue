@@ -25,7 +25,7 @@
           </template>
         </dl>
         <footer v-if="timelineEntity">
-          <el-button link type="info" @click="emit('timeline', row)">
+          <el-button size="small" type="primary" plain @click="emit('timeline', row)">
             记录
           </el-button>
         </footer>
