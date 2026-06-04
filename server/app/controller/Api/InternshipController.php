@@ -137,6 +137,21 @@ class InternshipController
         return $this->handle(fn (): array => $this->service()->reviewReport($request));
     }
 
+    public function delays(Request $request): Response
+    {
+        return $this->handle(fn (): array => $this->service()->delays($request));
+    }
+
+    public function saveDelay(Request $request): Response
+    {
+        return $this->handle(fn (): array => $this->service()->saveDelay($request));
+    }
+
+    public function reviewDelay(Request $request): Response
+    {
+        return $this->handle(fn (): array => $this->service()->reviewDelay($request));
+    }
+
     public function scores(Request $request): Response
     {
         return $this->handle(fn (): array => $this->service()->scores($request));

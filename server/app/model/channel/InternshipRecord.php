@@ -247,6 +247,45 @@ class InternshipRecord extends TableRecord
         ]);
     }
 
+    public static function delayPage(array $scope, array $filters): array
+    {
+        $query = self::applyStudentScope(self::queryTable('apply_report_delay')
+            ->leftJoin('students', 'apply_report_delay.student_id', '=', 'students.student_id')
+            ->leftJoin('arrangement', 'apply_report_delay.entity_id', '=', 'arrangement.id')
+            ->leftJoin('department', 'students.dep_id', '=', 'department.dep_id')
+            ->leftJoin('profession', 'students.profession_id', '=', 'profession.profession_id')
+            ->where('apply_report_delay.entity_type', 'internship')
+            ->whereNull('apply_report_delay.deleted_at'), $scope, 'apply_report_delay.student_id');
+        self::filter($query, $filters, 'apply_report_delay.status', 'status');
+        self::filter($query, $filters, 'apply_report_delay.config_key', 'config_key');
+        self::filter($query, $filters, 'apply_report_delay.entity_id', 'arrangement_id');
+        self::listFilters($query, $filters, [
+            'dep_id' => 'students.dep_id',
+            'profession_id' => 'students.profession_id',
+            'grade_id' => 'students.grade_id',
+            'semester' => 'arrangement.semester',
+        ]);
+        self::keyword($query, $filters, [
+            'students.name',
+            'students.student_num',
+            'arrangement.title',
+            'apply_report_delay.config_key',
+            'apply_report_delay.reason',
+        ], [
+            self::pairTeacherKeyword('apply_report_delay.student_id', 'apply_report_delay.entity_id'),
+        ]);
+
+        return self::paginate($query->orderByDesc('apply_report_delay.id'), $filters, [
+            'apply_report_delay.id', 'apply_report_delay.uuid', 'apply_report_delay.student_id',
+            'apply_report_delay.config_key', 'apply_report_delay.entity_type',
+            'apply_report_delay.entity_id as arrangement_id', 'apply_report_delay.requested_date',
+            'apply_report_delay.reason', 'apply_report_delay.status', 'apply_report_delay.created_at',
+            'students.name as student_name', 'students.student_num',
+            'department.dep_name', 'profession.profession_name',
+            'arrangement.title as arrangement_title', 'arrangement.semester',
+        ]);
+    }
+
     public static function scorePage(array $scope, array $filters): array
     {
         $query = self::applyStudentScope(self::queryTable('score')
@@ -439,6 +478,16 @@ class InternshipRecord extends TableRecord
             ->value('dep_id');
 
         return $depId ? (int) $depId : null;
+    }
+
+    public static function studentUserId(int $studentId): ?int
+    {
+        $userId = self::queryTable('students')
+            ->where('student_id', $studentId)
+            ->whereNull('deleted_at')
+            ->value('user_id');
+
+        return $userId ? (int) $userId : null;
     }
 
     public static function depIdsByProfessionIds(array $professionIds): array

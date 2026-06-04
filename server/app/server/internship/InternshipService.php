@@ -4,6 +4,7 @@ namespace app\server\internship;
 
 use app\model\channel\InternshipRecord;
 use app\server\CurrentContext;
+use app\server\config\ConfigService;
 use InvalidArgumentException;
 use RuntimeException;
 use support\Request;
@@ -36,13 +37,20 @@ class InternshipService
             'accept' => ['min' => 0, 'max' => 300],
             'modify' => ['min' => 8, 'max' => 800],
         ],
+        'delay' => [
+            'accept' => ['min' => 0, 'max' => 300],
+            'refuse' => ['min' => 5, 'max' => 500],
+            'modify' => ['min' => 5, 'max' => 500],
+        ],
     ];
     private const REVIEW_ENTITY_CONFIG = [
         'application' => ['table' => 'application', 'recording' => 'application_recording'],
         'journal' => ['table' => 'journal', 'recording' => 'journal_recording'],
         'report' => ['table' => 'report', 'recording' => 'report_recording'],
         'plan' => ['table' => 'internship_plan', 'recording' => 'plan_recording'],
+        'delay' => ['table' => 'apply_report_delay', 'recording' => 'apply_report_delay_recording'],
     ];
+    private const DELAY_CONFIG_KEYS = ['report_deadline', 'journal_deadline'];
     private const STUDENT_DOCUMENT_COLUMNS = [
         'students.name as student_name',
         'students.student_num',
@@ -518,6 +526,85 @@ class InternshipService
     public function reviewReport(Request $request): array
     {
         return $this->reviewStudentWork($request, 'report', 'report_recording');
+    }
+
+    public function delays(Request $request): array
+    {
+        $this->requirePermission('internship:view');
+
+        return InternshipRecord::delayPage($this->scopeContext(), $this->requestFilters($request, [
+            'page', 'page_size', 'per_page', 'keyword', 'status', 'config_key', 'arrangement_id',
+            'dep_id', 'profession_id', 'grade_id', 'semester',
+        ]));
+    }
+
+    public function saveDelay(Request $request): array
+    {
+        $this->requirePermission($this->isStudent() ? 'internship:apply' : 'internship:manage');
+        $studentId = $this->isStudent() ? $this->currentStudentId(true) : $this->requiredInt($request, 'student_id');
+        $entityType = $this->enum($request, 'entity_type', ['internship'], 'internship');
+        $entityId = $this->requiredInt($request, 'entity_id');
+        $configKey = $this->enum($request, 'config_key', self::DELAY_CONFIG_KEYS, 'report_deadline');
+        $existingId = $this->inputRowId($request, 'apply_report_delay');
+        $fromStatus = $existingId ? InternshipRecord::statusById('apply_report_delay', $existingId) : 'draft';
+
+        $this->assertStudentVisible($studentId);
+        if ($entityType === 'internship') {
+            $this->assertArrangementVisible($entityId);
+        }
+        if ($existingId) {
+            $row = $this->row('apply_report_delay', $existingId);
+            $this->assertStudentVisible((int) $row->student_id);
+        }
+
+        $values = [
+            'student_id' => $studentId,
+            'config_key' => $configKey,
+            'entity_type' => $entityType,
+            'entity_id' => $entityId,
+            'requested_date' => $this->requiredDate($request, 'requested_date'),
+            'reason' => $this->requiredString($request, 'reason', 2000),
+            'status' => 'wait',
+            'updated_at' => $this->now(),
+            'deleted_at' => null,
+        ];
+
+        $result = $this->saveRow('apply_report_delay', $request, $values);
+        $this->recordWorkflow('apply_report_delay_recording', 'delay', (int) $result['id'], 'submit', $fromStatus, 'wait', '提交延期申请', 'wait');
+
+        return $result;
+    }
+
+    public function reviewDelay(Request $request): array
+    {
+        $this->requirePermission('internship:approve');
+        $id = $this->requiredRowId($request, 'apply_report_delay');
+        $status = $this->enum($request, 'status', ['accept', 'refuse'], 'accept');
+        $opinion = $this->reviewOpinionInput($request, 'delay', $status);
+
+        return $this->connection()->transaction(function () use ($id, $status, $opinion): array {
+            $row = InternshipRecord::lockActiveRowById('apply_report_delay', $id);
+            if (!$row) {
+                throw new RuntimeException('延期申请不存在');
+            }
+            $this->assertStudentVisible((int) $row->student_id);
+            if ((string) $row->status !== 'wait') {
+                throw new InvalidArgumentException('仅待审核延期申请可处理', 42204);
+            }
+
+            InternshipRecord::updateById('apply_report_delay', $id, [
+                'status' => $status,
+                'updated_at' => $this->now(),
+            ]);
+            if ($status === 'accept') {
+                $this->saveDelayConfig($row);
+            }
+
+            $action = $this->isTeacher() ? 'teacher_review' : 'admin_review';
+            $this->recordWorkflow('apply_report_delay_recording', 'delay', $id, $action, (string) $row->status, $status, $opinion ?: '延期申请审核', $status);
+
+            return ['id' => $id, 'status' => $status];
+        });
     }
 
     public function scores(Request $request): array
@@ -1384,7 +1471,7 @@ class InternshipService
         $value = trim((string) $request->input('opinion', ''));
         $rule = self::REVIEW_OPINION_RULES[$entity][$status] ?? ['min' => 0, 'max' => null];
         $length = function_exists('mb_strlen') ? mb_strlen($value) : strlen($value);
-        $label = $status === 'modify' ? '退回原因' : '审核意见';
+        $label = in_array($status, ['modify', 'refuse'], true) ? '退回原因' : '审核意见';
         $min = (int) ($rule['min'] ?? 0);
         $max = $rule['max'] ?? null;
 
@@ -1420,6 +1507,16 @@ class InternshipService
         return preg_match('/^\d{4}-\d{2}-\d{2}$/', $value) ? $value : null;
     }
 
+    private function requiredDate(Request $request, string $key): string
+    {
+        $value = $this->dateInput($request, $key);
+        if (!$value) {
+            throw new InvalidArgumentException("{$key} 无效");
+        }
+
+        return $value;
+    }
+
     private function dateTimeInput(Request $request, string $key): ?string
     {
         $value = trim((string) $request->input($key, ''));
@@ -1450,6 +1547,23 @@ class InternshipService
     private function connection(): mixed
     {
         return InternshipRecord::connection();
+    }
+
+    private function saveDelayConfig(object $delay): void
+    {
+        $studentUserId = InternshipRecord::studentUserId((int) $delay->student_id);
+        if (!$studentUserId) {
+            return;
+        }
+
+        (new ConfigService())->set(
+            'internship',
+            (string) $delay->config_key,
+            (string) $delay->requested_date,
+            '延期申请通过后生成的学生截止日期',
+            0,
+            $studentUserId
+        );
     }
 
     private function uuid(): string

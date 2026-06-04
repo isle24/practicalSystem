@@ -139,6 +139,18 @@ export function reviewInternshipReport(payload) {
   return internshipPost('review-report', payload);
 }
 
+export function fetchInternshipDelays(params = {}) {
+  return internshipList('delays', params);
+}
+
+export function saveInternshipDelay(payload) {
+  return internshipPost('save-delay', payload);
+}
+
+export function reviewInternshipDelay(payload) {
+  return internshipPost('review-delay', payload);
+}
+
 export function fetchInternshipPlans(params = {}) {
   return internshipList('plans', params);
 }

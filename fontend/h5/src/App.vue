@@ -280,6 +280,40 @@
             </van-button>
           </section>
 
+          <section class="mobile-card form-card">
+            <header>
+              <FileClock :size="20" />
+              <strong>延期申请</strong>
+            </header>
+            <label>
+              <span>实习安排</span>
+              <select v-model.number="internship.forms.delay.arrangement_id">
+                <option v-for="item in internship.options.arrangements" :key="item.id" :value="item.id">
+                  {{ item.title }}
+                </option>
+              </select>
+            </label>
+            <label>
+              <span>延期类型</span>
+              <select v-model="internship.forms.delay.config_key">
+                <option v-for="item in delayConfigOptions()" :key="item.value" :value="item.value">
+                  {{ item.label }}
+                </option>
+              </select>
+            </label>
+            <label>
+              <span>申请延期至</span>
+              <input v-model="internship.forms.delay.requested_date" type="date">
+            </label>
+            <label>
+              <span>申请原因</span>
+              <textarea v-model="internship.forms.delay.reason" rows="4" />
+            </label>
+            <van-button block type="primary" :loading="internship.loading" @click="submitDelay">
+              提交延期申请
+            </van-button>
+          </section>
+
           <section class="mobile-card">
             <header>
               <FileClock :size="20" />
@@ -329,6 +363,33 @@
             <div class="mobile-list-footer">
               <span>共 {{ internship.lists.reports.pagination.total || 0 }} 条</span>
               <button v-if="canLoadMore('reports')" :disabled="internship.loading" @click="loadMoreInternshipList('reports')">
+                加载更多
+              </button>
+            </div>
+          </section>
+
+          <section class="mobile-card">
+            <header>
+              <FileClock :size="20" />
+              <strong>延期记录</strong>
+            </header>
+            <van-cell
+              v-for="row in internship.lists.delays.items"
+              :key="row.id"
+              :title="delayConfigText(row.config_key)"
+              :label="`${row.arrangement_title || '-'} / 延期至 ${row.requested_date || '-'}`"
+              :value="statusText(row.status)"
+            >
+              <template #right-icon>
+                <div class="cell-actions">
+                  <button @click.stop="openTimelineDialog('delay', row)">记录</button>
+                </div>
+              </template>
+            </van-cell>
+            <div v-if="!internship.lists.delays.items.length" class="mobile-empty">暂无延期申请</div>
+            <div class="mobile-list-footer">
+              <span>共 {{ internship.lists.delays.pagination.total || 0 }} 条</span>
+              <button v-if="canLoadMore('delays')" :disabled="internship.loading" @click="loadMoreInternshipList('delays')">
                 加载更多
               </button>
             </div>
@@ -711,6 +772,7 @@ import { useMobilePermissions } from './composables/useMobilePermissions';
 import {
   fetchInternshipApplications,
   fetchInternshipArrangements,
+  fetchInternshipDelays,
   fetchInternshipInsurances,
   fetchInternshipJournals,
   fetchInternshipOptions,
@@ -724,10 +786,12 @@ import {
   fetchInternshipTimeline,
   requestInternshipModification,
   reviewInternshipApplication,
+  reviewInternshipDelay,
   reviewInternshipJournal,
   reviewInternshipPlan,
   reviewInternshipReport,
   saveInternshipApplication,
+  saveInternshipDelay,
   saveInternshipJournal,
   saveInternshipReport,
   saveInternshipScore,
@@ -765,6 +829,10 @@ const defaultInternshipReviewRules = {
     accept: { min: 0, max: 300 },
     modify: { min: 8, max: 800 },
   },
+  delay: {
+    accept: { min: 0, max: 300 },
+    refuse: { min: 5, max: 500 },
+  },
 };
 
 const internship = reactive({
@@ -783,6 +851,7 @@ const internship = reactive({
     signIns: emptyPagedList(),
     journals: emptyPagedList(),
     reports: emptyPagedList(),
+    delays: emptyPagedList(),
     scores: emptyPagedList(),
     insurances: emptyPagedList(),
     safetyLetters: emptyPagedList(),
@@ -795,6 +864,7 @@ const internship = reactive({
     signIns: emptyInternshipFilters(),
     journals: emptyInternshipFilters(),
     reports: emptyInternshipFilters(),
+    delays: emptyInternshipFilters(),
     scores: emptyInternshipFilters(),
     insurances: emptyInternshipFilters(),
     safetyLetters: emptyInternshipFilters(),
@@ -816,6 +886,12 @@ const internship = reactive({
     report: {
       title: '',
       content: '',
+    },
+    delay: {
+      arrangement_id: null,
+      config_key: 'report_deadline',
+      requested_date: '',
+      reason: '',
     },
     score: {
       pair_id: null,
@@ -1015,6 +1091,11 @@ const reviewStatusOptions = [
   { value: 'accept', label: '已通过' },
   { value: 'modify', label: '需修改' },
 ];
+const delayStatusOptions = [
+  { value: 'wait', label: '待审核' },
+  { value: 'accept', label: '已通过' },
+  { value: 'refuse', label: '已退回' },
+];
 const mobileListConfigs = computed(() => ({
   arrangements: {
     key: 'arrangements',
@@ -1092,6 +1173,16 @@ const mobileListConfigs = computed(() => ({
     statusOptions: reviewStatusOptions,
     emptyText: '暂无报告记录',
   },
+  delays: {
+    key: 'delays',
+    entity: 'delay',
+    title: '延期申请',
+    shortTitle: '延期',
+    icon: FileClock,
+    keywordPlaceholder: '学生、学号、安排、原因',
+    statusOptions: delayStatusOptions,
+    emptyText: '暂无延期申请',
+  },
   scores: {
     key: 'scores',
     entity: '',
@@ -1127,7 +1218,7 @@ const mobileListConfigs = computed(() => ({
   },
 }));
 const reviewListTabs = computed(() => {
-  const keys = isTeacherRole.value ? ['applications', 'journals', 'reports'] : ['applications'];
+  const keys = isTeacherRole.value ? ['applications', 'journals', 'reports', 'delays'] : ['applications', 'delays'];
   if (canReviewInternshipPlan.value) {
     keys.push('plans');
   }
@@ -1140,6 +1231,7 @@ const manageListTabs = computed(() => [
   'signIns',
   'journals',
   'reports',
+  'delays',
   'scores',
   'insurances',
   'safetyLetters',
@@ -1251,6 +1343,7 @@ function mobileListTitle(key, row) {
     signIns: student || arrangement || `签到ID ${row.id}`,
     journals: row.title || student || `日志ID ${row.id}`,
     reports: row.title || student || `报告ID ${row.id}`,
+    delays: joinFact([student, delayConfigText(row.config_key)]) || `延期ID ${row.id}`,
     scores: student || `成绩ID ${row.id}`,
     insurances: student || row.insurance_company || `保险ID ${row.id}`,
     safetyLetters: student || `承诺ID ${row.id}`,
@@ -1320,6 +1413,13 @@ function mobileListFacts(key, row) {
       namedFact('提交', row.submitted_at || row.created_at),
       namedFact('内容', previewText(row.content, 42)),
     ],
+    delays: [
+      namedFact('学生', student),
+      namedFact('安排', arrangement),
+      namedFact('延期类型', delayConfigText(row.config_key)),
+      namedFact('延期至', row.requested_date),
+      namedFact('原因', previewText(row.reason, 42)),
+    ],
     scores: [
       namedFact('安排', arrangement),
       namedFact('评分人', row.teacher_name || row.teacher_num),
@@ -1349,12 +1449,13 @@ function mobileListActions(key, row, context) {
   const actions = [{ key: 'timeline', label: '记录', type: 'timeline', entity: config.entity }];
   if (context === 'review' && canReviewEntity(config.entity)) {
     if (canReviewRow(row)) {
+      const rejectStatus = config.entity === 'delay' ? 'refuse' : 'modify';
       actions.push(
         { key: 'accept', label: '通过', type: 'review', entity: config.entity, status: 'accept' },
-        { key: 'modify', label: '退回', type: 'review', entity: config.entity, status: 'modify' },
+        { key: rejectStatus, label: '退回', type: 'review', entity: config.entity, status: rejectStatus },
       );
     }
-    if (row.status === 'accept') {
+    if (row.status === 'accept' && config.entity !== 'delay') {
       actions.push({ key: 'reopen', label: '通过后修改', type: 'reopen', entity: config.entity });
     }
   }
@@ -1462,6 +1563,7 @@ function internshipFetcher(key) {
     signIns: fetchInternshipSignIns,
     journals: fetchInternshipJournals,
     reports: fetchInternshipReports,
+    delays: fetchInternshipDelays,
     scores: fetchInternshipScores,
     insurances: fetchInternshipInsurances,
     safetyLetters: fetchInternshipSafetyLetters,
@@ -1520,6 +1622,7 @@ function applyDefaultInternshipSelection() {
   if (firstArrangement) {
     internship.forms.application.arrangement_id ||= firstArrangement.id;
     internship.forms.sign.arrangement_id ||= firstArrangement.id;
+    internship.forms.delay.arrangement_id ||= firstArrangement.id;
   }
   if (firstTeacher) {
     internship.forms.application.teacher_id ||= firstTeacher.teacher_id;
@@ -1573,6 +1676,7 @@ async function loadInternshipPanelData() {
       loadInternshipList('signIns'),
       loadInternshipList('journals'),
       loadInternshipList('reports'),
+      loadInternshipList('delays'),
     ]);
     return;
   }
@@ -1695,6 +1799,44 @@ async function submitReport() {
   }
 }
 
+async function submitDelay() {
+  if (!internship.forms.delay.arrangement_id) {
+    internship.message = '请选择实习安排';
+    showToast(internship.message);
+    return;
+  }
+  if (!internship.forms.delay.requested_date) {
+    internship.message = '请选择申请延期日期';
+    showToast(internship.message);
+    return;
+  }
+  if (!String(internship.forms.delay.reason || '').trim()) {
+    internship.message = '请填写申请原因';
+    showToast(internship.message);
+    return;
+  }
+
+  internship.loading = true;
+  internship.message = '';
+  try {
+    await saveInternshipDelay({
+      entity_type: 'internship',
+      entity_id: internship.forms.delay.arrangement_id,
+      config_key: internship.forms.delay.config_key,
+      requested_date: internship.forms.delay.requested_date,
+      reason: internship.forms.delay.reason,
+    });
+    internship.forms.delay.requested_date = '';
+    internship.forms.delay.reason = '';
+    internship.message = '延期申请已提交';
+    await loadInternship();
+  } catch (error) {
+    internship.message = error.message;
+  } finally {
+    internship.loading = false;
+  }
+}
+
 function openReviewDialog(entity, row, status) {
   internship.reviewDialog.mode = 'review';
   internship.reviewDialog.entity = entity;
@@ -1769,6 +1911,10 @@ async function confirmReviewDialog() {
     await reviewPlan(row, status, internship.reviewDialog.reason);
     return;
   }
+  if (entity === 'delay') {
+    await reviewDelay(row, status, internship.reviewDialog.reason);
+    return;
+  }
   await reviewWork(entity, row, status, internship.reviewDialog.reason);
 }
 
@@ -1831,6 +1977,24 @@ async function reviewPlan(row, status, opinion) {
   }
 }
 
+async function reviewDelay(row, status, opinion) {
+  internship.loading = true;
+  internship.message = '';
+  try {
+    await reviewInternshipDelay({
+      id: row.id,
+      status,
+      opinion: opinion || defaultReviewOpinion('delay', status),
+    });
+    closeReviewDialog();
+    await loadInternship();
+  } catch (error) {
+    internship.message = error.message;
+  } finally {
+    internship.loading = false;
+  }
+}
+
 async function requestModification(entity, row, opinion) {
   internship.loading = true;
   internship.message = '';
@@ -1852,6 +2016,9 @@ async function requestModification(entity, row, opinion) {
 function defaultReviewOpinion(type, status) {
   if (status === 'accept') {
     return '同意';
+  }
+  if (type === 'delay' && status === 'refuse') {
+    return '不同意延期';
   }
   if (type === 'report') {
     return '请补充完善报告内容';
@@ -1894,8 +2061,13 @@ function reviewEntityName(entity) {
     journal: '实习日志',
     report: '实习报告',
     plan: '实习计划',
+    delay: '延期申请',
   };
   return names[entity] || '审核事项';
+}
+
+function isRejectReviewStatus(status) {
+  return ['modify', 'refuse'].includes(status);
 }
 
 function canReviewRow(row) {
@@ -1905,6 +2077,15 @@ function canReviewRow(row) {
 function reviewTargetText(row) {
   if (!row) {
     return '';
+  }
+  if (row.config_key) {
+    return [
+      row.student_name || row.student_num || '',
+      row.arrangement_title || '',
+      delayConfigText(row.config_key),
+      row.requested_date ? `延期至：${row.requested_date}` : '',
+      `状态：${statusText(row.status)}`,
+    ].filter(Boolean).join(' / ');
   }
   const parts = [
     row.student_name || row.student_num || '',
@@ -1952,7 +2133,7 @@ const reviewDialogTitle = computed(() => {
   if (internship.reviewDialog.mode === 'reopen') {
     return `通过后修改${reviewEntityName(internship.reviewDialog.entity)}`;
   }
-  const action = internship.reviewDialog.status === 'modify' ? '退回' : '通过';
+  const action = isRejectReviewStatus(internship.reviewDialog.status) ? '退回' : '通过';
   return `${action}${reviewEntityName(internship.reviewDialog.entity)}`;
 });
 
@@ -1962,7 +2143,7 @@ const reviewDialogReasonLabel = computed(() => {
   if (internship.reviewDialog.mode === 'reopen') {
     return '修改理由';
   }
-  return internship.reviewDialog.status === 'modify' ? '退回原因' : '审核意见';
+  return isRejectReviewStatus(internship.reviewDialog.status) ? '退回原因' : '审核意见';
 });
 
 const reviewDialogRuleText = computed(() => (
@@ -1973,7 +2154,7 @@ const reviewDialogConfirmText = computed(() => {
   if (internship.reviewDialog.mode === 'reopen') {
     return '确认修改';
   }
-  return internship.reviewDialog.status === 'modify' ? '确认退回' : '确认通过';
+  return isRejectReviewStatus(internship.reviewDialog.status) ? '确认退回' : '确认通过';
 });
 
 function textLength(value) {
@@ -1994,7 +2175,7 @@ function trimReviewDialogMax() {
 function validateReviewReason(entity, status, reason, label = null) {
   const rule = reviewRule(entity, status);
   const length = textLength(reason);
-  const fieldLabel = label || (status === 'modify' ? '退回原因' : '审核意见');
+  const fieldLabel = label || (isRejectReviewStatus(status) ? '退回原因' : '审核意见');
   if (rule.min && length < rule.min) {
     return `${fieldLabel}至少 ${rule.min} 字`;
   }
@@ -2074,12 +2255,24 @@ function signTypeText(value) {
   return names[value] || value || '-';
 }
 
+function delayConfigOptions() {
+  return [
+    { value: 'journal_deadline', label: '日志截止' },
+    { value: 'report_deadline', label: '报告截止' },
+  ];
+}
+
+function delayConfigText(value) {
+  return delayConfigOptions().find(item => item.value === value)?.label || value || '-';
+}
+
 function statusText(value) {
   const names = {
     draft: '草稿',
     wait: '待审核',
     accept: '已通过',
     modify: '需修改',
+    refuse: '已退回',
     skipped: '跳过',
     enabled: '启用',
     disabled: '停用',

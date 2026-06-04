@@ -591,7 +591,7 @@ function schoolBusinessStatements(): array
         simpleTable('report_template', ['`template_json` JSON DEFAULT NULL']),
         simpleTable('review_opinion', entityColumns(['`reviewer_id` BIGINT UNSIGNED DEFAULT NULL', '`opinion` TEXT DEFAULT NULL'])),
         simpleTable('recording_archive_2026', recordingColumns()),
-        simpleTable('apply_report_delay', entityColumns(['`student_id` BIGINT UNSIGNED DEFAULT NULL', '`reason` TEXT DEFAULT NULL'])),
+        simpleTable('apply_report_delay', entityColumns(['`student_id` BIGINT UNSIGNED DEFAULT NULL', '`config_key` VARCHAR(120) DEFAULT NULL', '`requested_date` DATE DEFAULT NULL', '`reason` TEXT DEFAULT NULL'])),
         simpleTable('apply_report_delay_recording', recordingColumns()),
         simpleTable('score', entityColumns(['`student_id` BIGINT UNSIGNED DEFAULT NULL', '`score_value` DECIMAL(5,2) DEFAULT NULL'])),
         simpleTable('internship_plan', ['`dep_id` BIGINT UNSIGNED DEFAULT NULL', '`semester` VARCHAR(80) DEFAULT NULL', '`plan_json` JSON DEFAULT NULL']),
@@ -1401,6 +1401,10 @@ function seedMenus(PDO $pdo): void
         [19, 1, '实习计划', null, null, 'pc', 'menu', 19, 'FileText'],
         [191, 19, '列表', 'internship:plan:list', '/internship/plans', 'pc', 'list', 191, 'List'],
         [110, 191, '维护', 'internship:plan', null, 'pc', 'button', 110, null],
+        [195, 1, '延期申请', null, null, 'both', 'menu', 195, 'FileClock'],
+        [1951, 195, '列表', 'internship:delay:list', '/internship/delays', 'both', 'list', 1951, 'List'],
+        [19511, 1951, '提交', 'internship:apply', null, 'both', 'button', 1951, null],
+        [19512, 1951, '审核', 'internship:approve', null, 'both', 'button', 1952, null],
         [2, 0, '实训管理', null, null, 'both', 'directory', 20, 'Workflow'],
         [21, 2, '实训项目', null, null, 'both', 'menu', 21, 'Workflow'],
         [211, 21, '列表', 'training:view', '/training', 'both', 'list', 211, 'List'],
@@ -1514,7 +1518,7 @@ function seedMenus(PDO $pdo): void
     $internshipAdminMenus = [
         1, 11, 111, 101, 1112, 12, 121, 103, 104, 1213, 13, 131, 1311, 1312,
         14, 141, 105, 15, 151, 106, 1512, 16, 161, 107, 1612, 17, 171, 108,
-        18, 181, 109, 19, 191, 110,
+        18, 181, 109, 19, 191, 110, 195, 1951, 19511, 19512,
     ];
     $trainingMenus = [2, 21, 211, 201, 2112];
     $labMenus = [3, 31, 311, 301, 3112];
@@ -1525,10 +1529,10 @@ function seedMenus(PDO $pdo): void
         }
     }
 
-    foreach ([1, 11, 111, 12, 121, 104, 1213, 13, 131, 14, 141, 105, 15, 151, 106, 1512, 16, 161, 107, 1612, 17, 171, 108, 2, 21, 211, 201, 3, 31, 311, 301] as $menuId) {
+    foreach ([1, 11, 111, 12, 121, 104, 1213, 13, 131, 14, 141, 105, 15, 151, 106, 1512, 16, 161, 107, 1612, 17, 171, 108, 195, 1951, 19512, 2, 21, 211, 201, 3, 31, 311, 301] as $menuId) {
         $roleMenu->execute([5, $menuId]);
     }
-    foreach ([1, 11, 111, 12, 121, 103, 14, 141, 105, 15, 151, 106, 16, 161, 107] as $menuId) {
+    foreach ([1, 11, 111, 12, 121, 103, 14, 141, 105, 15, 151, 106, 16, 161, 107, 195, 1951, 19511] as $menuId) {
         $roleMenu->execute([6, $menuId]);
     }
     foreach ([1, 17, 171, 108] as $menuId) {
