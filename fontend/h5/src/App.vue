@@ -414,11 +414,6 @@
               <strong>{{ currentReviewListConfig.title }}</strong>
             </header>
             <section class="mobile-list-tools" :class="{ compact: !currentReviewListConfig.statusOptions.length }">
-              <input
-                v-model="internship.filters[currentReviewListConfig.key].keyword"
-                :placeholder="currentReviewListConfig.keywordPlaceholder"
-                @keyup.enter="reloadInternshipList(currentReviewListConfig.key)"
-              >
               <select
                 v-if="currentReviewListConfig.gradeFilter"
                 v-model="internship.filters[currentReviewListConfig.key].grade_id"
@@ -429,6 +424,11 @@
                   {{ item.grade_name }}
                 </option>
               </select>
+              <input
+                v-model="internship.filters[currentReviewListConfig.key].keyword"
+                :placeholder="currentReviewListConfig.keywordPlaceholder"
+                @keyup.enter="reloadInternshipList(currentReviewListConfig.key)"
+              >
               <select
                 v-if="currentReviewListConfig.statusOptions.length"
                 v-model="internship.filters[currentReviewListConfig.key].status"
@@ -520,13 +520,13 @@
               <strong>成绩记录</strong>
             </header>
             <section class="mobile-list-tools">
-              <input v-model="internship.filters.scores.keyword" placeholder="学生、学号、安排" @keyup.enter="reloadInternshipList('scores')">
               <select v-model="internship.filters.scores.grade_id" @change="reloadInternshipList('scores')">
                 <option value="">全部届次</option>
                 <option v-for="item in internship.options.grades" :key="item.grade_id" :value="item.grade_id">
                   {{ item.grade_name }}
                 </option>
               </select>
+              <input v-model="internship.filters.scores.keyword" placeholder="学生、学号、安排" @keyup.enter="reloadInternshipList('scores')">
               <button type="button" :disabled="internship.loading" @click="reloadInternshipList('scores')">查询</button>
             </section>
             <van-cell
@@ -565,11 +565,6 @@
               <strong>{{ currentManageListConfig.title }}</strong>
             </header>
             <section class="mobile-list-tools" :class="{ compact: !currentManageListConfig.statusOptions.length }">
-              <input
-                v-model="internship.filters[currentManageListConfig.key].keyword"
-                :placeholder="currentManageListConfig.keywordPlaceholder"
-                @keyup.enter="reloadInternshipList(currentManageListConfig.key)"
-              >
               <select
                 v-if="currentManageListConfig.gradeFilter"
                 v-model="internship.filters[currentManageListConfig.key].grade_id"
@@ -580,6 +575,11 @@
                   {{ item.grade_name }}
                 </option>
               </select>
+              <input
+                v-model="internship.filters[currentManageListConfig.key].keyword"
+                :placeholder="currentManageListConfig.keywordPlaceholder"
+                @keyup.enter="reloadInternshipList(currentManageListConfig.key)"
+              >
               <select
                 v-if="currentManageListConfig.statusOptions.length"
                 v-model="internship.filters[currentManageListConfig.key].status"
