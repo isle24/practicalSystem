@@ -424,7 +424,7 @@
                             @input="trimReviewReasonMax"
                           />
                           <small class="review-counter">
-                            <span>{{ reviewRuleText(internshipState.dialog.entity, internshipState.dialog.status) }}</span>
+                            <span>{{ reviewRuleText(internshipState.dialog.entity, internshipState.dialog.status, internshipState.dialog.type === 'reopen' ? '修改理由' : null) }}</span>
                             <span>{{ reviewReasonLength }}/{{ reviewRuleMaxText(internshipState.dialog.entity, internshipState.dialog.status) }}</span>
                           </small>
                         </label>
@@ -4580,7 +4580,7 @@ async function confirmInternshipDialog() {
     await reviewStudentWork(internshipState.dialog.entity, internshipState.dialog.row, internshipState.dialog.status, internshipState.dialog.reason);
   }
   if (internshipState.dialog.type === 'reopen') {
-    const error = validateReviewReason(internshipState.dialog.entity, 'modify', internshipState.dialog.reason);
+    const error = validateReviewReason(internshipState.dialog.entity, 'modify', internshipState.dialog.reason, '修改理由');
     if (error) {
       internshipState.message = error;
       return;
@@ -4595,19 +4595,19 @@ function reviewRule(entity, status) {
     || { min: 0, max: null };
 }
 
-function reviewRuleText(entity, status) {
+function reviewRuleText(entity, status, label = null) {
   const rule = reviewRule(entity, status);
-  const label = isRejectReviewStatus(status) ? '退回原因' : '审核意见';
+  const fieldLabel = label || (isRejectReviewStatus(status) ? '退回原因' : '审核意见');
   if (!rule.min && !rule.max) {
-    return `${label}字数不限制`;
+    return `${fieldLabel}字数不限制`;
   }
   if (rule.min && rule.max) {
-    return `${label}需 ${rule.min}-${rule.max} 字`;
+    return `${fieldLabel}需 ${rule.min}-${rule.max} 字`;
   }
   if (rule.min) {
-    return `${label}至少 ${rule.min} 字`;
+    return `${fieldLabel}至少 ${rule.min} 字`;
   }
-  return `${label}最多 ${rule.max} 字`;
+  return `${fieldLabel}最多 ${rule.max} 字`;
 }
 
 function reviewRuleMax(entity, status) {
@@ -4842,15 +4842,16 @@ function trimReviewReasonMax(event) {
   internshipState.dialog.reason = value;
 }
 
-function validateReviewReason(entity, status, reason) {
+function validateReviewReason(entity, status, reason, label = null) {
   const rule = reviewRule(entity, status);
   const text = String(reason || '').trim();
   const length = textLength(text);
+  const fieldLabel = label || (isRejectReviewStatus(status) ? '退回原因' : '审核意见');
   if (rule.min && length < rule.min) {
-    return `${isRejectReviewStatus(status) ? '退回原因' : '审核意见'}至少 ${rule.min} 字`;
+    return `${fieldLabel}至少 ${rule.min} 字`;
   }
   if (rule.max && length > rule.max) {
-    return `${isRejectReviewStatus(status) ? '退回原因' : '审核意见'}最多 ${rule.max} 字`;
+    return `${fieldLabel}最多 ${rule.max} 字`;
   }
   return '';
 }

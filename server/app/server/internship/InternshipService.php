@@ -320,7 +320,7 @@ class InternshipService
         $entity = $this->reviewEntity($request);
         $config = self::REVIEW_ENTITY_CONFIG[$entity];
         $id = $this->requiredRowId($request, $config['table']);
-        $opinion = $this->reviewOpinionInput($request, $entity, 'modify');
+        $opinion = $this->reviewOpinionInput($request, $entity, 'modify', '修改理由');
 
         return $this->connection()->transaction(function () use ($entity, $config, $id, $opinion): array {
             $row = InternshipRecord::lockActiveRowById($config['table'], $id);
@@ -1625,12 +1625,12 @@ class InternshipService
         return $value === '' ? null : $value;
     }
 
-    private function reviewOpinionInput(Request $request, string $entity, string $status): ?string
+    private function reviewOpinionInput(Request $request, string $entity, string $status, ?string $label = null): ?string
     {
         $value = trim((string) $request->input('opinion', ''));
         $rule = self::REVIEW_OPINION_RULES[$entity][$status] ?? ['min' => 0, 'max' => null];
         $length = function_exists('mb_strlen') ? mb_strlen($value) : strlen($value);
-        $label = in_array($status, ['modify', 'refuse'], true) ? '退回原因' : '审核意见';
+        $label ??= in_array($status, ['modify', 'refuse'], true) ? '退回原因' : '审核意见';
         $min = (int) ($rule['min'] ?? 0);
         $max = $rule['max'] ?? null;
 
