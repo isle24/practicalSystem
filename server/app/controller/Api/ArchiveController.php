@@ -19,32 +19,32 @@ class ArchiveController
         'department' => [
             'table' => 'department',
             'id' => 'dep_id',
-            'columns' => ['dep_id', 'dep_name', 'dep_code', 'sort', 'flag'],
-            'fields' => ['dep_name', 'dep_code', 'sort', 'flag'],
+            'columns' => ['dep_id', 'dep_name', 'dep_short_name', 'dep_code', 'sort', 'flag'],
+            'fields' => ['dep_name', 'dep_short_name', 'dep_code', 'sort', 'flag'],
             'required' => 'dep_name',
             'order' => ['sort', 'dep_id'],
         ],
         'grade' => [
             'table' => 'grade_list',
             'id' => 'grade_id',
-            'columns' => ['grade_id', 'grade_name', 'dep_id', 'sort', 'flag'],
-            'fields' => ['grade_name', 'dep_id', 'sort', 'flag'],
+            'columns' => ['grade_id', 'grade_name', 'dep_id', 'is_current', 'sort', 'flag'],
+            'fields' => ['grade_name', 'dep_id', 'is_current', 'sort', 'flag'],
             'required' => 'grade_name',
             'order' => ['sort', 'grade_id'],
         ],
         'profession' => [
             'table' => 'profession',
             'id' => 'profession_id',
-            'columns' => ['profession_id', 'profession_name', 'profession_code', 'dep_id', 'grade_id', 'sort', 'flag'],
-            'fields' => ['profession_name', 'profession_code', 'dep_id', 'grade_id', 'sort', 'flag'],
+            'columns' => ['profession_id', 'profession_name', 'profession_short_name', 'profession_code', 'dep_id', 'grade_id', 'sort', 'flag'],
+            'fields' => ['profession_name', 'profession_short_name', 'profession_code', 'dep_id', 'grade_id', 'sort', 'flag'],
             'required' => 'profession_name',
             'order' => ['sort', 'profession_id'],
         ],
         'class' => [
             'table' => 'class',
             'id' => 'class_id',
-            'columns' => ['class_id', 'class_name', 'class_num', 'dep_id', 'profession_id', 'grade_id', 'sort', 'flag'],
-            'fields' => ['class_name', 'class_num', 'dep_id', 'profession_id', 'grade_id', 'sort', 'flag'],
+            'columns' => ['class_id', 'class_name', 'class_short_name', 'class_num', 'dep_id', 'profession_id', 'grade_id', 'sort', 'flag'],
+            'fields' => ['class_name', 'class_short_name', 'class_num', 'dep_id', 'profession_id', 'grade_id', 'sort', 'flag'],
             'required' => 'class_name',
             'order' => ['sort', 'class_id'],
         ],
@@ -85,14 +85,21 @@ class ArchiveController
             $values = $this->values($request, $definition);
             $now = date('Y-m-d H:i:s');
 
-            if ($id) {
-                ChannelTable::updateArchiveRow($definition['table'], $definition['id'], $id, array_merge($values, ['updated_at' => $now]));
-            } else {
+            ChannelTable::connection()->transaction(function () use ($definition, $id, $now, $type, $values): void {
+                if ($type === 'grade' && ($values['is_current'] ?? 'false') === 'true') {
+                    ChannelTable::clearCurrentGrade($id, $now);
+                }
+
+                if ($id) {
+                    ChannelTable::updateArchiveRow($definition['table'], $definition['id'], $id, array_merge($values, ['updated_at' => $now]));
+                    return;
+                }
+
                 ChannelTable::insertArchiveRow($definition['table'], array_merge($values, [
                     'created_at' => $now,
                     'updated_at' => $now,
                 ]));
-            }
+            });
 
             return $this->ok($this->items($type), '已保存');
         } catch (Throwable $exception) {
@@ -157,6 +164,7 @@ class ArchiveController
             $values[$field] = match ($field) {
                 $definition['required'] => $required,
                 'dep_id', 'profession_id', 'grade_id' => $this->optionalInt($request, $field),
+                'is_current' => $this->enum($request, 'is_current', ['false', 'true'], 'false'),
                 'sort' => $this->optionalInt($request, 'sort') ?? 0,
                 'flag' => $this->enum($request, 'flag', ['on', 'off'], 'on'),
                 default => $this->nullableString($request, $field, 255),

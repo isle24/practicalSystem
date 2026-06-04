@@ -90,6 +90,11 @@ export function fetchAdminAccounts(params = {}) {
   return request(`/admin/accounts${query ? `?${query}` : ''}`);
 }
 
+export function fetchAdminAccountDetail(params = {}) {
+  const query = new URLSearchParams(params).toString();
+  return request(`/admin/account-detail${query ? `?${query}` : ''}`);
+}
+
 export function saveAdminAccount(payload) {
   return request('/admin/save-account', {
     method: 'POST',

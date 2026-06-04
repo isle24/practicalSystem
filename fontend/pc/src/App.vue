@@ -253,8 +253,8 @@
           </section>
         </div>
 
-        <div v-else class="app-body">
-          <aside class="module-sidebar">
+        <div v-else class="app-body" :class="{ 'no-sidebar': !sidebarItems(win).length }">
+          <aside v-if="sidebarItems(win).length" class="module-sidebar">
             <section>
               <p>{{ win.module.id === 'config' ? '设置' : '模块' }}</p>
               <a
@@ -832,7 +832,7 @@
                   </template>
                 </div>
 
-                <div v-else-if="win.module.id === 'config' && win.panel === 'userManage'" class="admin-panel user-admin-panel">
+                <div v-else-if="isUserManageWindow(win)" class="admin-panel user-admin-panel">
                   <div class="admin-toolbar">
                     <el-button type="primary" :icon="Plus" @click="openUserDialog()">
                       新增用户
@@ -867,6 +867,12 @@
                       </el-button>
                       <el-button link type="warning" :disabled="!canMaintainUser(row)" @click="openResetPasswordDialog(row)">
                         重置密码
+                      </el-button>
+                      <el-button link type="primary" @click="openUserDetailDialog(row, 'logs')">
+                        日志
+                      </el-button>
+                      <el-button link type="primary" @click="openUserDetailDialog(row, 'bindings')">
+                        绑定
                       </el-button>
                     </template>
                   </DataListPanel>
@@ -930,34 +936,99 @@
                       </footer>
                     </section>
                   </div>
+                  <div v-if="userAdminState.detailDialogVisible" class="operation-mask" @click.self="closeUserDetailDialog">
+                    <section class="operation-dialog user-detail-dialog">
+                      <header>
+                        <strong>{{ userDetailTitle }}</strong>
+                        <button type="button" @click="closeUserDetailDialog">关闭</button>
+                      </header>
+                      <div class="user-detail-body">
+                        <section class="user-detail-summary">
+                          <strong>{{ userAdminState.detail.account?.name || '-' }}</strong>
+                          <span>{{ userAdminState.detail.account?.login_name || '-' }} / {{ userAdminState.detail.account?.role_name || '-' }}</span>
+                        </section>
+                        <el-table
+                          v-if="userAdminState.detailMode === 'logs'"
+                          :data="userAdminState.detail.logs"
+                          height="360"
+                          stripe
+                          v-loading="userAdminState.detailLoading"
+                        >
+                          <el-table-column prop="id" label="ID" width="76" />
+                          <el-table-column prop="action" label="操作" min-width="180" />
+                          <el-table-column prop="ip" label="IP" width="130" />
+                          <el-table-column label="内容" min-width="240">
+                            <template #default="{ row }">
+                              {{ logPayloadText(row.payload) }}
+                            </template>
+                          </el-table-column>
+                          <el-table-column prop="created_at" label="时间" width="168" />
+                        </el-table>
+                        <template v-else>
+                          <section class="detail-table-block">
+                            <header>
+                              <strong>其他登录账号</strong>
+                              <small>{{ userAdminState.detail.boundAccounts.length }} 个</small>
+                            </header>
+                            <el-table :data="userAdminState.detail.boundAccounts" height="190" stripe v-loading="userAdminState.detailLoading">
+                              <el-table-column prop="id" label="ID" width="76" />
+                              <el-table-column prop="login_name" label="登录账号" min-width="140" />
+                              <el-table-column prop="role_name" label="角色" min-width="130" />
+                              <el-table-column label="状态" width="96">
+                                <template #default="{ row }">
+                                  <el-tag :type="statusTagType(row.status)">
+                                    {{ statusText(row.status) }}
+                                  </el-tag>
+                                </template>
+                              </el-table-column>
+                              <el-table-column prop="created_at" label="创建时间" width="168" />
+                            </el-table>
+                          </section>
+                          <section class="detail-table-block">
+                            <header>
+                              <strong>企业微信绑定</strong>
+                              <small>{{ userAdminState.detail.wechatAccounts.length }} 个</small>
+                            </header>
+                            <el-table :data="userAdminState.detail.wechatAccounts" height="190" stripe v-loading="userAdminState.detailLoading">
+                              <el-table-column prop="wechat_userid" label="企业微信账号" min-width="150" />
+                              <el-table-column prop="wechat_name" label="姓名" min-width="120" />
+                              <el-table-column prop="mobile" label="手机" min-width="130" />
+                              <el-table-column prop="email" label="邮箱" min-width="160" />
+                              <el-table-column prop="last_synced_at" label="同步时间" width="168" />
+                            </el-table>
+                          </section>
+                        </template>
+                      </div>
+                    </section>
+                  </div>
                   <small v-if="userAdminState.message">{{ userAdminState.message }}</small>
                 </div>
 
-                <div v-else-if="win.module.id === 'config' && isArchiveManagePanel(win.panel)" class="admin-panel archive-panel">
+                <div v-else-if="isArchiveManageWindow(win)" class="admin-panel archive-panel">
                   <div class="admin-toolbar">
-                    <strong class="admin-toolbar-title">{{ currentArchiveDefinition.name }}管理</strong>
-                    <el-button :icon="RefreshCw" :loading="archiveState.loading" @click="loadArchiveItems">
+                    <strong class="admin-toolbar-title">{{ archiveDefinitionForWindow(win).name }}管理</strong>
+                    <el-button :icon="RefreshCw" :loading="archiveStateForWindow(win).loading" @click="loadArchiveItems(archiveTypeForWindow(win))">
                       读取
                     </el-button>
-                    <el-button :icon="Plus" @click="openArchiveDialog()">
+                    <el-button :icon="Plus" @click="openArchiveDialog(archiveTypeForWindow(win))">
                       新增
                     </el-button>
-                    <el-button :icon="Edit3" :disabled="!archiveState.selected" @click="openArchiveDialog(archiveState.selected)">
+                    <el-button :icon="Edit3" :disabled="!archiveStateForWindow(win).selected" @click="openArchiveDialog(archiveTypeForWindow(win), archiveStateForWindow(win).selected)">
                       编辑
                     </el-button>
                     <el-button
                       type="danger"
                       :icon="Trash2"
-                      :disabled="!archiveState.selected"
-                      @click="deleteArchiveConfig"
+                      :disabled="!archiveStateForWindow(win).selected"
+                      @click="deleteArchiveConfig(archiveTypeForWindow(win))"
                     >
                       删除
                     </el-button>
                   </div>
-                  <el-table :data="archiveState.items" height="100%" stripe highlight-current-row @row-click="selectArchiveItem">
-                    <el-table-column :prop="currentArchiveIdField" label="ID" width="76" />
+                  <el-table :data="archiveStateForWindow(win).items" height="100%" stripe highlight-current-row @row-click="row => selectArchiveItem(archiveTypeForWindow(win), row)">
+                    <el-table-column :prop="archiveIdFieldForWindow(win)" label="ID" width="76" />
                     <el-table-column
-                      v-for="field in currentArchiveTableFields"
+                      v-for="field in archiveTableFieldsForWindow(win)"
                       :key="field.key"
                       :prop="field.key"
                       :label="field.label"
@@ -968,21 +1039,21 @@
                       </template>
                     </el-table-column>
                   </el-table>
-                  <div v-if="archiveState.dialogVisible" class="operation-mask" @click.self="closeArchiveDialog">
+                  <div v-if="archiveStateForWindow(win).dialogVisible" class="operation-mask" @click.self="closeArchiveDialog(archiveTypeForWindow(win))">
                     <section class="operation-dialog menu-dialog">
                       <header>
-                        <strong>{{ archiveState.editing.id ? '编辑档案' : '新增档案' }}</strong>
-                        <button type="button" @click="closeArchiveDialog">关闭</button>
+                        <strong>{{ archiveStateForWindow(win).editing.id ? '编辑档案' : '新增档案' }}</strong>
+                        <button type="button" @click="closeArchiveDialog(archiveTypeForWindow(win))">关闭</button>
                       </header>
                       <div class="operation-form menu-dialog-form">
                       <label
-                        v-for="field in currentArchiveFields"
+                        v-for="field in archiveFieldsForWindow(win)"
                         :key="field.key"
                       >
                         <span>{{ field.label }}</span>
                         <el-select
                           v-if="field.options"
-                          v-model="archiveState.editing[field.key]"
+                          v-model="archiveStateForWindow(win).editing[field.key]"
                           clearable
                           filterable
                         >
@@ -995,20 +1066,20 @@
                         </el-select>
                         <input
                           v-else
-                          v-model="archiveState.editing[field.key]"
+                          v-model="archiveStateForWindow(win).editing[field.key]"
                           :type="field.inputType || 'text'"
                         >
                       </label>
                       </div>
                       <footer>
-                        <el-button @click="closeArchiveDialog">取消</el-button>
-                        <el-button type="primary" :icon="Save" :loading="archiveState.loading" @click="saveArchiveConfig">
+                        <el-button @click="closeArchiveDialog(archiveTypeForWindow(win))">取消</el-button>
+                        <el-button type="primary" :icon="Save" :loading="archiveStateForWindow(win).loading" @click="saveArchiveConfig(archiveTypeForWindow(win))">
                           保存
                         </el-button>
                       </footer>
                     </section>
                   </div>
-                  <small v-if="archiveState.message">{{ archiveState.message }}</small>
+                  <small v-if="archiveStateForWindow(win).message">{{ archiveStateForWindow(win).message }}</small>
                 </div>
 
                 <div v-else-if="win.module.id === 'config' && win.panel === 'operationGuides'" class="admin-panel guide-admin-panel">
@@ -1820,6 +1891,7 @@ import { usePermissions } from './composables/usePermissions';
 import {
   changeAdminAccountStatus,
   deleteArchiveItem,
+  fetchAdminAccountDetail,
   fetchAdminAccounts,
   fetchAdminMenus,
   fetchAdminOptions,
@@ -2038,6 +2110,10 @@ const userAdminState = reactive({
     name: '',
     password: 'admin123456',
   },
+  detailDialogVisible: false,
+  detailMode: 'logs',
+  detailLoading: false,
+  detail: emptyUserDetail(),
   pagination: {
     page: 1,
     page_size: 20,
@@ -2104,6 +2180,72 @@ const modules = [
     defaultPanel: 'fileManage',
   },
   {
+    id: 'userManage',
+    name: '用户管理',
+    icon: UsersRound,
+    color: 'blue',
+    scope: '学校账号',
+    viewPermission: 'config:user',
+    managePermission: 'config:manage',
+    defaultPanel: 'userManage',
+    adminOnly: true,
+  },
+  {
+    id: 'gradeManage',
+    name: '届次管理',
+    icon: GraduationCap,
+    color: 'amber',
+    scope: '届次基础档案',
+    viewPermission: 'config:grade',
+    managePermission: 'config:manage',
+    defaultPanel: 'gradeManage',
+    adminOnly: true,
+  },
+  {
+    id: 'departmentManage',
+    name: '学院管理',
+    icon: Building2,
+    color: 'green',
+    scope: '学院基础档案',
+    viewPermission: 'config:department',
+    managePermission: 'config:manage',
+    defaultPanel: 'departmentManage',
+    adminOnly: true,
+  },
+  {
+    id: 'professionManage',
+    name: '专业管理',
+    icon: GraduationCap,
+    color: 'teal',
+    scope: '专业基础档案',
+    viewPermission: 'config:profession',
+    managePermission: 'config:manage',
+    defaultPanel: 'professionManage',
+    adminOnly: true,
+  },
+  {
+    id: 'classManage',
+    name: '班级管理',
+    icon: UsersRound,
+    color: 'gray',
+    scope: '班级基础档案',
+    viewPermission: 'config:class',
+    managePermission: 'config:manage',
+    defaultPanel: 'classManage',
+    adminOnly: true,
+  },
+  {
+    id: 'companyManage',
+    name: '企业管理',
+    icon: Building2,
+    color: 'amber',
+    scope: '企业基础档案',
+    viewPermission: 'config:company',
+    managePermission: 'config:manage',
+    defaultPanel: 'companyManage',
+    adminOnly: true,
+  },
+  {
     id: 'config',
     name: '系统配置',
     icon: Settings,
@@ -2111,7 +2253,7 @@ const modules = [
     scope: '学校设置',
     viewPermission: 'config:view',
     managePermission: 'config:manage',
-    defaultPanel: 'userManage',
+    defaultPanel: 'menuManage',
   },
   {
     id: 'profile',
@@ -2163,6 +2305,7 @@ const archiveDefinitions = [
     idField: 'dep_id',
     fields: [
       { key: 'dep_name', label: '学院名称', required: true },
+      { key: 'dep_short_name', label: '学院简称' },
       { key: 'dep_code', label: '学院代码' },
       { key: 'sort', label: '排序', inputType: 'number' },
       { key: 'flag', label: '状态', options: 'flag' },
@@ -2175,6 +2318,7 @@ const archiveDefinitions = [
     fields: [
       { key: 'grade_name', label: '届次名称', required: true },
       { key: 'dep_id', label: '所属学院', options: 'departments' },
+      { key: 'is_current', label: '当前届次', options: 'boolean' },
       { key: 'sort', label: '排序', inputType: 'number' },
       { key: 'flag', label: '状态', options: 'flag' },
     ],
@@ -2185,6 +2329,7 @@ const archiveDefinitions = [
     idField: 'profession_id',
     fields: [
       { key: 'profession_name', label: '专业名称', required: true },
+      { key: 'profession_short_name', label: '专业简称' },
       { key: 'profession_code', label: '专业代码' },
       { key: 'dep_id', label: '所属学院', options: 'departments' },
       { key: 'grade_id', label: '所属届次', options: 'grades' },
@@ -2198,6 +2343,7 @@ const archiveDefinitions = [
     idField: 'class_id',
     fields: [
       { key: 'class_name', label: '班级名称', required: true },
+      { key: 'class_short_name', label: '班级简称' },
       { key: 'class_num', label: '班号' },
       { key: 'dep_id', label: '所属学院', options: 'departments' },
       { key: 'profession_id', label: '所属专业', options: 'professions' },
@@ -2222,6 +2368,13 @@ const archiveDefinitions = [
 ];
 const archiveManagePanels = {
   archive: 'department',
+  departmentManage: 'department',
+  gradeManage: 'grade',
+  professionManage: 'profession',
+  classManage: 'class',
+  companyManage: 'company',
+};
+const archiveManageModules = {
   departmentManage: 'department',
   gradeManage: 'grade',
   professionManage: 'profession',
@@ -2286,15 +2439,9 @@ const defaultInternshipReviewRules = {
   },
 };
 
-const archiveState = reactive({
-  type: 'department',
-  items: [],
-  editing: emptyArchiveItem('department'),
-  selected: null,
-  dialogVisible: false,
-  loading: false,
-  message: '',
-});
+const archiveStates = reactive(Object.fromEntries(
+  archiveDefinitions.map(definition => [definition.type, createArchiveState(definition.type)]),
+));
 
 const fileState = reactive({
   items: [],
@@ -2466,10 +2613,7 @@ const loginBackgroundUploadStyle = computed(() => (loginPageState.login_backgrou
   backgroundImage: `url("${safeCssUrl(loginPageState.login_background_url)}")`,
 } : {}));
 const profileAlertType = computed(() => (profileState.saved ? 'success' : 'warning'));
-const currentArchiveDefinition = computed(() => archiveDefinitions.find(item => item.type === archiveState.type) || archiveDefinitions[0]);
-const currentArchiveFields = computed(() => currentArchiveDefinition.value.fields);
-const currentArchiveIdField = computed(() => currentArchiveDefinition.value.idField);
-const currentArchiveTableFields = computed(() => currentArchiveFields.value.filter(field => field.key !== 'sort'));
+const userDetailTitle = computed(() => (userAdminState.detailMode === 'logs' ? '操作日志' : '绑定账号'));
 const reviewReasonLength = computed(() => textLength(internshipState.dialog.reason));
 const internshipTimelineCycles = computed(() => normalizeTimelineCycles(
   internshipState.dialog.cycles || [],
@@ -2483,7 +2627,10 @@ function canShowModule(module) {
   if (!hasPermission(module.viewPermission)) {
     return false;
   }
-  if (['config', 'training', 'lab'].includes(module.id)) {
+  if (module.adminOnly || module.id === 'config') {
+    return ['super_admin', 'school_admin'].includes(currentRoleType.value);
+  }
+  if (['training', 'lab'].includes(module.id)) {
     return isAdminRole.value;
   }
   if (module.id === 'internship') {
@@ -2934,6 +3081,9 @@ function studentPanelFields(panel) {
 }
 
 function sidebarItems(win) {
+  if (win.module.id === 'userManage' || archiveManageModules[win.module.id]) {
+    return [];
+  }
   if (win.module.id === 'file') {
     return [{ key: 'fileManage', name: '文件列表' }];
   }
@@ -2942,12 +3092,6 @@ function sidebarItems(win) {
   }
   if (win.module.id === 'config') {
     return [
-      { key: 'userManage', name: '用户管理' },
-      { key: 'gradeManage', name: '届次管理' },
-      { key: 'departmentManage', name: '学院管理' },
-      { key: 'professionManage', name: '专业管理' },
-      { key: 'classManage', name: '班级管理' },
-      { key: 'companyManage', name: '企业管理' },
       { key: 'menuManage', name: '菜单管理' },
       { key: 'roleMenus', name: '角色权限' },
       { key: 'organizationScope', name: '组织范围' },
@@ -3261,7 +3405,7 @@ function openModuleWindow(module, options = {}) {
       statState.report = statReports.some(item => item.key === existing.panel) ? existing.panel : 'overview';
       loadStats(statState.pagination.page || 1);
     }
-    if (module.id === 'config') {
+    if (module.id === 'config' || module.id === 'userManage' || archiveManageModules[module.id]) {
       activateWindowPanel(existing, existing.panel);
     }
     return;
@@ -3288,7 +3432,7 @@ function openModuleWindow(module, options = {}) {
     statState.report = win.panel;
     loadStats(1);
   }
-  if (module.id === 'config') {
+  if (module.id === 'config' || module.id === 'userManage' || archiveManageModules[module.id]) {
     activateWindowPanel(win, win.panel);
   }
 }
@@ -3459,14 +3603,13 @@ function activateWindowPanel(win, panel) {
   win.panel = panel;
   focusWindow(win.id);
 
-  if (win.module.id === 'config' && panel === 'userManage') {
+  if (isUserManageWindow(win)) {
     loadAdminFoundation();
     loadUserAccounts();
   }
-  if (win.module.id === 'config' && isArchiveManagePanel(panel)) {
-    syncArchiveTypeWithPanel(panel);
+  if (isArchiveManageWindow(win)) {
     loadAdminFoundation();
-    loadArchiveItems();
+    loadArchiveItems(archiveTypeForWindow(win));
   }
   if (win.module.id === 'file' && panel === 'fileManage') {
     loadFiles();
@@ -3659,6 +3802,15 @@ function emptyUserForm(row = {}) {
   };
 }
 
+function emptyUserDetail() {
+  return {
+    account: null,
+    boundAccounts: [],
+    wechatAccounts: [],
+    logs: [],
+  };
+}
+
 function manageableUserRoles() {
   return adminState.roles.filter(role => permissionState.context.role_type === 'super_admin' || role.role_type !== 'super_admin');
 }
@@ -3771,6 +3923,45 @@ async function resetUserPassword() {
   } finally {
     userAdminState.loading = false;
   }
+}
+
+async function openUserDetailDialog(row, mode) {
+  userAdminState.detailMode = mode;
+  userAdminState.detailDialogVisible = true;
+  userAdminState.detailLoading = true;
+  userAdminState.message = '';
+  userAdminState.detail = emptyUserDetail();
+  try {
+    const data = await fetchAdminAccountDetail({
+      id: row.id,
+      page: 1,
+      page_size: 20,
+    });
+    userAdminState.detail = {
+      account: data.account || row,
+      boundAccounts: data.bound_accounts || [],
+      wechatAccounts: data.wechat_accounts || [],
+      logs: data.operation_logs?.items || [],
+    };
+  } catch (error) {
+    userAdminState.message = error.message;
+  } finally {
+    userAdminState.detailLoading = false;
+  }
+}
+
+function closeUserDetailDialog() {
+  userAdminState.detailDialogVisible = false;
+}
+
+function logPayloadText(payload) {
+  if (!payload || typeof payload !== 'object') {
+    return '-';
+  }
+  const path = payload.path || '';
+  const status = payload.status_code ? `状态 ${payload.status_code}` : '';
+  const duration = payload.duration_ms ? `${payload.duration_ms}ms` : '';
+  return [path, status, duration].filter(Boolean).join(' / ') || '-';
 }
 
 function uniqueRoleOptions() {
@@ -4094,7 +4285,51 @@ function scopePayload(row) {
   };
 }
 
-function emptyArchiveItem(type = archiveState?.type || 'department') {
+function createArchiveState(type) {
+  return {
+    type,
+    items: [],
+    editing: emptyArchiveItem(type),
+    selected: null,
+    dialogVisible: false,
+    loading: false,
+    message: '',
+  };
+}
+
+function archiveDefinition(type) {
+  return archiveDefinitions.find(item => item.type === type) || archiveDefinitions[0];
+}
+
+function archiveStateByType(type) {
+  return archiveStates[type] || archiveStates.department;
+}
+
+function archiveTypeForWindow(win) {
+  return archiveManageModules[win.module.id] || archiveManagePanels[win.panel] || 'department';
+}
+
+function archiveStateForWindow(win) {
+  return archiveStateByType(archiveTypeForWindow(win));
+}
+
+function archiveDefinitionForWindow(win) {
+  return archiveDefinition(archiveTypeForWindow(win));
+}
+
+function archiveFieldsForWindow(win) {
+  return archiveDefinitionForWindow(win).fields;
+}
+
+function archiveIdFieldForWindow(win) {
+  return archiveDefinitionForWindow(win).idField;
+}
+
+function archiveTableFieldsForWindow(win) {
+  return archiveFieldsForWindow(win).filter(field => field.key !== 'sort');
+}
+
+function emptyArchiveItem(type = 'department') {
   const definition = archiveDefinitions.find(item => item.type === type) || archiveDefinitions[0];
   const item = {
     id: null,
@@ -4102,138 +4337,138 @@ function emptyArchiveItem(type = archiveState?.type || 'department') {
   };
 
   definition.fields.forEach((field) => {
-    item[field.key] = field.key === 'flag' ? 'on' : '';
+    if (field.key === 'flag') {
+      item[field.key] = 'on';
+      return;
+    }
+    if (field.key === 'is_current') {
+      item[field.key] = 'false';
+      return;
+    }
+    item[field.key] = '';
   });
 
   return item;
 }
 
-function isArchiveManagePanel(panel) {
-  return Boolean(archiveManagePanels[panel]);
+function isUserManageWindow(win) {
+  return Boolean(win && (win.module.id === 'userManage' || (win.module.id === 'config' && win.panel === 'userManage')));
 }
 
-function syncArchiveTypeWithPanel(panel) {
-  const type = archiveManagePanels[panel] || 'department';
-  if (archiveState.type === type) {
-    return;
-  }
-
-  archiveState.type = type;
-  archiveState.editing = emptyArchiveItem(type);
-  archiveState.selected = null;
-  archiveState.message = '';
+function isArchiveManageWindow(win) {
+  return Boolean(win && (archiveManageModules[win.module.id] || (win.module.id === 'config' && archiveManagePanels[win.panel])));
 }
 
-function changeArchiveType() {
-  archiveState.editing = emptyArchiveItem(archiveState.type);
-  archiveState.selected = null;
-  archiveState.message = '';
-  loadArchiveItems();
-}
-
-function openArchiveDialog(row = null) {
+function openArchiveDialog(type, row = null) {
   if (row) {
-    editArchiveItem(row);
+    editArchiveItem(type, row);
   } else {
-    newArchiveItem();
+    newArchiveItem(type);
   }
-  archiveState.dialogVisible = true;
+  archiveStateByType(type).dialogVisible = true;
 }
 
-function closeArchiveDialog() {
-  archiveState.dialogVisible = false;
+function closeArchiveDialog(type) {
+  archiveStateByType(type).dialogVisible = false;
 }
 
-function newArchiveItem() {
-  archiveState.editing = emptyArchiveItem(archiveState.type);
-  archiveState.message = '';
+function newArchiveItem(type) {
+  const state = archiveStateByType(type);
+  state.editing = emptyArchiveItem(type);
+  state.message = '';
 }
 
-function selectArchiveItem(row) {
-  archiveState.selected = row;
-  archiveState.message = '';
+function selectArchiveItem(type, row) {
+  const state = archiveStateByType(type);
+  state.selected = row;
+  state.message = '';
 }
 
-function editArchiveItem(row) {
-  const definition = currentArchiveDefinition.value;
-  const editing = emptyArchiveItem(archiveState.type);
+function editArchiveItem(type, row) {
+  const definition = archiveDefinition(type);
+  const editing = emptyArchiveItem(type);
   editing.id = row[definition.idField];
   editing[definition.idField] = row[definition.idField];
   definition.fields.forEach((field) => {
     editing[field.key] = row[field.key] === null || row[field.key] === undefined ? '' : String(row[field.key]);
   });
-  archiveState.editing = editing;
-  archiveState.message = '';
+  const state = archiveStateByType(type);
+  state.editing = editing;
+  state.message = '';
 }
 
-async function loadArchiveItems() {
-  if (!canManageConfig.value || archiveState.loading) {
+async function loadArchiveItems(type = 'department') {
+  const state = archiveStateByType(type);
+  if (!canManageConfig.value || state.loading) {
     return;
   }
 
-  archiveState.loading = true;
-  archiveState.message = '';
+  state.loading = true;
+  state.message = '';
   try {
-    const data = await fetchArchiveList(archiveState.type);
-    archiveState.items = data.items || [];
+    const data = await fetchArchiveList(type);
+    state.items = data.items || [];
   } catch (error) {
-    archiveState.message = error.message;
+    state.message = error.message;
   } finally {
-    archiveState.loading = false;
+    state.loading = false;
   }
 }
 
-async function saveArchiveConfig() {
+async function saveArchiveConfig(type) {
   if (!canManageConfig.value) {
     return;
   }
 
-  archiveState.loading = true;
-  archiveState.message = '';
+  const state = archiveStateByType(type);
+  state.loading = true;
+  state.message = '';
   try {
-    const definition = currentArchiveDefinition.value;
+    const definition = archiveDefinition(type);
     const payload = {
-      type: archiveState.type,
-      id: archiveState.editing.id || null,
-      [definition.idField]: archiveState.editing[definition.idField] || null,
+      type,
+      id: state.editing.id || null,
+      [definition.idField]: state.editing[definition.idField] || null,
     };
     definition.fields.forEach((field) => {
-      payload[field.key] = archiveState.editing[field.key];
+      payload[field.key] = state.editing[field.key];
     });
     const data = await saveArchiveItem(payload);
-    archiveState.items = data.items || [];
-    archiveState.message = '已保存';
-    archiveState.dialogVisible = false;
-    archiveState.selected = null;
+    state.items = data.items || [];
+    state.message = '已保存';
+    state.dialogVisible = false;
+    state.selected = null;
     await loadAdminFoundation();
   } catch (error) {
-    archiveState.message = error.message;
+    state.message = error.message;
   } finally {
-    archiveState.loading = false;
+    state.loading = false;
   }
 }
 
-async function deleteArchiveConfig() {
-  if (!archiveState.selected || !window.confirm('确认删除当前档案？')) {
+async function deleteArchiveConfig(type) {
+  const state = archiveStateByType(type);
+  if (!state.selected || !window.confirm('确认删除当前档案？')) {
     return;
   }
 
-  archiveState.loading = true;
-  archiveState.message = '';
+  state.loading = true;
+  state.message = '';
   try {
+    const definition = archiveDefinition(type);
     const data = await deleteArchiveItem({
-      type: archiveState.type,
-      id: archiveState.selected[currentArchiveIdField.value],
+      type,
+      id: state.selected[definition.idField],
     });
-    archiveState.items = data.items || [];
-    archiveState.editing = emptyArchiveItem(archiveState.type);
-    archiveState.selected = null;
-    archiveState.message = '已删除';
+    state.items = data.items || [];
+    state.editing = emptyArchiveItem(type);
+    state.selected = null;
+    state.message = '已删除';
     await loadAdminFoundation();
   } catch (error) {
-    archiveState.message = error.message;
+    state.message = error.message;
   } finally {
-    archiveState.loading = false;
+    state.loading = false;
   }
 }
 
@@ -4242,6 +4477,12 @@ function archiveFieldOptions(field) {
     return [
       { label: '启用', value: 'on' },
       { label: '停用', value: 'off' },
+    ];
+  }
+  if (field.options === 'boolean') {
+    return [
+      { label: '是', value: 'true' },
+      { label: '否', value: 'false' },
     ];
   }
   if (field.options === 'departments') {
@@ -5730,13 +5971,21 @@ function resetAdminState() {
     name: '',
     password: 'admin123456',
   };
+  userAdminState.detailDialogVisible = false;
+  userAdminState.detailMode = 'logs';
+  userAdminState.detailLoading = false;
+  userAdminState.detail = emptyUserDetail();
   userAdminState.pagination.page = 1;
   userAdminState.pagination.total = 0;
   userAdminState.message = '';
-  archiveState.type = 'department';
-  archiveState.items = [];
-  archiveState.editing = emptyArchiveItem('department');
-  archiveState.message = '';
+  Object.entries(archiveStates).forEach(([type, state]) => {
+    state.items = [];
+    state.editing = emptyArchiveItem(type);
+    state.selected = null;
+    state.dialogVisible = false;
+    state.loading = false;
+    state.message = '';
+  });
   fileState.items = [];
   fileState.message = '';
   fileState.pagination.page = 1;
@@ -6114,9 +6363,10 @@ watch(openWindows, (windows) => {
   if (windows.some(win => win.panel === 'operationGuides')) {
     loadGuideAdminItems();
   }
-  if (windows.some(win => win.panel === 'archive')) {
+  const archiveWindows = windows.filter(win => isArchiveManageWindow(win));
+  if (archiveWindows.length) {
     loadAdminFoundation();
-    loadArchiveItems();
+    Array.from(new Set(archiveWindows.map(archiveTypeForWindow))).forEach(type => loadArchiveItems(type));
   }
   if (windows.some(win => win.panel === 'fileManage')) {
     loadFiles(fileState.pagination.page);

@@ -170,6 +170,11 @@ class TableRecord extends BaseModel
             }
         }
 
+        $accountId = (int) ($filters['account_id'] ?? 0);
+        if ($accountId > 0) {
+            $query->where("{$table}.account_id", $accountId);
+        }
+
         $dateFrom = trim((string) ($filters['date_from'] ?? ''));
         if ($dateFrom !== '') {
             $query->where("{$table}.created_at", '>=', $dateFrom . ' 00:00:00');
@@ -250,6 +255,22 @@ class TableRecord extends BaseModel
                 'deleted_at' => $now,
                 'updated_at' => $now,
             ]);
+    }
+
+    public static function clearCurrentGrade(?int $excludeId, string $now): int
+    {
+        $query = self::queryTable('grade_list')
+            ->where('is_current', 'true')
+            ->whereNull('deleted_at');
+
+        if ($excludeId) {
+            $query->where('grade_id', '<>', $excludeId);
+        }
+
+        return $query->update([
+            'is_current' => 'false',
+            'updated_at' => $now,
+        ]);
     }
 
     public static function enabledOptionRows(string $table, array $columns, array $order, ?string $flagField = 'flag'): array

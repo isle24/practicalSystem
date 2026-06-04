@@ -10,6 +10,7 @@ use app\model\channel\RoleMenu;
 use app\model\channel\SysOrganization;
 use app\model\channel\TableRecord as ChannelTable;
 use app\model\channel\User;
+use app\model\channel\UserWechat;
 use app\model\channel\UserRole;
 use app\server\CurrentContext;
 use app\server\rbac\RbacService;
@@ -199,6 +200,35 @@ class AdminController
         }
     }
 
+    public function accountDetail(Request $request): Response
+    {
+        if (!$this->isAdmin()) {
+            return $this->fail(40300, '无操作权限', 403);
+        }
+
+        try {
+            $accountId = $this->requiredInt($request, 'id');
+            $this->assertAccountRoleWritable($accountId, '');
+            $account = Account::adminDetail($accountId);
+            if (!$account) {
+                return $this->fail(40400, '账号不存在', 404);
+            }
+
+            return $this->ok([
+                'account' => $account,
+                'bound_accounts' => Account::boundAccountsByUser((int) $account['user_id'], $accountId),
+                'wechat_accounts' => UserWechat::byUser((int) $account['user_id']),
+                'operation_logs' => ChannelTable::operationLogPage(CurrentContext::schoolDatabase() ?: '', [
+                    'page' => $this->optionalInt($request, 'page') ?? 1,
+                    'page_size' => $this->optionalInt($request, 'page_size') ?? 20,
+                    'account_id' => $accountId,
+                ]),
+            ]);
+        } catch (Throwable $exception) {
+            return $this->fail(40001, $exception->getMessage(), 400);
+        }
+    }
+
     public function saveAccount(Request $request): Response
     {
         if (!$this->isAdmin()) {
@@ -344,10 +374,10 @@ class AdminController
             return $this->ok([
                 'roles' => Role::enabledOrdered(['id', 'code', 'name', 'role_type']),
                 'accounts' => $this->accountsData(),
-                'departments' => ChannelTable::enabledOptionRows('department', ['dep_id', 'dep_name', 'dep_code'], ['sort']),
-                'grades' => ChannelTable::enabledOptionRows('grade_list', ['grade_id', 'grade_name', 'dep_id'], ['sort']),
-                'professions' => ChannelTable::enabledOptionRows('profession', ['profession_id', 'profession_name', 'profession_code', 'dep_id', 'grade_id'], ['sort']),
-                'classes' => ChannelTable::enabledOptionRows('class', ['class_id', 'class_name', 'class_num', 'dep_id', 'profession_id', 'grade_id'], ['sort']),
+                'departments' => ChannelTable::enabledOptionRows('department', ['dep_id', 'dep_name', 'dep_short_name', 'dep_code'], ['sort']),
+                'grades' => ChannelTable::enabledOptionRows('grade_list', ['grade_id', 'grade_name', 'dep_id', 'is_current'], ['sort']),
+                'professions' => ChannelTable::enabledOptionRows('profession', ['profession_id', 'profession_name', 'profession_short_name', 'profession_code', 'dep_id', 'grade_id'], ['sort']),
+                'classes' => ChannelTable::enabledOptionRows('class', ['class_id', 'class_name', 'class_short_name', 'class_num', 'dep_id', 'profession_id', 'grade_id'], ['sort']),
                 'companies' => ChannelTable::enabledOptionRows('companies', ['company_id', 'company_name', 'credit_code'], ['company_id']),
             ]);
         } catch (Throwable $exception) {

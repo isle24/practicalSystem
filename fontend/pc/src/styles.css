@@ -305,6 +305,10 @@ a {
   background: #fff;
 }
 
+.app-body.no-sidebar {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .module-sidebar {
   min-height: 0;
   border-right: 1px solid var(--line);
@@ -1457,6 +1461,10 @@ a {
   width: min(720px, calc(100vw - 48px));
 }
 
+.operation-dialog.user-detail-dialog {
+  width: min(960px, calc(100vw - 48px));
+}
+
 .operation-dialog.guide-edit-dialog {
   width: min(860px, calc(100vw - 48px));
   max-height: min(720px, calc(100vh - 72px));
@@ -1547,6 +1555,48 @@ a {
   min-height: 110px;
   padding-top: 8px;
   resize: vertical;
+}
+
+.user-detail-body {
+  min-height: 0;
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  overflow: auto;
+}
+
+.user-detail-summary {
+  min-height: 52px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 4px;
+  align-content: center;
+  padding: 10px 12px;
+  background: #fbfcfe;
+}
+
+.user-detail-summary strong {
+  color: var(--text);
+  font-size: 15px;
+}
+
+.user-detail-summary span,
+.detail-table-block small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.detail-table-block {
+  min-height: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.detail-table-block header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
 
 .timeline-view {
@@ -2472,6 +2522,10 @@ a {
 
   .app-body {
     grid-template-columns: 132px minmax(0, 1fr);
+  }
+
+  .app-body.no-sidebar {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .module-sidebar {

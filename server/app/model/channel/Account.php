@@ -98,6 +98,83 @@ class Account extends BaseModel
         ];
     }
 
+    public static function adminDetail(int $id): ?array
+    {
+        $row = self::query()
+            ->join('users', 'account.user_id', '=', 'users.id')
+            ->leftJoin('user_role', function ($join): void {
+                $join->on('account.id', '=', 'user_role.account_id')
+                    ->where('user_role.is_primary', 'true')
+                    ->whereNull('user_role.deleted_at');
+            })
+            ->leftJoin('role', 'user_role.role_id', '=', 'role.id')
+            ->where('account.id', $id)
+            ->whereNull('account.deleted_at')
+            ->whereNull('users.deleted_at')
+            ->first([
+                'account.id',
+                'account.uuid',
+                'account.user_id',
+                'account.login_name',
+                'account.status',
+                'account.two_factor_enabled',
+                'account.created_at',
+                'account.updated_at',
+                'users.name',
+                'users.mobile',
+                'users.email',
+                'users.avatar',
+                'users.status as user_status',
+                'role.id as role_id',
+                'role.name as role_name',
+                'role.role_type',
+            ]);
+
+        return $row ? self::adminAccountRow($row) : null;
+    }
+
+    public static function boundAccountsByUser(int $userId, int $excludeAccountId): array
+    {
+        return self::query()
+            ->leftJoin('user_role', function ($join): void {
+                $join->on('account.id', '=', 'user_role.account_id')
+                    ->where('user_role.is_primary', 'true')
+                    ->whereNull('user_role.deleted_at');
+            })
+            ->leftJoin('role', 'user_role.role_id', '=', 'role.id')
+            ->where('account.user_id', $userId)
+            ->where('account.id', '<>', $excludeAccountId)
+            ->whereNull('account.deleted_at')
+            ->orderBy('account.id')
+            ->get([
+                'account.id',
+                'account.uuid',
+                'account.user_id',
+                'account.login_name',
+                'account.status',
+                'account.two_factor_enabled',
+                'account.created_at',
+                'account.updated_at',
+                'role.id as role_id',
+                'role.name as role_name',
+                'role.role_type',
+            ])
+            ->map(static fn ($row): array => [
+                'id' => (int) $row->id,
+                'uuid' => $row->uuid,
+                'user_id' => (int) $row->user_id,
+                'login_name' => $row->login_name,
+                'status' => $row->status,
+                'two_factor_enabled' => $row->two_factor_enabled,
+                'created_at' => $row->created_at,
+                'updated_at' => $row->updated_at,
+                'role_id' => $row->role_id === null ? null : (int) $row->role_id,
+                'role_name' => $row->role_name,
+                'role_type' => $row->role_type,
+            ])
+            ->all();
+    }
+
     public static function enabledByLoginName(string $loginName): ?self
     {
         return self::query()
@@ -200,6 +277,28 @@ class Account extends BaseModel
     public static function updateAdminPassword(int $id, string $passwordHash): int
     {
         return self::updateAdminAccount($id, ['password' => $passwordHash]);
+    }
+
+    private static function adminAccountRow(object $row): array
+    {
+        return [
+            'id' => (int) $row->id,
+            'uuid' => $row->uuid,
+            'user_id' => (int) $row->user_id,
+            'login_name' => $row->login_name,
+            'status' => $row->status,
+            'two_factor_enabled' => $row->two_factor_enabled,
+            'created_at' => $row->created_at,
+            'updated_at' => $row->updated_at,
+            'name' => $row->name,
+            'mobile' => $row->mobile,
+            'email' => $row->email,
+            'avatar' => $row->avatar,
+            'user_status' => $row->user_status,
+            'role_id' => $row->role_id === null ? null : (int) $row->role_id,
+            'role_name' => $row->role_name,
+            'role_type' => $row->role_type,
+        ];
     }
 
     private static function uuid(): string
