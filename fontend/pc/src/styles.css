@@ -538,9 +538,9 @@ a {
   width: 100%;
   min-width: 0;
   display: grid;
-  grid-template-columns: minmax(160px, 1fr) minmax(220px, auto);
-  align-items: center;
-  gap: 12px;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  gap: 5px;
   padding: 3px 8px 3px 0;
   overflow: hidden;
 }
@@ -549,21 +549,27 @@ a {
 .menu-node-meta {
   min-width: 0;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 8px;
 }
 
-.menu-node-main strong,
+.menu-node-main strong {
+  min-width: 0;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
 .menu-node-main small,
 .menu-node-meta small {
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.35;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .menu-node-meta {
-  justify-content: flex-end;
+  justify-content: flex-start;
+  flex-wrap: wrap;
 }
 
 .menu-node-meta em {
@@ -1622,20 +1628,13 @@ a {
   padding: 4px 0;
 }
 
-.permission-tree .menu-manage-node,
-.menu-edit-tree .menu-manage-node {
-  grid-template-columns: minmax(0, 1fr);
-  align-items: start;
-  gap: 5px;
-}
-
 .permission-tree .menu-node-main,
 .permission-tree .menu-node-meta {
   width: 100%;
 }
 
 .permission-tree .menu-node-main {
-  justify-content: space-between;
+  justify-content: flex-start;
   align-items: flex-start;
   gap: 12px;
 }
@@ -1643,12 +1642,11 @@ a {
 .permission-tree .menu-node-main strong {
   min-width: 0;
   line-height: 1.35;
-  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .permission-tree .menu-node-main small {
-  flex: 0 1 320px;
-  text-align: right;
+  flex: 1 1 auto;
 }
 
 .permission-tree .menu-node-meta {
