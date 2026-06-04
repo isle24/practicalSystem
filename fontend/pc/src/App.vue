@@ -2172,13 +2172,13 @@ const internshipState = reactive({
 
 const openWindows = reactive([]);
 
-const visibleModules = computed(() => modules.filter(item => (item.id === 'profile' ? isLoggedIn.value : hasPermission(item.viewPermission))));
-const visibleWindows = computed(() => openWindows.filter(win => !win.minimized));
 const isLoggedIn = computed(() => Boolean(permissionState.context.account_id));
 const currentRoleType = computed(() => permissionState.context.role_type || '');
 const isStudentRole = computed(() => currentRoleType.value === 'student');
 const isTeacherRole = computed(() => currentRoleType.value === 'teacher');
 const isAdminRole = computed(() => ['super_admin', 'school_admin', 'college_admin', 'profession_admin'].includes(currentRoleType.value));
+const visibleModules = computed(() => modules.filter(canShowModule));
+const visibleWindows = computed(() => openWindows.filter(win => !win.minimized));
 const canManageConfig = computed(() => hasPermission('config:manage') && ['super_admin', 'school_admin'].includes(permissionState.context.role_type));
 const canManageInternship = computed(() => hasPermission('internship:manage'));
 const canManageInternshipPlan = computed(() => hasPermission('internship:plan') && isAdminRole.value);
@@ -2266,6 +2266,23 @@ const internshipTimelineCycles = computed(() => normalizeTimelineCycles(
   internshipState.dialog.cycles || [],
   internshipState.dialog.timeline || [],
 ));
+
+function canShowModule(module) {
+  if (module.id === 'profile') {
+    return isLoggedIn.value;
+  }
+  if (!hasPermission(module.viewPermission)) {
+    return false;
+  }
+  if (['config', 'training', 'lab'].includes(module.id)) {
+    return isAdminRole.value;
+  }
+  if (module.id === 'internship') {
+    return ['student', 'teacher', 'super_admin', 'school_admin', 'college_admin', 'profession_admin'].includes(currentRoleType.value);
+  }
+  return true;
+}
+
 const internshipOverviewCards = computed(() => [
   { name: '实习安排', value: internshipState.overview.arrangements || 0, theme: 'primary', icon: CalendarCheck },
   { name: '待审申请', value: internshipState.overview.applications_waiting || 0, theme: 'amber', icon: ClipboardList },

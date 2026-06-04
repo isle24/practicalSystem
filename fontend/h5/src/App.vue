@@ -68,9 +68,8 @@
 
         <section class="module-list">
           <button
-            v-for="module in modules"
+            v-for="module in visibleMobileModules"
             :key="module.key"
-            :disabled="!hasPermission(module.permission)"
             @click="activeTab = module.key"
           >
             <span :class="module.theme">
@@ -677,15 +676,15 @@
         <template #icon><Home :size="20" /></template>
         首页
       </van-tabbar-item>
-      <van-tabbar-item name="internship">
+      <van-tabbar-item v-if="isMobileModuleVisible('internship')" name="internship">
         <template #icon><BriefcaseBusiness :size="20" /></template>
         实习
       </van-tabbar-item>
-      <van-tabbar-item name="training">
+      <van-tabbar-item v-if="isMobileModuleVisible('training')" name="training">
         <template #icon><Workflow :size="20" /></template>
         实训
       </van-tabbar-item>
-      <van-tabbar-item name="lab">
+      <van-tabbar-item v-if="isMobileModuleVisible('lab')" name="lab">
         <template #icon><FlaskConical :size="20" /></template>
         实验
       </van-tabbar-item>
@@ -1031,6 +1030,7 @@ const roleType = computed(() => state.context.role_type || '');
 const isStudentRole = computed(() => roleType.value === 'student');
 const isTeacherRole = computed(() => roleType.value === 'teacher');
 const isAdminRole = computed(() => ['super_admin', 'school_admin', 'college_admin', 'profession_admin'].includes(roleType.value));
+const visibleMobileModules = computed(() => modules.filter(canShowMobileModule));
 const canReviewInternship = computed(() => hasPermission('internship:approve'));
 const canReviewInternshipPlan = computed(() => hasPermission('internship:plan') && isAdminRole.value);
 const roleNameMap = {
@@ -1042,6 +1042,23 @@ const roleNameMap = {
   student: '学生',
   enterprise: '企业导师',
 };
+
+function canShowMobileModule(module) {
+  if (!hasPermission(module.permission)) {
+    return false;
+  }
+  if (['training', 'lab'].includes(module.key)) {
+    return isAdminRole.value;
+  }
+  if (module.key === 'internship') {
+    return ['student', 'teacher', 'super_admin', 'school_admin', 'college_admin', 'profession_admin'].includes(roleType.value);
+  }
+  return true;
+}
+
+function isMobileModuleVisible(key) {
+  return visibleMobileModules.value.some(module => module.key === key);
+}
 const scopeNameMap = {
   dep_id: '学院',
   profession_id: '专业',
@@ -2657,11 +2674,20 @@ watch(activeTab, (tab) => {
 });
 
 watch(roleType, () => {
+  if (!['home', 'mine'].includes(activeTab.value) && !visibleMobileModules.value.some(module => module.key === activeTab.value)) {
+    activeTab.value = 'home';
+  }
   const panels = internshipPanels.value.map(item => item.key);
   if (!panels.includes(internship.panel)) {
     internship.panel = panels[0] || 'workbench';
   }
   normalizeInternshipListViews();
+});
+
+watch(visibleMobileModules, () => {
+  if (!['home', 'mine'].includes(activeTab.value) && !visibleMobileModules.value.some(module => module.key === activeTab.value)) {
+    activeTab.value = 'home';
+  }
 });
 
 onMounted(async () => {
