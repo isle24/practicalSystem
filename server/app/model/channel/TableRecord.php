@@ -313,7 +313,7 @@ class TableRecord extends BaseModel
                     $gradeName = self::importArchiveRequiredValue($row, 'grade_name', '届次');
                     $professionName = self::importArchiveRequiredValue($row, 'profession_name', '专业');
                     $department = self::findOrCreateImportDepartment($departmentName, $now);
-                    $grade = self::findOrCreateImportGrade($gradeName, (int) $department['id'], $now);
+                    $grade = self::findOrCreateImportGrade($gradeName, $now);
                     $profession = self::findOrCreateImportProfession($professionName, (int) $department['id'], (int) $grade['id'], $now);
 
                     if ($department['created']) {
@@ -390,11 +390,9 @@ class TableRecord extends BaseModel
         ];
     }
 
-    private static function findOrCreateImportGrade(string $name, int $departmentId, string $now): array
+    private static function findOrCreateImportGrade(string $name, string $now): array
     {
-        $row = self::activeArchiveNameRow('grade_list', 'grade_id', 'grade_name', $name, [
-            'dep_id' => $departmentId,
-        ]);
+        $row = self::activeArchiveNameRow('grade_list', 'grade_id', 'grade_name', $name);
         if ($row) {
             return ['id' => (int) $row->grade_id, 'created' => false];
         }
@@ -402,7 +400,7 @@ class TableRecord extends BaseModel
         return [
             'id' => (int) self::queryTable('grade_list')->insertGetId([
                 'grade_name' => $name,
-                'dep_id' => $departmentId,
+                'dep_id' => null,
                 'is_current' => 'false',
                 'sort' => 0,
                 'flag' => 'on',

@@ -49,7 +49,7 @@ class InternshipRecord extends TableRecord
     public static function optionRows(array $scope): array
     {
         $departments = self::applyOptionScope(self::queryTable('department')->where('flag', 'on')->whereNull('deleted_at'), $scope, 'dep_id', null);
-        $grades = self::applyOptionScope(self::queryTable('grade_list')->where('flag', 'on')->whereNull('deleted_at'), $scope, 'dep_id', null);
+        $grades = self::queryTable('grade_list')->where('flag', 'on')->whereNull('deleted_at');
         $professions = self::applyOptionScope(self::queryTable('profession')->where('flag', 'on')->whereNull('deleted_at'), $scope, 'dep_id', 'profession_id');
         $classes = self::applyOptionScope(self::queryTable('class')->where('flag', 'on')->whereNull('deleted_at'), $scope, 'dep_id', 'profession_id');
         $companies = self::applyCompanyScope(self::queryTable('companies')->where('flag', 'on')->whereNull('deleted_at'), $scope, 'company_id');
@@ -61,7 +61,7 @@ class InternshipRecord extends TableRecord
 
         return [
             'departments' => self::rows($departments->orderBy('sort')->get(['dep_id', 'dep_name', 'dep_code'])),
-            'grades' => self::rows($grades->orderBy('sort')->get(['grade_id', 'grade_name', 'dep_id'])),
+            'grades' => self::rows($grades->orderBy('sort')->get(['grade_id', 'grade_name'])),
             'professions' => self::rows($professions->orderBy('sort')->get(['profession_id', 'profession_name', 'profession_code', 'dep_id', 'grade_id'])),
             'classes' => self::rows($classes->orderBy('sort')->get(['class_id', 'class_name', 'class_num', 'dep_id', 'profession_id', 'grade_id'])),
             'companies' => self::rows($companies->orderBy('company_id')->get(['company_id', 'company_name', 'contact_name', 'contact_mobile'])),

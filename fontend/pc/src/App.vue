@@ -2336,7 +2336,6 @@ const archiveDefinitions = [
     idField: 'grade_id',
     fields: [
       { key: 'grade_name', label: '届次名称', required: true },
-      { key: 'dep_id', label: '所属学院', options: 'departments' },
       { key: 'is_current', label: '当前届次', options: 'boolean' },
       { key: 'sort', label: '排序', inputType: 'number' },
       { key: 'flag', label: '状态', options: 'flag' },
@@ -4878,30 +4877,17 @@ function optionItems(items, valueKey, labelKey) {
   }));
 }
 
-function arrangementSelectedGrade() {
-  const gradeId = Number(internshipState.arrangementForm.grade_id || 0);
-  return internshipState.options.grades.find(item => Number(item.grade_id) === gradeId) || null;
-}
-
 function arrangementSelectedProfession() {
   const professionId = Number(internshipState.arrangementForm.profession_id || 0);
   return internshipState.options.professions.find(item => Number(item.profession_id) === professionId) || null;
 }
 
-function firstArrangementGrade(depId = null) {
-  const targetDepId = Number(depId || 0);
-  return internshipState.options.grades.find((item) => {
-    const itemDepId = Number(item.dep_id || 0);
-    return !targetDepId || !itemDepId || itemDepId === targetDepId;
-  }) || internshipState.options.grades[0] || null;
+function firstArrangementGrade() {
+  return internshipState.options.grades[0] || null;
 }
 
 function arrangementDepartmentOptions() {
-  const grade = arrangementSelectedGrade();
-  if (!grade?.dep_id) {
-    return internshipState.options.departments;
-  }
-  return internshipState.options.departments.filter(item => Number(item.dep_id) === Number(grade.dep_id));
+  return internshipState.options.departments;
 }
 
 function arrangementProfessionOptions() {
@@ -4915,10 +4901,6 @@ function arrangementProfessionOptions() {
 }
 
 function handleArrangementGradeChange() {
-  const grade = arrangementSelectedGrade();
-  if (grade?.dep_id) {
-    internshipState.arrangementForm.dep_id = grade.dep_id;
-  }
   normalizeArrangementCascade();
 }
 
@@ -4941,14 +4923,11 @@ function normalizeArrangementCascade() {
     internshipState.arrangementForm.grade_id = profession.grade_id;
   }
   if (!internshipState.arrangementForm.grade_id) {
-    const grade = firstArrangementGrade(internshipState.arrangementForm.dep_id);
+    const grade = firstArrangementGrade();
     internshipState.arrangementForm.grade_id = grade?.grade_id || null;
   }
 
-  const grade = arrangementSelectedGrade();
-  if (grade?.dep_id) {
-    internshipState.arrangementForm.dep_id = grade.dep_id;
-  } else if (!internshipState.arrangementForm.dep_id && profession?.dep_id) {
+  if (!internshipState.arrangementForm.dep_id && profession?.dep_id) {
     internshipState.arrangementForm.dep_id = profession.dep_id;
   }
   if (!internshipState.arrangementForm.dep_id) {
@@ -5212,7 +5191,7 @@ function openArrangementDialog() {
   const defaults = defaultScopedFilters();
   const defaultProfession = internshipState.options.professions.find(item => Number(item.profession_id) === Number(defaults.profession_id || 0)) || null;
   const defaultDepId = defaults.dep_id || defaultProfession?.dep_id || null;
-  const defaultGrade = firstArrangementGrade(defaultDepId);
+  const defaultGrade = firstArrangementGrade();
   internshipState.arrangementForm = {
     ...emptyArrangementForm(),
     base_id: internshipState.options.bases[0]?.id || null,

@@ -39,7 +39,7 @@ class ArchiveController
         'grade' => [
             'table' => 'grade_list',
             'id' => 'grade_id',
-            'columns' => ['grade_id', 'grade_name', 'dep_id', 'is_current', 'sort', 'flag'],
+            'columns' => ['grade_id', 'grade_name', 'is_current', 'sort', 'flag'],
             'fields' => ['grade_name', 'dep_id', 'is_current', 'sort', 'flag'],
             'required' => 'grade_name',
             'order' => ['sort', 'grade_id'],
