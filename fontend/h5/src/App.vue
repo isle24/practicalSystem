@@ -678,9 +678,17 @@
       <section class="review-sheet">
         <header>
           <strong>{{ reviewDialogTitle }}</strong>
-          <p v-if="reviewDialogTargetText">{{ reviewDialogTargetText }}</p>
           <span>{{ reviewDialogRuleText }}</span>
         </header>
+        <section v-if="reviewDialogTargetDetails.length" class="review-target-card">
+          <div
+            v-for="item in reviewDialogTargetDetails"
+            :key="item.label"
+          >
+            <span>{{ item.label }}</span>
+            <strong>{{ item.value }}</strong>
+          </div>
+        </section>
         <label>
           <span>{{ reviewDialogReasonLabel }}</span>
           <textarea
@@ -2074,27 +2082,63 @@ function canReviewRow(row) {
   return row?.status === 'wait';
 }
 
-function reviewTargetText(row) {
-  if (!row) {
-    return '';
-  }
-  if (row.config_key) {
-    return [
-      row.student_name || row.student_num || '',
-      row.arrangement_title || '',
-      delayConfigText(row.config_key),
-      row.requested_date ? `延期至：${row.requested_date}` : '',
-      `状态：${statusText(row.status)}`,
-    ].filter(Boolean).join(' / ');
-  }
-  const parts = [
-    row.student_name || row.student_num || '',
-    row.arrangement_title || row.title || '',
-    row.date || '',
-    `状态：${statusText(row.status)}`,
-  ].filter(Boolean);
-  return parts.join(' / ');
+function detailItem(label, value) {
+  const text = String(value ?? '').trim();
+  return text && text !== '-' ? { label, value: text } : null;
 }
+
+function reviewTargetDetails(entity, row) {
+  if (!row) {
+    return [];
+  }
+  const student = joinFact([row.student_name, row.student_num]);
+  const arrangement = row.arrangement_title || (row.arrangement_id ? `安排ID ${row.arrangement_id}` : '');
+  const base = [
+    detailItem('审核模块', reviewEntityName(entity)),
+    detailItem('学生', student || (row.student_id ? `学生ID ${row.student_id}` : '')),
+    detailItem('实习安排', arrangement),
+  ];
+
+  const details = {
+    application: [
+      detailItem('学院专业', joinFact([row.dep_name, row.profession_name])),
+      detailItem('教师审核', statusText(row.teacher_status)),
+      detailItem('管理审核', statusText(row.admin_status)),
+      detailItem('申请备注', previewText(row.remark, 80)),
+    ],
+    journal: [
+      detailItem('日志标题', row.title),
+      detailItem('日志日期', row.date || row.created_at),
+      detailItem('内容摘要', previewText(row.content, 100)),
+    ],
+    report: [
+      detailItem('报告标题', row.title),
+      detailItem('提交时间', row.submitted_at || row.created_at),
+      detailItem('内容摘要', previewText(row.content, 100)),
+    ],
+    plan: [
+      detailItem('学期', row.semester),
+      detailItem('学院', row.dep_name),
+      detailItem('提交人', row.submitter_name),
+      detailItem('计划摘要', planContentText(row.plan_content, 100)),
+    ],
+    delay: [
+      detailItem('延期类型', delayConfigText(row.config_key)),
+      detailItem('申请延期至', row.requested_date),
+      detailItem('申请原因', previewText(row.reason, 100)),
+    ],
+  };
+
+  return [
+    ...base,
+    ...(details[entity] || []),
+    detailItem('当前状态', statusText(row.status)),
+  ].filter(Boolean);
+}
+
+const reviewDialogTargetDetails = computed(() => (
+  reviewTargetDetails(internship.reviewDialog.entity, internship.reviewDialog.row)
+));
 
 function workflowActionText(action) {
   const names = {
@@ -2136,8 +2180,6 @@ const reviewDialogTitle = computed(() => {
   const action = isRejectReviewStatus(internship.reviewDialog.status) ? '退回' : '通过';
   return `${action}${reviewEntityName(internship.reviewDialog.entity)}`;
 });
-
-const reviewDialogTargetText = computed(() => reviewTargetText(internship.reviewDialog.row));
 
 const reviewDialogReasonLabel = computed(() => {
   if (internship.reviewDialog.mode === 'reopen') {
