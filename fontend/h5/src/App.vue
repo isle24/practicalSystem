@@ -6,7 +6,7 @@
         <strong>{{ currentPage.title }}</strong>
       </div>
       <div class="mobile-actions">
-        <button aria-label="刷新" title="刷新" :disabled="state.loading" @click="load">
+        <button aria-label="刷新" title="刷新" :disabled="state.loading" @click="refreshMobilePage">
           <RefreshCw :size="18" />
         </button>
         <button v-if="isLoggedIn" aria-label="退出" title="退出" :disabled="loginState.loading" @click="submitLogout">
@@ -111,6 +111,77 @@
           <van-cell title="学校代码" :value="schoolCodeText" />
           <van-cell title="数据范围" :label="scopeDetailText" :value="scopeText" />
         </van-cell-group>
+      </template>
+
+      <template v-else-if="activeTab === 'message'">
+        <section class="module-head">
+          <span class="teal">
+            <MessageCircle :size="25" />
+          </span>
+          <div>
+            <h1>消息中心</h1>
+            <p>按时间查看待办、审核结果和系统通知</p>
+          </div>
+        </section>
+
+        <van-notice-bar
+          v-if="messageState.message"
+          color="#8a5a00"
+          background="#fff3d8"
+          left-icon="warning-o"
+          :text="messageState.message"
+        />
+
+        <section class="mobile-message-actions">
+          <button :class="{ active: messageState.filter === 'all' }" @click="setMobileMessageFilter('all')">
+            全部
+          </button>
+          <button :class="{ active: messageState.filter === 'unread' }" @click="setMobileMessageFilter('unread')">
+            未读 {{ messageUnreadCount }}
+          </button>
+          <button :disabled="messageUnreadCount <= 0 || messageState.loading" @click="markAllMobileMessagesRead">
+            全部已读
+          </button>
+        </section>
+
+        <section class="mobile-message-list">
+          <template v-if="messageGroups.length">
+            <div v-for="group in messageGroups" :key="group.key" class="mobile-message-day">
+              <span>{{ group.label }}</span>
+              <article
+                v-for="item in group.items"
+                :key="item.target_id"
+                class="mobile-message-card"
+                :class="{ unread: !item.is_read, urgent: item.level === 'urgent' }"
+                @click="handleMobileMessageClick(item)"
+              >
+                <header>
+                  <em :class="item.type">{{ messageTypeText(item.type) }}</em>
+                  <small>{{ messageTimeText(item.created_at) }}</small>
+                </header>
+                <strong>{{ item.title }}</strong>
+                <p>{{ item.content }}</p>
+                <footer>
+                  <span>{{ item.sender_name || '系统' }}</span>
+                  <span>{{ messageLevelText(item.level) }}</span>
+                  <span>{{ item.is_read ? '已读' : '未读' }}</span>
+                </footer>
+              </article>
+            </div>
+          </template>
+          <section v-else class="mobile-empty-card">
+            <strong>暂无消息</strong>
+            <span>新的通知会按时间显示在这里。</span>
+          </section>
+          <div class="mobile-list-footer">
+            <button
+              :disabled="messageState.loading || messageState.items.length >= messageState.pagination.total"
+              @click="loadMoreMessages"
+            >
+              {{ messageState.items.length >= messageState.pagination.total ? '没有更多' : '加载更多' }}
+            </button>
+          </div>
+        </section>
       </template>
 
       <template v-else-if="activeTab === 'internship'">
@@ -731,6 +802,10 @@
         <template #icon><FlaskConical :size="20" /></template>
         实验
       </van-tabbar-item>
+      <van-tabbar-item v-if="isLoggedIn" name="message" :badge="messageUnreadCount > 0 ? (messageUnreadCount > 99 ? '99+' : String(messageUnreadCount)) : ''">
+        <template #icon><MessageCircle :size="20" /></template>
+        消息
+      </van-tabbar-item>
       <van-tabbar-item name="mine">
         <template #icon><UserRound :size="20" /></template>
         我的
@@ -856,6 +931,7 @@ import {
   LogIn,
   LogOut,
   MapPin,
+  MessageCircle,
   RefreshCw,
   Route,
   Send,
@@ -880,6 +956,9 @@ import {
   fetchInternshipScores,
   fetchInternshipSignIns,
   fetchInternshipTimeline,
+  fetchMessages,
+  fetchMessageSummary,
+  markMessagesRead,
   requestInternshipModification,
   reviewInternshipApplication,
   reviewInternshipDelay,
@@ -906,6 +985,34 @@ const loginState = reactive({
   loading: false,
   message: '',
 });
+const messageState = reactive({
+  loading: false,
+  message: '',
+  filter: 'all',
+  items: [],
+  summary: {
+    unread: 0,
+    by_type: {},
+  },
+  pagination: {
+    page: 1,
+    page_size: 20,
+    total: 0,
+  },
+});
+
+const messageTypeNames = {
+  system: '系统通知',
+  todo: '待办提醒',
+  result: '处理结果',
+  audit: '审核通知',
+  alert: '预警提醒',
+};
+const messageLevelNames = {
+  normal: '普通',
+  important: '重要',
+  urgent: '紧急',
+};
 
 const defaultInternshipReviewRules = {
   application: {
@@ -1065,6 +1172,9 @@ const currentPage = computed(() => {
   if (activeTab.value === 'mine') {
     return { title: '我的', desc: '个人信息', theme: 'gray', icon: UserRound, permission: '', flow: '-' };
   }
+  if (activeTab.value === 'message') {
+    return { title: '消息中心', desc: '待办、审核结果和系统通知', theme: 'teal', icon: MessageCircle, permission: '', flow: '-' };
+  }
   return modules.find(item => item.key === activeTab.value) || modules[0];
 });
 
@@ -1073,6 +1183,8 @@ const summaries = computed(() => [
   { name: '角色', value: roleDisplayText.value },
   { name: '范围', value: scopeText.value },
 ]);
+const messageUnreadCount = computed(() => Number(messageState.summary.unread || 0));
+const messageGroups = computed(() => groupMessagesByDay(messageState.items));
 
 const isLoggedIn = computed(() => Boolean(state.context.account_id));
 const roleType = computed(() => state.context.role_type || '');
@@ -2900,6 +3012,197 @@ function statusText(value) {
   return names[value] || value || '-';
 }
 
+async function loadMessageSummary() {
+  if (!isLoggedIn.value) {
+    resetMessageState();
+    return;
+  }
+
+  try {
+    const data = await fetchMessageSummary();
+    messageState.summary = {
+      unread: Number(data.unread || 0),
+      by_type: data.by_type || {},
+    };
+  } catch (error) {
+    messageState.message = error.message;
+  }
+}
+
+async function loadMessages(page = 1, append = false) {
+  if (!isLoggedIn.value || messageState.loading) {
+    return;
+  }
+
+  messageState.loading = true;
+  messageState.message = '';
+  try {
+    const data = await fetchMessages({
+      page,
+      page_size: messageState.pagination.page_size,
+      status: messageState.filter,
+      type: 'all',
+    });
+    const items = data.items || [];
+    messageState.items = append ? [...messageState.items, ...items] : items;
+    messageState.pagination = {
+      page: Number(data.pagination?.page || page),
+      page_size: Number(data.pagination?.page_size || messageState.pagination.page_size),
+      total: Number(data.pagination?.total || 0),
+    };
+    await loadMessageSummary();
+  } catch (error) {
+    messageState.message = error.message;
+  } finally {
+    messageState.loading = false;
+  }
+}
+
+function loadMoreMessages() {
+  if (messageState.items.length >= messageState.pagination.total) {
+    return;
+  }
+  loadMessages(messageState.pagination.page + 1, true);
+}
+
+function setMobileMessageFilter(filter) {
+  messageState.filter = filter;
+  loadMessages(1);
+}
+
+async function handleMobileMessageClick(item) {
+  if (!item?.target_id || item.is_read) {
+    return;
+  }
+
+  try {
+    const data = await markMessagesRead({ ids: [item.target_id] });
+    item.is_read = true;
+    item.read_at = new Date().toLocaleString();
+    messageState.summary = data.summary || messageState.summary;
+    if (messageState.filter === 'unread') {
+      messageState.items = messageState.items.filter(row => row.target_id !== item.target_id);
+      messageState.pagination.total = Math.max(0, messageState.pagination.total - 1);
+    }
+  } catch (error) {
+    messageState.message = error.message;
+    showToast(error.message);
+  }
+}
+
+async function markAllMobileMessagesRead() {
+  if (messageUnreadCount.value <= 0 || messageState.loading) {
+    return;
+  }
+
+  messageState.loading = true;
+  messageState.message = '';
+  try {
+    const data = await markMessagesRead({ all: true });
+    messageState.summary = data.summary || { unread: 0, by_type: {} };
+    messageState.items = messageState.filter === 'unread'
+      ? []
+      : messageState.items.map(item => ({ ...item, is_read: true, read_at: item.read_at || new Date().toLocaleString() }));
+    if (messageState.filter === 'unread') {
+      messageState.pagination = { ...messageState.pagination, page: 1, total: 0 };
+    }
+  } catch (error) {
+    messageState.message = error.message;
+    showToast(error.message);
+  } finally {
+    messageState.loading = false;
+  }
+}
+
+function resetMessageState() {
+  messageState.message = '';
+  messageState.items = [];
+  messageState.summary = {
+    unread: 0,
+    by_type: {},
+  };
+  messageState.pagination = {
+    page: 1,
+    page_size: 20,
+    total: 0,
+  };
+}
+
+function messageTypeText(type) {
+  return messageTypeNames[type] || type || '系统通知';
+}
+
+function messageLevelText(level) {
+  return messageLevelNames[level] || level || '普通';
+}
+
+function groupMessagesByDay(items) {
+  const groups = new Map();
+  (items || []).forEach((item) => {
+    const key = messageDateKey(item.created_at);
+    if (!groups.has(key)) {
+      groups.set(key, {
+        key,
+        label: messageDayLabel(key),
+        items: [],
+      });
+    }
+    groups.get(key).items.push(item);
+  });
+  return Array.from(groups.values());
+}
+
+function messageDateKey(value) {
+  const text = String(value || '');
+  if (/^\d{4}-\d{2}-\d{2}/.test(text)) {
+    return text.slice(0, 10);
+  }
+  return formatDateKey(new Date());
+}
+
+function messageDayLabel(key) {
+  const today = formatDateKey(new Date());
+  const yesterdayDate = new Date();
+  yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+  const yesterday = formatDateKey(yesterdayDate);
+  if (key === today) {
+    return '今天';
+  }
+  if (key === yesterday) {
+    return '昨天';
+  }
+  return key;
+}
+
+function messageTimeText(value) {
+  const text = String(value || '');
+  if (/^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}/.test(text)) {
+    return text.slice(11, 16);
+  }
+  return text || '-';
+}
+
+function formatDateKey(date) {
+  return [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, '0'),
+    String(date.getDate()).padStart(2, '0'),
+  ].join('-');
+}
+
+async function refreshMobilePage() {
+  await load();
+  if (activeTab.value === 'message') {
+    await loadMessages(1);
+    return;
+  }
+  if (activeTab.value === 'internship') {
+    await loadInternship();
+    return;
+  }
+  await loadMessageSummary();
+}
+
 async function submitLogin() {
   loginState.loading = true;
   loginState.message = '';
@@ -2910,6 +3213,7 @@ async function submitLogin() {
       client: 'H5',
     });
     await load();
+    await loadMessageSummary();
     await loadInternship();
   } catch (error) {
     loginState.message = error.message;
@@ -2926,6 +3230,7 @@ async function submitLogout() {
     activeTab.value = 'home';
     internship.panel = 'workbench';
     internship.message = '';
+    resetMessageState();
     await load();
   } catch (error) {
     loginState.message = error.message;
@@ -2938,10 +3243,13 @@ watch(activeTab, (tab) => {
   if (tab === 'internship') {
     loadInternship();
   }
+  if (tab === 'message') {
+    loadMessages(1);
+  }
 });
 
 watch(roleType, () => {
-  if (!['home', 'mine'].includes(activeTab.value) && !visibleMobileModules.value.some(module => module.key === activeTab.value)) {
+  if (!['home', 'mine', 'message'].includes(activeTab.value) && !visibleMobileModules.value.some(module => module.key === activeTab.value)) {
     activeTab.value = 'home';
   }
   const panels = internshipPanels.value.map(item => item.key);
@@ -2952,13 +3260,14 @@ watch(roleType, () => {
 });
 
 watch(visibleMobileModules, () => {
-  if (!['home', 'mine'].includes(activeTab.value) && !visibleMobileModules.value.some(module => module.key === activeTab.value)) {
+  if (!['home', 'mine', 'message'].includes(activeTab.value) && !visibleMobileModules.value.some(module => module.key === activeTab.value)) {
     activeTab.value = 'home';
   }
 });
 
 onMounted(async () => {
   await load();
+  await loadMessageSummary();
   await loadInternship();
 });
 </script>

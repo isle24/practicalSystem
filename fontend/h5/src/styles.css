@@ -296,6 +296,131 @@ input {
   margin-bottom: 12px;
 }
 
+.mobile-message-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.mobile-message-actions button {
+  min-height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--muted);
+  background: #fff;
+}
+
+.mobile-message-actions button.active {
+  color: var(--primary);
+  border-color: #bfd8f4;
+  background: var(--primary-soft);
+}
+
+.mobile-message-actions button:disabled {
+  opacity: .5;
+}
+
+.mobile-message-list {
+  display: grid;
+  gap: 12px;
+}
+
+.mobile-message-day {
+  display: grid;
+  gap: 10px;
+}
+
+.mobile-message-day > span {
+  justify-self: center;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 3px 10px;
+  color: var(--muted);
+  background: rgba(255, 255, 255, .9);
+  font-size: 12px;
+}
+
+.mobile-message-card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  background: #fff;
+  box-shadow: var(--shadow);
+}
+
+.mobile-message-card.unread {
+  border-color: #9cc7f3;
+  background: #f7fbff;
+}
+
+.mobile-message-card.urgent {
+  border-color: #f0b9bf;
+}
+
+.mobile-message-card header,
+.mobile-message-card footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.mobile-message-card header {
+  justify-content: space-between;
+}
+
+.mobile-message-card em {
+  height: 22px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 8px;
+  color: #fff;
+  font-style: normal;
+}
+
+.mobile-message-card em.system { background: #53606f; }
+.mobile-message-card em.todo { background: #1f73d2; }
+.mobile-message-card em.result { background: #2e7d4f; }
+.mobile-message-card em.audit { background: #0f8f7e; }
+.mobile-message-card em.alert { background: #c74350; }
+
+.mobile-message-card strong {
+  display: block;
+  margin-top: 10px;
+  font-size: 16px;
+  line-height: 1.35;
+}
+
+.mobile-message-card p {
+  margin: 8px 0 10px;
+  color: var(--text);
+  line-height: 1.65;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.mobile-message-card footer {
+  flex-wrap: wrap;
+}
+
+.mobile-empty-card {
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 6px;
+  place-items: center;
+  padding: 28px 12px;
+  color: var(--muted);
+  background: rgba(255, 255, 255, .86);
+}
+
+.mobile-empty-card strong {
+  color: var(--text);
+}
+
 .internship-action-tabs {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

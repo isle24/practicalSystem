@@ -224,6 +224,7 @@ function createSchoolSchema(PDO $pdo): void
     ensureIndex($pdo, 'account', 'uk_login_name', "ALTER TABLE `account` ADD UNIQUE KEY `uk_login_name` (`login_name`)");
     ensureFileSchema($pdo);
     ensureInternshipSchema($pdo);
+    ensureMessageSchema($pdo);
 }
 
 function ensureMenuSchema(PDO $pdo): void
@@ -630,7 +631,11 @@ function schoolBusinessStatements(): array
         $statements[] = $statement;
     }
 
-    foreach (['message', 'message_target', 'message_template', 'message_channel_log', 'operation_log_template', 'stat_cache', 'export_task', 'doc_category', 'doc_article', 'doc_article_history', 'template_category', 'template'] as $table) {
+    foreach (messageTableStatements() as $statement) {
+        $statements[] = $statement;
+    }
+
+    foreach (['operation_log_template', 'stat_cache', 'export_task', 'doc_category', 'doc_article', 'doc_article_history', 'template_category', 'template'] as $table) {
         $statements[] = simpleTable($table, ['`payload` JSON DEFAULT NULL']);
     }
 
@@ -701,6 +706,96 @@ function fileTableStatements(): array
             KEY `idx_file_id` (`file_id`),
             KEY `idx_entity` (`entity_type`, `entity_id`),
             KEY `idx_tag` (`tag`),
+            KEY `idx_deleted_at` (`deleted_at`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+    ];
+}
+
+function messageTableStatements(): array
+{
+    return [
+        "CREATE TABLE IF NOT EXISTS `message` (
+            `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            `uuid` CHAR(36) DEFAULT NULL,
+            `name` VARCHAR(180) DEFAULT NULL,
+            `code` VARCHAR(120) DEFAULT NULL,
+            `status` VARCHAR(40) DEFAULT 'enabled',
+            `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+            `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            `deleted_at` DATETIME DEFAULT NULL,
+            `title` VARCHAR(180) DEFAULT NULL,
+            `content` TEXT DEFAULT NULL,
+            `type` VARCHAR(40) DEFAULT 'system',
+            `sender_id` BIGINT UNSIGNED DEFAULT 0,
+            `sender_name` VARCHAR(80) DEFAULT NULL,
+            `level` VARCHAR(40) DEFAULT 'normal',
+            `entity_type` VARCHAR(80) DEFAULT NULL,
+            `entity_id` BIGINT UNSIGNED DEFAULT NULL,
+            `link_url` VARCHAR(500) DEFAULT NULL,
+            `metadata` JSON DEFAULT NULL,
+            PRIMARY KEY (`id`),
+            UNIQUE KEY `uk_uuid` (`uuid`),
+            KEY `idx_status` (`status`),
+            KEY `idx_type_created` (`type`, `created_at`),
+            KEY `idx_entity` (`entity_type`, `entity_id`),
+            KEY `idx_deleted_at` (`deleted_at`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+        "CREATE TABLE IF NOT EXISTS `message_target` (
+            `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            `uuid` CHAR(36) DEFAULT NULL,
+            `name` VARCHAR(180) DEFAULT NULL,
+            `code` VARCHAR(120) DEFAULT NULL,
+            `status` VARCHAR(40) DEFAULT 'enabled',
+            `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+            `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            `deleted_at` DATETIME DEFAULT NULL,
+            `message_id` BIGINT UNSIGNED DEFAULT NULL,
+            `account_id` BIGINT UNSIGNED DEFAULT NULL,
+            `is_read` TINYINT(1) DEFAULT 0,
+            `read_at` DATETIME DEFAULT NULL,
+            PRIMARY KEY (`id`),
+            UNIQUE KEY `uk_uuid` (`uuid`),
+            KEY `idx_status` (`status`),
+            KEY `idx_account_read` (`account_id`, `is_read`, `created_at`),
+            KEY `idx_message_id` (`message_id`),
+            KEY `idx_deleted_at` (`deleted_at`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+        "CREATE TABLE IF NOT EXISTS `message_template` (
+            `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            `uuid` CHAR(36) DEFAULT NULL,
+            `name` VARCHAR(180) DEFAULT NULL,
+            `code` VARCHAR(120) DEFAULT NULL,
+            `status` VARCHAR(40) DEFAULT 'enabled',
+            `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+            `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            `deleted_at` DATETIME DEFAULT NULL,
+            `title_tpl` VARCHAR(255) DEFAULT NULL,
+            `content_tpl` TEXT DEFAULT NULL,
+            `channels` JSON DEFAULT NULL,
+            PRIMARY KEY (`id`),
+            UNIQUE KEY `uk_uuid` (`uuid`),
+            UNIQUE KEY `uk_code` (`code`),
+            KEY `idx_status` (`status`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+        "CREATE TABLE IF NOT EXISTS `message_channel_log` (
+            `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            `uuid` CHAR(36) DEFAULT NULL,
+            `name` VARCHAR(180) DEFAULT NULL,
+            `code` VARCHAR(120) DEFAULT NULL,
+            `status` VARCHAR(40) DEFAULT 'pending',
+            `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+            `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            `deleted_at` DATETIME DEFAULT NULL,
+            `message_id` BIGINT UNSIGNED DEFAULT NULL,
+            `account_id` BIGINT UNSIGNED DEFAULT NULL,
+            `channel` VARCHAR(40) DEFAULT 'internal',
+            `error_message` TEXT DEFAULT NULL,
+            `sent_at` DATETIME DEFAULT NULL,
+            PRIMARY KEY (`id`),
+            UNIQUE KEY `uk_uuid` (`uuid`),
+            KEY `idx_status` (`status`),
+            KEY `idx_message_account` (`message_id`, `account_id`),
+            KEY `idx_channel_status` (`channel`, `status`),
             KEY `idx_deleted_at` (`deleted_at`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
     ];
@@ -1002,6 +1097,59 @@ function ensureInternshipSchema(PDO $pdo): void
     ensureIndex($pdo, 'journal', 'idx_journal_student_date', "ALTER TABLE `journal` ADD KEY `idx_journal_student_date` (`student_id`, `entity_type`, `entity_id`, `date`)");
     ensureIndex($pdo, 'report', 'idx_report_student_arrangement', "ALTER TABLE `report` ADD KEY `idx_report_student_arrangement` (`student_id`, `arrangement_id`, `status`)");
     ensureIndex($pdo, 'score', 'idx_score_student_arrangement', "ALTER TABLE `score` ADD KEY `idx_score_student_arrangement` (`student_id`, `arrangement_id`)");
+}
+
+function ensureMessageSchema(PDO $pdo): void
+{
+    $schemas = [
+        'message' => [
+            'title' => "ALTER TABLE `message` ADD COLUMN `title` VARCHAR(180) DEFAULT NULL AFTER `code`",
+            'content' => "ALTER TABLE `message` ADD COLUMN `content` TEXT DEFAULT NULL AFTER `title`",
+            'type' => "ALTER TABLE `message` ADD COLUMN `type` VARCHAR(40) DEFAULT 'system' AFTER `content`",
+            'sender_id' => "ALTER TABLE `message` ADD COLUMN `sender_id` BIGINT UNSIGNED DEFAULT 0 AFTER `type`",
+            'sender_name' => "ALTER TABLE `message` ADD COLUMN `sender_name` VARCHAR(80) DEFAULT NULL AFTER `sender_id`",
+            'level' => "ALTER TABLE `message` ADD COLUMN `level` VARCHAR(40) DEFAULT 'normal' AFTER `sender_name`",
+            'entity_type' => "ALTER TABLE `message` ADD COLUMN `entity_type` VARCHAR(80) DEFAULT NULL AFTER `level`",
+            'entity_id' => "ALTER TABLE `message` ADD COLUMN `entity_id` BIGINT UNSIGNED DEFAULT NULL AFTER `entity_type`",
+            'link_url' => "ALTER TABLE `message` ADD COLUMN `link_url` VARCHAR(500) DEFAULT NULL AFTER `entity_id`",
+            'metadata' => "ALTER TABLE `message` ADD COLUMN `metadata` JSON DEFAULT NULL AFTER `link_url`",
+        ],
+        'message_target' => [
+            'message_id' => "ALTER TABLE `message_target` ADD COLUMN `message_id` BIGINT UNSIGNED DEFAULT NULL AFTER `code`",
+            'account_id' => "ALTER TABLE `message_target` ADD COLUMN `account_id` BIGINT UNSIGNED DEFAULT NULL AFTER `message_id`",
+            'is_read' => "ALTER TABLE `message_target` ADD COLUMN `is_read` TINYINT(1) DEFAULT 0 AFTER `account_id`",
+            'read_at' => "ALTER TABLE `message_target` ADD COLUMN `read_at` DATETIME DEFAULT NULL AFTER `is_read`",
+        ],
+        'message_template' => [
+            'title_tpl' => "ALTER TABLE `message_template` ADD COLUMN `title_tpl` VARCHAR(255) DEFAULT NULL AFTER `code`",
+            'content_tpl' => "ALTER TABLE `message_template` ADD COLUMN `content_tpl` TEXT DEFAULT NULL AFTER `title_tpl`",
+            'channels' => "ALTER TABLE `message_template` ADD COLUMN `channels` JSON DEFAULT NULL AFTER `content_tpl`",
+        ],
+        'message_channel_log' => [
+            'message_id' => "ALTER TABLE `message_channel_log` ADD COLUMN `message_id` BIGINT UNSIGNED DEFAULT NULL AFTER `code`",
+            'account_id' => "ALTER TABLE `message_channel_log` ADD COLUMN `account_id` BIGINT UNSIGNED DEFAULT NULL AFTER `message_id`",
+            'channel' => "ALTER TABLE `message_channel_log` ADD COLUMN `channel` VARCHAR(40) DEFAULT 'internal' AFTER `account_id`",
+            'error_message' => "ALTER TABLE `message_channel_log` ADD COLUMN `error_message` TEXT DEFAULT NULL AFTER `status`",
+            'sent_at' => "ALTER TABLE `message_channel_log` ADD COLUMN `sent_at` DATETIME DEFAULT NULL AFTER `error_message`",
+        ],
+    ];
+
+    foreach ($schemas as $table => $columns) {
+        foreach ($columns as $column => $ddl) {
+            ensureColumn($pdo, $table, $column, $ddl);
+        }
+    }
+
+    ensureIndex($pdo, 'message', 'idx_type_created', "ALTER TABLE `message` ADD KEY `idx_type_created` (`type`, `created_at`)");
+    ensureIndex($pdo, 'message', 'idx_entity', "ALTER TABLE `message` ADD KEY `idx_entity` (`entity_type`, `entity_id`)");
+    ensureIndex($pdo, 'message', 'idx_deleted_at', "ALTER TABLE `message` ADD KEY `idx_deleted_at` (`deleted_at`)");
+    ensureIndex($pdo, 'message_target', 'idx_account_read', "ALTER TABLE `message_target` ADD KEY `idx_account_read` (`account_id`, `is_read`, `created_at`)");
+    ensureIndex($pdo, 'message_target', 'idx_message_id', "ALTER TABLE `message_target` ADD KEY `idx_message_id` (`message_id`)");
+    ensureIndex($pdo, 'message_target', 'idx_deleted_at', "ALTER TABLE `message_target` ADD KEY `idx_deleted_at` (`deleted_at`)");
+    ensureIndex($pdo, 'message_template', 'uk_code', "ALTER TABLE `message_template` ADD UNIQUE KEY `uk_code` (`code`)");
+    ensureIndex($pdo, 'message_channel_log', 'idx_message_account', "ALTER TABLE `message_channel_log` ADD KEY `idx_message_account` (`message_id`, `account_id`)");
+    ensureIndex($pdo, 'message_channel_log', 'idx_channel_status', "ALTER TABLE `message_channel_log` ADD KEY `idx_channel_status` (`channel`, `status`)");
+    ensureIndex($pdo, 'message_channel_log', 'idx_deleted_at', "ALTER TABLE `message_channel_log` ADD KEY `idx_deleted_at` (`deleted_at`)");
 }
 
 function simpleTable(string $table, array $columns = []): string

@@ -58,6 +58,22 @@ export function fetchOperationLogs(params = {}) {
   return request(`/log/list${query ? `?${query}` : ''}`);
 }
 
+export function fetchMessageSummary() {
+  return request('/message/summary');
+}
+
+export function fetchMessages(params = {}) {
+  const query = new URLSearchParams(params).toString();
+  return request(`/message/list${query ? `?${query}` : ''}`);
+}
+
+export function markMessagesRead(payload) {
+  return request('/message/read', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
 export function fetchOperationGuide(module) {
   const query = new URLSearchParams({ module }).toString();
   return request(`/guide/current?${query}`);

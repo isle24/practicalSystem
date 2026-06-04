@@ -27,6 +27,22 @@ export function fetchDataScope(params = {}) {
   return request(`/permission/filter${query ? `?${query}` : ''}`);
 }
 
+export function fetchMessageSummary() {
+  return request('/message/summary');
+}
+
+export function fetchMessages(params = {}) {
+  const query = new URLSearchParams(params).toString();
+  return request(`/message/list${query ? `?${query}` : ''}`);
+}
+
+export function markMessagesRead(payload) {
+  return request('/message/read', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
 function internshipList(path, params = {}) {
   const query = new URLSearchParams(params).toString();
   return request(`/internship/${path}${query ? `?${query}` : ''}`);

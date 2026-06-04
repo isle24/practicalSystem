@@ -1195,6 +1195,123 @@
                   </div>
                 </div>
 
+                <div v-else-if="win.module.id === 'message'" class="message-center-panel">
+                  <div class="message-toolbar">
+                    <el-select v-model="messageState.filters.type" @change="loadMessages(1)">
+                      <el-option
+                        v-for="item in messageTypeOptions"
+                        :key="item.value"
+                        :label="item.label"
+                        :value="item.value"
+                      />
+                    </el-select>
+                    <el-select v-model="messageState.filters.status" @change="loadMessages(1)">
+                      <el-option
+                        v-for="item in messageStatusOptions"
+                        :key="item.value"
+                        :label="item.label"
+                        :value="item.value"
+                      />
+                    </el-select>
+                    <el-input
+                      v-model="messageState.filters.keyword"
+                      clearable
+                      placeholder="搜索标题、内容、发送人"
+                      @keyup.enter="loadMessages(1)"
+                    />
+                    <el-button :icon="Search" :loading="messageState.loading" @click="loadMessages(1)">
+                      查询
+                    </el-button>
+                    <el-button :icon="RefreshCw" :loading="messageState.loading" @click="resetMessageFilters">
+                      重置
+                    </el-button>
+                    <el-button
+                      type="primary"
+                      plain
+                      :disabled="messageUnreadCount <= 0"
+                      :loading="messageState.loading"
+                      @click="markAllMessagesRead"
+                    >
+                      全部已读
+                    </el-button>
+                  </div>
+
+                  <section class="message-summary-strip">
+                    <button
+                      v-for="item in messageTypeOptions"
+                      :key="`summary-${item.value}`"
+                      type="button"
+                      :class="{ active: messageState.filters.type === item.value }"
+                      @click="setMessageType(item.value)"
+                    >
+                      <span>{{ item.label }}</span>
+                      <strong>{{ messageTypeUnread(item.value) }}</strong>
+                    </button>
+                  </section>
+
+                  <el-alert
+                    v-if="messageState.message"
+                    type="warning"
+                    :closable="false"
+                    show-icon
+                    :title="messageState.message"
+                  />
+
+                  <section class="message-timeline" v-loading="messageState.loading">
+                    <template v-if="messageGroups.length">
+                      <div
+                        v-for="group in messageGroups"
+                        :key="group.key"
+                        class="message-day-group"
+                      >
+                        <div class="message-day-separator">
+                          <span>{{ group.label }}</span>
+                        </div>
+                        <article
+                          v-for="item in group.items"
+                          :key="item.target_id"
+                          class="message-bubble"
+                          :class="{ unread: !item.is_read, urgent: item.level === 'urgent' }"
+                          @click="handleMessageClick(item)"
+                        >
+                          <header>
+                            <span class="message-kind" :class="item.type">{{ messageTypeText(item.type) }}</span>
+                            <strong>{{ item.title }}</strong>
+                            <small>{{ messageTimeText(item.created_at) }}</small>
+                          </header>
+                          <p>{{ item.content }}</p>
+                          <footer>
+                            <span>{{ item.sender_name || '系统' }}</span>
+                            <el-tag size="small" :type="messageLevelTagType(item.level)">
+                              {{ messageLevelText(item.level) }}
+                            </el-tag>
+                            <em>{{ item.is_read ? `已读 ${item.read_at || ''}` : '未读' }}</em>
+                            <button v-if="item.link_url" type="button" @click.stop="openMessageLink(item)">
+                              打开关联页面
+                            </button>
+                          </footer>
+                        </article>
+                      </div>
+                    </template>
+                    <div v-else class="module-empty-state">
+                      <strong>暂无消息</strong>
+                      <span>新的待办、审核结果和系统通知会在这里按时间显示。</span>
+                    </div>
+                  </section>
+
+                  <div class="file-pagination">
+                    <span>共 {{ messageState.pagination.total }} 条消息，未读 {{ messageUnreadCount }} 条</span>
+                    <el-pagination
+                      size="small"
+                      layout="prev, pager, next"
+                      :current-page="messageState.pagination.page"
+                      :page-size="messageState.pagination.page_size"
+                      :total="messageState.pagination.total"
+                      @current-change="loadMessages"
+                    />
+                  </div>
+                </div>
+
                 <div v-else-if="win.module.id === 'file' && win.panel === 'fileManage'" class="admin-panel file-admin">
                   <div class="admin-toolbar file-toolbar">
                     <el-input
@@ -1859,8 +1976,15 @@
             <component :is="win.module.icon" :size="17" />
           </span>
         </a>
-        <button class="taskbar-icon-button" title="消息中心" aria-label="消息中心">
+        <button
+          class="taskbar-icon-button message-taskbar-button"
+          :class="{ active: isModuleFocused('message') }"
+          title="消息中心"
+          aria-label="消息中心"
+          @click="openMessageCenter"
+        >
           <MessageCircle :size="18" />
+          <i v-if="messageUnreadCount > 0">{{ messageUnreadCount > 99 ? '99+' : messageUnreadCount }}</i>
         </button>
       </div>
       <span>在线</span>
@@ -1943,6 +2067,8 @@ import {
   fetchInternshipStats,
   fetchInternshipTimeline,
   fetchLoginPageSettings,
+  fetchMessages,
+  fetchMessageSummary,
   fetchOrganizationScopes,
   fetchOperationGuide,
   fetchOperationGuides,
@@ -1955,6 +2081,7 @@ import {
   deleteOperationGuide,
   login as loginApi,
   logout as logoutApi,
+  markMessagesRead,
   reviewInternshipApplication,
   reviewInternshipDelay,
   reviewInternshipJournal,
@@ -2029,6 +2156,25 @@ const logState = reactive({
   },
   items: [],
   tables: [],
+  pagination: {
+    page: 1,
+    page_size: 20,
+    total: 0,
+  },
+});
+const messageState = reactive({
+  loading: false,
+  message: '',
+  filters: {
+    type: 'all',
+    status: 'all',
+    keyword: '',
+  },
+  items: [],
+  summary: {
+    unread: 0,
+    by_type: {},
+  },
   pagination: {
     page: 1,
     page_size: 20,
@@ -2302,6 +2448,15 @@ const modules = [
   },
 ];
 
+const messageModule = {
+  id: 'message',
+  name: '消息中心',
+  icon: MessageCircle,
+  color: 'teal',
+  scope: '站内消息 / 待办提醒 / 审核结果',
+  defaultPanel: 'inbox',
+};
+
 const wallpaperPresets = [
   {
     key: 'default',
@@ -2332,6 +2487,25 @@ const roleTypeNames = {
   teacher: '教师',
   student: '学生',
   enterprise: '企业用户',
+};
+const messageTypeOptions = [
+  { label: '全部类型', value: 'all' },
+  { label: '系统通知', value: 'system' },
+  { label: '待办提醒', value: 'todo' },
+  { label: '处理结果', value: 'result' },
+  { label: '审核通知', value: 'audit' },
+  { label: '预警提醒', value: 'alert' },
+];
+const messageStatusOptions = [
+  { label: '全部消息', value: 'all' },
+  { label: '未读消息', value: 'unread' },
+  { label: '已读消息', value: 'read' },
+];
+const messageTypeNames = Object.fromEntries(messageTypeOptions.map(item => [item.value, item.label.replace('全部类型', '全部')]));
+const messageLevelNames = {
+  normal: '普通',
+  important: '重要',
+  urgent: '紧急',
 };
 
 const archiveDefinitions = [
@@ -2590,6 +2764,8 @@ const statCards = computed(() => {
   }));
 });
 const currentStatColumns = computed(() => statState.columns || []);
+const messageGroups = computed(() => groupMessagesByDay(messageState.items));
+const messageUnreadCount = computed(() => Number(messageState.summary.unread || 0));
 const selectedWechatMenu = computed(() => {
   const main = wechatProxy.menu[wechatProxy.selectedMenuIndex];
   if (!main) {
@@ -3116,6 +3292,9 @@ function studentPanelFields(panel) {
 }
 
 function sidebarItems(win) {
+  if (win.module.id === 'message') {
+    return [];
+  }
   if (win.module.id === 'userManage' || archiveManageModules[win.module.id]) {
     return [];
   }
@@ -3143,6 +3322,235 @@ function sidebarItems(win) {
     { key: 'archive', name: '基础档案' },
     { key: 'workflow', name: '流程配置' },
   ];
+}
+
+function openMessageCenter() {
+  openModuleWindow(messageModule, { reuse: true });
+}
+
+async function loadMessageSummary() {
+  if (!isLoggedIn.value) {
+    resetMessageState();
+    return;
+  }
+
+  try {
+    const data = await fetchMessageSummary();
+    messageState.summary = {
+      unread: Number(data.unread || 0),
+      by_type: data.by_type || {},
+    };
+  } catch (error) {
+    messageState.message = error.message;
+  }
+}
+
+async function loadMessages(page = messageState.pagination.page || 1) {
+  if (!isLoggedIn.value || messageState.loading) {
+    return;
+  }
+
+  messageState.loading = true;
+  messageState.message = '';
+  try {
+    const data = await fetchMessages({
+      page,
+      page_size: messageState.pagination.page_size,
+      type: messageState.filters.type,
+      status: messageState.filters.status,
+      keyword: messageState.filters.keyword,
+    });
+    messageState.items = data.items || [];
+    messageState.pagination = {
+      page: Number(data.pagination?.page || page),
+      page_size: Number(data.pagination?.page_size || messageState.pagination.page_size),
+      total: Number(data.pagination?.total || 0),
+    };
+    await loadMessageSummary();
+  } catch (error) {
+    messageState.message = error.message;
+  } finally {
+    messageState.loading = false;
+  }
+}
+
+function resetMessageFilters() {
+  messageState.filters = {
+    type: 'all',
+    status: 'all',
+    keyword: '',
+  };
+  loadMessages(1);
+}
+
+function resetMessageState() {
+  messageState.message = '';
+  messageState.items = [];
+  messageState.summary = {
+    unread: 0,
+    by_type: {},
+  };
+  messageState.pagination = {
+    page: 1,
+    page_size: 20,
+    total: 0,
+  };
+}
+
+function setMessageType(type) {
+  messageState.filters.type = type;
+  loadMessages(1);
+}
+
+async function handleMessageClick(item) {
+  if (!item?.is_read) {
+    await markSingleMessageRead(item);
+  }
+}
+
+async function openMessageLink(item) {
+  await handleMessageClick(item);
+  const link = String(item.link_url || '').trim();
+  if (!link) {
+    return;
+  }
+  if (link.startsWith('#')) {
+    window.location.hash = link;
+    handleHashNavigation();
+    return;
+  }
+  window.open(link, '_blank', 'noopener,noreferrer');
+}
+
+async function markSingleMessageRead(item) {
+  if (!item?.target_id) {
+    return;
+  }
+
+  try {
+    const data = await markMessagesRead({ ids: [item.target_id] });
+    item.is_read = true;
+    item.read_at = new Date().toLocaleString();
+    if (data.summary) {
+      messageState.summary = data.summary;
+    } else {
+      await loadMessageSummary();
+    }
+    if (messageState.filters.status === 'unread') {
+      loadMessages(messageState.pagination.page);
+    }
+  } catch (error) {
+    messageState.message = error.message;
+  }
+}
+
+async function markAllMessagesRead() {
+  if (messageUnreadCount.value <= 0) {
+    return;
+  }
+
+  messageState.loading = true;
+  messageState.message = '';
+  try {
+    const data = await markMessagesRead({ all: true });
+    messageState.items = messageState.items.map(item => ({
+      ...item,
+      is_read: true,
+      read_at: item.read_at || new Date().toLocaleString(),
+    }));
+    messageState.summary = data.summary || { unread: 0, by_type: {} };
+    if (messageState.filters.status === 'unread') {
+      messageState.items = [];
+      messageState.pagination = {
+        ...messageState.pagination,
+        page: 1,
+        total: 0,
+      };
+    }
+  } catch (error) {
+    messageState.message = error.message;
+  } finally {
+    messageState.loading = false;
+  }
+}
+
+function messageTypeUnread(type) {
+  if (type === 'all') {
+    return messageUnreadCount.value;
+  }
+  return Number(messageState.summary.by_type?.[type] || 0);
+}
+
+function messageTypeText(type) {
+  return messageTypeNames[type] || type || '系统通知';
+}
+
+function messageLevelText(level) {
+  return messageLevelNames[level] || level || '普通';
+}
+
+function messageLevelTagType(level) {
+  if (level === 'urgent') {
+    return 'danger';
+  }
+  if (level === 'important') {
+    return 'warning';
+  }
+  return 'info';
+}
+
+function groupMessagesByDay(items) {
+  const groups = new Map();
+  (items || []).forEach((item) => {
+    const key = messageDateKey(item.created_at);
+    if (!groups.has(key)) {
+      groups.set(key, {
+        key,
+        label: messageDayLabel(key),
+        items: [],
+      });
+    }
+    groups.get(key).items.push(item);
+  });
+  return Array.from(groups.values());
+}
+
+function messageDateKey(value) {
+  const text = String(value || '');
+  if (/^\d{4}-\d{2}-\d{2}/.test(text)) {
+    return text.slice(0, 10);
+  }
+  return formatDateKey(new Date());
+}
+
+function messageDayLabel(key) {
+  const today = formatDateKey(new Date());
+  const yesterdayDate = new Date();
+  yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+  const yesterday = formatDateKey(yesterdayDate);
+  if (key === today) {
+    return '今天';
+  }
+  if (key === yesterday) {
+    return '昨天';
+  }
+  return key;
+}
+
+function messageTimeText(value) {
+  const text = String(value || '');
+  if (/^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}/.test(text)) {
+    return text.slice(11, 16);
+  }
+  return text || '-';
+}
+
+function formatDateKey(date) {
+  return [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, '0'),
+    String(date.getDate()).padStart(2, '0'),
+  ].join('-');
 }
 
 function renderClock() {
@@ -3443,6 +3851,9 @@ function openModuleWindow(module, options = {}) {
     if (module.id === 'config' || module.id === 'userManage' || archiveManageModules[module.id]) {
       activateWindowPanel(existing, existing.panel);
     }
+    if (module.id === 'message') {
+      loadMessages(messageState.pagination.page || 1);
+    }
     return;
   }
 
@@ -3469,6 +3880,9 @@ function openModuleWindow(module, options = {}) {
   }
   if (module.id === 'config' || module.id === 'userManage' || archiveManageModules[module.id]) {
     activateWindowPanel(win, win.panel);
+  }
+  if (module.id === 'message') {
+    loadMessages(1);
   }
 }
 
@@ -3677,6 +4091,7 @@ async function submitLogin() {
     await load();
     await loadProfile();
     await loadProxy();
+    await loadMessageSummary();
     ensureDefaultWindow();
     scheduleDefaultWindow();
     loadAdminFoundation();
@@ -3694,6 +4109,7 @@ async function submitLogout() {
     await logoutApi();
     resetAdminState();
     resetProfileState();
+    resetMessageState();
     openWindows.splice(0);
     focusedWindowId.value = null;
     await load();
@@ -6476,6 +6892,9 @@ watch(() => permissionState.context.account_id, (accountId) => {
   if (accountId) {
     loadAdminFoundation();
     loadInternshipFoundation();
+    loadMessageSummary();
+  } else {
+    resetMessageState();
   }
 });
 
@@ -6494,6 +6913,7 @@ onMounted(async () => {
   await load();
   await loadProfile();
   await loadProxy();
+  await loadMessageSummary();
   await nextTick();
   ensureDefaultWindow();
   handleHashNavigation();
