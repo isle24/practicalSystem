@@ -1434,28 +1434,50 @@ function seedMenus(PDO $pdo): void
         [511, 51, '列表', 'log:view', '/log', 'pc', 'list', 511, 'List'],
         [501, 511, '日志处理', 'log:manage', null, 'pc', 'button', 501, null],
         [6, 0, '系统配置', 'config:view', null, 'pc', 'directory', 60, 'Settings'],
-        [61, 6, '菜单管理', null, null, 'pc', 'menu', 61, 'ListTree'],
-        [611, 61, '列表', 'config:menu', '/config/menus', 'pc', 'list', 611, 'List'],
+        [606, 6, '用户管理', null, null, 'pc', 'menu', 60, 'UsersRound'],
+        [6061, 606, '列表', 'config:user', '/config/users', 'pc', 'list', 601, 'List'],
+        [607, 6, '届次管理', null, null, 'pc', 'menu', 61, 'GraduationCap'],
+        [6071, 607, '列表', 'config:grade', '/config/grades', 'pc', 'list', 611, 'List'],
+        [60711, 6071, '新增', 'config:grade:save', null, 'pc', 'button', 611, null],
+        [60712, 6071, '编辑', 'config:grade:update', null, 'pc', 'button', 612, null],
+        [60713, 6071, '删除', 'config:grade:delete', null, 'pc', 'button', 613, null],
+        [605, 6, '学院管理', null, null, 'pc', 'menu', 62, 'Building2'],
+        [6051, 605, '列表', 'config:department', '/config/departments', 'pc', 'list', 621, 'List'],
+        [60511, 6051, '新增', 'config:department:save', null, 'pc', 'button', 621, null],
+        [60512, 6051, '编辑', 'config:department:update', null, 'pc', 'button', 622, null],
+        [60513, 6051, '删除', 'config:department:delete', null, 'pc', 'button', 623, null],
+        [608, 6, '专业管理', null, null, 'pc', 'menu', 63, 'GraduationCap'],
+        [6081, 608, '列表', 'config:profession', '/config/professions', 'pc', 'list', 631, 'List'],
+        [60811, 6081, '新增', 'config:profession:save', null, 'pc', 'button', 631, null],
+        [60812, 6081, '编辑', 'config:profession:update', null, 'pc', 'button', 632, null],
+        [60813, 6081, '删除', 'config:profession:delete', null, 'pc', 'button', 633, null],
+        [609, 6, '班级管理', null, null, 'pc', 'menu', 64, 'UsersRound'],
+        [6091, 609, '列表', 'config:class', '/config/classes', 'pc', 'list', 641, 'List'],
+        [60911, 6091, '新增', 'config:class:save', null, 'pc', 'button', 641, null],
+        [60912, 6091, '编辑', 'config:class:update', null, 'pc', 'button', 642, null],
+        [60913, 6091, '删除', 'config:class:delete', null, 'pc', 'button', 643, null],
+        [610, 6, '企业管理', null, null, 'pc', 'menu', 65, 'Building2'],
+        [6101, 610, '列表', 'config:company', '/config/companies', 'pc', 'list', 651, 'List'],
+        [61011, 6101, '新增', 'config:company:save', null, 'pc', 'button', 651, null],
+        [61012, 6101, '编辑', 'config:company:update', null, 'pc', 'button', 652, null],
+        [61013, 6101, '删除', 'config:company:delete', null, 'pc', 'button', 653, null],
+        [61, 6, '菜单管理', null, null, 'pc', 'menu', 70, 'ListTree'],
+        [611, 61, '列表', 'config:menu', '/config/menus', 'pc', 'list', 701, 'List'],
         [601, 611, '新增', 'config:manage', null, 'pc', 'button', 601, null],
         [602, 611, '编辑', 'config:menu:save', null, 'pc', 'button', 602, null],
         [6113, 611, '删除', 'config:menu:delete', null, 'pc', 'button', 613, null],
-        [603, 6, '角色权限', null, null, 'pc', 'menu', 62, 'ShieldCheck'],
-        [6031, 603, '列表', 'config:role', '/config/roles', 'pc', 'list', 621, 'List'],
+        [603, 6, '角色权限', null, null, 'pc', 'menu', 71, 'ShieldCheck'],
+        [6031, 603, '列表', 'config:role', '/config/roles', 'pc', 'list', 711, 'List'],
         [60311, 6031, '保存', 'config:role:save', null, 'pc', 'button', 621, null],
-        [604, 6, '组织范围', null, null, 'pc', 'menu', 64, 'SlidersHorizontal'],
-        [6041, 604, '列表', 'config:scope', '/config/scopes', 'pc', 'list', 641, 'List'],
+        [604, 6, '组织范围', null, null, 'pc', 'menu', 72, 'SlidersHorizontal'],
+        [6041, 604, '列表', 'config:scope', '/config/scopes', 'pc', 'list', 721, 'List'],
         [60411, 6041, '保存', 'config:scope:save', null, 'pc', 'button', 641, null],
-        [605, 6, '基础档案', null, null, 'pc', 'menu', 65, 'Database'],
-        [6051, 605, '列表', 'config:archive', '/config/archive', 'pc', 'list', 651, 'List'],
-        [60511, 6051, '新增', 'config:archive:save', null, 'pc', 'button', 651, null],
-        [60512, 6051, '编辑', 'config:archive:update', null, 'pc', 'button', 652, null],
-        [60513, 6051, '删除', 'config:archive:delete', null, 'pc', 'button', 653, null],
-        [63, 6, '操作说明', null, null, 'pc', 'menu', 66, 'BookOpen'],
-        [631, 63, '列表', 'guide:view', '/config/guides', 'pc', 'list', 631, 'List'],
+        [63, 6, '操作说明', null, null, 'pc', 'menu', 73, 'BookOpen'],
+        [631, 63, '列表', 'guide:view', '/config/guides', 'pc', 'list', 731, 'List'],
         [6311, 631, '保存', 'guide:save', null, 'pc', 'button', 631, null],
         [6312, 631, '删除', 'guide:delete', null, 'pc', 'button', 632, null],
-        [7, 6, '企业微信应用', null, null, 'pc', 'menu', 67, 'Network'],
-        [711, 7, '列表', 'wechat:proxy', '/config/wechat-proxy', 'pc', 'list', 711, 'List'],
+        [7, 6, '企业微信应用', null, null, 'pc', 'menu', 74, 'Network'],
+        [711, 7, '列表', 'wechat:proxy', '/config/wechat-proxy', 'pc', 'list', 741, 'List'],
         [701, 711, '保存', 'wechat:proxy:save', null, 'pc', 'button', 701, null],
         [8, 0, '文件管理', null, null, 'pc', 'directory', 70, 'FolderOpen'],
         [81, 8, '文件管理', null, null, 'pc', 'menu', 81, 'FolderOpen'],
@@ -1509,12 +1531,6 @@ function seedMenus(PDO $pdo): void
          ON DUPLICATE KEY UPDATE `deleted_at` = NULL"
     );
 
-    foreach ([1, 2] as $roleId) {
-        foreach ($menus as $menu) {
-            $roleMenu->execute([$roleId, $menu[0]]);
-        }
-    }
-
     $internshipAdminMenus = [
         1, 11, 111, 101, 1112, 12, 121, 103, 104, 1213, 13, 131, 1311, 1312,
         14, 141, 105, 15, 151, 106, 1512, 16, 161, 107, 1612, 17, 171, 108,
@@ -1522,22 +1538,44 @@ function seedMenus(PDO $pdo): void
     ];
     $trainingMenus = [2, 21, 211, 201, 2112];
     $labMenus = [3, 31, 311, 301, 3112];
+    $allMenuIds = array_map(static fn (array $menu): int => (int) $menu[0], $menus);
+    $roleMenuIds = [
+        1 => $allMenuIds,
+        2 => $allMenuIds,
+        3 => array_merge($internshipAdminMenus, $trainingMenus, $labMenus),
+        4 => array_merge($internshipAdminMenus, $trainingMenus, $labMenus),
+        5 => [1, 11, 111, 12, 121, 104, 1213, 13, 131, 14, 141, 105, 15, 151, 106, 1512, 16, 161, 107, 1612, 17, 171, 108, 195, 1951, 19512, 2, 21, 211, 201, 3, 31, 311, 301],
+        6 => [1, 11, 111, 12, 121, 103, 14, 141, 105, 15, 151, 106, 16, 161, 107, 195, 1951, 19511],
+        7 => [1, 17, 171, 108],
+    ];
 
-    foreach ([3, 4] as $roleId) {
-        foreach (array_merge($internshipAdminMenus, $trainingMenus, $labMenus) as $menuId) {
+    foreach ($roleMenuIds as $roleId => $menuIds) {
+        $menuIds = array_values(array_unique(array_map('intval', $menuIds)));
+        foreach ($menuIds as $menuId) {
             $roleMenu->execute([$roleId, $menuId]);
         }
+        syncSeedRoleMenus($pdo, (int) $roleId, $menuIds);
+    }
+}
+
+function syncSeedRoleMenus(PDO $pdo, int $roleId, array $menuIds): void
+{
+    if (!$menuIds) {
+        $pdo->prepare(
+            "UPDATE `role_menu`
+             SET `deleted_at` = NOW(), `updated_at` = NOW()
+             WHERE `role_id` = ? AND `deleted_at` IS NULL"
+        )->execute([$roleId]);
+        return;
     }
 
-    foreach ([1, 11, 111, 12, 121, 104, 1213, 13, 131, 14, 141, 105, 15, 151, 106, 1512, 16, 161, 107, 1612, 17, 171, 108, 195, 1951, 19512, 2, 21, 211, 201, 3, 31, 311, 301] as $menuId) {
-        $roleMenu->execute([5, $menuId]);
-    }
-    foreach ([1, 11, 111, 12, 121, 103, 14, 141, 105, 15, 151, 106, 16, 161, 107, 195, 1951, 19511] as $menuId) {
-        $roleMenu->execute([6, $menuId]);
-    }
-    foreach ([1, 17, 171, 108] as $menuId) {
-        $roleMenu->execute([7, $menuId]);
-    }
+    $placeholders = implode(',', array_fill(0, count($menuIds), '?'));
+    $stmt = $pdo->prepare(
+        "UPDATE `role_menu`
+         SET `deleted_at` = NOW(), `updated_at` = NOW()
+         WHERE `role_id` = ? AND `deleted_at` IS NULL AND `menu_id` NOT IN ({$placeholders})"
+    );
+    $stmt->execute(array_merge([$roleId], $menuIds));
 }
 
 function seedOperationGuides(PDO $pdo): void
