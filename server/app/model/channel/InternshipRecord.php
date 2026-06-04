@@ -68,7 +68,7 @@ class InternshipRecord extends TableRecord
             'teachers' => self::rows($teachers->orderBy('teacher_id')->get(['teacher_id', 'teacher_name', 'teacher_num', 'dep_id', 'profession_id'])),
             'students' => self::rows($students->orderBy('student_id')->get(['student_id', 'name', 'student_num', 'grade_id', 'dep_id', 'profession_id', 'class_id'])),
             'bases' => self::rows(self::applyBaseScope(self::queryTable('base')->where('base.status', 'enabled')->whereNull('base.deleted_at'), $scope)->orderBy('base.id')->get(['base.id', 'base.name', 'base.company_id', 'base.dep_id'])),
-            'arrangements' => self::rows(self::applyArrangementScope(self::queryTable('arrangement')->whereNull('deleted_at'), $scope)->orderByDesc('id')->get(['id', 'uuid', 'title', 'name', 'type', 'organize_mode', 'semester', 'dep_id', 'profession_id', 'status'])),
+            'arrangements' => self::rows(self::applyArrangementScope(self::queryTable('arrangement')->whereNull('deleted_at'), $scope)->orderByDesc('id')->get(['id', 'uuid', 'title', 'name', 'type', 'organize_mode', 'semester', 'dep_id', 'profession_id', 'start_date', 'end_date', 'status'])),
             'report_templates' => self::rows(self::queryTable('report_template')->where('status', 'enabled')->whereNull('deleted_at')->orderBy('id')->get(['id', 'uuid', 'name', 'code', 'version', 'online_enabled'])),
         ];
     }
@@ -148,6 +148,7 @@ class InternshipRecord extends TableRecord
             'dep_id' => 'students.dep_id',
             'profession_id' => 'students.profession_id',
             'grade_id' => 'students.grade_id',
+            'class_id' => 'students.class_id',
             'semester' => 'arrangement.semester',
         ]);
         self::applicationKeyword($query, $filters, ['students.name', 'students.student_num', 'arrangement.title']);
@@ -177,6 +178,7 @@ class InternshipRecord extends TableRecord
             'dep_id' => 'students.dep_id',
             'profession_id' => 'students.profession_id',
             'grade_id' => 'students.grade_id',
+            'class_id' => 'students.class_id',
             'semester' => 'arrangement.semester',
         ]);
         self::keyword($query, $filters, ['students.name', 'students.student_num', 'teacher_list.teacher_name', 'teacher_list.teacher_num', 'arrangement.title']);
@@ -205,6 +207,7 @@ class InternshipRecord extends TableRecord
             'dep_id' => 'students.dep_id',
             'profession_id' => 'students.profession_id',
             'grade_id' => 'students.grade_id',
+            'class_id' => 'students.class_id',
             'semester' => 'arrangement.semester',
         ]);
         self::keyword($query, $filters, ['students.name', 'students.student_num', 'arrangement.title', 'sign_in.location'], [
@@ -235,6 +238,7 @@ class InternshipRecord extends TableRecord
             'dep_id' => 'students.dep_id',
             'profession_id' => 'students.profession_id',
             'grade_id' => 'students.grade_id',
+            'class_id' => 'students.class_id',
             'semester' => 'arrangement.semester',
         ]);
         self::keyword($query, $filters, ['journal.title', 'students.name', 'students.student_num', 'teacher_list.teacher_name', 'teacher_list.teacher_num'], [
@@ -264,6 +268,7 @@ class InternshipRecord extends TableRecord
             'dep_id' => 'students.dep_id',
             'profession_id' => 'students.profession_id',
             'grade_id' => 'students.grade_id',
+            'class_id' => 'students.class_id',
             'semester' => 'arrangement.semester',
         ]);
         self::keyword($query, $filters, ['report.title', 'students.name', 'students.student_num', 'teacher_list.teacher_name', 'teacher_list.teacher_num'], [
@@ -297,6 +302,7 @@ class InternshipRecord extends TableRecord
             'dep_id' => 'students.dep_id',
             'profession_id' => 'students.profession_id',
             'grade_id' => 'students.grade_id',
+            'class_id' => 'students.class_id',
             'semester' => 'arrangement.semester',
         ]);
         self::keyword($query, $filters, [
@@ -334,6 +340,7 @@ class InternshipRecord extends TableRecord
             'dep_id' => 'students.dep_id',
             'profession_id' => 'students.profession_id',
             'grade_id' => 'students.grade_id',
+            'class_id' => 'students.class_id',
             'semester' => 'arrangement.semester',
         ]);
         self::keyword($query, $filters, ['students.name', 'students.student_num', 'arrangement.title', 'teacher_list.teacher_name', 'teacher_list.teacher_num']);
@@ -427,6 +434,7 @@ class InternshipRecord extends TableRecord
                 'dep_id' => 'students.dep_id',
                 'profession_id' => 'students.profession_id',
                 'grade_id' => 'students.grade_id',
+                'class_id' => 'students.class_id',
                 'semester' => 'arrangement.semester',
             ]);
             $keywordColumns = ['students.name', 'students.student_num', 'arrangement.title'];
@@ -1216,6 +1224,7 @@ class InternshipRecord extends TableRecord
             'dep_id' => "{$studentTable}.dep_id",
             'profession_id' => "{$studentTable}.profession_id",
             'grade_id' => "{$studentTable}.grade_id",
+            'class_id' => "{$studentTable}.class_id",
             'semester' => "{$arrangementTable}.semester",
             'arrangement_id' => "{$arrangementTable}.id",
         ]);
@@ -2257,7 +2266,7 @@ class InternshipRecord extends TableRecord
 
     private static function listFilters(mixed $query, array $filters, array $columns): void
     {
-        foreach (['dep_id', 'profession_id', 'grade_id'] as $key) {
+        foreach (['dep_id', 'profession_id', 'grade_id', 'class_id'] as $key) {
             if (!isset($columns[$key])) {
                 continue;
             }

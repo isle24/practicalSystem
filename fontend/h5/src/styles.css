@@ -392,9 +392,107 @@ input {
   font-size: 15px;
 }
 
+.mobile-card header small {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.student-guide-card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  background: #fff;
+  box-shadow: var(--shadow);
+}
+
+.student-guide-card header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  color: var(--text);
+}
+
+.student-guide-card header svg {
+  color: var(--primary);
+}
+
+.student-guide-steps {
+  display: grid;
+  gap: 8px;
+}
+
+.student-guide-steps span {
+  position: relative;
+  min-height: 28px;
+  display: flex;
+  align-items: center;
+  padding-left: 24px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.student-guide-steps span::before {
+  content: "";
+  position: absolute;
+  left: 3px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--primary);
+}
+
+.student-submit-cards {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.student-submit-cards button {
+  min-height: 64px;
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+  text-align: left;
+  color: var(--text);
+  background: #fff;
+  box-shadow: var(--shadow);
+}
+
+.student-submit-cards button.active {
+  border-color: rgba(48, 102, 190, .45);
+  background: #f4f8ff;
+}
+
+.student-submit-cards svg {
+  color: var(--primary);
+}
+
+.student-submit-cards span {
+  display: grid;
+  gap: 3px;
+}
+
+.student-submit-cards strong {
+  font-size: 14px;
+}
+
+.student-submit-cards small,
+.student-submit-cards em {
+  color: var(--muted);
+  font-size: 12px;
+  font-style: normal;
+}
+
 .mobile-list-tools {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 108px 58px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
   padding: 10px 12px;
   border-bottom: 1px solid var(--line);
@@ -409,6 +507,10 @@ input {
   grid-template-columns: minmax(0, 1fr) 58px;
 }
 
+.mobile-list-tools.with-filters {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .mobile-list-tools input,
 .mobile-list-tools select {
   width: 100%;
@@ -420,6 +522,10 @@ input {
   color: var(--text);
   background: #fff;
   outline: none;
+}
+
+.mobile-list-tools .mobile-keyword-input {
+  grid-column: 1 / -1;
 }
 
 .mobile-list-tools button,
@@ -489,6 +595,19 @@ input {
   gap: 6px;
   padding-left: 8px;
   max-width: 148px;
+}
+
+.record-status-actions {
+  min-width: 112px;
+  max-width: 168px;
+  flex-wrap: nowrap;
+}
+
+.cell-status {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 28px;
+  white-space: nowrap;
 }
 
 .cell-actions button {

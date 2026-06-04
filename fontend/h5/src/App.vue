@@ -6,10 +6,10 @@
         <strong>{{ currentPage.title }}</strong>
       </div>
       <div class="mobile-actions">
-        <button :disabled="state.loading" @click="load">
+        <button aria-label="刷新" title="刷新" :disabled="state.loading" @click="load">
           <RefreshCw :size="18" />
         </button>
-        <button v-if="isLoggedIn" :disabled="loginState.loading" @click="submitLogout">
+        <button v-if="isLoggedIn" aria-label="退出" title="退出" :disabled="loginState.loading" @click="submitLogout">
           <LogOut :size="18" />
         </button>
       </div>
@@ -81,6 +81,16 @@
             </div>
             <ChevronRight :size="18" />
           </button>
+        </section>
+
+        <section v-if="isStudentRole" class="student-guide-card">
+          <header>
+            <Route :size="20" />
+            <strong>实习流程</strong>
+          </header>
+          <div class="student-guide-steps">
+            <span v-for="step in studentFlowSteps" :key="step">{{ step }}</span>
+          </div>
         </section>
       </template>
 
@@ -200,7 +210,23 @@
         </template>
 
         <template v-if="isStudentRole && internship.panel === 'submit'">
-          <section class="mobile-card form-card">
+          <section class="student-submit-cards">
+            <button
+              v-for="item in studentSubmitCards"
+              :key="item.key"
+              :class="{ active: internship.submitSection === item.key }"
+              @click="openStudentSubmitSection(item.key)"
+            >
+              <component :is="item.icon" :size="20" />
+              <span>
+                <strong>{{ item.title }}</strong>
+                <small>{{ item.desc }}</small>
+              </span>
+              <em>{{ item.meta }}</em>
+            </button>
+          </section>
+
+          <section v-if="internship.submitSection === 'sign'" class="mobile-card form-card">
             <header>
               <MapPin :size="20" />
               <strong>签到</strong>
@@ -222,7 +248,7 @@
             </van-button>
           </section>
 
-          <section class="mobile-card">
+          <section v-if="internship.submitSection === 'sign'" class="mobile-card">
             <header>
               <MapPin :size="20" />
               <strong>签到记录</strong>
@@ -243,10 +269,11 @@
             </div>
           </section>
 
-          <section class="mobile-card form-card">
+          <section v-if="internship.submitSection === 'journal'" class="mobile-card form-card">
             <header>
               <FileClock :size="20" />
               <strong>实习日志</strong>
+              <small>{{ stageDeadlineText('journal_deadline') }}</small>
             </header>
             <label>
               <span>标题</span>
@@ -257,14 +284,15 @@
               <textarea v-model="internship.forms.journal.content" rows="4" />
             </label>
             <van-button block type="primary" :loading="internship.loading" @click="submitJournal">
-              提交日志
+              {{ internship.forms.journal.id ? '重新提交日志' : '提交日志' }}
             </van-button>
           </section>
 
-          <section class="mobile-card form-card">
+          <section v-if="internship.submitSection === 'report'" class="mobile-card form-card">
             <header>
               <FileText :size="20" />
               <strong>实习报告</strong>
+              <small>{{ stageDeadlineText('report_deadline') }}</small>
             </header>
             <label>
               <span>标题</span>
@@ -275,11 +303,11 @@
               <textarea v-model="internship.forms.report.content" rows="4" />
             </label>
             <van-button block type="primary" :loading="internship.loading" @click="submitReport">
-              提交报告
+              {{ internship.forms.report.id ? '重新提交报告' : '提交报告' }}
             </van-button>
           </section>
 
-          <section class="mobile-card form-card">
+          <section v-if="internship.submitSection === 'delay'" class="mobile-card form-card">
             <header>
               <FileClock :size="20" />
               <strong>延期申请</strong>
@@ -293,12 +321,13 @@
               </select>
             </label>
             <label>
-              <span>延期类型</span>
+              <span>申请模块</span>
               <select v-model="internship.forms.delay.config_key">
                 <option v-for="item in delayConfigOptions()" :key="item.value" :value="item.value">
                   {{ item.label }}
                 </option>
               </select>
+              <small>{{ stageDeadlineText(internship.forms.delay.config_key) }}</small>
             </label>
             <label>
               <span>申请延期至</span>
@@ -313,7 +342,7 @@
             </van-button>
           </section>
 
-          <section class="mobile-card">
+          <section v-if="internship.submitSection === 'journal'" class="mobile-card">
             <header>
               <FileClock :size="20" />
               <strong>日志记录</strong>
@@ -323,10 +352,11 @@
               :key="row.id"
               :title="row.title"
               :label="row.date || row.created_at || '-'"
-              :value="statusText(row.status)"
             >
               <template #right-icon>
-                <div class="cell-actions">
+                <div class="cell-actions record-status-actions">
+                  <span class="cell-status">{{ statusText(row.status) }}</span>
+                  <button v-if="canEditStudentWork(row)" @click.stop="editStudentWork('journal', row)">修改</button>
                   <button @click.stop="openTimelineDialog('journal', row)">记录</button>
                 </div>
               </template>
@@ -340,7 +370,7 @@
             </div>
           </section>
 
-          <section class="mobile-card">
+          <section v-if="internship.submitSection === 'report'" class="mobile-card">
             <header>
               <FileText :size="20" />
               <strong>报告记录</strong>
@@ -350,10 +380,11 @@
               :key="row.id"
               :title="row.title"
               :label="row.created_at || '-'"
-              :value="statusText(row.status)"
             >
               <template #right-icon>
-                <div class="cell-actions">
+                <div class="cell-actions record-status-actions">
+                  <span class="cell-status">{{ statusText(row.status) }}</span>
+                  <button v-if="canEditStudentWork(row)" @click.stop="editStudentWork('report', row)">修改</button>
                   <button @click.stop="openTimelineDialog('report', row)">记录</button>
                 </div>
               </template>
@@ -367,7 +398,7 @@
             </div>
           </section>
 
-          <section class="mobile-card">
+          <section v-if="internship.submitSection === 'delay'" class="mobile-card">
             <header>
               <FileClock :size="20" />
               <strong>延期记录</strong>
@@ -413,18 +444,21 @@
               <component :is="currentReviewListConfig.icon" :size="20" />
               <strong>{{ currentReviewListConfig.title }}</strong>
             </header>
-            <section class="mobile-list-tools" :class="{ compact: !currentReviewListConfig.statusOptions.length }">
+            <section class="mobile-list-tools" :class="mobileListToolClass(currentReviewListConfig)">
               <select
-                v-if="currentReviewListConfig.gradeFilter"
-                v-model="internship.filters[currentReviewListConfig.key].grade_id"
-                @change="reloadInternshipList(currentReviewListConfig.key)"
+                v-for="filter in mobileListSelectFilters(currentReviewListConfig)"
+                :key="filter.key"
+                v-model="internship.filters[currentReviewListConfig.key][filter.key]"
+                :aria-label="filter.label"
+                @change="handleMobileListFilterChange(currentReviewListConfig.key, filter.key)"
               >
-                <option value="">全部届次</option>
-                <option v-for="item in internship.options.grades" :key="item.grade_id" :value="item.grade_id">
-                  {{ item.grade_name }}
+                <option value="">{{ filter.placeholder }}</option>
+                <option v-for="item in filter.options" :key="item.value" :value="item.value">
+                  {{ item.label }}
                 </option>
               </select>
               <input
+                class="mobile-keyword-input"
                 v-model="internship.filters[currentReviewListConfig.key].keyword"
                 :placeholder="currentReviewListConfig.keywordPlaceholder"
                 @keyup.enter="reloadInternshipList(currentReviewListConfig.key)"
@@ -519,14 +553,20 @@
               <GraduationCap :size="20" />
               <strong>成绩记录</strong>
             </header>
-            <section class="mobile-list-tools">
-              <select v-model="internship.filters.scores.grade_id" @change="reloadInternshipList('scores')">
-                <option value="">全部届次</option>
-                <option v-for="item in internship.options.grades" :key="item.grade_id" :value="item.grade_id">
-                  {{ item.grade_name }}
+            <section class="mobile-list-tools" :class="mobileListToolClass(getMobileListConfig('scores'))">
+              <select
+                v-for="filter in mobileListSelectFilters(getMobileListConfig('scores'))"
+                :key="filter.key"
+                v-model="internship.filters.scores[filter.key]"
+                :aria-label="filter.label"
+                @change="handleMobileListFilterChange('scores', filter.key)"
+              >
+                <option value="">{{ filter.placeholder }}</option>
+                <option v-for="item in filter.options" :key="item.value" :value="item.value">
+                  {{ item.label }}
                 </option>
               </select>
-              <input v-model="internship.filters.scores.keyword" placeholder="学生、学号、安排" @keyup.enter="reloadInternshipList('scores')">
+              <input class="mobile-keyword-input" v-model="internship.filters.scores.keyword" placeholder="学生、学号、安排" @keyup.enter="reloadInternshipList('scores')">
               <button type="button" :disabled="internship.loading" @click="reloadInternshipList('scores')">查询</button>
             </section>
             <van-cell
@@ -564,18 +604,21 @@
               <component :is="currentManageListConfig.icon" :size="20" />
               <strong>{{ currentManageListConfig.title }}</strong>
             </header>
-            <section class="mobile-list-tools" :class="{ compact: !currentManageListConfig.statusOptions.length }">
+            <section class="mobile-list-tools" :class="mobileListToolClass(currentManageListConfig)">
               <select
-                v-if="currentManageListConfig.gradeFilter"
-                v-model="internship.filters[currentManageListConfig.key].grade_id"
-                @change="reloadInternshipList(currentManageListConfig.key)"
+                v-for="filter in mobileListSelectFilters(currentManageListConfig)"
+                :key="filter.key"
+                v-model="internship.filters[currentManageListConfig.key][filter.key]"
+                :aria-label="filter.label"
+                @change="handleMobileListFilterChange(currentManageListConfig.key, filter.key)"
               >
-                <option value="">全部届次</option>
-                <option v-for="item in internship.options.grades" :key="item.grade_id" :value="item.grade_id">
-                  {{ item.grade_name }}
+                <option value="">{{ filter.placeholder }}</option>
+                <option v-for="item in filter.options" :key="item.value" :value="item.value">
+                  {{ item.label }}
                 </option>
               </select>
               <input
+                class="mobile-keyword-input"
                 v-model="internship.filters[currentManageListConfig.key].keyword"
                 :placeholder="currentManageListConfig.keywordPlaceholder"
                 @keyup.enter="reloadInternshipList(currentManageListConfig.key)"
@@ -814,6 +857,7 @@ import {
   LogOut,
   MapPin,
   RefreshCw,
+  Route,
   Send,
   UsersRound,
   UserRound,
@@ -892,6 +936,7 @@ const internship = reactive({
   loading: false,
   message: '',
   panel: 'workbench',
+  submitSection: '',
   reviewList: 'applications',
   manageList: 'arrangements',
   overview: emptyInternshipOverview(),
@@ -935,10 +980,14 @@ const internship = reactive({
       location: '',
     },
     journal: {
+      id: null,
+      arrangement_id: null,
       title: '',
       content: '',
     },
     report: {
+      id: null,
+      arrangement_id: null,
       title: '',
       content: '',
     },
@@ -1341,6 +1390,43 @@ const internshipSummaries = computed(() => [
   { name: '待审', value: internship.overview.applications_waiting || 0 },
   { name: '关系', value: internship.overview.active_pairs || 0 },
 ]);
+const studentFlowSteps = [
+  '选择实习安排并提交申请',
+  '教师和管理员审核',
+  '签到、日志、报告按阶段提交',
+  '退回或需修改时重新提交',
+  '完成归档和成绩确认',
+];
+const studentSubmitCards = computed(() => [
+  {
+    key: 'sign',
+    title: '签到',
+    desc: '提交当天实习位置',
+    icon: MapPin,
+    meta: `${internship.lists.signIns.pagination.total || 0} 条`,
+  },
+  {
+    key: 'journal',
+    title: '实习日志',
+    desc: '填写过程记录，需修改可重新提交',
+    icon: FileClock,
+    meta: stageDeadlineText('journal_deadline'),
+  },
+  {
+    key: 'report',
+    title: '实习报告',
+    desc: '提交阶段或总结报告',
+    icon: FileText,
+    meta: stageDeadlineText('report_deadline'),
+  },
+  {
+    key: 'delay',
+    title: '延期申请',
+    desc: '针对日志、报告等提交阶段申请延期',
+    icon: FileClock,
+    meta: delayConfigText(internship.forms.delay.config_key),
+  },
+]);
 const internshipWorkbenchCells = computed(() => {
   if (isStudentRole.value) {
     return [
@@ -1380,6 +1466,7 @@ function emptyInternshipFilters() {
     grade_id: '',
     dep_id: '',
     profession_id: '',
+    class_id: '',
     arrangement_id: '',
     status: '',
     keyword: '',
@@ -1401,14 +1488,138 @@ function emptyInternshipOptions() {
   return {
     arrangements: [],
     grades: [],
+    departments: [],
+    professions: [],
+    classes: [],
     teachers: [],
     report_templates: [],
     review_rules: defaultInternshipReviewRules,
+    deadline_configs: {},
   };
 }
 
 function getMobileListConfig(key) {
   return mobileListConfigs.value?.[key] || null;
+}
+
+const studentScopedListKeys = new Set([
+  'applications',
+  'pairs',
+  'signIns',
+  'journals',
+  'reports',
+  'delays',
+  'scores',
+  'archiveMaterials',
+  'insurances',
+  'safetyLetters',
+]);
+
+function selectFilterItems(items, valueKey, labelKey) {
+  return (items || []).map(item => ({
+    value: item[valueKey],
+    label: item[labelKey] || item[valueKey],
+  }));
+}
+
+function mobileDepartmentOptions(key) {
+  const filters = internship.filters[key] || {};
+  const gradeId = Number(filters.grade_id || 0);
+  const grade = internship.options.grades.find(item => Number(item.grade_id) === gradeId);
+  if (grade?.dep_id) {
+    return internship.options.departments.filter(item => Number(item.dep_id) === Number(grade.dep_id));
+  }
+  return internship.options.departments;
+}
+
+function mobileProfessionOptions(key) {
+  const filters = internship.filters[key] || {};
+  const gradeId = Number(filters.grade_id || 0);
+  const depId = Number(filters.dep_id || 0);
+  return internship.options.professions.filter((item) => {
+    const matchGrade = !gradeId || Number(item.grade_id || 0) === gradeId;
+    const matchDepartment = !depId || Number(item.dep_id || 0) === depId;
+    return matchGrade && matchDepartment;
+  });
+}
+
+function mobileClassOptions(key) {
+  const filters = internship.filters[key] || {};
+  const gradeId = Number(filters.grade_id || 0);
+  const depId = Number(filters.dep_id || 0);
+  const professionId = Number(filters.profession_id || 0);
+  return internship.options.classes.filter((item) => {
+    const matchGrade = !gradeId || Number(item.grade_id || 0) === gradeId;
+    const matchDepartment = !depId || Number(item.dep_id || 0) === depId;
+    const matchProfession = !professionId || Number(item.profession_id || 0) === professionId;
+    return matchGrade && matchDepartment && matchProfession;
+  });
+}
+
+function mobileListSelectFilters(config) {
+  if (!config) {
+    return [];
+  }
+  const key = config.key;
+  const filters = [];
+  if (config.gradeFilter) {
+    filters.push({
+      key: 'grade_id',
+      label: '届次',
+      placeholder: '全部届次',
+      options: selectFilterItems(internship.options.grades, 'grade_id', 'grade_name'),
+    });
+  }
+  if (isAdminRole.value && (studentScopedListKeys.has(key) || ['arrangements', 'plans'].includes(key))) {
+    filters.push({
+      key: 'dep_id',
+      label: '学院',
+      placeholder: '全部学院',
+      options: selectFilterItems(mobileDepartmentOptions(key), 'dep_id', 'dep_name'),
+    });
+  }
+  if (isAdminRole.value && (studentScopedListKeys.has(key) || key === 'arrangements')) {
+    filters.push({
+      key: 'profession_id',
+      label: '专业',
+      placeholder: '全部专业',
+      options: selectFilterItems(mobileProfessionOptions(key), 'profession_id', 'profession_name'),
+    });
+  }
+  if (isAdminRole.value && studentScopedListKeys.has(key)) {
+    filters.push({
+      key: 'class_id',
+      label: '班级',
+      placeholder: '全部班级',
+      options: selectFilterItems(mobileClassOptions(key), 'class_id', 'class_name'),
+    });
+  }
+  return filters;
+}
+
+function mobileListToolClass(config) {
+  return {
+    compact: !config?.statusOptions?.length && !mobileListSelectFilters(config).length,
+    'with-filters': mobileListSelectFilters(config).length > 0,
+  };
+}
+
+function normalizeMobileListFilters(key) {
+  const filters = internship.filters[key] || {};
+  if (filters.dep_id && !mobileDepartmentOptions(key).some(item => Number(item.dep_id) === Number(filters.dep_id))) {
+    filters.dep_id = '';
+  }
+  if (filters.profession_id && !mobileProfessionOptions(key).some(item => Number(item.profession_id) === Number(filters.profession_id))) {
+    filters.profession_id = '';
+  }
+  if (filters.class_id && !mobileClassOptions(key).some(item => Number(item.class_id) === Number(filters.class_id))) {
+    filters.class_id = '';
+  }
+}
+
+function handleMobileListFilterChange(key) {
+  normalizeMobileListFilters(key);
+  reloadInternshipList(key);
 }
 
 function normalizeInternshipListViews() {
@@ -1885,11 +2096,14 @@ async function submitJournal() {
   internship.message = '';
   try {
     await saveInternshipJournal({
-      arrangement_id: internship.forms.sign.arrangement_id,
+      id: internship.forms.journal.id || undefined,
+      arrangement_id: internship.forms.journal.arrangement_id || internship.forms.sign.arrangement_id,
       title: internship.forms.journal.title,
       content: internship.forms.journal.content,
       status: 'wait',
     });
+    internship.forms.journal.id = null;
+    internship.forms.journal.arrangement_id = null;
     internship.forms.journal.title = '';
     internship.forms.journal.content = '';
     internship.message = '日志已提交';
@@ -1906,12 +2120,15 @@ async function submitReport() {
   internship.message = '';
   try {
     await saveInternshipReport({
-      arrangement_id: internship.forms.sign.arrangement_id,
+      id: internship.forms.report.id || undefined,
+      arrangement_id: internship.forms.report.arrangement_id || internship.forms.sign.arrangement_id,
       template_id: internship.options.report_templates[0]?.id || null,
       title: internship.forms.report.title,
       content: internship.forms.report.content,
       status: 'wait',
     });
+    internship.forms.report.id = null;
+    internship.forms.report.arrangement_id = null;
     internship.forms.report.title = '';
     internship.forms.report.content = '';
     internship.message = '报告已提交';
@@ -1958,6 +2175,35 @@ async function submitDelay() {
     internship.message = error.message;
   } finally {
     internship.loading = false;
+  }
+}
+
+function canEditStudentWork(row) {
+  return isStudentRole.value && ['draft', 'modify'].includes(row?.status || '');
+}
+
+function editStudentWork(type, row) {
+  if (!canEditStudentWork(row)) {
+    return;
+  }
+  internship.panel = 'submit';
+  if (type === 'journal') {
+    internship.submitSection = 'journal';
+    internship.forms.journal.id = row.id || null;
+    internship.forms.journal.arrangement_id = row.arrangement_id || null;
+    internship.forms.journal.title = row.title || '';
+    internship.forms.journal.content = row.content || '';
+    internship.forms.sign.arrangement_id = row.arrangement_id || internship.forms.sign.arrangement_id;
+    internship.message = '已载入日志内容，请修改后重新提交';
+  }
+  if (type === 'report') {
+    internship.submitSection = 'report';
+    internship.forms.report.id = row.id || null;
+    internship.forms.report.arrangement_id = row.arrangement_id || null;
+    internship.forms.report.title = row.title || '';
+    internship.forms.report.content = row.content || '';
+    internship.forms.sign.arrangement_id = row.arrangement_id || internship.forms.sign.arrangement_id;
+    internship.message = '已载入报告内容，请修改后重新提交';
   }
 }
 
@@ -2597,10 +2843,31 @@ function signTypeText(value) {
   return names[value] || value || '-';
 }
 
+function openStudentSubmitSection(section) {
+  internship.submitSection = internship.submitSection === section ? '' : section;
+}
+
+function currentArrangement() {
+  const arrangementId = Number(
+    internship.forms.sign.arrangement_id
+    || internship.forms.application.arrangement_id
+    || internship.forms.delay.arrangement_id
+    || 0,
+  );
+  return internship.options.arrangements.find(item => Number(item.id) === arrangementId) || internship.options.arrangements[0] || null;
+}
+
+function stageDeadlineText(key) {
+  const configured = internship.options.deadline_configs?.[key] || '';
+  const arrangementEnd = currentArrangement()?.end_date || '';
+  const value = configured || arrangementEnd;
+  return value ? `截止 ${value}` : '截止时间未配置';
+}
+
 function delayConfigOptions() {
   return [
-    { value: 'journal_deadline', label: '日志截止' },
-    { value: 'report_deadline', label: '报告截止' },
+    { value: 'journal_deadline', label: '实习日志' },
+    { value: 'report_deadline', label: '实习报告' },
   ];
 }
 

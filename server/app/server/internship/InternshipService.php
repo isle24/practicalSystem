@@ -76,6 +76,7 @@ class InternshipService
             'organize_modes' => self::ORGANIZE_MODES,
         ], InternshipRecord::optionRows($this->scopeContext()), [
             'review_rules' => self::REVIEW_OPINION_RULES,
+            'deadline_configs' => $this->deadlineConfigs(),
         ]);
     }
 
@@ -172,7 +173,7 @@ class InternshipService
 
         return InternshipRecord::applicationPage($this->scopeContext(), $this->requestFilters($request, [
             'page', 'page_size', 'per_page', 'keyword', 'status', 'arrangement_id',
-            'dep_id', 'profession_id', 'grade_id', 'semester',
+            'dep_id', 'profession_id', 'grade_id', 'class_id', 'semester',
         ]));
     }
 
@@ -361,7 +362,7 @@ class InternshipService
 
         return InternshipRecord::pairPage($this->scopeContext(), $this->requestFilters($request, [
             'page', 'page_size', 'per_page', 'keyword', 'status', 'arrangement_id',
-            'dep_id', 'profession_id', 'grade_id', 'semester',
+            'dep_id', 'profession_id', 'grade_id', 'class_id', 'semester',
         ]));
     }
 
@@ -417,7 +418,7 @@ class InternshipService
 
         return InternshipRecord::signInPage($this->scopeContext(), $this->requestFilters($request, [
             'page', 'page_size', 'per_page', 'keyword', 'arrangement_id', 'date',
-            'dep_id', 'profession_id', 'grade_id', 'semester',
+            'dep_id', 'profession_id', 'grade_id', 'class_id', 'semester',
         ]));
     }
 
@@ -454,7 +455,7 @@ class InternshipService
 
         return InternshipRecord::journalPage($this->scopeContext(), $this->requestFilters($request, [
             'page', 'page_size', 'per_page', 'keyword', 'status', 'arrangement_id',
-            'dep_id', 'profession_id', 'grade_id', 'semester',
+            'dep_id', 'profession_id', 'grade_id', 'class_id', 'semester',
         ]));
     }
 
@@ -500,7 +501,7 @@ class InternshipService
 
         return InternshipRecord::reportPage($this->scopeContext(), $this->requestFilters($request, [
             'page', 'page_size', 'per_page', 'keyword', 'status', 'arrangement_id',
-            'dep_id', 'profession_id', 'grade_id', 'semester',
+            'dep_id', 'profession_id', 'grade_id', 'class_id', 'semester',
         ]));
     }
 
@@ -546,7 +547,7 @@ class InternshipService
 
         return InternshipRecord::delayPage($this->scopeContext(), $this->requestFilters($request, [
             'page', 'page_size', 'per_page', 'keyword', 'status', 'config_key', 'arrangement_id',
-            'dep_id', 'profession_id', 'grade_id', 'semester',
+            'dep_id', 'profession_id', 'grade_id', 'class_id', 'semester',
         ]));
     }
 
@@ -625,7 +626,7 @@ class InternshipService
 
         return InternshipRecord::scorePage($this->scopeContext(), $this->requestFilters($request, [
             'page', 'page_size', 'per_page', 'keyword', 'arrangement_id',
-            'dep_id', 'profession_id', 'grade_id', 'semester',
+            'dep_id', 'profession_id', 'grade_id', 'class_id', 'semester',
         ]));
     }
 
@@ -648,7 +649,7 @@ class InternshipService
 
         return InternshipRecord::archiveMaterialPage($this->scopeContext(), $this->requestFilters($request, [
             'page', 'page_size', 'per_page', 'keyword', 'archive_status',
-            'arrangement_id', 'dep_id', 'profession_id', 'grade_id', 'semester',
+            'arrangement_id', 'dep_id', 'profession_id', 'grade_id', 'class_id', 'semester',
         ]));
     }
 
@@ -944,7 +945,7 @@ class InternshipService
         $this->requirePermission('internship:view');
         return InternshipRecord::documentPage($table, $columns, $this->scopeContext(), $this->requestFilters($request, [
             'page', 'page_size', 'per_page', 'keyword', 'arrangement_id', 'status',
-            'dep_id', 'profession_id', 'grade_id', 'semester',
+            'dep_id', 'profession_id', 'grade_id', 'class_id', 'semester',
         ]));
     }
 
@@ -1717,6 +1718,18 @@ class InternshipService
     private function connection(): mixed
     {
         return InternshipRecord::connection();
+    }
+
+    private function deadlineConfigs(): array
+    {
+        $service = new ConfigService();
+        $userId = (int) (CurrentContext::userId() ?: 0);
+        $values = [];
+        foreach (self::DELAY_CONFIG_KEYS as $key) {
+            $values[$key] = (string) ($service->get("internship.{$key}", 0, $userId) ?? '');
+        }
+
+        return $values;
     }
 
     private function saveDelayConfig(object $delay): void
