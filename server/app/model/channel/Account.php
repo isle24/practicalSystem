@@ -8,6 +8,11 @@ class Account extends BaseModel
     protected $primaryKey = 'id';
     protected $guarded = [];
 
+    public static function connection(): mixed
+    {
+        return (new static())->getConnection();
+    }
+
     public static function adminPage(array $filters): array
     {
         $page = max(1, (int) ($filters['page'] ?? 1));
@@ -102,6 +107,14 @@ class Account extends BaseModel
             ->first();
     }
 
+    public static function activeById(int $id, array $columns = ['*']): ?self
+    {
+        return self::query()
+            ->where('id', $id)
+            ->whereNull('deleted_at')
+            ->first($columns);
+    }
+
     public static function enabledById(int $id, array $columns = ['*']): ?self
     {
         return self::query()
@@ -137,5 +150,63 @@ class Account extends BaseModel
             ])
             ->map(static fn ($row): array => (array) $row)
             ->all();
+    }
+
+    public static function loginNameExists(string $loginName, ?int $excludeId = null): bool
+    {
+        $query = self::query()
+            ->where('login_name', $loginName)
+            ->whereNull('deleted_at');
+
+        if ($excludeId) {
+            $query->where('id', '<>', $excludeId);
+        }
+
+        return $query->exists();
+    }
+
+    public static function primaryRoleTypeById(int $id): ?string
+    {
+        return self::query()
+            ->leftJoin('user_role', function ($join): void {
+                $join->on('account.id', '=', 'user_role.account_id')
+                    ->where('user_role.is_primary', 'true')
+                    ->whereNull('user_role.deleted_at');
+            })
+            ->leftJoin('role', 'user_role.role_id', '=', 'role.id')
+            ->where('account.id', $id)
+            ->whereNull('account.deleted_at')
+            ->value('role.role_type');
+    }
+
+    public static function createAdminAccount(int $userId, array $values): self
+    {
+        return self::query()->create(array_merge([
+            'uuid' => self::uuid(),
+            'user_id' => $userId,
+            'two_factor_enabled' => 'false',
+            'status' => 'enabled',
+        ], $values));
+    }
+
+    public static function updateAdminAccount(int $id, array $values): int
+    {
+        return self::query()
+            ->where('id', $id)
+            ->whereNull('deleted_at')
+            ->update($values);
+    }
+
+    public static function updateAdminPassword(int $id, string $passwordHash): int
+    {
+        return self::updateAdminAccount($id, ['password' => $passwordHash]);
+    }
+
+    private static function uuid(): string
+    {
+        $data = random_bytes(16);
+        $data[6] = chr((ord($data[6]) & 0x0f) | 0x40);
+        $data[8] = chr((ord($data[8]) & 0x3f) | 0x80);
+        return vsprintf('%s%s-%s-%s-%s-%s%s%s', str_split(bin2hex($data), 4));
     }
 }

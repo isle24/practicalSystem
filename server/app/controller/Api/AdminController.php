@@ -9,6 +9,8 @@ use app\model\channel\Role;
 use app\model\channel\RoleMenu;
 use app\model\channel\SysOrganization;
 use app\model\channel\TableRecord as ChannelTable;
+use app\model\channel\User;
+use app\model\channel\UserRole;
 use app\server\CurrentContext;
 use app\server\rbac\RbacService;
 use support\Request;
@@ -197,6 +199,141 @@ class AdminController
         }
     }
 
+    public function saveAccount(Request $request): Response
+    {
+        if (!$this->isAdmin()) {
+            return $this->fail(40300, '无操作权限', 403);
+        }
+
+        try {
+            $accountId = $this->optionalInt($request, 'id');
+            $roleId = $this->requiredInt($request, 'role_id');
+            $role = Role::enabledById($roleId, ['id', 'role_type']);
+            if (!$role) {
+                return $this->fail(40001, '角色不存在或已停用', 400);
+            }
+            $this->assertAccountRoleWritable($accountId, (string) $role->role_type);
+
+            $loginName = $this->requiredString($request, 'login_name', 80);
+            if (Account::loginNameExists($loginName, $accountId)) {
+                return $this->fail(40001, '登录账号已存在', 400);
+            }
+
+            $status = $this->enum($request, 'status', ['enabled', 'disabled'], 'enabled');
+            if ($accountId && $accountId === CurrentContext::accountId() && $status === 'disabled') {
+                return $this->fail(40001, '不能停用当前登录账号', 400);
+            }
+
+            $name = $this->requiredString($request, 'name', 80);
+            $password = $this->nullableString($request, 'password', 120);
+            if (!$accountId && !$password) {
+                $password = 'admin123456';
+            }
+            if ($password !== null && strlen($password) < 6) {
+                return $this->fail(40001, '密码至少 6 位', 400);
+            }
+
+            $now = date('Y-m-d H:i:s');
+            Account::connection()->transaction(function () use ($accountId, $loginName, $name, $now, $password, $request, $roleId, $status): void {
+                $userValues = [
+                    'name' => $name,
+                    'mobile' => $this->nullableString($request, 'mobile', 40),
+                    'email' => $this->nullableString($request, 'email', 120),
+                    'status' => $status,
+                    'updated_at' => $now,
+                ];
+                $accountValues = [
+                    'login_name' => $loginName,
+                    'status' => $status,
+                    'updated_at' => $now,
+                ];
+                if ($password !== null) {
+                    $accountValues['password'] = password_hash($password, PASSWORD_BCRYPT);
+                }
+
+                if ($accountId) {
+                    $account = Account::activeById($accountId, ['id', 'user_id']);
+                    if (!$account) {
+                        throw new \InvalidArgumentException('账号不存在');
+                    }
+                    User::updateAdminUser((int) $account->user_id, $userValues);
+                    Account::updateAdminAccount($accountId, $accountValues);
+                    UserRole::setPrimaryRole($accountId, $roleId, $now);
+                    return;
+                }
+
+                $user = User::createAdminUser(array_merge($userValues, ['created_at' => $now]));
+                $account = Account::createAdminAccount((int) $user->id, array_merge($accountValues, ['created_at' => $now]));
+                UserRole::setPrimaryRole((int) $account->id, $roleId, $now);
+            });
+
+            return $this->ok([], '已保存');
+        } catch (Throwable $exception) {
+            return $this->fail(40001, $exception->getMessage(), 400);
+        }
+    }
+
+    public function changeAccountStatus(Request $request): Response
+    {
+        if (!$this->isAdmin()) {
+            return $this->fail(40300, '无操作权限', 403);
+        }
+
+        try {
+            $accountId = $this->requiredInt($request, 'id');
+            if ($accountId === CurrentContext::accountId()) {
+                return $this->fail(40001, '不能修改当前登录账号状态', 400);
+            }
+            $this->assertAccountRoleWritable($accountId, '');
+            $status = $this->enum($request, 'status', ['enabled', 'disabled'], 'enabled');
+            $account = Account::activeById($accountId, ['id', 'user_id']);
+            if (!$account) {
+                return $this->fail(40400, '账号不存在', 404);
+            }
+            $now = date('Y-m-d H:i:s');
+
+            Account::connection()->transaction(function () use ($account, $accountId, $now, $status): void {
+                Account::updateAdminAccount($accountId, [
+                    'status' => $status,
+                    'updated_at' => $now,
+                ]);
+                User::updateAdminUser((int) $account->user_id, [
+                    'status' => $status,
+                    'updated_at' => $now,
+                ]);
+            });
+
+            return $this->ok([], $status === 'enabled' ? '已启用' : '已停用');
+        } catch (Throwable $exception) {
+            return $this->fail(40001, $exception->getMessage(), 400);
+        }
+    }
+
+    public function resetAccountPassword(Request $request): Response
+    {
+        if (!$this->isAdmin()) {
+            return $this->fail(40300, '无操作权限', 403);
+        }
+
+        try {
+            $accountId = $this->requiredInt($request, 'id');
+            $this->assertAccountRoleWritable($accountId, '');
+            $password = $this->nullableString($request, 'password', 120) ?? 'admin123456';
+            if (strlen($password) < 6) {
+                return $this->fail(40001, '密码至少 6 位', 400);
+            }
+            if (!Account::activeById($accountId, ['id'])) {
+                return $this->fail(40400, '账号不存在', 404);
+            }
+
+            Account::updateAdminPassword($accountId, password_hash($password, PASSWORD_BCRYPT));
+
+            return $this->ok([], '密码已重置');
+        } catch (Throwable $exception) {
+            return $this->fail(40001, $exception->getMessage(), 400);
+        }
+    }
+
     public function options(Request $request): Response
     {
         if (!$this->isAdmin()) {
@@ -300,9 +437,9 @@ class AdminController
         return is_numeric($value) ? (int) $value : null;
     }
 
-    private function requiredString(Request $request, string $key): string
+    private function requiredString(Request $request, string $key, int $maxLength = 255): string
     {
-        $value = trim((string) $request->input($key, ''));
+        $value = $this->stringInput($request, $key, $maxLength);
         if ($value === '') {
             throw new \InvalidArgumentException("{$key} 不能为空");
         }
@@ -310,16 +447,40 @@ class AdminController
         return $value;
     }
 
-    private function nullableString(Request $request, string $key): ?string
+    private function nullableString(Request $request, string $key, int $maxLength = 255): ?string
+    {
+        $value = $this->stringInput($request, $key, $maxLength);
+        return $value === '' ? null : $value;
+    }
+
+    private function stringInput(Request $request, string $key, int $maxLength): string
     {
         $value = trim((string) $request->input($key, ''));
-        return $value === '' ? null : $value;
+        if (function_exists('mb_substr')) {
+            return mb_substr($value, 0, $maxLength);
+        }
+
+        return substr($value, 0, $maxLength);
     }
 
     private function enum(Request $request, string $key, array $values, string $default): string
     {
         $value = (string) $request->input($key, $default);
         return in_array($value, $values, true) ? $value : $default;
+    }
+
+    private function assertAccountRoleWritable(?int $accountId, string $targetRoleType): void
+    {
+        $currentRoleType = CurrentContext::roleType();
+        if ($targetRoleType === 'super_admin' && $currentRoleType !== 'super_admin') {
+            throw new \InvalidArgumentException('只有超级管理员可以分配超级管理员角色');
+        }
+        if ($accountId && $accountId === CurrentContext::accountId() && $targetRoleType !== '' && $targetRoleType !== $currentRoleType) {
+            throw new \InvalidArgumentException('不能修改当前登录账号的角色');
+        }
+        if ($accountId && Account::primaryRoleTypeById($accountId) === 'super_admin' && $currentRoleType !== 'super_admin') {
+            throw new \InvalidArgumentException('只有超级管理员可以维护超级管理员账号');
+        }
     }
 
     private function intArray(mixed $value): array

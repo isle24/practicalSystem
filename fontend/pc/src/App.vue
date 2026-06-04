@@ -833,6 +833,14 @@
                 </div>
 
                 <div v-else-if="win.module.id === 'config' && win.panel === 'userManage'" class="admin-panel user-admin-panel">
+                  <div class="admin-toolbar">
+                    <el-button type="primary" :icon="Plus" @click="openUserDialog()">
+                      新增用户
+                    </el-button>
+                    <el-button :icon="RefreshCw" :loading="userAdminState.loading" @click="loadUserAccounts(userAdminState.pagination.page || 1)">
+                      刷新
+                    </el-button>
+                  </div>
                   <DataListPanel
                     :columns="userListColumns"
                     :filters="userListFilters"
@@ -844,7 +852,84 @@
                     @page-change="page => loadUserAccounts(page)"
                     @reset="resetUserFilters"
                     @search="loadUserAccounts(1)"
-                  />
+                  >
+                    <template #actions="{ row }">
+                      <el-button link type="primary" :disabled="!canMaintainUser(row)" @click="openUserDialog(row)">
+                        编辑
+                      </el-button>
+                      <el-button
+                        link
+                        :type="row.status === 'enabled' ? 'warning' : 'success'"
+                        :disabled="Number(row.id) === Number(permissionState.context.account_id) || !canMaintainUser(row)"
+                        @click="toggleUserStatus(row)"
+                      >
+                        {{ row.status === 'enabled' ? '停用' : '启用' }}
+                      </el-button>
+                      <el-button link type="warning" :disabled="!canMaintainUser(row)" @click="openResetPasswordDialog(row)">
+                        重置密码
+                      </el-button>
+                    </template>
+                  </DataListPanel>
+                  <div v-if="userAdminState.dialogVisible" class="operation-mask" @click.self="closeUserDialog">
+                    <section class="operation-dialog menu-dialog">
+                      <header>
+                        <strong>{{ userAdminState.editing.id ? '编辑用户' : '新增用户' }}</strong>
+                        <button type="button" @click="closeUserDialog">关闭</button>
+                      </header>
+                      <div class="operation-form menu-dialog-form">
+                        <label><span>姓名</span><input v-model="userAdminState.editing.name"></label>
+                        <label><span>登录账号</span><input v-model="userAdminState.editing.login_name"></label>
+                        <label>
+                          <span>角色</span>
+                          <el-select v-model="userAdminState.editing.role_id" filterable>
+                            <el-option
+                              v-for="role in manageableUserRoles()"
+                              :key="role.id"
+                              :label="role.name"
+                              :value="role.id"
+                            />
+                          </el-select>
+                        </label>
+                        <label><span>手机</span><input v-model="userAdminState.editing.mobile"></label>
+                        <label><span>邮箱</span><input v-model="userAdminState.editing.email"></label>
+                        <label>
+                          <span>状态</span>
+                          <el-select v-model="userAdminState.editing.status">
+                            <el-option label="启用" value="enabled" />
+                            <el-option label="停用" value="disabled" />
+                          </el-select>
+                        </label>
+                        <label>
+                          <span>{{ userAdminState.editing.id ? '新密码' : '初始密码' }}</span>
+                          <input v-model="userAdminState.editing.password" type="password" :placeholder="userAdminState.editing.id ? '留空表示不修改' : '默认 admin123456'">
+                        </label>
+                      </div>
+                      <footer>
+                        <el-button @click="closeUserDialog">取消</el-button>
+                        <el-button type="primary" :icon="Save" :loading="userAdminState.loading" @click="saveUserConfig">
+                          保存
+                        </el-button>
+                      </footer>
+                    </section>
+                  </div>
+                  <div v-if="userAdminState.passwordDialogVisible" class="operation-mask" @click.self="closeResetPasswordDialog">
+                    <section class="operation-dialog menu-dialog">
+                      <header>
+                        <strong>重置密码</strong>
+                        <button type="button" @click="closeResetPasswordDialog">关闭</button>
+                      </header>
+                      <div class="operation-form menu-dialog-form">
+                        <label><span>用户</span><input :value="userAdminState.passwordForm.name" disabled></label>
+                        <label><span>新密码</span><input v-model="userAdminState.passwordForm.password" type="password"></label>
+                      </div>
+                      <footer>
+                        <el-button @click="closeResetPasswordDialog">取消</el-button>
+                        <el-button type="primary" :icon="Save" :loading="userAdminState.loading" @click="resetUserPassword">
+                          保存
+                        </el-button>
+                      </footer>
+                    </section>
+                  </div>
                   <small v-if="userAdminState.message">{{ userAdminState.message }}</small>
                 </div>
 
@@ -1733,6 +1818,7 @@ import DataListPanel from './components/DataListPanel.vue';
 import StudentOwnPanel from './components/StudentOwnPanel.vue';
 import { usePermissions } from './composables/usePermissions';
 import {
+  changeAdminAccountStatus,
   deleteArchiveItem,
   fetchAdminAccounts,
   fetchAdminMenus,
@@ -1774,7 +1860,9 @@ import {
   reviewInternshipPlan,
   reviewInternshipReport,
   requestInternshipModification,
+  resetAdminAccountPassword,
   saveArchiveItem,
+  saveAdminAccount,
   saveInternshipArrangement,
   saveInternshipPlan,
   saveInternshipScore,
@@ -1941,6 +2029,14 @@ const userAdminState = reactive({
     keyword: '',
     role_type: '',
     status: 'all',
+  },
+  editing: emptyUserForm(),
+  dialogVisible: false,
+  passwordDialogVisible: false,
+  passwordForm: {
+    id: null,
+    name: '',
+    password: 'admin123456',
   },
   pagination: {
     page: 1,
@@ -3548,6 +3644,133 @@ function openMenuDialog(row = null, parent = null) {
 
 function closeMenuDialog() {
   adminState.menu.dialogVisible = false;
+}
+
+function emptyUserForm(row = {}) {
+  return {
+    id: row.id || null,
+    name: row.name || '',
+    login_name: row.login_name || '',
+    role_id: row.role_id || null,
+    mobile: row.mobile || '',
+    email: row.email || '',
+    status: row.status || 'enabled',
+    password: '',
+  };
+}
+
+function manageableUserRoles() {
+  return adminState.roles.filter(role => permissionState.context.role_type === 'super_admin' || role.role_type !== 'super_admin');
+}
+
+function canMaintainUser(row) {
+  return permissionState.context.role_type === 'super_admin' || row.role_type !== 'super_admin';
+}
+
+function openUserDialog(row = null) {
+  const roles = manageableUserRoles();
+  userAdminState.editing = emptyUserForm(row || {});
+  if (!userAdminState.editing.role_id && roles.length) {
+    userAdminState.editing.role_id = roles[0].id;
+  }
+  userAdminState.message = '';
+  userAdminState.dialogVisible = true;
+}
+
+function closeUserDialog() {
+  userAdminState.dialogVisible = false;
+}
+
+async function saveUserConfig() {
+  if (!canManageConfig.value || userAdminState.loading) {
+    return;
+  }
+
+  userAdminState.loading = true;
+  userAdminState.message = '';
+  try {
+    await saveAdminAccount({
+      ...userAdminState.editing,
+      id: userAdminState.editing.id || null,
+      role_id: Number(userAdminState.editing.role_id || 0),
+    });
+    userAdminState.message = '已保存';
+    userAdminState.dialogVisible = false;
+    userAdminState.loading = false;
+    await Promise.all([
+      loadUserAccounts(userAdminState.pagination.page || 1),
+      loadAdminFoundation(),
+    ]);
+  } catch (error) {
+    userAdminState.message = error.message;
+  } finally {
+    userAdminState.loading = false;
+  }
+}
+
+async function toggleUserStatus(row) {
+  if (!row || userAdminState.loading) {
+    return;
+  }
+  const nextStatus = row.status === 'enabled' ? 'disabled' : 'enabled';
+  const text = nextStatus === 'enabled' ? '启用' : '停用';
+  if (!window.confirm(`确认${text}账号 ${row.login_name || row.name}？`)) {
+    return;
+  }
+
+  userAdminState.loading = true;
+  userAdminState.message = '';
+  try {
+    await changeAdminAccountStatus({
+      id: row.id,
+      status: nextStatus,
+    });
+    userAdminState.message = `已${text}`;
+    userAdminState.loading = false;
+    await Promise.all([
+      loadUserAccounts(userAdminState.pagination.page || 1),
+      loadAdminFoundation(),
+    ]);
+  } catch (error) {
+    userAdminState.message = error.message;
+  } finally {
+    userAdminState.loading = false;
+  }
+}
+
+function openResetPasswordDialog(row) {
+  userAdminState.passwordForm = {
+    id: row.id,
+    name: `${row.name || '-'} / ${row.login_name || '-'}`,
+    password: 'admin123456',
+  };
+  userAdminState.message = '';
+  userAdminState.passwordDialogVisible = true;
+}
+
+function closeResetPasswordDialog() {
+  userAdminState.passwordDialogVisible = false;
+}
+
+async function resetUserPassword() {
+  if (!userAdminState.passwordForm.id || userAdminState.loading) {
+    return;
+  }
+
+  userAdminState.loading = true;
+  userAdminState.message = '';
+  try {
+    await resetAdminAccountPassword({
+      id: userAdminState.passwordForm.id,
+      password: userAdminState.passwordForm.password,
+    });
+    userAdminState.message = '密码已重置';
+    userAdminState.passwordDialogVisible = false;
+  } catch (error) {
+    userAdminState.message = error.message;
+  } finally {
+    userAdminState.loading = false;
+  }
 }
 
 function uniqueRoleOptions() {
@@ -5499,6 +5722,14 @@ function resetAdminState() {
   userAdminState.filters.keyword = '';
   userAdminState.filters.role_type = '';
   userAdminState.filters.status = 'all';
+  userAdminState.editing = emptyUserForm();
+  userAdminState.dialogVisible = false;
+  userAdminState.passwordDialogVisible = false;
+  userAdminState.passwordForm = {
+    id: null,
+    name: '',
+    password: 'admin123456',
+  };
   userAdminState.pagination.page = 1;
   userAdminState.pagination.total = 0;
   userAdminState.message = '';

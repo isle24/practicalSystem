@@ -90,6 +90,27 @@ export function fetchAdminAccounts(params = {}) {
   return request(`/admin/accounts${query ? `?${query}` : ''}`);
 }
 
+export function saveAdminAccount(payload) {
+  return request('/admin/save-account', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function changeAdminAccountStatus(payload) {
+  return request('/admin/change-account-status', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function resetAdminAccountPassword(payload) {
+  return request('/admin/reset-account-password', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
 export function fetchAdminMenus() {
   return request('/admin/menus');
 }
