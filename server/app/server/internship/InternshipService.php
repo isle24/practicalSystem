@@ -54,6 +54,8 @@ class InternshipService
     private const STUDENT_DOCUMENT_COLUMNS = [
         'students.name as student_name',
         'students.student_num',
+        'students.grade_id',
+        'grade_list.grade_name',
         'arrangement.title as arrangement_title',
         'arrangement.semester as arrangement_semester',
     ];
@@ -133,7 +135,7 @@ class InternshipService
 
         return InternshipRecord::arrangementPage($this->scopeContext(), $this->requestFilters($request, [
             'page', 'page_size', 'per_page', 'keyword', 'status', 'type', 'organize_mode',
-            'dep_id', 'profession_id', 'semester',
+            'dep_id', 'profession_id', 'grade_id', 'semester',
         ]));
     }
 

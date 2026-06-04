@@ -2,7 +2,11 @@
   <section class="data-list-panel">
     <div class="data-list-toolbar">
       <div class="data-list-filters">
-        <label v-for="filter in filters" :key="filter.key">
+        <label
+          v-for="filter in filters"
+          :key="filter.key"
+          :class="{ 'filter-active': hasFilterValue(filterValues[filter.key]) }"
+        >
           <span>{{ filter.label }}</span>
           <el-select
             v-if="filter.type === 'select'"
@@ -135,6 +139,10 @@ let lastActionAt = 0;
 
 function updateFilter(key, value) {
   emit('filter-change', { key, value });
+}
+
+function hasFilterValue(value) {
+  return value !== '' && value !== null && value !== undefined;
 }
 
 function columnText(column, row) {

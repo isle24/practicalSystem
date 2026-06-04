@@ -6,7 +6,7 @@ class InternshipRecord extends TableRecord
 {
     private const STAT_DATA_LIMIT = 20000;
     private const ARCHIVE_MATERIALS = [
-        'plan' => '学期实习计划表',
+        'plan' => '实习计划表',
         'implementation_sheet' => '教学实习实施表',
         'syllabus_guide' => '实习大纲及指导书',
         'score_summary' => '实习情况及成绩汇总表',
@@ -109,6 +109,7 @@ class InternshipRecord extends TableRecord
             ->leftJoin('base', 'arrangement.base_id', '=', 'base.id')
             ->leftJoin('department', 'arrangement.dep_id', '=', 'department.dep_id')
             ->leftJoin('profession', 'arrangement.profession_id', '=', 'profession.profession_id')
+            ->leftJoin('grade_list', 'profession.grade_id', '=', 'grade_list.grade_id')
             ->whereNull('arrangement.deleted_at'), $scope);
         self::filter($query, $filters, 'arrangement.status', 'status');
         self::filter($query, $filters, 'arrangement.type', 'type');
@@ -116,6 +117,7 @@ class InternshipRecord extends TableRecord
         self::listFilters($query, $filters, [
             'dep_id' => 'arrangement.dep_id',
             'profession_id' => 'arrangement.profession_id',
+            'grade_id' => 'profession.grade_id',
             'semester' => 'arrangement.semester',
         ]);
         self::keyword($query, $filters, ['arrangement.title', 'arrangement.name', 'base.name', 'department.dep_name', 'profession.profession_name']);
@@ -127,6 +129,7 @@ class InternshipRecord extends TableRecord
             'arrangement.start_date', 'arrangement.end_date', 'arrangement.location',
             'arrangement.description', 'arrangement.status', 'arrangement.created_at',
             'base.name as base_name', 'department.dep_name', 'profession.profession_name',
+            'profession.grade_id', 'grade_list.grade_name',
         ]);
     }
 
@@ -137,6 +140,7 @@ class InternshipRecord extends TableRecord
             ->leftJoin('arrangement', 'application.arrangement_id', '=', 'arrangement.id')
             ->leftJoin('department', 'students.dep_id', '=', 'department.dep_id')
             ->leftJoin('profession', 'students.profession_id', '=', 'profession.profession_id')
+            ->leftJoin('grade_list', 'students.grade_id', '=', 'grade_list.grade_id')
             ->whereNull('application.deleted_at'), $scope);
         self::filter($query, $filters, 'application.status', 'status');
         self::filter($query, $filters, 'application.arrangement_id', 'arrangement_id');
@@ -153,6 +157,7 @@ class InternshipRecord extends TableRecord
             'application.type', 'application.status', 'application.teacher_status', 'application.admin_status',
             'application.remark', 'application.created_at', 'students.name as student_name',
             'students.student_num', 'department.dep_name', 'profession.profession_name',
+            'students.grade_id', 'grade_list.grade_name',
             'arrangement.title as arrangement_title', 'arrangement.type as arrangement_type',
         ]);
     }
@@ -163,6 +168,7 @@ class InternshipRecord extends TableRecord
             ->leftJoin('students', 'pair.student_id', '=', 'students.student_id')
             ->leftJoin('teacher_list', 'pair.teacher_id', '=', 'teacher_list.teacher_id')
             ->leftJoin('arrangement', 'pair.arrangement_id', '=', 'arrangement.id')
+            ->leftJoin('grade_list', 'students.grade_id', '=', 'grade_list.grade_id')
             ->where('pair.type', 'internship')
             ->whereNull('pair.deleted_at'), $scope, 'pair.student_id');
         self::filter($query, $filters, 'pair.status', 'status');
@@ -180,6 +186,7 @@ class InternshipRecord extends TableRecord
             'pair.second_teacher_id', 'pair.enterprise_mentor_id', 'pair.arrangement_id',
             'pair.application_id', 'pair.status', 'pair.remove_reason', 'pair.created_at',
             'students.name as student_name', 'students.student_num',
+            'students.grade_id', 'grade_list.grade_name',
             'teacher_list.teacher_name', 'arrangement.title as arrangement_title',
         ]);
     }
@@ -189,6 +196,7 @@ class InternshipRecord extends TableRecord
         $query = self::applyStudentScope(self::queryTable('sign_in')
             ->leftJoin('students', 'sign_in.student_id', '=', 'students.student_id')
             ->leftJoin('arrangement', 'sign_in.entity_id', '=', 'arrangement.id')
+            ->leftJoin('grade_list', 'students.grade_id', '=', 'grade_list.grade_id')
             ->where('sign_in.entity_type', 'internship')
             ->whereNull('sign_in.deleted_at'), $scope, 'sign_in.student_id');
         self::filter($query, $filters, 'sign_in.entity_id', 'arrangement_id');
@@ -207,7 +215,8 @@ class InternshipRecord extends TableRecord
             'sign_in.id', 'sign_in.uuid', 'sign_in.student_id', 'sign_in.entity_id as arrangement_id',
             'sign_in.date', 'sign_in.sign_time', 'sign_in.sign_type', 'sign_in.location',
             'sign_in.longitude', 'sign_in.latitude', 'sign_in.remark', 'sign_in.status',
-            'students.name as student_name', 'students.student_num', 'arrangement.title as arrangement_title',
+            'students.name as student_name', 'students.student_num',
+            'students.grade_id', 'grade_list.grade_name', 'arrangement.title as arrangement_title',
         ]);
     }
 
@@ -217,6 +226,7 @@ class InternshipRecord extends TableRecord
             ->leftJoin('students', 'journal.student_id', '=', 'students.student_id')
             ->leftJoin('arrangement', 'journal.entity_id', '=', 'arrangement.id')
             ->leftJoin('teacher_list', 'journal.teacher_id', '=', 'teacher_list.teacher_id')
+            ->leftJoin('grade_list', 'students.grade_id', '=', 'grade_list.grade_id')
             ->where('journal.entity_type', 'internship')
             ->whereNull('journal.deleted_at'), $scope, 'journal.student_id');
         self::filter($query, $filters, 'journal.status', 'status');
@@ -235,6 +245,7 @@ class InternshipRecord extends TableRecord
             'journal.id', 'journal.uuid', 'journal.student_id', 'journal.entity_id as arrangement_id',
             'journal.title', 'journal.content', 'journal.date', 'journal.status', 'journal.teacher_id',
             'journal.created_at', 'students.name as student_name', 'students.student_num',
+            'students.grade_id', 'grade_list.grade_name',
             'teacher_list.teacher_name', 'arrangement.title as arrangement_title',
         ]);
     }
@@ -245,6 +256,7 @@ class InternshipRecord extends TableRecord
             ->leftJoin('students', 'report.student_id', '=', 'students.student_id')
             ->leftJoin('arrangement', 'report.arrangement_id', '=', 'arrangement.id')
             ->leftJoin('teacher_list', 'report.teacher_id', '=', 'teacher_list.teacher_id')
+            ->leftJoin('grade_list', 'students.grade_id', '=', 'grade_list.grade_id')
             ->whereNull('report.deleted_at'), $scope, 'report.student_id');
         self::filter($query, $filters, 'report.status', 'status');
         self::filter($query, $filters, 'report.arrangement_id', 'arrangement_id');
@@ -263,6 +275,7 @@ class InternshipRecord extends TableRecord
             'report.title', 'report.content', 'report.status', 'report.teacher_id',
             'report.submitted_at', 'report.reviewed_at', 'report.created_at',
             'students.name as student_name', 'students.student_num',
+            'students.grade_id', 'grade_list.grade_name',
             'teacher_list.teacher_name', 'arrangement.title as arrangement_title',
         ]);
     }
@@ -274,6 +287,7 @@ class InternshipRecord extends TableRecord
             ->leftJoin('arrangement', 'apply_report_delay.entity_id', '=', 'arrangement.id')
             ->leftJoin('department', 'students.dep_id', '=', 'department.dep_id')
             ->leftJoin('profession', 'students.profession_id', '=', 'profession.profession_id')
+            ->leftJoin('grade_list', 'students.grade_id', '=', 'grade_list.grade_id')
             ->where('apply_report_delay.entity_type', 'internship')
             ->whereNull('apply_report_delay.deleted_at'), $scope, 'apply_report_delay.student_id');
         self::filter($query, $filters, 'apply_report_delay.status', 'status');
@@ -302,6 +316,7 @@ class InternshipRecord extends TableRecord
             'apply_report_delay.reason', 'apply_report_delay.status', 'apply_report_delay.created_at',
             'students.name as student_name', 'students.student_num',
             'department.dep_name', 'profession.profession_name',
+            'students.grade_id', 'grade_list.grade_name',
             'arrangement.title as arrangement_title', 'arrangement.semester',
         ]);
     }
@@ -312,6 +327,7 @@ class InternshipRecord extends TableRecord
             ->leftJoin('students', 'score.student_id', '=', 'students.student_id')
             ->leftJoin('arrangement', 'score.arrangement_id', '=', 'arrangement.id')
             ->leftJoin('teacher_list', 'score.teacher_id', '=', 'teacher_list.teacher_id')
+            ->leftJoin('grade_list', 'students.grade_id', '=', 'grade_list.grade_id')
             ->whereNull('score.deleted_at'), $scope, 'score.student_id');
         self::filter($query, $filters, 'score.arrangement_id', 'arrangement_id');
         self::listFilters($query, $filters, [
@@ -328,7 +344,8 @@ class InternshipRecord extends TableRecord
             'score.sign_in_weight', 'score.journal_weight', 'score.report_weight',
             'score.enterprise_score', 'score.enterprise_comment', 'score.final_score',
             'score.teacher_id', 'score.comment', 'students.name as student_name',
-            'students.student_num', 'teacher_list.teacher_name', 'arrangement.title as arrangement_title',
+            'students.student_num', 'students.grade_id', 'grade_list.grade_name',
+            'teacher_list.teacher_name', 'arrangement.title as arrangement_title',
         ]);
     }
 
@@ -403,7 +420,8 @@ class InternshipRecord extends TableRecord
         $query = self::queryTable($table)->whereNull("{$table}.deleted_at");
         if (in_array($table, ['insurance', 'safety_letter_sign'], true)) {
             $query->leftJoin('students', "{$table}.student_id", '=', 'students.student_id')
-                ->leftJoin('arrangement', "{$table}.arrangement_id", '=', 'arrangement.id');
+                ->leftJoin('arrangement', "{$table}.arrangement_id", '=', 'arrangement.id')
+                ->leftJoin('grade_list', 'students.grade_id', '=', 'grade_list.grade_id');
             self::applyStudentScope($query, $scope, "{$table}.student_id");
             self::listFilters($query, $filters, [
                 'dep_id' => 'students.dep_id',
@@ -954,10 +972,12 @@ class InternshipRecord extends TableRecord
         $query = self::applyArrangementScope(self::queryTable('arrangement')
             ->leftJoin('department', 'arrangement.dep_id', '=', 'department.dep_id')
             ->leftJoin('profession', 'arrangement.profession_id', '=', 'profession.profession_id')
+            ->leftJoin('grade_list', 'profession.grade_id', '=', 'grade_list.grade_id')
             ->whereNull('arrangement.deleted_at'), $scope);
         self::listFilters($query, $filters, [
             'dep_id' => 'arrangement.dep_id',
             'profession_id' => 'arrangement.profession_id',
+            'grade_id' => 'profession.grade_id',
             'semester' => 'arrangement.semester',
         ]);
         self::keyword($query, $filters, ['arrangement.title', 'arrangement.name', 'department.dep_name', 'profession.profession_name']);
@@ -965,7 +985,7 @@ class InternshipRecord extends TableRecord
         return self::statRows($query->orderByDesc('arrangement.id'), [
             'arrangement.id', 'arrangement.title', 'arrangement.name', 'arrangement.semester',
             'arrangement.dep_id', 'arrangement.profession_id', 'arrangement.type', 'arrangement.status',
-            'department.dep_name', 'profession.profession_name',
+            'profession.grade_id', 'department.dep_name', 'profession.profession_name', 'grade_list.grade_name',
         ]);
     }
 
@@ -1240,10 +1260,14 @@ class InternshipRecord extends TableRecord
             $arrangementId = (int) ($arrangement['id'] ?? 0);
             $applications = self::filterRows($data['applications'], static fn (array $row): bool => (int) ($row['arrangement_id'] ?? 0) === $arrangementId);
             $scores = self::filterRows($data['scores'], static fn (array $row): bool => (int) ($row['arrangement_id'] ?? 0) === $arrangementId);
+            $scopeText = implode(' / ', array_filter([
+                $arrangement['dep_name'] ?: '全校',
+                $arrangement['profession_name'] ?: '全部专业',
+                $arrangement['grade_name'] ?? '',
+            ]));
             $rows[] = [
                 'arrangement_title' => $arrangement['title'] ?: ($arrangement['name'] ?? '-'),
-                'semester' => $arrangement['semester'] ?: '-',
-                'scope' => ($arrangement['dep_name'] ?: '全校') . ' / ' . ($arrangement['profession_name'] ?: '全部专业'),
+                'scope' => $scopeText ?: '-',
                 'applications' => count($applications),
                 'accepted_applications' => self::countRows($applications, static fn (array $row): bool => (string) ($row['status'] ?? '') === 'accept'),
                 'active_pairs' => self::countRows($data['pairs'], static fn (array $row): bool => (int) ($row['arrangement_id'] ?? 0) === $arrangementId && (string) ($row['status'] ?? '') === 'active'),
@@ -1387,6 +1411,7 @@ class InternshipRecord extends TableRecord
             $rows[] = [
                 'student_name' => $student['name'] ?? '-',
                 'student_num' => $student['student_num'] ?? '-',
+                'grade_name' => $student['grade_name'] ?? '-',
                 'dep_name' => $student['dep_name'] ?? '-',
                 'profession_name' => $student['profession_name'] ?? '-',
                 'arrangement_title' => $arrangement['title'] ?? ($application['arrangement_title'] ?? '-'),
@@ -1411,6 +1436,7 @@ class InternshipRecord extends TableRecord
             $rows[] = [
                 'student_name' => $row['student_name'],
                 'student_num' => $row['student_num'],
+                'grade_name' => $row['grade_name'],
                 'arrangement_title' => $row['arrangement_title'],
                 'required_count' => $row['required_count'],
                 'archived_count' => $row['archived_count'],
@@ -1470,6 +1496,8 @@ class InternshipRecord extends TableRecord
             'student_id' => $studentId,
             'student_name' => $student['name'] ?? '-',
             'student_num' => $student['student_num'] ?? '-',
+            'grade_id' => $student['grade_id'] ?? null,
+            'grade_name' => $student['grade_name'] ?? '-',
             'dep_name' => $student['dep_name'] ?? '-',
             'profession_name' => $student['profession_name'] ?? '-',
             'arrangement_id' => $arrangementId,
@@ -1827,7 +1855,6 @@ class InternshipRecord extends TableRecord
     {
         return [
             ['key' => 'arrangement_title', 'label' => '实习安排', 'min_width' => 180],
-            ['key' => 'semester', 'label' => '学期', 'width' => 120],
             ['key' => 'scope', 'label' => '范围', 'min_width' => 180],
             ['key' => 'applications', 'label' => '申请', 'width' => 90],
             ['key' => 'accepted_applications', 'label' => '通过', 'width' => 90],
@@ -1882,6 +1909,7 @@ class InternshipRecord extends TableRecord
         return [
             ['key' => 'student_name', 'label' => '学生', 'width' => 120],
             ['key' => 'student_num', 'label' => '学号', 'width' => 130],
+            ['key' => 'grade_name', 'label' => '届次', 'width' => 110],
             ['key' => 'dep_name', 'label' => '学院', 'min_width' => 150],
             ['key' => 'profession_name', 'label' => '专业', 'min_width' => 150],
             ['key' => 'arrangement_title', 'label' => '实习安排', 'min_width' => 180],
@@ -1899,6 +1927,7 @@ class InternshipRecord extends TableRecord
         return [
             ['key' => 'student_name', 'label' => '学生', 'width' => 120],
             ['key' => 'student_num', 'label' => '学号', 'width' => 130],
+            ['key' => 'grade_name', 'label' => '届次', 'width' => 110],
             ['key' => 'arrangement_title', 'label' => '实习安排', 'min_width' => 180],
             ['key' => 'material_progress', 'label' => '归档进度', 'width' => 100],
             ['key' => 'missing_materials', 'label' => '缺失材料', 'min_width' => 260],
@@ -1911,11 +1940,11 @@ class InternshipRecord extends TableRecord
         return [
             ['key' => 'student_name', 'label' => '学生', 'width' => 120],
             ['key' => 'student_num', 'label' => '学号', 'width' => 130],
+            ['key' => 'grade_name', 'label' => '届次', 'width' => 110],
             ['key' => 'dep_name', 'label' => '学院', 'min_width' => 150],
             ['key' => 'profession_name', 'label' => '专业', 'min_width' => 150],
             ['key' => 'arrangement_title', 'label' => '实习安排', 'min_width' => 190],
             ['key' => 'arrangement_type_text', 'label' => '实习类型', 'width' => 120],
-            ['key' => 'semester', 'label' => '学期', 'width' => 120],
             ['key' => 'material_progress', 'label' => '归档进度', 'width' => 100],
             ['key' => 'plan_status', 'label' => '计划表', 'width' => 100],
             ['key' => 'implementation_sheet_status', 'label' => '实施表', 'width' => 100],

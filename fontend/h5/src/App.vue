@@ -421,6 +421,16 @@
                 @keyup.enter="reloadInternshipList(currentReviewListConfig.key)"
               >
               <select
+                v-if="currentReviewListConfig.gradeFilter"
+                v-model="internship.filters[currentReviewListConfig.key].grade_id"
+                @change="reloadInternshipList(currentReviewListConfig.key)"
+              >
+                <option value="">全部届次</option>
+                <option v-for="item in internship.options.grades" :key="item.grade_id" :value="item.grade_id">
+                  {{ item.grade_name }}
+                </option>
+              </select>
+              <select
                 v-if="currentReviewListConfig.statusOptions.length"
                 v-model="internship.filters[currentReviewListConfig.key].status"
                 @change="reloadInternshipList(currentReviewListConfig.key)"
@@ -512,6 +522,12 @@
             </header>
             <section class="mobile-list-tools">
               <input v-model="internship.filters.scores.keyword" placeholder="学生、学号、安排" @keyup.enter="reloadInternshipList('scores')">
+              <select v-model="internship.filters.scores.grade_id" @change="reloadInternshipList('scores')">
+                <option value="">全部届次</option>
+                <option v-for="item in internship.options.grades" :key="item.grade_id" :value="item.grade_id">
+                  {{ item.grade_name }}
+                </option>
+              </select>
               <button type="button" :disabled="internship.loading" @click="reloadInternshipList('scores')">查询</button>
             </section>
             <van-cell
@@ -555,6 +571,16 @@
                 :placeholder="currentManageListConfig.keywordPlaceholder"
                 @keyup.enter="reloadInternshipList(currentManageListConfig.key)"
               >
+              <select
+                v-if="currentManageListConfig.gradeFilter"
+                v-model="internship.filters[currentManageListConfig.key].grade_id"
+                @change="reloadInternshipList(currentManageListConfig.key)"
+              >
+                <option value="">全部届次</option>
+                <option v-for="item in internship.options.grades" :key="item.grade_id" :value="item.grade_id">
+                  {{ item.grade_name }}
+                </option>
+              </select>
               <select
                 v-if="currentManageListConfig.statusOptions.length"
                 v-model="internship.filters[currentManageListConfig.key].status"
@@ -1135,7 +1161,8 @@ const mobileListConfigs = computed(() => ({
     title: '实习安排',
     shortTitle: '安排',
     icon: CalendarCheck,
-    keywordPlaceholder: '安排、学院、专业',
+    keywordPlaceholder: '安排、届次、学院、专业',
+    gradeFilter: true,
     statusOptions: [
       { value: 'enabled', label: '启用' },
       { value: 'disabled', label: '停用' },
@@ -1148,7 +1175,7 @@ const mobileListConfigs = computed(() => ({
     title: '实习计划',
     shortTitle: '计划',
     icon: FileText,
-    keywordPlaceholder: '学期、学院、提交人',
+    keywordPlaceholder: '学院、提交人',
     statusOptions: reviewStatusOptions,
     emptyText: '暂无实习计划',
   },
@@ -1159,6 +1186,7 @@ const mobileListConfigs = computed(() => ({
     shortTitle: '申请',
     icon: ClipboardList,
     keywordPlaceholder: '学生、学号、实习安排、教师',
+    gradeFilter: true,
     statusOptions: reviewStatusOptions,
     emptyText: '暂无实习申请',
   },
@@ -1169,6 +1197,7 @@ const mobileListConfigs = computed(() => ({
     shortTitle: '关系',
     icon: UsersRound,
     keywordPlaceholder: '学生、学号、教师、安排',
+    gradeFilter: true,
     statusOptions: [
       { value: 'active', label: '有效' },
       { value: 'removed', label: '已移除' },
@@ -1182,6 +1211,7 @@ const mobileListConfigs = computed(() => ({
     shortTitle: '签到',
     icon: MapPin,
     keywordPlaceholder: '学生、学号、安排、地点',
+    gradeFilter: true,
     statusOptions: [],
     emptyText: '暂无签到记录',
   },
@@ -1192,6 +1222,7 @@ const mobileListConfigs = computed(() => ({
     shortTitle: '日志',
     icon: FileClock,
     keywordPlaceholder: '学生、标题、内容、教师',
+    gradeFilter: true,
     statusOptions: reviewStatusOptions,
     emptyText: '暂无日志记录',
   },
@@ -1202,6 +1233,7 @@ const mobileListConfigs = computed(() => ({
     shortTitle: '报告',
     icon: FileText,
     keywordPlaceholder: '学生、标题、内容、教师',
+    gradeFilter: true,
     statusOptions: reviewStatusOptions,
     emptyText: '暂无报告记录',
   },
@@ -1212,6 +1244,7 @@ const mobileListConfigs = computed(() => ({
     shortTitle: '延期',
     icon: FileClock,
     keywordPlaceholder: '学生、学号、安排、原因',
+    gradeFilter: true,
     statusOptions: delayStatusOptions,
     emptyText: '暂无延期申请',
   },
@@ -1222,6 +1255,7 @@ const mobileListConfigs = computed(() => ({
     shortTitle: '成绩',
     icon: GraduationCap,
     keywordPlaceholder: '学生、学号、安排、教师',
+    gradeFilter: true,
     statusOptions: [],
     emptyText: '暂无成绩记录',
   },
@@ -1232,6 +1266,7 @@ const mobileListConfigs = computed(() => ({
     shortTitle: '归档',
     icon: FileText,
     keywordPlaceholder: '学生、学号、安排、材料',
+    gradeFilter: true,
     statusOptions: [
       { value: 'complete', label: '完整' },
       { value: 'incomplete', label: '待补齐' },
@@ -1245,6 +1280,7 @@ const mobileListConfigs = computed(() => ({
     shortTitle: '保险',
     icon: FileText,
     keywordPlaceholder: '学生、学号、安排、保单',
+    gradeFilter: true,
     statusOptions: [],
     emptyText: '暂无保险记录',
   },
@@ -1255,6 +1291,7 @@ const mobileListConfigs = computed(() => ({
     shortTitle: '承诺',
     icon: CheckCircle2,
     keywordPlaceholder: '学生、学号、安排',
+    gradeFilter: true,
     statusOptions: [
       { value: 'pending', label: '待签署' },
       { value: 'signed', label: '已签署' },
@@ -1346,6 +1383,7 @@ function emptyInternshipOverview() {
 function emptyInternshipOptions() {
   return {
     arrangements: [],
+    grades: [],
     teachers: [],
     report_templates: [],
     review_rules: defaultInternshipReviewRules,
@@ -1381,7 +1419,8 @@ function mobileListTitle(key, row) {
   const arrangement = row.arrangement_title || (row.arrangement_id ? `安排ID ${row.arrangement_id}` : '');
   const titles = {
     arrangements: row.title || row.name || `安排ID ${row.id}`,
-    plans: joinFact([row.semester, row.dep_name]) || `计划ID ${row.id}`,
+    // 暂时隐藏学期展示，后续需要时恢复 row.semester。
+    plans: row.dep_name || `计划ID ${row.id}`,
     applications: student || arrangement || `申请ID ${row.id}`,
     pairs: student || `关系ID ${row.id}`,
     signIns: student || arrangement || `签到ID ${row.id}`,
@@ -1417,20 +1456,23 @@ function mobileListFacts(key, row) {
   const arrangement = row.arrangement_title || (row.arrangement_id ? `安排ID ${row.arrangement_id}` : '');
   const facts = {
     arrangements: [
-      namedFact('学期', row.semester),
+      // 暂时隐藏学期字段，后续需要时恢复。
+      // namedFact('学期', row.semester),
       namedFact('类型', arrangementTypeText(row.type)),
       namedFact('方式', organizeModeText(row.organize_mode)),
       namedFact('时间', dateRangeText(row.start_date, row.end_date)),
-      namedFact('范围', joinFact([row.dep_name || '全校', row.profession_name || '全部专业'])),
+      namedFact('范围', joinFact([row.dep_name || '全校', row.profession_name || '全部专业', row.grade_name])),
     ],
     plans: [
-      namedFact('学期', row.semester),
+      // 暂时隐藏学期字段，后续需要时恢复。
+      // namedFact('学期', row.semester),
       namedFact('学院', row.dep_name),
       namedFact('提交人', row.submitter_name),
       namedFact('内容', planContentText(row.plan_content, 48)),
     ],
     applications: [
       namedFact('学号', row.student_num),
+      namedFact('届次', row.grade_name),
       namedFact('安排', arrangement),
       namedFact('学院专业', joinFact([row.dep_name, row.profession_name])),
       namedFact('教师审核', statusText(row.teacher_status)),
@@ -1439,42 +1481,49 @@ function mobileListFacts(key, row) {
     ],
     pairs: [
       namedFact('学号', row.student_num),
+      namedFact('届次', row.grade_name),
       namedFact('教师', row.teacher_name || row.teacher_num),
       namedFact('安排', arrangement),
       namedFact('创建', row.created_at),
     ],
     signIns: [
       namedFact('学生', student),
+      namedFact('届次', row.grade_name),
       namedFact('安排', arrangement),
       namedFact('时间', joinFact([row.date, row.sign_time])),
       namedFact('地点', row.location),
     ],
     journals: [
       namedFact('学生', student),
+      namedFact('届次', row.grade_name),
       namedFact('日期', row.date || row.created_at),
       namedFact('安排', arrangement),
       namedFact('内容', previewText(row.content, 42)),
     ],
     reports: [
       namedFact('学生', student),
+      namedFact('届次', row.grade_name),
       namedFact('安排', arrangement),
       namedFact('提交', row.submitted_at || row.created_at),
       namedFact('内容', previewText(row.content, 42)),
     ],
     delays: [
       namedFact('学生', student),
+      namedFact('届次', row.grade_name),
       namedFact('安排', arrangement),
       namedFact('延期类型', delayConfigText(row.config_key)),
       namedFact('延期至', row.requested_date),
       namedFact('原因', previewText(row.reason, 42)),
     ],
     scores: [
+      namedFact('届次', row.grade_name),
       namedFact('安排', arrangement),
       namedFact('评分人', row.teacher_name || row.teacher_num),
       namedFact('分项', scoreBreakdownText(row)),
     ],
     archiveMaterials: [
       namedFact('学生', student || (row.student_id ? `学生ID ${row.student_id}` : '')),
+      namedFact('届次', row.grade_name),
       namedFact('安排', arrangement),
       namedFact('类型', row.arrangement_type_text),
       namedFact('进度', row.material_progress),
@@ -1482,12 +1531,14 @@ function mobileListFacts(key, row) {
     ],
     insurances: [
       namedFact('学生', student || (row.student_id ? `学生ID ${row.student_id}` : '')),
+      namedFact('届次', row.grade_name),
       namedFact('安排', arrangement),
       namedFact('保险公司', row.insurance_company),
       namedFact('时间', dateRangeText(row.start_date, row.end_date)),
     ],
     safetyLetters: [
       namedFact('学生', student || (row.student_id ? `学生ID ${row.student_id}` : '')),
+      namedFact('届次', row.grade_name),
       namedFact('安排', arrangement),
       namedFact('签署', row.signed_at),
     ],
@@ -2200,28 +2251,33 @@ function reviewTargetDetails(entity, row) {
 
   const details = {
     application: [
+      detailItem('届次', row.grade_name),
       detailItem('学院专业', joinFact([row.dep_name, row.profession_name])),
       detailItem('教师审核', statusText(row.teacher_status)),
       detailItem('管理审核', statusText(row.admin_status)),
       detailItem('申请备注', previewText(row.remark, 80)),
     ],
     journal: [
+      detailItem('届次', row.grade_name),
       detailItem('日志标题', row.title),
       detailItem('日志日期', row.date || row.created_at),
       detailItem('内容摘要', previewText(row.content, 100)),
     ],
     report: [
+      detailItem('届次', row.grade_name),
       detailItem('报告标题', row.title),
       detailItem('提交时间', row.submitted_at || row.created_at),
       detailItem('内容摘要', previewText(row.content, 100)),
     ],
     plan: [
-      detailItem('学期', row.semester),
+      // 暂时隐藏学期字段，后续需要时恢复。
+      // detailItem('学期', row.semester),
       detailItem('学院', row.dep_name),
       detailItem('提交人', row.submitter_name),
       detailItem('计划摘要', planContentText(row.plan_content, 100)),
     ],
     delay: [
+      detailItem('届次', row.grade_name),
       detailItem('延期类型', delayConfigText(row.config_key)),
       detailItem('申请延期至', row.requested_date),
       detailItem('申请原因', previewText(row.reason, 100)),

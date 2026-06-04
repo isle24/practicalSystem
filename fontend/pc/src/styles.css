@@ -726,6 +726,12 @@ a {
   font-size: 12px;
 }
 
+.stat-filter-bar label.filter-active,
+.data-list-filters label.filter-active {
+  color: #155ea8;
+  font-weight: 700;
+}
+
 .stat-filter-bar input {
   height: 32px;
   border: 1px solid var(--line);
@@ -733,6 +739,25 @@ a {
   padding: 0 9px;
   color: var(--text);
   outline: none;
+}
+
+.stat-filter-bar label.filter-active input,
+.data-list-filters label.filter-active input {
+  border-color: #2f7ed8;
+  background: #f0f7ff;
+  box-shadow: 0 0 0 3px rgba(47, 126, 216, 0.12);
+}
+
+.stat-filter-bar label.filter-active .el-select__wrapper,
+.data-list-filters label.filter-active .el-select__wrapper {
+  background: #f0f7ff;
+  box-shadow: 0 0 0 1px #2f7ed8 inset, 0 0 0 3px rgba(47, 126, 216, 0.12);
+}
+
+.stat-filter-bar label.filter-active .el-select__selected-item,
+.data-list-filters label.filter-active .el-select__selected-item {
+  color: #124f8c;
+  font-weight: 700;
 }
 
 .stat-filter-actions {
