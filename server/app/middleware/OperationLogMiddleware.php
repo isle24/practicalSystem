@@ -72,7 +72,7 @@ class OperationLogMiddleware implements MiddlewareInterface
     private function shouldRecord(Request $request): bool
     {
         $method = strtoupper($request->method());
-        if (in_array($method, ['GET', 'HEAD', 'OPTIONS'], true)) {
+        if (in_array($method, ['HEAD', 'OPTIONS'], true)) {
             return false;
         }
 

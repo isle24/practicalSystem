@@ -947,23 +947,35 @@
                           <strong>{{ userAdminState.detail.account?.name || '-' }}</strong>
                           <span>{{ userAdminState.detail.account?.login_name || '-' }} / {{ userAdminState.detail.account?.role_name || '-' }}</span>
                         </section>
-                        <el-table
-                          v-if="userAdminState.detailMode === 'logs'"
-                          :data="userAdminState.detail.logs"
-                          height="360"
-                          stripe
-                          v-loading="userAdminState.detailLoading"
-                        >
-                          <el-table-column prop="id" label="ID" width="76" />
-                          <el-table-column prop="action" label="操作" min-width="180" />
-                          <el-table-column prop="ip" label="IP" width="130" />
-                          <el-table-column label="内容" min-width="240">
-                            <template #default="{ row }">
-                              {{ logPayloadText(row.payload) }}
-                            </template>
-                          </el-table-column>
-                          <el-table-column prop="created_at" label="时间" width="168" />
-                        </el-table>
+                        <template v-if="userAdminState.detailMode === 'logs'">
+                          <el-table
+                            :data="userAdminState.detail.logs"
+                            height="340"
+                            stripe
+                            v-loading="userAdminState.detailLoading"
+                          >
+                            <el-table-column prop="id" label="ID" width="76" />
+                            <el-table-column prop="action" label="操作" min-width="180" />
+                            <el-table-column prop="ip" label="IP" width="130" />
+                            <el-table-column label="内容" min-width="240">
+                              <template #default="{ row }">
+                                {{ logPayloadText(row.payload) }}
+                              </template>
+                            </el-table-column>
+                            <el-table-column prop="created_at" label="时间" width="168" />
+                          </el-table>
+                          <div class="user-detail-pagination">
+                            <span>共 {{ userAdminState.detailPagination.total || 0 }} 条日志</span>
+                            <el-pagination
+                              size="small"
+                              layout="prev, pager, next"
+                              :current-page="userAdminState.detailPagination.page || 1"
+                              :page-size="userAdminState.detailPagination.page_size || 20"
+                              :total="userAdminState.detailPagination.total || 0"
+                              @current-change="loadUserDetailPage"
+                            />
+                          </div>
+                        </template>
                         <template v-else>
                           <section class="detail-table-block">
                             <header>
@@ -2133,6 +2145,11 @@ const userAdminState = reactive({
   detailMode: 'logs',
   detailLoading: false,
   detail: emptyUserDetail(),
+  detailPagination: {
+    page: 1,
+    page_size: 20,
+    total: 0,
+  },
   pagination: {
     page: 1,
     page_size: 20,
@@ -3946,14 +3963,23 @@ async function resetUserPassword() {
 async function openUserDetailDialog(row, mode) {
   userAdminState.detailMode = mode;
   userAdminState.detailDialogVisible = true;
-  userAdminState.detailLoading = true;
   userAdminState.message = '';
   userAdminState.detail = emptyUserDetail();
+  userAdminState.detailPagination = {
+    page: 1,
+    page_size: 20,
+    total: 0,
+  };
+  await loadUserDetailData(row, 1);
+}
+
+async function loadUserDetailData(row, page = 1) {
+  userAdminState.detailLoading = true;
   try {
     const data = await fetchAdminAccountDetail({
       id: row.id,
-      page: 1,
-      page_size: 20,
+      page,
+      page_size: userAdminState.detailPagination.page_size || 20,
     });
     userAdminState.detail = {
       account: data.account || row,
@@ -3961,11 +3987,24 @@ async function openUserDetailDialog(row, mode) {
       wechatAccounts: data.wechat_accounts || [],
       logs: data.operation_logs?.items || [],
     };
+    userAdminState.detailPagination = {
+      ...userAdminState.detailPagination,
+      ...(data.operation_logs?.pagination || {}),
+    };
   } catch (error) {
     userAdminState.message = error.message;
   } finally {
     userAdminState.detailLoading = false;
   }
+}
+
+async function loadUserDetailPage(page) {
+  const account = userAdminState.detail.account;
+  if (!account?.id) {
+    return;
+  }
+
+  await loadUserDetailData(account, page);
 }
 
 function closeUserDetailDialog() {
@@ -6020,6 +6059,11 @@ function resetAdminState() {
   userAdminState.detailMode = 'logs';
   userAdminState.detailLoading = false;
   userAdminState.detail = emptyUserDetail();
+  userAdminState.detailPagination = {
+    page: 1,
+    page_size: 20,
+    total: 0,
+  };
   userAdminState.pagination.page = 1;
   userAdminState.pagination.total = 0;
   userAdminState.message = '';

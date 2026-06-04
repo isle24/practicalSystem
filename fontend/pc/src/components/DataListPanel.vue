@@ -62,7 +62,7 @@
           <span v-else>{{ columnText(column, row) }}</span>
         </template>
       </el-table-column>
-      <el-table-column v-if="actions.length || $slots.actions" label="操作" width="220">
+      <el-table-column v-if="actions.length || $slots.actions" label="操作" width="280" fixed="right">
         <template #default="{ row }">
           <template v-if="actions.length">
             <button
