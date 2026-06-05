@@ -358,6 +358,12 @@ input {
   border-color: #f0b9bf;
 }
 
+.mobile-message-card.own {
+  margin-left: 24px;
+  border-color: #b7dfd7;
+  background: #f4fbf8;
+}
+
 .mobile-message-card header,
 .mobile-message-card footer {
   display: flex;
@@ -404,6 +410,15 @@ input {
 
 .mobile-message-card footer {
   flex-wrap: wrap;
+}
+
+.mobile-message-card footer button {
+  min-height: 26px;
+  border: 1px solid #bfd8f4;
+  border-radius: 7px;
+  padding: 0 9px;
+  background: var(--primary-soft);
+  color: var(--primary);
 }
 
 .mobile-empty-card {

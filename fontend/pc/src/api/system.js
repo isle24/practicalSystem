@@ -67,6 +67,18 @@ export function fetchMessages(params = {}) {
   return request(`/message/list${query ? `?${query}` : ''}`);
 }
 
+export function fetchMessageTargets(params = {}) {
+  const query = new URLSearchParams(params).toString();
+  return request(`/message/targets${query ? `?${query}` : ''}`);
+}
+
+export function sendMessage(payload) {
+  return request('/message/send', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
 export function markMessagesRead(payload) {
   return request('/message/read', {
     method: 'POST',

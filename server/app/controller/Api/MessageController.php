@@ -54,6 +54,23 @@ class MessageController
         }
     }
 
+    public function targets(Request $request): Response
+    {
+        if (!in_array(CurrentContext::roleType(), self::ADMIN_ROLES, true)) {
+            return $this->fail(40300, '无操作权限', 403);
+        }
+
+        try {
+            return $this->ok((new MessageService())->targets([
+                'keyword' => $request->input('keyword', ''),
+                'role_type' => $request->input('role_type', ''),
+                'limit' => $this->intInput($request, 'limit') ?: 200,
+            ]));
+        } catch (Throwable $exception) {
+            return $this->fail($this->statusCode($exception), $exception->getMessage(), $this->httpStatus($exception));
+        }
+    }
+
     public function send(Request $request): Response
     {
         if (!in_array(CurrentContext::roleType(), self::ADMIN_ROLES, true)) {

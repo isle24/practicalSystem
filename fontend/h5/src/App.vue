@@ -154,7 +154,7 @@
                 v-for="item in group.items"
                 :key="item.target_id"
                 class="mobile-message-card"
-                :class="{ unread: !item.is_read, urgent: item.level === 'urgent' }"
+                :class="{ unread: !item.is_read, urgent: item.level === 'urgent', own: isOwnMobileMessage(item) }"
                 @click="handleMobileMessageClick(item)"
               >
                 <header>
@@ -164,9 +164,12 @@
                 <strong>{{ item.title }}</strong>
                 <p>{{ item.content }}</p>
                 <footer>
-                  <span>{{ item.sender_name || '系统' }}</span>
+                  <span>{{ isOwnMobileMessage(item) ? '我发送' : (item.sender_name || '系统') }}</span>
                   <span>{{ messageLevelText(item.level) }}</span>
                   <span>{{ item.is_read ? '已读' : '未读' }}</span>
+                  <button v-if="item.link_url" type="button" @click.stop="openMobileMessageLink(item)">
+                    查看关联
+                  </button>
                 </footer>
               </article>
             </div>
@@ -3490,6 +3493,34 @@ function messageTypeText(type) {
 
 function messageLevelText(level) {
   return messageLevelNames[level] || level || '普通';
+}
+
+function isOwnMobileMessage(item) {
+  return Number(item?.sender_id || 0) > 0
+    && Number(item.sender_id) === Number(state.context.account_id || 0);
+}
+
+async function openMobileMessageLink(item) {
+  await handleMobileMessageClick(item);
+  const link = String(item?.link_url || '').trim();
+  if (!link) {
+    return;
+  }
+  if (link.startsWith('#tab=')) {
+    const tab = link.replace('#tab=', '').trim();
+    if (tab) {
+      activeTab.value = tab;
+    }
+    return;
+  }
+  if (link.startsWith('#')) {
+    const tab = link.slice(1).split(':')[0].replace('panel=', '').trim();
+    if (tab && isMobileModuleVisible(tab)) {
+      activeTab.value = tab;
+    }
+    return;
+  }
+  window.open(link, '_blank', 'noopener,noreferrer');
 }
 
 function groupMessagesByDay(items) {

@@ -50,6 +50,7 @@ class OperationLogMiddleware implements MiddlewareInterface
             $path = '/' . trim($request->path(), '/');
             $method = strtoupper($request->method());
             $statusCode = $exception ? 500 : $this->statusCode($response);
+            $responsePayload = $this->responsePayload($response, $exception);
             TableRecord::writeOperationLog([
                 'account_id' => CurrentContext::accountId() ?: null,
                 'action' => mb_substr($method . ' ' . $path, 0, 120),
@@ -62,6 +63,8 @@ class OperationLogMiddleware implements MiddlewareInterface
                     'query' => $this->mask($this->requestQuery($request)),
                     'input' => $this->mask($this->requestInput($request)),
                     'user_agent' => mb_substr((string) $request->header('user-agent', ''), 0, 300),
+                    'response_code' => $responsePayload['code'],
+                    'response_message' => $responsePayload['message'],
                     'error' => $exception ? mb_substr($exception->getMessage(), 0, 500) : null,
                 ],
             ]);
@@ -87,6 +90,44 @@ class OperationLogMiddleware implements MiddlewareInterface
         }
 
         return 200;
+    }
+
+    private function responsePayload(?Response $response, ?Throwable $exception): array
+    {
+        if ($exception) {
+            return [
+                'code' => 50000,
+                'message' => mb_substr($exception->getMessage(), 0, 500),
+            ];
+        }
+
+        if (!$response || !method_exists($response, 'rawBody')) {
+            return [
+                'code' => null,
+                'message' => null,
+            ];
+        }
+
+        $body = (string) $response->rawBody();
+        if ($body === '' || mb_strlen($body) > 20000) {
+            return [
+                'code' => null,
+                'message' => null,
+            ];
+        }
+
+        $decoded = json_decode($body, true);
+        if (!is_array($decoded)) {
+            return [
+                'code' => null,
+                'message' => null,
+            ];
+        }
+
+        return [
+            'code' => isset($decoded['code']) && is_numeric($decoded['code']) ? (int) $decoded['code'] : null,
+            'message' => isset($decoded['message']) ? mb_substr((string) $decoded['message'], 0, 500) : null,
+        ];
     }
 
     private function requestQuery(Request $request): array

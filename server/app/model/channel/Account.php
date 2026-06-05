@@ -229,6 +229,65 @@ class Account extends BaseModel
             ->all();
     }
 
+    public static function messageTargets(array $filters = []): array
+    {
+        $limit = min(500, max(20, (int) ($filters['limit'] ?? 200)));
+        $query = self::query()
+            ->join('users', 'account.user_id', '=', 'users.id')
+            ->leftJoin('user_role', function ($join): void {
+                $join->on('account.id', '=', 'user_role.account_id')
+                    ->where('user_role.is_primary', 'true')
+                    ->whereNull('user_role.deleted_at');
+            })
+            ->leftJoin('role', 'user_role.role_id', '=', 'role.id')
+            ->where('account.status', 'enabled')
+            ->where('users.status', 'enabled')
+            ->whereNull('account.deleted_at')
+            ->whereNull('users.deleted_at');
+
+        $keyword = trim((string) ($filters['keyword'] ?? ''));
+        if ($keyword !== '') {
+            $like = '%' . str_replace(['%', '_'], ['\\%', '\\_'], $keyword) . '%';
+            $query->where(function ($builder) use ($like): void {
+                $builder->where('account.login_name', 'like', $like)
+                    ->orWhere('users.name', 'like', $like)
+                    ->orWhere('users.mobile', 'like', $like)
+                    ->orWhere('role.name', 'like', $like);
+            });
+        }
+
+        $roleType = trim((string) ($filters['role_type'] ?? ''));
+        if ($roleType !== '') {
+            $query->where('role.role_type', $roleType);
+        }
+
+        return $query
+            ->orderBy('role.sort')
+            ->orderBy('account.id')
+            ->limit($limit)
+            ->get([
+                'account.id',
+                'account.user_id',
+                'account.login_name',
+                'users.name',
+                'users.mobile',
+                'role.id as role_id',
+                'role.name as role_name',
+                'role.role_type',
+            ])
+            ->map(static fn ($row): array => [
+                'id' => (int) $row->id,
+                'user_id' => (int) $row->user_id,
+                'login_name' => $row->login_name,
+                'name' => $row->name,
+                'mobile' => $row->mobile,
+                'role_id' => $row->role_id === null ? null : (int) $row->role_id,
+                'role_name' => $row->role_name,
+                'role_type' => $row->role_type,
+            ])
+            ->all();
+    }
+
     public static function loginNameExists(string $loginName, ?int $excludeId = null): bool
     {
         $query = self::query()

@@ -2,6 +2,7 @@
 
 namespace app\server\message;
 
+use app\model\channel\Account;
 use app\model\channel\MessageRecord;
 use InvalidArgumentException;
 
@@ -32,6 +33,13 @@ class MessageService
         ];
     }
 
+    public function targets(array $filters): array
+    {
+        return [
+            'items' => Account::messageTargets($filters),
+        ];
+    }
+
     public function send(array $payload, int $senderId, string $senderName): array
     {
         $accountIds = (array) ($payload['account_ids'] ?? $payload['target_account_ids'] ?? []);
@@ -51,7 +59,10 @@ class MessageService
 
         $messageId = MessageRecord::createMessage($message, $accountIds, date('Y-m-d H:i:s'));
 
-        return ['message_id' => $messageId];
+        return [
+            'message_id' => $messageId,
+            'summary' => $senderId > 0 ? MessageRecord::unreadSummary($senderId) : ['unread' => 0, 'by_type' => []],
+        ];
     }
 
     public function sendByTemplate(string $code, array $accountIds, array $vars, array $override = []): array

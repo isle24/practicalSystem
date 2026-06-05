@@ -158,6 +158,7 @@ class TableRecord extends BaseModel
             $query->where(function ($builder) use ($table, $like): void {
                 $builder->where("{$table}.action", 'like', $like)
                     ->orWhere("{$table}.ip", 'like', $like)
+                    ->orWhere("{$table}.payload", 'like', $like)
                     ->orWhere('account.login_name', 'like', $like)
                     ->orWhere('users.name', 'like', $like);
             });
@@ -190,6 +191,9 @@ class TableRecord extends BaseModel
 
     private static function operationLogRow(object $row): array
     {
+        $payload = self::decodeLogPayload($row->payload);
+        $payloadData = is_array($payload) ? $payload : [];
+
         return [
             'id' => (int) $row->id,
             'uuid' => $row->uuid,
@@ -199,7 +203,14 @@ class TableRecord extends BaseModel
             'user_name' => $row->user_name,
             'action' => $row->action,
             'ip' => $row->ip,
-            'payload' => self::decodeLogPayload($row->payload),
+            'method' => $payloadData['method'] ?? null,
+            'path' => $payloadData['path'] ?? null,
+            'status_code' => isset($payloadData['status_code']) ? (int) $payloadData['status_code'] : null,
+            'duration_ms' => isset($payloadData['duration_ms']) ? (float) $payloadData['duration_ms'] : null,
+            'response_code' => isset($payloadData['response_code']) && is_numeric($payloadData['response_code']) ? (int) $payloadData['response_code'] : null,
+            'response_message' => $payloadData['response_message'] ?? null,
+            'error' => $payloadData['error'] ?? null,
+            'payload' => $payload,
             'created_at' => $row->created_at,
         ];
     }

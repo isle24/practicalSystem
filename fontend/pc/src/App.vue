@@ -1238,6 +1238,15 @@
                       重置
                     </el-button>
                     <el-button
+                      v-if="canSendMessages"
+                      type="primary"
+                      :icon="Plus"
+                      :loading="messageState.sendDialog.sending"
+                      @click="openMessageSendDialog"
+                    >
+                      发送消息
+                    </el-button>
+                    <el-button
                       type="primary"
                       plain
                       :disabled="messageUnreadCount <= 0"
@@ -1283,7 +1292,7 @@
                           v-for="item in group.items"
                           :key="item.target_id"
                           class="message-bubble"
-                          :class="{ unread: !item.is_read, urgent: item.level === 'urgent' }"
+                          :class="{ unread: !item.is_read, urgent: item.level === 'urgent', own: isOwnMessage(item) }"
                           @click="handleMessageClick(item)"
                         >
                           <header>
@@ -1293,7 +1302,7 @@
                           </header>
                           <p>{{ item.content }}</p>
                           <footer>
-                            <span>{{ item.sender_name || '系统' }}</span>
+                            <span>{{ isOwnMessage(item) ? '我发送' : (item.sender_name || '系统') }}</span>
                             <el-tag size="small" :type="messageLevelTagType(item.level)">
                               {{ messageLevelText(item.level) }}
                             </el-tag>
@@ -1321,6 +1330,112 @@
                       :total="messageState.pagination.total"
                       @current-change="loadMessages"
                     />
+                  </div>
+
+                  <div v-if="messageState.sendDialog.visible" class="operation-mask" @click.self="closeMessageSendDialog">
+                    <section class="operation-dialog message-send-dialog">
+                      <header>
+                        <strong>发送消息</strong>
+                        <button type="button" @click="closeMessageSendDialog">关闭</button>
+                      </header>
+                      <div class="message-send-body">
+                        <div class="message-send-target-tools">
+                          <el-select
+                            v-model="messageState.sendDialog.filters.role_type"
+                            clearable
+                            placeholder="角色"
+                            @change="loadMessageTargets"
+                          >
+                            <el-option
+                              v-for="item in messageTargetRoleOptions"
+                              :key="item.value"
+                              :label="item.label"
+                              :value="item.value"
+                            />
+                          </el-select>
+                          <el-input
+                            v-model="messageState.sendDialog.filters.keyword"
+                            clearable
+                            placeholder="搜索姓名、账号、手机、角色"
+                            @keyup.enter="loadMessageTargets"
+                          />
+                          <el-button :icon="Search" :loading="messageState.targetLoading" @click="loadMessageTargets">
+                            查找
+                          </el-button>
+                        </div>
+                        <label class="message-send-field wide">
+                          <span>收件人</span>
+                          <el-select
+                            v-model="messageState.sendDialog.form.account_ids"
+                            multiple
+                            filterable
+                            collapse-tags
+                            collapse-tags-tooltip
+                            placeholder="请选择收件人"
+                          >
+                            <el-option
+                              v-for="item in messageState.targetOptions"
+                              :key="item.id"
+                              :label="messageTargetLabel(item)"
+                              :value="item.id"
+                            />
+                          </el-select>
+                        </label>
+                        <div class="message-send-grid">
+                          <label class="message-send-field">
+                            <span>消息类型</span>
+                            <el-select v-model="messageState.sendDialog.form.type">
+                              <el-option
+                                v-for="item in messageTypeOptions.filter(option => option.value !== 'all')"
+                                :key="item.value"
+                                :label="item.label"
+                                :value="item.value"
+                              />
+                            </el-select>
+                          </label>
+                          <label class="message-send-field">
+                            <span>消息级别</span>
+                            <el-select v-model="messageState.sendDialog.form.level">
+                              <el-option
+                                v-for="item in messageLevelOptions"
+                                :key="item.value"
+                                :label="item.label"
+                                :value="item.value"
+                              />
+                            </el-select>
+                          </label>
+                        </div>
+                        <label class="message-send-field wide">
+                          <span>标题</span>
+                          <el-input v-model="messageState.sendDialog.form.title" maxlength="180" show-word-limit />
+                        </label>
+                        <label class="message-send-field wide">
+                          <span>内容</span>
+                          <el-input
+                            v-model="messageState.sendDialog.form.content"
+                            type="textarea"
+                            :rows="6"
+                            maxlength="1000"
+                            show-word-limit
+                          />
+                        </label>
+                        <label class="message-send-field wide">
+                          <span>关联地址</span>
+                          <el-input v-model="messageState.sendDialog.form.link_url" placeholder="#panel=internship:applications 或 https://..." />
+                        </label>
+                      </div>
+                      <footer>
+                        <el-button @click="closeMessageSendDialog">取消</el-button>
+                        <el-button
+                          type="primary"
+                          :icon="Save"
+                          :loading="messageState.sendDialog.sending"
+                          @click="submitMessageSend"
+                        >
+                          发送
+                        </el-button>
+                      </footer>
+                    </section>
                   </div>
                 </div>
 
@@ -1729,14 +1844,47 @@
                         {{ row.user_name || row.login_name || row.account_id || '-' }}
                       </template>
                     </el-table-column>
-                    <el-table-column prop="action" label="动作" min-width="150" />
+                    <el-table-column label="接口" min-width="240">
+                      <template #default="{ row }">
+                        <span class="log-endpoint">
+                          <em>{{ row.method || logMethodText(row.action) }}</em>
+                          <strong :title="row.path || row.action">{{ row.path || row.action || '-' }}</strong>
+                        </span>
+                      </template>
+                    </el-table-column>
+                    <el-table-column label="HTTP" width="96">
+                      <template #default="{ row }">
+                        <el-tag :type="logStatusTagType(row.status_code)">
+                          {{ row.status_code || '-' }}
+                        </el-tag>
+                      </template>
+                    </el-table-column>
+                    <el-table-column label="业务码" width="96">
+                      <template #default="{ row }">
+                        <el-tag :type="Number(row.response_code) === 0 ? 'success' : 'warning'">
+                          {{ row.response_code ?? '-' }}
+                        </el-tag>
+                      </template>
+                    </el-table-column>
+                    <el-table-column label="耗时" width="98">
+                      <template #default="{ row }">
+                        {{ logDurationText(row.duration_ms) }}
+                      </template>
+                    </el-table-column>
                     <el-table-column prop="ip" label="IP" width="140" />
-                    <el-table-column prop="source_table" label="来源表" width="150" />
-                    <el-table-column label="内容" min-width="260">
+                    <el-table-column label="响应消息" min-width="220">
+                      <template #default="{ row }">
+                        <span class="log-payload" :title="row.response_message || row.error || '-'">
+                          {{ row.response_message || row.error || '-' }}
+                        </span>
+                      </template>
+                    </el-table-column>
+                    <el-table-column label="请求摘要" min-width="240">
                       <template #default="{ row }">
                         <span class="log-payload" :title="payloadText(row.payload)">{{ payloadText(row.payload) }}</span>
                       </template>
                     </el-table-column>
+                    <el-table-column prop="source_table" label="分表" width="138" />
                   </el-table>
                   <div class="file-pagination">
                     <span>共 {{ logState.pagination.total }} 条日志，{{ logState.tables.length }} 个分表</span>
@@ -2083,6 +2231,7 @@ import {
   fetchInternshipTimeline,
   fetchLoginPageSettings,
   fetchMessages,
+  fetchMessageTargets,
   fetchMessageSummary,
   fetchOrganizationScopes,
   fetchOperationGuide,
@@ -2110,6 +2259,7 @@ import {
   saveInternshipPlan,
   saveInternshipScore,
   saveMenu as saveMenuApi,
+  sendMessage,
   saveOrganizationScopes,
   saveOperationGuide,
   saveProfileSettings,
@@ -2179,6 +2329,7 @@ const logState = reactive({
 });
 const messageState = reactive({
   loading: false,
+  targetLoading: false,
   message: '',
   filters: {
     type: 'all',
@@ -2186,6 +2337,7 @@ const messageState = reactive({
     keyword: '',
   },
   items: [],
+  targetOptions: [],
   summary: {
     unread: 0,
     by_type: {},
@@ -2194,6 +2346,15 @@ const messageState = reactive({
     page: 1,
     page_size: 20,
     total: 0,
+  },
+  sendDialog: {
+    visible: false,
+    sending: false,
+    filters: {
+      keyword: '',
+      role_type: '',
+    },
+    form: emptyMessageSendForm(),
   },
 });
 const statState = reactive({
@@ -2552,6 +2713,30 @@ const messageLevelNames = {
   important: '重要',
   urgent: '紧急',
 };
+const messageLevelOptions = [
+  { label: '普通', value: 'normal' },
+  { label: '重要', value: 'important' },
+  { label: '紧急', value: 'urgent' },
+];
+const messageTargetRoleOptions = [
+  { label: '学生', value: 'student' },
+  { label: '教师', value: 'teacher' },
+  { label: '专业管理员', value: 'profession_admin' },
+  { label: '学院管理员', value: 'college_admin' },
+  { label: '学校管理员', value: 'school_admin' },
+  { label: '超级管理员', value: 'super_admin' },
+];
+
+function emptyMessageSendForm() {
+  return {
+    account_ids: [],
+    type: 'system',
+    level: 'normal',
+    title: '',
+    content: '',
+    link_url: '',
+  };
+}
 
 const archiveDefinitions = [
   {
@@ -2779,6 +2964,7 @@ const isAdminRole = computed(() => ['super_admin', 'school_admin', 'college_admi
 const visibleModules = computed(() => modules.filter(canShowModule));
 const visibleWindows = computed(() => openWindows.filter(win => !win.minimized));
 const canManageConfig = computed(() => hasPermission('config:manage') && ['super_admin', 'school_admin'].includes(permissionState.context.role_type));
+const canSendMessages = computed(() => ['super_admin', 'school_admin'].includes(currentRoleType.value));
 const canManageInternship = computed(() => hasPermission('internship:manage'));
 const canManageInternshipPlan = computed(() => hasPermission('internship:plan') && isAdminRole.value);
 const canApproveInternship = computed(() => hasPermission('internship:approve') && !isStudentRole.value);
@@ -3542,6 +3728,105 @@ function messageLevelTagType(level) {
     return 'warning';
   }
   return 'info';
+}
+
+function isOwnMessage(item) {
+  return Number(item?.sender_id || 0) > 0
+    && Number(item.sender_id) === Number(permissionState.context.account_id || 0);
+}
+
+function messageTargetLabel(item) {
+  const name = item?.name || item?.login_name || `账号${item?.id || ''}`;
+  const loginName = item?.login_name && item.login_name !== name ? ` / ${item.login_name}` : '';
+  const roleName = roleTypeNames[item?.role_type] || item?.role_name || item?.role_type || '未分配角色';
+  const mobile = item?.mobile ? ` / ${item.mobile}` : '';
+  return `${name}${loginName} / ${roleName}${mobile}`;
+}
+
+async function openMessageSendDialog() {
+  if (!canSendMessages.value) {
+    messageState.message = '当前角色不能发送消息';
+    return;
+  }
+  messageState.message = '';
+  messageState.sendDialog.visible = true;
+  messageState.sendDialog.form = emptyMessageSendForm();
+  if (!messageState.targetOptions.length) {
+    await loadMessageTargets();
+  }
+}
+
+function closeMessageSendDialog() {
+  if (messageState.sendDialog.sending) {
+    return;
+  }
+  messageState.sendDialog.visible = false;
+}
+
+async function loadMessageTargets() {
+  if (!canSendMessages.value || messageState.targetLoading) {
+    return;
+  }
+
+  messageState.targetLoading = true;
+  messageState.message = '';
+  try {
+    const data = await fetchMessageTargets({
+      keyword: messageState.sendDialog.filters.keyword,
+      role_type: messageState.sendDialog.filters.role_type,
+      limit: 300,
+    });
+    messageState.targetOptions = data.items || [];
+  } catch (error) {
+    messageState.message = error.message;
+  } finally {
+    messageState.targetLoading = false;
+  }
+}
+
+async function submitMessageSend() {
+  if (messageState.sendDialog.sending) {
+    return;
+  }
+
+  const form = messageState.sendDialog.form;
+  const payload = {
+    account_ids: (form.account_ids || []).map(Number).filter(Boolean),
+    type: form.type,
+    level: form.level,
+    title: String(form.title || '').trim(),
+    content: String(form.content || '').trim(),
+    link_url: String(form.link_url || '').trim(),
+  };
+
+  if (!payload.account_ids.length) {
+    messageState.message = '请选择收件人';
+    return;
+  }
+  if (!payload.title) {
+    messageState.message = '请填写消息标题';
+    return;
+  }
+  if (!payload.content) {
+    messageState.message = '请填写消息内容';
+    return;
+  }
+
+  messageState.sendDialog.sending = true;
+  messageState.message = '';
+  try {
+    const data = await sendMessage(payload);
+    if (data.summary) {
+      messageState.summary = data.summary;
+    }
+    messageState.sendDialog.visible = false;
+    messageState.sendDialog.form = emptyMessageSendForm();
+    await loadMessages(1);
+  } catch (error) {
+    messageState.message = error.message;
+  } finally {
+    messageState.sendDialog.sending = false;
+  }
 }
 
 function groupMessagesByDay(items) {
@@ -5220,14 +5505,45 @@ function resetStatFilters() {
   loadStats(1);
 }
 
+function logMethodText(action) {
+  const match = String(action || '').trim().match(/^(GET|POST|PUT|PATCH|DELETE|OPTIONS|HEAD)\s+/i);
+  return match ? match[1].toUpperCase() : '-';
+}
+
+function logStatusTagType(statusCode) {
+  const code = Number(statusCode || 0);
+  if (code >= 200 && code < 300) {
+    return 'success';
+  }
+  if (code >= 400 && code < 500) {
+    return 'warning';
+  }
+  if (code >= 500) {
+    return 'danger';
+  }
+  return 'info';
+}
+
+function logDurationText(durationMs) {
+  const value = Number(durationMs);
+  if (!Number.isFinite(value) || value < 0) {
+    return '-';
+  }
+  if (value < 1000) {
+    return `${Math.round(value)}ms`;
+  }
+  return `${(value / 1000).toFixed(2)}s`;
+}
+
 function payloadText(payload) {
   if (payload === null || payload === undefined || payload === '') {
     return '-';
   }
   if (typeof payload === 'string') {
-    return payload;
+    return payload.length > 180 ? `${payload.slice(0, 177)}...` : payload;
   }
-  return JSON.stringify(payload);
+  const text = JSON.stringify(payload);
+  return text.length > 180 ? `${text.slice(0, 177)}...` : text;
 }
 
 function emptyPagedList() {

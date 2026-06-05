@@ -820,6 +820,35 @@ a {
   white-space: nowrap;
 }
 
+.log-endpoint {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+.log-endpoint em {
+  min-width: 44px;
+  height: 22px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #eef4fb;
+  color: var(--primary);
+  font-size: 12px;
+  font-style: normal;
+}
+
+.log-endpoint strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+
 .stat-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -2424,6 +2453,12 @@ a {
   border-color: #f0b9bf;
 }
 
+.message-bubble.own {
+  justify-self: end;
+  border-color: #b7dfd7;
+  background: #f4fbf8;
+}
+
 .message-bubble header,
 .message-bubble footer {
   display: flex;
@@ -2485,6 +2520,48 @@ a {
 .message-kind.result { background: #2e7d4f; }
 .message-kind.audit { background: #0f8f7e; }
 .message-kind.alert { background: #c74350; }
+
+.message-send-dialog {
+  width: min(760px, calc(100vw - 48px));
+}
+
+.message-send-body {
+  display: grid;
+  gap: 14px;
+}
+
+.message-send-target-tools,
+.message-send-grid {
+  display: grid;
+  grid-template-columns: 150px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: end;
+}
+
+.message-send-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: stretch;
+}
+
+.message-send-field {
+  min-width: 0;
+  display: grid;
+  gap: 7px;
+}
+
+.message-send-field > span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.message-send-field.wide {
+  width: 100%;
+}
+
+.message-send-field .el-select,
+.message-send-field .el-input {
+  width: 100%;
+}
 
 .taskbar {
   display: grid;
