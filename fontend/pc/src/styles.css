@@ -620,6 +620,29 @@ a {
   gap: 12px;
 }
 
+.archive-panel {
+  grid-template-rows: auto auto minmax(0, 1fr) auto auto;
+}
+
+.archive-filter-bar {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  background: #fff;
+}
+
+.archive-filter-bar .data-list-filters label {
+  width: 180px;
+}
+
+.archive-panel .el-table {
+  min-height: 0;
+}
+
+.archive-pagination {
+  min-height: 30px;
+}
+
 .file-admin {
   grid-template-rows: auto 1fr auto auto;
 }

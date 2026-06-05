@@ -243,6 +243,49 @@ class TableRecord extends BaseModel
         return $query->get($columns)->map(static fn ($row): array => $row->toArray())->all();
     }
 
+    public static function archivePage(string $table, array $columns, array $order, array $filters): array
+    {
+        $page = max(1, (int) ($filters['page'] ?? 1));
+        $pageSize = min(100, max(10, (int) ($filters['page_size'] ?? 20)));
+        $query = self::queryTable($table)->whereNull('deleted_at');
+
+        $flag = trim((string) ($filters['flag'] ?? ''));
+        if (in_array($flag, ['on', 'off'], true)) {
+            $query->where('flag', $flag);
+        }
+
+        $keyword = trim((string) ($filters['keyword'] ?? ''));
+        $keywordColumns = array_values(array_filter((array) ($filters['keyword_columns'] ?? []), static fn ($column): bool => is_string($column) && $column !== ''));
+        if ($keyword !== '' && $keywordColumns) {
+            $like = '%' . str_replace(['%', '_'], ['\\%', '\\_'], $keyword) . '%';
+            $query->where(function ($builder) use ($keywordColumns, $like): void {
+                foreach ($keywordColumns as $index => $column) {
+                    $index === 0
+                        ? $builder->where($column, 'like', $like)
+                        : $builder->orWhere($column, 'like', $like);
+                }
+            });
+        }
+
+        $total = (int) (clone $query)->count();
+        foreach ($order as $field) {
+            $query->orderBy($field);
+        }
+
+        return [
+            'items' => $query
+                ->forPage($page, $pageSize)
+                ->get($columns)
+                ->map(static fn ($row): array => $row->toArray())
+                ->all(),
+            'pagination' => [
+                'page' => $page,
+                'page_size' => $pageSize,
+                'total' => $total,
+            ],
+        ];
+    }
+
     public static function updateArchiveRow(string $table, string $idField, int $id, array $values): int
     {
         return self::queryTable($table)

@@ -35,14 +35,16 @@ class ArchiveController
             'fields' => ['dep_name', 'dep_short_name', 'dep_code', 'sort', 'flag'],
             'required' => 'dep_name',
             'order' => ['sort', 'dep_id'],
+            'keyword' => ['dep_name', 'dep_short_name', 'dep_code'],
         ],
         'grade' => [
             'table' => 'grade_list',
             'id' => 'grade_id',
             'columns' => ['grade_id', 'grade_name', 'is_current', 'sort', 'flag'],
-            'fields' => ['grade_name', 'dep_id', 'is_current', 'sort', 'flag'],
+            'fields' => ['grade_name', 'is_current', 'sort', 'flag'],
             'required' => 'grade_name',
             'order' => ['sort', 'grade_id'],
+            'keyword' => ['grade_name'],
         ],
         'profession' => [
             'table' => 'profession',
@@ -51,6 +53,7 @@ class ArchiveController
             'fields' => ['profession_name', 'profession_short_name', 'profession_code', 'dep_id', 'grade_id', 'sort', 'flag'],
             'required' => 'profession_name',
             'order' => ['sort', 'profession_id'],
+            'keyword' => ['profession_name', 'profession_short_name', 'profession_code'],
         ],
         'class' => [
             'table' => 'class',
@@ -59,6 +62,7 @@ class ArchiveController
             'fields' => ['class_name', 'class_short_name', 'class_num', 'dep_id', 'profession_id', 'grade_id', 'sort', 'flag'],
             'required' => 'class_name',
             'order' => ['sort', 'class_id'],
+            'keyword' => ['class_name', 'class_short_name', 'class_num'],
         ],
         'company' => [
             'table' => 'companies',
@@ -67,6 +71,7 @@ class ArchiveController
             'fields' => ['company_name', 'credit_code', 'contact_name', 'contact_mobile', 'address', 'flag'],
             'required' => 'company_name',
             'order' => ['company_id'],
+            'keyword' => ['company_name', 'credit_code', 'contact_name', 'contact_mobile', 'address'],
         ],
     ];
 
@@ -78,7 +83,7 @@ class ArchiveController
 
         try {
             $type = $this->type($request);
-            return $this->ok($this->items($type));
+            return $this->ok($this->items($type, $request));
         } catch (Throwable $exception) {
             return $this->fail(40001, $exception->getMessage(), 400);
         }
@@ -113,7 +118,7 @@ class ArchiveController
                 ]));
             });
 
-            return $this->ok($this->items($type), '已保存');
+            return $this->ok($this->items($type, $request), '已保存');
         } catch (Throwable $exception) {
             return $this->fail(40001, $exception->getMessage(), 400);
         }
@@ -133,7 +138,7 @@ class ArchiveController
 
             ChannelTable::softDeleteArchiveRow($definition['table'], $definition['id'], $id, $now);
 
-            return $this->ok($this->items($type), '已删除');
+            return $this->ok($this->items($type, $request), '已删除');
         } catch (Throwable $exception) {
             return $this->fail(40001, $exception->getMessage(), 400);
         }
@@ -150,7 +155,7 @@ class ArchiveController
             $rows = $this->excelRows($this->excelFile($request), $type);
             $summary = ChannelTable::importAcademicArchiveRows($type, $rows, date('Y-m-d H:i:s'));
 
-            return $this->ok(array_merge($summary, $this->items($type)), '导入完成');
+            return $this->ok(array_merge($summary, $this->items($type, $request)), '导入完成');
         } catch (Throwable $exception) {
             return $this->fail(40001, $exception->getMessage(), 400);
         }
@@ -181,14 +186,19 @@ class ArchiveController
         return $type;
     }
 
-    private function items(string $type): array
+    private function items(string $type, Request $request): array
     {
         $definition = self::DEFINITIONS[$type];
-        return [
+        return array_merge([
             'type' => $type,
             'id_field' => $definition['id'],
-            'items' => ChannelTable::archiveRows($definition['table'], $definition['columns'], $definition['order']),
-        ];
+        ], ChannelTable::archivePage($definition['table'], $definition['columns'], $definition['order'], [
+            'page' => $this->optionalInt($request, 'page') ?? 1,
+            'page_size' => $this->optionalInt($request, 'page_size') ?? 20,
+            'keyword' => $this->nullableString($request, 'keyword', 180) ?? '',
+            'flag' => $this->enum($request, 'filter_flag', ['all', 'on', 'off'], 'all'),
+            'keyword_columns' => $definition['keyword'] ?? [$definition['required']],
+        ]));
     }
 
     private function values(Request $request, array $definition): array

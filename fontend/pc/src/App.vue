@@ -1019,8 +1019,8 @@
                 <div v-else-if="isArchiveManageWindow(win)" class="admin-panel archive-panel">
                   <div class="admin-toolbar">
                     <strong class="admin-toolbar-title">{{ archiveDefinitionForWindow(win).name }}管理</strong>
-                    <el-button :icon="RefreshCw" :loading="archiveStateForWindow(win).loading" @click="loadArchiveItems(archiveTypeForWindow(win))">
-                      读取
+                    <el-button :icon="RefreshCw" :loading="archiveStateForWindow(win).loading" @click="loadArchiveItems(archiveTypeForWindow(win), archiveStateForWindow(win).pagination.page)">
+                      刷新
                     </el-button>
                     <el-button :icon="Plus" @click="openArchiveDialog(archiveTypeForWindow(win))">
                       新增
@@ -1045,6 +1045,38 @@
                       删除
                     </el-button>
                   </div>
+                  <div class="archive-filter-bar data-list-toolbar">
+                    <div class="data-list-filters">
+                      <label :class="{ 'filter-active': hasFilterValue(archiveStateForWindow(win).filters.keyword) }">
+                        <span>关键词</span>
+                        <input
+                          v-model="archiveStateForWindow(win).filters.keyword"
+                          :placeholder="archiveKeywordPlaceholder(archiveTypeForWindow(win))"
+                          @keyup.enter="loadArchiveItems(archiveTypeForWindow(win), 1)"
+                        >
+                      </label>
+                      <label :class="{ 'filter-active': archiveStateForWindow(win).filters.filter_flag !== 'all' }">
+                        <span>状态</span>
+                        <el-select
+                          v-model="archiveStateForWindow(win).filters.filter_flag"
+                          class="filter-select"
+                          :class="{ 'is-filter-active': archiveStateForWindow(win).filters.filter_flag !== 'all' }"
+                          filterable
+                          @change="loadArchiveItems(archiveTypeForWindow(win), 1)"
+                        >
+                          <el-option v-for="option in archiveStatusFilterOptions" :key="option.value" :label="option.label" :value="option.value" />
+                        </el-select>
+                      </label>
+                    </div>
+                    <div class="data-list-actions">
+                      <el-button :icon="Search" :loading="archiveStateForWindow(win).loading" @click="loadArchiveItems(archiveTypeForWindow(win), 1)">
+                        查询
+                      </el-button>
+                      <el-button @click="resetArchiveFilters(archiveTypeForWindow(win))">
+                        重置
+                      </el-button>
+                    </div>
+                  </div>
                   <el-table :data="archiveStateForWindow(win).items" height="100%" stripe highlight-current-row @row-click="row => selectArchiveItem(archiveTypeForWindow(win), row)">
                     <el-table-column :prop="archiveIdFieldForWindow(win)" label="ID" width="76" />
                     <el-table-column
@@ -1059,6 +1091,17 @@
                       </template>
                     </el-table-column>
                   </el-table>
+                  <div class="archive-pagination data-list-pagination">
+                    <span>共 {{ archiveStateForWindow(win).pagination.total || 0 }} 条</span>
+                    <el-pagination
+                      size="small"
+                      layout="prev, pager, next"
+                      :current-page="archiveStateForWindow(win).pagination.page || 1"
+                      :page-size="archiveStateForWindow(win).pagination.page_size || 20"
+                      :total="archiveStateForWindow(win).pagination.total || 0"
+                      @current-change="page => loadArchiveItems(archiveTypeForWindow(win), page)"
+                    />
+                  </div>
                   <div v-if="archiveStateForWindow(win).dialogVisible" class="operation-mask" @click.self="closeArchiveDialog(archiveTypeForWindow(win))">
                     <section class="operation-dialog menu-dialog">
                       <header>
@@ -1076,9 +1119,10 @@
                           v-model="archiveStateForWindow(win).editing[field.key]"
                           clearable
                           filterable
+                          @change="handleArchiveFieldChange(archiveTypeForWindow(win), field.key)"
                         >
                           <el-option
-                            v-for="option in archiveFieldOptions(field)"
+                            v-for="option in archiveEditFieldOptions(field, archiveTypeForWindow(win))"
                             :key="option.value"
                             :label="option.label"
                             :value="option.value"
@@ -2767,11 +2811,11 @@ const archiveDefinitions = [
     name: '专业',
     idField: 'profession_id',
     fields: [
+      { key: 'grade_id', label: '所属届次', options: 'grades' },
+      { key: 'dep_id', label: '所属学院', options: 'departments' },
       { key: 'profession_name', label: '专业名称', required: true },
       { key: 'profession_short_name', label: '专业简称' },
       { key: 'profession_code', label: '专业代码' },
-      { key: 'dep_id', label: '所属学院', options: 'departments' },
-      { key: 'grade_id', label: '所属届次', options: 'grades' },
       { key: 'sort', label: '排序', inputType: 'number' },
       { key: 'flag', label: '状态', options: 'flag' },
     ],
@@ -2781,12 +2825,12 @@ const archiveDefinitions = [
     name: '班级',
     idField: 'class_id',
     fields: [
+      { key: 'grade_id', label: '所属届次', options: 'grades' },
+      { key: 'dep_id', label: '所属学院', options: 'departments' },
+      { key: 'profession_id', label: '所属专业', options: 'professions' },
       { key: 'class_name', label: '班级名称', required: true },
       { key: 'class_short_name', label: '班级简称' },
       { key: 'class_num', label: '班号' },
-      { key: 'dep_id', label: '所属学院', options: 'departments' },
-      { key: 'profession_id', label: '所属专业', options: 'professions' },
-      { key: 'grade_id', label: '所属届次', options: 'grades' },
       { key: 'sort', label: '排序', inputType: 'number' },
       { key: 'flag', label: '状态', options: 'flag' },
     ],
@@ -2820,6 +2864,11 @@ const archiveManageModules = {
   classManage: 'class',
   companyManage: 'company',
 };
+const archiveStatusFilterOptions = [
+  { label: '全部', value: 'all' },
+  { label: '启用', value: 'on' },
+  { label: '停用', value: 'off' },
+];
 const userListColumns = [
   { key: 'id', label: 'ID', width: 76 },
   { key: 'name', label: '姓名', minWidth: 130 },
@@ -5092,6 +5141,15 @@ function createArchiveState(type) {
   return {
     type,
     items: [],
+    filters: {
+      keyword: '',
+      filter_flag: 'all',
+    },
+    pagination: {
+      page: 1,
+      page_size: 20,
+      total: 0,
+    },
     editing: emptyArchiveItem(type),
     selected: null,
     dialogVisible: false,
@@ -5131,6 +5189,44 @@ function archiveIdFieldForWindow(win) {
 
 function archiveTableFieldsForWindow(win) {
   return archiveFieldsForWindow(win).filter(field => field.key !== 'sort');
+}
+
+function archiveRequestParams(type, page = null) {
+  const state = archiveStateByType(type);
+  return {
+    page: page || state.pagination.page || 1,
+    page_size: state.pagination.page_size || 20,
+    keyword: state.filters.keyword,
+    filter_flag: state.filters.filter_flag || 'all',
+  };
+}
+
+function applyArchivePage(type, data = {}) {
+  const state = archiveStateByType(type);
+  state.items = data.items || [];
+  state.pagination = {
+    ...state.pagination,
+    ...(data.pagination || {}),
+  };
+  state.selected = null;
+}
+
+function archiveKeywordPlaceholder(type) {
+  return {
+    department: '学院名称、简称、代码',
+    grade: '届次名称',
+    profession: '专业名称、简称、代码',
+    class: '班级名称、简称、班号',
+    company: '企业名称、信用代码、联系人',
+  }[type] || '关键词';
+}
+
+function resetArchiveFilters(type) {
+  const state = archiveStateByType(type);
+  state.filters.keyword = '';
+  state.filters.filter_flag = 'all';
+  state.pagination.page = 1;
+  loadArchiveItems(type, 1);
 }
 
 function emptyArchiveItem(type = 'department') {
@@ -5201,7 +5297,7 @@ function editArchiveItem(type, row) {
   state.message = '';
 }
 
-async function loadArchiveItems(type = 'department') {
+async function loadArchiveItems(type = 'department', page = null) {
   const state = archiveStateByType(type);
   if (!canManageConfig.value || state.loading) {
     return;
@@ -5210,8 +5306,8 @@ async function loadArchiveItems(type = 'department') {
   state.loading = true;
   state.message = '';
   try {
-    const data = await fetchArchiveList(type);
-    state.items = data.items || [];
+    const data = await fetchArchiveList(type, archiveRequestParams(type, page));
+    applyArchivePage(type, data);
   } catch (error) {
     state.message = error.message;
   } finally {
@@ -5237,8 +5333,11 @@ async function saveArchiveConfig(type) {
     definition.fields.forEach((field) => {
       payload[field.key] = state.editing[field.key];
     });
-    const data = await saveArchiveItem(payload);
-    state.items = data.items || [];
+    const data = await saveArchiveItem({
+      ...payload,
+      ...archiveRequestParams(type, payload.id ? state.pagination.page : 1),
+    });
+    applyArchivePage(type, data);
     state.message = '已保存';
     state.dialogVisible = false;
     state.selected = null;
@@ -5263,10 +5362,13 @@ async function deleteArchiveConfig(type) {
     const data = await deleteArchiveItem({
       type,
       id: state.selected[definition.idField],
+      ...archiveRequestParams(type),
     });
-    state.items = data.items || [];
     state.editing = emptyArchiveItem(type);
-    state.selected = null;
+    applyArchivePage(type, data);
+    if (!state.items.length && (state.pagination.total || 0) > 0 && (state.pagination.page || 1) > 1) {
+      applyArchivePage(type, await fetchArchiveList(type, archiveRequestParams(type, (state.pagination.page || 1) - 1)));
+    }
     state.message = '已删除';
     await loadAdminFoundation();
   } catch (error) {
@@ -5303,9 +5405,8 @@ async function handleArchiveImportFile(event) {
   state.importing = true;
   state.message = '';
   try {
-    const data = await importArchiveExcel(type, file);
-    state.items = data.items || [];
-    state.selected = null;
+    const data = await importArchiveExcel(type, file, archiveRequestParams(type, 1));
+    applyArchivePage(type, data);
     state.editing = emptyArchiveItem(type);
     const failedText = data.failed ? `，失败 ${data.failed} 条` : '';
     const firstError = data.errors?.[0]?.message ? `；首条错误：${data.errors[0].message}` : '';
@@ -5345,6 +5446,53 @@ function archiveFieldOptions(field) {
     return adminState.options.professions.map(item => ({ label: item.profession_name, value: String(item.profession_id) }));
   }
   return [];
+}
+
+function archiveEditFieldOptions(field, type) {
+  if (field.options !== 'professions' || type !== 'class') {
+    return archiveFieldOptions(field);
+  }
+
+  const editing = archiveStateByType(type).editing;
+  return adminState.options.professions
+    .filter((item) => {
+      const matchGrade = !editing.grade_id || Number(item.grade_id || 0) === Number(editing.grade_id);
+      const matchDepartment = !editing.dep_id || Number(item.dep_id || 0) === Number(editing.dep_id);
+      return matchGrade && matchDepartment;
+    })
+    .map(item => ({ label: item.profession_name, value: String(item.profession_id) }));
+}
+
+function handleArchiveFieldChange(type, fieldKey) {
+  if (type !== 'class') {
+    return;
+  }
+
+  const editing = archiveStateByType(type).editing;
+  if (fieldKey === 'profession_id') {
+    const profession = adminState.options.professions.find(item => String(item.profession_id) === String(editing.profession_id));
+    if (profession) {
+      editing.grade_id = String(profession.grade_id || editing.grade_id || '');
+      editing.dep_id = String(profession.dep_id || editing.dep_id || '');
+    }
+    return;
+  }
+
+  if (!['grade_id', 'dep_id'].includes(fieldKey) || !editing.profession_id) {
+    return;
+  }
+
+  const profession = adminState.options.professions.find(item => String(item.profession_id) === String(editing.profession_id));
+  if (!profession) {
+    editing.profession_id = '';
+    return;
+  }
+
+  const mismatchGrade = editing.grade_id && Number(profession.grade_id || 0) !== Number(editing.grade_id);
+  const mismatchDepartment = editing.dep_id && Number(profession.dep_id || 0) !== Number(editing.dep_id);
+  if (mismatchGrade || mismatchDepartment) {
+    editing.profession_id = '';
+  }
 }
 
 function archiveFieldText(field, value) {
@@ -6846,10 +6994,15 @@ function resetAdminState() {
   userAdminState.message = '';
   Object.entries(archiveStates).forEach(([type, state]) => {
     state.items = [];
+    state.filters.keyword = '';
+    state.filters.filter_flag = 'all';
+    state.pagination.page = 1;
+    state.pagination.total = 0;
     state.editing = emptyArchiveItem(type);
     state.selected = null;
     state.dialogVisible = false;
     state.loading = false;
+    state.importing = false;
     state.message = '';
   });
   fileState.items = [];

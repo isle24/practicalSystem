@@ -306,8 +306,8 @@ export function fetchFileList(params = {}) {
   return request(`/file/list${query ? `?${query}` : ''}`);
 }
 
-export function fetchArchiveList(type) {
-  const query = new URLSearchParams({ type }).toString();
+export function fetchArchiveList(type, params = {}) {
+  const query = new URLSearchParams({ type, ...params }).toString();
   return request(`/archive/list?${query}`);
 }
 
@@ -325,10 +325,15 @@ export function deleteArchiveItem(payload) {
   });
 }
 
-export function importArchiveExcel(type, file) {
+export function importArchiveExcel(type, file, params = {}) {
   const body = new FormData();
   body.append('type', type);
   body.append('file', file);
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== '') {
+      body.append(key, value);
+    }
+  });
   return request('/archive/import-excel', {
     method: 'POST',
     body,
