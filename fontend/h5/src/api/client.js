@@ -1,11 +1,12 @@
 const apiBase = import.meta.env.VITE_API_BASE || '/api';
 
 export async function request(path, options = {}) {
+  const isFormData = options.body instanceof FormData;
   const response = await fetch(`${apiBase}${path}`, {
     credentials: 'include',
     headers: {
-      'Content-Type': 'application/json',
       Accept: 'application/json',
+      ...(!isFormData ? { 'Content-Type': 'application/json' } : {}),
       ...(options.headers || {}),
     },
     ...options,

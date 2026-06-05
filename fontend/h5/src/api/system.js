@@ -43,6 +43,36 @@ export function markMessagesRead(payload) {
   });
 }
 
+export function fetchDocCategories() {
+  return request('/doc/categories');
+}
+
+export function fetchDocList(params = {}) {
+  const query = new URLSearchParams(params).toString();
+  return request(`/doc/list${query ? `?${query}` : ''}`);
+}
+
+export function fetchDocDetail(id) {
+  const query = new URLSearchParams({ id }).toString();
+  return request(`/doc/detail?${query}`);
+}
+
+export function fetchTemplateCategories() {
+  return request('/template/categories');
+}
+
+export function fetchTemplateList(params = {}) {
+  const query = new URLSearchParams(params).toString();
+  return request(`/template/list${query ? `?${query}` : ''}`);
+}
+
+export function downloadTemplateItem(id) {
+  return request('/template/download', {
+    method: 'POST',
+    body: JSON.stringify({ id }),
+  });
+}
+
 function internshipList(path, params = {}) {
   const query = new URLSearchParams(params).toString();
   return request(`/internship/${path}${query ? `?${query}` : ''}`);

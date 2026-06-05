@@ -225,6 +225,9 @@ function createSchoolSchema(PDO $pdo): void
     ensureFileSchema($pdo);
     ensureInternshipSchema($pdo);
     ensureMessageSchema($pdo);
+    ensureDocSchema($pdo);
+    ensureTemplateSchema($pdo);
+    ensureExportTaskSchema($pdo);
 }
 
 function ensureMenuSchema(PDO $pdo): void
@@ -1152,6 +1155,107 @@ function ensureMessageSchema(PDO $pdo): void
     ensureIndex($pdo, 'message_channel_log', 'idx_deleted_at', "ALTER TABLE `message_channel_log` ADD KEY `idx_deleted_at` (`deleted_at`)");
 }
 
+function ensureDocSchema(PDO $pdo): void
+{
+    $schemas = [
+        'doc_category' => [
+            'parent_id' => "ALTER TABLE `doc_category` ADD COLUMN `parent_id` BIGINT UNSIGNED DEFAULT 0 AFTER `deleted_at`",
+            'icon' => "ALTER TABLE `doc_category` ADD COLUMN `icon` VARCHAR(80) DEFAULT NULL AFTER `parent_id`",
+            'sort' => "ALTER TABLE `doc_category` ADD COLUMN `sort` INT DEFAULT 0 AFTER `icon`",
+        ],
+        'doc_article' => [
+            'category_id' => "ALTER TABLE `doc_article` ADD COLUMN `category_id` BIGINT UNSIGNED DEFAULT NULL AFTER `deleted_at`",
+            'title' => "ALTER TABLE `doc_article` ADD COLUMN `title` VARCHAR(180) DEFAULT NULL AFTER `category_id`",
+            'content' => "ALTER TABLE `doc_article` ADD COLUMN `content` MEDIUMTEXT DEFAULT NULL AFTER `title`",
+            'version' => "ALTER TABLE `doc_article` ADD COLUMN `version` VARCHAR(40) DEFAULT '1.0' AFTER `content`",
+            'author_id' => "ALTER TABLE `doc_article` ADD COLUMN `author_id` BIGINT UNSIGNED DEFAULT NULL AFTER `version`",
+            'view_count' => "ALTER TABLE `doc_article` ADD COLUMN `view_count` INT UNSIGNED DEFAULT 0 AFTER `author_id`",
+            'published_at' => "ALTER TABLE `doc_article` ADD COLUMN `published_at` DATETIME DEFAULT NULL AFTER `view_count`",
+        ],
+        'doc_article_history' => [
+            'article_id' => "ALTER TABLE `doc_article_history` ADD COLUMN `article_id` BIGINT UNSIGNED DEFAULT NULL AFTER `deleted_at`",
+            'title' => "ALTER TABLE `doc_article_history` ADD COLUMN `title` VARCHAR(180) DEFAULT NULL AFTER `article_id`",
+            'content' => "ALTER TABLE `doc_article_history` ADD COLUMN `content` MEDIUMTEXT DEFAULT NULL AFTER `title`",
+            'version' => "ALTER TABLE `doc_article_history` ADD COLUMN `version` VARCHAR(40) DEFAULT '1.0' AFTER `content`",
+            'editor_id' => "ALTER TABLE `doc_article_history` ADD COLUMN `editor_id` BIGINT UNSIGNED DEFAULT NULL AFTER `version`",
+            'change_note' => "ALTER TABLE `doc_article_history` ADD COLUMN `change_note` VARCHAR(500) DEFAULT NULL AFTER `editor_id`",
+        ],
+    ];
+
+    foreach ($schemas as $table => $columns) {
+        foreach ($columns as $column => $ddl) {
+            ensureColumn($pdo, $table, $column, $ddl);
+        }
+    }
+
+    ensureIndex($pdo, 'doc_category', 'uk_code', "ALTER TABLE `doc_category` ADD UNIQUE KEY `uk_code` (`code`)");
+    ensureIndex($pdo, 'doc_category', 'idx_parent', "ALTER TABLE `doc_category` ADD KEY `idx_parent` (`parent_id`)");
+    ensureIndex($pdo, 'doc_category', 'idx_status_sort', "ALTER TABLE `doc_category` ADD KEY `idx_status_sort` (`status`, `sort`)");
+    ensureIndex($pdo, 'doc_category', 'idx_deleted_at', "ALTER TABLE `doc_category` ADD KEY `idx_deleted_at` (`deleted_at`)");
+    ensureIndex($pdo, 'doc_article', 'idx_category_status', "ALTER TABLE `doc_article` ADD KEY `idx_category_status` (`category_id`, `status`)");
+    ensureIndex($pdo, 'doc_article', 'idx_status_published', "ALTER TABLE `doc_article` ADD KEY `idx_status_published` (`status`, `published_at`)");
+    ensureIndex($pdo, 'doc_article', 'idx_deleted_at', "ALTER TABLE `doc_article` ADD KEY `idx_deleted_at` (`deleted_at`)");
+    ensureIndex($pdo, 'doc_article_history', 'idx_article', "ALTER TABLE `doc_article_history` ADD KEY `idx_article` (`article_id`, `created_at`)");
+    ensureIndex($pdo, 'doc_article_history', 'idx_deleted_at', "ALTER TABLE `doc_article_history` ADD KEY `idx_deleted_at` (`deleted_at`)");
+}
+
+function ensureTemplateSchema(PDO $pdo): void
+{
+    $schemas = [
+        'template_category' => [
+            'description' => "ALTER TABLE `template_category` ADD COLUMN `description` VARCHAR(500) DEFAULT NULL AFTER `deleted_at`",
+            'sort' => "ALTER TABLE `template_category` ADD COLUMN `sort` INT DEFAULT 0 AFTER `description`",
+            'flag' => "ALTER TABLE `template_category` ADD COLUMN `flag` ENUM('off','on') DEFAULT 'on' AFTER `sort`",
+        ],
+        'template' => [
+            'category_id' => "ALTER TABLE `template` ADD COLUMN `category_id` BIGINT UNSIGNED DEFAULT NULL AFTER `deleted_at`",
+            'description' => "ALTER TABLE `template` ADD COLUMN `description` VARCHAR(1000) DEFAULT NULL AFTER `category_id`",
+            'file_id' => "ALTER TABLE `template` ADD COLUMN `file_id` BIGINT UNSIGNED DEFAULT NULL AFTER `description`",
+            'version' => "ALTER TABLE `template` ADD COLUMN `version` VARCHAR(40) DEFAULT '1.0' AFTER `file_id`",
+            'download_count' => "ALTER TABLE `template` ADD COLUMN `download_count` INT UNSIGNED DEFAULT 0 AFTER `version`",
+            'flag' => "ALTER TABLE `template` ADD COLUMN `flag` ENUM('off','on') DEFAULT 'on' AFTER `download_count`",
+        ],
+    ];
+
+    foreach ($schemas as $table => $columns) {
+        foreach ($columns as $column => $ddl) {
+            ensureColumn($pdo, $table, $column, $ddl);
+        }
+    }
+
+    ensureIndex($pdo, 'template_category', 'uk_code', "ALTER TABLE `template_category` ADD UNIQUE KEY `uk_code` (`code`)");
+    ensureIndex($pdo, 'template_category', 'idx_flag_sort', "ALTER TABLE `template_category` ADD KEY `idx_flag_sort` (`flag`, `sort`)");
+    ensureIndex($pdo, 'template_category', 'idx_deleted_at', "ALTER TABLE `template_category` ADD KEY `idx_deleted_at` (`deleted_at`)");
+    ensureIndex($pdo, 'template', 'idx_category_flag', "ALTER TABLE `template` ADD KEY `idx_category_flag` (`category_id`, `flag`)");
+    ensureIndex($pdo, 'template', 'idx_file_id', "ALTER TABLE `template` ADD KEY `idx_file_id` (`file_id`)");
+    ensureIndex($pdo, 'template', 'idx_deleted_at', "ALTER TABLE `template` ADD KEY `idx_deleted_at` (`deleted_at`)");
+}
+
+function ensureExportTaskSchema(PDO $pdo): void
+{
+    $columns = [
+        'user_id' => "ALTER TABLE `export_task` ADD COLUMN `user_id` BIGINT UNSIGNED DEFAULT NULL AFTER `deleted_at`",
+        'type' => "ALTER TABLE `export_task` ADD COLUMN `type` VARCHAR(80) DEFAULT NULL AFTER `user_id`",
+        'file_name' => "ALTER TABLE `export_task` ADD COLUMN `file_name` VARCHAR(255) DEFAULT NULL AFTER `type`",
+        'params' => "ALTER TABLE `export_task` ADD COLUMN `params` JSON DEFAULT NULL AFTER `file_name`",
+        'progress' => "ALTER TABLE `export_task` ADD COLUMN `progress` TINYINT UNSIGNED DEFAULT 0 AFTER `status`",
+        'total_rows' => "ALTER TABLE `export_task` ADD COLUMN `total_rows` INT UNSIGNED DEFAULT 0 AFTER `progress`",
+        'file_id' => "ALTER TABLE `export_task` ADD COLUMN `file_id` BIGINT UNSIGNED DEFAULT NULL AFTER `total_rows`",
+        'error_message' => "ALTER TABLE `export_task` ADD COLUMN `error_message` TEXT DEFAULT NULL AFTER `file_id`",
+        'error_trace' => "ALTER TABLE `export_task` ADD COLUMN `error_trace` MEDIUMTEXT DEFAULT NULL AFTER `error_message`",
+        'started_at' => "ALTER TABLE `export_task` ADD COLUMN `started_at` DATETIME DEFAULT NULL AFTER `error_trace`",
+        'finished_at' => "ALTER TABLE `export_task` ADD COLUMN `finished_at` DATETIME DEFAULT NULL AFTER `started_at`",
+    ];
+
+    foreach ($columns as $column => $ddl) {
+        ensureColumn($pdo, 'export_task', $column, $ddl);
+    }
+
+    ensureIndex($pdo, 'export_task', 'idx_user_status', "ALTER TABLE `export_task` ADD KEY `idx_user_status` (`user_id`, `status`)");
+    ensureIndex($pdo, 'export_task', 'idx_type_status', "ALTER TABLE `export_task` ADD KEY `idx_type_status` (`type`, `status`)");
+    ensureIndex($pdo, 'export_task', 'idx_deleted_at', "ALTER TABLE `export_task` ADD KEY `idx_deleted_at` (`deleted_at`)");
+}
+
 function simpleTable(string $table, array $columns = []): string
 {
     $extra = $columns ? ",\n            " . implode(",\n            ", $columns) : '';
@@ -1202,6 +1306,7 @@ function seedSchool(PDO $pdo, string $wechatProxyUrl): void
     seedPracticeUsers($pdo);
     seedMenus($pdo);
     seedOperationGuides($pdo);
+    seedCommonSupportData($pdo);
     seedConfig($pdo, $wechatProxyUrl);
     seedInternshipDemo($pdo);
 }
@@ -1646,6 +1751,22 @@ function seedMenus(PDO $pdo): void
         [81, 8, '文件管理', null, null, 'pc', 'menu', 81, 'FolderOpen'],
         [811, 81, '列表', 'file:view', '/file', 'pc', 'list', 811, 'List'],
         [801, 811, '文件处理', 'file:manage', null, 'pc', 'button', 801, null],
+        [9, 0, '文档中心', null, null, 'both', 'directory', 75, 'BookOpen'],
+        [91, 9, '帮助文档', null, null, 'both', 'menu', 91, 'BookOpen'],
+        [911, 91, '列表', 'doc:view', '/doc', 'both', 'list', 911, 'List'],
+        [9111, 911, '保存', 'doc:manage', null, 'pc', 'button', 912, null],
+        [9112, 911, '删除', 'doc:manage', null, 'pc', 'button', 913, null],
+        [10, 0, '模板库', null, null, 'both', 'directory', 76, 'FolderOpen'],
+        [100, 10, '模板管理', null, null, 'both', 'menu', 100, 'FolderOpen'],
+        [1000, 100, '列表', 'template:view', '/template', 'both', 'list', 1000, 'List'],
+        [10001, 1000, '下载', 'template:download', null, 'both', 'button', 1001, null],
+        [10002, 1000, '保存', 'template:manage', null, 'pc', 'button', 1002, null],
+        [10003, 1000, '删除', 'template:manage', null, 'pc', 'button', 1003, null],
+        [20, 0, '导出任务', null, null, 'pc', 'directory', 77, 'FileClock'],
+        [200, 20, '任务中心', null, null, 'pc', 'menu', 200, 'FileClock'],
+        [2000, 200, '列表', 'export:view', '/export/tasks', 'pc', 'list', 2000, 'List'],
+        [20001, 2000, '创建', 'export:create', null, 'pc', 'button', 2001, null],
+        [20002, 2000, '重试', 'export:retry', null, 'pc', 'button', 2002, null],
     ];
 
     $stmt = $pdo->prepare(
@@ -1701,15 +1822,16 @@ function seedMenus(PDO $pdo): void
     ];
     $trainingMenus = [2, 21, 211, 201, 2112];
     $labMenus = [3, 31, 311, 301, 3112];
+    $commonViewMenus = [9, 91, 911, 10, 100, 1000, 10001, 20, 200, 2000, 20001, 20002];
     $allMenuIds = array_map(static fn (array $menu): int => (int) $menu[0], $menus);
     $roleMenuIds = [
         1 => $allMenuIds,
         2 => $allMenuIds,
-        3 => array_merge($internshipAdminMenus, $trainingMenus, $labMenus),
-        4 => array_merge($internshipAdminMenus, $trainingMenus, $labMenus),
-        5 => [1, 11, 111, 12, 121, 104, 1213, 13, 131, 14, 141, 105, 15, 151, 106, 1512, 16, 161, 107, 1612, 17, 171, 108, 195, 1951, 19512, 2, 21, 211, 201, 3, 31, 311, 301],
-        6 => [1, 11, 111, 12, 121, 103, 14, 141, 105, 15, 151, 106, 16, 161, 107, 195, 1951, 19511],
-        7 => [1, 17, 171, 108],
+        3 => array_merge($internshipAdminMenus, $trainingMenus, $labMenus, $commonViewMenus),
+        4 => array_merge($internshipAdminMenus, $trainingMenus, $labMenus, $commonViewMenus),
+        5 => array_merge([1, 11, 111, 12, 121, 104, 1213, 13, 131, 14, 141, 105, 15, 151, 106, 1512, 16, 161, 107, 1612, 17, 171, 108, 195, 1951, 19512, 2, 21, 211, 201, 3, 31, 311, 301], $commonViewMenus),
+        6 => array_merge([1, 11, 111, 12, 121, 103, 14, 141, 105, 15, 151, 106, 16, 161, 107, 195, 1951, 19511], $commonViewMenus),
+        7 => array_merge([1, 17, 171, 108], $commonViewMenus),
     ];
 
     foreach ($roleMenuIds as $roleId => $menuIds) {
@@ -1741,6 +1863,116 @@ function syncSeedRoleMenus(PDO $pdo, int $roleId, array $menuIds): void
     $stmt->execute(array_merge([$roleId], $menuIds));
 }
 
+function seedCommonSupportData(PDO $pdo): void
+{
+    seedDocCenterData($pdo);
+    seedTemplateLibraryData($pdo);
+}
+
+function seedDocCenterData(PDO $pdo): void
+{
+    $categoryStmt = $pdo->prepare(
+        "INSERT INTO `doc_category` (`id`, `uuid`, `parent_id`, `code`, `name`, `icon`, `sort`, `status`)
+         VALUES (?, ?, ?, ?, ?, ?, ?, 'enabled')
+         ON DUPLICATE KEY UPDATE
+            `parent_id` = VALUES(`parent_id`),
+            `code` = VALUES(`code`),
+            `name` = VALUES(`name`),
+            `icon` = VALUES(`icon`),
+            `sort` = VALUES(`sort`),
+            `status` = 'enabled',
+            `deleted_at` = NULL"
+    );
+
+    $categories = [
+        [1, '00000000-0000-0000-0000-000000210001', 0, 'practice_flow', '实践流程', 'Route', 10],
+        [2, '00000000-0000-0000-0000-000000210002', 0, 'student_help', '学生帮助', 'UserRound', 20],
+        [3, '00000000-0000-0000-0000-000000210003', 0, 'teacher_help', '教师帮助', 'UsersRound', 30],
+        [4, '00000000-0000-0000-0000-000000210004', 0, 'admin_help', '管理员帮助', 'ShieldCheck', 40],
+    ];
+    foreach ($categories as $category) {
+        $categoryStmt->execute($category);
+    }
+
+    $articleStmt = $pdo->prepare(
+        "INSERT INTO `doc_article` (`id`, `uuid`, `category_id`, `title`, `name`, `content`, `version`, `author_id`, `view_count`, `published_at`, `status`)
+         VALUES (?, ?, ?, ?, ?, ?, '1.0', 1, 0, NOW(), 'published')
+         ON DUPLICATE KEY UPDATE
+            `category_id` = VALUES(`category_id`),
+            `title` = VALUES(`title`),
+            `name` = VALUES(`name`),
+            `content` = VALUES(`content`),
+            `version` = VALUES(`version`),
+            `published_at` = COALESCE(`published_at`, NOW()),
+            `status` = 'published',
+            `deleted_at` = NULL"
+    );
+
+    $articles = [
+        [
+            1,
+            '00000000-0000-0000-0000-000000220001',
+            1,
+            '高校实习实践基础流程',
+            '<h3>流程</h3><p>管理员维护届次、学院、专业、班级、企业、实习安排和指导关系；学生按安排提交申请、签到、日志、报告和延期申请；教师按指导关系处理审核、评阅和成绩；学校管理员查看统计、归档材料和审计日志。</p><h3>注意</h3><p>实验和实训流程待确认，当前文档中心仅维护公共帮助和实习实践基础说明。</p>',
+        ],
+        [
+            2,
+            '00000000-0000-0000-0000-000000220002',
+            2,
+            '学生端提交说明',
+            '<h3>学生流程</h3><p>学生端主要完成自己的实习申请、签到、日志、报告、延期申请和流程记录查看。状态为需修改时，应进入对应记录重新编辑并提交。</p><h3>常见问题</h3><p>看不到列表筛选属于正常体验，学生仅查看本人的数据。</p>',
+        ],
+        [
+            3,
+            '00000000-0000-0000-0000-000000220003',
+            3,
+            '教师端审核说明',
+            '<h3>教师流程</h3><p>教师根据指导关系查看学生过程材料。待审核状态可通过或退回，已通过状态只能发起通过后修改，退回后需等待学生重新提交。</p>',
+        ],
+        [
+            4,
+            '00000000-0000-0000-0000-000000220004',
+            4,
+            '管理员基础维护说明',
+            '<h3>维护顺序</h3><p>建议先维护届次，再维护学院、专业、班级、用户、角色权限、组织范围，最后配置实习安排和业务规则。</p><h3>数据范围</h3><p>学院管理员默认按学院范围，专业管理员默认按专业范围，指导教师按指导学生范围查看数据。</p>',
+        ],
+    ];
+    foreach ($articles as $article) {
+        [$id, $uuid, $categoryId, $title, $content] = $article;
+        $articleStmt->execute([$id, $uuid, $categoryId, $title, $title, $content]);
+    }
+}
+
+function seedTemplateLibraryData(PDO $pdo): void
+{
+    $stmt = $pdo->prepare(
+        "INSERT INTO `template_category` (`id`, `uuid`, `code`, `name`, `description`, `sort`, `flag`, `status`)
+         VALUES (?, ?, ?, ?, ?, ?, 'on', 'enabled')
+         ON DUPLICATE KEY UPDATE
+            `code` = VALUES(`code`),
+            `name` = VALUES(`name`),
+            `description` = VALUES(`description`),
+            `sort` = VALUES(`sort`),
+            `flag` = 'on',
+            `status` = 'enabled',
+            `deleted_at` = NULL"
+    );
+
+    $categories = [
+        [1, '00000000-0000-0000-0000-000000230001', 'internship_requirement', '实习要求模板', '实习安排、实习要求、过程约束类模板。', 10],
+        [2, '00000000-0000-0000-0000-000000230002', 'safety_letter', '安全责任书', '学生安全承诺、安全告知相关模板。', 20],
+        [3, '00000000-0000-0000-0000-000000230003', 'position_cert', '岗位证明模板', '企业岗位证明、在岗证明材料模板。', 30],
+        [4, '00000000-0000-0000-0000-000000230004', 'guardian_consent', '监护人知情同意书', '监护人告知和知情同意材料模板。', 40],
+        [5, '00000000-0000-0000-0000-000000230005', 'tripartite_agreement', '三方协议模板库', '学校、学生、企业三方协议相关模板。', 50],
+        [6, '00000000-0000-0000-0000-000000230006', 'process_document', '过程文档模板库', '签到、日志、周志、过程检查材料模板。', 60],
+        [7, '00000000-0000-0000-0000-000000230007', 'report_template_lib', '实习报告模板库', '实习报告、总结、鉴定类模板。', 70],
+    ];
+    foreach ($categories as $category) {
+        $stmt->execute($category);
+    }
+}
+
 function seedOperationGuides(PDO $pdo): void
 {
     $guides = [
@@ -1752,6 +1984,9 @@ function seedOperationGuides(PDO $pdo): void
         ['file', '文件管理操作说明', '文件管理用于查看学校业务库内的上传文件、上传人、上传时间、设备信息和文件状态。', '通过关键词、状态和分类定位文件，点击打开可查看文件访问地址。', '如果文件打不开，检查文件状态、存储配置和浏览器访问权限。', 60],
         ['config', '系统配置操作说明', '系统配置维护菜单权限、角色权限、组织范围、基础档案、操作说明和企业微信应用配置。', '菜单树按主菜单、业务菜单、列表、按钮维护；角色授权按树勾选；组织范围用于限制学院、专业、班级、企业等数据边界。', '如果授权后没有生效，刷新权限或重新登录；如果菜单结构异常，先检查父级是否选择为按钮节点。', 70],
         ['profile', '个人设置操作说明', '个人设置用于维护头像资料、桌面壁纸和消息接收偏好。', '点击头像或壁纸区域上传文件，也可以在桌面右键进入壁纸设置。', '如果壁纸没有立即变化，检查浏览器缓存和上传结果，必要时重新保存个人设置。', 80],
+        ['doc', '文档中心操作说明', '文档中心用于维护学校实践制度、操作流程、常见问题和角色帮助文档。', '学校管理员维护分类和文档，教师、学生和其他角色按权限查看已发布文档。', '如果用户看不到文档，检查文档状态是否发布，以及角色是否具备文档查看权限。', 90],
+        ['templateLib', '模板库操作说明', '模板库用于维护实习实践材料模板，支持按分类查看、上传、下载和维护版本。', '学校管理员上传模板文件并选择分类，师生进入模板库下载对应材料。', '模板列表没有文件时，说明分类已创建但尚未上传真实模板。', 100],
+        ['exportTask', '导出任务操作说明', '导出任务中心记录后续列表导出的任务状态、进度、文件和失败原因。', '用户创建导出任务后在任务中心查看状态；失败或超时任务可重新排队。', '当前任务中心先提供统一记录能力，具体业务列表的真实异步导出会在对应模块接入。', 110],
     ];
 
     $stmt = $pdo->prepare(

@@ -110,6 +110,8 @@
           <van-cell title="所属学校" :value="schoolText" />
           <van-cell title="学校代码" :value="schoolCodeText" />
           <van-cell title="数据范围" :label="scopeDetailText" :value="scopeText" />
+          <van-cell v-if="hasPermission('doc:view')" title="文档中心" value="查看" is-link @click="activeTab = 'doc'" />
+          <van-cell v-if="hasPermission('template:view')" title="模板库" value="下载" is-link @click="activeTab = 'templateLib'" />
         </van-cell-group>
       </template>
 
@@ -179,6 +181,105 @@
               @click="loadMoreMessages"
             >
               {{ messageState.items.length >= messageState.pagination.total ? '没有更多' : '加载更多' }}
+            </button>
+          </div>
+        </section>
+      </template>
+
+      <template v-else-if="activeTab === 'doc'">
+        <section class="module-head">
+          <span class="green">
+            <BookOpen :size="25" />
+          </span>
+          <div>
+            <h1>文档中心</h1>
+            <p>学校制度、流程说明和常见问题</p>
+          </div>
+        </section>
+
+        <section class="mobile-list-tools support-mobile-tools">
+          <select v-model="support.doc.filters.category_id" @change="loadMobileDocs(1)">
+            <option value="">全部分类</option>
+            <option v-for="item in support.doc.categories" :key="item.id" :value="item.id">
+              {{ item.name }}
+            </option>
+          </select>
+          <input v-model="support.doc.filters.keyword" placeholder="搜索文档" @keyup.enter="loadMobileDocs(1)">
+        </section>
+
+        <section class="mobile-support-list">
+          <article
+            v-for="item in support.doc.items"
+            :key="item.id"
+            class="mobile-card support-mobile-card"
+            @click="openMobileDoc(item)"
+          >
+            <header>
+              <BookOpen :size="19" />
+              <strong>{{ item.title }}</strong>
+              <small>{{ item.category_name || '未分类' }}</small>
+            </header>
+            <p>{{ item.version ? `版本 ${item.version}` : '文档' }} / {{ item.updated_at || '-' }}</p>
+          </article>
+          <section v-if="!support.doc.items.length" class="mobile-empty-card">
+            <strong>暂无文档</strong>
+            <span>已发布文档会显示在这里。</span>
+          </section>
+          <div class="mobile-list-footer">
+            <button :disabled="support.doc.loading" @click="loadMobileDocs(1)">刷新</button>
+            <button v-if="canLoadMoreSupport('doc')" :disabled="support.doc.loading" @click="loadMobileDocs(support.doc.pagination.page + 1, true)">
+              加载更多
+            </button>
+          </div>
+        </section>
+      </template>
+
+      <template v-else-if="activeTab === 'templateLib'">
+        <section class="module-head">
+          <span class="teal">
+            <FileText :size="25" />
+          </span>
+          <div>
+            <h1>模板库</h1>
+            <p>实习实践材料模板查看和下载</p>
+          </div>
+        </section>
+
+        <section class="mobile-list-tools support-mobile-tools">
+          <select v-model="support.template.filters.category_id" @change="loadMobileTemplates(1)">
+            <option value="">全部分类</option>
+            <option v-for="item in support.template.categories" :key="item.id" :value="item.id">
+              {{ item.name }}
+            </option>
+          </select>
+          <input v-model="support.template.filters.keyword" placeholder="搜索模板" @keyup.enter="loadMobileTemplates(1)">
+        </section>
+
+        <section class="mobile-support-list">
+          <article
+            v-for="item in support.template.items"
+            :key="item.id"
+            class="mobile-card support-mobile-card"
+          >
+            <header>
+              <FileText :size="19" />
+              <strong>{{ item.name }}</strong>
+              <small>{{ item.category_name || '未分类' }}</small>
+            </header>
+            <p>{{ item.description || item.file?.download_name || '暂无说明' }}</p>
+            <footer>
+              <span>版本 {{ item.version || '-' }} / 下载 {{ item.download_count || 0 }}</span>
+              <button type="button" @click="downloadMobileTemplate(item)">下载</button>
+            </footer>
+          </article>
+          <section v-if="!support.template.items.length" class="mobile-empty-card">
+            <strong>暂无模板</strong>
+            <span>学校管理员上传模板后会显示在这里。</span>
+          </section>
+          <div class="mobile-list-footer">
+            <button :disabled="support.template.loading" @click="loadMobileTemplates(1)">刷新</button>
+            <button v-if="canLoadMoreSupport('template')" :disabled="support.template.loading" @click="loadMobileTemplates(support.template.pagination.page + 1, true)">
+              加载更多
             </button>
           </div>
         </section>
@@ -813,6 +914,36 @@
     </van-tabbar>
 
     <van-popup
+      v-model:show="support.doc.detail.visible"
+      round
+      position="bottom"
+      safe-area-inset-bottom
+    >
+      <section class="support-doc-sheet">
+        <header>
+          <span>{{ support.doc.detail.article?.category_name || '未分类' }}</span>
+          <strong>{{ support.doc.detail.article?.title || '文档详情' }}</strong>
+          <small>
+            版本 {{ support.doc.detail.article?.version || '-' }} /
+            浏览 {{ support.doc.detail.article?.view_count || 0 }}
+          </small>
+        </header>
+        <article
+          v-if="support.doc.detail.article"
+          class="support-mobile-rich"
+          v-html="support.doc.detail.article.content"
+        />
+        <div v-else class="mobile-empty-card">
+          <strong>{{ support.doc.detail.loading ? '正在读取文档' : '暂无文档内容' }}</strong>
+          <span>{{ support.doc.detail.message || '请稍后重试。' }}</span>
+        </div>
+        <div class="sheet-actions single">
+          <button type="button" @click="closeMobileDoc">关闭</button>
+        </div>
+      </section>
+    </van-popup>
+
+    <van-popup
       v-model:show="internship.reviewDialog.visible"
       round
       position="bottom"
@@ -919,6 +1050,7 @@ import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { showToast } from 'vant';
 import {
   BriefcaseBusiness,
+  BookOpen,
   CalendarCheck,
   CheckCircle2,
   ChevronRight,
@@ -941,6 +1073,10 @@ import {
 } from '@lucide/vue';
 import { useMobilePermissions } from './composables/useMobilePermissions';
 import {
+  downloadTemplateItem,
+  fetchDocCategories,
+  fetchDocDetail,
+  fetchDocList,
   fetchInternshipArchiveMaterials,
   fetchInternshipApplications,
   fetchInternshipArrangements,
@@ -958,6 +1094,8 @@ import {
   fetchInternshipTimeline,
   fetchMessages,
   fetchMessageSummary,
+  fetchTemplateCategories,
+  fetchTemplateList,
   markMessagesRead,
   requestInternshipModification,
   reviewInternshipApplication,
@@ -1013,6 +1151,45 @@ const messageLevelNames = {
   important: '重要',
   urgent: '紧急',
 };
+
+const support = reactive({
+  doc: {
+    loading: false,
+    message: '',
+    categories: [],
+    items: [],
+    detail: {
+      visible: false,
+      loading: false,
+      message: '',
+      article: null,
+    },
+    filters: {
+      category_id: '',
+      keyword: '',
+    },
+    pagination: {
+      page: 1,
+      page_size: 20,
+      total: 0,
+    },
+  },
+  template: {
+    loading: false,
+    message: '',
+    categories: [],
+    items: [],
+    filters: {
+      category_id: '',
+      keyword: '',
+    },
+    pagination: {
+      page: 1,
+      page_size: 20,
+      total: 0,
+    },
+  },
+});
 
 const defaultInternshipReviewRules = {
   application: {
@@ -1161,6 +1338,24 @@ const modules = [
     icon: FlaskConical,
     theme: 'green',
     permission: 'lab:view',
+    flow: '-',
+  },
+  {
+    key: 'doc',
+    title: '文档中心',
+    desc: '制度流程和常见问题',
+    icon: BookOpen,
+    theme: 'green',
+    permission: 'doc:view',
+    flow: '-',
+  },
+  {
+    key: 'templateLib',
+    title: '模板库',
+    desc: '材料模板查看和下载',
+    icon: FileText,
+    theme: 'teal',
+    permission: 'template:view',
     flow: '-',
   },
 ];
@@ -3012,6 +3207,167 @@ function statusText(value) {
   return names[value] || value || '-';
 }
 
+async function loadMobileSupportCategories() {
+  if (!isLoggedIn.value) {
+    support.doc.categories = [];
+    support.template.categories = [];
+    return;
+  }
+
+  const tasks = [];
+  if (hasPermission('doc:view')) {
+    tasks.push(fetchDocCategories().then((data) => {
+      support.doc.categories = flattenSupportCategories(data.tree || data.items || []);
+    }));
+  }
+  if (hasPermission('template:view')) {
+    tasks.push(fetchTemplateCategories().then((data) => {
+      support.template.categories = data.items || [];
+    }));
+  }
+
+  if (!tasks.length) {
+    return;
+  }
+
+  try {
+    await Promise.all(tasks);
+  } catch (error) {
+    support.doc.message = error.message;
+    support.template.message = error.message;
+  }
+}
+
+async function loadMobileDocs(page = 1, append = false) {
+  if (!isLoggedIn.value || !hasPermission('doc:view') || support.doc.loading) {
+    return;
+  }
+
+  support.doc.loading = true;
+  support.doc.message = '';
+  try {
+    if (!support.doc.categories.length) {
+      const categories = await fetchDocCategories();
+      support.doc.categories = flattenSupportCategories(categories.tree || categories.items || []);
+    }
+    const data = await fetchDocList({
+      page,
+      page_size: support.doc.pagination.page_size,
+      category_id: support.doc.filters.category_id || '',
+      keyword: support.doc.filters.keyword || '',
+    });
+    const items = data.items || [];
+    support.doc.items = append ? [...support.doc.items, ...items] : items;
+    support.doc.pagination = {
+      page: Number(data.pagination?.page || page),
+      page_size: Number(data.pagination?.page_size || support.doc.pagination.page_size),
+      total: Number(data.pagination?.total || 0),
+    };
+  } catch (error) {
+    support.doc.message = error.message;
+    showToast(error.message);
+  } finally {
+    support.doc.loading = false;
+  }
+}
+
+async function loadMobileTemplates(page = 1, append = false) {
+  if (!isLoggedIn.value || !hasPermission('template:view') || support.template.loading) {
+    return;
+  }
+
+  support.template.loading = true;
+  support.template.message = '';
+  try {
+    if (!support.template.categories.length) {
+      const categories = await fetchTemplateCategories();
+      support.template.categories = categories.items || [];
+    }
+    const data = await fetchTemplateList({
+      page,
+      page_size: support.template.pagination.page_size,
+      category_id: support.template.filters.category_id || '',
+      keyword: support.template.filters.keyword || '',
+    });
+    const items = data.items || [];
+    support.template.items = append ? [...support.template.items, ...items] : items;
+    support.template.pagination = {
+      page: Number(data.pagination?.page || page),
+      page_size: Number(data.pagination?.page_size || support.template.pagination.page_size),
+      total: Number(data.pagination?.total || 0),
+    };
+  } catch (error) {
+    support.template.message = error.message;
+    showToast(error.message);
+  } finally {
+    support.template.loading = false;
+  }
+}
+
+async function openMobileDoc(row) {
+  if (!row?.id) {
+    return;
+  }
+
+  support.doc.detail.visible = true;
+  support.doc.detail.loading = true;
+  support.doc.detail.message = '';
+  support.doc.detail.article = row;
+  try {
+    const data = await fetchDocDetail(row.id);
+    support.doc.detail.article = data.article || row;
+  } catch (error) {
+    support.doc.detail.message = error.message;
+    showToast(error.message);
+  } finally {
+    support.doc.detail.loading = false;
+  }
+}
+
+function closeMobileDoc() {
+  support.doc.detail.visible = false;
+}
+
+async function downloadMobileTemplate(row) {
+  if (!row?.id) {
+    return;
+  }
+
+  support.template.message = '';
+  try {
+    const data = await downloadTemplateItem(row.id);
+    if (data.url) {
+      window.open(data.url, '_blank', 'noopener');
+    } else {
+      support.template.message = '模板文件暂无下载地址';
+      showToast(support.template.message);
+    }
+    await loadMobileTemplates(support.template.pagination.page || 1);
+  } catch (error) {
+    support.template.message = error.message;
+    showToast(error.message);
+  }
+}
+
+function canLoadMoreSupport(type) {
+  const target = type === 'template' ? support.template : support.doc;
+  return target.items.length < (target.pagination.total || 0);
+}
+
+function flattenSupportCategories(rows, level = 0) {
+  const result = [];
+  (rows || []).forEach((row) => {
+    result.push({
+      ...row,
+      name: `${'　'.repeat(level)}${row.name || '-'}`,
+    });
+    if (row.children?.length) {
+      result.push(...flattenSupportCategories(row.children, level + 1));
+    }
+  });
+  return result;
+}
+
 async function loadMessageSummary() {
   if (!isLoggedIn.value) {
     resetMessageState();
@@ -3196,10 +3552,19 @@ async function refreshMobilePage() {
     await loadMessages(1);
     return;
   }
+  if (activeTab.value === 'doc') {
+    await loadMobileDocs(1);
+    return;
+  }
+  if (activeTab.value === 'templateLib') {
+    await loadMobileTemplates(1);
+    return;
+  }
   if (activeTab.value === 'internship') {
     await loadInternship();
     return;
   }
+  await loadMobileSupportCategories();
   await loadMessageSummary();
 }
 
@@ -3214,6 +3579,7 @@ async function submitLogin() {
     });
     await load();
     await loadMessageSummary();
+    await loadMobileSupportCategories();
     await loadInternship();
   } catch (error) {
     loginState.message = error.message;
@@ -3231,6 +3597,9 @@ async function submitLogout() {
     internship.panel = 'workbench';
     internship.message = '';
     resetMessageState();
+    support.doc.items = [];
+    support.template.items = [];
+    support.doc.detail.visible = false;
     await load();
   } catch (error) {
     loginState.message = error.message;
@@ -3245,6 +3614,12 @@ watch(activeTab, (tab) => {
   }
   if (tab === 'message') {
     loadMessages(1);
+  }
+  if (tab === 'doc') {
+    loadMobileDocs(1);
+  }
+  if (tab === 'templateLib') {
+    loadMobileTemplates(1);
   }
 });
 
@@ -3268,6 +3643,7 @@ watch(visibleMobileModules, () => {
 onMounted(async () => {
   await load();
   await loadMessageSummary();
+  await loadMobileSupportCategories();
   await loadInternship();
 });
 </script>

@@ -97,6 +97,111 @@ export function deleteOperationGuide(id) {
   });
 }
 
+export function fetchDocCategories() {
+  return request('/doc/categories');
+}
+
+export function fetchDocList(params = {}) {
+  const query = new URLSearchParams(params).toString();
+  return request(`/doc/list${query ? `?${query}` : ''}`);
+}
+
+export function fetchDocDetail(id) {
+  const query = new URLSearchParams({ id }).toString();
+  return request(`/doc/detail?${query}`);
+}
+
+export function fetchDocHistory(articleId) {
+  const query = new URLSearchParams({ article_id: articleId }).toString();
+  return request(`/doc/history?${query}`);
+}
+
+export function saveDocCategory(payload) {
+  return request('/doc/save-category', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function saveDocArticle(payload) {
+  return request('/doc/save', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function deleteDocArticle(id) {
+  return request('/doc/delete', {
+    method: 'POST',
+    body: JSON.stringify({ id }),
+  });
+}
+
+export function fetchTemplateCategories() {
+  return request('/template/categories');
+}
+
+export function fetchTemplateList(params = {}) {
+  const query = new URLSearchParams(params).toString();
+  return request(`/template/list${query ? `?${query}` : ''}`);
+}
+
+export function saveTemplateCategory(payload) {
+  return request('/template/save-category', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function uploadTemplateFile(file) {
+  const body = new FormData();
+  body.append('file', file);
+  return request('/template/upload', {
+    method: 'POST',
+    body,
+  });
+}
+
+export function saveTemplateItem(payload) {
+  return request('/template/save', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function deleteTemplateItem(id) {
+  return request('/template/delete', {
+    method: 'POST',
+    body: JSON.stringify({ id }),
+  });
+}
+
+export function downloadTemplateItem(id) {
+  return request('/template/download', {
+    method: 'POST',
+    body: JSON.stringify({ id }),
+  });
+}
+
+export function fetchExportTasks(params = {}) {
+  const query = new URLSearchParams(params).toString();
+  return request(`/export/list${query ? `?${query}` : ''}`);
+}
+
+export function createExportTask(payload) {
+  return request('/export/create', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function retryExportTask(id) {
+  return request('/export/retry', {
+    method: 'POST',
+    body: JSON.stringify({ id }),
+  });
+}
+
 export function fetchAdminRoles() {
   return request('/admin/roles');
 }

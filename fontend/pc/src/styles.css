@@ -2702,6 +2702,205 @@ a {
   background: #fbfcfe;
 }
 
+.support-panel {
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 10px;
+  padding: 12px;
+  overflow: hidden;
+  background: #fff;
+}
+
+.support-toolbar {
+  display: grid;
+  grid-template-columns: 180px 180px minmax(220px, 1fr) auto auto auto auto;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+}
+
+.template-library-panel .support-toolbar,
+.export-task-panel .support-toolbar {
+  grid-template-columns: 190px minmax(260px, 1fr) auto auto auto auto;
+}
+
+.support-layout {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 178px minmax(420px, 1fr) minmax(280px, 38%);
+  gap: 10px;
+  overflow: hidden;
+}
+
+.support-side {
+  min-height: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px;
+  overflow: auto;
+  background: #fbfcfe;
+}
+
+.support-side button,
+.template-category-strip button {
+  min-height: 34px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text);
+  background: transparent;
+  text-align: left;
+}
+
+.support-side button {
+  width: 100%;
+  padding: 0 9px;
+}
+
+.support-side button.active,
+.support-side button:hover,
+.template-category-strip button.active,
+.template-category-strip button:hover {
+  border-color: #bfd8f4;
+  color: var(--primary);
+  background: var(--primary-soft);
+}
+
+.support-table {
+  min-height: 0;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 10px;
+  overflow: hidden;
+}
+
+.support-detail {
+  min-height: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  overflow: hidden;
+  background: #fbfcfe;
+}
+
+.support-detail header {
+  display: grid;
+  gap: 4px;
+  padding: 14px;
+  border-bottom: 1px solid var(--line);
+  background: #fff;
+}
+
+.support-detail header span,
+.support-detail header small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.support-detail header strong {
+  font-size: 17px;
+}
+
+.support-detail footer {
+  padding: 10px 14px;
+  border-top: 1px solid var(--line);
+  background: #fff;
+}
+
+.support-rich {
+  min-height: 0;
+  overflow: auto;
+  padding: 16px;
+  line-height: 1.7;
+}
+
+.template-category-strip {
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.template-category-strip button {
+  flex: 0 0 auto;
+  padding: 0 12px;
+  white-space: nowrap;
+}
+
+.template-cell,
+.file-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.template-cell span,
+.file-cell span {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.template-cell strong,
+.file-cell strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.template-cell small,
+.file-cell small {
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.operation-form .span-2,
+.operation-form .template-upload-row {
+  grid-column: 1 / -1;
+}
+
+.template-upload-row {
+  display: grid;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.template-upload-row button {
+  min-height: 38px;
+  border: 1px dashed var(--line-strong);
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--primary);
+  background: #fbfcfe;
+}
+
+.operation-dialog.doc-edit-dialog,
+.operation-dialog.template-edit-dialog,
+.operation-dialog.export-create-dialog {
+  width: min(860px, calc(100vw - 48px));
+}
+
+.operation-dialog.category-edit-dialog {
+  width: min(620px, calc(100vw - 48px));
+}
+
+.operation-dialog.history-dialog {
+  width: min(840px, calc(100vw - 48px));
+}
+
 @media (max-width: 980px) {
   .desktop-shell {
     min-width: 0;
@@ -2768,5 +2967,12 @@ a {
 
   .admin-toolbar .el-select {
     width: min(240px, 100%);
+  }
+
+  .support-toolbar,
+  .template-library-panel .support-toolbar,
+  .export-task-panel .support-toolbar,
+  .support-layout {
+    grid-template-columns: minmax(0, 1fr);
   }
 }

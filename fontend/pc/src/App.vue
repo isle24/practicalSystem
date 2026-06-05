@@ -1195,6 +1195,18 @@
                   </div>
                 </div>
 
+                <div v-else-if="win.module.id === 'doc'" class="module-content-panel">
+                  <DocCenter :can-manage="hasPermission('doc:manage')" />
+                </div>
+
+                <div v-else-if="win.module.id === 'templateLib'" class="module-content-panel">
+                  <TemplateLibrary :can-manage="hasPermission('template:manage')" />
+                </div>
+
+                <div v-else-if="win.module.id === 'exportTask'" class="module-content-panel">
+                  <ExportTaskCenter />
+                </div>
+
                 <div v-else-if="win.module.id === 'message'" class="message-center-panel">
                   <div class="message-toolbar">
                     <el-select v-model="messageState.filters.type" @change="loadMessages(1)">
@@ -2038,7 +2050,10 @@ import {
 } from '@lucide/vue';
 import DesktopWindow from './components/DesktopWindow.vue';
 import DataListPanel from './components/DataListPanel.vue';
+import DocCenter from './components/DocCenter.vue';
+import ExportTaskCenter from './components/ExportTaskCenter.vue';
 import StudentOwnPanel from './components/StudentOwnPanel.vue';
+import TemplateLibrary from './components/TemplateLibrary.vue';
 import { usePermissions } from './composables/usePermissions';
 import {
   changeAdminAccountStatus,
@@ -2360,6 +2375,36 @@ const modules = [
     viewPermission: 'file:view',
     managePermission: 'file:manage',
     defaultPanel: 'fileManage',
+  },
+  {
+    id: 'doc',
+    name: '文档中心',
+    icon: BookOpen,
+    color: 'green',
+    scope: '制度 / 流程 / 帮助文档',
+    viewPermission: 'doc:view',
+    managePermission: 'doc:manage',
+    defaultPanel: 'docList',
+  },
+  {
+    id: 'templateLib',
+    name: '模板库',
+    icon: FileText,
+    color: 'teal',
+    scope: '材料模板 / 下载',
+    viewPermission: 'template:view',
+    managePermission: 'template:manage',
+    defaultPanel: 'templateList',
+  },
+  {
+    id: 'exportTask',
+    name: '导出任务',
+    icon: FileClock,
+    color: 'amber',
+    scope: '导出队列 / 下载记录',
+    viewPermission: 'export:view',
+    managePermission: 'export:create',
+    defaultPanel: 'taskList',
   },
   {
     id: 'userManage',
@@ -3292,7 +3337,7 @@ function studentPanelFields(panel) {
 }
 
 function sidebarItems(win) {
-  if (win.module.id === 'message') {
+  if (['message', 'doc', 'templateLib', 'exportTask'].includes(win.module.id)) {
     return [];
   }
   if (win.module.id === 'userManage' || archiveManageModules[win.module.id]) {

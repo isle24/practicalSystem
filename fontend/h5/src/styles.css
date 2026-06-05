@@ -421,6 +421,136 @@ input {
   color: var(--text);
 }
 
+.mobile-support-list {
+  display: grid;
+  gap: 10px;
+}
+
+.support-mobile-tools {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  margin-bottom: 12px;
+  box-shadow: var(--shadow);
+}
+
+.support-mobile-tools .mobile-keyword-input,
+.support-mobile-tools input {
+  grid-column: 1 / -1;
+}
+
+.support-mobile-card {
+  margin-bottom: 0;
+  padding: 12px;
+}
+
+.support-mobile-card header {
+  min-height: 0;
+  border-bottom: 0;
+  padding: 0;
+  background: transparent;
+}
+
+.support-mobile-card header strong {
+  min-width: 0;
+  flex: 1;
+  overflow-wrap: anywhere;
+}
+
+.support-mobile-card header small {
+  max-width: 96px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.support-mobile-card p {
+  margin: 9px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.support-mobile-card footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.support-mobile-card footer span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.support-mobile-card footer button {
+  flex: 0 0 auto;
+  height: 30px;
+  border: 1px solid #bfd8f4;
+  border-radius: 8px;
+  padding: 0 12px;
+  color: var(--primary);
+  background: var(--primary-soft);
+}
+
+.support-doc-sheet {
+  max-height: min(82vh, 760px);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 12px;
+  padding: 18px 16px calc(18px + env(safe-area-inset-bottom));
+  background: #fff;
+}
+
+.support-doc-sheet header {
+  display: grid;
+  gap: 5px;
+}
+
+.support-doc-sheet header span,
+.support-doc-sheet header small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.support-doc-sheet header strong {
+  min-width: 0;
+  font-size: 18px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.support-mobile-rich {
+  min-height: 180px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  color: var(--text);
+  background: #fbfcfe;
+  line-height: 1.75;
+  word-break: break-word;
+}
+
+.support-mobile-rich :first-child {
+  margin-top: 0;
+}
+
+.support-mobile-rich :last-child {
+  margin-bottom: 0;
+}
+
+.support-mobile-rich img,
+.support-mobile-rich video {
+  max-width: 100%;
+  height: auto;
+}
+
 .internship-action-tabs {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
