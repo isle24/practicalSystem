@@ -42,7 +42,7 @@ class MessageService
 
     public function send(array $payload, int $senderId, string $senderName): array
     {
-        $accountIds = (array) ($payload['account_ids'] ?? $payload['target_account_ids'] ?? []);
+        [$accountIds, $targetCount] = $this->resolveAccountIds($payload, $senderId);
         $message = [
             'code' => $this->nullableString($payload['code'] ?? null, 120),
             'title' => $this->requiredString($payload['title'] ?? '', '消息标题', 180),
@@ -61,6 +61,7 @@ class MessageService
 
         return [
             'message_id' => $messageId,
+            'target_count' => $targetCount,
             'summary' => $senderId > 0 ? MessageRecord::unreadSummary($senderId) : ['unread' => 0, 'by_type' => []],
         ];
     }
@@ -87,6 +88,39 @@ class MessageService
         if ($accountId <= 0) {
             throw new InvalidArgumentException('请先登录');
         }
+    }
+
+    private function resolveAccountIds(array $payload, int $senderId): array
+    {
+        $scope = trim((string) ($payload['send_scope'] ?? 'custom'));
+        $roleType = trim((string) ($payload['role_type'] ?? ''));
+        if (!in_array($scope, ['custom', 'role', 'all'], true)) {
+            throw new InvalidArgumentException('消息发送范围不正确');
+        }
+
+        if ($scope === 'all') {
+            $accountIds = Account::messageTargetIds();
+        } elseif ($scope === 'role') {
+            if ($roleType === '') {
+                throw new InvalidArgumentException('请选择接收角色');
+            }
+            $accountIds = Account::messageTargetIds(['role_type' => $roleType]);
+        } else {
+            $accountIds = (array) ($payload['account_ids'] ?? $payload['target_account_ids'] ?? []);
+        }
+
+        $ids = array_values(array_unique(array_filter(array_map('intval', $accountIds))));
+        if (!$ids) {
+            throw new InvalidArgumentException('缺少消息接收人');
+        }
+        $receiverIds = array_values(array_filter($ids, static fn (int $id): bool => $id !== $senderId));
+        $targetCount = count($receiverIds);
+        if ($senderId > 0) {
+            $ids[] = $senderId;
+            $ids = array_values(array_unique($ids));
+        }
+
+        return [$ids, $targetCount];
     }
 
     private function requiredString(mixed $value, string $label, int $limit): string

@@ -93,6 +93,7 @@ class MessageRecord extends TableRecord
         }
 
         return (int) self::connection()->transaction(function () use ($message, $targets, $now): int {
+            $senderId = (int) ($message['sender_id'] ?? 0);
             $messageId = (int) self::queryTable('message')->insertGetId([
                 'uuid' => self::uuidValue(),
                 'name' => mb_substr((string) ($message['title'] ?? ''), 0, 180),
@@ -116,12 +117,13 @@ class MessageRecord extends TableRecord
             $targetRows = [];
             $logRows = [];
             foreach ($targets as $accountId) {
+                $isSender = $senderId > 0 && $accountId === $senderId;
                 $targetRows[] = [
                     'uuid' => self::uuidValue(),
                     'message_id' => $messageId,
                     'account_id' => $accountId,
-                    'is_read' => 0,
-                    'read_at' => null,
+                    'is_read' => $isSender ? 1 : 0,
+                    'read_at' => $isSender ? $now : null,
                     'status' => 'enabled',
                     'created_at' => $now,
                     'updated_at' => $now,
@@ -277,7 +279,21 @@ class MessageRecord extends TableRecord
             'is_read' => (int) $row->is_read === 1,
             'read_at' => $row->read_at,
             'created_at' => $row->created_at,
+            'date_key' => self::dateKey($row->created_at),
+            'time_label' => self::timeLabel($row->created_at),
         ];
+    }
+
+    private static function dateKey(mixed $value): string
+    {
+        $text = (string) ($value ?? '');
+        return preg_match('/^\d{4}-\d{2}-\d{2}/', $text) ? substr($text, 0, 10) : '';
+    }
+
+    private static function timeLabel(mixed $value): string
+    {
+        $text = (string) ($value ?? '');
+        return preg_match('/^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}/', $text) ? substr($text, 11, 5) : $text;
     }
 
     private static function createSchema(): void

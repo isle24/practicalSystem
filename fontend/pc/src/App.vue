@@ -35,7 +35,7 @@
         <input v-model="keyword" type="search" placeholder="搜索模块、学生、企业或文档">
       </label>
       <div class="top-actions">
-        <el-button text :icon="Bell" />
+        <el-button text :icon="Bell" title="消息中心" @click="openMessageCenter" />
         <el-button v-if="isLoggedIn" text class="operator-button" @click="openProfile">
           <span class="top-avatar" :style="topAvatarStyle">
             <UserRound v-if="!profileState.form.avatar" :size="14" />
@@ -1342,7 +1342,7 @@
                           <header>
                             <span class="message-kind" :class="item.type">{{ messageTypeText(item.type) }}</span>
                             <strong>{{ item.title }}</strong>
-                            <small>{{ messageTimeText(item.created_at) }}</small>
+                            <small>{{ messageTimeText(item) }}</small>
                           </header>
                           <p>{{ item.content }}</p>
                           <footer>
@@ -1383,13 +1383,35 @@
                         <button type="button" @click="closeMessageSendDialog">关闭</button>
                       </header>
                       <div class="message-send-body">
-                        <div class="message-send-target-tools">
-                          <el-select
-                            v-model="messageState.sendDialog.filters.role_type"
-                            clearable
-                            placeholder="角色"
-                            @change="loadMessageTargets"
-                          >
+                        <div class="message-send-grid">
+                          <label class="message-send-field">
+                            <span>发送范围</span>
+                            <el-select v-model="messageState.sendDialog.form.send_scope" @change="handleMessageSendScopeChange">
+                              <el-option label="指定人员" value="custom" />
+                              <el-option label="按角色发送" value="role" />
+                              <el-option label="全部账号" value="all" />
+                            </el-select>
+                          </label>
+                          <label v-if="messageState.sendDialog.form.send_scope === 'role'" class="message-send-field">
+                            <span>接收角色</span>
+                            <el-select v-model="messageState.sendDialog.form.role_type" placeholder="请选择角色">
+                              <el-option
+                                v-for="item in messageTargetRoleOptions"
+                                :key="item.value"
+                                :label="item.label"
+                                :value="item.value"
+                              />
+                            </el-select>
+                          </label>
+                          <label v-else class="message-send-field">
+                            <span>接收说明</span>
+                            <div class="message-send-hint">
+                              {{ messageSendScopeHint }}
+                            </div>
+                          </label>
+                        </div>
+                        <div v-if="messageState.sendDialog.form.send_scope === 'custom'" class="message-send-target-tools">
+                          <el-select v-model="messageState.sendDialog.filters.role_type" clearable placeholder="角色" @change="loadMessageTargets">
                             <el-option
                               v-for="item in messageTargetRoleOptions"
                               :key="item.value"
@@ -1407,7 +1429,7 @@
                             查找
                           </el-button>
                         </div>
-                        <label class="message-send-field wide">
+                        <label v-if="messageState.sendDialog.form.send_scope === 'custom'" class="message-send-field wide">
                           <span>收件人</span>
                           <el-select
                             v-model="messageState.sendDialog.form.account_ids"
@@ -2787,6 +2809,8 @@ const messageTargetRoleOptions = [
 
 function emptyMessageSendForm() {
   return {
+    send_scope: 'custom',
+    role_type: '',
     account_ids: [],
     type: 'system',
     level: 'normal',
@@ -3060,6 +3084,17 @@ const statCards = computed(() => {
 const currentStatColumns = computed(() => statState.columns || []);
 const messageGroups = computed(() => groupMessagesByDay(messageState.items));
 const messageUnreadCount = computed(() => Number(messageState.summary.unread || 0));
+const messageSendScopeHint = computed(() => {
+  const form = messageState.sendDialog.form;
+  if (form.send_scope === 'all') {
+    return '发送给当前学校所有启用账号';
+  }
+  if (form.send_scope === 'role') {
+    const roleName = messageTargetRoleOptions.find(item => item.value === form.role_type)?.label;
+    return roleName ? `发送给所有${roleName}` : '请选择接收角色';
+  }
+  return '从下方列表选择一个或多个收件人';
+});
 const selectedWechatMenu = computed(() => {
   const main = wechatProxy.menu[wechatProxy.selectedMenuIndex];
   if (!main) {
@@ -3819,6 +3854,17 @@ async function openMessageSendDialog() {
   }
 }
 
+function handleMessageSendScopeChange() {
+  const form = messageState.sendDialog.form;
+  form.account_ids = [];
+  if (form.send_scope !== 'role') {
+    form.role_type = '';
+  }
+  if (form.send_scope === 'custom' && !messageState.targetOptions.length) {
+    loadMessageTargets();
+  }
+}
+
 function closeMessageSendDialog() {
   if (messageState.sendDialog.sending) {
     return;
@@ -3854,6 +3900,8 @@ async function submitMessageSend() {
 
   const form = messageState.sendDialog.form;
   const payload = {
+    send_scope: form.send_scope,
+    role_type: form.send_scope === 'role' ? String(form.role_type || '').trim() : '',
     account_ids: (form.account_ids || []).map(Number).filter(Boolean),
     type: form.type,
     level: form.level,
@@ -3862,8 +3910,12 @@ async function submitMessageSend() {
     link_url: String(form.link_url || '').trim(),
   };
 
-  if (!payload.account_ids.length) {
+  if (payload.send_scope === 'custom' && !payload.account_ids.length) {
     messageState.message = '请选择收件人';
+    return;
+  }
+  if (payload.send_scope === 'role' && !payload.role_type) {
+    messageState.message = '请选择接收角色';
     return;
   }
   if (!payload.title) {
@@ -3872,6 +3924,9 @@ async function submitMessageSend() {
   }
   if (!payload.content) {
     messageState.message = '请填写消息内容';
+    return;
+  }
+  if (payload.send_scope === 'all' && !window.confirm('确认发送给当前学校所有启用账号？')) {
     return;
   }
 
@@ -3894,8 +3949,16 @@ async function submitMessageSend() {
 
 function groupMessagesByDay(items) {
   const groups = new Map();
-  (items || []).forEach((item) => {
-    const key = messageDateKey(item.created_at);
+  const sortedItems = [...(items || [])].sort((a, b) => {
+    const timeA = new Date(String(a.created_at || '').replace(' ', 'T')).getTime() || 0;
+    const timeB = new Date(String(b.created_at || '').replace(' ', 'T')).getTime() || 0;
+    if (timeA !== timeB) {
+      return timeA - timeB;
+    }
+    return Number(a.target_id || 0) - Number(b.target_id || 0);
+  });
+  sortedItems.forEach((item) => {
+    const key = messageDateKey(item.date_key || item.created_at);
     if (!groups.has(key)) {
       groups.set(key, {
         key,
@@ -3931,6 +3994,9 @@ function messageDayLabel(key) {
 }
 
 function messageTimeText(value) {
+  if (value && typeof value === 'object') {
+    return value.time_label || messageTimeText(value.created_at);
+  }
   const text = String(value || '');
   if (/^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}/.test(text)) {
     return text.slice(11, 16);

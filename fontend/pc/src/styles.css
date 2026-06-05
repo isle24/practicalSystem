@@ -2586,6 +2586,18 @@ a {
   width: 100%;
 }
 
+.message-send-hint {
+  min-height: 32px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  color: var(--muted);
+  background: #f8fafc;
+  font-size: 13px;
+}
+
 .taskbar {
   display: grid;
   grid-template-columns: 84px 1fr auto;

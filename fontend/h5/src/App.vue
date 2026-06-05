@@ -146,6 +146,18 @@
           </button>
         </section>
 
+        <section class="mobile-message-type-scroll" aria-label="消息类型">
+          <button
+            v-for="item in mobileMessageTypeOptions"
+            :key="item.value"
+            :class="{ active: messageState.type === item.value }"
+            @click="setMobileMessageType(item.value)"
+          >
+            <span>{{ item.label }}</span>
+            <strong>{{ mobileMessageTypeUnread(item.value) }}</strong>
+          </button>
+        </section>
+
         <section class="mobile-message-list">
           <template v-if="messageGroups.length">
             <div v-for="group in messageGroups" :key="group.key" class="mobile-message-day">
@@ -156,10 +168,10 @@
                 class="mobile-message-card"
                 :class="{ unread: !item.is_read, urgent: item.level === 'urgent', own: isOwnMobileMessage(item) }"
                 @click="handleMobileMessageClick(item)"
-              >
+                >
                 <header>
                   <em :class="item.type">{{ messageTypeText(item.type) }}</em>
-                  <small>{{ messageTimeText(item.created_at) }}</small>
+                  <small>{{ messageTimeText(item) }}</small>
                 </header>
                 <strong>{{ item.title }}</strong>
                 <p>{{ item.content }}</p>
@@ -1130,6 +1142,7 @@ const messageState = reactive({
   loading: false,
   message: '',
   filter: 'all',
+  type: 'all',
   items: [],
   summary: {
     unread: 0,
@@ -1149,6 +1162,14 @@ const messageTypeNames = {
   audit: '审核通知',
   alert: '预警提醒',
 };
+const mobileMessageTypeOptions = [
+  { label: '全部类型', value: 'all' },
+  { label: '待办', value: 'todo' },
+  { label: '审核', value: 'audit' },
+  { label: '结果', value: 'result' },
+  { label: '预警', value: 'alert' },
+  { label: '系统', value: 'system' },
+];
 const messageLevelNames = {
   normal: '普通',
   important: '重要',
@@ -3400,7 +3421,7 @@ async function loadMessages(page = 1, append = false) {
       page,
       page_size: messageState.pagination.page_size,
       status: messageState.filter,
-      type: 'all',
+      type: messageState.type,
     });
     const items = data.items || [];
     messageState.items = append ? [...messageState.items, ...items] : items;
@@ -3426,6 +3447,11 @@ function loadMoreMessages() {
 
 function setMobileMessageFilter(filter) {
   messageState.filter = filter;
+  loadMessages(1);
+}
+
+function setMobileMessageType(type) {
+  messageState.type = type;
   loadMessages(1);
 }
 
@@ -3475,6 +3501,8 @@ async function markAllMobileMessagesRead() {
 
 function resetMessageState() {
   messageState.message = '';
+  messageState.filter = 'all';
+  messageState.type = 'all';
   messageState.items = [];
   messageState.summary = {
     unread: 0,
@@ -3489,6 +3517,13 @@ function resetMessageState() {
 
 function messageTypeText(type) {
   return messageTypeNames[type] || type || '系统通知';
+}
+
+function mobileMessageTypeUnread(type) {
+  if (type === 'all') {
+    return messageUnreadCount.value;
+  }
+  return Number(messageState.summary.by_type?.[type] || 0);
 }
 
 function messageLevelText(level) {
@@ -3525,8 +3560,16 @@ async function openMobileMessageLink(item) {
 
 function groupMessagesByDay(items) {
   const groups = new Map();
-  (items || []).forEach((item) => {
-    const key = messageDateKey(item.created_at);
+  const sortedItems = [...(items || [])].sort((a, b) => {
+    const timeA = new Date(String(a.created_at || '').replace(' ', 'T')).getTime() || 0;
+    const timeB = new Date(String(b.created_at || '').replace(' ', 'T')).getTime() || 0;
+    if (timeA !== timeB) {
+      return timeA - timeB;
+    }
+    return Number(a.target_id || 0) - Number(b.target_id || 0);
+  });
+  sortedItems.forEach((item) => {
+    const key = messageDateKey(item.date_key || item.created_at);
     if (!groups.has(key)) {
       groups.set(key, {
         key,
@@ -3562,6 +3605,9 @@ function messageDayLabel(key) {
 }
 
 function messageTimeText(value) {
+  if (value && typeof value === 'object') {
+    return value.time_label || messageTimeText(value.created_at);
+  }
   const text = String(value || '');
   if (/^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}/.test(text)) {
     return text.slice(11, 16);

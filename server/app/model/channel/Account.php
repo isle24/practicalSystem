@@ -232,6 +232,51 @@ class Account extends BaseModel
     public static function messageTargets(array $filters = []): array
     {
         $limit = min(500, max(20, (int) ($filters['limit'] ?? 200)));
+
+        return self::messageTargetQuery($filters)
+            ->orderBy('role.sort')
+            ->orderBy('account.id')
+            ->limit($limit)
+            ->get([
+                'account.id',
+                'account.user_id',
+                'account.login_name',
+                'users.name',
+                'users.mobile',
+                'role.id as role_id',
+                'role.name as role_name',
+                'role.role_type',
+            ])
+            ->map(static fn ($row): array => [
+                'id' => (int) $row->id,
+                'user_id' => (int) $row->user_id,
+                'login_name' => $row->login_name,
+                'name' => $row->name,
+                'mobile' => $row->mobile,
+                'role_id' => $row->role_id === null ? null : (int) $row->role_id,
+                'role_name' => $row->role_name,
+                'role_type' => $row->role_type,
+            ])
+            ->all();
+    }
+
+    public static function messageTargetIds(array $filters = []): array
+    {
+        $limit = min(20000, max(1, (int) ($filters['limit'] ?? 20000)));
+
+        return self::messageTargetQuery($filters)
+            ->orderBy('role.sort')
+            ->orderBy('account.id')
+            ->limit($limit)
+            ->pluck('account.id')
+            ->map(static fn ($id): int => (int) $id)
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    private static function messageTargetQuery(array $filters = []): mixed
+    {
         $query = self::query()
             ->join('users', 'account.user_id', '=', 'users.id')
             ->leftJoin('user_role', function ($join): void {
@@ -261,31 +306,7 @@ class Account extends BaseModel
             $query->where('role.role_type', $roleType);
         }
 
-        return $query
-            ->orderBy('role.sort')
-            ->orderBy('account.id')
-            ->limit($limit)
-            ->get([
-                'account.id',
-                'account.user_id',
-                'account.login_name',
-                'users.name',
-                'users.mobile',
-                'role.id as role_id',
-                'role.name as role_name',
-                'role.role_type',
-            ])
-            ->map(static fn ($row): array => [
-                'id' => (int) $row->id,
-                'user_id' => (int) $row->user_id,
-                'login_name' => $row->login_name,
-                'name' => $row->name,
-                'mobile' => $row->mobile,
-                'role_id' => $row->role_id === null ? null : (int) $row->role_id,
-                'role_name' => $row->role_name,
-                'role_type' => $row->role_type,
-            ])
-            ->all();
+        return $query;
     }
 
     public static function loginNameExists(string $loginName, ?int $excludeId = null): bool

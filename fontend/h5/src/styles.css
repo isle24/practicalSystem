@@ -321,6 +321,51 @@ input {
   opacity: .5;
 }
 
+.mobile-message-type-scroll {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 0 2px 10px;
+  margin: -2px 0 12px;
+  scrollbar-width: none;
+}
+
+.mobile-message-type-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.mobile-message-type-scroll button {
+  flex: 0 0 auto;
+  min-width: 82px;
+  min-height: 34px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 10px;
+  color: var(--muted);
+  background: #fff;
+}
+
+.mobile-message-type-scroll button.active {
+  color: var(--primary);
+  border-color: #bfd8f4;
+  background: var(--primary-soft);
+}
+
+.mobile-message-type-scroll strong {
+  min-width: 22px;
+  height: 20px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  background: #edf1f6;
+  color: var(--text);
+  font-size: 12px;
+}
+
 .mobile-message-list {
   display: grid;
   gap: 12px;
