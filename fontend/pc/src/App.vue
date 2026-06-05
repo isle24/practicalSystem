@@ -1946,6 +1946,13 @@
 
                 <div v-else-if="win.module.id === 'stat'" class="admin-panel stat-panel">
                   <section class="stat-report-content">
+                    <header>
+                      <div>
+                        <strong>{{ currentStatReport.name }}</strong>
+                        <small>{{ currentStatReport.description }}</small>
+                      </div>
+                      <small>{{ statState.generated_at ? `生成时间 ${statState.generated_at}` : '等待生成' }}</small>
+                    </header>
                     <div class="stat-filter-bar">
                       <!-- 暂时隐藏学期筛选，后续需要时恢复。 -->
                       <!--
@@ -1958,20 +1965,26 @@
                       -->
                       <label :class="{ 'filter-active': hasFilterValue(statState.filters.grade_id) }">
                         <span>届次</span>
-                        <el-select v-model="statState.filters.grade_id" class="filter-select" :class="{ 'is-filter-active': hasFilterValue(statState.filters.grade_id) }" clearable filterable placeholder="全部">
+                        <el-select v-model="statState.filters.grade_id" class="filter-select" :class="{ 'is-filter-active': hasFilterValue(statState.filters.grade_id) }" clearable filterable placeholder="全部" @change="handleStatFilterChange('grade_id')">
                           <el-option v-for="item in optionItems(internshipState.options.grades, 'grade_id', 'grade_name')" :key="item.value" :label="item.label" :value="item.value" />
                         </el-select>
                       </label>
                       <label :class="{ 'filter-active': hasFilterValue(statState.filters.dep_id) }">
                         <span>学院</span>
-                        <el-select v-model="statState.filters.dep_id" class="filter-select" :class="{ 'is-filter-active': hasFilterValue(statState.filters.dep_id) }" clearable filterable placeholder="全部">
-                          <el-option v-for="item in optionItems(internshipState.options.departments, 'dep_id', 'dep_name')" :key="item.value" :label="item.label" :value="item.value" />
+                        <el-select v-model="statState.filters.dep_id" class="filter-select" :class="{ 'is-filter-active': hasFilterValue(statState.filters.dep_id) }" clearable filterable placeholder="全部" @change="handleStatFilterChange('dep_id')">
+                          <el-option v-for="item in statDepartmentOptions()" :key="item.value" :label="item.label" :value="item.value" />
                         </el-select>
                       </label>
                       <label :class="{ 'filter-active': hasFilterValue(statState.filters.profession_id) }">
                         <span>专业</span>
-                        <el-select v-model="statState.filters.profession_id" class="filter-select" :class="{ 'is-filter-active': hasFilterValue(statState.filters.profession_id) }" clearable filterable placeholder="全部">
-                          <el-option v-for="item in optionItems(internshipState.options.professions, 'profession_id', 'profession_name')" :key="item.value" :label="item.label" :value="item.value" />
+                        <el-select v-model="statState.filters.profession_id" class="filter-select" :class="{ 'is-filter-active': hasFilterValue(statState.filters.profession_id) }" clearable filterable placeholder="全部" @change="handleStatFilterChange('profession_id')">
+                          <el-option v-for="item in statProfessionOptions()" :key="item.value" :label="item.label" :value="item.value" />
+                        </el-select>
+                      </label>
+                      <label :class="{ 'filter-active': hasFilterValue(statState.filters.class_id) }">
+                        <span>班级</span>
+                        <el-select v-model="statState.filters.class_id" class="filter-select" :class="{ 'is-filter-active': hasFilterValue(statState.filters.class_id) }" clearable filterable placeholder="全部" @change="handleStatFilterChange('class_id')">
+                          <el-option v-for="item in statClassOptions()" :key="item.value" :label="item.label" :value="item.value" />
                         </el-select>
                       </label>
                       <label :class="{ 'filter-active': hasFilterValue(statState.filters.keyword) }">
@@ -2408,6 +2421,7 @@ const statState = reactive({
     dep_id: '',
     profession_id: '',
     grade_id: '',
+    class_id: '',
     keyword: '',
   },
   cards: [],
@@ -5648,6 +5662,7 @@ function resetStatFilters() {
     dep_id: '',
     profession_id: '',
     grade_id: '',
+    class_id: '',
     keyword: '',
   });
   loadStats(1);
@@ -5839,6 +5854,69 @@ function optionItems(items, valueKey, labelKey) {
     value: item[valueKey],
     label: item[labelKey] || item[valueKey],
   }));
+}
+
+function sameFilterValue(left, right) {
+  return String(left || '') === String(right || '');
+}
+
+function statDepartmentOptions() {
+  return optionItems(internshipState.options.departments, 'dep_id', 'dep_name');
+}
+
+function statProfessionOptions() {
+  const gradeId = statState.filters.grade_id;
+  const depId = statState.filters.dep_id;
+  return optionItems(internshipState.options.professions.filter((item) => {
+    const matchGrade = !gradeId || sameFilterValue(item.grade_id, gradeId);
+    const matchDepartment = !depId || sameFilterValue(item.dep_id, depId);
+    return matchGrade && matchDepartment;
+  }), 'profession_id', 'profession_name');
+}
+
+function statClassOptions() {
+  const gradeId = statState.filters.grade_id;
+  const depId = statState.filters.dep_id;
+  const professionId = statState.filters.profession_id;
+  return optionItems(internshipState.options.classes.filter((item) => {
+    const matchGrade = !gradeId || sameFilterValue(item.grade_id, gradeId);
+    const matchDepartment = !depId || sameFilterValue(item.dep_id, depId);
+    const matchProfession = !professionId || sameFilterValue(item.profession_id, professionId);
+    return matchGrade && matchDepartment && matchProfession;
+  }), 'class_id', 'class_name');
+}
+
+function handleStatFilterChange(key) {
+  if (key === 'profession_id') {
+    const profession = internshipState.options.professions.find(item => sameFilterValue(item.profession_id, statState.filters.profession_id));
+    if (profession) {
+      statState.filters.grade_id = profession.grade_id || statState.filters.grade_id || '';
+      statState.filters.dep_id = profession.dep_id || statState.filters.dep_id || '';
+    }
+  }
+
+  if (key === 'class_id') {
+    const classItem = internshipState.options.classes.find(item => sameFilterValue(item.class_id, statState.filters.class_id));
+    if (classItem) {
+      statState.filters.grade_id = classItem.grade_id || statState.filters.grade_id || '';
+      statState.filters.dep_id = classItem.dep_id || statState.filters.dep_id || '';
+      statState.filters.profession_id = classItem.profession_id || statState.filters.profession_id || '';
+    }
+  }
+
+  normalizeStatCascade();
+}
+
+function normalizeStatCascade() {
+  const professionId = statState.filters.profession_id;
+  if (professionId && !statProfessionOptions().some(item => sameFilterValue(item.value, professionId))) {
+    statState.filters.profession_id = '';
+  }
+
+  const classId = statState.filters.class_id;
+  if (classId && !statClassOptions().some(item => sameFilterValue(item.value, classId))) {
+    statState.filters.class_id = '';
+  }
 }
 
 function arrangementSelectedProfession() {

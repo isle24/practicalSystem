@@ -951,6 +951,7 @@ class InternshipRecord extends TableRecord
             'dep_id' => 'students.dep_id',
             'profession_id' => 'students.profession_id',
             'grade_id' => 'students.grade_id',
+            'class_id' => 'students.class_id',
         ]);
         self::keyword($query, $filters, ['students.name', 'students.student_num', 'department.dep_name', 'profession.profession_name']);
 

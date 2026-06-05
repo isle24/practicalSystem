@@ -635,7 +635,7 @@ class InternshipService
         $this->requirePermission('stat:view');
         $filters = $this->requestFilters($request, [
             'report', 'page', 'page_size', 'per_page', 'keyword',
-            'dep_id', 'profession_id', 'grade_id', 'semester',
+            'dep_id', 'profession_id', 'grade_id', 'class_id', 'semester',
         ]);
         $report = trim((string) ($filters['report'] ?? 'overview'));
         $filters['report'] = in_array($report, self::STAT_REPORTS, true) ? $report : 'overview';
