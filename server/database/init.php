@@ -1917,6 +1917,8 @@ function seedMenus(PDO $pdo): void
         [451, 45, '列表', 'stat:student', '/stat/student', 'pc', 'list', 451, 'List'],
         [46, 4, '归档材料统计', null, null, 'pc', 'menu', 46, 'FolderOpen'],
         [461, 46, '列表', 'stat:archive', '/stat/archive', 'pc', 'list', 461, 'List'],
+        [47, 4, '实验实训成绩记载表', null, null, 'pc', 'menu', 47, 'Table2'],
+        [471, 47, '列表', 'stat:view', '/stat/practice-score-sheet', 'pc', 'list', 471, 'List'],
         [5, 0, '日志审计', null, null, 'pc', 'directory', 50, 'FileClock'],
         [51, 5, '操作日志', null, null, 'pc', 'menu', 51, 'FileClock'],
         [511, 51, '列表', 'log:view', '/log', 'pc', 'list', 511, 'List'],
@@ -2033,13 +2035,14 @@ function seedMenus(PDO $pdo): void
     ];
     $trainingMenus = [2, 21, 211, 201, 202, 22, 221, 2211, 23, 231, 2311, 2312, 24, 241, 2411, 2412, 25, 251, 2511, 26, 261, 2611, 2612, 27, 271, 2711];
     $labMenus = [3, 31, 311, 301, 302, 32, 321, 3211, 33, 331, 3311, 3312, 34, 341, 3411, 3412, 35, 351, 3511, 36, 361, 3611, 3612, 37, 371, 3711];
+    $statMenus = [4, 41, 411, 402, 42, 421, 43, 431, 44, 441, 45, 451, 46, 461, 47, 471];
     $commonViewMenus = [9, 91, 911, 10, 100, 1000, 10001, 20, 200, 2000, 20001, 20002];
     $allMenuIds = array_map(static fn (array $menu): int => (int) $menu[0], $menus);
     $roleMenuIds = [
         1 => $allMenuIds,
         2 => $allMenuIds,
-        3 => array_merge($internshipAdminMenus, $trainingMenus, $labMenus, $commonViewMenus),
-        4 => array_merge($internshipAdminMenus, $trainingMenus, $labMenus, $commonViewMenus),
+        3 => array_merge($internshipAdminMenus, $trainingMenus, $labMenus, $statMenus, $commonViewMenus),
+        4 => array_merge($internshipAdminMenus, $trainingMenus, $labMenus, $statMenus, $commonViewMenus),
         5 => array_merge([1, 11, 111, 12, 121, 104, 1213, 13, 131, 14, 141, 105, 15, 151, 106, 1512, 16, 161, 107, 1612, 17, 171, 108, 195, 1951, 19512, 2, 21, 211, 201, 3, 31, 311, 301], $commonViewMenus),
         6 => array_merge([1, 11, 111, 12, 121, 103, 14, 141, 105, 15, 151, 106, 16, 161, 107, 195, 1951, 19511], $commonViewMenus),
         7 => array_merge([1, 17, 171, 108], $commonViewMenus),

@@ -1213,7 +1213,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { showToast } from 'vant';
 import {
   BriefcaseBusiness,
@@ -4316,6 +4316,110 @@ function resetMessageState() {
   };
 }
 
+function resetSupportState() {
+  support.doc.loading = false;
+  support.doc.message = '';
+  support.doc.categories = [];
+  support.doc.items = [];
+  support.doc.filters = {
+    category_id: '',
+    keyword: '',
+  };
+  support.doc.pagination = {
+    page: 1,
+    page_size: 20,
+    total: 0,
+  };
+  support.doc.detail = {
+    visible: false,
+    loading: false,
+    message: '',
+    article: null,
+  };
+
+  support.template.loading = false;
+  support.template.message = '';
+  support.template.categories = [];
+  support.template.items = [];
+  support.template.filters = {
+    category_id: '',
+    keyword: '',
+  };
+  support.template.pagination = {
+    page: 1,
+    page_size: 20,
+    total: 0,
+  };
+}
+
+function resetInternshipState() {
+  internship.loading = false;
+  internship.message = '';
+  internship.panel = 'workbench';
+  internship.submitSection = '';
+  internship.reviewList = 'applications';
+  internship.manageList = 'arrangements';
+  internship.overview = emptyInternshipOverview();
+  internship.options = emptyInternshipOptions();
+  Object.keys(internship.lists).forEach((key) => {
+    internship.lists[key] = emptyPagedList();
+  });
+  Object.keys(internship.filters).forEach((key) => {
+    internship.filters[key] = emptyInternshipFilters();
+  });
+  internship.forms.application = { arrangement_id: null, teacher_id: null, remark: '' };
+  internship.forms.sign = { arrangement_id: null, location: '' };
+  internship.forms.journal = { id: null, arrangement_id: null, title: '', content: '' };
+  internship.forms.report = { id: null, arrangement_id: null, title: '', content: '' };
+  internship.forms.delay = { arrangement_id: null, config_key: 'report_deadline', requested_date: '', reason: '' };
+  internship.forms.score = {
+    pair_id: null,
+    student_id: null,
+    arrangement_id: null,
+    sign_in_score: '',
+    journal_score: '',
+    report_score: '',
+    enterprise_score: '',
+  };
+  internship.reviewDialog.visible = false;
+  internship.reviewDialog.row = null;
+  internship.reviewDialog.reason = '';
+  internship.timelineDialog.visible = false;
+  internship.timelineDialog.row = null;
+  internship.timelineDialog.items = [];
+  internship.timelineDialog.cycles = [];
+  internship.timelineDialog.message = '';
+}
+
+function resetPracticeState() {
+  practice.training = createPracticeState();
+  practice.lab = createPracticeState();
+  practiceReviewDialog.visible = false;
+  practiceReviewDialog.row = null;
+  practiceReviewDialog.reason = '';
+}
+
+function resetMobileLocalState() {
+  resetMessageState();
+  resetSupportState();
+  resetInternshipState();
+  resetPracticeState();
+}
+
+function handleAuthExpired(event) {
+  const message = event?.detail?.message || '登录已过期，请重新登录';
+  state.context = {};
+  state.permissions = [];
+  state.menus = [];
+  state.dataScope = null;
+  state.error = message;
+  loginState.loading = false;
+  loginState.message = message;
+  activeTab.value = 'home';
+  resetMobileLocalState();
+  showToast(message);
+}
+
 function messageTypeText(type) {
   return messageTypeNames[type] || type || '系统通知';
 }
@@ -4479,14 +4583,7 @@ async function submitLogout() {
   try {
     await logoutApi();
     activeTab.value = 'home';
-    internship.panel = 'workbench';
-    internship.message = '';
-    practice.training.message = '';
-    practice.lab.message = '';
-    resetMessageState();
-    support.doc.items = [];
-    support.template.items = [];
-    support.doc.detail.visible = false;
+    resetMobileLocalState();
     await load();
   } catch (error) {
     loginState.message = error.message;
@@ -4533,6 +4630,7 @@ watch(visibleMobileModules, () => {
 });
 
 onMounted(async () => {
+  window.addEventListener('practical-auth-expired', handleAuthExpired);
   await load();
   await loadMessageSummary();
   await loadMobileSupportCategories();
@@ -4540,5 +4638,9 @@ onMounted(async () => {
   if (isPracticeTab(activeTab.value)) {
     await loadPractice(activeTab.value);
   }
+});
+
+onBeforeUnmount(() => {
+  window.removeEventListener('practical-auth-expired', handleAuthExpired);
 });
 </script>

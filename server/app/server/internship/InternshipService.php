@@ -3,6 +3,7 @@
 namespace app\server\internship;
 
 use app\model\channel\InternshipRecord;
+use app\model\channel\PracticeRecord;
 use app\server\CurrentContext;
 use app\server\config\ConfigService;
 use InvalidArgumentException;
@@ -18,7 +19,7 @@ class InternshipService
     private const JOIN_STATUS = ['applying', 'accept', 'refuse'];
     private const ARRANGEMENT_TYPES = ['cognition_internal', 'cognition_external', 'major_internal', 'major_external', 'production', 'graduation'];
     private const ORGANIZE_MODES = ['centralized', 'distributed', 'autonomous'];
-    private const STAT_REPORTS = ['overview', 'department', 'profession', 'teacher', 'student', 'archive'];
+    private const STAT_REPORTS = ['overview', 'department', 'profession', 'teacher', 'student', 'archive', 'practice_score_sheet'];
     private const BASE_FLOW_TABLES = [
         'application' => 'base_application',
         'usage' => 'base_usage',
@@ -691,9 +692,13 @@ class InternshipService
         $filters = $this->requestFilters($request, [
             'report', 'page', 'page_size', 'per_page', 'keyword',
             'dep_id', 'profession_id', 'grade_id', 'class_id', 'semester',
+            'module_type', 'plan_id', 'status', 'academic_year',
         ]);
         $report = trim((string) ($filters['report'] ?? 'overview'));
         $filters['report'] = in_array($report, self::STAT_REPORTS, true) ? $report : 'overview';
+        if ($filters['report'] === 'practice_score_sheet') {
+            return PracticeRecord::courseScoreSheetReport($this->scopeContext(), $filters);
+        }
 
         return InternshipRecord::statReport($this->scopeContext(), $filters, date('Y-m-d'));
     }

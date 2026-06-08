@@ -97,6 +97,29 @@ class PracticeRecord extends TableRecord
         return self::paginate($query->orderByDesc("{$table}.id"), $filters, self::entityColumns($entity, $table));
     }
 
+    public static function courseScoreSheetReport(array $scope, array $filters): array
+    {
+        $moduleType = self::practiceModuleType($filters);
+        $planId = self::optionalInt($filters['plan_id'] ?? null);
+        $meta = self::scoreSheetMeta($scope, $moduleType, $planId, $filters);
+        $rows = $planId
+            ? self::scoreSheetRowsByPlan($scope, $moduleType, $planId, $filters)
+            : self::scoreSheetRowsByScores($scope, $moduleType, $filters);
+        $rows = self::scoreSheetRows($rows);
+        $paged = self::paginateArrayRows($rows, $filters);
+
+        return [
+            'report' => 'practice_score_sheet',
+            'title' => '课程考核及成绩记载表（实验实训）',
+            'generated_at' => date('Y-m-d H:i:s'),
+            'cards' => self::scoreSheetCards($rows, $moduleType),
+            'columns' => self::scoreSheetColumns(),
+            'rows' => $paged['items'],
+            'pagination' => $paged['pagination'],
+            'sheet_meta' => $meta,
+        ];
+    }
+
     public static function activeRowByEntity(string $moduleType, string $entity, int $id): ?object
     {
         $table = self::entityTable($entity);
@@ -225,6 +248,349 @@ class PracticeRecord extends TableRecord
             ->whereIn('profession_id', $professionIds)
             ->whereNull('deleted_at')
             ->pluck('dep_id'));
+    }
+
+    private static function practiceModuleType(array $filters): string
+    {
+        $moduleType = (string) ($filters['module_type'] ?? 'training');
+        return in_array($moduleType, ['training', 'lab'], true) ? $moduleType : 'training';
+    }
+
+    private static function scoreSheetRowsByPlan(array $scope, string $moduleType, int $planId, array $filters): array
+    {
+        $plan = self::scoreSheetPlan($scope, $moduleType, $planId);
+        if (!$plan) {
+            return [];
+        }
+
+        $query = self::queryTable('students')
+            ->leftJoin('practice_score', function ($join) use ($moduleType, $planId): void {
+                $join->on('students.student_id', '=', 'practice_score.student_id')
+                    ->where('practice_score.module_type', $moduleType)
+                    ->where('practice_score.plan_id', $planId)
+                    ->whereNull('practice_score.deleted_at');
+            })
+            ->leftJoin('grade_list', 'students.grade_id', '=', 'grade_list.grade_id')
+            ->leftJoin('department', 'students.dep_id', '=', 'department.dep_id')
+            ->leftJoin('profession', 'students.profession_id', '=', 'profession.profession_id')
+            ->leftJoin('class', 'students.class_id', '=', 'class.class_id')
+            ->leftJoin('teacher_list', 'practice_score.teacher_id', '=', 'teacher_list.teacher_id')
+            ->where('students.status', 'enabled')
+            ->whereNull('students.deleted_at');
+
+        foreach (['grade_id', 'dep_id', 'profession_id', 'class_id'] as $field) {
+            $value = (int) ($plan[$field] ?? 0);
+            if ($value > 0) {
+                $query->where("students.{$field}", $value);
+            }
+        }
+
+        self::applyStudentOptionScope($query, $scope, 'students');
+        self::listScoreSheetFilters($query, $filters, 'students', false);
+        self::keyword($query, $filters, ['students.name', 'students.student_num', 'class.class_name', 'practice_score.title']);
+
+        return self::rows($query->orderBy('class.class_name')->orderBy('students.student_num')->get(self::scoreSheetStudentColumns()));
+    }
+
+    private static function scoreSheetRowsByScores(array $scope, string $moduleType, array $filters): array
+    {
+        $query = self::moduleQuery('practice_score', $moduleType)
+            ->leftJoin('practice_plan', 'practice_score.plan_id', '=', 'practice_plan.id')
+            ->leftJoin('students', 'practice_score.student_id', '=', 'students.student_id')
+            ->leftJoin('grade_list', 'students.grade_id', '=', 'grade_list.grade_id')
+            ->leftJoin('department', 'students.dep_id', '=', 'department.dep_id')
+            ->leftJoin('profession', 'students.profession_id', '=', 'profession.profession_id')
+            ->leftJoin('class', 'students.class_id', '=', 'class.class_id')
+            ->leftJoin('teacher_list', 'practice_score.teacher_id', '=', 'teacher_list.teacher_id');
+
+        self::applyPracticeScope($query, $scope, 'practice_score', true, 'score');
+        self::listScoreSheetFilters($query, $filters, 'practice_score');
+        self::keyword($query, $filters, ['students.name', 'students.student_num', 'class.class_name', 'practice_score.title', 'practice_plan.title', 'teacher_list.teacher_name']);
+
+        return self::rows($query->orderByDesc('practice_score.id')->get(self::scoreSheetStudentColumns()));
+    }
+
+    private static function scoreSheetStudentColumns(): array
+    {
+        return [
+            'practice_score.id as score_id',
+            'practice_score.plan_id',
+            'practice_score.score_items',
+            'practice_score.score_value',
+            'practice_score.status as score_status',
+            'practice_score.teacher_id as score_teacher_id',
+            'practice_score.title as score_title',
+            'students.student_id',
+            'students.name',
+            'students.student_num',
+            'students.grade_id',
+            'students.dep_id',
+            'students.profession_id',
+            'students.class_id',
+            'grade_list.grade_name',
+            'department.dep_name',
+            'profession.profession_name',
+            'class.class_name',
+            'class.class_num',
+            'teacher_list.teacher_name',
+            'teacher_list.teacher_num',
+        ];
+    }
+
+    private static function scoreSheetRows(array $rows): array
+    {
+        $items = [];
+        foreach ($rows as $index => $row) {
+            $scoreItems = is_array($row['score_items'] ?? null) ? $row['score_items'] : [];
+            $attendance = self::scoreItemList($scoreItems, ['attendance', 'attendance_scores', 'class_performance', 'classroom_performance', 'performance'], 16);
+            $projects = self::scoreItemList($scoreItems, ['project', 'project_scores', 'operation', 'practice', 'practical_scores'], 12);
+            $item = [
+                'sequence' => $index + 1,
+                'student_id' => $row['student_id'] ?? null,
+                'student_num' => $row['student_num'] ?? null,
+                'student_name' => $row['name'] ?? null,
+                'class_name' => $row['class_name'] ?? ($row['class_num'] ?? null),
+                'grade_name' => $row['grade_name'] ?? null,
+                'dep_name' => $row['dep_name'] ?? null,
+                'profession_name' => $row['profession_name'] ?? null,
+                'score_id' => $row['score_id'] ?? null,
+                'score_status' => $row['score_status'] ?? null,
+            ];
+
+            for ($i = 1; $i <= 16; $i++) {
+                $item["attendance_{$i}"] = $attendance[$i - 1] ?? null;
+            }
+            $item['attendance_total'] = self::scoreItemValue($scoreItems, ['attendance_total', 'class_performance_total', 'performance_total'])
+                ?? self::scoreTotal($attendance);
+
+            for ($i = 1; $i <= 12; $i++) {
+                $item["project_{$i}"] = $projects[$i - 1] ?? null;
+            }
+            $item['project_total'] = self::scoreItemValue($scoreItems, ['project_total', 'operation_total', 'practice_total']);
+            $item['report_score'] = self::scoreItemValue($scoreItems, ['report_score', 'report', 'course_report', 'course_report_score']);
+            $item['total_score'] = self::scoreItemValue($scoreItems, ['total_score', 'final_score', 'score_value']) ?? ($row['score_value'] ?? null);
+            $items[] = $item;
+        }
+
+        return $items;
+    }
+
+    private static function scoreSheetMeta(array $scope, string $moduleType, ?int $planId, array $filters): array
+    {
+        $plan = $planId ? self::scoreSheetPlan($scope, $moduleType, $planId) : null;
+        $schedule = $planId ? self::scoreSheetScheduleMeta($moduleType, $planId) : ['class_time' => '', 'location' => ''];
+
+        return [
+            'module_type' => $moduleType,
+            'module_name' => $moduleType === 'lab' ? '实验' : '实训',
+            'academic_year' => (string) ($filters['academic_year'] ?? ''),
+            'semester' => (string) ($filters['semester'] ?? ''),
+            'course_number' => (string) ($plan['code'] ?? ''),
+            'course_name' => (string) (($plan['course_name'] ?? '') ?: ($plan['title'] ?? '')),
+            'teacher_name' => (string) ($plan['teacher_name'] ?? ''),
+            'teacher_unit' => (string) ($plan['dep_name'] ?? ''),
+            'class_time' => $schedule['class_time'],
+            'location' => $schedule['location'],
+        ];
+    }
+
+    private static function scoreSheetPlan(array $scope, string $moduleType, int $planId): ?array
+    {
+        $query = self::moduleQuery('practice_plan', $moduleType)
+            ->leftJoin('grade_list', 'practice_plan.grade_id', '=', 'grade_list.grade_id')
+            ->leftJoin('department', 'practice_plan.dep_id', '=', 'department.dep_id')
+            ->leftJoin('profession', 'practice_plan.profession_id', '=', 'profession.profession_id')
+            ->leftJoin('class', 'practice_plan.class_id', '=', 'class.class_id')
+            ->leftJoin('teacher_list', 'practice_plan.teacher_id', '=', 'teacher_list.teacher_id')
+            ->where('practice_plan.id', $planId);
+        self::applyPracticeScope($query, $scope, 'practice_plan');
+        $row = $query->first([
+            'practice_plan.id',
+            'practice_plan.code',
+            'practice_plan.title',
+            'practice_plan.course_name',
+            'practice_plan.grade_id',
+            'practice_plan.dep_id',
+            'practice_plan.profession_id',
+            'practice_plan.class_id',
+            'practice_plan.teacher_id',
+            'grade_list.grade_name',
+            'department.dep_name',
+            'profession.profession_name',
+            'class.class_name',
+            'teacher_list.teacher_name',
+        ]);
+
+        return $row ? $row->getAttributes() : null;
+    }
+
+    private static function scoreSheetScheduleMeta(string $moduleType, int $planId): array
+    {
+        $rows = self::rows(self::moduleQuery('practice_schedule', $moduleType)
+            ->where('plan_id', $planId)
+            ->orderBy('schedule_date')
+            ->orderBy('start_time')
+            ->limit(8)
+            ->get(['schedule_date', 'start_time', 'end_time', 'location']));
+        $times = [];
+        $locations = [];
+        foreach ($rows as $row) {
+            $time = trim(implode(' ', array_filter([
+                $row['schedule_date'] ?? '',
+                trim(($row['start_time'] ?? '') . '-' . ($row['end_time'] ?? ''), '-'),
+            ])));
+            if ($time !== '') {
+                $times[] = $time;
+            }
+            if (!empty($row['location'])) {
+                $locations[] = (string) $row['location'];
+            }
+        }
+
+        return [
+            'class_time' => implode('；', array_slice(array_values(array_unique($times)), 0, 3)),
+            'location' => implode('；', array_slice(array_values(array_unique($locations)), 0, 3)),
+        ];
+    }
+
+    private static function listScoreSheetFilters(mixed $query, array $filters, string $alias, bool $withScoreFilters = true): void
+    {
+        foreach (['grade_id', 'dep_id', 'profession_id', 'class_id', 'plan_id', 'status'] as $key) {
+            $value = trim((string) ($filters[$key] ?? ''));
+            if ($value === '') {
+                continue;
+            }
+            if (!$withScoreFilters && $key === 'plan_id') {
+                continue;
+            }
+            $column = match ($key) {
+                'status' => 'practice_score.status',
+                'plan_id' => 'practice_score.plan_id',
+                default => "{$alias}.{$key}",
+            };
+            $query->where($column, $value);
+        }
+    }
+
+    private static function scoreItemList(array $items, array $keys, int $limit): array
+    {
+        $value = self::scoreItemValue($items, $keys, true);
+        if (!is_array($value)) {
+            return [];
+        }
+        if (array_is_list($value)) {
+            return array_map(static fn ($item): mixed => self::scoreItemScalar($item), array_slice($value, 0, $limit));
+        }
+
+        $result = [];
+        for ($i = 1; $i <= $limit; $i++) {
+            $result[] = self::scoreItemScalar($value[$i] ?? $value[(string) $i] ?? $value["item_{$i}"] ?? null);
+        }
+
+        return $result;
+    }
+
+    private static function scoreItemValue(array $items, array $keys, bool $allowArray = false): mixed
+    {
+        foreach ($keys as $key) {
+            if (!array_key_exists($key, $items)) {
+                continue;
+            }
+            $value = $items[$key];
+            if (is_array($value)) {
+                return $allowArray ? $value : self::scoreItemScalar($value);
+            }
+
+            return $value;
+        }
+
+        return null;
+    }
+
+    private static function scoreItemScalar(mixed $value): mixed
+    {
+        if (!is_array($value)) {
+            return $value;
+        }
+        foreach (['score', 'value', 'point', 'points', 'text'] as $key) {
+            if (array_key_exists($key, $value)) {
+                return $value[$key];
+            }
+        }
+
+        return null;
+    }
+
+    private static function scoreTotal(array $values): ?float
+    {
+        $total = 0.0;
+        $hasValue = false;
+        foreach ($values as $value) {
+            if (is_numeric($value)) {
+                $total += (float) $value;
+                $hasValue = true;
+            }
+        }
+
+        return $hasValue ? round($total, 2) : null;
+    }
+
+    private static function scoreSheetCards(array $rows, string $moduleType): array
+    {
+        $scores = array_values(array_filter(array_map(static fn (array $row): mixed => $row['total_score'] ?? null, $rows), 'is_numeric'));
+
+        return [
+            ['name' => '模块类型', 'value' => $moduleType === 'lab' ? '实验' : '实训', 'desc' => '当前成绩记载表来源'],
+            ['name' => '学生人数', 'value' => count($rows), 'desc' => '当前筛选范围内学生'],
+            ['name' => '已录成绩', 'value' => count(array_filter($rows, static fn (array $row): bool => !empty($row['score_id']))), 'desc' => '已有成绩记录的学生'],
+            ['name' => '平均总分', 'value' => self::averageScoreText($scores), 'desc' => '已录总分平均值'],
+        ];
+    }
+
+    private static function scoreSheetColumns(): array
+    {
+        $columns = [
+            ['key' => 'sequence', 'label' => '序号', 'width' => 70],
+            ['key' => 'student_num', 'label' => '学号', 'width' => 130],
+            ['key' => 'student_name', 'label' => '姓名', 'width' => 100],
+            ['key' => 'class_name', 'label' => '行政班级', 'width' => 130],
+        ];
+        for ($i = 1; $i <= 16; $i++) {
+            $columns[] = ['key' => "attendance_{$i}", 'label' => "考勤{$i}", 'width' => 72];
+        }
+        $columns[] = ['key' => 'attendance_total', 'label' => '考勤小计', 'width' => 88];
+        for ($i = 1; $i <= 12; $i++) {
+            $columns[] = ['key' => "project_{$i}", 'label' => "项目{$i}", 'width' => 72];
+        }
+        $columns[] = ['key' => 'report_score', 'label' => '课程报告', 'width' => 88];
+        $columns[] = ['key' => 'total_score', 'label' => '总分', 'width' => 88];
+
+        return $columns;
+    }
+
+    private static function averageScoreText(array $values): string
+    {
+        if (!$values) {
+            return '-';
+        }
+
+        return (string) round(array_sum(array_map('floatval', $values)) / count($values), 2);
+    }
+
+    private static function paginateArrayRows(array $rows, array $filters): array
+    {
+        $page = max(1, (int) ($filters['page'] ?? 1));
+        $pageSize = min(100, max(1, (int) ($filters['page_size'] ?? $filters['per_page'] ?? 20)));
+        $total = count($rows);
+
+        return [
+            'items' => array_slice($rows, ($page - 1) * $pageSize, $pageSize),
+            'pagination' => [
+                'page' => $page,
+                'page_size' => $pageSize,
+                'total' => $total,
+            ],
+        ];
     }
 
     private static function entityTable(string $entity): string
@@ -415,17 +781,18 @@ class PracticeRecord extends TableRecord
         return $query;
     }
 
-    private static function applyStudentOptionScope(mixed $query, array $scope): mixed
+    private static function applyStudentOptionScope(mixed $query, array $scope, string $alias = ''): mixed
     {
+        $column = static fn (string $field): string => $alias !== '' ? "{$alias}.{$field}" : $field;
         $roleType = (string) ($scope['role_type'] ?? '');
         if ($roleType === 'college_admin') {
-            return self::whereInOrDeny($query, 'dep_id', $scope['dep_ids'] ?? []);
+            return self::whereInOrDeny($query, $column('dep_id'), $scope['dep_ids'] ?? []);
         }
         if ($roleType === 'profession_admin') {
-            return self::whereInOrDeny($query, 'profession_id', $scope['profession_ids'] ?? []);
+            return self::whereInOrDeny($query, $column('profession_id'), $scope['profession_ids'] ?? []);
         }
         if ($roleType === 'student') {
-            return self::whereInOrDeny($query, 'student_id', [(int) ($scope['student_id'] ?? 0)]);
+            return self::whereInOrDeny($query, $column('student_id'), [(int) ($scope['student_id'] ?? 0)]);
         }
 
         return $query;

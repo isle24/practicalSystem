@@ -2338,7 +2338,7 @@
                       <label :class="{ 'filter-active': hasFilterValue(statState.filters.grade_id) }">
                         <span>届次</span>
                         <el-select v-model="statState.filters.grade_id" class="filter-select" :class="{ 'is-filter-active': hasFilterValue(statState.filters.grade_id) }" clearable filterable placeholder="全部" @change="handleStatFilterChange('grade_id')">
-                          <el-option v-for="item in optionItems(internshipState.options.grades, 'grade_id', 'grade_name')" :key="item.value" :label="item.label" :value="item.value" />
+                          <el-option v-for="item in statGradeOptions()" :key="item.value" :label="item.label" :value="item.value" />
                         </el-select>
                       </label>
                       <label :class="{ 'filter-active': hasFilterValue(statState.filters.dep_id) }">
@@ -2358,6 +2358,23 @@
                         <el-select v-model="statState.filters.class_id" class="filter-select" :class="{ 'is-filter-active': hasFilterValue(statState.filters.class_id) }" clearable filterable placeholder="全部" @change="handleStatFilterChange('class_id')">
                           <el-option v-for="item in statClassOptions()" :key="item.value" :label="item.label" :value="item.value" />
                         </el-select>
+                      </label>
+                      <label v-if="isPracticeScoreSheetReport()" :class="{ 'filter-active': hasFilterValue(statState.filters.module_type) }">
+                        <span>模块</span>
+                        <el-select v-model="statState.filters.module_type" class="filter-select" :class="{ 'is-filter-active': hasFilterValue(statState.filters.module_type) }" filterable placeholder="实训" @change="handleStatFilterChange('module_type')">
+                          <el-option label="实训" value="training" />
+                          <el-option label="实验" value="lab" />
+                        </el-select>
+                      </label>
+                      <label v-if="isPracticeScoreSheetReport()" :class="{ 'filter-active': hasFilterValue(statState.filters.plan_id) }">
+                        <span>教学计划</span>
+                        <el-select v-model="statState.filters.plan_id" class="filter-select" :class="{ 'is-filter-active': hasFilterValue(statState.filters.plan_id) }" clearable filterable placeholder="全部计划" @change="handleStatFilterChange('plan_id')">
+                          <el-option v-for="item in practiceScoreSheetPlanOptions()" :key="item.value" :label="item.label" :value="item.value" />
+                        </el-select>
+                      </label>
+                      <label v-if="isPracticeScoreSheetReport()" :class="{ 'filter-active': hasFilterValue(statState.filters.academic_year) }">
+                        <span>学年</span>
+                        <input v-model="statState.filters.academic_year" placeholder="如 2025-2026">
                       </label>
                       <label :class="{ 'filter-active': hasFilterValue(statState.filters.keyword) }">
                         <span>关键词</span>
@@ -2388,7 +2405,60 @@
                       </section>
                     </div>
                     <section class="stat-detail-panel">
-                      <el-table :data="statState.rows" height="100%" stripe v-loading="statState.loading">
+                      <section v-if="isPracticeScoreSheetReport()" class="course-score-sheet" v-loading="statState.loading">
+                        <header>
+                          <strong>成都锦城学院{{ statState.sheet_meta.title || currentStatReport.name }}</strong>
+                          <small>{{ statState.sheet_meta.module_name || '实训' }}成绩记载 / 共 {{ statState.pagination.total }} 人</small>
+                        </header>
+                        <div class="course-score-meta">
+                          <span v-for="item in courseScoreSheetMetaItems" :key="item.key">
+                            <em>{{ item.label }}</em>
+                            <strong>{{ item.value || '-' }}</strong>
+                          </span>
+                        </div>
+                        <div class="course-score-scroll">
+                          <table class="course-score-table">
+                            <thead>
+                              <tr>
+                                <th rowspan="2">序号</th>
+                                <th rowspan="2">学号</th>
+                                <th rowspan="2">姓名</th>
+                                <th rowspan="2">行政班级</th>
+                                <th :colspan="scoreSheetAttendanceIndexes.length + 1">考勤与课堂表现（占20%）</th>
+                                <th :colspan="scoreSheetProjectIndexes.length">项目（实操）成绩（占70%）</th>
+                                <th rowspan="2">课程报告<br>10%</th>
+                                <th rowspan="2">总分</th>
+                              </tr>
+                              <tr>
+                                <th v-for="index in scoreSheetAttendanceIndexes" :key="`att-${index}`">{{ index }}</th>
+                                <th>小计</th>
+                                <th v-for="index in scoreSheetProjectIndexes" :key="`project-${index}`">{{ index }}</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              <tr v-for="row in statState.rows" :key="row.student_id || row.sequence">
+                                <td>{{ statCellText(row.sequence) }}</td>
+                                <td>{{ statCellText(row.student_num) }}</td>
+                                <td>{{ statCellText(row.student_name) }}</td>
+                                <td>{{ statCellText(row.class_name) }}</td>
+                                <td v-for="index in scoreSheetAttendanceIndexes" :key="`row-att-${row.sequence}-${index}`">{{ scoreSheetCell(row, `attendance_${index}`) }}</td>
+                                <td>{{ scoreSheetCell(row, 'attendance_total') }}</td>
+                                <td v-for="index in scoreSheetProjectIndexes" :key="`row-project-${row.sequence}-${index}`">{{ scoreSheetCell(row, `project_${index}`) }}</td>
+                                <td>{{ scoreSheetCell(row, 'report_score') }}</td>
+                                <td>{{ scoreSheetCell(row, 'total_score') }}</td>
+                              </tr>
+                              <tr v-if="!statState.rows.length">
+                                <td :colspan="currentStatColumns.length || 35">暂无成绩记载数据</td>
+                              </tr>
+                            </tbody>
+                          </table>
+                        </div>
+                        <footer>
+                          <span>注：考勤与课堂表现、项目实操、课程报告按成绩规则记录，空白表示未录入。</span>
+                          <span>生成时间：{{ statState.generated_at || '-' }}</span>
+                        </footer>
+                      </section>
+                      <el-table v-else :data="statState.rows" height="100%" stripe v-loading="statState.loading">
                         <el-table-column
                           v-for="column in currentStatColumns"
                           :key="column.key"
@@ -2619,6 +2689,7 @@ import {
   Search,
   Settings,
   SlidersHorizontal,
+  Table2,
   Trash2,
   Upload,
   UsersRound,
@@ -2809,11 +2880,15 @@ const statState = reactive({
     profession_id: '',
     grade_id: '',
     class_id: '',
+    module_type: 'training',
+    plan_id: '',
+    academic_year: '',
     keyword: '',
   },
   cards: [],
   columns: [],
   rows: [],
+  sheet_meta: {},
   pagination: {
     page: 1,
     page_size: 20,
@@ -3459,9 +3534,12 @@ const statReports = [
   { key: 'teacher', name: '指导统计', description: '按指导关系统计教师指导数量和评阅进度。', icon: UsersRound },
   { key: 'student', name: '学生过程统计', description: '查看学生申请、签到、日志、报告、成绩的过程状态。', icon: UserRound },
   { key: 'archive', name: '归档材料统计', description: '统计保险、安全承诺和报告归档材料完整性。', icon: FolderOpen },
+  { key: 'practice_score_sheet', name: '实验实训成绩记载表', description: '按教学计划生成考勤、项目实操、课程报告和总分记载表。', icon: Table2 },
 ];
 const currentStatReport = computed(() => statReports.find(item => item.key === statState.report) || statReports[0]);
 const statCardIcons = [UserRound, ClipboardList, CheckCircle2, UsersRound, GraduationCap, MapPin];
+const scoreSheetAttendanceIndexes = Array.from({ length: 16 }, (_, index) => index + 1);
+const scoreSheetProjectIndexes = Array.from({ length: 12 }, (_, index) => index + 1);
 const guideModuleOptions = computed(() => modules.map(item => ({
   label: item.name,
   value: item.id,
@@ -3479,6 +3557,19 @@ const statCards = computed(() => {
   }));
 });
 const currentStatColumns = computed(() => statState.columns || []);
+const courseScoreSheetMetaItems = computed(() => {
+  const meta = statState.sheet_meta || {};
+  return [
+    { key: 'academic_year', label: '学年', value: meta.academic_year || statState.filters.academic_year },
+    { key: 'semester', label: '学期', value: meta.semester },
+    { key: 'course_number', label: '选课课号', value: meta.course_number },
+    { key: 'course_name', label: '名称', value: meta.course_name },
+    { key: 'teacher_name', label: '教师姓名', value: meta.teacher_name },
+    { key: 'teacher_unit', label: '教师单位', value: meta.teacher_unit },
+    { key: 'class_time', label: '上课时间', value: meta.class_time },
+    { key: 'location', label: '地点', value: meta.location },
+  ];
+});
 const messageGroups = computed(() => groupMessagesByDay(messageState.items));
 const messageUnreadCount = computed(() => Number(messageState.summary.unread || 0));
 const messageSendScopeHint = computed(() => {
@@ -3649,7 +3740,7 @@ const internshipListConfigs = computed(() => ({
   applications: {
     listKey: 'applications',
     filename: '实习申请',
-    filters: internshipListFilters('applications', ['grade_id', 'dep_id', 'profession_id', 'status', 'keyword']),
+    filters: internshipListFilters('applications', ['grade_id', 'dep_id', 'profession_id', 'class_id', 'status', 'keyword']),
     columns: [
       { prop: 'student_name', label: '学生', width: 110 },
       { prop: 'student_num', label: '学号', width: 130 },
@@ -3680,7 +3771,7 @@ const internshipListConfigs = computed(() => ({
   pairs: {
     listKey: 'pairs',
     filename: '指导关系',
-    filters: internshipListFilters('pairs', ['grade_id', 'dep_id', 'profession_id', 'status', 'keyword']),
+    filters: internshipListFilters('pairs', ['grade_id', 'dep_id', 'profession_id', 'class_id', 'status', 'keyword']),
     columns: [
       { prop: 'student_name', label: '学生', width: 120 },
       { prop: 'student_num', label: '学号', width: 130 },
@@ -3694,7 +3785,7 @@ const internshipListConfigs = computed(() => ({
   signIns: {
     listKey: 'signIns',
     filename: '签到记录',
-    filters: internshipListFilters('signIns', ['grade_id', 'dep_id', 'profession_id', 'arrangement_id', 'keyword']),
+    filters: internshipListFilters('signIns', ['grade_id', 'dep_id', 'profession_id', 'class_id', 'arrangement_id', 'keyword']),
     columns: [
       { prop: 'student_name', label: '学生', width: 110 },
       { prop: 'student_num', label: '学号', width: 130 },
@@ -3709,7 +3800,7 @@ const internshipListConfigs = computed(() => ({
   journals: {
     listKey: 'journals',
     filename: '实习日志',
-    filters: internshipListFilters('journals', ['grade_id', 'dep_id', 'profession_id', 'arrangement_id', 'status', 'keyword']),
+    filters: internshipListFilters('journals', ['grade_id', 'dep_id', 'profession_id', 'class_id', 'arrangement_id', 'status', 'keyword']),
     columns: [
       { prop: 'student_name', label: '学生', width: 110 },
       { prop: 'grade_name', label: '届次', width: 100 },
@@ -3722,7 +3813,7 @@ const internshipListConfigs = computed(() => ({
   reports: {
     listKey: 'reports',
     filename: '实习报告',
-    filters: internshipListFilters('reports', ['grade_id', 'dep_id', 'profession_id', 'arrangement_id', 'status', 'keyword']),
+    filters: internshipListFilters('reports', ['grade_id', 'dep_id', 'profession_id', 'class_id', 'arrangement_id', 'status', 'keyword']),
     columns: [
       { prop: 'student_name', label: '学生', width: 110 },
       { prop: 'grade_name', label: '届次', width: 100 },
@@ -3735,7 +3826,7 @@ const internshipListConfigs = computed(() => ({
   delays: {
     listKey: 'delays',
     filename: '延期申请',
-    filters: internshipListFilters('delays', ['grade_id', 'dep_id', 'profession_id', 'arrangement_id', 'config_key', 'status', 'keyword']),
+    filters: internshipListFilters('delays', ['grade_id', 'dep_id', 'profession_id', 'class_id', 'arrangement_id', 'config_key', 'status', 'keyword']),
     columns: [
       { prop: 'student_name', label: '学生', width: 110 },
       { prop: 'student_num', label: '学号', width: 130 },
@@ -3751,7 +3842,7 @@ const internshipListConfigs = computed(() => ({
   scores: {
     listKey: 'scores',
     filename: '实习成绩',
-    filters: internshipListFilters('scores', ['grade_id', 'dep_id', 'profession_id', 'arrangement_id', 'keyword']),
+    filters: internshipListFilters('scores', ['grade_id', 'dep_id', 'profession_id', 'class_id', 'arrangement_id', 'keyword']),
     columns: [
       { prop: 'student_name', label: '学生', width: 110 },
       { prop: 'grade_name', label: '届次', width: 100 },
@@ -3767,7 +3858,7 @@ const internshipListConfigs = computed(() => ({
   archiveMaterials: {
     listKey: 'archiveMaterials',
     filename: '归档材料',
-    filters: internshipListFilters('archiveMaterials', ['grade_id', 'dep_id', 'profession_id', 'arrangement_id', 'archive_status', 'keyword']),
+    filters: internshipListFilters('archiveMaterials', ['grade_id', 'dep_id', 'profession_id', 'class_id', 'arrangement_id', 'archive_status', 'keyword']),
     columns: [
       { prop: 'student_name', label: '学生', width: 110 },
       { prop: 'student_num', label: '学号', width: 130 },
@@ -3796,7 +3887,7 @@ const internshipListConfigs = computed(() => ({
   insurances: {
     listKey: 'insurances',
     filename: '保险记录',
-    filters: internshipListFilters('insurances', ['grade_id', 'dep_id', 'profession_id', 'arrangement_id', 'keyword']),
+    filters: internshipListFilters('insurances', ['grade_id', 'dep_id', 'profession_id', 'class_id', 'arrangement_id', 'keyword']),
     columns: [
       { prop: 'student_name', label: '学生', width: 110 },
       { prop: 'student_num', label: '学号', width: 130 },
@@ -3811,7 +3902,7 @@ const internshipListConfigs = computed(() => ({
   safetyLetters: {
     listKey: 'safetyLetters',
     filename: '安全承诺',
-    filters: internshipListFilters('safetyLetters', ['grade_id', 'dep_id', 'profession_id', 'arrangement_id', 'keyword']),
+    filters: internshipListFilters('safetyLetters', ['grade_id', 'dep_id', 'profession_id', 'class_id', 'arrangement_id', 'keyword']),
     columns: [
       { prop: 'student_name', label: '学生', width: 110 },
       { prop: 'student_num', label: '学号', width: 130 },
@@ -3873,7 +3964,7 @@ const internshipListConfigs = computed(() => ({
   inspections: {
     listKey: 'inspections',
     filename: '实习巡查记录',
-    filters: internshipListFilters('inspections', ['grade_id', 'dep_id', 'profession_id', 'arrangement_id', 'result', 'keyword']),
+    filters: internshipListFilters('inspections', ['grade_id', 'dep_id', 'profession_id', 'class_id', 'arrangement_id', 'result', 'keyword']),
     columns: [
       { prop: 'grade_name', label: '届次', width: 100 },
       { prop: 'arrangement_title', label: '实习安排', minWidth: 190 },
@@ -3919,9 +4010,9 @@ function internshipListFilters(listKey, adminKeys) {
     return [];
   }
   if (isTeacherRole.value) {
-    return listKey === 'arrangements' ? [] : internshipFilters(['grade_id', 'student_keyword']);
+    return listKey === 'arrangements' ? [] : internshipFilters(['grade_id', 'student_keyword'], internshipState.filters[listKey] || {});
   }
-  return internshipFilters(adminKeys);
+  return internshipFilters(adminKeys, internshipState.filters[listKey] || {});
 }
 
 function hasInternshipToolbarActions(panel) {
@@ -6197,10 +6288,15 @@ async function loadStats(page = 1) {
   statState.message = '';
   try {
     await loadInternshipFoundation();
+    if (isPracticeScoreSheetReport()) {
+      await loadPracticeFoundation(statState.filters.module_type || 'training');
+      normalizeStatCascade();
+    }
     const data = await fetchInternshipStats(statQueryParams(page));
     statState.cards = data.cards || [];
     statState.columns = data.columns || [];
     statState.rows = data.rows || [];
+    statState.sheet_meta = data.sheet_meta || {};
     statState.pagination = {
       page: data.pagination?.page || page,
       page_size: data.pagination?.page_size || statState.pagination.page_size,
@@ -6241,9 +6337,35 @@ function resetStatFilters() {
     profession_id: '',
     grade_id: '',
     class_id: '',
+    module_type: 'training',
+    plan_id: '',
+    academic_year: '',
     keyword: '',
   });
   loadStats(1);
+}
+
+function isPracticeScoreSheetReport() {
+  return statState.report === 'practice_score_sheet';
+}
+
+function practiceScoreSheetPlanOptions() {
+  const module = statState.filters.module_type || 'training';
+  const plans = practiceModuleState(module).options.plans || [];
+  const gradeId = statState.filters.grade_id;
+  const depId = statState.filters.dep_id;
+  const professionId = statState.filters.profession_id;
+  const classId = statState.filters.class_id;
+  return plans
+    .filter(item => matchAcademicFilters(item, { grade_id: gradeId, dep_id: depId, profession_id: professionId, class_id: classId }))
+    .map(item => ({
+      value: item.id,
+      label: item.course_name || item.title || `计划 ${item.id}`,
+    }));
+}
+
+function scoreSheetCell(row, key) {
+  return statCellText(row?.[key]);
 }
 
 function logMethodText(action) {
@@ -6335,6 +6457,7 @@ function emptyInternshipFilters() {
     base_id: '',
     profession_id: '',
     grade_id: '',
+    class_id: '',
     arrangement_id: '',
     config_key: '',
     status: '',
@@ -6687,19 +6810,21 @@ function practiceFilters(module, panel, keys) {
     return [];
   }
   if (isTeacherRole.value) {
-    return practiceFilterDefinitions(module, ['grade_id', 'keyword']);
+    return practiceFilterDefinitions(module, panel, ['grade_id', 'keyword']);
   }
-  return practiceFilterDefinitions(module, keys);
+  return practiceFilterDefinitions(module, panel, keys);
 }
 
-function practiceFilterDefinitions(module, keys) {
+function practiceFilterDefinitions(module, panel, keys) {
   const options = practiceModuleState(module).options;
+  const values = practiceModuleState(module).filters[panel] || {};
   const definitions = {
     keyword: { key: 'keyword', label: '关键词', placeholder: '标题、课程、学生、内容' },
     grade_id: { key: 'grade_id', label: '届次', type: 'select', options: optionItems(options.grades, 'grade_id', 'grade_name') },
-    dep_id: { key: 'dep_id', label: '学院', type: 'select', options: optionItems(options.departments, 'dep_id', 'dep_name') },
-    profession_id: { key: 'profession_id', label: '专业', type: 'select', options: optionItems(options.professions, 'profession_id', 'profession_name') },
-    plan_id: { key: 'plan_id', label: '教学计划', type: 'select', options: optionItems(options.plans, 'id', 'title') },
+    dep_id: { key: 'dep_id', label: '学院', type: 'select', options: optionItems(filterAcademicDepartments(options, values), 'dep_id', 'dep_name') },
+    profession_id: { key: 'profession_id', label: '专业', type: 'select', options: optionItems(filterAcademicItems(options.professions, values, ['grade_id', 'dep_id']), 'profession_id', 'profession_name') },
+    class_id: { key: 'class_id', label: '班级', type: 'select', options: optionItems(filterAcademicItems(options.classes, values, ['grade_id', 'dep_id', 'profession_id']), 'class_id', 'class_name') },
+    plan_id: { key: 'plan_id', label: '教学计划', type: 'select', options: optionItems(filterAcademicItems(options.plans, values, ['grade_id', 'dep_id', 'profession_id', 'class_id']), 'id', 'title') },
     room_id: { key: 'room_id', label: '场地', type: 'select', options: optionItems(options.rooms, 'id', 'name') },
     place_type: { key: 'place_type', label: '地点类型', type: 'select', options: practicePlaceTypeOptions() },
     source_type: { key: 'source_type', label: '来源', type: 'select', options: practiceSourceTypeOptions() },
@@ -6774,7 +6899,9 @@ function practiceQueryParams(module, panel, page = 1) {
 }
 
 function setPracticeFilter(module, panel, event) {
-  practiceModuleState(module).filters[panel][event.key] = event.value ?? '';
+  const values = practiceModuleState(module).filters[panel];
+  values[event.key] = event.value ?? '';
+  normalizeFilterCascade(values, practiceModuleState(module).options, event.key);
 }
 
 function resetPracticeFilters(module, panel) {
@@ -7081,17 +7208,18 @@ function hasFilterValue(value) {
   return value !== '' && value !== null && value !== undefined;
 }
 
-function internshipFilters(keys) {
+function internshipFilters(keys, values = {}, options = internshipState.options) {
   const visibleKeys = keys.filter(key => key !== 'semester'); // 暂时隐藏学期筛选，后续需要时恢复。
   const definitions = {
     keyword: { key: 'keyword', label: '关键词', placeholder: '学生、学号、教师、标题' },
     student_keyword: { key: 'keyword', label: '学生', placeholder: '姓名或学号' },
     semester: { key: 'semester', label: '学期', type: 'select', options: semesterOptions() },
     base_id: { key: 'base_id', label: '实习基地', type: 'select', options: optionItems(internshipState.options.bases, 'id', 'name') },
-    dep_id: { key: 'dep_id', label: '学院', type: 'select', options: optionItems(internshipState.options.departments, 'dep_id', 'dep_name') },
-    profession_id: { key: 'profession_id', label: '专业', type: 'select', options: optionItems(internshipState.options.professions, 'profession_id', 'profession_name') },
-    grade_id: { key: 'grade_id', label: '届次', type: 'select', options: optionItems(internshipState.options.grades, 'grade_id', 'grade_name') },
-    arrangement_id: { key: 'arrangement_id', label: '实习安排', type: 'select', options: optionItems(internshipState.options.arrangements, 'id', 'title') },
+    grade_id: { key: 'grade_id', label: '届次', type: 'select', options: optionItems(options.grades, 'grade_id', 'grade_name') },
+    dep_id: { key: 'dep_id', label: '学院', type: 'select', options: optionItems(filterAcademicDepartments(options, values), 'dep_id', 'dep_name') },
+    profession_id: { key: 'profession_id', label: '专业', type: 'select', options: optionItems(filterAcademicItems(options.professions, values, ['grade_id', 'dep_id']), 'profession_id', 'profession_name') },
+    class_id: { key: 'class_id', label: '班级', type: 'select', options: optionItems(filterAcademicItems(options.classes, values, ['grade_id', 'dep_id', 'profession_id']), 'class_id', 'class_name') },
+    arrangement_id: { key: 'arrangement_id', label: '实习安排', type: 'select', options: optionItems(filterAcademicItems(options.arrangements, values, ['grade_id', 'dep_id', 'profession_id', 'class_id']), 'id', 'title') },
     config_key: { key: 'config_key', label: '延期类型', type: 'select', options: delayConfigOptions() },
     status: { key: 'status', label: '状态', type: 'select', options: statusOptions() },
     archive_status: { key: 'archive_status', label: '归档状态', type: 'select', options: archiveStatusOptions() },
@@ -7108,7 +7236,7 @@ function baseFlowFilters() {
   }
   return [
     { key: 'type', label: '流程类型', type: 'select', options: baseFlowTypes },
-    ...internshipFilters(['dep_id', 'base_id', 'status', 'keyword']),
+    ...internshipFilters(['dep_id', 'base_id', 'status', 'keyword'], internshipState.filters.baseFlows),
   ];
 }
 
@@ -7120,66 +7248,186 @@ function optionItems(items, valueKey, labelKey) {
 }
 
 function sameFilterValue(left, right) {
-  return String(left || '') === String(right || '');
+  return String(left ?? '') === String(right ?? '');
+}
+
+function matchAcademicFilters(item, values = {}, keys = ['grade_id', 'dep_id', 'profession_id', 'class_id']) {
+  return keys.every((key) => {
+    const expected = values[key];
+    if (!hasFilterValue(expected)) {
+      return true;
+    }
+    const actual = item?.[key];
+    if (!hasFilterValue(actual)) {
+      return true;
+    }
+    return sameFilterValue(actual, expected);
+  });
+}
+
+function filterAcademicItems(items = [], values = {}, keys = ['grade_id', 'dep_id', 'profession_id', 'class_id']) {
+  return (items || []).filter(item => matchAcademicFilters(item, values, keys));
+}
+
+function filterAcademicDepartments(options = {}, values = {}) {
+  const departments = options.departments || [];
+  if (!hasFilterValue(values.grade_id)) {
+    return departments;
+  }
+
+  const depIds = new Set();
+  [
+    ...(options.professions || []),
+    ...(options.classes || []),
+    ...(options.students || []),
+    ...(options.plans || []),
+  ].forEach((item) => {
+    if (matchAcademicFilters(item, values, ['grade_id']) && hasFilterValue(item.dep_id)) {
+      depIds.add(String(item.dep_id));
+    }
+  });
+
+  if (!depIds.size) {
+    return departments;
+  }
+  return departments.filter(item => depIds.has(String(item.dep_id)));
+}
+
+function findSelectedPlan(values = {}, options = {}) {
+  if (!hasFilterValue(values.plan_id)) {
+    return null;
+  }
+  return (options.plans || []).find(item => sameFilterValue(item.id ?? item.plan_id, values.plan_id)) || null;
+}
+
+function findSelectedArrangement(values = {}, options = {}) {
+  if (!hasFilterValue(values.arrangement_id)) {
+    return null;
+  }
+  return (options.arrangements || []).find(item => sameFilterValue(item.id, values.arrangement_id)) || null;
+}
+
+function normalizeFilterCascade(values = {}, options = {}, changedKey = '') {
+  const selectedPlan = findSelectedPlan(values, options);
+  if (changedKey === 'plan_id' && selectedPlan) {
+    ['grade_id', 'dep_id', 'profession_id', 'class_id'].forEach((key) => {
+      if (hasFilterValue(selectedPlan[key])) {
+        values[key] = selectedPlan[key];
+      }
+    });
+  }
+
+  const selectedArrangement = findSelectedArrangement(values, options);
+  if (changedKey === 'arrangement_id' && selectedArrangement) {
+    ['grade_id', 'dep_id', 'profession_id'].forEach((key) => {
+      if (hasFilterValue(selectedArrangement[key])) {
+        values[key] = selectedArrangement[key];
+      }
+    });
+  }
+
+  const selectedClass = hasFilterValue(values.class_id)
+    ? (options.classes || []).find(item => sameFilterValue(item.class_id, values.class_id))
+    : null;
+  if (hasFilterValue(values.class_id) && !selectedClass) {
+    values.class_id = '';
+  }
+  if (changedKey === 'class_id' && selectedClass) {
+    values.grade_id = selectedClass.grade_id || values.grade_id || '';
+    values.dep_id = selectedClass.dep_id || values.dep_id || '';
+    values.profession_id = selectedClass.profession_id || values.profession_id || '';
+  }
+
+  const selectedProfession = hasFilterValue(values.profession_id)
+    ? (options.professions || []).find(item => sameFilterValue(item.profession_id, values.profession_id))
+    : null;
+  if (hasFilterValue(values.profession_id) && !selectedProfession) {
+    values.profession_id = '';
+    values.class_id = '';
+  }
+  if (changedKey === 'profession_id' && selectedProfession) {
+    values.grade_id = selectedProfession.grade_id || values.grade_id || '';
+    values.dep_id = selectedProfession.dep_id || values.dep_id || '';
+  }
+
+  const departments = filterAcademicDepartments(options, values);
+  if (hasFilterValue(values.dep_id) && departments.length && !departments.some(item => sameFilterValue(item.dep_id, values.dep_id))) {
+    values.dep_id = '';
+    values.profession_id = '';
+    values.class_id = '';
+    values.plan_id = '';
+  }
+
+  if (hasFilterValue(values.profession_id)) {
+    const professionVisible = filterAcademicItems(options.professions || [], values, ['grade_id', 'dep_id'])
+      .some(item => sameFilterValue(item.profession_id, values.profession_id));
+    if (!professionVisible) {
+      values.profession_id = '';
+      values.class_id = '';
+      values.plan_id = '';
+    }
+  }
+
+  if (hasFilterValue(values.class_id)) {
+    const classVisible = filterAcademicItems(options.classes || [], values, ['grade_id', 'dep_id', 'profession_id'])
+      .some(item => sameFilterValue(item.class_id, values.class_id));
+    if (!classVisible) {
+      values.class_id = '';
+      values.plan_id = '';
+    }
+  }
+
+  if (hasFilterValue(values.arrangement_id)) {
+    const arrangementVisible = filterAcademicItems(options.arrangements || [], values, ['grade_id', 'dep_id', 'profession_id', 'class_id'])
+      .some(item => sameFilterValue(item.id, values.arrangement_id));
+    if (!arrangementVisible) {
+      values.arrangement_id = '';
+    }
+  }
+
+  if (hasFilterValue(values.plan_id)) {
+    const planVisible = filterAcademicItems(options.plans || [], values, ['grade_id', 'dep_id', 'profession_id', 'class_id'])
+      .some(item => sameFilterValue(item.id ?? item.plan_id, values.plan_id));
+    if (!planVisible) {
+      values.plan_id = '';
+    }
+  }
+}
+
+function statAcademicOptions() {
+  if (!isPracticeScoreSheetReport()) {
+    return internshipState.options;
+  }
+  return practiceModuleState(statState.filters.module_type || 'training').options;
+}
+
+function statGradeOptions() {
+  return optionItems(statAcademicOptions().grades, 'grade_id', 'grade_name');
 }
 
 function statDepartmentOptions() {
-  return optionItems(internshipState.options.departments, 'dep_id', 'dep_name');
+  return optionItems(filterAcademicDepartments(statAcademicOptions(), statState.filters), 'dep_id', 'dep_name');
 }
 
 function statProfessionOptions() {
-  const gradeId = statState.filters.grade_id;
-  const depId = statState.filters.dep_id;
-  return optionItems(internshipState.options.professions.filter((item) => {
-    const matchGrade = !gradeId || sameFilterValue(item.grade_id, gradeId);
-    const matchDepartment = !depId || sameFilterValue(item.dep_id, depId);
-    return matchGrade && matchDepartment;
-  }), 'profession_id', 'profession_name');
+  return optionItems(filterAcademicItems(statAcademicOptions().professions, statState.filters, ['grade_id', 'dep_id']), 'profession_id', 'profession_name');
 }
 
 function statClassOptions() {
-  const gradeId = statState.filters.grade_id;
-  const depId = statState.filters.dep_id;
-  const professionId = statState.filters.profession_id;
-  return optionItems(internshipState.options.classes.filter((item) => {
-    const matchGrade = !gradeId || sameFilterValue(item.grade_id, gradeId);
-    const matchDepartment = !depId || sameFilterValue(item.dep_id, depId);
-    const matchProfession = !professionId || sameFilterValue(item.profession_id, professionId);
-    return matchGrade && matchDepartment && matchProfession;
-  }), 'class_id', 'class_name');
+  return optionItems(filterAcademicItems(statAcademicOptions().classes, statState.filters, ['grade_id', 'dep_id', 'profession_id']), 'class_id', 'class_name');
 }
 
-function handleStatFilterChange(key) {
-  if (key === 'profession_id') {
-    const profession = internshipState.options.professions.find(item => sameFilterValue(item.profession_id, statState.filters.profession_id));
-    if (profession) {
-      statState.filters.grade_id = profession.grade_id || statState.filters.grade_id || '';
-      statState.filters.dep_id = profession.dep_id || statState.filters.dep_id || '';
-    }
+async function handleStatFilterChange(key) {
+  if (key === 'module_type') {
+    statState.filters.plan_id = '';
+    await loadPracticeFoundation(statState.filters.module_type || 'training');
   }
 
-  if (key === 'class_id') {
-    const classItem = internshipState.options.classes.find(item => sameFilterValue(item.class_id, statState.filters.class_id));
-    if (classItem) {
-      statState.filters.grade_id = classItem.grade_id || statState.filters.grade_id || '';
-      statState.filters.dep_id = classItem.dep_id || statState.filters.dep_id || '';
-      statState.filters.profession_id = classItem.profession_id || statState.filters.profession_id || '';
-    }
-  }
-
-  normalizeStatCascade();
+  normalizeStatCascade(key);
 }
 
-function normalizeStatCascade() {
-  const professionId = statState.filters.profession_id;
-  if (professionId && !statProfessionOptions().some(item => sameFilterValue(item.value, professionId))) {
-    statState.filters.profession_id = '';
-  }
-
-  const classId = statState.filters.class_id;
-  if (classId && !statClassOptions().some(item => sameFilterValue(item.value, classId))) {
-    statState.filters.class_id = '';
-  }
+function normalizeStatCascade(changedKey = '') {
+  normalizeFilterCascade(statState.filters, statAcademicOptions(), changedKey);
 }
 
 function arrangementSelectedProfession() {
@@ -7489,8 +7737,11 @@ function defaultScopedFilters() {
   }
   if (roleType === 'profession_admin') {
     filters.profession_id = firstScope.profession_id ? Number(firstScope.profession_id) : internshipState.options.professions[0]?.profession_id || '';
-    filters.dep_id = firstScope.dep_id ? Number(firstScope.dep_id) : internshipState.options.professions.find(item => item.profession_id === filters.profession_id)?.dep_id || '';
+    const profession = internshipState.options.professions.find(item => Number(item.profession_id) === Number(filters.profession_id || 0)) || {};
+    filters.dep_id = firstScope.dep_id ? Number(firstScope.dep_id) : profession.dep_id || '';
+    filters.grade_id = profession.grade_id || '';
   }
+  normalizeFilterCascade(filters, internshipState.options);
   return filters;
 }
 
@@ -7506,6 +7757,7 @@ function applyDefaultScopedFilters() {
         current[filterKey] = value;
       }
     });
+    normalizeFilterCascade(current, internshipState.options);
     internshipState.filters[key] = current;
   });
 }
@@ -7525,11 +7777,14 @@ function internshipQueryParams(key, page) {
 }
 
 function setInternshipFilter(listKey, event) {
-  internshipState.filters[listKey][event.key] = event.value ?? '';
+  const values = internshipState.filters[listKey];
+  values[event.key] = event.value ?? '';
+  normalizeFilterCascade(values, internshipState.options, event.key);
 }
 
 function resetInternshipFilters(listKey) {
   internshipState.filters[listKey] = defaultScopedFilters();
+  normalizeFilterCascade(internshipState.filters[listKey], internshipState.options);
   loadInternshipPanel(listKey, 1);
 }
 
@@ -8879,8 +9134,24 @@ watch(visibleModules, () => {
   }
 });
 
+function handleAuthExpired(event) {
+  const message = event?.detail?.message || '登录已过期，请重新登录';
+  permissionState.context = {};
+  permissionState.permissions = [];
+  permissionState.menus = [];
+  permissionState.dataScope = null;
+  permissionState.error = message;
+  loginState.message = message;
+  openWindows.splice(0, openWindows.length);
+  focusedWindowId.value = null;
+  resetMessageState();
+  resetInternshipState();
+  window.location.hash = '';
+}
+
 onMounted(async () => {
   window.addEventListener('hashchange', handleHashNavigation);
+  window.addEventListener('practical-auth-expired', handleAuthExpired);
   renderClock();
   setInterval(renderClock, 30000);
   await loadLoginPageSettings();
@@ -8897,5 +9168,6 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   window.removeEventListener('hashchange', handleHashNavigation);
+  window.removeEventListener('practical-auth-expired', handleAuthExpired);
 });
 </script>

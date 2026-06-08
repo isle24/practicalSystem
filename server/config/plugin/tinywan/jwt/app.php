@@ -1,5 +1,10 @@
 <?php
 
+$env = static function (string $key, mixed $default = null): mixed {
+    $value = $_ENV[$key] ?? getenv($key);
+    return $value === false || $value === null || $value === '' ? $default : $value;
+};
+
 return [
     'enable' => true,
     'jwt' => [
@@ -10,13 +15,13 @@ return [
         'access_secret_key' => '2248e684683fdeb8f7fc76524b8aa52443724b34bb7d441d0179cc8411600ecc',
 
         /** access令牌过期时间，单位：秒。默认 2 小时 */
-        'access_exp' => 7200,
+        'access_exp' => (int) $env('JWT_ACCESS_EXP', 86400),
 
         /** refresh令牌秘钥（安装时自动生成64位随机值） */
         'refresh_secret_key' => '74b71941389206a3828c78a4a96363eb4b0321ff2eb42451edc1ff8e3348e824',
 
         /** refresh令牌过期时间，单位：秒。默认 7 天 */
-        'refresh_exp' => 604800,
+        'refresh_exp' => (int) $env('JWT_REFRESH_EXP', 604800),
 
         /** refresh 令牌是否禁用，默认不禁用 false */
         'refresh_disable' => false,
@@ -34,7 +39,7 @@ return [
         'is_single_device' => false,
 
         /** 缓存令牌时间，单位：秒。默认 7 天 */
-        'cache_token_ttl' => 604800,
+        'cache_token_ttl' => (int) $env('JWT_CACHE_TOKEN_TTL', 604800),
 
         /** 缓存令牌前缀，默认 JWT:TOKEN: */
         'cache_token_pre' => 'JWT:TOKEN:',

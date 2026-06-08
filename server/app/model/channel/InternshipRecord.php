@@ -68,7 +68,16 @@ class InternshipRecord extends TableRecord
             'teachers' => self::rows($teachers->orderBy('teacher_id')->get(['teacher_id', 'teacher_name', 'teacher_num', 'dep_id', 'profession_id'])),
             'students' => self::rows($students->orderBy('student_id')->get(['student_id', 'name', 'student_num', 'grade_id', 'dep_id', 'profession_id', 'class_id'])),
             'bases' => self::rows(self::applyBaseScope(self::queryTable('base')->where('base.status', 'enabled')->whereNull('base.deleted_at'), $scope)->orderBy('base.id')->get(['base.id', 'base.name', 'base.company_id', 'base.dep_id'])),
-            'arrangements' => self::rows(self::applyArrangementScope(self::queryTable('arrangement')->whereNull('deleted_at'), $scope)->orderByDesc('id')->get(['id', 'uuid', 'title', 'name', 'type', 'organize_mode', 'semester', 'dep_id', 'profession_id', 'start_date', 'end_date', 'status'])),
+            'arrangements' => self::rows(self::applyArrangementScope(self::queryTable('arrangement')
+                ->leftJoin('profession', 'arrangement.profession_id', '=', 'profession.profession_id')
+                ->whereNull('arrangement.deleted_at'), $scope)
+                ->orderByDesc('arrangement.id')
+                ->get([
+                    'arrangement.id', 'arrangement.uuid', 'arrangement.title', 'arrangement.name',
+                    'arrangement.type', 'arrangement.organize_mode', 'arrangement.semester',
+                    'arrangement.dep_id', 'arrangement.profession_id', 'profession.grade_id',
+                    'arrangement.start_date', 'arrangement.end_date', 'arrangement.status',
+                ])),
             'report_templates' => self::rows(self::queryTable('report_template')->where('status', 'enabled')->whereNull('deleted_at')->orderBy('id')->get(['id', 'uuid', 'name', 'code', 'version', 'online_enabled'])),
         ];
     }
