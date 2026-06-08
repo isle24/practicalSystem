@@ -2242,7 +2242,14 @@ a {
 }
 
 .profile-inline-message {
-  color: var(--muted);
+  min-height: 22px;
+  border: 1px solid #d5e7fb;
+  border-radius: 7px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 8px;
+  color: var(--primary);
+  background: var(--primary-soft);
   font-size: 12px;
 }
 
@@ -2545,25 +2552,44 @@ a {
 .message-kind.alert { background: #c74350; }
 
 .message-send-dialog {
-  width: min(760px, calc(100vw - 48px));
+  width: min(720px, calc(100vw - 48px));
+  max-height: min(680px, calc(100vh - 72px));
 }
 
 .message-send-body {
+  min-height: 0;
   display: grid;
-  gap: 14px;
-}
-
-.message-send-target-tools,
-.message-send-grid {
-  display: grid;
-  grid-template-columns: 150px minmax(0, 1fr) auto;
-  gap: 10px;
-  align-items: end;
+  gap: 12px;
+  padding: 16px;
+  overflow: auto;
 }
 
 .message-send-grid {
+  display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
   align-items: stretch;
+}
+
+.message-send-target-panel {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 10px;
+  padding: 10px;
+  background: #fbfcfe;
+}
+
+.message-send-target-tools {
+  display: grid;
+  grid-template-columns: 140px minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.message-send-target-tools .el-select,
+.message-send-target-tools .el-input {
+  width: 100%;
 }
 
 .message-send-field {
@@ -2824,6 +2850,10 @@ a {
   background: #fff;
 }
 
+.template-library-panel {
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+}
+
 .support-toolbar {
   display: grid;
   grid-template-columns: 180px 180px minmax(220px, 1fr) auto auto auto auto;
@@ -2931,17 +2961,20 @@ a {
 }
 
 .template-category-strip {
-  min-height: 40px;
+  min-height: 30px;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   overflow-x: auto;
-  padding-bottom: 2px;
+  padding-bottom: 0;
 }
 
 .template-category-strip button {
   flex: 0 0 auto;
-  padding: 0 12px;
+  min-height: 28px;
+  border-radius: 7px;
+  padding: 0 10px;
+  font-size: 13px;
   white-space: nowrap;
 }
 

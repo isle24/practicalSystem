@@ -6,7 +6,6 @@ use app\model\channel\ConfigGroup;
 use app\model\channel\ConfigItem;
 use app\server\CurrentContext;
 use InvalidArgumentException;
-use RuntimeException;
 
 class ConfigService
 {
@@ -37,12 +36,9 @@ class ConfigService
         $this->assertKey($groupCode);
         $this->assertKey($key);
 
-        $group = $this->group($groupCode);
-        if (!$group) {
-            throw new RuntimeException('配置分组不存在');
-        }
+        $group = ConfigGroup::enabledOrCreate($groupCode, $this->groupName($groupCode));
 
-        ConfigItem::saveValue((int) $group['id'], $key, $value, $description, $collegeId, $userId);
+        ConfigItem::saveValue((int) $group->id, $key, $value, $description, $collegeId, $userId);
 
         return [
             'group' => $groupCode,
@@ -74,6 +70,17 @@ class ConfigService
         $this->assertKey($parts[1]);
 
         return $parts;
+    }
+
+    private function groupName(string $groupCode): string
+    {
+        return [
+            'system' => '系统配置',
+            'internship' => '实习配置',
+            'training' => '实训配置',
+            'lab' => '实验配置',
+            'file' => '文件配置',
+        ][$groupCode] ?? $groupCode;
     }
 
     private function assertKey(string $key): void

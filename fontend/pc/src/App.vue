@@ -1410,43 +1410,45 @@
                             </div>
                           </label>
                         </div>
-                        <div v-if="messageState.sendDialog.form.send_scope === 'custom'" class="message-send-target-tools">
-                          <el-select v-model="messageState.sendDialog.filters.role_type" clearable placeholder="角色" @change="loadMessageTargets">
-                            <el-option
-                              v-for="item in messageTargetRoleOptions"
-                              :key="item.value"
-                              :label="item.label"
-                              :value="item.value"
+                        <div v-if="messageState.sendDialog.form.send_scope === 'custom'" class="message-send-target-panel">
+                          <div class="message-send-target-tools">
+                            <el-select v-model="messageState.sendDialog.filters.role_type" clearable placeholder="角色" @change="loadMessageTargets">
+                              <el-option
+                                v-for="item in messageTargetRoleOptions"
+                                :key="item.value"
+                                :label="item.label"
+                                :value="item.value"
+                              />
+                            </el-select>
+                            <el-input
+                              v-model="messageState.sendDialog.filters.keyword"
+                              clearable
+                              placeholder="搜索姓名、账号、手机、角色"
+                              @keyup.enter="loadMessageTargets"
                             />
-                          </el-select>
-                          <el-input
-                            v-model="messageState.sendDialog.filters.keyword"
-                            clearable
-                            placeholder="搜索姓名、账号、手机、角色"
-                            @keyup.enter="loadMessageTargets"
-                          />
-                          <el-button :icon="Search" :loading="messageState.targetLoading" @click="loadMessageTargets">
-                            查找
-                          </el-button>
+                            <el-button :icon="Search" :loading="messageState.targetLoading" @click="loadMessageTargets">
+                              查找
+                            </el-button>
+                          </div>
+                          <label class="message-send-field wide">
+                            <span>收件人</span>
+                            <el-select
+                              v-model="messageState.sendDialog.form.account_ids"
+                              multiple
+                              filterable
+                              collapse-tags
+                              collapse-tags-tooltip
+                              placeholder="请选择收件人"
+                            >
+                              <el-option
+                                v-for="item in messageState.targetOptions"
+                                :key="item.id"
+                                :label="messageTargetLabel(item)"
+                                :value="item.id"
+                              />
+                            </el-select>
+                          </label>
                         </div>
-                        <label v-if="messageState.sendDialog.form.send_scope === 'custom'" class="message-send-field wide">
-                          <span>收件人</span>
-                          <el-select
-                            v-model="messageState.sendDialog.form.account_ids"
-                            multiple
-                            filterable
-                            collapse-tags
-                            collapse-tags-tooltip
-                            placeholder="请选择收件人"
-                          >
-                            <el-option
-                              v-for="item in messageState.targetOptions"
-                              :key="item.id"
-                              :label="messageTargetLabel(item)"
-                              :value="item.id"
-                            />
-                          </el-select>
-                        </label>
                         <div class="message-send-grid">
                           <label class="message-send-field">
                             <span>消息类型</span>
@@ -2358,6 +2360,8 @@ const archiveImportType = ref('');
 const focusedWindowId = ref(null);
 const zIndexSeed = ref(20);
 const wallpaperCacheKey = 'practical_pc_wallpaper';
+const loginBackgroundMaxSize = 8 * 1024 * 1024;
+const imageAssetTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 const loginForm = reactive({
   login_name: 'admin',
   password: 'admin123456',
@@ -4350,6 +4354,7 @@ function openProfile(section = '') {
   if (profileModule) {
     openModuleWindow(profileModule, { reuse: true });
   }
+  loginPageState.message = '';
   if (section === 'wallpaper') {
     profileState.focus = 'wallpaper';
     nextTick(() => {
@@ -7298,6 +7303,11 @@ async function handleLoginBackgroundSelected(event) {
   if (!file || !canManageLoginBackground.value) {
     return;
   }
+  const assetError = validateImageAsset(file, loginBackgroundMaxSize);
+  if (assetError) {
+    loginPageState.message = assetError;
+    return;
+  }
 
   loginPageState.loading = true;
   loginPageState.message = '';
@@ -7309,6 +7319,16 @@ async function handleLoginBackgroundSelected(event) {
   } finally {
     loginPageState.loading = false;
   }
+}
+
+function validateImageAsset(file, maxSize) {
+  if (!imageAssetTypes.includes(file.type)) {
+    return '仅支持 JPG、PNG、WEBP、GIF 图片';
+  }
+  if (file.size > maxSize) {
+    return `图片大小不能超过 ${formatFileSize(maxSize)}`;
+  }
+  return '';
 }
 
 async function persistProfileSettings(message) {

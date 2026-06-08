@@ -16,4 +16,27 @@ class ConfigGroup extends BaseModel
             ->whereNull('deleted_at')
             ->first(['id', 'code', 'name']);
     }
+
+    public static function enabledOrCreate(string $code, string $name = ''): self
+    {
+        $group = self::query()
+            ->where('code', $code)
+            ->first();
+
+        if ($group) {
+            $group->name = $group->name ?: ($name ?: $code);
+            $group->status = 'enabled';
+            $group->deleted_at = null;
+            $group->save();
+            return $group;
+        }
+
+        return self::query()->create([
+            'parent_id' => 0,
+            'code' => $code,
+            'name' => $name ?: $code,
+            'sort' => 0,
+            'status' => 'enabled',
+        ]);
+    }
 }
