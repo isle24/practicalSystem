@@ -1266,6 +1266,75 @@ a {
 .internship-stat.amber { background: var(--amber-soft); border-color: #f0d49b; }
 .internship-stat.green { background: var(--green-soft); border-color: #bdddc8; }
 
+.practice-overview-work {
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 12px;
+}
+
+.practice-stat-button {
+  border: 1px solid var(--line);
+  text-align: left;
+  cursor: pointer;
+}
+
+.practice-stat-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 24px rgba(33, 49, 70, .08);
+}
+
+.practice-flow-card {
+  min-height: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+  background: #fff;
+}
+
+.practice-flow-card header {
+  display: grid;
+  gap: 4px;
+  padding: 14px;
+  border-bottom: 1px solid var(--line);
+  background: #fbfcfe;
+}
+
+.practice-flow-card header strong {
+  font-size: 15px;
+}
+
+.practice-flow-card header small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.practice-flow-card > div {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  align-content: start;
+  gap: 10px;
+  padding: 14px;
+  overflow: auto;
+}
+
+.practice-flow-card button {
+  height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--text);
+  background: #fff;
+}
+
+.practice-flow-card button:hover {
+  border-color: #bfd8f4;
+  color: var(--primary);
+  background: var(--primary-soft);
+}
+
 .internship-overview-work,
 .internship-score-layout,
 .internship-main-grid,
@@ -2005,6 +2074,12 @@ a {
   .message-bubble {
     width: 100%;
   }
+
+  .message-send-grid,
+  .message-send-grid-compact,
+  .message-send-target-tools {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .settings-form .check-row {
@@ -2552,7 +2627,7 @@ a {
 .message-kind.alert { background: #c74350; }
 
 .message-send-dialog {
-  width: min(720px, calc(100vw - 48px));
+  width: min(760px, calc(100vw - 48px));
   max-height: min(680px, calc(100vh - 72px));
 }
 
@@ -2567,8 +2642,12 @@ a {
 .message-send-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  gap: 12px;
   align-items: stretch;
+}
+
+.message-send-grid-compact {
+  grid-template-columns: minmax(0, 1fr) minmax(160px, 220px);
 }
 
 .message-send-target-panel {
@@ -2582,7 +2661,7 @@ a {
 
 .message-send-target-tools {
   display: grid;
-  grid-template-columns: 140px minmax(0, 1fr) auto;
+  grid-template-columns: minmax(130px, 160px) minmax(0, 1fr) auto;
   gap: 8px;
   align-items: center;
 }
@@ -2622,6 +2701,10 @@ a {
   color: var(--muted);
   background: #f8fafc;
   font-size: 13px;
+}
+
+.message-send-field textarea {
+  resize: none;
 }
 
 .taskbar {
@@ -2851,7 +2934,7 @@ a {
 }
 
 .template-library-panel {
-  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  grid-template-rows: auto 28px minmax(0, 1fr) auto;
 }
 
 .support-toolbar {
@@ -2886,7 +2969,7 @@ a {
 
 .support-side button,
 .template-category-strip button {
-  min-height: 34px;
+  min-height: 32px;
   border: 1px solid transparent;
   border-radius: 8px;
   display: flex;
@@ -2961,7 +3044,7 @@ a {
 }
 
 .template-category-strip {
-  min-height: 30px;
+  min-height: 28px;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -2971,10 +3054,12 @@ a {
 
 .template-category-strip button {
   flex: 0 0 auto;
-  min-height: 28px;
-  border-radius: 7px;
+  min-height: 26px;
+  height: 26px;
+  border-radius: 999px;
   padding: 0 10px;
-  font-size: 13px;
+  font-size: 12px;
+  line-height: 1;
   white-space: nowrap;
 }
 

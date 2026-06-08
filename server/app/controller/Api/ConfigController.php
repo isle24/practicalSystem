@@ -90,12 +90,15 @@ class ConfigController
 
     private function loginPageData(): array
     {
-        $config = new ConfigService();
+        $backgroundUrl = '';
+        if (CurrentContext::get('school_connection')) {
+            $backgroundUrl = (string) ((new ConfigService())->get('system.login_background_url') ?? '');
+        }
 
         return [
             'school_code' => CurrentContext::schoolCode() ?: '2184',
             'school_name' => CurrentContext::get('school_name') ?: '成都锦城学院',
-            'login_background_url' => (string) ($config->get('system.login_background_url') ?? ''),
+            'login_background_url' => $backgroundUrl,
         ];
     }
 

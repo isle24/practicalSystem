@@ -88,6 +88,38 @@ class InternshipRecord extends TableRecord
         ]);
     }
 
+    public static function baseFlowPage(string $table, array $scope, array $filters): array
+    {
+        $query = self::applyBaseFlowScope(self::queryTable($table)
+            ->leftJoin('base', "{$table}.base_id", '=', 'base.id')
+            ->leftJoin('department', "{$table}.dep_id", '=', 'department.dep_id')
+            ->leftJoin('account', "{$table}.submitter_id", '=', 'account.id')
+            ->leftJoin('users', 'account.user_id', '=', 'users.id')
+            ->whereNull("{$table}.deleted_at"), $scope, $table);
+        self::filter($query, $filters, "{$table}.status", 'status');
+        self::filter($query, $filters, "{$table}.base_id", 'base_id');
+        self::filter($query, $filters, "{$table}.dep_id", 'dep_id');
+        self::keyword($query, $filters, ["{$table}.title", "{$table}.content", 'base.name', 'department.dep_name', 'users.name']);
+
+        return self::paginate($query->orderByDesc("{$table}.id"), $filters, [
+            "{$table}.*",
+            'base.name as base_name',
+            'base.code as base_code',
+            'department.dep_name',
+            'users.name as submitter_name',
+        ]);
+    }
+
+    public static function baseFlowVisible(string $table, array $scope, int $id): bool
+    {
+        $query = self::queryTable($table)
+            ->where("{$table}.id", $id)
+            ->whereNull("{$table}.deleted_at");
+        self::applyBaseFlowScope($query, $scope, $table);
+
+        return $query->exists();
+    }
+
     public static function mentorPage(array $scope, array $filters): array
     {
         $query = self::queryTable('enterprise_mentor')
@@ -417,9 +449,32 @@ class InternshipRecord extends TableRecord
     {
         $query = self::applyArrangementScope(self::queryTable('syllabus_guide')
             ->leftJoin('arrangement', 'syllabus_guide.arrangement_id', '=', 'arrangement.id')
+            ->leftJoin('department', 'syllabus_guide.dep_id', '=', 'department.dep_id')
+            ->leftJoin('profession', 'syllabus_guide.profession_id', '=', 'profession.profession_id')
+            ->leftJoin('grade_list', 'profession.grade_id', '=', 'grade_list.grade_id')
+            ->leftJoin('account', 'syllabus_guide.created_by', '=', 'account.id')
+            ->leftJoin('users', 'account.user_id', '=', 'users.id')
             ->whereNull('syllabus_guide.deleted_at'), $scope);
+        self::filter($query, $filters, 'syllabus_guide.arrangement_id', 'arrangement_id');
+        self::filter($query, $filters, 'syllabus_guide.status', 'status');
+        self::listFilters($query, $filters, [
+            'dep_id' => 'syllabus_guide.dep_id',
+            'profession_id' => 'syllabus_guide.profession_id',
+            'grade_id' => 'profession.grade_id',
+            'semester' => 'arrangement.semester',
+        ]);
+        self::keyword($query, $filters, ['syllabus_guide.title', 'syllabus_guide.content', 'arrangement.title', 'department.dep_name', 'profession.profession_name']);
 
-        return self::paginate($query->orderByDesc('syllabus_guide.id'), $filters, ['syllabus_guide.*', 'arrangement.title as arrangement_title']);
+        return self::paginate($query->orderByDesc('syllabus_guide.id'), $filters, [
+            'syllabus_guide.*',
+            'arrangement.title as arrangement_title',
+            'arrangement.semester',
+            'department.dep_name',
+            'profession.profession_name',
+            'profession.grade_id',
+            'grade_list.grade_name',
+            'users.name as creator_name',
+        ]);
     }
 
     public static function documentPage(string $table, array $columns, array $scope, array $filters): array
@@ -447,7 +502,34 @@ class InternshipRecord extends TableRecord
             ]);
         }
         if (in_array($table, ['implementation_sheet', 'teacher_work_report'], true)) {
-            self::applyArrangementIdScope($query, $scope, "{$table}.arrangement_id");
+            $query->leftJoin('arrangement', "{$table}.arrangement_id", '=', 'arrangement.id')
+                ->leftJoin('department', 'arrangement.dep_id', '=', 'department.dep_id')
+                ->leftJoin('profession', 'arrangement.profession_id', '=', 'profession.profession_id')
+                ->leftJoin('grade_list', 'profession.grade_id', '=', 'grade_list.grade_id');
+            if ($table === 'implementation_sheet') {
+                $query->leftJoin('teacher_list', "{$table}.teacher_id", '=', 'teacher_list.teacher_id')
+                    ->leftJoin('internship_plan', "{$table}.plan_ref_id", '=', 'internship_plan.id')
+                    ->leftJoin('syllabus_guide', "{$table}.syllabus_ref_id", '=', 'syllabus_guide.id');
+            }
+            if ($table === 'teacher_work_report') {
+                $query->leftJoin('teacher_list', "{$table}.teacher_id", '=', 'teacher_list.teacher_id');
+            }
+            self::applyArrangementScope($query, $scope);
+            self::listFilters($query, $filters, [
+                'dep_id' => 'arrangement.dep_id',
+                'profession_id' => 'arrangement.profession_id',
+                'grade_id' => 'profession.grade_id',
+                'semester' => 'arrangement.semester',
+            ]);
+            self::keyword($query, $filters, array_filter([
+                'arrangement.title',
+                'department.dep_name',
+                'profession.profession_name',
+                'teacher_list.teacher_name',
+                $table === 'teacher_work_report' ? 'teacher_work_report.summary' : null,
+                $table === 'teacher_work_report' ? 'teacher_work_report.problems' : null,
+                $table === 'teacher_work_report' ? 'teacher_work_report.suggestions' : null,
+            ]));
         }
         self::filter($query, $filters, "{$table}.arrangement_id", 'arrangement_id');
         self::filter($query, $filters, "{$table}.status", 'status');
@@ -455,11 +537,40 @@ class InternshipRecord extends TableRecord
         return self::paginate($query->orderByDesc("{$table}.id"), $filters, $columns);
     }
 
-    public static function inspectionPage(array $filters): array
+    public static function inspectionPage(array $scope, array $filters): array
     {
-        return self::paginate(self::queryTable('inspection_record')
-            ->whereNull('deleted_at')
-            ->orderByDesc('id'), $filters, ['inspection_record.*']);
+        $query = self::queryTable('inspection_record')
+            ->leftJoin('arrangement', 'inspection_record.arrangement_id', '=', 'arrangement.id')
+            ->leftJoin('students', 'inspection_record.student_id', '=', 'students.student_id')
+            ->leftJoin('department', 'arrangement.dep_id', '=', 'department.dep_id')
+            ->leftJoin('profession', 'arrangement.profession_id', '=', 'profession.profession_id')
+            ->leftJoin('grade_list', 'profession.grade_id', '=', 'grade_list.grade_id')
+            ->leftJoin('account', 'inspection_record.inspector_id', '=', 'account.id')
+            ->leftJoin('users', 'account.user_id', '=', 'users.id')
+            ->whereNull('inspection_record.deleted_at')
+            ->orderByDesc('inspection_record.id');
+        self::applyArrangementScope($query, $scope);
+        self::filter($query, $filters, 'inspection_record.arrangement_id', 'arrangement_id');
+        self::filter($query, $filters, 'inspection_record.result', 'result');
+        self::listFilters($query, $filters, [
+            'dep_id' => 'arrangement.dep_id',
+            'profession_id' => 'arrangement.profession_id',
+            'grade_id' => 'profession.grade_id',
+            'semester' => 'arrangement.semester',
+        ]);
+        self::keyword($query, $filters, ['arrangement.title', 'students.name', 'students.student_num', 'inspection_record.remark', 'users.name']);
+
+        return self::paginate($query, $filters, [
+            'inspection_record.*',
+            'arrangement.title as arrangement_title',
+            'department.dep_name',
+            'profession.profession_name',
+            'profession.grade_id',
+            'grade_list.grade_name',
+            'students.name as student_name',
+            'students.student_num',
+            'users.name as inspector_name',
+        ]);
     }
 
     public static function archiveMaterialPage(array $scope, array $filters): array
@@ -2048,6 +2159,25 @@ class InternshipRecord extends TableRecord
         }
 
         return $query;
+    }
+
+    private static function applyBaseFlowScope(mixed $query, array $scope, string $table): mixed
+    {
+        $roleType = (string) ($scope['role_type'] ?? '');
+        if (in_array($roleType, ['super_admin', 'school_admin'], true)) {
+            return $query;
+        }
+        if ($roleType === 'college_admin') {
+            return self::whereInOrDeny($query, "{$table}.dep_id", $scope['dep_ids'] ?? []);
+        }
+        if ($roleType === 'profession_admin') {
+            return self::whereInOrDeny($query, "{$table}.dep_id", $scope['profession_dep_ids'] ?? []);
+        }
+        if ($roleType === 'enterprise') {
+            return self::whereInOrDeny($query, "{$table}.base_id", $scope['base_ids'] ?? []);
+        }
+
+        return $query->whereRaw('1 = 0');
     }
 
     private static function applyArrangementScope(mixed $query, array $scope): mixed

@@ -224,6 +224,7 @@ function createSchoolSchema(PDO $pdo): void
     ensureIndex($pdo, 'account', 'uk_login_name', "ALTER TABLE `account` ADD UNIQUE KEY `uk_login_name` (`login_name`)");
     ensureFileSchema($pdo);
     ensureInternshipSchema($pdo);
+    ensurePracticeSchema($pdo);
     ensureMessageSchema($pdo);
     ensureDocSchema($pdo);
     ensureTemplateSchema($pdo);
@@ -620,6 +621,19 @@ function schoolBusinessStatements(): array
         simpleTable('implementation_sheet', ['`arrangement_id` BIGINT UNSIGNED DEFAULT NULL', '`sheet_json` JSON DEFAULT NULL']),
         simpleTable('teacher_work_report', ['`teacher_id` BIGINT UNSIGNED DEFAULT NULL', '`semester` VARCHAR(80) DEFAULT NULL']),
         simpleTable('inspection_record', ['`inspector_id` BIGINT UNSIGNED DEFAULT NULL', '`entity_type` VARCHAR(40) DEFAULT NULL', '`entity_id` BIGINT UNSIGNED DEFAULT NULL']),
+        simpleTable('base_application', ['`base_id` BIGINT UNSIGNED DEFAULT NULL', '`dep_id` BIGINT UNSIGNED DEFAULT NULL', '`base_type` VARCHAR(40) DEFAULT NULL']),
+        simpleTable('base_usage', ['`base_id` BIGINT UNSIGNED DEFAULT NULL', '`dep_id` BIGINT UNSIGNED DEFAULT NULL', '`usage_type` VARCHAR(80) DEFAULT NULL']),
+        simpleTable('base_result', ['`base_id` BIGINT UNSIGNED DEFAULT NULL', '`dep_id` BIGINT UNSIGNED DEFAULT NULL', '`result_type` VARCHAR(80) DEFAULT NULL']),
+        simpleTable('base_expense', ['`base_id` BIGINT UNSIGNED DEFAULT NULL', '`dep_id` BIGINT UNSIGNED DEFAULT NULL', '`amount` DECIMAL(12,2) DEFAULT NULL']),
+        simpleTable('practice_plan', practiceCommonColumns(['`source_type` VARCHAR(40) DEFAULT \'manual\'', '`submitter_id` BIGINT UNSIGNED DEFAULT NULL'])),
+        simpleTable('practice_schedule', practiceCommonColumns(['`room_id` BIGINT UNSIGNED DEFAULT NULL', '`base_id` BIGINT UNSIGNED DEFAULT NULL', '`place_type` VARCHAR(40) DEFAULT \'inside\'', '`schedule_date` DATE DEFAULT NULL', '`start_time` VARCHAR(20) DEFAULT NULL', '`end_time` VARCHAR(20) DEFAULT NULL', '`location` VARCHAR(255) DEFAULT NULL', '`student_count` INT DEFAULT 0', '`roster_printed_at` DATETIME DEFAULT NULL'])),
+        simpleTable('practice_syllabus', practiceCommonColumns(['`submitter_id` BIGINT UNSIGNED DEFAULT NULL'])),
+        simpleTable('practice_lesson_plan', practiceCommonColumns(['`submitter_id` BIGINT UNSIGNED DEFAULT NULL'])),
+        simpleTable('practice_grade_rule', practiceCommonColumns(['`ratio_json` JSON DEFAULT NULL'])),
+        simpleTable('practice_score', practiceCommonColumns(['`student_id` BIGINT UNSIGNED DEFAULT NULL', '`rule_id` BIGINT UNSIGNED DEFAULT NULL', '`score_items` JSON DEFAULT NULL', '`score_value` DECIMAL(5,2) DEFAULT NULL'])),
+        simpleTable('practice_reflection', practiceCommonColumns(['`submitter_id` BIGINT UNSIGNED DEFAULT NULL'])),
+        simpleTable('practice_room', ['`module_type` ENUM(\'training\',\'lab\') DEFAULT \'training\'', '`dep_id` BIGINT UNSIGNED DEFAULT NULL', '`room_type` VARCHAR(80) DEFAULT NULL', '`capacity` INT DEFAULT 0', '`location` VARCHAR(255) DEFAULT NULL', '`manager_id` BIGINT UNSIGNED DEFAULT NULL']),
+        simpleTable('practice_recording', array_merge(['`parent_id` BIGINT UNSIGNED DEFAULT NULL', '`module_type` ENUM(\'training\',\'lab\') DEFAULT \'training\'', '`action` VARCHAR(40) DEFAULT NULL', '`content` TEXT DEFAULT NULL'], recordingColumns())),
     ];
 
     foreach (['training_project', 'training_project_class', 'training_room', 'training_booking', 'training_material', 'training_report', 'training_score'] as $table) {
@@ -1102,6 +1116,134 @@ function ensureInternshipSchema(PDO $pdo): void
     ensureIndex($pdo, 'score', 'idx_score_student_arrangement', "ALTER TABLE `score` ADD KEY `idx_score_student_arrangement` (`student_id`, `arrangement_id`)");
 }
 
+function ensurePracticeSchema(PDO $pdo): void
+{
+    $practiceTables = ['practice_plan', 'practice_schedule', 'practice_syllabus', 'practice_lesson_plan', 'practice_grade_rule', 'practice_score', 'practice_reflection'];
+    foreach ($practiceTables as $table) {
+        $columns = [
+            'module_type' => "ALTER TABLE `{$table}` ADD COLUMN `module_type` ENUM('training','lab') DEFAULT 'training' AFTER `code`",
+            'plan_id' => "ALTER TABLE `{$table}` ADD COLUMN `plan_id` BIGINT UNSIGNED DEFAULT NULL AFTER `module_type`",
+            'grade_id' => "ALTER TABLE `{$table}` ADD COLUMN `grade_id` BIGINT UNSIGNED DEFAULT NULL AFTER `plan_id`",
+            'dep_id' => "ALTER TABLE `{$table}` ADD COLUMN `dep_id` BIGINT UNSIGNED DEFAULT NULL AFTER `grade_id`",
+            'profession_id' => "ALTER TABLE `{$table}` ADD COLUMN `profession_id` BIGINT UNSIGNED DEFAULT NULL AFTER `dep_id`",
+            'class_id' => "ALTER TABLE `{$table}` ADD COLUMN `class_id` BIGINT UNSIGNED DEFAULT NULL AFTER `profession_id`",
+            'teacher_id' => "ALTER TABLE `{$table}` ADD COLUMN `teacher_id` BIGINT UNSIGNED DEFAULT NULL AFTER `class_id`",
+            'course_name' => "ALTER TABLE `{$table}` ADD COLUMN `course_name` VARCHAR(180) DEFAULT NULL AFTER `teacher_id`",
+            'title' => "ALTER TABLE `{$table}` ADD COLUMN `title` VARCHAR(180) DEFAULT NULL AFTER `course_name`",
+            'content' => "ALTER TABLE `{$table}` ADD COLUMN `content` MEDIUMTEXT DEFAULT NULL AFTER `title`",
+            'content_json' => "ALTER TABLE `{$table}` ADD COLUMN `content_json` JSON DEFAULT NULL AFTER `content`",
+            'remark' => "ALTER TABLE `{$table}` ADD COLUMN `remark` TEXT DEFAULT NULL AFTER `content_json`",
+        ];
+        foreach ($columns as $column => $ddl) {
+            ensureColumn($pdo, $table, $column, $ddl);
+        }
+        ensureIndex($pdo, $table, "idx_{$table}_module_scope", "ALTER TABLE `{$table}` ADD KEY `idx_{$table}_module_scope` (`module_type`, `grade_id`, `dep_id`, `profession_id`, `status`)");
+        ensureIndex($pdo, $table, "idx_{$table}_teacher", "ALTER TABLE `{$table}` ADD KEY `idx_{$table}_teacher` (`module_type`, `teacher_id`, `status`)");
+    }
+
+    $specificColumns = [
+        'practice_plan' => [
+            'source_type' => "ALTER TABLE `practice_plan` ADD COLUMN `source_type` VARCHAR(40) DEFAULT 'manual' AFTER `remark`",
+            'submitter_id' => "ALTER TABLE `practice_plan` ADD COLUMN `submitter_id` BIGINT UNSIGNED DEFAULT NULL AFTER `source_type`",
+        ],
+        'practice_schedule' => [
+            'room_id' => "ALTER TABLE `practice_schedule` ADD COLUMN `room_id` BIGINT UNSIGNED DEFAULT NULL AFTER `remark`",
+            'base_id' => "ALTER TABLE `practice_schedule` ADD COLUMN `base_id` BIGINT UNSIGNED DEFAULT NULL AFTER `room_id`",
+            'place_type' => "ALTER TABLE `practice_schedule` ADD COLUMN `place_type` VARCHAR(40) DEFAULT 'inside' AFTER `base_id`",
+            'schedule_date' => "ALTER TABLE `practice_schedule` ADD COLUMN `schedule_date` DATE DEFAULT NULL AFTER `place_type`",
+            'start_time' => "ALTER TABLE `practice_schedule` ADD COLUMN `start_time` VARCHAR(20) DEFAULT NULL AFTER `schedule_date`",
+            'end_time' => "ALTER TABLE `practice_schedule` ADD COLUMN `end_time` VARCHAR(20) DEFAULT NULL AFTER `start_time`",
+            'location' => "ALTER TABLE `practice_schedule` ADD COLUMN `location` VARCHAR(255) DEFAULT NULL AFTER `end_time`",
+            'student_count' => "ALTER TABLE `practice_schedule` ADD COLUMN `student_count` INT DEFAULT 0 AFTER `location`",
+            'roster_printed_at' => "ALTER TABLE `practice_schedule` ADD COLUMN `roster_printed_at` DATETIME DEFAULT NULL AFTER `student_count`",
+        ],
+        'practice_syllabus' => [
+            'submitter_id' => "ALTER TABLE `practice_syllabus` ADD COLUMN `submitter_id` BIGINT UNSIGNED DEFAULT NULL AFTER `remark`",
+        ],
+        'practice_lesson_plan' => [
+            'submitter_id' => "ALTER TABLE `practice_lesson_plan` ADD COLUMN `submitter_id` BIGINT UNSIGNED DEFAULT NULL AFTER `remark`",
+        ],
+        'practice_grade_rule' => [
+            'ratio_json' => "ALTER TABLE `practice_grade_rule` ADD COLUMN `ratio_json` JSON DEFAULT NULL AFTER `remark`",
+        ],
+        'practice_score' => [
+            'student_id' => "ALTER TABLE `practice_score` ADD COLUMN `student_id` BIGINT UNSIGNED DEFAULT NULL AFTER `remark`",
+            'rule_id' => "ALTER TABLE `practice_score` ADD COLUMN `rule_id` BIGINT UNSIGNED DEFAULT NULL AFTER `student_id`",
+            'score_items' => "ALTER TABLE `practice_score` ADD COLUMN `score_items` JSON DEFAULT NULL AFTER `rule_id`",
+            'score_value' => "ALTER TABLE `practice_score` ADD COLUMN `score_value` DECIMAL(5,2) DEFAULT NULL AFTER `score_items`",
+        ],
+        'practice_reflection' => [
+            'submitter_id' => "ALTER TABLE `practice_reflection` ADD COLUMN `submitter_id` BIGINT UNSIGNED DEFAULT NULL AFTER `remark`",
+        ],
+        'practice_room' => [
+            'module_type' => "ALTER TABLE `practice_room` ADD COLUMN `module_type` ENUM('training','lab') DEFAULT 'training' AFTER `code`",
+            'dep_id' => "ALTER TABLE `practice_room` ADD COLUMN `dep_id` BIGINT UNSIGNED DEFAULT NULL AFTER `module_type`",
+            'room_type' => "ALTER TABLE `practice_room` ADD COLUMN `room_type` VARCHAR(80) DEFAULT NULL AFTER `dep_id`",
+            'capacity' => "ALTER TABLE `practice_room` ADD COLUMN `capacity` INT DEFAULT 0 AFTER `room_type`",
+            'location' => "ALTER TABLE `practice_room` ADD COLUMN `location` VARCHAR(255) DEFAULT NULL AFTER `capacity`",
+            'manager_id' => "ALTER TABLE `practice_room` ADD COLUMN `manager_id` BIGINT UNSIGNED DEFAULT NULL AFTER `location`",
+        ],
+        'practice_recording' => [
+            'parent_id' => "ALTER TABLE `practice_recording` ADD COLUMN `parent_id` BIGINT UNSIGNED DEFAULT NULL AFTER `code`",
+            'module_type' => "ALTER TABLE `practice_recording` ADD COLUMN `module_type` ENUM('training','lab') DEFAULT 'training' AFTER `parent_id`",
+            'action' => "ALTER TABLE `practice_recording` ADD COLUMN `action` VARCHAR(40) DEFAULT NULL AFTER `module_type`",
+            'content' => "ALTER TABLE `practice_recording` ADD COLUMN `content` TEXT DEFAULT NULL AFTER `action`",
+        ],
+    ];
+    foreach ($specificColumns as $table => $columns) {
+        foreach ($columns as $column => $ddl) {
+            ensureColumn($pdo, $table, $column, $ddl);
+        }
+    }
+
+    ensureIndex($pdo, 'practice_schedule', 'idx_practice_schedule_date', "ALTER TABLE `practice_schedule` ADD KEY `idx_practice_schedule_date` (`module_type`, `schedule_date`, `status`)");
+    ensureIndex($pdo, 'practice_score', 'idx_practice_score_student', "ALTER TABLE `practice_score` ADD KEY `idx_practice_score_student` (`module_type`, `student_id`, `status`)");
+    ensureIndex($pdo, 'practice_room', 'idx_practice_room_module', "ALTER TABLE `practice_room` ADD KEY `idx_practice_room_module` (`module_type`, `dep_id`, `status`)");
+    ensureIndex($pdo, 'practice_recording', 'idx_practice_recording_entity', "ALTER TABLE `practice_recording` ADD KEY `idx_practice_recording_entity` (`module_type`, `entity_type`, `entity_id`)");
+    ensureIndex($pdo, 'practice_recording', 'idx_practice_recording_parent', "ALTER TABLE `practice_recording` ADD KEY `idx_practice_recording_parent` (`parent_id`)");
+
+    $baseFlowColumns = [
+        'base_application' => [
+            'base_id' => "ALTER TABLE `base_application` ADD COLUMN `base_id` BIGINT UNSIGNED DEFAULT NULL AFTER `code`",
+            'dep_id' => "ALTER TABLE `base_application` ADD COLUMN `dep_id` BIGINT UNSIGNED DEFAULT NULL AFTER `base_id`",
+            'base_type' => "ALTER TABLE `base_application` ADD COLUMN `base_type` VARCHAR(40) DEFAULT NULL AFTER `dep_id`",
+            'title' => "ALTER TABLE `base_application` ADD COLUMN `title` VARCHAR(180) DEFAULT NULL AFTER `base_type`",
+            'content' => "ALTER TABLE `base_application` ADD COLUMN `content` TEXT DEFAULT NULL AFTER `title`",
+            'submitter_id' => "ALTER TABLE `base_application` ADD COLUMN `submitter_id` BIGINT UNSIGNED DEFAULT NULL AFTER `content`",
+        ],
+        'base_usage' => [
+            'base_id' => "ALTER TABLE `base_usage` ADD COLUMN `base_id` BIGINT UNSIGNED DEFAULT NULL AFTER `code`",
+            'dep_id' => "ALTER TABLE `base_usage` ADD COLUMN `dep_id` BIGINT UNSIGNED DEFAULT NULL AFTER `base_id`",
+            'usage_type' => "ALTER TABLE `base_usage` ADD COLUMN `usage_type` VARCHAR(80) DEFAULT NULL AFTER `dep_id`",
+            'title' => "ALTER TABLE `base_usage` ADD COLUMN `title` VARCHAR(180) DEFAULT NULL AFTER `usage_type`",
+            'content' => "ALTER TABLE `base_usage` ADD COLUMN `content` TEXT DEFAULT NULL AFTER `title`",
+            'submitter_id' => "ALTER TABLE `base_usage` ADD COLUMN `submitter_id` BIGINT UNSIGNED DEFAULT NULL AFTER `content`",
+        ],
+        'base_result' => [
+            'base_id' => "ALTER TABLE `base_result` ADD COLUMN `base_id` BIGINT UNSIGNED DEFAULT NULL AFTER `code`",
+            'dep_id' => "ALTER TABLE `base_result` ADD COLUMN `dep_id` BIGINT UNSIGNED DEFAULT NULL AFTER `base_id`",
+            'result_type' => "ALTER TABLE `base_result` ADD COLUMN `result_type` VARCHAR(80) DEFAULT NULL AFTER `dep_id`",
+            'title' => "ALTER TABLE `base_result` ADD COLUMN `title` VARCHAR(180) DEFAULT NULL AFTER `result_type`",
+            'content' => "ALTER TABLE `base_result` ADD COLUMN `content` TEXT DEFAULT NULL AFTER `title`",
+            'submitter_id' => "ALTER TABLE `base_result` ADD COLUMN `submitter_id` BIGINT UNSIGNED DEFAULT NULL AFTER `content`",
+        ],
+        'base_expense' => [
+            'base_id' => "ALTER TABLE `base_expense` ADD COLUMN `base_id` BIGINT UNSIGNED DEFAULT NULL AFTER `code`",
+            'dep_id' => "ALTER TABLE `base_expense` ADD COLUMN `dep_id` BIGINT UNSIGNED DEFAULT NULL AFTER `base_id`",
+            'amount' => "ALTER TABLE `base_expense` ADD COLUMN `amount` DECIMAL(12,2) DEFAULT NULL AFTER `dep_id`",
+            'title' => "ALTER TABLE `base_expense` ADD COLUMN `title` VARCHAR(180) DEFAULT NULL AFTER `amount`",
+            'content' => "ALTER TABLE `base_expense` ADD COLUMN `content` TEXT DEFAULT NULL AFTER `title`",
+            'submitter_id' => "ALTER TABLE `base_expense` ADD COLUMN `submitter_id` BIGINT UNSIGNED DEFAULT NULL AFTER `content`",
+        ],
+    ];
+    foreach ($baseFlowColumns as $table => $columns) {
+        foreach ($columns as $column => $ddl) {
+            ensureColumn($pdo, $table, $column, $ddl);
+        }
+        ensureIndex($pdo, $table, "idx_{$table}_base", "ALTER TABLE `{$table}` ADD KEY `idx_{$table}_base` (`base_id`, `dep_id`, `status`)");
+    }
+}
+
 function ensureMessageSchema(PDO $pdo): void
 {
     $schemas = [
@@ -1281,6 +1423,24 @@ function entityColumns(array $extra = []): array
         '`entity_type` VARCHAR(40) DEFAULT NULL',
         '`entity_id` BIGINT UNSIGNED DEFAULT NULL',
         'KEY `idx_entity` (`entity_type`, `entity_id`)',
+    ], $extra);
+}
+
+function practiceCommonColumns(array $extra = []): array
+{
+    return array_merge([
+        '`module_type` ENUM(\'training\',\'lab\') DEFAULT \'training\'',
+        '`plan_id` BIGINT UNSIGNED DEFAULT NULL',
+        '`grade_id` BIGINT UNSIGNED DEFAULT NULL',
+        '`dep_id` BIGINT UNSIGNED DEFAULT NULL',
+        '`profession_id` BIGINT UNSIGNED DEFAULT NULL',
+        '`class_id` BIGINT UNSIGNED DEFAULT NULL',
+        '`teacher_id` BIGINT UNSIGNED DEFAULT NULL',
+        '`course_name` VARCHAR(180) DEFAULT NULL',
+        '`title` VARCHAR(180) DEFAULT NULL',
+        '`content` MEDIUMTEXT DEFAULT NULL',
+        '`content_json` JSON DEFAULT NULL',
+        '`remark` TEXT DEFAULT NULL',
     ], $extra);
 }
 
@@ -1674,15 +1834,57 @@ function seedMenus(PDO $pdo): void
         [19511, 1951, '提交', 'internship:apply', null, 'both', 'button', 1951, null],
         [19512, 1951, '审核', 'internship:approve', null, 'both', 'button', 1952, null],
         [2, 0, '实训管理', null, null, 'both', 'directory', 20, 'Workflow'],
-        [21, 2, '实训项目', null, null, 'both', 'menu', 21, 'Workflow'],
-        [211, 21, '列表', 'training:view', '/training', 'both', 'list', 211, 'List'],
-        [201, 211, '处理', 'training:manage', null, 'both', 'button', 201, null],
-        [2112, 211, '删除', 'training:project:delete', null, 'pc', 'button', 212, null],
+        [21, 2, '教学计划', null, null, 'both', 'menu', 21, 'FileText'],
+        [211, 21, '列表', 'training:view', '/training/plans', 'both', 'list', 211, 'List'],
+        [201, 211, '维护', 'training:manage', null, 'both', 'button', 201, null],
+        [202, 211, '审核', 'training:approve', null, 'both', 'button', 202, null],
+        [22, 2, '课表安排', null, null, 'both', 'menu', 22, 'CalendarCheck'],
+        [221, 22, '列表', 'training:schedule:list', '/training/schedules', 'both', 'list', 221, 'List'],
+        [2211, 221, '维护', 'training:manage', null, 'both', 'button', 2211, null],
+        [23, 2, '大纲编写', null, null, 'both', 'menu', 23, 'BookOpen'],
+        [231, 23, '列表', 'training:syllabus:list', '/training/syllabus', 'both', 'list', 231, 'List'],
+        [2311, 231, '维护', 'training:manage', null, 'both', 'button', 2311, null],
+        [2312, 231, '审核', 'training:approve', null, 'both', 'button', 2312, null],
+        [24, 2, '教案编写', null, null, 'both', 'menu', 24, 'FileText'],
+        [241, 24, '列表', 'training:lesson:list', '/training/lesson-plans', 'both', 'list', 241, 'List'],
+        [2411, 241, '维护', 'training:manage', null, 'both', 'button', 2411, null],
+        [2412, 241, '审核', 'training:approve', null, 'both', 'button', 2412, null],
+        [25, 2, '成绩评定', null, null, 'both', 'menu', 25, 'GraduationCap'],
+        [251, 25, '列表', 'training:score:list', '/training/scores', 'both', 'list', 251, 'List'],
+        [2511, 251, '维护', 'training:manage', null, 'both', 'button', 2511, null],
+        [26, 2, '反思报告', null, null, 'both', 'menu', 26, 'FileClock'],
+        [261, 26, '列表', 'training:reflection:list', '/training/reflections', 'both', 'list', 261, 'List'],
+        [2611, 261, '维护', 'training:manage', null, 'both', 'button', 2611, null],
+        [2612, 261, '审核', 'training:approve', null, 'both', 'button', 2612, null],
+        [27, 2, '场地管理', null, null, 'pc', 'menu', 27, 'Building2'],
+        [271, 27, '列表', 'training:room:list', '/training/rooms', 'pc', 'list', 271, 'List'],
+        [2711, 271, '维护', 'training:manage', null, 'pc', 'button', 2711, null],
         [3, 0, '实验管理', null, null, 'both', 'directory', 30, 'FlaskConical'],
-        [31, 3, '实验项目', null, null, 'both', 'menu', 31, 'FlaskConical'],
-        [311, 31, '列表', 'lab:view', '/lab', 'both', 'list', 311, 'List'],
-        [301, 311, '处理', 'lab:manage', null, 'both', 'button', 301, null],
-        [3112, 311, '删除', 'lab:project:delete', null, 'pc', 'button', 312, null],
+        [31, 3, '教学计划', null, null, 'both', 'menu', 31, 'FileText'],
+        [311, 31, '列表', 'lab:view', '/lab/plans', 'both', 'list', 311, 'List'],
+        [301, 311, '维护', 'lab:manage', null, 'both', 'button', 301, null],
+        [302, 311, '审核', 'lab:approve', null, 'both', 'button', 302, null],
+        [32, 3, '课表安排', null, null, 'both', 'menu', 32, 'CalendarCheck'],
+        [321, 32, '列表', 'lab:schedule:list', '/lab/schedules', 'both', 'list', 321, 'List'],
+        [3211, 321, '维护', 'lab:manage', null, 'both', 'button', 3211, null],
+        [33, 3, '大纲编写', null, null, 'both', 'menu', 33, 'BookOpen'],
+        [331, 33, '列表', 'lab:syllabus:list', '/lab/syllabus', 'both', 'list', 331, 'List'],
+        [3311, 331, '维护', 'lab:manage', null, 'both', 'button', 3311, null],
+        [3312, 331, '审核', 'lab:approve', null, 'both', 'button', 3312, null],
+        [34, 3, '教案编写', null, null, 'both', 'menu', 34, 'FileText'],
+        [341, 34, '列表', 'lab:lesson:list', '/lab/lesson-plans', 'both', 'list', 341, 'List'],
+        [3411, 341, '维护', 'lab:manage', null, 'both', 'button', 3411, null],
+        [3412, 341, '审核', 'lab:approve', null, 'both', 'button', 3412, null],
+        [35, 3, '成绩评定', null, null, 'both', 'menu', 35, 'GraduationCap'],
+        [351, 35, '列表', 'lab:score:list', '/lab/scores', 'both', 'list', 351, 'List'],
+        [3511, 351, '维护', 'lab:manage', null, 'both', 'button', 3511, null],
+        [36, 3, '反思报告', null, null, 'both', 'menu', 36, 'FileClock'],
+        [361, 36, '列表', 'lab:reflection:list', '/lab/reflections', 'both', 'list', 361, 'List'],
+        [3611, 361, '维护', 'lab:manage', null, 'both', 'button', 3611, null],
+        [3612, 361, '审核', 'lab:approve', null, 'both', 'button', 3612, null],
+        [37, 3, '场地管理', null, null, 'pc', 'menu', 37, 'Building2'],
+        [371, 37, '列表', 'lab:room:list', '/lab/rooms', 'pc', 'list', 371, 'List'],
+        [3711, 371, '维护', 'lab:manage', null, 'pc', 'button', 3711, null],
         [4, 0, '统计报表', null, null, 'pc', 'directory', 40, 'ChartColumn'],
         [41, 4, '实习统计', null, null, 'pc', 'menu', 41, 'ChartColumn'],
         [411, 41, '列表', 'stat:view', '/stat', 'pc', 'list', 411, 'List'],
@@ -1799,7 +2001,7 @@ function seedMenus(PDO $pdo): void
         $stmt->execute($menu);
     }
 
-    $disabledMenuIds = [102, 202, 302, 401];
+    $disabledMenuIds = [102, 401];
     $disableStmt = $pdo->prepare(
         "UPDATE `menu`
          SET `visible` = 'false', `status` = 'disabled', `deleted_at` = COALESCE(`deleted_at`, NOW())
@@ -1820,8 +2022,8 @@ function seedMenus(PDO $pdo): void
         14, 141, 105, 15, 151, 106, 1512, 16, 161, 107, 1612, 17, 171, 108,
         18, 181, 109, 19, 191, 110, 195, 1951, 19511, 19512,
     ];
-    $trainingMenus = [2, 21, 211, 201, 2112];
-    $labMenus = [3, 31, 311, 301, 3112];
+    $trainingMenus = [2, 21, 211, 201, 202, 22, 221, 2211, 23, 231, 2311, 2312, 24, 241, 2411, 2412, 25, 251, 2511, 26, 261, 2611, 2612, 27, 271, 2711];
+    $labMenus = [3, 31, 311, 301, 302, 32, 321, 3211, 33, 331, 3311, 3312, 34, 341, 3411, 3412, 35, 351, 3511, 36, 361, 3611, 3612, 37, 371, 3711];
     $commonViewMenus = [9, 91, 911, 10, 100, 1000, 10001, 20, 200, 2000, 20001, 20002];
     $allMenuIds = array_map(static fn (array $menu): int => (int) $menu[0], $menus);
     $roleMenuIds = [
@@ -1977,8 +2179,8 @@ function seedOperationGuides(PDO $pdo): void
 {
     $guides = [
         ['internship', '实习管理操作说明', '实习管理围绕实习安排、学生申请、签到、日志、报告、成绩和归档材料进行全过程留痕。', '学生提交申请并完成过程材料，教师按指导关系审核评阅，学校管理员按学院、专业、届次查看整体进度。', '学生看不到列表筛选时，先确认当前账号是否为学生角色；教师看不到学生时，检查指导关系和组织范围；审核退回后学生重新提交会形成新的记录。', 10],
-        ['training', '实训管理操作说明', '实训流程尚未最终确认，当前先保留菜单、权限和基础框架。', '后续确认实训项目、预约、材料、报告、成绩等流程后，在该模块补充列表、提交和审核功能。', '如果页面暂无业务数据，属于流程待确认状态；权限可先在系统配置中完成角色授权。', 20],
-        ['lab', '实验管理操作说明', '实验流程尚未最终确认，当前先保留菜单、权限和基础框架。', '后续确认实验课程、项目、预约、材料、报告、成绩等流程后，在该模块补充业务页面。', '如果页面暂无业务数据，属于流程待确认状态；权限可先在系统配置中完成角色授权。', 30],
+        ['training', '实训管理操作说明', '实训管理围绕教学计划、课表安排、大纲、教案、成绩评定和反思报告进行维护。', '教学计划可由教务拉取或教师填报，经过系主任、学院教务科、学院主管院长、教务处和教务处领导等节点审核；课表安排区分校内实训室和校外基地，并支持签到册打印记录；大纲、教案和反思报告由任课教师提交后按学院流程审核。', '待审核数据才能通过或退回；已通过数据只能发起通过后修改；学生端主要查看本人课表、成绩和可提交材料。', 20],
+        ['lab', '实验管理操作说明', '实验管理围绕教学计划、课表安排、大纲、教案、成绩评定和反思报告进行维护。', '教学计划可由教务拉取或教师填报，课表安排维护实验室、时间地点和学生范围；大纲、教案由任课教师编写后进入系主任和学院分管院长审核；成绩评定包含比例设定、成绩录入、成绩提交和成绩统计。', '实验室、课程、项目和课表数据要先维护基础信息；待审核数据才能处理，退回后需重新提交形成新记录。', 30],
         ['stat', '统计报表操作说明', '统计报表按当前角色的数据范围展示实习总览、学院统计、专业统计、指导统计、学生过程统计和归档材料统计。', '选择左侧报表菜单后，通过届次、学院、专业和关键词筛选数据；切换报表菜单可查看不同统计口径的数据明细。', '如果统计值与列表不一致，优先确认当前角色的数据范围、筛选条件和业务数据是否已刷新。', 40],
         ['log', '日志审计操作说明', '日志审计读取当前学校业务库下所有 operation_log 按月分表，支持关键词、动作、IP 和日期范围查询。', '管理员进入日志审计后先设置查询条件，再查看来源分表、操作账号、动作、IP 和日志内容。', '如果日志为空，检查当前月份日志分表是否存在，以及账号是否具备日志查看权限。', 50],
         ['file', '文件管理操作说明', '文件管理用于查看学校业务库内的上传文件、上传人、上传时间、设备信息和文件状态。', '通过关键词、状态和分类定位文件，点击打开可查看文件访问地址。', '如果文件打不开，检查文件状态、存储配置和浏览器访问权限。', 60],

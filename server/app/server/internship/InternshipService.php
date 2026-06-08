@@ -19,6 +19,12 @@ class InternshipService
     private const ARRANGEMENT_TYPES = ['cognition_internal', 'cognition_external', 'major_internal', 'major_external', 'production', 'graduation'];
     private const ORGANIZE_MODES = ['centralized', 'distributed', 'autonomous'];
     private const STAT_REPORTS = ['overview', 'department', 'profession', 'teacher', 'student', 'archive'];
+    private const BASE_FLOW_TABLES = [
+        'application' => 'base_application',
+        'usage' => 'base_usage',
+        'result' => 'base_result',
+        'expense' => 'base_expense',
+    ];
     private const REVIEW_OPINION_RULES = [
         'application' => [
             'accept' => ['min' => 0, 'max' => 200],
@@ -105,6 +111,55 @@ class InternshipService
         ];
 
         return $this->saveRow('base', $request, $values);
+    }
+
+    public function baseFlows(Request $request): array
+    {
+        $this->requirePermission('internship:view');
+        $table = $this->baseFlowTable($request);
+
+        return InternshipRecord::baseFlowPage($table, $this->scopeContext(), $this->requestFilters($request, [
+            'page', 'page_size', 'per_page', 'keyword', 'status', 'base_id', 'dep_id',
+        ]));
+    }
+
+    public function saveBaseFlow(Request $request): array
+    {
+        $this->requirePermission('internship:manage');
+        $this->requireAdminRole();
+        $type = $this->baseFlowType($request);
+        $table = self::BASE_FLOW_TABLES[$type];
+        $baseId = $this->requiredInt($request, 'base_id');
+        $base = $this->row('base', $baseId);
+        $depId = $this->optionalInt($request, 'dep_id') ?? (int) ($base->dep_id ?? 0) ?: null;
+        if ($depId) {
+            $this->assertDepartmentVisible($depId);
+        }
+
+        $values = [
+            'base_id' => $baseId,
+            'dep_id' => $depId,
+            'title' => $this->requiredString($request, 'title', 180),
+            'content' => $this->nullableString($request, 'content', 10000),
+            'submitter_id' => CurrentContext::accountId(),
+            'status' => $this->enum($request, 'status', ['draft', 'wait', 'accept', 'modify', 'enabled', 'disabled'], 'enabled'),
+            'updated_at' => $this->now(),
+            'deleted_at' => null,
+        ];
+        if ($type === 'application') {
+            $values['base_type'] = $this->enum($request, 'base_type', ['fixed', 'spot'], 'fixed');
+        }
+        if ($type === 'usage') {
+            $values['usage_type'] = $this->nullableString($request, 'usage_type', 80);
+        }
+        if ($type === 'result') {
+            $values['result_type'] = $this->nullableString($request, 'result_type', 80);
+        }
+        if ($type === 'expense') {
+            $values['amount'] = $this->decimalInput($request, 'amount');
+        }
+
+        return $this->saveRow($table, $request, $values);
     }
 
     public function mentors(Request $request): array
@@ -697,7 +752,7 @@ class InternshipService
         $this->requirePermission('internship:plan');
 
         return InternshipRecord::planPage($this->scopeContext(), $this->requestFilters($request, [
-            'page', 'page_size', 'per_page', 'status', 'semester', 'dep_id', 'keyword',
+            'page', 'page_size', 'per_page', 'status', 'dep_id', 'keyword',
         ]));
     }
 
@@ -712,7 +767,7 @@ class InternshipService
 
         $values = [
             'dep_id' => $depId,
-            'semester' => $this->requiredString($request, 'semester', 80),
+            'semester' => $this->nullableString($request, 'semester', 80),
             'plan_content' => $this->jsonValue($request->input('plan_content', [])),
             'submitter_id' => CurrentContext::accountId(),
             'status' => $this->enum($request, 'status', ['draft', 'wait'], 'draft'),
@@ -814,7 +869,10 @@ class InternshipService
     public function syllabusGuides(Request $request): array
     {
         $this->requirePermission('internship:view');
-        return InternshipRecord::syllabusGuidePage($this->scopeContext(), $this->requestFilters($request, ['page', 'page_size', 'per_page']));
+        return InternshipRecord::syllabusGuidePage($this->scopeContext(), $this->requestFilters($request, [
+            'page', 'page_size', 'per_page', 'keyword', 'arrangement_id', 'status',
+            'dep_id', 'profession_id', 'grade_id', 'class_id', 'semester',
+        ]));
     }
 
     public function saveSyllabusGuide(Request $request): array
@@ -836,7 +894,17 @@ class InternshipService
 
     public function implementationSheets(Request $request): array
     {
-        return $this->documentList($request, 'implementation_sheet', ['implementation_sheet.*']);
+        return $this->documentList($request, 'implementation_sheet', [
+            'implementation_sheet.*',
+            'arrangement.title as arrangement_title',
+            'arrangement.semester',
+            'department.dep_name',
+            'profession.profession_name',
+            'profession.grade_id',
+            'grade_list.grade_name',
+            'teacher_list.teacher_name',
+            'syllabus_guide.title as syllabus_title',
+        ]);
     }
 
     public function saveImplementationSheet(Request $request): array
@@ -860,7 +928,16 @@ class InternshipService
 
     public function teacherWorkReports(Request $request): array
     {
-        return $this->documentList($request, 'teacher_work_report', ['teacher_work_report.*']);
+        return $this->documentList($request, 'teacher_work_report', [
+            'teacher_work_report.*',
+            'arrangement.title as arrangement_title',
+            'arrangement.semester',
+            'department.dep_name',
+            'profession.profession_name',
+            'profession.grade_id',
+            'grade_list.grade_name',
+            'teacher_list.teacher_name',
+        ]);
     }
 
     public function saveTeacherWorkReport(Request $request): array
@@ -883,7 +960,10 @@ class InternshipService
     public function inspections(Request $request): array
     {
         $this->requirePermission('internship:archive');
-        return InternshipRecord::inspectionPage($this->requestFilters($request, ['page', 'page_size', 'per_page']));
+        return InternshipRecord::inspectionPage($this->scopeContext(), $this->requestFilters($request, [
+            'page', 'page_size', 'per_page', 'keyword', 'arrangement_id', 'result',
+            'dep_id', 'profession_id', 'grade_id', 'class_id', 'semester',
+        ]));
     }
 
     public function saveInspection(Request $request): array
@@ -1339,6 +1419,21 @@ class InternshipService
         }
 
         return $entity;
+    }
+
+    private function baseFlowType(Request $request): string
+    {
+        $type = (string) $request->input('type', '');
+        if (!isset(self::BASE_FLOW_TABLES[$type])) {
+            throw new InvalidArgumentException('type 无效');
+        }
+
+        return $type;
+    }
+
+    private function baseFlowTable(Request $request): string
+    {
+        return self::BASE_FLOW_TABLES[$this->baseFlowType($request)];
     }
 
     private function assertReviewEntityVisible(string $entity, object $row): void

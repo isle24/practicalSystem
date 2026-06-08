@@ -61,7 +61,7 @@
           :href="moduleHref(module)"
           class="desktop-icon"
           :class="{ active: isModuleFocused(module.id) }"
-          @click="openModule(module)"
+          @click.prevent="openModule(module)"
         >
           <span class="app-glyph" :class="module.color">
             <component :is="module.icon" :size="25" />
@@ -308,6 +308,9 @@
                       <el-button v-if="win.panel === 'scores' && canManageInternship" :icon="GraduationCap" @click="openScoreDialog">
                         录入成绩
                       </el-button>
+                      <el-button v-if="win.panel === 'baseFlows' && canManageInternship" :icon="Plus" @click="openBaseFlowDialog">
+                        新增基地流程
+                      </el-button>
                     </div>
                   </div>
 
@@ -417,6 +420,65 @@
                         <label><span>报告成绩</span><input v-model="internshipState.scoreForm.report_score" type="number"></label>
                         <label><span>企业成绩</span><input v-model="internshipState.scoreForm.enterprise_score" type="number"></label>
                         <label><span>评语</span><input v-model="internshipState.scoreForm.comment"></label>
+                      </div>
+
+                      <div v-else-if="internshipState.dialog.type === 'baseFlow'" class="operation-form">
+                        <label>
+                          <span>流程类型</span>
+                          <el-select v-model="internshipState.baseFlowForm.type">
+                            <el-option v-for="item in baseFlowTypes" :key="item.value" :label="item.label" :value="item.value" />
+                          </el-select>
+                        </label>
+                        <label>
+                          <span>实习基地</span>
+                          <el-select v-model="internshipState.baseFlowForm.base_id" clearable filterable>
+                            <el-option v-for="base in internshipState.options.bases" :key="base.id" :label="base.name" :value="base.id" />
+                          </el-select>
+                        </label>
+                        <label>
+                          <span>学院</span>
+                          <el-select v-model="internshipState.baseFlowForm.dep_id" clearable filterable>
+                            <el-option v-for="dep in internshipState.options.departments" :key="dep.dep_id" :label="dep.dep_name" :value="dep.dep_id" />
+                          </el-select>
+                        </label>
+                        <label>
+                          <span>标题</span>
+                          <input v-model="internshipState.baseFlowForm.title">
+                        </label>
+                        <label v-if="internshipState.baseFlowForm.type === 'application'">
+                          <span>基地类型</span>
+                          <el-select v-model="internshipState.baseFlowForm.base_type">
+                            <el-option label="固定基地" value="fixed" />
+                            <el-option label="实习点" value="spot" />
+                          </el-select>
+                        </label>
+                        <label v-if="internshipState.baseFlowForm.type === 'usage'">
+                          <span>使用类型</span>
+                          <input v-model="internshipState.baseFlowForm.usage_type" placeholder="文件制度、基地运行等">
+                        </label>
+                        <label v-if="internshipState.baseFlowForm.type === 'result'">
+                          <span>成果类型</span>
+                          <input v-model="internshipState.baseFlowForm.result_type" placeholder="成果、运行数据等">
+                        </label>
+                        <label v-if="internshipState.baseFlowForm.type === 'expense'">
+                          <span>费用金额</span>
+                          <input v-model="internshipState.baseFlowForm.amount" type="number">
+                        </label>
+                        <label class="span-2">
+                          <span>内容</span>
+                          <textarea v-model="internshipState.baseFlowForm.content" rows="7" />
+                        </label>
+                        <label>
+                          <span>状态</span>
+                          <el-select v-model="internshipState.baseFlowForm.status">
+                            <el-option label="草稿" value="draft" />
+                            <el-option label="待审核" value="wait" />
+                            <el-option label="已通过" value="accept" />
+                            <el-option label="需修改" value="modify" />
+                            <el-option label="启用" value="enabled" />
+                            <el-option label="停用" value="disabled" />
+                          </el-select>
+                        </label>
                       </div>
 
                       <div v-else-if="['review', 'reopen'].includes(internshipState.dialog.type)" class="operation-form single">
@@ -583,6 +645,27 @@
                     />
                   </template>
 
+                  <template v-else-if="win.panel === 'baseFlows'">
+                    <DataListPanel
+                      :columns="internshipListConfigs.baseFlows.columns"
+                      :filters="internshipListConfigs.baseFlows.filters"
+                      :filter-values="internshipState.filters.baseFlows"
+                      :loading="internshipState.loading"
+                      :pagination="internshipState.lists.baseFlows.pagination"
+                      :rows="internshipState.lists.baseFlows.items"
+                      @filter-change="setInternshipFilter('baseFlows', $event)"
+                      @page-change="page => loadInternshipPanel('baseFlows', page)"
+                      @reset="resetInternshipFilters('baseFlows')"
+                      @search="loadInternshipPanel('baseFlows', 1)"
+                    >
+                      <template #actions="{ row }">
+                        <el-button v-if="canManageInternship" link type="primary" @click="openBaseFlowDialog(row)">
+                          编辑
+                        </el-button>
+                      </template>
+                    </DataListPanel>
+                  </template>
+
                   <template v-else-if="win.panel === 'arrangements'">
                     <div class="internship-list-only">
                       <DataListPanel
@@ -628,6 +711,21 @@
                         </el-button>
                       </template>
                     </DataListPanel>
+                  </template>
+
+                  <template v-else-if="isInternshipReadOnlyListPanel(win.panel)">
+                    <DataListPanel
+                      :columns="internshipListConfigs[win.panel].columns"
+                      :filters="internshipListConfigs[win.panel].filters"
+                      :filter-values="internshipState.filters[win.panel]"
+                      :loading="internshipState.loading"
+                      :pagination="internshipState.lists[win.panel].pagination"
+                      :rows="internshipState.lists[win.panel].items"
+                      @filter-change="setInternshipFilter(win.panel, $event)"
+                      @page-change="page => loadInternshipPanel(win.panel, page)"
+                      @reset="resetInternshipFilters(win.panel)"
+                      @search="loadInternshipPanel(win.panel, 1)"
+                    />
                   </template>
 
                   <template v-else-if="win.panel === 'applications'">
@@ -830,6 +928,256 @@
                       @search="loadInternshipPanel('documents', 1)"
                     />
                   </template>
+                </div>
+
+                <div v-else-if="isPracticeModule(win.module.id)" class="internship-panel practice-panel">
+                  <div v-if="canManagePractice(win.module.id)" class="internship-toolbar action-only">
+                    <div class="data-list-actions">
+                      <el-button
+                        v-if="canManagePractice(win.module.id) && win.panel !== 'overview'"
+                        :icon="Plus"
+                        @click="openPracticeDialog(win.module.id, win.panel)"
+                      >
+                        新增{{ practicePanelLabel(win.panel) }}
+                      </el-button>
+                      <el-button :icon="RefreshCw" :loading="practiceModuleState(win.module.id).loading" @click="loadPracticePanel(win.module.id, win.panel)">
+                        刷新
+                      </el-button>
+                    </div>
+                  </div>
+
+                  <el-alert
+                    v-if="practiceModuleState(win.module.id).message"
+                    type="warning"
+                    :closable="false"
+                    show-icon
+                    :title="practiceModuleState(win.module.id).message"
+                  />
+
+                  <div v-if="practiceModuleState(win.module.id).dialog.type" class="operation-mask" @click.self="closePracticeDialog(win.module.id)">
+                    <section class="operation-dialog">
+                      <header>
+                        <strong>{{ practiceModuleState(win.module.id).dialog.title }}</strong>
+                        <button type="button" @click="closePracticeDialog(win.module.id)">关闭</button>
+                      </header>
+
+                      <div v-if="practiceModuleState(win.module.id).dialog.type === 'edit'" class="operation-form">
+                        <label>
+                          <span>标题</span>
+                          <input v-model="practiceModuleState(win.module.id).form.title">
+                        </label>
+                        <label>
+                          <span>届次</span>
+                          <el-select v-model="practiceModuleState(win.module.id).form.grade_id" clearable filterable @change="normalizePracticeCascade(win.module.id)">
+                            <el-option v-for="grade in practiceModuleState(win.module.id).options.grades" :key="grade.grade_id" :label="grade.grade_name" :value="grade.grade_id" />
+                          </el-select>
+                        </label>
+                        <label>
+                          <span>学院</span>
+                          <el-select v-model="practiceModuleState(win.module.id).form.dep_id" clearable filterable @change="normalizePracticeCascade(win.module.id)">
+                            <el-option v-for="dep in practiceModuleState(win.module.id).options.departments" :key="dep.dep_id" :label="dep.dep_name" :value="dep.dep_id" />
+                          </el-select>
+                        </label>
+                        <label>
+                          <span>专业</span>
+                          <el-select v-model="practiceModuleState(win.module.id).form.profession_id" clearable filterable @change="handlePracticeProfessionChange(win.module.id)">
+                            <el-option v-for="profession in practiceProfessionOptions(win.module.id)" :key="profession.profession_id" :label="profession.profession_name" :value="profession.profession_id" />
+                          </el-select>
+                        </label>
+                        <label>
+                          <span>任课教师</span>
+                          <el-select v-model="practiceModuleState(win.module.id).form.teacher_id" clearable filterable>
+                            <el-option v-for="teacher in practiceModuleState(win.module.id).options.teachers" :key="teacher.teacher_id" :label="teacher.teacher_name" :value="teacher.teacher_id" />
+                          </el-select>
+                        </label>
+                        <label v-if="practiceNeedsPlan(win.panel)">
+                          <span>关联计划</span>
+                          <el-select v-model="practiceModuleState(win.module.id).form.plan_id" clearable filterable>
+                            <el-option v-for="plan in practiceModuleState(win.module.id).options.plans" :key="plan.id" :label="plan.title || plan.course_name" :value="plan.id" />
+                          </el-select>
+                        </label>
+                        <label v-if="win.panel === 'plans'">
+                          <span>来源</span>
+                          <el-select v-model="practiceModuleState(win.module.id).form.source_type">
+                            <el-option label="教务拉取" value="jw" />
+                            <el-option label="手动填报" value="manual" />
+                          </el-select>
+                        </label>
+                        <label v-if="win.panel === 'schedules'">
+                          <span>地点类型</span>
+                          <el-select v-model="practiceModuleState(win.module.id).form.place_type">
+                            <el-option label="校内" value="inside" />
+                            <el-option label="校外" value="outside" />
+                          </el-select>
+                        </label>
+                        <label v-if="win.panel === 'schedules'">
+                          <span>场地</span>
+                          <el-select v-model="practiceModuleState(win.module.id).form.room_id" clearable filterable>
+                            <el-option v-for="room in practiceModuleState(win.module.id).options.rooms" :key="room.id" :label="room.name" :value="room.id" />
+                          </el-select>
+                        </label>
+                        <label v-if="win.panel === 'schedules'"><span>日期</span><input v-model="practiceModuleState(win.module.id).form.schedule_date" type="date"></label>
+                        <label v-if="win.panel === 'schedules'"><span>开始时间</span><input v-model="practiceModuleState(win.module.id).form.start_time" type="time"></label>
+                        <label v-if="win.panel === 'schedules'"><span>结束时间</span><input v-model="practiceModuleState(win.module.id).form.end_time" type="time"></label>
+                        <label v-if="win.panel === 'schedules'"><span>地点</span><input v-model="practiceModuleState(win.module.id).form.location"></label>
+                        <label v-if="win.panel === 'schedules'"><span>学生数</span><input v-model="practiceModuleState(win.module.id).form.student_count" type="number"></label>
+                        <label v-if="win.panel === 'rooms'"><span>名称</span><input v-model="practiceModuleState(win.module.id).form.name"></label>
+                        <label v-if="win.panel === 'rooms'"><span>编号</span><input v-model="practiceModuleState(win.module.id).form.code"></label>
+                        <label v-if="win.panel === 'rooms'"><span>容量</span><input v-model="practiceModuleState(win.module.id).form.capacity" type="number"></label>
+                        <label v-if="win.panel === 'rooms'"><span>位置</span><input v-model="practiceModuleState(win.module.id).form.location"></label>
+                        <label v-if="win.panel === 'scores'">
+                          <span>学生</span>
+                          <el-select v-model="practiceModuleState(win.module.id).form.student_id" clearable filterable>
+                            <el-option v-for="student in practiceModuleState(win.module.id).options.students" :key="student.student_id" :label="`${student.name} / ${student.student_num}`" :value="student.student_id" />
+                          </el-select>
+                        </label>
+                        <label v-if="win.panel === 'scores'"><span>成绩</span><input v-model="practiceModuleState(win.module.id).form.score_value" type="number"></label>
+                        <label v-if="win.panel === 'gradeRules'" class="span-2">
+                          <span>比例配置</span>
+                          <textarea v-model="practiceModuleState(win.module.id).form.ratio_text" rows="4" placeholder="平时成绩40%，报告60%" />
+                        </label>
+                        <label v-if="practiceTextPanel(win.panel)" class="span-2">
+                          <span>内容</span>
+                          <textarea v-model="practiceModuleState(win.module.id).form.content" rows="8" />
+                        </label>
+                        <label>
+                          <span>状态</span>
+                          <el-select v-model="practiceModuleState(win.module.id).form.status">
+                            <el-option v-for="option in practiceEditStatusOptions(win.panel)" :key="option.value" :label="option.label" :value="option.value" />
+                          </el-select>
+                        </label>
+                      </div>
+
+                      <div v-else-if="['review', 'reopen'].includes(practiceModuleState(win.module.id).dialog.type)" class="operation-form single">
+                        <p>{{ practiceModuleState(win.module.id).dialog.description }}</p>
+                        <label>
+                          <span>{{ practiceModuleState(win.module.id).dialog.type === 'reopen' ? '修改理由' : (practiceModuleState(win.module.id).dialog.status === 'modify' ? '退回原因' : '审核意见') }}</span>
+                          <textarea
+                            v-model="practiceModuleState(win.module.id).dialog.reason"
+                            rows="5"
+                            :maxlength="practiceReviewRuleMax(win.module.id, practiceModuleState(win.module.id).dialog.entity, practiceModuleState(win.module.id).dialog.status)"
+                            @input="event => trimPracticeReviewReasonMax(win.module.id, event)"
+                          />
+                          <small class="review-counter">
+                            <span>{{ practiceReviewRuleText(win.module.id, practiceModuleState(win.module.id).dialog.entity, practiceModuleState(win.module.id).dialog.status) }}</span>
+                            <span>{{ textLength(practiceModuleState(win.module.id).dialog.reason) }}/{{ practiceReviewRuleMaxText(win.module.id, practiceModuleState(win.module.id).dialog.entity, practiceModuleState(win.module.id).dialog.status) }}</span>
+                          </small>
+                        </label>
+                      </div>
+
+                      <div v-else-if="practiceModuleState(win.module.id).dialog.type === 'timeline'" class="operation-form single">
+                        <div class="timeline-view">
+                          <section
+                            v-for="(cycle, index) in normalizeTimelineCycles(practiceModuleState(win.module.id).dialog.cycles || [], [])"
+                            :key="timelineCycleKey(cycle, index)"
+                            class="timeline-cycle"
+                          >
+                            <span />
+                            <div>
+                              <header class="timeline-node-head">
+                                <strong>{{ timelineCycleTitle(cycle) }}</strong>
+                                <small>{{ timelineCycleTime(cycle) }}</small>
+                              </header>
+                              <p>{{ timelineCycleContent(cycle) }}</p>
+                              <div v-if="cycle.branches?.length" class="timeline-branches">
+                                <article
+                                  v-for="(branch, branchIndex) in cycle.branches"
+                                  :key="timelineBranchKey(branch, branchIndex)"
+                                  class="timeline-branch"
+                                  :class="{ reopen: isModifyAfterAcceptBranch(branch) }"
+                                >
+                                  <span />
+                                  <div>
+                                    <header class="timeline-node-head">
+                                      <strong>{{ timelineBranchTitle(branch) }}</strong>
+                                      <small>{{ timelineBranchTime(branch) }}</small>
+                                    </header>
+                                    <p v-if="timelineBranchContent(branch)">{{ timelineBranchContent(branch) }}</p>
+                                    <p v-for="review in timelineBranchReviews(branch)" :key="review.id" class="timeline-review">
+                                      <span>状态：{{ statusText(review.status) }}</span>
+                                      <span>审核意见：{{ review.opinion || '-' }}</span>
+                                    </p>
+                                  </div>
+                                </article>
+                              </div>
+                            </div>
+                          </section>
+                          <small v-if="!practiceModuleState(win.module.id).dialog.cycles?.length">暂无流程记录</small>
+                        </div>
+                      </div>
+
+                      <footer>
+                        <el-button @click="closePracticeDialog(win.module.id)">取消</el-button>
+                        <el-button v-if="practiceModuleState(win.module.id).dialog.type !== 'timeline'" type="primary" :loading="practiceModuleState(win.module.id).loading" @click="confirmPracticeDialog(win.module.id)">
+                          确认
+                        </el-button>
+                      </footer>
+                    </section>
+                  </div>
+
+                  <div v-if="win.panel === 'overview'" class="practice-overview-work">
+                    <div class="internship-overview">
+                      <button
+                        v-for="item in practiceOverviewCards(win.module.id)"
+                        :key="item.name"
+                        type="button"
+                        class="internship-stat practice-stat-button"
+                        :class="item.theme"
+                        @click="activateWindowPanel(win, item.panel)"
+                      >
+                        <component :is="item.icon" :size="21" />
+                        <strong>{{ item.value }}</strong>
+                        <span>{{ item.name }}</span>
+                      </button>
+                    </div>
+                    <section class="practice-flow-card">
+                      <header>
+                        <strong>{{ win.module.name }}流程</strong>
+                        <small>按教学计划、课表、大纲、教案、成绩、反思闭环处理。</small>
+                      </header>
+                      <div>
+                        <button
+                          v-for="item in practiceSidebarItems().filter(panel => panel.key !== 'overview')"
+                          :key="item.key"
+                          type="button"
+                          @click="activateWindowPanel(win, item.key)"
+                        >
+                          {{ item.name }}
+                        </button>
+                      </div>
+                    </section>
+                  </div>
+                  <DataListPanel
+                    v-else
+                    :columns="practiceListConfig(win.module.id, win.panel).columns"
+                    :filters="practiceListConfig(win.module.id, win.panel).filters"
+                    :filter-values="practiceModuleState(win.module.id).filters[win.panel]"
+                    :loading="practiceModuleState(win.module.id).loading"
+                    :pagination="practiceModuleState(win.module.id).lists[win.panel].pagination"
+                    :rows="practiceModuleState(win.module.id).lists[win.panel].items"
+                    @filter-change="event => setPracticeFilter(win.module.id, win.panel, event)"
+                    @page-change="page => loadPracticePanel(win.module.id, win.panel, page)"
+                    @reset="resetPracticeFilters(win.module.id, win.panel)"
+                    @search="loadPracticePanel(win.module.id, win.panel, 1)"
+                  >
+                    <template #actions="{ row }">
+                      <el-button v-if="canManagePractice(win.module.id)" link type="primary" @click="openPracticeDialog(win.module.id, win.panel, row)">
+                        编辑
+                      </el-button>
+                      <el-button v-if="canReviewPracticeRow(win.module.id, win.panel, row)" link type="primary" @click="openPracticeReviewDialog(win.module.id, win.panel, row, 'accept')">
+                        通过
+                      </el-button>
+                      <el-button v-if="canReviewPracticeRow(win.module.id, win.panel, row)" link type="warning" @click="openPracticeReviewDialog(win.module.id, win.panel, row, 'modify')">
+                        退回
+                      </el-button>
+                      <el-button v-if="canReopenPracticeRow(win.module.id, win.panel, row)" link type="danger" @click="openPracticeReopenDialog(win.module.id, win.panel, row)">
+                        通过后修改
+                      </el-button>
+                      <el-button v-if="practiceReviewEntity(win.panel)" size="small" type="primary" plain @click="openPracticeTimelineDialog(win.module.id, win.panel, row)">
+                        记录
+                      </el-button>
+                    </template>
+                  </DataListPanel>
                 </div>
 
                 <div v-else-if="isUserManageWindow(win)" class="admin-panel user-admin-panel">
@@ -1449,7 +1797,7 @@
                             </el-select>
                           </label>
                         </div>
-                        <div class="message-send-grid">
+                        <div class="message-send-grid message-send-grid-compact">
                           <label class="message-send-field">
                             <span>消息类型</span>
                             <el-select v-model="messageState.sendDialog.form.type">
@@ -2298,6 +2646,7 @@ import {
   fetchInternshipApplications,
   fetchInternshipArrangements,
   fetchInternshipDelays,
+  fetchInternshipBaseFlows,
   fetchInternshipInsurances,
   fetchInternshipJournals,
   fetchInternshipOptions,
@@ -2309,6 +2658,10 @@ import {
   fetchInternshipScores,
   fetchInternshipSignIns,
   fetchInternshipStats,
+  fetchInternshipSyllabusGuides,
+  fetchInternshipImplementationSheets,
+  fetchInternshipTeacherWorkReports,
+  fetchInternshipInspections,
   fetchInternshipTimeline,
   fetchLoginPageSettings,
   fetchMessages,
@@ -2318,6 +2671,10 @@ import {
   fetchOperationGuide,
   fetchOperationGuides,
   fetchOperationLogs,
+  fetchPracticeList,
+  fetchPracticeOptions,
+  fetchPracticeOverview,
+  fetchPracticeTimeline,
   fetchProfileSettings,
   fetchRolePermissions,
   fetchWechatConfig,
@@ -2333,12 +2690,16 @@ import {
   reviewInternshipPlan,
   reviewInternshipReport,
   requestInternshipModification,
+  requestPracticeModification,
   resetAdminAccountPassword,
+  reviewPracticeItem,
   saveArchiveItem,
   saveAdminAccount,
   saveInternshipArrangement,
+  saveInternshipBaseFlow,
   saveInternshipPlan,
   saveInternshipScore,
+  savePracticeItem,
   saveMenu as saveMenuApi,
   sendMessage,
   saveOrganizationScopes,
@@ -2583,6 +2944,7 @@ const modules = [
     scope: '实训模块入口',
     viewPermission: 'training:view',
     managePermission: 'training:manage',
+    defaultPanel: 'overview',
   },
   {
     id: 'lab',
@@ -2592,6 +2954,7 @@ const modules = [
     scope: '实验模块入口',
     viewPermission: 'lab:view',
     managePermission: 'lab:manage',
+    defaultPanel: 'overview',
   },
   {
     id: 'stat',
@@ -2969,6 +3332,13 @@ const defaultInternshipReviewRules = {
   },
 };
 
+const baseFlowTypes = [
+  { value: 'application', label: '基地申报' },
+  { value: 'usage', label: '基地使用' },
+  { value: 'result', label: '基地成果' },
+  { value: 'expense', label: '基地费用' },
+];
+
 const archiveStates = reactive(Object.fromEntries(
   archiveDefinitions.map(definition => [definition.type, createArchiveState(definition.type)]),
 ));
@@ -2991,15 +3361,20 @@ const fileState = reactive({
 
 const internshipSidebarItems = [
   { key: 'overview', name: '总览', icon: ChartColumn },
+  { key: 'baseFlows', name: '基地建设', icon: Building2, permission: 'internship:manage' },
   { key: 'arrangements', name: '实习安排', icon: CalendarCheck },
   { key: 'plans', name: '实习计划', icon: FileText, permission: 'internship:plan' },
+  { key: 'syllabusGuides', name: '大纲指导书', icon: BookOpen },
+  { key: 'implementationSheets', name: '实施表', icon: ClipboardList },
   { key: 'applications', name: '申请审核', icon: ClipboardList },
   { key: 'pairs', name: '指导关系', icon: UsersRound },
   { key: 'signIns', name: '签到记录', icon: MapPin },
   { key: 'journals', name: '实习日志', icon: FileClock },
   { key: 'reports', name: '实习报告', icon: FileText },
+  { key: 'teacherWorkReports', name: '教师工作报告', icon: FileText },
   { key: 'delays', name: '延期申请', icon: FileClock },
   { key: 'scores', name: '成绩管理', icon: GraduationCap },
+  { key: 'inspections', name: '巡查记录', icon: Search, permission: 'internship:archive' },
   { key: 'documents', name: '归档材料', icon: FolderOpen },
 ];
 
@@ -3015,34 +3390,50 @@ const internshipState = reactive({
   arrangementForm: emptyArrangementForm(),
   planForm: emptyPlanForm(),
   scoreForm: emptyScoreForm(),
+  baseFlowForm: emptyBaseFlowForm(),
   filters: {
     arrangements: emptyInternshipFilters(),
     plans: emptyInternshipFilters(),
+    syllabusGuides: emptyInternshipFilters(),
+    implementationSheets: emptyInternshipFilters(),
     applications: emptyInternshipFilters(),
     pairs: emptyInternshipFilters(),
     signIns: emptyInternshipFilters(),
     journals: emptyInternshipFilters(),
     reports: emptyInternshipFilters(),
+    teacherWorkReports: emptyInternshipFilters(),
     delays: emptyInternshipFilters(),
     scores: emptyInternshipFilters(),
+    inspections: emptyInternshipFilters(),
     archiveMaterials: emptyInternshipFilters(),
+    baseFlows: emptyInternshipFilters(),
     insurances: emptyInternshipFilters(),
     safetyLetters: emptyInternshipFilters(),
   },
   lists: {
     arrangements: emptyPagedList(),
     plans: emptyPagedList(),
+    syllabusGuides: emptyPagedList(),
+    implementationSheets: emptyPagedList(),
     applications: emptyPagedList(),
     pairs: emptyPagedList(),
     signIns: emptyPagedList(),
     journals: emptyPagedList(),
     reports: emptyPagedList(),
+    teacherWorkReports: emptyPagedList(),
     delays: emptyPagedList(),
     scores: emptyPagedList(),
+    inspections: emptyPagedList(),
     archiveMaterials: emptyPagedList(),
+    baseFlows: emptyPagedList(),
     insurances: emptyPagedList(),
     safetyLetters: emptyPagedList(),
   },
+});
+
+const practiceState = reactive({
+  training: createPracticeModuleState(),
+  lab: createPracticeModuleState(),
 });
 
 const openWindows = reactive([]);
@@ -3059,6 +3450,8 @@ const canSendMessages = computed(() => ['super_admin', 'school_admin'].includes(
 const canManageInternship = computed(() => hasPermission('internship:manage'));
 const canManageInternshipPlan = computed(() => hasPermission('internship:plan') && isAdminRole.value);
 const canApproveInternship = computed(() => hasPermission('internship:approve') && !isStudentRole.value);
+const canManagePractice = module => hasPermission(`${module}:manage`) && !isStudentRole.value;
+const canApprovePractice = module => hasPermission(`${module}:approve`) && !isStudentRole.value;
 const statReports = [
   { key: 'overview', name: '实习总览', description: '实习安排、申请、指导关系和过程材料汇总。', icon: ChartColumn },
   { key: 'department', name: '学院统计', description: '按学院统计学生参与、审核进度和成绩分布。', icon: Building2 },
@@ -3175,7 +3568,7 @@ function canShowModule(module) {
     return ['super_admin', 'school_admin'].includes(currentRoleType.value);
   }
   if (['training', 'lab'].includes(module.id)) {
-    return isAdminRole.value;
+    return ['student', 'teacher', 'super_admin', 'school_admin', 'college_admin', 'profession_admin'].includes(currentRoleType.value);
   }
   if (module.id === 'internship') {
     return ['student', 'teacher', 'super_admin', 'school_admin', 'college_admin', 'profession_admin'].includes(currentRoleType.value);
@@ -3222,10 +3615,25 @@ const activeOverviewTab = computed(() => {
   return keys.has(internshipState.overviewTab) ? internshipState.overviewTab : internshipOverviewTabs.value[0]?.key || 'metrics';
 });
 const internshipListConfigs = computed(() => ({
+  baseFlows: {
+    listKey: 'baseFlows',
+    filename: '基地建设',
+    filters: baseFlowFilters(),
+    columns: [
+      { key: 'flow_type', label: '流程类型', width: 110, formatter: row => baseFlowTypeText(row.flow_type || internshipState.filters.baseFlows.type) },
+      { prop: 'base_name', label: '基地', minWidth: 160 },
+      { prop: 'dep_name', label: '学院', minWidth: 130 },
+      { prop: 'title', label: '标题', minWidth: 180 },
+      { key: 'detail', label: '类型/金额', minWidth: 130, formatter: row => baseFlowDetailText(row) },
+      { prop: 'submitter_name', label: '提交人', width: 110 },
+      { prop: 'status', label: '状态', width: 90, tag: true, tagType: row => statusTagType(row.status), formatter: row => statusText(row.status) },
+      { prop: 'created_at', label: '创建时间', width: 168 },
+    ],
+  },
   arrangements: {
     listKey: 'arrangements',
     filename: '实习安排',
-    filters: internshipListFilters('arrangements', ['semester', 'grade_id', 'dep_id', 'profession_id', 'type', 'organize_mode', 'status', 'keyword']),
+    filters: internshipListFilters('arrangements', ['grade_id', 'dep_id', 'profession_id', 'type', 'organize_mode', 'status', 'keyword']),
     columns: [
       { prop: 'title', label: '实习安排', minWidth: 180 },
       // 暂时隐藏学期列，后续需要时恢复。
@@ -3241,7 +3649,7 @@ const internshipListConfigs = computed(() => ({
   applications: {
     listKey: 'applications',
     filename: '实习申请',
-    filters: internshipListFilters('applications', ['semester', 'grade_id', 'dep_id', 'profession_id', 'status', 'keyword']),
+    filters: internshipListFilters('applications', ['grade_id', 'dep_id', 'profession_id', 'status', 'keyword']),
     columns: [
       { prop: 'student_name', label: '学生', width: 110 },
       { prop: 'student_num', label: '学号', width: 130 },
@@ -3258,7 +3666,7 @@ const internshipListConfigs = computed(() => ({
   plans: {
     listKey: 'plans',
     filename: '实习计划',
-    filters: internshipListFilters('plans', ['semester', 'dep_id', 'status', 'keyword']),
+    filters: internshipListFilters('plans', ['dep_id', 'status', 'keyword']),
     columns: [
       // 暂时隐藏学期列，后续需要时恢复。
       // { prop: 'semester', label: '学期', width: 130 },
@@ -3272,7 +3680,7 @@ const internshipListConfigs = computed(() => ({
   pairs: {
     listKey: 'pairs',
     filename: '指导关系',
-    filters: internshipListFilters('pairs', ['semester', 'grade_id', 'dep_id', 'profession_id', 'status', 'keyword']),
+    filters: internshipListFilters('pairs', ['grade_id', 'dep_id', 'profession_id', 'status', 'keyword']),
     columns: [
       { prop: 'student_name', label: '学生', width: 120 },
       { prop: 'student_num', label: '学号', width: 130 },
@@ -3286,7 +3694,7 @@ const internshipListConfigs = computed(() => ({
   signIns: {
     listKey: 'signIns',
     filename: '签到记录',
-    filters: internshipListFilters('signIns', ['semester', 'grade_id', 'dep_id', 'profession_id', 'arrangement_id', 'keyword']),
+    filters: internshipListFilters('signIns', ['grade_id', 'dep_id', 'profession_id', 'arrangement_id', 'keyword']),
     columns: [
       { prop: 'student_name', label: '学生', width: 110 },
       { prop: 'student_num', label: '学号', width: 130 },
@@ -3301,7 +3709,7 @@ const internshipListConfigs = computed(() => ({
   journals: {
     listKey: 'journals',
     filename: '实习日志',
-    filters: internshipListFilters('journals', ['semester', 'grade_id', 'dep_id', 'profession_id', 'arrangement_id', 'status', 'keyword']),
+    filters: internshipListFilters('journals', ['grade_id', 'dep_id', 'profession_id', 'arrangement_id', 'status', 'keyword']),
     columns: [
       { prop: 'student_name', label: '学生', width: 110 },
       { prop: 'grade_name', label: '届次', width: 100 },
@@ -3314,7 +3722,7 @@ const internshipListConfigs = computed(() => ({
   reports: {
     listKey: 'reports',
     filename: '实习报告',
-    filters: internshipListFilters('reports', ['semester', 'grade_id', 'dep_id', 'profession_id', 'arrangement_id', 'status', 'keyword']),
+    filters: internshipListFilters('reports', ['grade_id', 'dep_id', 'profession_id', 'arrangement_id', 'status', 'keyword']),
     columns: [
       { prop: 'student_name', label: '学生', width: 110 },
       { prop: 'grade_name', label: '届次', width: 100 },
@@ -3327,7 +3735,7 @@ const internshipListConfigs = computed(() => ({
   delays: {
     listKey: 'delays',
     filename: '延期申请',
-    filters: internshipListFilters('delays', ['semester', 'grade_id', 'dep_id', 'profession_id', 'arrangement_id', 'config_key', 'status', 'keyword']),
+    filters: internshipListFilters('delays', ['grade_id', 'dep_id', 'profession_id', 'arrangement_id', 'config_key', 'status', 'keyword']),
     columns: [
       { prop: 'student_name', label: '学生', width: 110 },
       { prop: 'student_num', label: '学号', width: 130 },
@@ -3343,7 +3751,7 @@ const internshipListConfigs = computed(() => ({
   scores: {
     listKey: 'scores',
     filename: '实习成绩',
-    filters: internshipListFilters('scores', ['semester', 'grade_id', 'dep_id', 'profession_id', 'arrangement_id', 'keyword']),
+    filters: internshipListFilters('scores', ['grade_id', 'dep_id', 'profession_id', 'arrangement_id', 'keyword']),
     columns: [
       { prop: 'student_name', label: '学生', width: 110 },
       { prop: 'grade_name', label: '届次', width: 100 },
@@ -3359,7 +3767,7 @@ const internshipListConfigs = computed(() => ({
   archiveMaterials: {
     listKey: 'archiveMaterials',
     filename: '归档材料',
-    filters: internshipListFilters('archiveMaterials', ['semester', 'grade_id', 'dep_id', 'profession_id', 'arrangement_id', 'archive_status', 'keyword']),
+    filters: internshipListFilters('archiveMaterials', ['grade_id', 'dep_id', 'profession_id', 'arrangement_id', 'archive_status', 'keyword']),
     columns: [
       { prop: 'student_name', label: '学生', width: 110 },
       { prop: 'student_num', label: '学号', width: 130 },
@@ -3388,7 +3796,7 @@ const internshipListConfigs = computed(() => ({
   insurances: {
     listKey: 'insurances',
     filename: '保险记录',
-    filters: internshipListFilters('insurances', ['semester', 'grade_id', 'dep_id', 'profession_id', 'arrangement_id', 'keyword']),
+    filters: internshipListFilters('insurances', ['grade_id', 'dep_id', 'profession_id', 'arrangement_id', 'keyword']),
     columns: [
       { prop: 'student_name', label: '学生', width: 110 },
       { prop: 'student_num', label: '学号', width: 130 },
@@ -3403,7 +3811,7 @@ const internshipListConfigs = computed(() => ({
   safetyLetters: {
     listKey: 'safetyLetters',
     filename: '安全承诺',
-    filters: internshipListFilters('safetyLetters', ['semester', 'grade_id', 'dep_id', 'profession_id', 'arrangement_id', 'keyword']),
+    filters: internshipListFilters('safetyLetters', ['grade_id', 'dep_id', 'profession_id', 'arrangement_id', 'keyword']),
     columns: [
       { prop: 'student_name', label: '学生', width: 110 },
       { prop: 'student_num', label: '学号', width: 130 },
@@ -3411,6 +3819,72 @@ const internshipListConfigs = computed(() => ({
       { prop: 'arrangement_title', label: '实习安排', minWidth: 180 },
       { prop: 'signed_at', label: '签署时间', minWidth: 160 },
       { key: 'status', label: '状态', width: 90, formatter: row => statusText(row.status) },
+    ],
+  },
+  syllabusGuides: {
+    listKey: 'syllabusGuides',
+    filename: '实习大纲及指导书',
+    filters: internshipListFilters('syllabusGuides', ['grade_id', 'dep_id', 'profession_id', 'arrangement_id', 'status', 'keyword']),
+    columns: [
+      { prop: 'title', label: '标题', minWidth: 180 },
+      { prop: 'grade_name', label: '届次', width: 100 },
+      { prop: 'arrangement_title', label: '实习安排', minWidth: 190 },
+      { prop: 'dep_name', label: '学院', minWidth: 130 },
+      { prop: 'profession_name', label: '专业', minWidth: 130 },
+      { prop: 'creator_name', label: '录入人', width: 110 },
+      { prop: 'status', label: '状态', width: 90, tag: true, tagType: row => statusTagType(row.status), formatter: row => statusText(row.status) },
+      { prop: 'created_at', label: '创建时间', width: 168 },
+      { prop: 'content', label: '内容', minWidth: 240 },
+    ],
+  },
+  implementationSheets: {
+    listKey: 'implementationSheets',
+    filename: '教学实习实施表',
+    filters: internshipListFilters('implementationSheets', ['grade_id', 'dep_id', 'profession_id', 'arrangement_id', 'status', 'keyword']),
+    columns: [
+      { prop: 'grade_name', label: '届次', width: 100 },
+      { prop: 'arrangement_title', label: '实习安排', minWidth: 190 },
+      { prop: 'dep_name', label: '学院', minWidth: 130 },
+      { prop: 'profession_name', label: '专业', minWidth: 130 },
+      { prop: 'teacher_name', label: '指导教师', width: 120 },
+      { prop: 'signed_count', label: '已签承诺', width: 100 },
+      { prop: 'unsigned_count', label: '未签承诺', width: 100 },
+      { key: 'insurance_verified', label: '保险核验', width: 100, formatter: row => row.insurance_verified === 'true' ? '已核验' : '未核验' },
+      { prop: 'status', label: '状态', width: 90, tag: true, tagType: row => statusTagType(row.status), formatter: row => statusText(row.status) },
+      { prop: 'confirmed_at', label: '确认时间', width: 168 },
+    ],
+  },
+  teacherWorkReports: {
+    listKey: 'teacherWorkReports',
+    filename: '实习指导教师工作报告',
+    filters: internshipListFilters('teacherWorkReports', ['grade_id', 'dep_id', 'profession_id', 'arrangement_id', 'status', 'keyword']),
+    columns: [
+      { prop: 'grade_name', label: '届次', width: 100 },
+      { prop: 'arrangement_title', label: '实习安排', minWidth: 190 },
+      { prop: 'teacher_name', label: '指导教师', width: 120 },
+      { prop: 'guidance_count', label: '指导人数', width: 100 },
+      { prop: 'summary', label: '工作总结', minWidth: 220 },
+      { prop: 'problems', label: '问题', minWidth: 180 },
+      { prop: 'suggestions', label: '建议', minWidth: 180 },
+      { prop: 'status', label: '状态', width: 90, tag: true, tagType: row => statusTagType(row.status), formatter: row => statusText(row.status) },
+      { prop: 'created_at', label: '提交时间', width: 168 },
+    ],
+  },
+  inspections: {
+    listKey: 'inspections',
+    filename: '实习巡查记录',
+    filters: internshipListFilters('inspections', ['grade_id', 'dep_id', 'profession_id', 'arrangement_id', 'result', 'keyword']),
+    columns: [
+      { prop: 'grade_name', label: '届次', width: 100 },
+      { prop: 'arrangement_title', label: '实习安排', minWidth: 190 },
+      { prop: 'student_name', label: '学生', width: 110 },
+      { prop: 'student_num', label: '学号', width: 130 },
+      { prop: 'dep_name', label: '学院', minWidth: 130 },
+      { prop: 'profession_name', label: '专业', minWidth: 130 },
+      { prop: 'inspector_name', label: '巡查人', width: 110 },
+      { key: 'result', label: '结果', width: 90, formatter: row => inspectionResultText(row.result) },
+      { prop: 'remark', label: '说明', minWidth: 220 },
+      { prop: 'created_at', label: '记录时间', width: 168 },
     ],
   },
 }));
@@ -3436,6 +3910,10 @@ function internshipRolePanelName(key) {
   return names[key] || '我的实习';
 }
 
+function isInternshipReadOnlyListPanel(panel) {
+  return ['syllabusGuides', 'implementationSheets', 'teacherWorkReports', 'inspections'].includes(panel);
+}
+
 function internshipListFilters(listKey, adminKeys) {
   if (isStudentRole.value) {
     return [];
@@ -3447,6 +3925,9 @@ function internshipListFilters(listKey, adminKeys) {
 }
 
 function hasInternshipToolbarActions(panel) {
+  if (panel === 'baseFlows') {
+    return canManageInternship.value;
+  }
   if (panel === 'arrangements') {
     return canManageInternship.value;
   }
@@ -3636,6 +4117,9 @@ function sidebarItems(win) {
   }
   if (win.module.id === 'internship') {
     return visibleInternshipSidebarItems.value;
+  }
+  if (isPracticeModule(win.module.id)) {
+    return practiceSidebarItems();
   }
   if (win.module.id === 'config') {
     return [
@@ -4317,25 +4801,32 @@ function openModuleWindow(module, options = {}) {
     if (module.id === 'message') {
       loadMessages(messageState.pagination.page || 1);
     }
+    if (isPracticeModule(module.id)) {
+      loadPracticePanel(module.id, existing.panel);
+    }
     return;
   }
 
   const index = openWindows.length;
+  const frame = defaultWindowFrame(index);
   const win = {
     id: `${module.id}-${Date.now()}`,
     module,
     panel: module.defaultPanel || 'overview',
     minimized: false,
-    left: 160 + index * 28,
-    top: 60 + index * 24,
-    width: 1120,
-    height: 680,
+    left: frame.left,
+    top: frame.top,
+    width: frame.width,
+    height: frame.height,
     zIndex: ++zIndexSeed.value,
   };
   openWindows.push(win);
   focusedWindowId.value = win.id;
   if (module.id === 'internship') {
     loadInternshipPanel(win.panel);
+  }
+  if (isPracticeModule(module.id)) {
+    loadPracticePanel(module.id, win.panel);
   }
   if (module.id === 'stat') {
     statState.report = win.panel;
@@ -4347,6 +4838,19 @@ function openModuleWindow(module, options = {}) {
   if (module.id === 'message') {
     loadMessages(1);
   }
+}
+
+function defaultWindowFrame(index = 0) {
+  const viewportWidth = window.innerWidth || 1280;
+  const viewportHeight = window.innerHeight || 760;
+  const iconReserve = viewportWidth >= 900 ? 390 : 120;
+  const minWidth = viewportWidth >= 900 ? 680 : Math.min(680, viewportWidth);
+  const left = Math.min(iconReserve + index * 28, Math.max(24, viewportWidth - minWidth - 30));
+  const top = 60 + index * 24;
+  const width = Math.max(minWidth, Math.min(1120, viewportWidth - left - 30));
+  const height = Math.max(500, Math.min(680, viewportHeight - top - 70));
+
+  return { left, top, width, height };
 }
 
 function openProfile(section = '') {
@@ -4536,6 +5040,9 @@ function activateWindowPanel(win, panel) {
   }
   if (win.module.id === 'internship') {
     loadInternshipPanel(panel);
+  }
+  if (isPracticeModule(win.module.id)) {
+    loadPracticePanel(win.module.id, panel);
   }
 }
 
@@ -5825,12 +6332,14 @@ function emptyInternshipFilters() {
     keyword: '',
     semester: '',
     dep_id: '',
+    base_id: '',
     profession_id: '',
     grade_id: '',
     arrangement_id: '',
     config_key: '',
     status: '',
     archive_status: '',
+    result: '',
     type: '',
     organize_mode: '',
   };
@@ -5839,7 +6348,7 @@ function emptyInternshipFilters() {
 function emptyArrangementForm() {
   return {
     title: '',
-    semester: '2025-2026-2',
+    semester: '',
     grade_id: null,
     base_id: null,
     dep_id: null,
@@ -5855,7 +6364,7 @@ function emptyArrangementForm() {
 
 function emptyPlanForm() {
   return {
-    semester: '2025-2026-2',
+    semester: '',
     dep_id: null,
     content: '',
     status: 'wait',
@@ -5875,6 +6384,22 @@ function emptyScoreForm() {
   };
 }
 
+function emptyBaseFlowForm(row = {}) {
+  return {
+    id: row.id || null,
+    type: row.flow_type || row.type || 'application',
+    base_id: row.base_id || null,
+    dep_id: row.dep_id || null,
+    title: row.title || '',
+    content: row.content || '',
+    base_type: row.base_type || 'fixed',
+    usage_type: row.usage_type || '',
+    result_type: row.result_type || '',
+    amount: row.amount || '',
+    status: row.status || 'enabled',
+  };
+}
+
 function emptyOperationDialog() {
   return {
     type: '',
@@ -5887,6 +6412,661 @@ function emptyOperationDialog() {
     timeline: [],
     cycles: [],
   };
+}
+
+function createPracticeModuleState() {
+  const panels = ['plans', 'schedules', 'syllabus', 'lessonPlans', 'gradeRules', 'scores', 'reflections', 'rooms'];
+  return {
+    loading: false,
+    message: '',
+    overview: emptyPracticeOverview(),
+    options: emptyPracticeOptions(),
+    form: emptyPracticeForm(),
+    dialog: emptyOperationDialog(),
+    filters: Object.fromEntries(panels.map(panel => [panel, emptyPracticeFilters()])),
+    lists: Object.fromEntries(panels.map(panel => [panel, emptyPagedList()])),
+  };
+}
+
+function emptyPracticeOverview() {
+  return {
+    plans_waiting: 0,
+    schedules: 0,
+    syllabus_waiting: 0,
+    lesson_plans_waiting: 0,
+    scores_submitted: 0,
+    reflections_waiting: 0,
+    today_schedules: 0,
+  };
+}
+
+function emptyPracticeOptions() {
+  return {
+    departments: [],
+    grades: [],
+    professions: [],
+    classes: [],
+    teachers: [],
+    students: [],
+    rooms: [],
+    plans: [],
+    review_rules: {},
+  };
+}
+
+function emptyPracticeFilters() {
+  return {
+    keyword: '',
+    status: '',
+    grade_id: '',
+    dep_id: '',
+    profession_id: '',
+    class_id: '',
+    plan_id: '',
+    teacher_id: '',
+    room_id: '',
+    place_type: '',
+    source_type: '',
+  };
+}
+
+function emptyPracticeForm(row = {}) {
+  return {
+    id: row.id || null,
+    title: row.title || '',
+    course_name: row.course_name || '',
+    grade_id: row.grade_id || null,
+    dep_id: row.dep_id || null,
+    profession_id: row.profession_id || null,
+    class_id: row.class_id || null,
+    teacher_id: row.teacher_id || null,
+    plan_id: row.plan_id || null,
+    source_type: row.source_type || 'manual',
+    place_type: row.place_type || 'inside',
+    room_id: row.room_id || null,
+    base_id: row.base_id || null,
+    schedule_date: row.schedule_date || '',
+    start_time: row.start_time || '',
+    end_time: row.end_time || '',
+    location: row.location || '',
+    student_count: row.student_count || '',
+    name: row.name || '',
+    code: row.code || '',
+    capacity: row.capacity || '',
+    student_id: row.student_id || null,
+    score_value: row.score_value || '',
+    ratio_text: practiceRatioText(row.ratio_json),
+    content: row.content || '',
+    remark: row.remark || '',
+    status: row.status || 'wait',
+  };
+}
+
+function practiceModuleState(module) {
+  return practiceState[module] || practiceState.training;
+}
+
+function isPracticeModule(module) {
+  return ['training', 'lab'].includes(module);
+}
+
+function practiceSidebarItems() {
+  const items = [
+    { key: 'overview', name: '总览' },
+    { key: 'plans', name: '教学计划' },
+    { key: 'schedules', name: '课表安排' },
+    { key: 'syllabus', name: '大纲编写' },
+    { key: 'lessonPlans', name: '教案编写' },
+    { key: 'gradeRules', name: '成绩比例' },
+    { key: 'scores', name: '成绩评定' },
+    { key: 'reflections', name: '反思报告' },
+    { key: 'rooms', name: '场地管理' },
+  ];
+  if (isStudentRole.value) {
+    return items.filter(item => ['overview', 'schedules', 'scores'].includes(item.key));
+  }
+  if (isTeacherRole.value) {
+    return items.filter(item => item.key !== 'rooms');
+  }
+  return items;
+}
+
+function practicePanelEntity(panel) {
+  return {
+    plans: 'plan',
+    schedules: 'schedule',
+    syllabus: 'syllabus',
+    lessonPlans: 'lessonPlan',
+    gradeRules: 'gradeRule',
+    scores: 'score',
+    reflections: 'reflection',
+    rooms: 'room',
+  }[panel] || 'plan';
+}
+
+function practiceReviewEntity(panel) {
+  return {
+    plans: 'plan',
+    syllabus: 'syllabus',
+    lessonPlans: 'lessonPlan',
+    reflections: 'reflection',
+  }[panel] || '';
+}
+
+function practicePanelLabel(panel) {
+  return practiceSidebarItems().find(item => item.key === panel)?.name || '数据';
+}
+
+function practiceNeedsPlan(panel) {
+  return ['schedules', 'syllabus', 'lessonPlans', 'gradeRules', 'scores', 'reflections'].includes(panel);
+}
+
+function practiceTextPanel(panel) {
+  return ['plans', 'syllabus', 'lessonPlans', 'reflections'].includes(panel);
+}
+
+function practiceOverviewCards(module) {
+  const overview = practiceModuleState(module).overview;
+  return [
+    { name: '待审计划', value: overview.plans_waiting || 0, theme: 'primary', icon: FileText, panel: 'plans' },
+    { name: '课表安排', value: overview.schedules || 0, theme: 'green', icon: CalendarCheck, panel: 'schedules' },
+    { name: '待审大纲', value: overview.syllabus_waiting || 0, theme: 'teal', icon: BookOpen, panel: 'syllabus' },
+    { name: '待审教案', value: overview.lesson_plans_waiting || 0, theme: 'amber', icon: FileText, panel: 'lessonPlans' },
+    { name: '成绩记录', value: overview.scores_submitted || 0, theme: 'primary', icon: GraduationCap, panel: 'scores' },
+    { name: '待审反思', value: overview.reflections_waiting || 0, theme: 'teal', icon: FileClock, panel: 'reflections' },
+    { name: '今日课表', value: overview.today_schedules || 0, theme: 'green', icon: MapPin, panel: 'schedules' },
+  ];
+}
+
+function practiceEditStatusOptions(panel) {
+  if (practiceReviewEntity(panel)) {
+    return [
+      { value: 'draft', label: '草稿' },
+      { value: 'wait', label: '提交审核' },
+    ];
+  }
+  if (panel === 'scores') {
+    return [
+      { value: 'accept', label: '已确认' },
+      { value: 'wait', label: '提交审核' },
+      { value: 'draft', label: '草稿' },
+    ];
+  }
+  return [
+    { value: 'enabled', label: '启用' },
+    { value: 'disabled', label: '停用' },
+  ];
+}
+
+function practiceRatioText(value) {
+  if (Array.isArray(value)) {
+    return value.map(item => `${item.name || item.label || '项目'}${item.weight || item.ratio || ''}%`).join('，');
+  }
+  if (value && typeof value === 'object') {
+    return Object.entries(value).map(([key, val]) => `${key}${val}%`).join('，');
+  }
+  return value ? String(value) : '';
+}
+
+function practiceListConfig(module, panel) {
+  const commonFilters = ['grade_id', 'dep_id', 'profession_id', 'status', 'keyword'];
+  const filters = practiceFilters(module, panel, panel === 'schedules'
+    ? ['grade_id', 'dep_id', 'profession_id', 'plan_id', 'place_type', 'status', 'keyword']
+    : panel === 'rooms'
+      ? ['dep_id', 'status', 'keyword']
+      : panel === 'scores'
+        ? ['grade_id', 'dep_id', 'profession_id', 'plan_id', 'keyword']
+        : commonFilters);
+  const columns = {
+    plans: [
+      { prop: 'title', label: '计划标题', minWidth: 180 },
+      { prop: 'grade_name', label: '届次', width: 100 },
+      { prop: 'dep_name', label: '学院', minWidth: 140 },
+      { prop: 'profession_name', label: '专业', minWidth: 140 },
+      { prop: 'teacher_name', label: '任课教师', width: 120 },
+      { key: 'source_type', label: '来源', width: 100, formatter: row => practiceSourceText(row.source_type) },
+      { prop: 'status', label: '状态', width: 90, tag: true, tagType: row => statusTagType(row.status), formatter: row => statusText(row.status) },
+      { prop: 'created_at', label: '创建时间', width: 168 },
+    ],
+    schedules: [
+      { prop: 'title', label: '课表标题', minWidth: 180 },
+      { prop: 'plan_title', label: '关联计划', minWidth: 160 },
+      { prop: 'schedule_date', label: '日期', width: 110 },
+      { key: 'time', label: '时间', width: 120, formatter: row => `${row.start_time || '-'}-${row.end_time || '-'}` },
+      { key: 'place', label: '地点', minWidth: 180, formatter: row => row.room_name || row.base_name || row.location || '-' },
+      { prop: 'student_count', label: '学生数', width: 90 },
+      { prop: 'status', label: '状态', width: 90, tag: true, tagType: row => statusTagType(row.status), formatter: row => statusText(row.status) },
+    ],
+    syllabus: practiceDocumentColumns('大纲'),
+    lessonPlans: practiceDocumentColumns('教案'),
+    gradeRules: [
+      { prop: 'title', label: '规则名称', minWidth: 180 },
+      { prop: 'plan_title', label: '关联计划', minWidth: 160 },
+      { key: 'ratio', label: '比例', minWidth: 220, formatter: row => practiceRatioText(row.ratio_json) || '-' },
+      { prop: 'teacher_name', label: '任课教师', width: 120 },
+      { prop: 'status', label: '状态', width: 90, tag: true, tagType: row => statusTagType(row.status), formatter: row => statusText(row.status) },
+    ],
+    scores: [
+      { prop: 'student_name', label: '学生', width: 110 },
+      { prop: 'student_num', label: '学号', width: 130 },
+      { prop: 'grade_name', label: '届次', width: 100 },
+      { prop: 'plan_title', label: '关联计划', minWidth: 160 },
+      { prop: 'score_value', label: '成绩', width: 90 },
+      { prop: 'teacher_name', label: '评分教师', width: 120 },
+      { prop: 'status', label: '状态', width: 90, tag: true, tagType: row => statusTagType(row.status), formatter: row => statusText(row.status) },
+    ],
+    reflections: practiceDocumentColumns('反思报告'),
+    rooms: [
+      { prop: 'name', label: '场地名称', minWidth: 180 },
+      { prop: 'code', label: '编号', width: 120 },
+      { prop: 'dep_name', label: '学院', minWidth: 140 },
+      { prop: 'room_type', label: '类型', width: 110 },
+      { prop: 'capacity', label: '容量', width: 90 },
+      { prop: 'location', label: '位置', minWidth: 180 },
+      { prop: 'status', label: '状态', width: 90, tag: true, tagType: row => statusTagType(row.status), formatter: row => statusText(row.status) },
+    ],
+  }[panel] || [];
+  return { filters, columns };
+}
+
+function practiceDocumentColumns(label) {
+  return [
+    { prop: 'title', label: `${label}标题`, minWidth: 180 },
+    { prop: 'plan_title', label: '关联计划', minWidth: 160 },
+    { prop: 'grade_name', label: '届次', width: 100 },
+    { prop: 'dep_name', label: '学院', minWidth: 130 },
+    { prop: 'teacher_name', label: '任课教师', width: 120 },
+    { prop: 'status', label: '状态', width: 90, tag: true, tagType: row => statusTagType(row.status), formatter: row => statusText(row.status) },
+    { prop: 'content', label: '内容', minWidth: 240 },
+    { prop: 'created_at', label: '提交时间', width: 168 },
+  ];
+}
+
+function practiceFilters(module, panel, keys) {
+  if (isStudentRole.value) {
+    return [];
+  }
+  if (isTeacherRole.value) {
+    return practiceFilterDefinitions(module, ['grade_id', 'keyword']);
+  }
+  return practiceFilterDefinitions(module, keys);
+}
+
+function practiceFilterDefinitions(module, keys) {
+  const options = practiceModuleState(module).options;
+  const definitions = {
+    keyword: { key: 'keyword', label: '关键词', placeholder: '标题、课程、学生、内容' },
+    grade_id: { key: 'grade_id', label: '届次', type: 'select', options: optionItems(options.grades, 'grade_id', 'grade_name') },
+    dep_id: { key: 'dep_id', label: '学院', type: 'select', options: optionItems(options.departments, 'dep_id', 'dep_name') },
+    profession_id: { key: 'profession_id', label: '专业', type: 'select', options: optionItems(options.professions, 'profession_id', 'profession_name') },
+    plan_id: { key: 'plan_id', label: '教学计划', type: 'select', options: optionItems(options.plans, 'id', 'title') },
+    room_id: { key: 'room_id', label: '场地', type: 'select', options: optionItems(options.rooms, 'id', 'name') },
+    place_type: { key: 'place_type', label: '地点类型', type: 'select', options: practicePlaceTypeOptions() },
+    source_type: { key: 'source_type', label: '来源', type: 'select', options: practiceSourceTypeOptions() },
+    status: { key: 'status', label: '状态', type: 'select', options: statusOptions() },
+  };
+  return keys.map(key => definitions[key]).filter(Boolean);
+}
+
+function practiceSourceTypeOptions() {
+  return [
+    { value: 'jw', label: '教务拉取' },
+    { value: 'manual', label: '手动填报' },
+  ];
+}
+
+function practicePlaceTypeOptions() {
+  return [
+    { value: 'inside', label: '校内' },
+    { value: 'outside', label: '校外' },
+  ];
+}
+
+function practiceSourceText(value) {
+  return practiceSourceTypeOptions().find(item => item.value === value)?.label || value || '-';
+}
+
+function practiceProfessionOptions(module) {
+  const state = practiceModuleState(module);
+  const gradeId = Number(state.form.grade_id || 0);
+  const depId = Number(state.form.dep_id || 0);
+  return state.options.professions.filter((item) => {
+    const matchGrade = !gradeId || Number(item.grade_id || 0) === gradeId;
+    const matchDepartment = !depId || Number(item.dep_id || 0) === depId;
+    return matchGrade && matchDepartment;
+  });
+}
+
+function normalizePracticeCascade(module) {
+  const state = practiceModuleState(module);
+  const options = practiceProfessionOptions(module);
+  const current = Number(state.form.profession_id || 0);
+  if (current && options.some(item => Number(item.profession_id) === current)) {
+    return;
+  }
+  state.form.profession_id = null;
+}
+
+function handlePracticeProfessionChange(module) {
+  const state = practiceModuleState(module);
+  const profession = state.options.professions.find(item => Number(item.profession_id) === Number(state.form.profession_id || 0));
+  if (!profession) {
+    return;
+  }
+  state.form.grade_id = profession.grade_id || state.form.grade_id;
+  state.form.dep_id = profession.dep_id || state.form.dep_id;
+}
+
+function practiceQueryParams(module, panel, page = 1) {
+  const state = practiceModuleState(module);
+  const filters = state.filters[panel] || {};
+  const params = {
+    entity: practicePanelEntity(panel),
+    page,
+    page_size: state.lists[panel]?.pagination.page_size || 20,
+  };
+  Object.entries(filters).forEach(([key, value]) => {
+    if (value !== '' && value !== null && value !== undefined) {
+      params[key] = value;
+    }
+  });
+  return params;
+}
+
+function setPracticeFilter(module, panel, event) {
+  practiceModuleState(module).filters[panel][event.key] = event.value ?? '';
+}
+
+function resetPracticeFilters(module, panel) {
+  practiceModuleState(module).filters[panel] = emptyPracticeFilters();
+  loadPracticePanel(module, panel, 1);
+}
+
+async function loadPracticeFoundation(module) {
+  if (!hasPermission(`${module}:view`)) {
+    return;
+  }
+  const state = practiceModuleState(module);
+  const [overview, options] = await Promise.all([
+    fetchPracticeOverview(module),
+    fetchPracticeOptions(module),
+  ]);
+  state.overview = {
+    ...emptyPracticeOverview(),
+    ...(overview || {}),
+  };
+  state.options = {
+    ...emptyPracticeOptions(),
+    ...(options || {}),
+  };
+}
+
+async function loadPracticePanel(module, panel = 'overview', page = 1) {
+  if (!hasPermission(`${module}:view`)) {
+    return;
+  }
+  const state = practiceModuleState(module);
+  state.loading = true;
+  state.message = '';
+  try {
+    await loadPracticeFoundation(module);
+    if (panel !== 'overview') {
+      const data = await fetchPracticeList(module, practiceQueryParams(module, panel, page));
+      state.lists[panel].items = data.items || [];
+      state.lists[panel].pagination = {
+        ...state.lists[panel].pagination,
+        ...(data.pagination || {}),
+      };
+    }
+  } catch (error) {
+    state.message = error.message;
+  } finally {
+    state.loading = false;
+  }
+}
+
+function openPracticeDialog(module, panel, row = null) {
+  const state = practiceModuleState(module);
+  state.form = emptyPracticeForm(row || {});
+  if (!row) {
+    state.form.grade_id = state.options.grades[0]?.grade_id || null;
+    state.form.dep_id = state.options.departments[0]?.dep_id || null;
+    state.form.plan_id = practiceNeedsPlan(panel) ? state.options.plans[0]?.id || null : null;
+  }
+  state.dialog = {
+    ...emptyOperationDialog(),
+    type: 'edit',
+    title: `${row ? '编辑' : '新增'}${practicePanelLabel(panel)}`,
+    entity: practicePanelEntity(panel),
+    row,
+  };
+}
+
+function closePracticeDialog(module) {
+  practiceModuleState(module).dialog = emptyOperationDialog();
+}
+
+async function confirmPracticeDialog(module) {
+  const state = practiceModuleState(module);
+  if (state.dialog.type === 'edit') {
+    await savePractice(module);
+    return;
+  }
+  if (state.dialog.type === 'review') {
+    const error = validatePracticeReviewReason(module, state.dialog.entity, state.dialog.status, state.dialog.reason);
+    if (error) {
+      state.message = error;
+      return;
+    }
+    await reviewPractice(module);
+    return;
+  }
+  if (state.dialog.type === 'reopen') {
+    const error = validatePracticeReviewReason(module, state.dialog.entity, 'modify', state.dialog.reason, '修改理由');
+    if (error) {
+      state.message = error;
+      return;
+    }
+    await requestPracticeReopen(module);
+  }
+}
+
+async function savePractice(module) {
+  const state = practiceModuleState(module);
+  const panel = practiceSidebarItems().find(item => practicePanelEntity(item.key) === state.dialog.entity)?.key || 'plans';
+  const payload = {
+    ...state.form,
+    entity: state.dialog.entity,
+    ratio_json: ratioTextToJson(state.form.ratio_text),
+  };
+  state.loading = true;
+  state.message = '';
+  try {
+    await savePracticeItem(module, payload);
+    closePracticeDialog(module);
+    await loadPracticePanel(module, panel, state.lists[panel]?.pagination.page || 1);
+  } catch (error) {
+    state.message = error.message;
+  } finally {
+    state.loading = false;
+  }
+}
+
+function ratioTextToJson(value) {
+  const text = String(value || '').trim();
+  if (!text) {
+    return [];
+  }
+  return text.split(/[，,;\n]+/).map((part) => {
+    const item = part.trim();
+    const match = item.match(/^(.+?)(\d+(?:\.\d+)?)%?$/);
+    return match ? { name: match[1].trim(), weight: Number(match[2]) } : { name: item, weight: null };
+  });
+}
+
+function canReviewPracticeRow(module, panel, row) {
+  return Boolean(row && row.status === 'wait' && practiceReviewEntity(panel) && canApprovePractice(module));
+}
+
+function canReopenPracticeRow(module, panel, row) {
+  return Boolean(row && row.status === 'accept' && practiceReviewEntity(panel) && canApprovePractice(module));
+}
+
+function openPracticeReviewDialog(module, panel, row, status) {
+  if (!canReviewPracticeRow(module, panel, row)) {
+    practiceModuleState(module).message = '仅待审核数据可处理';
+    return;
+  }
+  const state = practiceModuleState(module);
+  const actionText = status === 'accept' ? '通过' : '退回';
+  state.dialog = {
+    ...emptyOperationDialog(),
+    type: 'review',
+    title: `${actionText}${practicePanelLabel(panel)}`,
+    description: `请确认是否${actionText}「${row.title || row.name || row.id}」。`,
+    entity: practiceReviewEntity(panel),
+    status,
+    row,
+    reason: status === 'accept' ? '同意' : '',
+  };
+}
+
+function openPracticeReopenDialog(module, panel, row) {
+  if (!canReopenPracticeRow(module, panel, row)) {
+    practiceModuleState(module).message = '仅已通过数据可发起通过后修改';
+    return;
+  }
+  const state = practiceModuleState(module);
+  state.dialog = {
+    ...emptyOperationDialog(),
+    type: 'reopen',
+    title: `通过后修改${practicePanelLabel(panel)}`,
+    description: `此操作会新增审核记录，并将「${row.title || row.name || row.id}」改为需修改。`,
+    entity: practiceReviewEntity(panel),
+    status: 'modify',
+    row,
+    reason: '',
+  };
+}
+
+async function openPracticeTimelineDialog(module, panel, row) {
+  const state = practiceModuleState(module);
+  state.dialog = {
+    ...emptyOperationDialog(),
+    type: 'timeline',
+    title: `${practicePanelLabel(panel)}流程记录`,
+    description: row.title || row.name || String(row.id),
+    entity: practiceReviewEntity(panel),
+    row,
+  };
+  state.loading = true;
+  state.message = '';
+  try {
+    const data = await fetchPracticeTimeline(module, { entity: practiceReviewEntity(panel), id: row.id });
+    state.dialog.cycles = data.cycles || [];
+    state.dialog.timeline = data.items || data.records || [];
+  } catch (error) {
+    state.message = error.message;
+  } finally {
+    state.loading = false;
+  }
+}
+
+function practiceReviewRule(module, entity, status) {
+  return practiceModuleState(module).options.review_rules?.[entity]?.[status]
+    || { min: 0, max: null };
+}
+
+function practiceReviewRuleText(module, entity, status, label = null) {
+  const rule = practiceReviewRule(module, entity, status);
+  const fieldLabel = label || (status === 'modify' ? '退回原因' : '审核意见');
+  if (!rule.min && !rule.max) {
+    return `${fieldLabel}字数不限制`;
+  }
+  if (rule.min && rule.max) {
+    return `${fieldLabel}需 ${rule.min}-${rule.max} 字`;
+  }
+  if (rule.min) {
+    return `${fieldLabel}至少 ${rule.min} 字`;
+  }
+  return `${fieldLabel}最多 ${rule.max} 字`;
+}
+
+function practiceReviewRuleMax(module, entity, status) {
+  return practiceReviewRule(module, entity, status).max || null;
+}
+
+function practiceReviewRuleMaxText(module, entity, status) {
+  return practiceReviewRuleMax(module, entity, status) || '不限';
+}
+
+function trimPracticeReviewReasonMax(module, event) {
+  const state = practiceModuleState(module);
+  const max = practiceReviewRuleMax(module, state.dialog.entity, state.dialog.status);
+  if (!max) {
+    return;
+  }
+  const chars = Array.from(String(event.target.value || ''));
+  if (chars.length <= max) {
+    return;
+  }
+  const value = chars.slice(0, max).join('');
+  event.target.value = value;
+  state.dialog.reason = value;
+}
+
+function validatePracticeReviewReason(module, entity, status, reason, label = null) {
+  const rule = practiceReviewRule(module, entity, status);
+  const length = textLength(reason);
+  const fieldLabel = label || (status === 'modify' ? '退回原因' : '审核意见');
+  if (rule.min && length < rule.min) {
+    return `${fieldLabel}至少 ${rule.min} 字`;
+  }
+  if (rule.max && length > rule.max) {
+    return `${fieldLabel}最多 ${rule.max} 字`;
+  }
+  return '';
+}
+
+async function reviewPractice(module) {
+  const state = practiceModuleState(module);
+  const panel = practiceSidebarItems().find(item => practiceReviewEntity(item.key) === state.dialog.entity)?.key || 'plans';
+  state.loading = true;
+  state.message = '';
+  try {
+    await reviewPracticeItem(module, {
+      entity: state.dialog.entity,
+      id: state.dialog.row.id,
+      status: state.dialog.status,
+      opinion: state.dialog.reason,
+    });
+    closePracticeDialog(module);
+    await loadPracticePanel(module, panel, state.lists[panel]?.pagination.page || 1);
+  } catch (error) {
+    state.message = error.message;
+  } finally {
+    state.loading = false;
+  }
+}
+
+async function requestPracticeReopen(module) {
+  const state = practiceModuleState(module);
+  const panel = practiceSidebarItems().find(item => practiceReviewEntity(item.key) === state.dialog.entity)?.key || 'plans';
+  state.loading = true;
+  state.message = '';
+  try {
+    await requestPracticeModification(module, {
+      entity: state.dialog.entity,
+      id: state.dialog.row.id,
+      opinion: state.dialog.reason,
+    });
+    closePracticeDialog(module);
+    await loadPracticePanel(module, panel, state.lists[panel]?.pagination.page || 1);
+  } catch (error) {
+    state.message = error.message;
+  } finally {
+    state.loading = false;
+  }
 }
 
 function setPagedList(key, data) {
@@ -5907,6 +7087,7 @@ function internshipFilters(keys) {
     keyword: { key: 'keyword', label: '关键词', placeholder: '学生、学号、教师、标题' },
     student_keyword: { key: 'keyword', label: '学生', placeholder: '姓名或学号' },
     semester: { key: 'semester', label: '学期', type: 'select', options: semesterOptions() },
+    base_id: { key: 'base_id', label: '实习基地', type: 'select', options: optionItems(internshipState.options.bases, 'id', 'name') },
     dep_id: { key: 'dep_id', label: '学院', type: 'select', options: optionItems(internshipState.options.departments, 'dep_id', 'dep_name') },
     profession_id: { key: 'profession_id', label: '专业', type: 'select', options: optionItems(internshipState.options.professions, 'profession_id', 'profession_name') },
     grade_id: { key: 'grade_id', label: '届次', type: 'select', options: optionItems(internshipState.options.grades, 'grade_id', 'grade_name') },
@@ -5914,10 +7095,21 @@ function internshipFilters(keys) {
     config_key: { key: 'config_key', label: '延期类型', type: 'select', options: delayConfigOptions() },
     status: { key: 'status', label: '状态', type: 'select', options: statusOptions() },
     archive_status: { key: 'archive_status', label: '归档状态', type: 'select', options: archiveStatusOptions() },
+    result: { key: 'result', label: '巡查结果', type: 'select', options: inspectionResultOptions() },
     type: { key: 'type', label: '类型', type: 'select', options: internshipState.options.types.map(value => ({ value, label: arrangementTypeText(value) })) },
     organize_mode: { key: 'organize_mode', label: '组织方式', type: 'select', options: internshipState.options.organize_modes.map(value => ({ value, label: organizeModeText(value) })) },
   };
   return visibleKeys.map(key => definitions[key]).filter(Boolean);
+}
+
+function baseFlowFilters() {
+  if (isStudentRole.value || isTeacherRole.value) {
+    return [];
+  }
+  return [
+    { key: 'type', label: '流程类型', type: 'select', options: baseFlowTypes },
+    ...internshipFilters(['dep_id', 'base_id', 'status', 'keyword']),
+  ];
 }
 
 function optionItems(items, valueKey, labelKey) {
@@ -6209,6 +7401,17 @@ function archiveStatusOptions() {
   ];
 }
 
+function inspectionResultOptions() {
+  return [
+    { value: 'pass', label: '通过' },
+    { value: 'fail', label: '不通过' },
+  ];
+}
+
+function inspectionResultText(value) {
+  return inspectionResultOptions().find(item => item.value === value)?.label || value || '-';
+}
+
 function delayConfigOptions() {
   return [
     { value: 'journal_deadline', label: '日志截止' },
@@ -6218,6 +7421,36 @@ function delayConfigOptions() {
 
 function delayConfigText(value) {
   return delayConfigOptions().find(item => item.value === value)?.label || value || '-';
+}
+
+function baseFlowTypeText(value) {
+  return baseFlowTypes.find(item => item.value === value)?.label || value || '基地流程';
+}
+
+function baseFlowDetailText(row) {
+  if (row.base_type) {
+    return row.base_type === 'fixed' ? '固定基地' : '实习点';
+  }
+  if (row.usage_type) {
+    return row.usage_type;
+  }
+  if (row.result_type) {
+    return row.result_type;
+  }
+  if (row.amount !== null && row.amount !== undefined && row.amount !== '') {
+    return `费用 ${row.amount}`;
+  }
+  return '-';
+}
+
+function markBaseFlowItems(data, flowType) {
+  return {
+    ...data,
+    items: (data.items || []).map(item => ({
+      ...item,
+      flow_type: flowType,
+    })),
+  };
 }
 
 async function handleInternshipHashAction(listKey, action, id) {
@@ -6349,6 +7582,22 @@ function openScoreDialog(row = null) {
   };
 }
 
+function openBaseFlowDialog(row = null) {
+  const form = emptyBaseFlowForm(row || {});
+  if (!row) {
+    form.base_id = internshipState.options.bases[0]?.id || null;
+    form.dep_id = defaultScopedFilters().dep_id || internshipState.options.departments[0]?.dep_id || null;
+    form.type = internshipState.filters.baseFlows.type || 'application';
+  }
+  internshipState.baseFlowForm = form;
+  internshipState.dialog = {
+    ...emptyOperationDialog(),
+    type: 'baseFlow',
+    title: `${row ? '编辑' : '新增'}${baseFlowTypeText(form.type)}`,
+    row,
+  };
+}
+
 function openReviewDialog(entity, row, status) {
   if (!canReviewRow(row, entity)) {
     internshipState.message = '仅待审核数据可处理';
@@ -6423,6 +7672,10 @@ async function confirmInternshipDialog() {
   }
   if (internshipState.dialog.type === 'score') {
     await saveScore();
+    return;
+  }
+  if (internshipState.dialog.type === 'baseFlow') {
+    await saveBaseFlow();
     return;
   }
   if (internshipState.dialog.type === 'review') {
@@ -6768,8 +8021,19 @@ async function loadInternshipPanel(panel = 'overview', page = 1) {
       setPagedList('applications', applications);
     } else if (panel === 'arrangements') {
       setPagedList('arrangements', await fetchInternshipArrangements(params('arrangements')));
+    } else if (panel === 'baseFlows') {
+      const flowType = internshipState.filters.baseFlows.type || 'application';
+      const data = await fetchInternshipBaseFlows({
+        ...params('baseFlows'),
+        type: flowType,
+      });
+      setPagedList('baseFlows', markBaseFlowItems(data, flowType));
     } else if (panel === 'plans') {
       setPagedList('plans', await fetchInternshipPlans(params('plans')));
+    } else if (panel === 'syllabusGuides') {
+      setPagedList('syllabusGuides', await fetchInternshipSyllabusGuides(params('syllabusGuides')));
+    } else if (panel === 'implementationSheets') {
+      setPagedList('implementationSheets', await fetchInternshipImplementationSheets(params('implementationSheets')));
     } else if (panel === 'applications') {
       setPagedList('applications', await fetchInternshipApplications(params('applications')));
     } else if (panel === 'pairs') {
@@ -6780,6 +8044,8 @@ async function loadInternshipPanel(panel = 'overview', page = 1) {
       setPagedList('journals', await fetchInternshipJournals(params('journals')));
     } else if (panel === 'reports') {
       setPagedList('reports', await fetchInternshipReports(params('reports')));
+    } else if (panel === 'teacherWorkReports') {
+      setPagedList('teacherWorkReports', await fetchInternshipTeacherWorkReports(params('teacherWorkReports')));
     } else if (panel === 'delays') {
       setPagedList('delays', await fetchInternshipDelays(params('delays')));
     } else if (panel === 'scores') {
@@ -6791,11 +8057,39 @@ async function loadInternshipPanel(panel = 'overview', page = 1) {
       setPagedList('pairs', pairs);
     } else if (panel === 'documents') {
       setPagedList('archiveMaterials', await fetchInternshipArchiveMaterials(params('archiveMaterials')));
+    } else if (panel === 'inspections') {
+      setPagedList('inspections', await fetchInternshipInspections(params('inspections')));
     } else if (panel === 'insurances') {
       setPagedList('insurances', await fetchInternshipInsurances(params('insurances')));
     } else if (panel === 'safetyLetters') {
       setPagedList('safetyLetters', await fetchInternshipSafetyLetters(params('safetyLetters')));
     }
+  } catch (error) {
+    internshipState.message = error.message;
+  } finally {
+    internshipState.loading = false;
+  }
+}
+
+async function saveBaseFlow() {
+  if (!canManageInternship.value) {
+    return;
+  }
+  if (!internshipState.baseFlowForm.base_id) {
+    internshipState.message = '请选择实习基地';
+    return;
+  }
+  internshipState.loading = true;
+  internshipState.message = '';
+  try {
+    await saveInternshipBaseFlow({
+      ...internshipState.baseFlowForm,
+      amount: numericOrNull(internshipState.baseFlowForm.amount),
+    });
+    internshipState.filters.baseFlows.type = internshipState.baseFlowForm.type;
+    internshipState.baseFlowForm = emptyBaseFlowForm();
+    closeInternshipDialog();
+    await loadInternshipPanel('baseFlows');
   } catch (error) {
     internshipState.message = error.message;
   } finally {
@@ -6871,7 +8165,7 @@ async function savePlan() {
   try {
     await saveInternshipPlan({
       dep_id: internshipState.planForm.dep_id,
-      semester: internshipState.planForm.semester,
+      semester: '',
       plan_content: {
         content: internshipState.planForm.content,
       },
@@ -7170,6 +8464,7 @@ function resetInternshipState() {
   internshipState.arrangementForm = emptyArrangementForm();
   internshipState.planForm = emptyPlanForm();
   internshipState.scoreForm = emptyScoreForm();
+  internshipState.baseFlowForm = emptyBaseFlowForm();
   Object.keys(internshipState.filters).forEach((key) => {
     internshipState.filters[key] = emptyInternshipFilters();
   });
@@ -7192,9 +8487,10 @@ function applyProfileData(data) {
 }
 
 function applyLoginPageData(data) {
-  loginPageState.school_code = data.school_code || '2184';
-  loginPageState.school_name = data.school_name || '成都锦城学院';
-  loginPageState.login_background_url = data.login_background_url || '';
+  const payload = data?.data && typeof data.data === 'object' ? data.data : data || {};
+  loginPageState.school_code = payload.school_code || '2184';
+  loginPageState.school_name = payload.school_name || '成都锦城学院';
+  loginPageState.login_background_url = payload.login_background_url || payload.url || '';
 }
 
 async function loadLoginPageSettings() {

@@ -6,6 +6,7 @@ use app\model\channel\ConfigGroup;
 use app\model\channel\ConfigItem;
 use app\server\CurrentContext;
 use InvalidArgumentException;
+use RuntimeException;
 
 class ConfigService
 {

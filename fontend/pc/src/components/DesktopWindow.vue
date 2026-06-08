@@ -59,7 +59,7 @@ const frame = reactive({
   height: props.initialHeight,
 });
 const interaction = ref(null);
-const baseMinFrame = { width: 860, height: 560 };
+const baseMinFrame = { width: 680, height: 500 };
 const maximized = ref(false);
 const restoreFrame = ref(null);
 

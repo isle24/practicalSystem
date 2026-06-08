@@ -32,6 +32,16 @@ class InternshipController
         return $this->handle(fn (): array => $this->service()->saveBase($request));
     }
 
+    public function baseFlows(Request $request): Response
+    {
+        return $this->handle(fn (): array => $this->service()->baseFlows($request));
+    }
+
+    public function saveBaseFlow(Request $request): Response
+    {
+        return $this->handle(fn (): array => $this->service()->saveBaseFlow($request));
+    }
+
     public function mentors(Request $request): Response
     {
         return $this->handle(fn (): array => $this->service()->mentors($request));

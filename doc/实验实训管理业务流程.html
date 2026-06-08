@@ -1,0 +1,1307 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>实验实训管理业务流程</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: "Microsoft YaHei", "微软雅黑", "SimSun", "宋体", Arial, sans-serif;
+            line-height: 1.8;
+            color: #333;
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 40px;
+            border-radius: 10px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+        }
+
+        /* 标题样式 */
+        h1 {
+            color: #1e3a8a;
+            border-bottom: 3px solid #3b82f6;
+            padding-bottom: 15px;
+            margin-bottom: 30px;
+            font-size: 32px;
+            text-align: center;
+        }
+
+        h2 {
+            color: #1e40af;
+            margin-top: 40px;
+            margin-bottom: 20px;
+            padding-left: 15px;
+            border-left: 5px solid #3b82f6;
+            font-size: 24px;
+        }
+
+        h3 {
+            color: #2563eb;
+            margin-top: 30px;
+            margin-bottom: 15px;
+            font-size: 20px;
+        }
+
+        h4 {
+            color: #3b82f6;
+            margin-top: 20px;
+            margin-bottom: 10px;
+            font-size: 18px;
+        }
+
+        /* 文档信息 */
+        .doc-info {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 25px;
+            border-radius: 10px;
+            margin-bottom: 30px;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .doc-info h3 {
+            color: white;
+            margin: 0 0 15px 0;
+            border: none;
+            padding: 0;
+        }
+
+        .doc-info p {
+            margin: 8px 0;
+            font-size: 15px;
+        }
+
+        .doc-info strong {
+            color: #fbbf24;
+        }
+
+        /* 分隔线 */
+        hr {
+            border: none;
+            height: 2px;
+            background: linear-gradient(to right, transparent, #3b82f6, transparent);
+            margin: 30px 0;
+        }
+
+        /* 表格样式 */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        thead {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        th, td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+        th {
+            font-weight: 600;
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        tbody tr {
+            transition: background 0.3s;
+        }
+
+        tbody tr:hover {
+            background: #f3f4f6;
+        }
+
+        tbody tr:nth-child(even) {
+            background: #f9fafb;
+        }
+
+        tbody tr:nth-child(even):hover {
+            background: #f3f4f6;
+        }
+
+        /* 流程图样式 */
+        .flowchart {
+            background: #f8fafc;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+            font-family: "Courier New", monospace;
+            line-height: 1.6;
+            overflow-x: auto;
+            white-space: pre;
+            font-size: 14px;
+        }
+
+        /* 业务规则 */
+        .business-rules {
+            background: #fef3c7;
+            border-left: 4px solid #f59e0b;
+            padding: 15px 20px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+
+        .business-rules h4 {
+            color: #92400e;
+            margin-top: 0;
+            margin-bottom: 10px;
+        }
+
+        .business-rules ol, .business-rules ul {
+            margin-left: 20px;
+        }
+
+        .business-rules li {
+            margin: 8px 0;
+            color: #78350f;
+        }
+
+        /* 目录导航 */
+        .toc {
+            background: #eff6ff;
+            border: 2px solid #bfdbfe;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+
+        .toc h3 {
+            color: #1e40af;
+            margin-top: 0;
+        }
+
+        .toc ul {
+            list-style: none;
+            padding-left: 0;
+        }
+
+        .toc li {
+            padding: 8px 0;
+            padding-left: 20px;
+            position: relative;
+        }
+
+        .toc li:before {
+            content: "▸";
+            position: absolute;
+            left: 0;
+            color: #3b82f6;
+        }
+
+        .toc a {
+            color: #2563eb;
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        .toc a:hover {
+            color: #1d4ed8;
+            text-decoration: underline;
+        }
+
+        /* 审批签字栏 */
+        .signature-table {
+            margin: 30px 0;
+        }
+
+        .signature-table td {
+            height: 50px;
+            vertical-align: bottom;
+        }
+
+        /* 备注框 */
+        .note {
+            background: #e0f2fe;
+            border-left: 4px solid #0288d1;
+            padding: 15px 20px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+
+        .note p {
+            margin: 5px 0;
+            color: #01579b;
+        }
+
+        /* 打印样式 */
+        @media print {
+            body {
+                background: white;
+                padding: 0;
+            }
+
+            .container {
+                box-shadow: none;
+                padding: 20px;
+            }
+
+            .toc {
+                break-inside: avoid;
+            }
+
+            table {
+                break-inside: avoid;
+            }
+        }
+
+        /* 响应式 */
+        @media (max-width: 768px) {
+            .container {
+                padding: 20px;
+            }
+
+            h1 {
+                font-size: 24px;
+            }
+
+            h2 {
+                font-size: 20px;
+            }
+
+            table {
+                font-size: 14px;
+            }
+
+            th, td {
+                padding: 8px 10px;
+            }
+        }
+
+        /* 步骤表格特殊样式 */
+        .step-table {
+            counter-reset: step-counter;
+        }
+
+        /* 高亮重要信息 */
+        strong {
+            color: #1e40af;
+        }
+
+        /* 列表样式 */
+        ul, ol {
+            margin: 15px 0;
+            padding-left: 30px;
+        }
+
+        li {
+            margin: 8px 0;
+        }
+
+        /* 页脚 */
+        .footer {
+            text-align: center;
+            margin-top: 50px;
+            padding-top: 20px;
+            border-top: 2px solid #e5e7eb;
+            color: #6b7280;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>实验实训管理业务流程</h1>
+
+        <!-- 文档信息 -->
+        <div class="doc-info">
+            <h3>📄 文档信息</h3>
+            <p><strong>文档名称：</strong>实验实训管理业务流程</p>
+            <p><strong>版本号：</strong>V1.0</p>
+            <p><strong>编制日期：</strong>2026年6月5日</p>
+            <p><strong>适用系统：</strong>实验实训管理系统</p>
+            <p><strong>编制单位：</strong>教务处</p>
+        </div>
+
+        <hr>
+
+        <!-- 目录 -->
+        <div class="toc">
+            <h3>📑 目录</h3>
+            <ul>
+                <li><a href="#overview">一、流程概述</a></li>
+                <li><a href="#process-detail">二、业务流程详细说明书</a>
+                    <ul>
+                        <li><a href="#process-2-1">2.1 实验实训教学计划流程</a></li>
+                        <li><a href="#process-2-2">2.2 实验实训课表安排流程</a></li>
+                        <li><a href="#process-2-3">2.3 大纲编写流程</a></li>
+                        <li><a href="#process-2-4">2.4 教案编写流程</a></li>
+                        <li><a href="#process-2-5">2.5 成绩评定流程</a></li>
+                        <li><a href="#process-2-6">2.6 反思报告撰写流程</a></li>
+                    </ul>
+                </li>
+                <li><a href="#system-requirements">三、系统功能需求</a></li>
+                <li><a href="#non-functional">四、非功能性需求</a></li>
+                <li><a href="#appendix">五、附录</a></li>
+                <li><a href="#maintenance">六、文档维护记录</a></li>
+            </ul>
+        </div>
+
+        <!-- 一、流程概述 -->
+        <section id="overview">
+            <h2>一、流程概述</h2>
+
+            <h3>1.1 流程目的</h3>
+            <p>规范实验实训教学全过程管理，实现从教学计划制定到教学反思的全流程信息化管理，提高实验实训教学质量和管理效率。</p>
+
+            <h3>1.2 适用范围</h3>
+            <p>适用于全校各专业实验实训课程的教学计划、课表安排、大纲编写、教案编写、成绩评定和反思报告等全过程管理。</p>
+
+            <h3>1.3 主要角色</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>角色</th>
+                        <th>职责</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>任课教师</strong></td>
+                        <td>填写教学计划、编写大纲和教案、录入成绩、撰写反思报告</td>
+                    </tr>
+                    <tr>
+                        <td><strong>系主任</strong></td>
+                        <td>审核教学计划、大纲、教案</td>
+                    </tr>
+                    <tr>
+                        <td><strong>学院教务科</strong></td>
+                        <td>审核教学计划</td>
+                    </tr>
+                    <tr>
+                        <td><strong>学院主管院长</strong></td>
+                        <td>审核教学计划、大纲、教案</td>
+                    </tr>
+                    <tr>
+                        <td><strong>教务处</strong></td>
+                        <td>审核教学计划</td>
+                    </tr>
+                    <tr>
+                        <td><strong>教务处领导</strong></td>
+                        <td>审核教学计划</td>
+                    </tr>
+                    <tr>
+                        <td><strong>系统管理员</strong></td>
+                        <td>维护系统、数据对接</td>
+                    </tr>
+                </tbody>
+            </table>
+        </section>
+
+        <hr>
+
+        <!-- 二、业务流程详细说明书 -->
+        <section id="process-detail">
+            <h2>二、业务流程详细说明书</h2>
+
+            <!-- 2.1 实验实训教学计划流程 -->
+            <section id="process-2-1">
+                <h3>2.1 实验实训教学计划流程</h3>
+
+                <h4>流程说明</h4>
+                <p>实验实训教学计划是实验实训教学的基础，需要经过多级审核确保教学计划的科学性和可行性。</p>
+
+                <h4>流程图</h4>
+                <div class="flowchart">开始
+  ↓
+教务管理系统拉取基础数据 或 教师手动填写教学计划
+  ↓
+教师提交教学计划
+  ↓
+系主任审核 → 不通过 → 返回教师修改
+  ↓ 通过
+学院教务科审核 → 不通过 → 返回教师修改
+  ↓ 通过
+学院主管院长审核 → 不通过 → 返回教师修改
+  ↓ 通过
+教务处审核 → 不通过 → 返回教师修改
+  ↓ 通过
+教务处领导审核 → 不通过 → 返回教师修改
+  ↓ 通过
+教学计划审核通过，流程结束</div>
+
+                <h4>详细步骤</h4>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>步骤</th>
+                            <th>操作角色</th>
+                            <th>操作内容</th>
+                            <th>操作说明</th>
+                            <th>输出物</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>1</strong></td>
+                            <td>教师</td>
+                            <td>创建教学计划</td>
+                            <td>1. 从教务管理系统拉取课程基础信息<br>2. 或手动填写教学计划信息<br>3. 填写教学内容、教学目标、教学安排等</td>
+                            <td>教学计划草稿</td>
+                        </tr>
+                        <tr>
+                            <td><strong>2</strong></td>
+                            <td>教师</td>
+                            <td>提交审核</td>
+                            <td>确认信息无误后提交审核</td>
+                            <td>待审核的教学计划</td>
+                        </tr>
+                        <tr>
+                            <td><strong>3</strong></td>
+                            <td>系主任</td>
+                            <td>审核教学计划</td>
+                            <td>1. 查看教学计划详情<br>2. 审核教学内容的合理性<br>3. 填写审核意见<br>4. 点击"通过"或"不通过"</td>
+                            <td>审核意见</td>
+                        </tr>
+                        <tr>
+                            <td><strong>4</strong></td>
+                            <td>学院教务科</td>
+                            <td>审核教学计划</td>
+                            <td>1. 查看教学计划和系主任审核意见<br>2. 审核教学安排的合理性<br>3. 填写审核意见</td>
+                            <td>审核意见</td>
+                        </tr>
+                        <tr>
+                            <td><strong>5</strong></td>
+                            <td>学院主管院长</td>
+                            <td>审核教学计划</td>
+                            <td>1. 查看教学计划和前两级审核意见<br>2. 审核教学资源的配置<br>3. 填写审核意见</td>
+                            <td>审核意见</td>
+                        </tr>
+                        <tr>
+                            <td><strong>6</strong></td>
+                            <td>教务处</td>
+                            <td>审核教学计划</td>
+                            <td>1. 查看教学计划和前三级审核意见<br>2. 审核全校教学安排的协调性<br>3. 填写审核意见</td>
+                            <td>审核意见</td>
+                        </tr>
+                        <tr>
+                            <td><strong>7</strong></td>
+                            <td>教务处领导</td>
+                            <td>终审</td>
+                            <td>1. 查看教学计划和前四级审核意见<br>2. 最终审批<br>3. 填写审核意见</td>
+                            <td>终审意见</td>
+                        </tr>
+                        <tr>
+                            <td><strong>8</strong></td>
+                            <td>系统</td>
+                            <td>通知结果</td>
+                            <td>1. 审核通过后，系统自动通知教师<br>2. 审核不通过，系统通知教师修改</td>
+                            <td>通知消息</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <div class="business-rules">
+                    <h4>⚙️ 业务规则</h4>
+                    <ol>
+                        <li><strong>数据来源</strong>：教学计划基础数据优先从教务管理系统拉取，确保数据一致性</li>
+                        <li><strong>审核机制</strong>：采用多级审核机制，前一环节不通过，后续环节不可见</li>
+                        <li><strong>修改机制</strong>：审核不通过时，教师可根据审核意见修改后重新提交</li>
+                        <li><strong>时间要求</strong>：教学计划应在学期开始前2周完成审核</li>
+                    </ol>
+                </div>
+            </section>
+
+            <hr>
+
+            <!-- 2.2 实验实训课表安排流程 -->
+            <section id="process-2-2">
+                <h3>2.2 实验实训课表安排流程</h3>
+
+                <h4>流程说明</h4>
+                <p>实验实训课表安排包括校内实验实训室安排和校外实训基地安排，需要确保场地、时间、人员的合理匹配。</p>
+
+                <h4>流程图</h4>
+                <div class="flowchart">开始
+  ↓
+选择安排类型：校内安排 或 校外安排
+  ↓
+【校内安排】                【校外安排】
+  ↓                          ↓
+校内实验实训室录入        校外实训基地安排
+（可拉取教务系统数据）    （时间、地点、学生）
+  ↓                          ↓
+查看校内可用场地          查看校外基地信息
+  ↓                          ↓
+选择场地和时间            选择基地和时间
+  ↓                          ↓
+安排学生名单              安排学生名单
+（拉取教务系统数据）      （拉取教务系统数据）
+  ↓                          ↓
+课表安排完成              课表安排完成
+  ↓                          ↓
+生成课表                   生成课表
+  ↓
+打印签到册
+  ↓
+课表安排结束</div>
+
+                <h4>详细步骤</h4>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>步骤</th>
+                            <th>操作角色</th>
+                            <th>操作内容</th>
+                            <th>操作说明</th>
+                            <th>输出物</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>1</strong></td>
+                            <td>教务管理员</td>
+                            <td>选择安排类型</td>
+                            <td>根据课程性质选择校内安排或校外安排</td>
+                            <td>安排类型选择结果</td>
+                        </tr>
+                        <tr>
+                            <td><strong>2</strong></td>
+                            <td>教务管理员</td>
+                            <td>录入场地信息</td>
+                            <td>1. 校内：从教务系统拉取或手动录入实验实训室信息<br>2. 校外：选择已备案的校外实训基地</td>
+                            <td>场地信息</td>
+                        </tr>
+                        <tr>
+                            <td><strong>3</strong></td>
+                            <td>教务管理员</td>
+                            <td>安排时间</td>
+                            <td>1. 查看场地可用时间<br>2. 安排上课时间，避免时间冲突</td>
+                            <td>时间安排表</td>
+                        </tr>
+                        <tr>
+                            <td><strong>4</strong></td>
+                            <td>教务管理员</td>
+                            <td>安排学生</td>
+                            <td>1. 从教务系统拉取选课学生名单<br>2. 确认学生名单无误</td>
+                            <td>学生名单</td>
+                        </tr>
+                        <tr>
+                            <td><strong>5</strong></td>
+                            <td>系统</td>
+                            <td>冲突检测</td>
+                            <td>1. 检测场地时间冲突<br>2. 检测学生时间冲突<br>3. 检测教师时间冲突</td>
+                            <td>冲突检测报告</td>
+                        </tr>
+                        <tr>
+                            <td><strong>6</strong></td>
+                            <td>教务管理员</td>
+                            <td>调整安排</td>
+                            <td>根据冲突检测结果调整安排</td>
+                            <td>调整后的课表</td>
+                        </tr>
+                        <tr>
+                            <td><strong>7</strong></td>
+                            <td>系统</td>
+                            <td>生成课表</td>
+                            <td>1. 生成实验实训课表<br>2. 生成签到册</td>
+                            <td>课表、签到册</td>
+                        </tr>
+                        <tr>
+                            <td><strong>8</strong></td>
+                            <td>教务管理员</td>
+                            <td>打印签到册</td>
+                            <td>打印纸质签到册用于课堂签到</td>
+                            <td>纸质签到册</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <div class="business-rules">
+                    <h4>⚙️ 业务规则</h4>
+                    <ol>
+                        <li><strong>数据同步</strong>：校内实验实训室信息优先从教务系统拉取，确保数据实时性</li>
+                        <li><strong>冲突检测</strong>：系统自动检测场地、时间、人员的冲突，避免重复安排</li>
+                        <li><strong>校外基地管理</strong>：校外实训基地需提前在系统中备案，包括基地信息、联系人、合作协议等</li>
+                        <li><strong>签到册打印</strong>：系统支持批量打印签到册，方便课堂管理</li>
+                    </ol>
+                </div>
+            </section>
+
+            <hr>
+
+            <!-- 2.3 大纲编写流程 -->
+            <section id="process-2-3">
+                <h3>2.3 大纲编写流程</h3>
+
+                <h4>流程说明</h4>
+                <p>实验实训教学大纲是指导实验实训教学的重要文件，需要明确教学目标、教学内容、考核方式等。</p>
+
+                <h4>流程图</h4>
+                <div class="flowchart">开始
+  ↓
+任课教师编写教学大纲
+  ↓
+提交审核
+  ↓
+系主任审核 → 不通过 → 返回教师修改
+  ↓ 通过
+学院分管院长审核 → 不通过 → 返回教师修改
+  ↓ 通过
+大纲审核通过，归档保存
+  ↓
+流程结束</div>
+
+                <h4>详细步骤</h4>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>步骤</th>
+                            <th>操作角色</th>
+                            <th>操作内容</th>
+                            <th>操作说明</th>
+                            <th>输出物</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>1</strong></td>
+                            <td>任课教师</td>
+                            <td>编写教学大纲</td>
+                            <td>1. 填写课程基本信息<br>2. 编写教学目标<br>3. 编写教学内容与学时分配<br>4. 编写考核方式与成绩评定<br>5. 编写教材与参考资料</td>
+                            <td>教学大纲草稿</td>
+                        </tr>
+                        <tr>
+                            <td><strong>2</strong></td>
+                            <td>任课教师</td>
+                            <td>提交审核</td>
+                            <td>确认大纲内容无误后提交审核</td>
+                            <td>待审核的教学大纲</td>
+                        </tr>
+                        <tr>
+                            <td><strong>3</strong></td>
+                            <td>系主任</td>
+                            <td>审核大纲</td>
+                            <td>1. 查看教学大纲<br>2. 审核教学目标的合理性<br>3. 审核教学内容的完整性<br>4. 填写审核意见</td>
+                            <td>审核意见</td>
+                        </tr>
+                        <tr>
+                            <td><strong>4</strong></td>
+                            <td>学院分管院长</td>
+                            <td>终审</td>
+                            <td>1. 查看教学大纲和系主任审核意见<br>2. 最终审批<br>3. 填写审核意见</td>
+                            <td>终审意见</td>
+                        </tr>
+                        <tr>
+                            <td><strong>5</strong></td>
+                            <td>系统</td>
+                            <td>归档保存</td>
+                            <td>审核通过后，系统自动归档保存教学大纲</td>
+                            <td>归档的教学大纲</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <div class="business-rules">
+                    <h4>⚙️ 业务规则</h4>
+                    <ol>
+                        <li><strong>大纲模板</strong>：系统提供标准的大纲模板，教师可按模板填写</li>
+                        <li><strong>版本管理</strong>：系统支持大纲版本管理，记录每次修改历史</li>
+                        <li><strong>审核机制</strong>：采用两级审核机制，确保大纲质量</li>
+                        <li><strong>归档要求</strong>：审核通过的大纲需归档保存，作为教学检查的依据</li>
+                    </ol>
+                </div>
+            </section>
+
+            <hr>
+
+            <!-- 2.4 教案编写流程 -->
+            <section id="process-2-4">
+                <h3>2.4 教案编写流程</h3>
+
+                <h4>流程说明</h4>
+                <p>实验实训教案是每次实验实训课程的详细教学方案，需要明确教学目标、教学步骤、教学方法等。</p>
+
+                <h4>流程图</h4>
+                <div class="flowchart">开始
+  ↓
+任课教师编写教案
+  ↓
+提交审核
+  ↓
+系主任审核 → 不通过 → 返回教师修改
+  ↓ 通过
+学院分管院长审核 → 不通过 → 返回教师修改
+  ↓ 通过
+教案审核通过，归档保存
+  ↓
+流程结束</div>
+
+                <h4>详细步骤</h4>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>步骤</th>
+                            <th>操作角色</th>
+                            <th>操作内容</th>
+                            <th>操作说明</th>
+                            <th>输出物</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>1</strong></td>
+                            <td>任课教师</td>
+                            <td>编写教案</td>
+                            <td>1. 选择对应的教学大纲<br>2. 填写本次实验实训的教学目标<br>3. 编写教学步骤与教学方法<br>4. 编写教学重点与难点<br>5. 准备教学器材与耗材</td>
+                            <td>教案草稿</td>
+                        </tr>
+                        <tr>
+                            <td><strong>2</strong></td>
+                            <td>任课教师</td>
+                            <td>提交审核</td>
+                            <td>确认教案内容无误后提交审核</td>
+                            <td>待审核的教案</td>
+                        </tr>
+                        <tr>
+                            <td><strong>3</strong></td>
+                            <td>系主任</td>
+                            <td>审核教案</td>
+                            <td>1. 查看教案<br>2. 审核教学步骤的合理性<br>3. 审核教学方法的适用性<br>4. 填写审核意见</td>
+                            <td>审核意见</td>
+                        </tr>
+                        <tr>
+                            <td><strong>4</strong></td>
+                            <td>学院分管院长</td>
+                            <td>终审</td>
+                            <td>1. 查看教案和系主任审核意见<br>2. 最终审批<br>3. 填写审核意见</td>
+                            <td>终审意见</td>
+                        </tr>
+                        <tr>
+                            <td><strong>5</strong></td>
+                            <td>系统</td>
+                            <td>归档保存</td>
+                            <td>审核通过后，系统自动归档保存教案</td>
+                            <td>归档的教案</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <div class="business-rules">
+                    <h4>⚙️ 业务规则</h4>
+                    <ol>
+                        <li><strong>教案模板</strong>：系统提供标准的教案模板，教师可按模板填写</li>
+                        <li><strong>关联大纲</strong>：教案需关联对应的教学大纲，确保教学内容一致</li>
+                        <li><strong>审核机制</strong>：采用两级审核机制，确保教案质量</li>
+                        <li><strong>复用机制</strong>：系统支持教案复用，相似课程可参考以往教案</li>
+                    </ol>
+                </div>
+            </section>
+
+            <hr>
+
+            <!-- 2.5 成绩评定流程 -->
+            <section id="process-2-5">
+                <h3>2.5 成绩评定流程</h3>
+
+                <h4>流程说明</h4>
+                <p>实验实训成绩评定需要设定合理的成绩比例，确保成绩评定的公平性和科学性。</p>
+
+                <h4>流程图</h4>
+                <div class="flowchart">开始
+  ↓
+设定成绩比例
+  ↓
+录入成绩
+  ↓
+提交成绩
+  ↓
+成绩统计与分析
+  ↓
+流程结束</div>
+
+                <h4>详细步骤</h4>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>步骤</th>
+                            <th>操作角色</th>
+                            <th>操作内容</th>
+                            <th>操作说明</th>
+                            <th>输出物</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>1</strong></td>
+                            <td>任课教师</td>
+                            <td>设定成绩比例</td>
+                            <td>1. 根据教学大纲设定成绩构成<br>2. 设定各部分成绩比例（如平时成绩30%、实验报告30%、期末考核40%）<br>3. 提交成绩比例设定</td>
+                            <td>成绩比例设定方案</td>
+                        </tr>
+                        <tr>
+                            <td><strong>2</strong></td>
+                            <td>系主任</td>
+                            <td>审核成绩比例</td>
+                            <td>审核成绩比例的合理性</td>
+                            <td>审核意见</td>
+                        </tr>
+                        <tr>
+                            <td><strong>3</strong></td>
+                            <td>任课教师</td>
+                            <td>录入成绩</td>
+                            <td>1. 根据成绩比例录入学生各项成绩<br>2. 系统自动计算总评成绩</td>
+                            <td>学生成绩表</td>
+                        </tr>
+                        <tr>
+                            <td><strong>4</strong></td>
+                            <td>任课教师</td>
+                            <td>提交成绩</td>
+                            <td>确认成绩无误后提交</td>
+                            <td>待审核的成绩</td>
+                        </tr>
+                        <tr>
+                            <td><strong>5</strong></td>
+                            <td>系主任</td>
+                            <td>审核成绩</td>
+                            <td>1. 查看学生成绩分布<br>2. 审核成绩的合理性<br>3. 填写审核意见</td>
+                            <td>审核意见</td>
+                        </tr>
+                        <tr>
+                            <td><strong>6</strong></td>
+                            <td>系统</td>
+                            <td>成绩统计</td>
+                            <td>1. 统计成绩分布情况<br>2. 生成成绩分析报表<br>3. 导出成绩数据</td>
+                            <td>成绩统计报表</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <div class="business-rules">
+                    <h4>⚙️ 业务规则</h4>
+                    <ol>
+                        <li><strong>成绩比例设定</strong>：成绩比例需符合教学大纲要求，并经系主任审核</li>
+                        <li><strong>成绩录入</strong>：系统支持批量导入成绩，也支持手动录入</li>
+                        <li><strong>成绩提交</strong>：成绩提交后不可随意修改，如需修改需经系主任审批</li>
+                        <li><strong>成绩统计</strong>：系统自动生成成绩统计分析报表，包括平均分、及格率、分布图等</li>
+                    </ol>
+                </div>
+            </section>
+
+            <hr>
+
+            <!-- 2.6 反思报告撰写流程 -->
+            <section id="process-2-6">
+                <h3>2.6 反思报告撰写流程</h3>
+
+                <h4>流程说明</h4>
+                <p>实验实训反思报告是教师对实验实训教学过程的总结和反思，用于改进教学质量。</p>
+
+                <h4>流程图</h4>
+                <div class="flowchart">开始
+  ↓
+任课教师撰写反思报告
+  ↓
+提交反思报告
+  ↓
+系统归档保存
+  ↓
+反思报告分享与交流
+  ↓
+流程结束</div>
+
+                <h4>详细步骤</h4>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>步骤</th>
+                            <th>操作角色</th>
+                            <th>操作内容</th>
+                            <th>操作说明</th>
+                            <th>输出物</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>1</strong></td>
+                            <td>任课教师</td>
+                            <td>撰写反思报告</td>
+                            <td>1. 总结教学过程中的优点<br>2. 分析教学过程中的问题<br>3. 提出改进措施和建议<br>4. 填写反思报告</td>
+                            <td>反思报告草稿</td>
+                        </tr>
+                        <tr>
+                            <td><strong>2</strong></td>
+                            <td>任课教师</td>
+                            <td>提交反思报告</td>
+                            <td>确认反思报告内容无误后提交</td>
+                            <td>反思报告</td>
+                        </tr>
+                        <tr>
+                            <td><strong>3</strong></td>
+                            <td>系统</td>
+                            <td>归档保存</td>
+                            <td>系统自动归档保存反思报告</td>
+                            <td>归档的反思报告</td>
+                        </tr>
+                        <tr>
+                            <td><strong>4</strong></td>
+                            <td>教务管理员</td>
+                            <td>分享与交流</td>
+                            <td>1. 选择优秀的反思报告进行分享<br>2. 组织教师进行教学反思交流活动</td>
+                            <td>分享记录</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <div class="business-rules">
+                    <h4>⚙️ 业务规则</h4>
+                    <ol>
+                        <li><strong>反思报告模板</strong>：系统提供标准的反思报告模板，教师可按模板填写</li>
+                        <li><strong>提交时间</strong>：反思报告应在课程结束后1周内提交</li>
+                        <li><strong>分享机制</strong>：系统支持反思报告分享，促进教师间的交流学习</li>
+                        <li><strong>归档要求</strong>：反思报告需归档保存，作为教学评估的依据</li>
+                    </ol>
+                </div>
+            </section>
+        </section>
+
+        <hr>
+
+        <!-- 三、系统功能需求 -->
+        <section id="system-requirements">
+            <h2>三、系统功能需求</h2>
+
+            <h3>3.1 功能模块划分</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>模块名称</th>
+                        <th>主要功能</th>
+                        <th>涉及角色</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>教学计划管理</strong></td>
+                        <td>教学计划创建、审核、查询、统计</td>
+                        <td>教师、系主任、教务科、院长、教务处</td>
+                    </tr>
+                    <tr>
+                        <td><strong>课表安排管理</strong></td>
+                        <td>课表安排、冲突检测、打印签到册</td>
+                        <td>教务管理员</td>
+                    </tr>
+                    <tr>
+                        <td><strong>大纲管理</strong></td>
+                        <td>大纲编写、审核、归档、查询</td>
+                        <td>教师、系主任、院长</td>
+                    </tr>
+                    <tr>
+                        <td><strong>教案管理</strong></td>
+                        <td>教案编写、审核、归档、查询</td>
+                        <td>教师、系主任、院长</td>
+                    </tr>
+                    <tr>
+                        <td><strong>成绩管理</strong></td>
+                        <td>成绩比例设定、成绩录入、成绩提交、成绩统计</td>
+                        <td>教师、系主任</td>
+                    </tr>
+                    <tr>
+                        <td><strong>反思报告管理</strong></td>
+                        <td>反思报告撰写、提交、归档、分享</td>
+                        <td>教师、教务管理员</td>
+                    </tr>
+                    <tr>
+                        <td><strong>系统管理</strong></td>
+                        <td>数据对接、用户管理、权限管理、日志管理</td>
+                        <td>系统管理员</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h3>3.2 数据对接需求</h3>
+            <ol>
+                <li><strong>教务管理系统对接</strong>：
+                    <ul>
+                        <li>拉取课程基础信息</li>
+                        <li>拉取教师信息</li>
+                        <li>拉取学生选课信息</li>
+                        <li>拉取教室和实验室信息</li>
+                    </ul>
+                </li>
+                <li><strong>数据同步机制</strong>：
+                    <ul>
+                        <li>实时同步：关键数据变化时实时同步</li>
+                        <li>定时同步：每天定时同步基础数据</li>
+                        <li>手动同步：支持手动触发数据同步</li>
+                    </ul>
+                </li>
+            </ol>
+        </section>
+
+        <hr>
+
+        <!-- 四、非功能性需求 -->
+        <section id="non-functional">
+            <h2>四、非功能性需求</h2>
+
+            <h3>4.1 性能需求</h3>
+            <ul>
+                <li>系统响应时间：普通操作≤2秒，复杂查询≤5秒</li>
+                <li>并发用户数：支持至少500用户同时在线</li>
+                <li>数据存储：支持至少5年的数据存储</li>
+            </ul>
+
+            <h3>4.2 安全需求</h3>
+            <ul>
+                <li>用户认证：支持统一身份认证</li>
+                <li>权限控制：基于角色的权限控制</li>
+                <li>数据加密：敏感数据加密存储</li>
+                <li>操作日志：记录所有关键操作</li>
+            </ul>
+
+            <h3>4.3 可用性需求</h3>
+            <ul>
+                <li>系统可用性：≥99.5%</li>
+                <li>数据备份：每天自动备份</li>
+                <li>故障恢复：支持快速故障恢复</li>
+            </ul>
+        </section>
+
+        <hr>
+
+        <!-- 五、附录 -->
+        <section id="appendix">
+            <h2>五、附录</h2>
+
+            <h3>附录A：流程清单</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>流程编号</th>
+                        <th>流程名称</th>
+                        <th>主要角色</th>
+                        <th>关键输出</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>BP-01</strong></td>
+                        <td>实验实训教学计划流程</td>
+                        <td>教师、系主任、教务科、院长、教务处</td>
+                        <td>审核通过的教学计划</td>
+                    </tr>
+                    <tr>
+                        <td><strong>BP-02</strong></td>
+                        <td>实验实训课表安排流程</td>
+                        <td>教务管理员</td>
+                        <td>实验实训课表、签到册</td>
+                    </tr>
+                    <tr>
+                        <td><strong>BP-03</strong></td>
+                        <td>大纲编写流程</td>
+                        <td>教师、系主任、院长</td>
+                        <td>审核通过的教学大纲</td>
+                    </tr>
+                    <tr>
+                        <td><strong>BP-04</strong></td>
+                        <td>教案编写流程</td>
+                        <td>教师、系主任、院长</td>
+                        <td>审核通过的教案</td>
+                    </tr>
+                    <tr>
+                        <td><strong>BP-05</strong></td>
+                        <td>成绩评定流程</td>
+                        <td>教师、系主任</td>
+                        <td>学生成绩表、成绩统计报表</td>
+                    </tr>
+                    <tr>
+                        <td><strong>BP-06</strong></td>
+                        <td>反思报告撰写流程</td>
+                        <td>教师、教务管理员</td>
+                        <td>反思报告</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h3>附录B：角色权限矩阵</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>功能模块</th>
+                        <th>教师</th>
+                        <th>系主任</th>
+                        <th>教务科</th>
+                        <th>学院主管院长</th>
+                        <th>教务处</th>
+                        <th>教务处领导</th>
+                        <th>教务管理员</th>
+                        <th>系统管理员</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>教学计划管理</strong></td>
+                        <td>创建、提交</td>
+                        <td>审核</td>
+                        <td>审核</td>
+                        <td>审核</td>
+                        <td>审核</td>
+                        <td>终审</td>
+                        <td>查看</td>
+                        <td>管理</td>
+                    </tr>
+                    <tr>
+                        <td><strong>课表安排管理</strong></td>
+                        <td>查看</td>
+                        <td>查看</td>
+                        <td>查看</td>
+                        <td>查看</td>
+                        <td>查看</td>
+                        <td>查看</td>
+                        <td>操作</td>
+                        <td>管理</td>
+                    </tr>
+                    <tr>
+                        <td><strong>大纲管理</strong></td>
+                        <td>创建、提交</td>
+                        <td>审核</td>
+                        <td>-</td>
+                        <td>审核</td>
+                        <td>-</td>
+                        <td>-</td>
+                        <td>查看</td>
+                        <td>管理</td>
+                    </tr>
+                    <tr>
+                        <td><strong>教案管理</strong></td>
+                        <td>创建、提交</td>
+                        <td>审核</td>
+                        <td>-</td>
+                        <td>审核</td>
+                        <td>-</td>
+                        <td>-</td>
+                        <td>查看</td>
+                        <td>管理</td>
+                    </tr>
+                    <tr>
+                        <td><strong>成绩管理</strong></td>
+                        <td>录入、提交</td>
+                        <td>审核</td>
+                        <td>-</td>
+                        <td>-</td>
+                        <td>-</td>
+                        <td>-</td>
+                        <td>查看</td>
+                        <td>管理</td>
+                    </tr>
+                    <tr>
+                        <td><strong>反思报告管理</strong></td>
+                        <td>创建、提交</td>
+                        <td>查看</td>
+                        <td>-</td>
+                        <td>查看</td>
+                        <td>-</td>
+                        <td>-</td>
+                        <td>分享</td>
+                        <td>管理</td>
+                    </tr>
+                    <tr>
+                        <td><strong>系统管理</strong></td>
+                        <td>-</td>
+                        <td>-</td>
+                        <td>-</td>
+                        <td>-</td>
+                        <td>-</td>
+                        <td>-</td>
+                        <td>-</td>
+                        <td>全部权限</td>
+                    </tr>
+                </tbody>
+            </table>
+        </section>
+
+        <hr>
+
+        <!-- 六、文档维护记录 -->
+        <section id="maintenance">
+            <h2>六、文档维护记录</h2>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th>版本号</th>
+                        <th>修改日期</th>
+                        <th>修改内容</th>
+                        <th>修改人</th>
+                        <th>审核人</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>V1.0</strong></td>
+                        <td>2026-06-05</td>
+                        <td>初始版本创建</td>
+                        <td>教务处</td>
+                        <td>-</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h3>审批签字</h3>
+            <table class="signature-table">
+                <thead>
+                    <tr>
+                        <th>审批角色</th>
+                        <th>姓名</th>
+                        <th>签字</th>
+                        <th>日期</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>编制人</strong></td>
+                        <td>&nbsp;</td>
+                        <td>&nbsp;</td>
+                        <td>&nbsp;</td>
+                    </tr>
+                    <tr>
+                        <td><strong>审核人</strong></td>
+                        <td>&nbsp;</td>
+                        <td>&nbsp;</td>
+                        <td>&nbsp;</td>
+                    </tr>
+                    <tr>
+                        <td><strong>批准人</strong></td>
+                        <td>&nbsp;</td>
+                        <td>&nbsp;</td>
+                        <td>&nbsp;</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <div class="note">
+                <p><strong>备注</strong>：</p>
+                <p>1. 本文档为实验实训管理系统的业务流程说明，作为系统开发的重要依据。</p>
+                <p>2. 实际开发过程中，可根据具体技术实现细节对流程进行适当调整。</p>
+                <p>3. 本文档需根据业务变化及时更新，确保流程的准确性和适用性。</p>
+            </div>
+        </section>
+
+        <div class="footer">
+            <p>© 2026 成都锦城学院 教务处</p>
+            <p>实验实训管理业务流程 V1.0</p>
+        </div>
+    </div>
+</body>
+</html>

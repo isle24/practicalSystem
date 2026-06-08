@@ -396,6 +396,14 @@ export function saveInternshipBase(payload) {
   return internshipPost('save-base', payload);
 }
 
+export function fetchInternshipBaseFlows(params = {}) {
+  return internshipList('base-flows', params);
+}
+
+export function saveInternshipBaseFlow(payload) {
+  return internshipPost('save-base-flow', payload);
+}
+
 export function fetchInternshipMentors(params = {}) {
   return internshipList('mentors', params);
 }
@@ -526,4 +534,77 @@ export function fetchInternshipInsurances(params = {}) {
 
 export function fetchInternshipSafetyLetters(params = {}) {
   return internshipList('safety-letters', params);
+}
+
+export function fetchInternshipSyllabusGuides(params = {}) {
+  return internshipList('syllabus-guides', params);
+}
+
+export function saveInternshipSyllabusGuide(payload) {
+  return internshipPost('save-syllabus-guide', payload);
+}
+
+export function fetchInternshipImplementationSheets(params = {}) {
+  return internshipList('implementation-sheets', params);
+}
+
+export function saveInternshipImplementationSheet(payload) {
+  return internshipPost('save-implementation-sheet', payload);
+}
+
+export function fetchInternshipTeacherWorkReports(params = {}) {
+  return internshipList('teacher-work-reports', params);
+}
+
+export function saveInternshipTeacherWorkReport(payload) {
+  return internshipPost('save-teacher-work-report', payload);
+}
+
+export function fetchInternshipInspections(params = {}) {
+  return internshipList('inspections', params);
+}
+
+export function saveInternshipInspection(payload) {
+  return internshipPost('save-inspection', payload);
+}
+
+function practiceList(module, params = {}) {
+  const query = new URLSearchParams(params).toString();
+  return request(`/${module}/list${query ? `?${query}` : ''}`);
+}
+
+function practicePost(module, path, payload) {
+  return request(`/${module}/${path}`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function fetchPracticeOverview(module) {
+  return request(`/${module}/overview`);
+}
+
+export function fetchPracticeOptions(module) {
+  return request(`/${module}/options`);
+}
+
+export function fetchPracticeList(module, params = {}) {
+  return practiceList(module, params);
+}
+
+export function savePracticeItem(module, payload) {
+  return practicePost(module, 'save', payload);
+}
+
+export function reviewPracticeItem(module, payload) {
+  return practicePost(module, 'review', payload);
+}
+
+export function requestPracticeModification(module, payload) {
+  return practicePost(module, 'request-modification', payload);
+}
+
+export function fetchPracticeTimeline(module, params = {}) {
+  const query = new URLSearchParams(params).toString();
+  return request(`/${module}/timeline${query ? `?${query}` : ''}`);
 }
