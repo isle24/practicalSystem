@@ -108,7 +108,7 @@ class PracticeService
 
         $id = $this->saveEntity($entity, $request, $values);
         if (($values['status'] ?? '') === 'wait' && $this->entityRequiresReview($entity)) {
-            $this->recordWorkflow($entity, $id, 'submit', $fromStatus, 'wait', $this->workflowContent($entity, $values), null);
+            $this->recordWorkflow($entity, $id, 'submit', $fromStatus, 'wait', $this->workflowContent($entity, $values), 'wait');
         }
 
         return ['id' => $id, 'uuid' => PracticeRecord::uuidById($entity, $id)];
@@ -312,7 +312,7 @@ class PracticeService
                 'recording_id' => $recordingId,
                 'teacher_id' => $this->currentTeacherId(false),
                 'reviewer_id' => CurrentContext::accountId(),
-                'opinion' => $content,
+                'opinion' => $action === 'submit' ? null : $content,
                 'status' => $reviewStatus,
                 'created_at' => $this->now(),
                 'updated_at' => $this->now(),
@@ -336,13 +336,14 @@ class PracticeService
         $current = null;
         $sequence = 0;
         foreach ($records as $record) {
+            $recordId = (int) ($record['id'] ?? 0);
             if (($record['action'] ?? '') === 'submit') {
                 $sequence++;
                 $cycles[] = [
                     'sequence' => $sequence,
                     'created_at' => $record['created_at'] ?? null,
                     'record' => $record,
-                    'branches' => [],
+                    'branches' => $this->timelineReviewBranches($record, $reviewsByRecording[$recordId] ?? []),
                 ];
                 $current = count($cycles) - 1;
                 continue;
@@ -359,16 +360,49 @@ class PracticeService
                 $current = count($cycles) - 1;
             }
 
-            $recordId = (int) ($record['id'] ?? 0);
             $cycles[$current]['branches'][] = [
+                'kind' => 'branch',
                 'type' => 'recording',
                 'created_at' => $record['created_at'] ?? null,
                 'record' => $record,
-                'reviews' => $reviewsByRecording[$recordId] ?? [],
+                'reviews' => $this->workflowReviewsForRecord($record, $reviewsByRecording[$recordId] ?? []),
             ];
         }
 
         return $cycles;
+    }
+
+    private function timelineReviewBranches(array $record, array $reviews): array
+    {
+        $reviews = $this->workflowReviewsForRecord($record, $reviews);
+        if (!$reviews) {
+            return [];
+        }
+
+        $firstReview = $reviews[0];
+        return [[
+            'kind' => 'branch',
+            'type' => 'review',
+            'created_at' => $firstReview['created_at'] ?? ($record['created_at'] ?? null),
+            'record' => null,
+            'review' => $firstReview,
+            'reviews' => $reviews,
+        ]];
+    }
+
+    private function workflowReviewsForRecord(array $record, array $reviews): array
+    {
+        if (($record['action'] ?? '') !== 'submit') {
+            return array_values($reviews);
+        }
+
+        return array_values(array_map(static function (array $review): array {
+            if (($review['status'] ?? '') === 'wait') {
+                $review['opinion'] = null;
+            }
+
+            return $review;
+        }, $reviews));
     }
 
     private function scopeContext(): array

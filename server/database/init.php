@@ -234,6 +234,24 @@ function createSchoolSchema(PDO $pdo): void
 function ensureMenuSchema(PDO $pdo): void
 {
     $pdo->exec("ALTER TABLE `menu` MODIFY COLUMN `type` ENUM('directory','menu','list','button') DEFAULT 'menu'");
+    $indexes = menuIndexMap($pdo);
+    if (isset($indexes['uk_menu_code']) && (int) $indexes['uk_menu_code']['non_unique'] === 0) {
+        $pdo->exec('ALTER TABLE `menu` DROP INDEX `uk_menu_code`');
+    }
+    ensureIndex($pdo, 'menu', 'idx_menu_code', 'ALTER TABLE `menu` ADD KEY `idx_menu_code` (`code`)');
+}
+
+function menuIndexMap(PDO $pdo): array
+{
+    $indexes = [];
+    foreach ($pdo->query('SHOW INDEX FROM `menu`') as $row) {
+        $indexName = (string) $row['Key_name'];
+        if (($row['Column_name'] ?? '') === 'code') {
+            $indexes[$indexName] = ['non_unique' => (int) $row['Non_unique']];
+        }
+    }
+
+    return $indexes;
 }
 
 function ensureArchiveSchema(PDO $pdo): void
@@ -509,7 +527,7 @@ function schoolCoreStatements(): array
             `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             `deleted_at` DATETIME DEFAULT NULL,
             PRIMARY KEY (`id`),
-            UNIQUE KEY `uk_menu_code` (`code`),
+            KEY `idx_menu_code` (`code`),
             KEY `idx_parent` (`parent_id`, `sort`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
         "CREATE TABLE IF NOT EXISTS `role_menu` (
@@ -1988,16 +2006,7 @@ function seedMenus(PDO $pdo): void
             `deleted_at` = NULL"
     );
 
-    $dedupeCode = $pdo->prepare(
-        "UPDATE `menu`
-         SET `code` = NULL
-         WHERE `code` = ? AND `id` <> ?"
-    );
-
     foreach ($menus as $menu) {
-        if ($menu[3] !== null) {
-            $dedupeCode->execute([$menu[3], $menu[0]]);
-        }
         $stmt->execute($menu);
     }
 

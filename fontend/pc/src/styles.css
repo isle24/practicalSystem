@@ -2627,15 +2627,15 @@ a {
 .message-kind.alert { background: #c74350; }
 
 .message-send-dialog {
-  width: min(760px, calc(100vw - 48px));
-  max-height: min(680px, calc(100vh - 72px));
+  width: min(820px, calc(100vw - 48px));
+  max-height: min(640px, calc(100vh - 72px));
 }
 
 .message-send-body {
   min-height: 0;
   display: grid;
-  gap: 12px;
-  padding: 16px;
+  gap: 10px;
+  padding: 14px;
   overflow: auto;
 }
 
@@ -2654,8 +2654,8 @@ a {
   border: 1px solid var(--line);
   border-radius: 8px;
   display: grid;
-  gap: 10px;
-  padding: 10px;
+  gap: 8px;
+  padding: 9px;
   background: #fbfcfe;
 }
 
@@ -2674,7 +2674,7 @@ a {
 .message-send-field {
   min-width: 0;
   display: grid;
-  gap: 7px;
+  gap: 6px;
 }
 
 .message-send-field > span {
@@ -2704,7 +2704,7 @@ a {
 }
 
 .message-send-field textarea {
-  resize: none;
+  resize: vertical;
 }
 
 .taskbar {
@@ -2950,6 +2950,10 @@ a {
   grid-template-columns: 190px minmax(260px, 1fr) auto auto auto auto;
 }
 
+.template-library-panel .support-toolbar {
+  min-height: 36px;
+}
+
 .support-layout {
   min-height: 0;
   display: grid;
@@ -3044,20 +3048,20 @@ a {
 }
 
 .template-category-strip {
-  min-height: 28px;
+  min-height: 24px;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   overflow-x: auto;
   padding-bottom: 0;
 }
 
 .template-category-strip button {
   flex: 0 0 auto;
-  min-height: 26px;
-  height: 26px;
+  min-height: 24px;
+  height: 24px;
   border-radius: 999px;
-  padding: 0 10px;
+  padding: 0 9px;
   font-size: 12px;
   line-height: 1;
   white-space: nowrap;

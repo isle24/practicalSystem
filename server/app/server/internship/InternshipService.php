@@ -1496,7 +1496,7 @@ class InternshipService
                         'sequence' => $sequence,
                         'created_at' => $record['created_at'] ?? null,
                         'record' => $record,
-                        'branches' => [],
+                        'branches' => $this->timelineReviewBranches($record, $reviewsByRecording[$recordId] ?? []),
                     ];
                     $current = count($cycles) - 1;
                     continue;
@@ -1595,11 +1595,35 @@ class InternshipService
 
     private function workflowReviewsForRecord(array $record, array $reviews): array
     {
-        if (($record['action'] ?? '') === 'submit') {
+        if (($record['action'] ?? '') !== 'submit') {
+            return array_values($reviews);
+        }
+
+        return array_values(array_map(static function (array $review): array {
+            if (($review['status'] ?? '') === 'wait') {
+                $review['opinion'] = null;
+            }
+
+            return $review;
+        }, $reviews));
+    }
+
+    private function timelineReviewBranches(array $record, array $reviews): array
+    {
+        $reviews = $this->workflowReviewsForRecord($record, $reviews);
+        if (!$reviews) {
             return [];
         }
 
-        return array_values($reviews);
+        $firstReview = $reviews[0];
+        return [[
+            'kind' => 'branch',
+            'type' => 'review',
+            'created_at' => $firstReview['created_at'] ?? ($record['created_at'] ?? null),
+            'record' => null,
+            'review' => $firstReview,
+            'reviews' => $reviews,
+        ]];
     }
 
     private function recordWorkflow(
