@@ -491,6 +491,12 @@ class InternshipService
         $arrangementId = $this->requiredInt($request, 'arrangement_id');
         $this->assertStudentVisible($studentId);
         $this->assertArrangementVisible($arrangementId);
+        $signType = $this->enum($request, 'sign_type', ['gps', 'qrcode', 'manual'], $this->isStudent() ? 'gps' : 'manual');
+        $longitude = $this->coordinateInput($request, 'longitude', -180, 180);
+        $latitude = $this->coordinateInput($request, 'latitude', -90, 90);
+        if ($this->isStudent() && $signType === 'gps' && ($longitude === null || $latitude === null)) {
+            throw new InvalidArgumentException('GPS 定位坐标不能为空', 42201);
+        }
 
         $values = [
             'student_id' => $studentId,
@@ -498,10 +504,10 @@ class InternshipService
             'entity_id' => $arrangementId,
             'date' => $this->dateInput($request, 'date') ?: date('Y-m-d'),
             'sign_time' => $this->dateTimeInput($request, 'sign_time') ?: $this->now(),
-            'sign_type' => $this->enum($request, 'sign_type', ['gps', 'qrcode', 'manual'], $this->isStudent() ? 'gps' : 'manual'),
+            'sign_type' => $signType,
             'location' => $this->nullableString($request, 'location', 255),
-            'longitude' => $this->decimalInput($request, 'longitude'),
-            'latitude' => $this->decimalInput($request, 'latitude'),
+            'longitude' => $longitude,
+            'latitude' => $latitude,
             'remark' => $this->nullableString($request, 'remark', 1000),
             'status' => 'accept',
             'updated_at' => $this->now(),
@@ -1822,6 +1828,17 @@ class InternshipService
     {
         $value = $request->input($key);
         return is_numeric($value) ? round((float) $value, 2) : null;
+    }
+
+    private function coordinateInput(Request $request, string $key, float $min, float $max): ?float
+    {
+        $value = $request->input($key);
+        if (!is_numeric($value)) {
+            return null;
+        }
+
+        $number = round((float) $value, 6);
+        return $number >= $min && $number <= $max ? $number : null;
     }
 
     private function jsonValue(mixed $value): string

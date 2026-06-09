@@ -441,11 +441,31 @@
                 </option>
               </select>
             </label>
-            <label>
-              <span>位置</span>
-              <input v-model="internship.forms.sign.location" placeholder="当前位置或实习单位">
-            </label>
-            <van-button block type="primary" :loading="internship.loading" @click="submitSignIn">
+            <div class="gps-sign-card">
+              <div class="gps-sign-head">
+                <span>
+                  <strong>{{ signGpsTitle }}</strong>
+                  <small>{{ internship.forms.sign.location || signGpsHint }}</small>
+                </span>
+                <button type="button" :disabled="internship.forms.sign.locating" @click="locateSignPosition">
+                  {{ internship.forms.sign.locating ? '定位中' : '重新定位' }}
+                </button>
+              </div>
+              <div class="gps-map-preview">
+                <img v-if="signMapUrl" :src="signMapUrl" alt="签到定位地图">
+                <div v-else>
+                  <MapPin :size="24" />
+                  <span>获取 GPS 后显示地图</span>
+                </div>
+              </div>
+              <div class="gps-coordinate-grid">
+                <span>经度 {{ coordinateText(internship.forms.sign.longitude) }}</span>
+                <span>纬度 {{ coordinateText(internship.forms.sign.latitude) }}</span>
+                <span>精度 {{ accuracyText }}</span>
+              </div>
+              <small v-if="internship.forms.sign.gps_error" class="gps-error">{{ internship.forms.sign.gps_error }}</small>
+            </div>
+            <van-button block type="primary" :loading="internship.loading" :disabled="!signGpsReady" @click="submitSignIn">
               提交签到
             </van-button>
           </section>
@@ -1480,6 +1500,12 @@ const internship = reactive({
     sign: {
       arrangement_id: null,
       location: '',
+      longitude: null,
+      latitude: null,
+      accuracy: null,
+      located_at: '',
+      locating: false,
+      gps_error: '',
     },
     journal: {
       id: null,
@@ -1630,6 +1656,21 @@ const isAdminRole = computed(() => ['super_admin', 'school_admin', 'college_admi
 const visibleMobileModules = computed(() => modules.filter(canShowMobileModule));
 const canReviewInternship = computed(() => hasPermission('internship:approve'));
 const canReviewInternshipPlan = computed(() => hasPermission('internship:plan') && isAdminRole.value);
+const signGpsReady = computed(() => hasCoordinateValue(internship.forms.sign.longitude) && hasCoordinateValue(internship.forms.sign.latitude));
+const signGpsTitle = computed(() => (signGpsReady.value ? '已获取 GPS 定位' : '等待 GPS 定位'));
+const signGpsHint = computed(() => (signGpsReady.value ? '坐标来自当前设备定位' : '签到前请先授权并获取当前位置'));
+const signMapUrl = computed(() => {
+  if (!signGpsReady.value) {
+    return '';
+  }
+  const longitude = Number(internship.forms.sign.longitude).toFixed(6);
+  const latitude = Number(internship.forms.sign.latitude).toFixed(6);
+  return `https://staticmap.openstreetmap.de/staticmap.php?center=${latitude},${longitude}&zoom=16&size=640x300&markers=${latitude},${longitude},red-pushpin`;
+});
+const accuracyText = computed(() => {
+  const accuracy = Number(internship.forms.sign.accuracy || 0);
+  return accuracy > 0 ? `${Math.round(accuracy)} 米` : '-';
+});
 const roleNameMap = {
   super_admin: '系统管理员',
   school_admin: '学校管理员',
@@ -3064,14 +3105,24 @@ async function submitApplication() {
 }
 
 async function submitSignIn() {
+  if (!signGpsReady.value) {
+    internship.message = '请先获取 GPS 定位后再签到';
+    showToast(internship.message);
+    return;
+  }
+
   internship.loading = true;
   internship.message = '';
   try {
     await saveInternshipSignIn({
       arrangement_id: internship.forms.sign.arrangement_id,
-      location: internship.forms.sign.location || '移动端签到',
+      sign_type: 'gps',
+      location: internship.forms.sign.location || 'GPS 定位签到',
+      longitude: internship.forms.sign.longitude,
+      latitude: internship.forms.sign.latitude,
+      remark: internship.forms.sign.accuracy ? `GPS 精度 ${Math.round(Number(internship.forms.sign.accuracy))} 米` : '',
     });
-    internship.forms.sign.location = '';
+    resetSignPosition();
     internship.message = '签到已提交';
     await loadInternship();
   } catch (error) {
@@ -3984,6 +4035,9 @@ function inspectionResultText(value) {
 
 function openStudentSubmitSection(section) {
   internship.submitSection = internship.submitSection === section ? '' : section;
+  if (internship.submitSection === 'sign' && !signGpsReady.value) {
+    locateSignPosition();
+  }
 }
 
 function currentArrangement() {
@@ -4001,6 +4055,75 @@ function stageDeadlineText(key) {
   const arrangementEnd = currentArrangement()?.end_date || '';
   const value = configured || arrangementEnd;
   return value ? `截止 ${value}` : '截止时间未配置';
+}
+
+function coordinateText(value) {
+  if (!hasCoordinateValue(value)) {
+    return '-';
+  }
+  const number = Number(value);
+  return number.toFixed(6);
+}
+
+function hasCoordinateValue(value) {
+  return value !== null && value !== undefined && value !== '' && Number.isFinite(Number(value));
+}
+
+function resetSignPosition() {
+  internship.forms.sign.location = '';
+  internship.forms.sign.longitude = null;
+  internship.forms.sign.latitude = null;
+  internship.forms.sign.accuracy = null;
+  internship.forms.sign.located_at = '';
+  internship.forms.sign.gps_error = '';
+}
+
+function geolocationErrorText(error) {
+  if (!error) {
+    return '无法获取当前位置';
+  }
+  if (error.code === 1) {
+    return '定位权限未授权，请允许浏览器访问位置';
+  }
+  if (error.code === 2) {
+    return '当前位置不可用，请检查定位服务';
+  }
+  if (error.code === 3) {
+    return '定位超时，请重新定位';
+  }
+  return error.message || '无法获取当前位置';
+}
+
+async function locateSignPosition() {
+  if (!navigator.geolocation) {
+    internship.forms.sign.gps_error = '当前浏览器不支持 GPS 定位';
+    showToast(internship.forms.sign.gps_error);
+    return;
+  }
+
+  internship.forms.sign.locating = true;
+  internship.forms.sign.gps_error = '';
+  try {
+    const position = await new Promise((resolve, reject) => {
+      navigator.geolocation.getCurrentPosition(resolve, reject, {
+        enableHighAccuracy: true,
+        timeout: 12000,
+        maximumAge: 0,
+      });
+    });
+    const { latitude, longitude, accuracy } = position.coords;
+    internship.forms.sign.latitude = Number(latitude.toFixed(6));
+    internship.forms.sign.longitude = Number(longitude.toFixed(6));
+    internship.forms.sign.accuracy = accuracy ? Math.round(accuracy) : null;
+    internship.forms.sign.located_at = new Date().toISOString();
+    internship.forms.sign.location = `GPS ${coordinateText(internship.forms.sign.latitude)}, ${coordinateText(internship.forms.sign.longitude)}`;
+  } catch (error) {
+    resetSignPosition();
+    internship.forms.sign.gps_error = geolocationErrorText(error);
+    showToast(internship.forms.sign.gps_error);
+  } finally {
+    internship.forms.sign.locating = false;
+  }
 }
 
 function delayConfigOptions() {
@@ -4393,7 +4516,7 @@ function resetInternshipState() {
     internship.filters[key] = emptyInternshipFilters();
   });
   internship.forms.application = { arrangement_id: null, remark: '' };
-  internship.forms.sign = { arrangement_id: null, location: '' };
+  internship.forms.sign = { arrangement_id: null, location: '', longitude: null, latitude: null, accuracy: null, located_at: '', locating: false, gps_error: '' };
   internship.forms.journal = { id: null, arrangement_id: null, title: '', content: '' };
   internship.forms.report = { id: null, arrangement_id: null, title: '', content: '' };
   internship.forms.delay = { arrangement_id: null, config_key: 'report_deadline', requested_date: '', reason: '' };

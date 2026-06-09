@@ -912,6 +912,105 @@ input {
   resize: vertical;
 }
 
+.gps-sign-card {
+  display: grid;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  background: #f8fbff;
+}
+
+.gps-sign-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.gps-sign-head span {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.gps-sign-head strong {
+  font-size: 14px;
+  line-height: 1.25;
+}
+
+.gps-sign-head small,
+.gps-error {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.gps-sign-head button {
+  flex: 0 0 auto;
+  height: 32px;
+  border: 1px solid #bfd8f4;
+  border-radius: 8px;
+  padding: 0 10px;
+  color: var(--primary);
+  background: var(--primary-soft);
+}
+
+.gps-sign-head button:disabled {
+  opacity: .55;
+}
+
+.gps-map-preview {
+  position: relative;
+  overflow: hidden;
+  height: 156px;
+  border: 1px solid #ccd7e5;
+  border-radius: 8px;
+  background: #eaf1f8;
+  pointer-events: none;
+  user-select: none;
+  touch-action: none;
+}
+
+.gps-map-preview img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+  -webkit-user-drag: none;
+}
+
+.gps-map-preview div {
+  height: 100%;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.gps-coordinate-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.gps-coordinate-grid span {
+  min-height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 7px;
+  color: var(--muted);
+  background: #fff;
+  font-size: 12px;
+}
+
+.gps-error {
+  color: #c74350;
+}
+
 .cell-actions {
   display: flex;
   align-items: center;
