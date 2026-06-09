@@ -1337,6 +1337,7 @@ import {
   fetchDocList,
   fetchInternshipArchiveMaterials,
   fetchInternshipApplications,
+  fetchInternshipArrangementChanges,
   fetchInternshipArrangements,
   fetchInternshipDelays,
   fetchInternshipInsurances,
@@ -1368,6 +1369,7 @@ import {
   requestInternshipModification,
   requestPracticeModification,
   reviewInternshipApplication,
+  reviewInternshipArrangementChange,
   reviewInternshipDelay,
   reviewInternshipJournal,
   reviewInternshipPlan,
@@ -1478,6 +1480,11 @@ const support = reactive({
 });
 
 const defaultInternshipReviewRules = {
+  arrangement_change: {
+    accept: { min: 0, max: 300 },
+    modify: { min: 5, max: 500 },
+    refuse: { min: 5, max: 500 },
+  },
   application: {
     accept: { min: 0, max: 200 },
     modify: { min: 5, max: 500 },
@@ -1513,6 +1520,7 @@ const internship = reactive({
   options: emptyInternshipOptions(),
   lists: {
     arrangements: emptyPagedList(),
+    arrangementChanges: emptyPagedList(),
     plans: emptyPagedList(),
     syllabusGuides: emptyPagedList(),
     implementationSheets: emptyPagedList(),
@@ -1532,6 +1540,7 @@ const internship = reactive({
   },
   filters: {
     arrangements: emptyInternshipFilters(),
+    arrangementChanges: emptyInternshipFilters(),
     plans: emptyInternshipFilters(),
     syllabusGuides: emptyInternshipFilters(),
     implementationSheets: emptyInternshipFilters(),
@@ -1877,9 +1886,27 @@ const mobileListConfigs = computed(() => ({
     gradeFilter: true,
     statusOptions: [
       { value: 'enabled', label: '启用' },
+      { value: 'changing', label: '变更中' },
+      { value: 'changed', label: '已变更' },
       { value: 'disabled', label: '停用' },
     ],
     emptyText: '暂无实习任务',
+  },
+  arrangementChanges: {
+    key: 'arrangementChanges',
+    entity: 'arrangement_change',
+    title: '任务变更',
+    shortTitle: '变更',
+    icon: Workflow,
+    keywordPlaceholder: '任务、课程、教师、原因、提交人',
+    gradeFilter: true,
+    statusOptions: [
+      { value: 'wait', label: '待审核' },
+      { value: 'accept', label: '已通过' },
+      { value: 'modify', label: '需修改' },
+      { value: 'refuse', label: '已退回' },
+    ],
+    emptyText: '暂无任务变更',
   },
   plans: {
     key: 'plans',
@@ -2085,6 +2112,7 @@ const reviewListTabs = computed(() => {
 });
 const manageListTabs = computed(() => [
   'arrangements',
+  'arrangementChanges',
   'plans',
   'syllabusGuides',
   'implementationSheets',
@@ -2380,7 +2408,7 @@ function mobileListSelectFilters(config) {
       options: selectFilterItems(internship.options.grades, 'grade_id', 'grade_name'),
     });
   }
-  if (isAdminRole.value && (studentScopedListKeys.has(key) || ['arrangements', 'plans', 'syllabusGuides', 'implementationSheets', 'teacherWorkReports', 'inspections'].includes(key))) {
+  if (isAdminRole.value && (studentScopedListKeys.has(key) || ['arrangements', 'arrangementChanges', 'plans', 'syllabusGuides', 'implementationSheets', 'teacherWorkReports', 'inspections'].includes(key))) {
     filters.push({
       key: 'dep_id',
       label: '学院',
@@ -2388,7 +2416,7 @@ function mobileListSelectFilters(config) {
       options: selectFilterItems(mobileDepartmentOptions(key), 'dep_id', 'dep_name'),
     });
   }
-  if (isAdminRole.value && (studentScopedListKeys.has(key) || ['arrangements', 'syllabusGuides', 'implementationSheets', 'teacherWorkReports', 'inspections'].includes(key))) {
+  if (isAdminRole.value && (studentScopedListKeys.has(key) || ['arrangements', 'arrangementChanges', 'syllabusGuides', 'implementationSheets', 'teacherWorkReports', 'inspections'].includes(key))) {
     filters.push({
       key: 'profession_id',
       label: '专业',
@@ -2455,8 +2483,10 @@ function listTotal(key) {
 function mobileListTitle(key, row) {
   const student = row.student_name || row.student_num || (row.student_id ? `学生ID ${row.student_id}` : '');
   const arrangement = row.arrangement_title || (row.arrangement_id ? `安排ID ${row.arrangement_id}` : '');
+  const changePayload = arrangementChangePayload(row);
   const titles = {
     arrangements: row.title || row.name || `安排ID ${row.id}`,
+    arrangementChanges: changePayload.title || row.arrangement_title || `变更ID ${row.id}`,
     // 暂时隐藏学期展示，后续需要时恢复 row.semester。
     plans: row.dep_name || `计划ID ${row.id}`,
     syllabusGuides: row.title || row.arrangement_title || `大纲ID ${row.id}`,
@@ -2479,6 +2509,9 @@ function mobileListTitle(key, row) {
 }
 
 function mobileListValue(key, row) {
+  if (key === 'arrangementChanges') {
+    return statusText(row.status);
+  }
   if (key === 'signIns') {
     return signTypeText(row.sign_type);
   }
@@ -2503,6 +2536,7 @@ function mobileListValue(key, row) {
 function mobileListFacts(key, row) {
   const student = joinFact([row.student_name, row.student_num]);
   const arrangement = row.arrangement_title || (row.arrangement_id ? `安排ID ${row.arrangement_id}` : '');
+  const changePayload = arrangementChangePayload(row);
   const facts = {
     arrangements: [
       // 暂时隐藏学期字段，后续需要时恢复。
@@ -2511,6 +2545,14 @@ function mobileListFacts(key, row) {
       namedFact('方式', organizeModeText(row.organize_mode)),
       namedFact('时间', dateRangeText(row.start_date, row.end_date)),
       namedFact('范围', joinFact([row.dep_name || '全校', row.profession_name || '全部专业', row.grade_name])),
+    ],
+    arrangementChanges: [
+      namedFact('原任务', arrangement),
+      namedFact('课程', row.course_name),
+      namedFact('原老师', row.teacher_name),
+      namedFact('拟变更时间', dateRangeText(changePayload.start_date, changePayload.end_date)),
+      namedFact('原因', previewText(row.reason, 42)),
+      namedFact('提交人', row.submitter_name),
     ],
     plans: [
       // 暂时隐藏学期字段，后续需要时恢复。
@@ -2639,7 +2681,8 @@ function mobileListActions(key, row, context) {
   }
 
   const actions = [{ key: 'timeline', label: '记录', type: 'timeline', entity: config.entity }];
-  if (context === 'review' && canReviewEntity(config.entity)) {
+  const canActInContext = context === 'review' || (context === 'manage' && config.entity === 'arrangement_change');
+  if (canActInContext && canReviewEntity(config.entity)) {
     if (canReviewRow(row, config.entity)) {
       const rejectStatus = config.entity === 'delay' ? 'refuse' : 'modify';
       actions.push(
@@ -2657,6 +2700,9 @@ function mobileListActions(key, row, context) {
 function canReviewEntity(entity) {
   if (entity === 'plan') {
     return canReviewInternshipPlan.value;
+  }
+  if (entity === 'arrangement_change') {
+    return isAdminRole.value && (hasPermission('internship:manage') || hasPermission('internship:approve'));
   }
   return canReviewInternship.value;
 }
@@ -2749,6 +2795,7 @@ function internshipQueryParams(key, page = 1) {
 function internshipFetcher(key) {
   const fetchers = {
     arrangements: fetchInternshipArrangements,
+    arrangementChanges: fetchInternshipArrangementChanges,
     plans: fetchInternshipPlans,
     applications: fetchInternshipApplications,
     pairs: fetchInternshipPairs,
@@ -3525,6 +3572,10 @@ async function confirmReviewDialog() {
     await reviewApplication(row, status, internship.reviewDialog.reason);
     return;
   }
+  if (entity === 'arrangement_change') {
+    await reviewArrangementChange(row, status, internship.reviewDialog.reason);
+    return;
+  }
   if (entity === 'plan') {
     await reviewPlan(row, status, internship.reviewDialog.reason);
     return;
@@ -3544,6 +3595,24 @@ async function reviewApplication(row, status, opinion) {
       id: row.id,
       status,
       opinion: opinion || defaultReviewOpinion('application', status),
+    });
+    closeReviewDialog();
+    await loadInternship();
+  } catch (error) {
+    internship.message = error.message;
+  } finally {
+    internship.loading = false;
+  }
+}
+
+async function reviewArrangementChange(row, status, opinion) {
+  internship.loading = true;
+  internship.message = '';
+  try {
+    await reviewInternshipArrangementChange({
+      id: row.id,
+      status,
+      opinion: opinion || defaultReviewOpinion('arrangement_change', status),
     });
     closeReviewDialog();
     await loadInternship();
@@ -3726,6 +3795,7 @@ function validatePracticeReason(module, entity, status, reason, label = null) {
 
 function reviewEntityName(entity) {
   const names = {
+    arrangement_change: '任务变更',
     application: '补充申请',
     journal: '实习日志',
     report: '实习报告',
@@ -3759,6 +3829,9 @@ function canReviewRow(row, entity) {
   if (entity === 'plan') {
     return canReviewInternshipPlan.value;
   }
+  if (entity === 'arrangement_change') {
+    return isAdminRole.value && (hasPermission('internship:manage') || hasPermission('internship:approve'));
+  }
   if (entity === 'application') {
     if (!canReviewInternship.value) {
       return false;
@@ -3781,6 +3854,9 @@ function canRequestModification(row, entity) {
   if (entity === 'plan') {
     return canReviewInternshipPlan.value;
   }
+  if (entity === 'arrangement_change') {
+    return false;
+  }
   return canReviewInternship.value;
 }
 
@@ -3795,6 +3871,7 @@ function reviewTargetDetails(entity, row) {
   }
   const student = joinFact([row.student_name, row.student_num]);
   const arrangement = row.arrangement_title || (row.arrangement_id ? `安排ID ${row.arrangement_id}` : '');
+  const changePayload = arrangementChangePayload(row);
   const base = [
     detailItem('审核模块', reviewEntityName(entity)),
     detailItem('学生', student || (row.student_id ? `学生ID ${row.student_id}` : '')),
@@ -3802,6 +3879,14 @@ function reviewTargetDetails(entity, row) {
   ];
 
   const details = {
+    arrangement_change: [
+      detailItem('课程计划', row.course_name),
+      detailItem('原负责老师', row.teacher_name),
+      detailItem('拟变更任务', changePayload.title),
+      detailItem('拟变更时间', dateRangeText(changePayload.start_date, changePayload.end_date)),
+      detailItem('变更原因', previewText(row.reason, 100)),
+      detailItem('提交人', row.submitter_name),
+    ],
     application: [
       detailItem('届次', row.grade_name),
       detailItem('学院专业', joinFact([row.dep_name, row.profession_name])),
@@ -4102,6 +4187,19 @@ function numericOrNull(value) {
   return value === '' || value === null || value === undefined ? null : Number(value);
 }
 
+function arrangementChangePayload(row) {
+  const payload = row?.payload || {};
+  if (typeof payload === 'string') {
+    try {
+      const parsed = JSON.parse(payload);
+      return parsed && typeof parsed === 'object' ? parsed : {};
+    } catch {
+      return {};
+    }
+  }
+  return payload && typeof payload === 'object' ? payload : {};
+}
+
 function arrangementTypeText(value) {
   const names = {
     cognition_internal: '认知校内',
@@ -4290,6 +4388,7 @@ function statusText(value) {
     refuse: '已退回',
     skipped: '跳过',
     enabled: '启用',
+    changing: '变更中',
     disabled: '停用',
     changed: '已变更',
     pending: '待处理',

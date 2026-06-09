@@ -614,6 +614,8 @@ function schoolBusinessStatements(): array
         simpleTable('enterprise_mentor', ['`company_id` BIGINT UNSIGNED DEFAULT NULL', '`mentor_name` VARCHAR(80) DEFAULT NULL', '`mobile` VARCHAR(40) DEFAULT NULL']),
         simpleTable('arrangement', ['`plan_id` BIGINT UNSIGNED DEFAULT NULL', '`base_id` BIGINT UNSIGNED DEFAULT NULL', '`dep_id` BIGINT UNSIGNED DEFAULT NULL', '`profession_id` BIGINT UNSIGNED DEFAULT NULL', '`semester` VARCHAR(80) DEFAULT NULL', '`teacher_id` BIGINT UNSIGNED DEFAULT NULL', '`task_no` VARCHAR(80) DEFAULT NULL', '`batch_no` VARCHAR(80) DEFAULT NULL', '`credit` DECIMAL(5,2) DEFAULT NULL', '`student_count` INT DEFAULT 0', '`start_date` DATE DEFAULT NULL', '`end_date` DATE DEFAULT NULL']),
         simpleTable('arrangement_recording', recordingColumns()),
+        simpleTable('arrangement_change', ['`arrangement_id` BIGINT UNSIGNED DEFAULT NULL', '`payload` JSON DEFAULT NULL', '`reason` TEXT DEFAULT NULL', '`from_status` VARCHAR(40) DEFAULT NULL', '`submitter_id` BIGINT UNSIGNED DEFAULT NULL', '`submitted_at` DATETIME DEFAULT NULL', '`reviewer_id` BIGINT UNSIGNED DEFAULT NULL', '`review_opinion` TEXT DEFAULT NULL', '`reviewed_at` DATETIME DEFAULT NULL', '`new_arrangement_id` BIGINT UNSIGNED DEFAULT NULL']),
+        simpleTable('arrangement_change_recording', recordingColumns()),
         simpleTable('internship_task_class', ['`arrangement_id` BIGINT UNSIGNED NOT NULL', '`grade_id` BIGINT UNSIGNED DEFAULT NULL', '`dep_id` BIGINT UNSIGNED DEFAULT NULL', '`profession_id` BIGINT UNSIGNED DEFAULT NULL', '`class_id` BIGINT UNSIGNED NOT NULL', '`student_count_snapshot` INT DEFAULT 0', 'UNIQUE KEY `uk_task_class` (`arrangement_id`, `class_id`)']),
         simpleTable('application', ['`arrangement_id` BIGINT UNSIGNED DEFAULT NULL', '`student_id` BIGINT UNSIGNED DEFAULT NULL', '`teacher_id` BIGINT UNSIGNED DEFAULT NULL']),
         simpleTable('application_recording', recordingColumns()),
@@ -937,6 +939,18 @@ function ensureInternshipSchema(PDO $pdo): void
             'description' => "ALTER TABLE `arrangement` ADD COLUMN `description` TEXT DEFAULT NULL AFTER `location`",
             'created_by' => "ALTER TABLE `arrangement` ADD COLUMN `created_by` BIGINT UNSIGNED DEFAULT NULL AFTER `description`",
         ],
+        'arrangement_change' => [
+            'arrangement_id' => "ALTER TABLE `arrangement_change` ADD COLUMN `arrangement_id` BIGINT UNSIGNED DEFAULT NULL AFTER `code`",
+            'payload' => "ALTER TABLE `arrangement_change` ADD COLUMN `payload` JSON DEFAULT NULL AFTER `arrangement_id`",
+            'reason' => "ALTER TABLE `arrangement_change` ADD COLUMN `reason` TEXT DEFAULT NULL AFTER `payload`",
+            'from_status' => "ALTER TABLE `arrangement_change` ADD COLUMN `from_status` VARCHAR(40) DEFAULT NULL AFTER `reason`",
+            'submitter_id' => "ALTER TABLE `arrangement_change` ADD COLUMN `submitter_id` BIGINT UNSIGNED DEFAULT NULL AFTER `from_status`",
+            'submitted_at' => "ALTER TABLE `arrangement_change` ADD COLUMN `submitted_at` DATETIME DEFAULT NULL AFTER `submitter_id`",
+            'reviewer_id' => "ALTER TABLE `arrangement_change` ADD COLUMN `reviewer_id` BIGINT UNSIGNED DEFAULT NULL AFTER `submitted_at`",
+            'review_opinion' => "ALTER TABLE `arrangement_change` ADD COLUMN `review_opinion` TEXT DEFAULT NULL AFTER `reviewer_id`",
+            'reviewed_at' => "ALTER TABLE `arrangement_change` ADD COLUMN `reviewed_at` DATETIME DEFAULT NULL AFTER `review_opinion`",
+            'new_arrangement_id' => "ALTER TABLE `arrangement_change` ADD COLUMN `new_arrangement_id` BIGINT UNSIGNED DEFAULT NULL AFTER `reviewed_at`",
+        ],
         'application' => [
             'student_id' => "ALTER TABLE `application` ADD COLUMN `student_id` BIGINT UNSIGNED DEFAULT NULL AFTER `code`",
             'arrangement_id' => "ALTER TABLE `application` ADD COLUMN `arrangement_id` BIGINT UNSIGNED DEFAULT NULL AFTER `student_id`",
@@ -1138,7 +1152,7 @@ function ensureInternshipSchema(PDO $pdo): void
         }
     }
 
-    foreach (['application_recording', 'arrangement_recording', 'journal_recording', 'report_recording', 'join_recording', 'apply_report_delay_recording', 'plan_recording'] as $table) {
+    foreach (['application_recording', 'arrangement_recording', 'arrangement_change_recording', 'journal_recording', 'report_recording', 'join_recording', 'apply_report_delay_recording', 'plan_recording'] as $table) {
         ensureColumn($pdo, $table, 'parent_id', "ALTER TABLE `{$table}` ADD COLUMN `parent_id` BIGINT UNSIGNED DEFAULT NULL AFTER `code`");
         ensureColumn($pdo, $table, 'action', "ALTER TABLE `{$table}` ADD COLUMN `action` VARCHAR(40) DEFAULT NULL AFTER `parent_id`");
         ensureColumn($pdo, $table, 'operator_id', "ALTER TABLE `{$table}` ADD COLUMN `operator_id` BIGINT UNSIGNED DEFAULT NULL AFTER `action`");
@@ -1150,6 +1164,8 @@ function ensureInternshipSchema(PDO $pdo): void
     ensureIndex($pdo, 'arrangement', 'idx_arrangement_scope', "ALTER TABLE `arrangement` ADD KEY `idx_arrangement_scope` (`dep_id`, `profession_id`, `status`)");
     ensureIndex($pdo, 'arrangement', 'idx_arrangement_plan', "ALTER TABLE `arrangement` ADD KEY `idx_arrangement_plan` (`plan_id`, `teacher_id`, `status`)");
     ensureIndex($pdo, 'arrangement', 'idx_arrangement_teacher_time', "ALTER TABLE `arrangement` ADD KEY `idx_arrangement_teacher_time` (`teacher_id`, `start_date`, `end_date`)");
+    ensureIndex($pdo, 'arrangement_change', 'idx_arrangement_change_task', "ALTER TABLE `arrangement_change` ADD KEY `idx_arrangement_change_task` (`arrangement_id`, `status`)");
+    ensureIndex($pdo, 'arrangement_change', 'idx_arrangement_change_submitter', "ALTER TABLE `arrangement_change` ADD KEY `idx_arrangement_change_submitter` (`submitter_id`, `status`)");
     ensureIndex($pdo, 'internship_plan', 'idx_internship_plan_scope', "ALTER TABLE `internship_plan` ADD KEY `idx_internship_plan_scope` (`grade_id`, `dep_id`, `profession_id`, `status`)");
     ensureIndex($pdo, 'internship_task_class', 'uk_task_class', "ALTER TABLE `internship_task_class` ADD UNIQUE KEY `uk_task_class` (`arrangement_id`, `class_id`)");
     ensureIndex($pdo, 'internship_task_class', 'idx_task_class_scope', "ALTER TABLE `internship_task_class` ADD KEY `idx_task_class_scope` (`grade_id`, `dep_id`, `profession_id`, `class_id`)");

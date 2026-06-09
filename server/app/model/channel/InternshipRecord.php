@@ -242,6 +242,117 @@ class InternshipRecord extends TableRecord
         ];
     }
 
+    public static function arrangementChangePage(array $scope, array $filters): array
+    {
+        $query = self::applyArrangementChangeScope(self::queryTable('arrangement_change')
+            ->leftJoin('arrangement', 'arrangement_change.arrangement_id', '=', 'arrangement.id')
+            ->leftJoin('internship_plan', 'arrangement.plan_id', '=', 'internship_plan.id')
+            ->leftJoin('teacher_list', 'arrangement.teacher_id', '=', 'teacher_list.teacher_id')
+            ->leftJoin('account as submit_account', 'arrangement_change.submitter_id', '=', 'submit_account.id')
+            ->leftJoin('users as submit_user', 'submit_account.user_id', '=', 'submit_user.id')
+            ->leftJoin('account as review_account', 'arrangement_change.reviewer_id', '=', 'review_account.id')
+            ->leftJoin('users as review_user', 'review_account.user_id', '=', 'review_user.id')
+            ->whereNull('arrangement_change.deleted_at'), $scope);
+        self::filter($query, $filters, 'arrangement_change.status', 'status');
+        self::filter($query, $filters, 'arrangement_change.arrangement_id', 'arrangement_id');
+        self::listFilters($query, $filters, [
+            'dep_id' => 'arrangement.dep_id',
+            'profession_id' => 'arrangement.profession_id',
+            'grade_id' => 'internship_plan.grade_id',
+            'semester' => 'arrangement.semester',
+        ]);
+        self::keyword($query, $filters, [
+            'arrangement.title',
+            'arrangement.task_no',
+            'arrangement.batch_no',
+            'arrangement_change.reason',
+            'submit_user.name',
+            'review_user.name',
+            'teacher_list.teacher_name',
+            'teacher_list.teacher_num',
+        ]);
+
+        return self::paginate($query->orderByDesc('arrangement_change.id'), $filters, [
+            'arrangement_change.id',
+            'arrangement_change.uuid',
+            'arrangement_change.arrangement_id',
+            'arrangement_change.payload',
+            'arrangement_change.reason',
+            'arrangement_change.from_status',
+            'arrangement_change.submitter_id',
+            'arrangement_change.submitted_at',
+            'arrangement_change.reviewer_id',
+            'arrangement_change.review_opinion',
+            'arrangement_change.reviewed_at',
+            'arrangement_change.new_arrangement_id',
+            'arrangement_change.status',
+            'arrangement_change.created_at',
+            'arrangement.title as arrangement_title',
+            'arrangement.task_no',
+            'arrangement.batch_no',
+            'arrangement.teacher_id',
+            'arrangement.dep_id',
+            'arrangement.profession_id',
+            'internship_plan.grade_id',
+            'internship_plan.course_name',
+            'teacher_list.teacher_name',
+            'submit_user.name as submitter_name',
+            'review_user.name as reviewer_name',
+        ]);
+    }
+
+    public static function arrangementChangeVisible(array $scope, int $changeId): bool
+    {
+        if ($changeId <= 0) {
+            return false;
+        }
+
+        return self::applyArrangementChangeScope(self::queryTable('arrangement_change')
+            ->leftJoin('arrangement', 'arrangement_change.arrangement_id', '=', 'arrangement.id')
+            ->where('arrangement_change.id', $changeId)
+            ->whereNull('arrangement_change.deleted_at'), $scope)
+            ->exists();
+    }
+
+    public static function arrangementChangeRow(array $scope, int $changeId): ?object
+    {
+        if ($changeId <= 0 || !self::arrangementChangeVisible($scope, $changeId)) {
+            return null;
+        }
+
+        return self::queryTable('arrangement_change')
+            ->where('id', $changeId)
+            ->whereNull('deleted_at')
+            ->first();
+    }
+
+    public static function lockArrangementChangeRow(array $scope, int $changeId): ?object
+    {
+        if ($changeId <= 0 || !self::arrangementChangeVisible($scope, $changeId)) {
+            return null;
+        }
+
+        return self::queryTable('arrangement_change')
+            ->where('id', $changeId)
+            ->whereNull('deleted_at')
+            ->lockForUpdate()
+            ->first();
+    }
+
+    public static function pendingArrangementChangeId(int $arrangementId): int
+    {
+        if ($arrangementId <= 0) {
+            return 0;
+        }
+
+        return (int) (self::queryTable('arrangement_change')
+            ->where('arrangement_id', $arrangementId)
+            ->where('status', 'wait')
+            ->whereNull('deleted_at')
+            ->orderByDesc('id')
+            ->value('id') ?: 0);
+    }
+
     private static function arrangementRow(int $arrangementId): ?array
     {
         $row = self::queryTable('arrangement')
@@ -3055,6 +3166,11 @@ class InternshipRecord extends TableRecord
         return $query->whereRaw('1 = 0');
     }
 
+    private static function applyArrangementChangeScope(mixed $query, array $scope): mixed
+    {
+        return self::applyArrangementScope($query, $scope);
+    }
+
     private static function applyApplicationScope(mixed $query, array $scope): mixed
     {
         return self::applyStudentTaskScope($query, $scope, 'application.student_id', 'application.arrangement_id');
@@ -3167,7 +3283,7 @@ class InternshipRecord extends TableRecord
         $items = [];
         foreach ($rows as $row) {
             $item = method_exists($row, 'getAttributes') ? $row->getAttributes() : (array) $row;
-            foreach (['materials', 'plan_content', 'form_schema', 'fee_detail', 'items'] as $jsonField) {
+            foreach (['materials', 'plan_content', 'form_schema', 'fee_detail', 'items', 'payload'] as $jsonField) {
                 if (isset($item[$jsonField]) && is_string($item[$jsonField])) {
                     $decoded = json_decode($item[$jsonField], true);
                     $item[$jsonField] = json_last_error() === JSON_ERROR_NONE ? $decoded : $item[$jsonField];

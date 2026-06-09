@@ -62,9 +62,24 @@ class InternshipController
         return $this->handle(fn (): array => $this->service()->arrangementDetail($request));
     }
 
+    public function arrangementChanges(Request $request): Response
+    {
+        return $this->handle(fn (): array => $this->service()->arrangementChanges($request));
+    }
+
     public function saveArrangement(Request $request): Response
     {
         return $this->handle(fn (): array => $this->service()->saveArrangement($request));
+    }
+
+    public function saveArrangementChange(Request $request): Response
+    {
+        return $this->handle(fn (): array => $this->service()->saveArrangementChange($request));
+    }
+
+    public function reviewArrangementChange(Request $request): Response
+    {
+        return $this->handle(fn (): array => $this->service()->reviewArrangementChange($request));
     }
 
     public function importArrangementAssignments(Request $request): Response

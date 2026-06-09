@@ -445,8 +445,20 @@ export function fetchInternshipArrangementDetail(params = {}) {
   return internshipList('arrangement-detail', params);
 }
 
+export function fetchInternshipArrangementChanges(params = {}) {
+  return internshipList('arrangement-changes', params);
+}
+
 export function saveInternshipArrangement(payload) {
   return internshipPost('save-arrangement', payload);
+}
+
+export function saveInternshipArrangementChange(payload) {
+  return internshipPost('save-arrangement-change', payload);
+}
+
+export function reviewInternshipArrangementChange(payload) {
+  return internshipPost('review-arrangement-change', payload);
 }
 
 export function importInternshipArrangementAssignments(file) {

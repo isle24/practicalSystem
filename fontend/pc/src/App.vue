@@ -445,8 +445,8 @@
                           <textarea v-model="internshipState.arrangementForm.description" rows="3" />
                         </label>
                         <label v-if="internshipState.arrangementForm.id" class="span-2">
-                          <span>变更原因</span>
-                          <textarea v-model="internshipState.arrangementForm.change_reason" rows="3" />
+                          <span>变更申请原因</span>
+                          <textarea v-model="internshipState.arrangementForm.change_reason" rows="3" placeholder="已存在任务调整后需审核通过才会生效" />
                         </label>
                       </div>
 
@@ -865,6 +865,36 @@
                         </template>
                       </DataListPanel>
                     </div>
+                  </template>
+
+                  <template v-else-if="win.panel === 'arrangementChanges'">
+                    <DataListPanel
+                      :columns="internshipListConfigs.arrangementChanges.columns"
+                      :filters="internshipListConfigs.arrangementChanges.filters"
+                      :filter-values="internshipState.filters.arrangementChanges"
+                      :loading="internshipState.loading"
+                      :pagination="internshipState.lists.arrangementChanges.pagination"
+                      :rows="internshipState.lists.arrangementChanges.items"
+                      @filter-change="setInternshipFilter('arrangementChanges', $event)"
+                      @page-change="page => loadInternshipPanel('arrangementChanges', page)"
+                      @reset="resetInternshipFilters('arrangementChanges')"
+                      @search="loadInternshipPanel('arrangementChanges', 1)"
+                    >
+                      <template #actions="{ row }">
+                        <el-button v-if="canReviewRow(row, 'arrangement_change')" link type="primary" @click="openReviewDialog('arrangement_change', row, 'accept')">
+                          通过
+                        </el-button>
+                        <el-button v-if="canReviewRow(row, 'arrangement_change')" link type="warning" @click="openReviewDialog('arrangement_change', row, 'modify')">
+                          退回
+                        </el-button>
+                        <el-button v-if="canManageInternship && ['draft', 'modify'].includes(row.status)" link type="primary" @click="reopenArrangementChangeDialog(row)">
+                          重新提交
+                        </el-button>
+                        <el-button size="small" type="primary" plain @click="openTimelineDialog('arrangement_change', row)">
+                          记录
+                        </el-button>
+                      </template>
+                    </DataListPanel>
                   </template>
 
                   <template v-else-if="win.panel === 'plans'">
@@ -2960,6 +2990,7 @@ import {
   fetchSwitchableAccounts,
   fetchInternshipArchiveMaterials,
   fetchInternshipApplications,
+  fetchInternshipArrangementChanges,
   fetchInternshipArrangementDetail,
   fetchInternshipArrangements,
   fetchInternshipDelays,
@@ -3006,6 +3037,7 @@ import {
   markMessagesRead,
   passkeyLogin,
   reviewInternshipApplication,
+  reviewInternshipArrangementChange,
   reviewInternshipDelay,
   reviewInternshipJournal,
   reviewInternshipPlan,
@@ -3017,6 +3049,7 @@ import {
   saveArchiveItem,
   saveAdminAccount,
   saveInternshipArrangement,
+  saveInternshipArrangementChange,
   saveInternshipBaseFlow,
   saveInternshipPlan,
   saveInternshipScore,
@@ -3642,6 +3675,11 @@ const userListFilters = computed(() => [
 ]);
 
 const defaultInternshipReviewRules = {
+  arrangement_change: {
+    accept: { min: 0, max: 300 },
+    modify: { min: 5, max: 500 },
+    refuse: { min: 5, max: 500 },
+  },
   application: {
     accept: { min: 0, max: 200 },
     modify: { min: 5, max: 500 },
@@ -3697,6 +3735,7 @@ const internshipSidebarItems = [
   { key: 'overview', name: '总览', icon: ChartColumn },
   { key: 'baseFlows', name: '基地建设', icon: Building2, permission: 'internship:manage' },
   { key: 'arrangements', name: '实习安排', icon: CalendarCheck },
+  { key: 'arrangementChanges', name: '任务变更', icon: Workflow, permission: 'internship:manage' },
   { key: 'plans', name: '实习计划', icon: FileText, permission: 'internship:plan' },
   { key: 'syllabusGuides', name: '大纲指导书', icon: BookOpen },
   { key: 'implementationSheets', name: '实施表', icon: ClipboardList },
@@ -3730,6 +3769,7 @@ const internshipState = reactive({
   baseFlowForm: emptyBaseFlowForm(),
   filters: {
     arrangements: emptyInternshipFilters(),
+    arrangementChanges: emptyInternshipFilters(),
     plans: emptyInternshipFilters(),
     syllabusGuides: emptyInternshipFilters(),
     implementationSheets: emptyInternshipFilters(),
@@ -3750,6 +3790,7 @@ const internshipState = reactive({
   },
   lists: {
     arrangements: emptyPagedList(),
+    arrangementChanges: emptyPagedList(),
     plans: emptyPagedList(),
     syllabusGuides: emptyPagedList(),
     implementationSheets: emptyPagedList(),
@@ -4070,6 +4111,25 @@ const internshipListConfigs = computed(() => ({
       { prop: 'student_count', label: '人数', width: 80 },
       { key: 'date', label: '时间', minWidth: 170, formatter: row => `${row.start_date || '-'} 至 ${row.end_date || '-'}` },
       { key: 'scope', label: '范围', minWidth: 190, formatter: row => arrangementScopeText(row) },
+      { prop: 'status', label: '状态', width: 90, tag: true, tagType: row => statusTagType(row.status), formatter: row => statusText(row.status) },
+    ],
+  },
+  arrangementChanges: {
+    listKey: 'arrangementChanges',
+    filename: '任务变更',
+    filters: internshipListFilters('arrangementChanges', ['grade_id', 'dep_id', 'profession_id', 'arrangement_id', 'status', 'keyword']),
+    columns: [
+      { prop: 'arrangement_title', label: '原任务', minWidth: 190 },
+      { prop: 'course_name', label: '课程计划', minWidth: 170 },
+      { prop: 'teacher_name', label: '原负责老师', width: 120 },
+      { prop: 'task_no', label: '任务编号', width: 140 },
+      { key: 'change_title', label: '拟变更任务', minWidth: 190, formatter: row => row.payload?.title || '-' },
+      { key: 'change_date', label: '拟变更时间', minWidth: 170, formatter: row => `${row.payload?.start_date || '-'} 至 ${row.payload?.end_date || '-'}` },
+      { prop: 'reason', label: '变更原因', minWidth: 220 },
+      { prop: 'submitter_name', label: '提交人', width: 110 },
+      { prop: 'submitted_at', label: '提交时间', width: 168 },
+      { prop: 'reviewer_name', label: '审核人', width: 110 },
+      { prop: 'review_opinion', label: '审核意见', minWidth: 180 },
       { prop: 'status', label: '状态', width: 90, tag: true, tagType: row => statusTagType(row.status), formatter: row => statusText(row.status) },
     ],
   },
@@ -7091,6 +7151,7 @@ function emptyArrangementForm() {
     location: '',
     description: '',
     change_reason: '',
+    change_id: null,
     status: 'enabled',
   };
 }
@@ -8353,7 +8414,7 @@ function semesterOptions() {
 }
 
 function statusOptions() {
-  return ['draft', 'wait', 'accept', 'modify', 'refuse', 'enabled', 'disabled', 'changed', 'active', 'removed'].map(value => ({
+  return ['draft', 'wait', 'accept', 'modify', 'refuse', 'enabled', 'changing', 'disabled', 'changed', 'active', 'removed'].map(value => ({
     value,
     label: statusText(value),
   }));
@@ -8545,6 +8606,48 @@ function fillArrangementFormFromDetail(detail) {
   normalizeArrangementCascade();
 }
 
+function fillArrangementFormFromChange(row) {
+  const payload = row?.payload && typeof row.payload === 'object' ? row.payload : {};
+  internshipState.arrangementForm = {
+    ...emptyArrangementForm(),
+    id: row.arrangement_id || null,
+    change_id: row.id || null,
+    plan_id: payload.plan_id || null,
+    title: payload.title || payload.name || row.arrangement_title || '',
+    task_no: payload.task_no || row.task_no || '',
+    batch_no: payload.batch_no || row.batch_no || '',
+    grade_id: row.grade_id || null,
+    base_id: payload.base_id || null,
+    dep_id: row.dep_id || null,
+    profession_id: row.profession_id || null,
+    teacher_id: payload.teacher_id || row.teacher_id || null,
+    class_ids: Array.isArray(payload.class_ids) ? payload.class_ids : [],
+    credit: payload.credit ?? '',
+    type: payload.type || 'major_external',
+    organize_mode: payload.organize_mode || 'centralized',
+    start_date: payload.start_date || '',
+    end_date: payload.end_date || '',
+    location: payload.location || '',
+    description: payload.description || '',
+    change_reason: row.reason || '',
+    status: 'enabled',
+  };
+  normalizeArrangementCascade();
+}
+
+function reopenArrangementChangeDialog(row) {
+  if (!row || !['draft', 'modify'].includes(row.status)) {
+    internshipState.message = '仅草稿或退回的任务变更可重新提交';
+    return;
+  }
+  fillArrangementFormFromChange(row);
+  internshipState.dialog = {
+    ...emptyOperationDialog(),
+    type: 'arrangement',
+    title: '重新提交任务变更申请',
+  };
+}
+
 async function openArrangementDialog(row = null) {
   if (row?.id) {
     internshipState.loading = true;
@@ -8555,7 +8658,7 @@ async function openArrangementDialog(row = null) {
       internshipState.dialog = {
         ...emptyOperationDialog(),
         type: 'arrangement',
-        title: '编辑实习任务',
+        title: '提交任务变更申请',
       };
     } catch (error) {
       internshipState.message = error.message;
@@ -8748,6 +8851,10 @@ async function confirmInternshipDialog() {
       await reviewApplication(internshipState.dialog.row, internshipState.dialog.status, internshipState.dialog.reason);
       return;
     }
+    if (internshipState.dialog.entity === 'arrangement_change') {
+      await reviewArrangementChange(internshipState.dialog.row, internshipState.dialog.status, internshipState.dialog.reason);
+      return;
+    }
     if (internshipState.dialog.entity === 'plan') {
       await reviewPlan(internshipState.dialog.row, internshipState.dialog.status, internshipState.dialog.reason);
       return;
@@ -8805,6 +8912,7 @@ function reviewEntityName(entity) {
     report: '实习报告',
     plan: '实习计划',
     arrangement: '实习任务',
+    arrangement_change: '任务变更',
     delay: '延期申请',
   };
   return names[entity] || '审核事项';
@@ -8979,6 +9087,9 @@ function canReviewRow(row, entity) {
   if (entity === 'plan') {
     return canManageInternshipPlan.value;
   }
+  if (entity === 'arrangement_change') {
+    return canManageInternship.value || canApproveInternship.value;
+  }
   if (entity === 'application') {
     if (!canApproveInternship.value) {
       return false;
@@ -9082,6 +9193,8 @@ async function loadInternshipPanel(panel = 'overview', page = 1) {
       setPagedList('applications', applications);
     } else if (panel === 'arrangements') {
       setPagedList('arrangements', await fetchInternshipArrangements(params('arrangements')));
+    } else if (panel === 'arrangementChanges') {
+      setPagedList('arrangementChanges', await fetchInternshipArrangementChanges(params('arrangementChanges')));
     } else if (panel === 'baseFlows') {
       const flowType = internshipState.filters.baseFlows.type || 'application';
       const data = await fetchInternshipBaseFlows({
@@ -9166,6 +9279,7 @@ async function saveArrangement() {
   if (!canManageInternship.value) {
     return;
   }
+  const form = internshipState.arrangementForm;
   if (!internshipState.arrangementForm.plan_id) {
     internshipState.message = '请选择实习计划';
     return;
@@ -9178,33 +9292,75 @@ async function saveArrangement() {
     internshipState.message = '请选择任务班级';
     return;
   }
+  if (form.id && !String(form.change_reason || '').trim()) {
+    internshipState.message = '请填写任务变更申请原因';
+    return;
+  }
 
   internshipState.loading = true;
   internshipState.message = '';
   internshipState.savedMessage = '';
   try {
-    await saveInternshipArrangement({
-      ...internshipState.arrangementForm,
-      name: internshipState.arrangementForm.title,
-      base_id: internshipState.arrangementForm.base_id || null,
-      dep_id: internshipState.arrangementForm.dep_id || null,
-      profession_id: internshipState.arrangementForm.profession_id || null,
-      teacher_id: internshipState.arrangementForm.teacher_id || null,
-      class_ids: internshipState.arrangementForm.class_ids,
-    });
-    internshipState.savedMessage = '已保存';
+    const payload = {
+      ...form,
+      name: form.title,
+      base_id: form.base_id || null,
+      dep_id: form.dep_id || null,
+      profession_id: form.profession_id || null,
+      teacher_id: form.teacher_id || null,
+      class_ids: form.class_ids,
+    };
+    if (form.id) {
+      await saveInternshipArrangementChange({
+        ...payload,
+        arrangement_id: form.id,
+        change_id: form.change_id || undefined,
+        id: undefined,
+        uuid: undefined,
+        reason: form.change_reason,
+        status: 'wait',
+      });
+      internshipState.savedMessage = '变更申请已提交，审核通过后生效';
+    } else {
+      await saveInternshipArrangement(payload);
+      internshipState.savedMessage = '已保存';
+    }
     internshipState.arrangementForm = {
       ...emptyArrangementForm(),
-      plan_id: internshipState.arrangementForm.plan_id,
-      base_id: internshipState.arrangementForm.base_id,
-      grade_id: internshipState.arrangementForm.grade_id,
-      dep_id: internshipState.arrangementForm.dep_id,
-      profession_id: internshipState.arrangementForm.profession_id,
-      teacher_id: internshipState.arrangementForm.teacher_id,
-      credit: internshipState.arrangementForm.credit,
+      plan_id: form.plan_id,
+      base_id: form.base_id,
+      grade_id: form.grade_id,
+      dep_id: form.dep_id,
+      profession_id: form.profession_id,
+      teacher_id: form.teacher_id,
+      credit: form.credit,
     };
     closeInternshipDialog();
     await Promise.all([
+      loadInternshipPanel('arrangements'),
+      loadInternshipPanel('arrangementChanges'),
+      loadInternshipPanel('pairs'),
+      loadInternshipOptions(),
+    ]);
+  } catch (error) {
+    internshipState.message = error.message;
+  } finally {
+    internshipState.loading = false;
+  }
+}
+
+async function reviewArrangementChange(row, status, opinion = '') {
+  internshipState.loading = true;
+  internshipState.message = '';
+  try {
+    await reviewInternshipArrangementChange({
+      id: row.id,
+      status,
+      opinion: opinion || (status === 'accept' ? '同意任务变更' : '任务变更退回，请调整后重新提交'),
+    });
+    closeInternshipDialog();
+    await Promise.all([
+      loadInternshipPanel('arrangementChanges'),
       loadInternshipPanel('arrangements'),
       loadInternshipPanel('pairs'),
       loadInternshipOptions(),
@@ -9505,6 +9661,7 @@ function statusText(value) {
     modify: '需修改',
     refuse: '已退回',
     enabled: '启用',
+    changing: '变更中',
     disabled: '停用',
     changed: '已变更',
     pending: '待处理',
@@ -9527,7 +9684,7 @@ function statusTagType(value) {
   if (['accept', 'enabled', 'active', 'signed', 'complete', 'archived', 'confirmed', 'published'].includes(value)) {
     return 'success';
   }
-  if (['wait', 'pending', 'draft'].includes(value)) {
+  if (['wait', 'pending', 'draft', 'changing'].includes(value)) {
     return 'warning';
   }
   if (['modify', 'removed', 'disabled', 'changed', 'not_required'].includes(value)) {
