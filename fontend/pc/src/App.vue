@@ -70,19 +70,25 @@
           trigger="click"
           @command="switchLoginAccount"
         >
-          <el-button text :loading="switchAccountState.loading">
-            {{ roleText }}
+          <el-button class="switch-account-button" :loading="switchAccountState.loading">
+            <UsersRound :size="15" />
+            切换身份
           </el-button>
           <template #dropdown>
-            <el-dropdown-menu>
+            <el-dropdown-menu class="switch-account-menu">
               <el-dropdown-item
                 v-for="account in switchAccountState.items"
                 :key="account.id"
                 :command="account.id"
                 :disabled="account.is_current"
               >
-                {{ account.role_name || roleTypeNames[account.role_type] || account.login_name }}
-                <span v-if="account.is_current">（当前）</span>
+                <span class="switch-account-item">
+                  <strong>
+                    {{ switchAccountName(account) }}
+                    <em v-if="account.is_current">当前</em>
+                  </strong>
+                  <small>{{ switchAccountMeta(account) }}</small>
+                </span>
               </el-dropdown-item>
             </el-dropdown-menu>
           </template>
@@ -5360,11 +5366,22 @@ async function switchLoginAccount(accountId) {
       client: 'WEB',
     });
     await refreshAuthenticatedSession(true);
+    switchAccountState.message = `已切换为 ${operatorName.value}`;
   } catch (error) {
     switchAccountState.message = error.message;
   } finally {
     switchAccountState.loading = false;
   }
+}
+
+function switchAccountName(account) {
+  return account?.name || account?.login_name || '未命名账号';
+}
+
+function switchAccountMeta(account) {
+  const roleName = account?.role_name || roleTypeNames[account?.role_type] || account?.role_type || '未分配角色';
+  const loginName = account?.login_name ? ` / ${account.login_name}` : '';
+  return `${roleName}${loginName}`;
 }
 
 async function consumeUrlPasskey() {

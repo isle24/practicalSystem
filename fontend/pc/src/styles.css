@@ -208,6 +208,54 @@ a {
   background: #fff center / cover no-repeat;
 }
 
+.switch-account-button {
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 10px;
+  color: var(--primary);
+  background: #fff;
+}
+
+.switch-account-menu {
+  min-width: 190px;
+}
+
+.switch-account-item {
+  display: grid;
+  gap: 2px;
+  min-width: 150px;
+}
+
+.switch-account-item strong {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.3;
+}
+
+.switch-account-item em {
+  border-radius: 999px;
+  padding: 1px 6px;
+  color: var(--primary);
+  background: var(--primary-soft);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 500;
+}
+
+.switch-account-item small {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.3;
+}
+
 .workspace {
   position: relative;
   min-height: 0;
