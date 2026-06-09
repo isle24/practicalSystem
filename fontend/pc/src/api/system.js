@@ -17,6 +17,24 @@ export function logout() {
   });
 }
 
+export function fetchSwitchableAccounts() {
+  return request('/auth/switchable-accounts');
+}
+
+export function switchAccount(payload) {
+  return request('/auth/switch-account', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function passkeyLogin(payload) {
+  return request('/auth/passkey-login', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
 export function fetchSchool() {
   return request('/school/current');
 }
@@ -244,6 +262,13 @@ export function changeAdminAccountStatus(payload) {
 
 export function resetAdminAccountPassword(payload) {
   return request('/admin/reset-account-password', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function generateAdminLoginPasskey(payload) {
+  return request('/admin/login-passkey', {
     method: 'POST',
     body: JSON.stringify(payload),
   });

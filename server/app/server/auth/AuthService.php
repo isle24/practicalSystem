@@ -3,6 +3,7 @@
 namespace app\server\auth;
 
 use app\model\channel\Account;
+use app\model\channel\AuthPasskey;
 use app\model\channel\User;
 use app\server\CurrentContext;
 use app\server\rbac\DataScopeService;
@@ -20,6 +21,7 @@ class AuthService
 {
     private const ACCESS_COOKIE = 'jwt';
     private const REFRESH_COOKIE = 'refresh_jwt';
+    private const PASSKEY_TTL = 600;
 
     public function login(string $loginName, string $password, string $client = JwtToken::TOKEN_CLIENT_WEB): array
     {
@@ -41,6 +43,131 @@ class AuthService
             'token' => $token,
             'session' => $this->session($context, (int) $token['expires_in']),
         ];
+    }
+
+    public function switchableAccounts(): array
+    {
+        $accountId = CurrentContext::accountId();
+        if (!$accountId) {
+            throw new RuntimeException('请先登录');
+        }
+
+        return [
+            'accounts' => Account::switchableAccounts($accountId),
+        ];
+    }
+
+    public function switchAccount(int $targetAccountId, string $client = JwtToken::TOKEN_CLIENT_WEB): array
+    {
+        $currentAccountId = CurrentContext::accountId();
+        if (!$currentAccountId) {
+            throw new RuntimeException('请先登录');
+        }
+        if ($targetAccountId <= 0) {
+            throw new RuntimeException('目标账号无效');
+        }
+        if (!Account::canSwitchBetween($currentAccountId, $targetAccountId)) {
+            throw new RuntimeException('只能切换同一用户或同手机号绑定的账号');
+        }
+
+        return $this->issueSessionForAccount($targetAccountId, $client);
+    }
+
+    public function adminLoginPasskey(int $targetAccountId, string $client = JwtToken::TOKEN_CLIENT_WEB, string $returnUrl = ''): array
+    {
+        $creatorAccountId = CurrentContext::accountId();
+        if (!$creatorAccountId) {
+            throw new RuntimeException('请先登录');
+        }
+        $target = $this->assertAdminCanAccessAccount($targetAccountId);
+
+        $now = date('Y-m-d H:i:s');
+        $purpose = 'admin_login';
+        $record = AuthPasskey::reusable($creatorAccountId, $targetAccountId, $purpose, $now);
+        $reused = (bool) $record;
+        if (!$record) {
+            $record = AuthPasskey::createKey([
+                'passkey' => $this->newPasskey(),
+                'purpose' => $purpose,
+                'creator_account_id' => $creatorAccountId,
+                'target_account_id' => $targetAccountId,
+                'creator_role_type' => CurrentContext::roleType(),
+                'client' => $this->client($client),
+                'expires_at' => date('Y-m-d H:i:s', time() + self::PASSKEY_TTL),
+                'created_at' => $now,
+                'updated_at' => $now,
+            ]);
+        }
+
+        $passkey = (string) $record->passkey;
+
+        return [
+            'passkey' => $passkey,
+            'login_url' => $this->appendPasskeyUrl($returnUrl, $passkey),
+            'expires_in' => max(0, strtotime((string) $record->expires_at) - time()),
+            'expires_at' => (string) $record->expires_at,
+            'reused' => $reused,
+            'target' => $target,
+        ];
+    }
+
+    public function loginByPasskey(string $passkey, string $client = JwtToken::TOKEN_CLIENT_WEB): array
+    {
+        $passkey = trim($passkey);
+        if ($passkey === '') {
+            throw new RuntimeException('一键登录凭证不能为空');
+        }
+
+        $record = AuthPasskey::consume($passkey, date('Y-m-d H:i:s'));
+        if (!$record) {
+            throw new RuntimeException('一键登录链接已失效或已使用');
+        }
+
+        return $this->issueSessionForAccount((int) $record['target_account_id'], $client);
+    }
+
+    public function assertAdminCanAccessAccount(int $targetAccountId): array
+    {
+        $roleType = CurrentContext::roleType();
+        if (!in_array($roleType, ['super_admin', 'school_admin', 'college_admin', 'profession_admin'], true)) {
+            throw new RuntimeException('无一键登录权限');
+        }
+
+        $target = Account::adminLoginTargetProfile($targetAccountId);
+        if (!$target) {
+            throw new RuntimeException('目标账号不存在、已停用或未分配角色');
+        }
+
+        $targetRoleType = (string) ($target['role_type'] ?? '');
+        if ($roleType === 'super_admin') {
+            return $target;
+        }
+        if ($roleType === 'school_admin') {
+            if ($targetRoleType === 'super_admin') {
+                throw new RuntimeException('学校管理员不能一键登录超级管理员账号');
+            }
+            return $target;
+        }
+
+        if (!in_array($targetRoleType, ['teacher', 'student'], true)) {
+            throw new RuntimeException('学院或专业管理员只能一键登录老师、学生账号');
+        }
+
+        $scope = $this->adminScope();
+        if ($roleType === 'college_admin') {
+            $depIds = $scope['dep_ids'];
+            if (!$depIds || !in_array((int) ($target['dep_id'] ?? 0), $depIds, true)) {
+                throw new RuntimeException('目标账号不在当前学院范围内');
+            }
+            return $target;
+        }
+
+        $professionIds = $scope['profession_ids'];
+        if (!$professionIds || !in_array((int) ($target['profession_id'] ?? 0), $professionIds, true)) {
+            throw new RuntimeException('目标账号不在当前专业范围内');
+        }
+
+        return $target;
     }
 
     public function refresh(string $refreshToken): array
@@ -153,6 +280,17 @@ class AuthService
         return $context;
     }
 
+    private function issueSessionForAccount(int $accountId, string $client): array
+    {
+        $context = $this->contextForAccount($accountId, $this->client($client));
+        $token = JwtToken::generateToken($this->tokenPayload($context, $this->client($client)));
+
+        return [
+            'token' => $token,
+            'session' => $this->session($context, (int) $token['expires_in']),
+        ];
+    }
+
     private function session(array $context, int $expiresIn): array
     {
         return [
@@ -195,6 +333,58 @@ class AuthService
         return in_array(strtoupper($client), ['MOBILE', 'H5'], true)
             ? JwtToken::TOKEN_CLIENT_MOBILE
             : JwtToken::TOKEN_CLIENT_WEB;
+    }
+
+    private function newPasskey(): string
+    {
+        return rtrim(strtr(base64_encode(random_bytes(36)), '+/', '-_'), '=');
+    }
+
+    private function appendPasskeyUrl(string $returnUrl, string $passkey): string
+    {
+        $returnUrl = trim($returnUrl);
+        if ($returnUrl === '') {
+            return '';
+        }
+
+        $parts = parse_url($returnUrl);
+        if (!$parts || empty($parts['scheme']) || empty($parts['host'])) {
+            return '';
+        }
+
+        $query = [];
+        if (!empty($parts['query'])) {
+            parse_str($parts['query'], $query);
+        }
+        $query['passkey'] = $passkey;
+        unset($query['fresh']);
+
+        $port = isset($parts['port']) ? ':' . $parts['port'] : '';
+        $path = $parts['path'] ?? '/';
+        $fragment = isset($parts['fragment']) ? '#' . $parts['fragment'] : '';
+
+        return "{$parts['scheme']}://{$parts['host']}{$port}{$path}?" . http_build_query($query) . $fragment;
+    }
+
+    private function adminScope(): array
+    {
+        $scopes = CurrentContext::organizationScopes();
+        $depIds = [];
+        $professionIds = [];
+        foreach ($scopes as $scope) {
+            if (!empty($scope['dep_id'])) {
+                $depIds[] = (int) $scope['dep_id'];
+            }
+            if (!empty($scope['profession_id'])) {
+                $professionIds[] = (int) $scope['profession_id'];
+            }
+        }
+
+        return [
+            'role_type' => CurrentContext::roleType(),
+            'dep_ids' => array_values(array_unique($depIds)),
+            'profession_ids' => array_values(array_unique($professionIds)),
+        ];
     }
 
     private function verifyRefreshToken(string $refreshToken): array

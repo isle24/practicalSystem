@@ -5,6 +5,7 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
 
   return {
+    base: './',
     plugins: [vue()],
     server: {
       proxy: {
@@ -15,6 +16,8 @@ export default defineConfig(({ mode }) => {
       },
     },
     build: {
+      outDir: '../../server/public/h5',
+      emptyOutDir: true,
       rollupOptions: {
         output: {
           manualChunks: {

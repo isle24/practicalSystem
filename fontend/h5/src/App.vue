@@ -113,6 +113,22 @@
           <van-cell v-if="hasPermission('doc:view')" title="文档中心" value="查看" is-link @click="activeTab = 'doc'" />
           <van-cell v-if="hasPermission('template:view')" title="模板库" value="下载" is-link @click="activeTab = 'templateLib'" />
         </van-cell-group>
+
+        <van-cell-group v-if="switchAccountState.items.length > 1" inset class="switch-account-group">
+          <van-cell
+            title="切换身份"
+            :label="switchAccountState.message || '同一用户或同手机号绑定账号可快速切换'"
+          />
+          <van-cell
+            v-for="account in switchAccountState.items"
+            :key="account.id"
+            :title="accountSwitchTitle(account)"
+            :label="accountSwitchLabel(account)"
+            :value="account.is_current ? '当前' : '切换'"
+            :is-link="!account.is_current"
+            @click="switchMobileAccount(account)"
+          />
+        </van-cell-group>
       </template>
 
       <template v-else-if="activeTab === 'message'">
@@ -1265,6 +1281,7 @@ import {
   fetchInternshipTimeline,
   fetchMessages,
   fetchMessageSummary,
+  fetchSwitchableAccounts,
   fetchPracticeList,
   fetchPracticeOptions,
   fetchPracticeOverview,
@@ -1286,8 +1303,10 @@ import {
   saveInternshipReport,
   saveInternshipScore,
   saveInternshipSignIn,
+  passkeyLogin,
   login as loginApi,
   logout as logoutApi,
+  switchAccount,
 } from './api/system';
 
 const { state, hasPermission, load } = useMobilePermissions();
@@ -1299,6 +1318,11 @@ const loginForm = reactive({
 const loginState = reactive({
   loading: false,
   message: '',
+});
+const switchAccountState = reactive({
+  loading: false,
+  message: '',
+  items: [],
 });
 const messageState = reactive({
   loading: false,
@@ -4400,6 +4424,9 @@ function resetPracticeState() {
 }
 
 function resetMobileLocalState() {
+  switchAccountState.items = [];
+  switchAccountState.message = '';
+  switchAccountState.loading = false;
   resetMessageState();
   resetSupportState();
   resetInternshipState();
@@ -4530,6 +4557,7 @@ function formatDateKey(date) {
 
 async function refreshMobilePage() {
   await load();
+  await loadSwitchableAccounts();
   if (activeTab.value === 'message') {
     await loadMessages(1);
     return;
@@ -4554,6 +4582,109 @@ async function refreshMobilePage() {
   await loadMessageSummary();
 }
 
+async function refreshMobileSession(resetWorkspace = false) {
+  if (resetWorkspace) {
+    resetMobileLocalState();
+  }
+
+  await load();
+  if (!isLoggedIn.value) {
+    switchAccountState.items = [];
+    return;
+  }
+
+  await loadSwitchableAccounts();
+  await loadMessageSummary();
+  await loadMobileSupportCategories();
+  await loadInternship();
+  if (isPracticeTab(activeTab.value)) {
+    await loadPractice(activeTab.value);
+  }
+}
+
+async function loadSwitchableAccounts() {
+  if (!isLoggedIn.value) {
+    switchAccountState.items = [];
+    switchAccountState.message = '';
+    return;
+  }
+
+  switchAccountState.loading = true;
+  switchAccountState.message = '';
+  try {
+    const data = await fetchSwitchableAccounts();
+    switchAccountState.items = data.accounts || [];
+  } catch (error) {
+    switchAccountState.items = [];
+    switchAccountState.message = error.message;
+  } finally {
+    switchAccountState.loading = false;
+  }
+}
+
+async function switchMobileAccount(account) {
+  const accountId = Number(account?.id || 0);
+  if (!accountId || account?.is_current || switchAccountState.loading) {
+    return;
+  }
+
+  switchAccountState.loading = true;
+  switchAccountState.message = '';
+  try {
+    await switchAccount({
+      account_id: accountId,
+      client: 'H5',
+    });
+    await refreshMobileSession(true);
+    showToast('已切换身份');
+  } catch (error) {
+    switchAccountState.message = error.message;
+    showToast(error.message);
+  } finally {
+    switchAccountState.loading = false;
+  }
+}
+
+function accountSwitchTitle(account) {
+  return account?.name || account?.login_name || '未命名账号';
+}
+
+function accountSwitchLabel(account) {
+  const parts = [
+    account?.role_name || roleNameMap[account?.role_type] || account?.role_type || '未分配角色',
+    account?.login_name || '',
+  ].filter(Boolean);
+  return parts.join(' / ');
+}
+
+async function consumeUrlPasskey() {
+  const params = new URLSearchParams(window.location.search);
+  const passkey = params.get('passkey') || params.get('login_key');
+  if (!passkey) {
+    return false;
+  }
+
+  loginState.loading = true;
+  loginState.message = '';
+  try {
+    await passkeyLogin({
+      passkey,
+      client: 'H5',
+    });
+    params.delete('passkey');
+    params.delete('login_key');
+    const query = params.toString();
+    history.replaceState(null, '', `${window.location.pathname}${query ? `?${query}` : ''}${window.location.hash}`);
+    return true;
+  } catch (error) {
+    loginState.message = error.message;
+    showToast(error.message);
+    return false;
+  } finally {
+    loginState.loading = false;
+  }
+}
+
 async function submitLogin() {
   loginState.loading = true;
   loginState.message = '';
@@ -4563,13 +4694,7 @@ async function submitLogin() {
       password: loginForm.password,
       client: 'H5',
     });
-    await load();
-    await loadMessageSummary();
-    await loadMobileSupportCategories();
-    await loadInternship();
-    if (isPracticeTab(activeTab.value)) {
-      await loadPractice(activeTab.value);
-    }
+    await refreshMobileSession(true);
   } catch (error) {
     loginState.message = error.message;
   } finally {
@@ -4631,13 +4756,8 @@ watch(visibleMobileModules, () => {
 
 onMounted(async () => {
   window.addEventListener('practical-auth-expired', handleAuthExpired);
-  await load();
-  await loadMessageSummary();
-  await loadMobileSupportCategories();
-  await loadInternship();
-  if (isPracticeTab(activeTab.value)) {
-    await loadPractice(activeTab.value);
-  }
+  await consumeUrlPasskey();
+  await refreshMobileSession();
 });
 
 onBeforeUnmount(() => {

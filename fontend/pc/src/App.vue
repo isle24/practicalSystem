@@ -65,7 +65,29 @@
           </span>
           <span>{{ operatorName }}</span>
         </el-button>
-        <span v-else>{{ operatorName }}</span>
+        <el-dropdown
+          v-if="isLoggedIn && switchAccountState.items.length > 1"
+          trigger="click"
+          @command="switchLoginAccount"
+        >
+          <el-button text :loading="switchAccountState.loading">
+            {{ roleText }}
+          </el-button>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item
+                v-for="account in switchAccountState.items"
+                :key="account.id"
+                :command="account.id"
+                :disabled="account.is_current"
+              >
+                {{ account.role_name || roleTypeNames[account.role_type] || account.login_name }}
+                <span v-if="account.is_current">（当前）</span>
+              </el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
+        <span v-if="!isLoggedIn">{{ operatorName }}</span>
         <el-button v-if="!isLoggedIn" text :icon="LogIn" @click="focusLogin">
           登录
         </el-button>
@@ -1205,7 +1227,7 @@
 
                 <div v-else-if="isUserManageWindow(win)" class="admin-panel user-admin-panel">
                   <div class="admin-toolbar">
-                    <el-button type="primary" :icon="Plus" @click="openUserDialog()">
+                    <el-button v-if="canManageConfig" type="primary" :icon="Plus" @click="openUserDialog()">
                       新增用户
                     </el-button>
                     <el-button :icon="RefreshCw" :loading="userAdminState.loading" @click="loadUserAccounts(userAdminState.pagination.page || 1)">
@@ -1225,10 +1247,11 @@
                     @search="loadUserAccounts(1)"
                   >
                     <template #actions="{ row }">
-                      <el-button link type="primary" :disabled="!canMaintainUser(row)" @click="openUserDialog(row)">
+                      <el-button v-if="canManageConfig" link type="primary" :disabled="!canMaintainUser(row)" @click="openUserDialog(row)">
                         编辑
                       </el-button>
                       <el-button
+                        v-if="canManageConfig"
                         link
                         :type="row.status === 'enabled' ? 'warning' : 'success'"
                         :disabled="Number(row.id) === Number(permissionState.context.account_id) || !canMaintainUser(row)"
@@ -1236,8 +1259,17 @@
                       >
                         {{ row.status === 'enabled' ? '停用' : '启用' }}
                       </el-button>
-                      <el-button link type="warning" :disabled="!canMaintainUser(row)" @click="openResetPasswordDialog(row)">
+                      <el-button v-if="canManageConfig" link type="warning" :disabled="!canMaintainUser(row)" @click="openResetPasswordDialog(row)">
                         重置密码
+                      </el-button>
+                      <el-button
+                        link
+                        type="success"
+                        :loading="userAdminState.passkeyLoadingId === row.id"
+                        :disabled="!canGenerateLoginPasskey(row)"
+                        @click="copyAdminLoginUrl(row)"
+                      >
+                        一键登录
                       </el-button>
                       <el-button link type="primary" @click="openUserDetailDialog(row, 'logs')">
                         日志
@@ -2746,6 +2778,7 @@ import {
   fetchAdminRoles,
   fetchArchiveList,
   fetchFileList,
+  fetchSwitchableAccounts,
   fetchInternshipArchiveMaterials,
   fetchInternshipApplications,
   fetchInternshipArrangements,
@@ -2782,12 +2815,14 @@ import {
   fetchProfileSettings,
   fetchRolePermissions,
   fetchWechatConfig,
+  generateAdminLoginPasskey,
   importArchiveExcel,
   deleteMenu as deleteMenuApi,
   deleteOperationGuide,
   login as loginApi,
   logout as logoutApi,
   markMessagesRead,
+  passkeyLogin,
   reviewInternshipApplication,
   reviewInternshipDelay,
   reviewInternshipJournal,
@@ -2811,6 +2846,7 @@ import {
   saveProfileSettings,
   saveRoleMenus,
   saveWechatConfig,
+  switchAccount,
   uploadLoginBackground,
   uploadProfileAsset,
 } from './api/system';
@@ -2833,6 +2869,11 @@ const loginForm = reactive({
 });
 const loginState = reactive({
   loading: false,
+  message: '',
+});
+const switchAccountState = reactive({
+  loading: false,
+  items: [],
   message: '',
 });
 const loginPageState = reactive({
@@ -3025,6 +3066,8 @@ const userAdminState = reactive({
     page_size: 20,
     total: 0,
   },
+  passkeyLoadingId: null,
+  passkeyUrl: '',
   pagination: {
     page: 1,
     page_size: 20,
@@ -3600,6 +3643,7 @@ const visibleDesktopModules = computed(() => {
 const showGlobalSearchResults = computed(() => globalSearchKeyword.value && globalSearchResults.value.length > 0);
 const visibleWindows = computed(() => openWindows.filter(win => !win.minimized));
 const canManageConfig = computed(() => hasPermission('config:manage') && ['super_admin', 'school_admin'].includes(permissionState.context.role_type));
+const canViewUserAdmin = computed(() => ['super_admin', 'school_admin', 'college_admin', 'profession_admin'].includes(permissionState.context.role_type));
 const canSendMessages = computed(() => ['super_admin', 'school_admin'].includes(currentRoleType.value));
 const canManageInternship = computed(() => hasPermission('internship:manage'));
 const canManageInternshipPlan = computed(() => hasPermission('internship:plan') && isAdminRole.value);
@@ -3730,6 +3774,9 @@ const internshipTimelineCycles = computed(() => normalizeTimelineCycles(
 function canShowModule(module) {
   if (module.id === 'profile') {
     return isLoggedIn.value;
+  }
+  if (module.id === 'userManage') {
+    return canViewUserAdmin.value;
   }
   if (!hasPermission(module.viewPermission)) {
     return false;
@@ -5251,15 +5298,98 @@ async function submitLogin() {
       password: loginForm.password,
       client: 'WEB',
     });
-    await load();
-    await loadProfile();
-    await loadProxy();
-    await loadMessageSummary();
-    ensureDefaultWindow();
-    scheduleDefaultWindow();
-    loadAdminFoundation();
+    await refreshAuthenticatedSession(true);
   } catch (error) {
     loginState.message = error.message;
+  } finally {
+    loginState.loading = false;
+  }
+}
+
+async function refreshAuthenticatedSession(resetWorkspace = false) {
+  if (resetWorkspace) {
+    resetAdminState();
+    resetProfileState();
+    resetMessageState();
+    resetInternshipState();
+    openWindows.splice(0);
+    focusedWindowId.value = null;
+  }
+
+  await load();
+  await loadProfile();
+  await loadProxy();
+  await loadMessageSummary();
+  await loadSwitchableAccounts();
+  ensureDefaultWindow();
+  handleHashNavigation();
+  scheduleDefaultWindow();
+  loadAdminFoundation();
+}
+
+async function loadSwitchableAccounts() {
+  if (!isLoggedIn.value) {
+    switchAccountState.items = [];
+    switchAccountState.message = '';
+    return;
+  }
+
+  switchAccountState.loading = true;
+  switchAccountState.message = '';
+  try {
+    const data = await fetchSwitchableAccounts();
+    switchAccountState.items = data.accounts || [];
+  } catch (error) {
+    switchAccountState.items = [];
+    switchAccountState.message = error.message;
+  } finally {
+    switchAccountState.loading = false;
+  }
+}
+
+async function switchLoginAccount(accountId) {
+  const targetId = Number(accountId || 0);
+  if (!targetId || targetId === Number(permissionState.context.account_id || 0) || switchAccountState.loading) {
+    return;
+  }
+
+  switchAccountState.loading = true;
+  switchAccountState.message = '';
+  try {
+    await switchAccount({
+      account_id: targetId,
+      client: 'WEB',
+    });
+    await refreshAuthenticatedSession(true);
+  } catch (error) {
+    switchAccountState.message = error.message;
+  } finally {
+    switchAccountState.loading = false;
+  }
+}
+
+async function consumeUrlPasskey() {
+  const params = new URLSearchParams(window.location.search);
+  const passkey = params.get('passkey') || params.get('login_key');
+  if (!passkey) {
+    return false;
+  }
+
+  loginState.loading = true;
+  loginState.message = '';
+  try {
+    await passkeyLogin({
+      passkey,
+      client: 'WEB',
+    });
+    params.delete('passkey');
+    params.delete('login_key');
+    const query = params.toString();
+    history.replaceState(null, '', `${window.location.pathname}${query ? `?${query}` : ''}${window.location.hash}`);
+    return true;
+  } catch (error) {
+    loginState.message = error.message;
+    return false;
   } finally {
     loginState.loading = false;
   }
@@ -5273,6 +5403,8 @@ async function submitLogout() {
     resetAdminState();
     resetProfileState();
     resetMessageState();
+    switchAccountState.items = [];
+    switchAccountState.message = '';
     openWindows.splice(0);
     focusedWindowId.value = null;
     await load();
@@ -5433,6 +5565,23 @@ function canMaintainUser(row) {
   return permissionState.context.role_type === 'super_admin' || row.role_type !== 'super_admin';
 }
 
+function canGenerateLoginPasskey(row) {
+  if (!row || Number(row.id) === Number(permissionState.context.account_id || 0)) {
+    return false;
+  }
+  const roleType = permissionState.context.role_type;
+  if (roleType === 'super_admin') {
+    return true;
+  }
+  if (roleType === 'school_admin') {
+    return row.role_type !== 'super_admin';
+  }
+  if (['college_admin', 'profession_admin'].includes(roleType)) {
+    return ['teacher', 'student'].includes(row.role_type);
+  }
+  return false;
+}
+
 function openUserDialog(row = null) {
   const roles = manageableUserRoles();
   userAdminState.editing = emptyUserForm(row || {});
@@ -5539,6 +5688,64 @@ async function resetUserPassword() {
   }
 }
 
+async function copyAdminLoginUrl(row) {
+  if (!row?.id || userAdminState.passkeyLoadingId) {
+    return;
+  }
+
+  userAdminState.passkeyLoadingId = row.id;
+  userAdminState.message = '';
+  userAdminState.passkeyUrl = '';
+  try {
+    const data = await generateAdminLoginPasskey({
+      id: row.id,
+      client: 'WEB',
+      return_url: frontendLoginReturnUrl(),
+    });
+    const url = data.login_url || buildPasskeyUrl(data.passkey);
+    if (!url) {
+      throw new Error('一键登录链接生成失败');
+    }
+    await copyText(url);
+    userAdminState.passkeyUrl = url;
+    userAdminState.message = `已复制 ${row.name || row.login_name || '账号'} 的一键登录链接，${data.expires_in || 600} 秒内有效`;
+  } catch (error) {
+    userAdminState.message = error.message;
+  } finally {
+    userAdminState.passkeyLoadingId = null;
+  }
+}
+
+function frontendLoginReturnUrl() {
+  return `${window.location.origin}${window.location.pathname}`;
+}
+
+function buildPasskeyUrl(passkey) {
+  if (!passkey) {
+    return '';
+  }
+  const url = new URL(frontendLoginReturnUrl());
+  url.searchParams.set('passkey', passkey);
+  return url.href;
+}
+
+async function copyText(text) {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+
+  const textarea = document.createElement('textarea');
+  textarea.value = text;
+  textarea.setAttribute('readonly', 'readonly');
+  textarea.style.position = 'fixed';
+  textarea.style.left = '-9999px';
+  document.body.appendChild(textarea);
+  textarea.select();
+  document.execCommand('copy');
+  document.body.removeChild(textarea);
+}
+
 async function openUserDetailDialog(row, mode) {
   userAdminState.detailMode = mode;
   userAdminState.detailDialogVisible = true;
@@ -5625,7 +5832,7 @@ function resetUserFilters() {
 }
 
 async function loadUserAccounts(page = 1) {
-  if (!canManageConfig.value || userAdminState.loading) {
+  if (!canViewUserAdmin.value || userAdminState.loading) {
     return;
   }
 
@@ -8791,6 +8998,8 @@ function resetAdminState() {
   };
   userAdminState.pagination.page = 1;
   userAdminState.pagination.total = 0;
+  userAdminState.passkeyLoadingId = null;
+  userAdminState.passkeyUrl = '';
   userAdminState.message = '';
   Object.entries(archiveStates).forEach(([type, state]) => {
     state.items = [];
@@ -9224,8 +9433,10 @@ watch(() => permissionState.context.account_id, (accountId) => {
     loadAdminFoundation();
     loadInternshipFoundation();
     loadMessageSummary();
+    loadSwitchableAccounts();
   } else {
     resetMessageState();
+    switchAccountState.items = [];
   }
 });
 
@@ -9246,6 +9457,8 @@ function handleAuthExpired(event) {
   loginState.message = message;
   openWindows.splice(0, openWindows.length);
   focusedWindowId.value = null;
+  switchAccountState.items = [];
+  switchAccountState.message = '';
   resetMessageState();
   resetInternshipState();
   window.location.hash = '';
@@ -9257,10 +9470,12 @@ onMounted(async () => {
   renderClock();
   setInterval(renderClock, 30000);
   await loadLoginPageSettings();
+  await consumeUrlPasskey();
   await load();
   await loadProfile();
   await loadProxy();
   await loadMessageSummary();
+  await loadSwitchableAccounts();
   await nextTick();
   ensureDefaultWindow();
   handleHashNavigation();

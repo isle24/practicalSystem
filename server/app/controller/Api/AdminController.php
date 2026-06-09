@@ -12,6 +12,7 @@ use app\model\channel\TableRecord as ChannelTable;
 use app\model\channel\User;
 use app\model\channel\UserWechat;
 use app\model\channel\UserRole;
+use app\server\auth\AuthService;
 use app\server\CurrentContext;
 use app\server\rbac\RbacService;
 use support\Request;
@@ -23,6 +24,7 @@ class AdminController
     use Responds;
 
     private const ADMIN_ROLE_TYPES = ['super_admin', 'school_admin'];
+    private const USER_VIEW_ROLE_TYPES = ['super_admin', 'school_admin', 'college_admin', 'profession_admin'];
 
     public function roles(Request $request): Response
     {
@@ -183,7 +185,7 @@ class AdminController
 
     public function accounts(Request $request): Response
     {
-        if (!$this->isAdmin()) {
+        if (!$this->canViewUsers()) {
             return $this->fail(40300, '无操作权限', 403);
         }
 
@@ -194,6 +196,7 @@ class AdminController
                 'keyword' => $this->nullableString($request, 'keyword') ?? '',
                 'role_type' => $this->nullableString($request, 'role_type') ?? '',
                 'status' => $this->enum($request, 'status', ['all', 'enabled', 'disabled'], 'all'),
+                'admin_scope' => $this->currentAdminScope(),
             ]));
         } catch (Throwable $exception) {
             return $this->fail(50000, $exception->getMessage(), 500);
@@ -202,13 +205,17 @@ class AdminController
 
     public function accountDetail(Request $request): Response
     {
-        if (!$this->isAdmin()) {
+        if (!$this->canViewUsers()) {
             return $this->fail(40300, '无操作权限', 403);
         }
 
         try {
             $accountId = $this->requiredInt($request, 'id');
-            $this->assertAccountRoleWritable($accountId, '');
+            if (!$this->isAdmin()) {
+                (new AuthService())->assertAdminCanAccessAccount($accountId);
+            } else {
+                $this->assertAccountRoleWritable($accountId, '');
+            }
             $account = Account::adminDetail($accountId);
             if (!$account) {
                 return $this->fail(40400, '账号不存在', 404);
@@ -224,6 +231,25 @@ class AdminController
                     'account_id' => $accountId,
                 ]),
             ]);
+        } catch (Throwable $exception) {
+            return $this->fail(40001, $exception->getMessage(), 400);
+        }
+    }
+
+    public function loginPasskey(Request $request): Response
+    {
+        if (!$this->canViewUsers()) {
+            return $this->fail(40300, '无操作权限', 403);
+        }
+
+        try {
+            $service = new AuthService();
+
+            return $this->ok($service->adminLoginPasskey(
+                $this->requiredInt($request, 'id'),
+                (string) $request->input('client', 'WEB'),
+                $this->nullableString($request, 'return_url', 1000) ?? ''
+            ));
         } catch (Throwable $exception) {
             return $this->fail(40001, $exception->getMessage(), 400);
         }
@@ -451,6 +477,11 @@ class AdminController
         return in_array(CurrentContext::roleType(), self::ADMIN_ROLE_TYPES, true);
     }
 
+    private function canViewUsers(): bool
+    {
+        return in_array(CurrentContext::roleType(), self::USER_VIEW_ROLE_TYPES, true);
+    }
+
     private function requiredInt(Request $request, string $key): int
     {
         $value = $request->input($key);
@@ -589,6 +620,27 @@ class AdminController
         }
 
         return $account;
+    }
+
+    private function currentAdminScope(): array
+    {
+        $scopes = CurrentContext::organizationScopes();
+        $depIds = [];
+        $professionIds = [];
+        foreach ($scopes as $scope) {
+            if (!empty($scope['dep_id'])) {
+                $depIds[] = (int) $scope['dep_id'];
+            }
+            if (!empty($scope['profession_id'])) {
+                $professionIds[] = (int) $scope['profession_id'];
+            }
+        }
+
+        return [
+            'role_type' => CurrentContext::roleType(),
+            'dep_ids' => array_values(array_unique($depIds)),
+            'profession_ids' => array_values(array_unique($professionIds)),
+        ];
     }
 
     private function scopes(array $items): array

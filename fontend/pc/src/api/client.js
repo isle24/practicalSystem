@@ -63,6 +63,7 @@ function isAuthExpired(response, payload) {
 function isAuthPath(path) {
   return String(path || '').startsWith('/auth/login')
     || String(path || '').startsWith('/auth/logout')
+    || String(path || '').startsWith('/auth/passkey-login')
     || String(path || '').startsWith('/auth/refresh');
 }
 

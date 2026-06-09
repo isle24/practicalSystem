@@ -22,11 +22,8 @@ class AuthController
             $client = (string) $request->input('client', 'WEB');
             $service = new AuthService();
             $result = $service->login($loginName, $password, $client);
-            $cookies = $service->cookieNames();
 
-            return $this->ok($result['session'])
-                ->cookie($cookies['access'], $result['token']['access_token'], (int) $result['token']['expires_in'], '/', '', false, true, 'Lax')
-                ->cookie($cookies['refresh'], (string) ($result['token']['refresh_token'] ?? ''), $service->refreshExpiresIn(), '/', '', false, true, 'Lax');
+            return $this->sessionResponse($service, $result);
         } catch (Throwable $exception) {
             return $this->fail(40100, $exception->getMessage(), 401);
         }
@@ -39,9 +36,7 @@ class AuthController
             $cookies = $service->cookieNames();
             $result = $service->refresh((string) $request->cookie($cookies['refresh'], ''));
 
-            return $this->ok($result['session'])
-                ->cookie($cookies['access'], $result['token']['access_token'], (int) $result['token']['expires_in'], '/', '', false, true, 'Lax')
-                ->cookie($cookies['refresh'], (string) ($result['token']['refresh_token'] ?? ''), $service->refreshExpiresIn(), '/', '', false, true, 'Lax');
+            return $this->sessionResponse($service, $result);
         } catch (Throwable $exception) {
             $cookies = (new AuthService())->cookieNames();
             return $this->fail(40100, $exception->getMessage(), 401)
@@ -56,6 +51,40 @@ class AuthController
         return $this->ok()
             ->cookie($cookies['access'], '', 0, '/', '', false, true, 'Lax')
             ->cookie($cookies['refresh'], '', 0, '/', '', false, true, 'Lax');
+    }
+
+    public function switchableAccounts(Request $request): Response
+    {
+        try {
+            return $this->ok((new AuthService())->switchableAccounts());
+        } catch (Throwable $exception) {
+            return $this->fail(40001, $exception->getMessage(), 400);
+        }
+    }
+
+    public function switchAccount(Request $request): Response
+    {
+        try {
+            $service = new AuthService();
+            $result = $service->switchAccount($this->intInput($request, 'account_id') ?: 0, (string) $request->input('client', 'WEB'));
+
+            return $this->sessionResponse($service, $result);
+        } catch (Throwable $exception) {
+            return $this->fail(40001, $exception->getMessage(), 400);
+        }
+    }
+
+    public function passkeyLogin(Request $request): Response
+    {
+        try {
+            $service = new AuthService();
+            $passkey = (string) ($request->input('passkey') ?? $request->input('key', ''));
+            $result = $service->loginByPasskey($passkey, (string) $request->input('client', 'WEB'));
+
+            return $this->sessionResponse($service, $result);
+        } catch (Throwable $exception) {
+            return $this->fail(40100, $exception->getMessage(), 401);
+        }
     }
 
     public function context(Request $request): Response
@@ -103,5 +132,14 @@ class AuthController
     {
         $value = $request->input($key);
         return is_numeric($value) ? (int) $value : null;
+    }
+
+    private function sessionResponse(AuthService $service, array $result): Response
+    {
+        $cookies = $service->cookieNames();
+
+        return $this->ok($result['session'])
+            ->cookie($cookies['access'], $result['token']['access_token'], (int) $result['token']['expires_in'], '/', '', false, true, 'Lax')
+            ->cookie($cookies['refresh'], (string) ($result['token']['refresh_token'] ?? ''), $service->refreshExpiresIn(), '/', '', false, true, 'Lax');
     }
 }

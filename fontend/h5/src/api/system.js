@@ -17,6 +17,24 @@ export function logout() {
   });
 }
 
+export function fetchSwitchableAccounts() {
+  return request('/auth/switchable-accounts');
+}
+
+export function switchAccount(payload) {
+  return request('/auth/switch-account', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function passkeyLogin(payload) {
+  return request('/auth/passkey-login', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
 export function fetchMenus(params = {}) {
   const query = new URLSearchParams(params).toString();
   return request(`/permission/menus${query ? `?${query}` : ''}`);

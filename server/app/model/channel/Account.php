@@ -50,6 +50,8 @@ class Account extends BaseModel
             $query->where('account.status', $status);
         }
 
+        self::applyAdminVisibilityScope($query, (array) ($filters['admin_scope'] ?? []));
+
         $total = (clone $query)->count();
         $items = $query
             ->orderBy('account.id')
@@ -275,6 +277,124 @@ class Account extends BaseModel
             ->all();
     }
 
+    public static function switchableAccounts(int $accountId): array
+    {
+        $identity = self::identityByAccountId($accountId);
+        if (!$identity) {
+            return [];
+        }
+
+        $query = self::accountListQuery()
+            ->where(function ($builder) use ($identity): void {
+                $builder->where('account.user_id', (int) $identity['user_id']);
+                $mobile = trim((string) ($identity['mobile'] ?? ''));
+                if ($mobile !== '') {
+                    $builder->orWhere('users.mobile', $mobile);
+                }
+            });
+
+        return $query
+            ->orderBy('role.sort')
+            ->orderBy('account.id')
+            ->get([
+                'account.id',
+                'account.user_id',
+                'account.login_name',
+                'account.status',
+                'users.name',
+                'users.mobile',
+                'role.id as role_id',
+                'role.name as role_name',
+                'role.role_type',
+            ])
+            ->map(static fn ($row): array => [
+                'id' => (int) $row->id,
+                'user_id' => (int) $row->user_id,
+                'login_name' => $row->login_name,
+                'status' => $row->status,
+                'name' => $row->name,
+                'mobile' => $row->mobile,
+                'role_id' => $row->role_id === null ? null : (int) $row->role_id,
+                'role_name' => $row->role_name,
+                'role_type' => $row->role_type,
+                'is_current' => (int) $row->id === $accountId,
+            ])
+            ->all();
+    }
+
+    public static function canSwitchBetween(int $currentAccountId, int $targetAccountId): bool
+    {
+        if ($currentAccountId === $targetAccountId) {
+            return true;
+        }
+
+        $current = self::identityByAccountId($currentAccountId);
+        $target = self::identityByAccountId($targetAccountId);
+        if (!$current || !$target) {
+            return false;
+        }
+
+        if ((int) $current['user_id'] === (int) $target['user_id']) {
+            return true;
+        }
+
+        $currentMobile = trim((string) ($current['mobile'] ?? ''));
+        $targetMobile = trim((string) ($target['mobile'] ?? ''));
+        return $currentMobile !== '' && $currentMobile === $targetMobile;
+    }
+
+    public static function adminLoginTargetProfile(int $accountId): ?array
+    {
+        $row = self::accountListQuery()
+            ->where('account.id', $accountId)
+            ->first([
+                'account.id',
+                'account.user_id',
+                'account.login_name',
+                'users.name',
+                'users.mobile',
+                'role.id as role_id',
+                'role.name as role_name',
+                'role.role_type',
+            ]);
+
+        if (!$row) {
+            return null;
+        }
+
+        return array_merge([
+            'id' => (int) $row->id,
+            'user_id' => (int) $row->user_id,
+            'login_name' => $row->login_name,
+            'name' => $row->name,
+            'mobile' => $row->mobile,
+            'role_id' => $row->role_id === null ? null : (int) $row->role_id,
+            'role_name' => $row->role_name,
+            'role_type' => $row->role_type,
+            'dep_id' => null,
+            'profession_id' => null,
+            'class_id' => null,
+        ], self::organizationProfile((int) $row->user_id, (string) $row->role_type));
+    }
+
+    public static function professionDepartmentIds(array $professionIds): array
+    {
+        $ids = self::intIds($professionIds);
+        if (!$ids) {
+            return [];
+        }
+
+        return TableRecord::queryTable('profession')
+            ->whereIn('profession_id', $ids)
+            ->whereNull('deleted_at')
+            ->pluck('dep_id')
+            ->map(static fn ($id): int => (int) $id)
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+    }
+
     private static function messageTargetQuery(array $filters = []): mixed
     {
         $query = self::query()
@@ -379,6 +499,149 @@ class Account extends BaseModel
             'role_name' => $row->role_name,
             'role_type' => $row->role_type,
         ];
+    }
+
+    private static function accountListQuery(): mixed
+    {
+        return self::query()
+            ->join('users', 'account.user_id', '=', 'users.id')
+            ->leftJoin('user_role', function ($join): void {
+                $join->on('account.id', '=', 'user_role.account_id')
+                    ->where('user_role.is_primary', 'true')
+                    ->whereNull('user_role.deleted_at');
+            })
+            ->leftJoin('role', 'user_role.role_id', '=', 'role.id')
+            ->where('account.status', 'enabled')
+            ->where('users.status', 'enabled')
+            ->whereNull('account.deleted_at')
+            ->whereNull('users.deleted_at');
+    }
+
+    private static function identityByAccountId(int $accountId): ?array
+    {
+        $row = self::accountListQuery()
+            ->where('account.id', $accountId)
+            ->first([
+                'account.id',
+                'account.user_id',
+                'account.login_name',
+                'users.mobile',
+                'role.role_type',
+            ]);
+
+        return $row ? [
+            'id' => (int) $row->id,
+            'user_id' => (int) $row->user_id,
+            'login_name' => $row->login_name,
+            'mobile' => $row->mobile,
+            'role_type' => $row->role_type,
+        ] : null;
+    }
+
+    private static function organizationProfile(int $userId, string $roleType): array
+    {
+        if ($roleType === 'student') {
+            $student = TableRecord::queryTable('students')
+                ->where('user_id', $userId)
+                ->where('status', 'enabled')
+                ->whereNull('deleted_at')
+                ->orderByDesc('student_id')
+                ->first(['dep_id', 'profession_id', 'class_id']);
+
+            return $student ? [
+                'dep_id' => $student->dep_id === null ? null : (int) $student->dep_id,
+                'profession_id' => $student->profession_id === null ? null : (int) $student->profession_id,
+                'class_id' => $student->class_id === null ? null : (int) $student->class_id,
+            ] : ['dep_id' => null, 'profession_id' => null, 'class_id' => null];
+        }
+
+        if ($roleType === 'teacher') {
+            $teacher = TableRecord::queryTable('teacher_list')
+                ->where('user_id', $userId)
+                ->where('status', 'enabled')
+                ->whereNull('deleted_at')
+                ->orderByDesc('teacher_id')
+                ->first(['dep_id', 'profession_id']);
+
+            return $teacher ? [
+                'dep_id' => $teacher->dep_id === null ? null : (int) $teacher->dep_id,
+                'profession_id' => $teacher->profession_id === null ? null : (int) $teacher->profession_id,
+                'class_id' => null,
+            ] : ['dep_id' => null, 'profession_id' => null, 'class_id' => null];
+        }
+
+        return ['dep_id' => null, 'profession_id' => null, 'class_id' => null];
+    }
+
+    private static function applyAdminVisibilityScope(mixed $query, array $scope): void
+    {
+        $roleType = (string) ($scope['role_type'] ?? '');
+        if ($roleType === '') {
+            return;
+        }
+
+        if ($roleType === 'school_admin') {
+            $query->where(function ($builder): void {
+                $builder->whereNull('role.role_type')
+                    ->orWhere('role.role_type', '<>', 'super_admin');
+            });
+            return;
+        }
+
+        if (!in_array($roleType, ['college_admin', 'profession_admin'], true)) {
+            return;
+        }
+
+        $query->whereIn('role.role_type', ['teacher', 'student']);
+        $depIds = self::intIds((array) ($scope['dep_ids'] ?? []));
+        $professionIds = self::intIds((array) ($scope['profession_ids'] ?? []));
+
+        if ($roleType === 'college_admin') {
+            if (!$depIds) {
+                $query->whereRaw('1 = 0');
+                return;
+            }
+            self::whereTeacherOrStudentScope($query, 'dep_id', $depIds);
+            return;
+        }
+
+        if (!$professionIds) {
+            $query->whereRaw('1 = 0');
+            return;
+        }
+        self::whereTeacherOrStudentScope($query, 'profession_id', $professionIds);
+    }
+
+    private static function whereTeacherOrStudentScope(mixed $query, string $field, array $ids): void
+    {
+        $query->where(function ($builder) use ($field, $ids): void {
+            $builder->where(function ($roleBuilder) use ($field, $ids): void {
+                $roleBuilder->where('role.role_type', 'student')
+                    ->whereExists(function ($exists) use ($field, $ids): void {
+                        $exists->selectRaw('1')
+                            ->from('students')
+                            ->whereColumn('students.user_id', 'account.user_id')
+                            ->where('students.status', 'enabled')
+                            ->whereNull('students.deleted_at')
+                            ->whereIn("students.{$field}", $ids);
+                    });
+            })->orWhere(function ($roleBuilder) use ($field, $ids): void {
+                $roleBuilder->where('role.role_type', 'teacher')
+                    ->whereExists(function ($exists) use ($field, $ids): void {
+                        $exists->selectRaw('1')
+                            ->from('teacher_list')
+                            ->whereColumn('teacher_list.user_id', 'account.user_id')
+                            ->where('teacher_list.status', 'enabled')
+                            ->whereNull('teacher_list.deleted_at')
+                            ->whereIn("teacher_list.{$field}", $ids);
+                    });
+            });
+        });
+    }
+
+    private static function intIds(array $values): array
+    {
+        return array_values(array_unique(array_filter(array_map('intval', $values))));
     }
 
     private static function uuid(): string

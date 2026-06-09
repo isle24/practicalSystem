@@ -974,6 +974,10 @@ input {
   overflow: hidden;
 }
 
+.switch-account-group {
+  margin-top: 12px;
+}
+
 .review-sheet {
   display: grid;
   gap: 14px;
