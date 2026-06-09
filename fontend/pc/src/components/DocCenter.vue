@@ -121,10 +121,25 @@
             <span>变更说明</span>
             <input v-model="articleDialog.form.change_note" placeholder="用于版本记录">
           </label>
-          <label class="span-2">
-            <span>正文 HTML</span>
-            <textarea v-model="articleDialog.form.content" rows="12" placeholder="<h3>操作流程</h3><p>...</p>" />
-          </label>
+          <section class="span-2 doc-rich-field">
+            <span>正文</span>
+            <div class="rich-editor-toolbar">
+              <button type="button" @click="applyArticleBlock('h3')">标题</button>
+              <button type="button" @click="applyArticleBlock('p')">正文</button>
+              <button type="button" @click="applyArticleFormat('bold')">B</button>
+              <button type="button" @click="applyArticleFormat('insertUnorderedList')">列表</button>
+              <button type="button" @click="applyArticleFormat('insertOrderedList')">编号</button>
+              <button type="button" @click="insertArticleTemplate">模板</button>
+            </div>
+            <div
+              ref="articleEditorRef"
+              class="rich-editor doc-rich-editor"
+              contenteditable="true"
+              data-placeholder="请输入文档正文"
+              @input="syncArticleEditor"
+              v-html="articleDialog.form.content"
+            />
+          </section>
         </div>
         <footer>
           <el-button @click="closeArticleDialog">取消</el-button>
@@ -185,7 +200,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue';
+import { computed, nextTick, onMounted, reactive, ref } from 'vue';
 import { BookOpen, FileClock, Plus, RefreshCw, Save, Search } from '@lucide/vue';
 import {
   deleteDocArticle,
@@ -210,6 +225,7 @@ const message = ref('');
 const categories = ref([]);
 const articles = ref([]);
 const selectedArticle = ref(null);
+const articleEditorRef = ref(null);
 const filters = reactive({
   category_id: '',
   status: 'all',
@@ -302,11 +318,13 @@ function openArticleDialog(row = null) {
   if (row && articleDialog.form.content === '') {
     fetchDocDetail(row.id).then((data) => {
       articleDialog.form.content = data.article?.content || '';
+      nextTick(syncArticleEditorDom);
     }).catch((error) => {
       message.value = error.message;
     });
   }
   articleDialog.visible = true;
+  nextTick(syncArticleEditorDom);
 }
 
 function closeArticleDialog() {
@@ -314,6 +332,7 @@ function closeArticleDialog() {
 }
 
 async function saveArticle() {
+  syncArticleEditor();
   saving.value = true;
   message.value = '';
   try {
@@ -329,6 +348,60 @@ async function saveArticle() {
   } finally {
     saving.value = false;
   }
+}
+
+function activeArticleEditor() {
+  const editor = articleEditorRef.value;
+  return Array.isArray(editor) ? editor.at(-1) : editor;
+}
+
+function syncArticleEditorDom() {
+  const editor = activeArticleEditor();
+  if (editor && editor.innerHTML !== articleDialog.form.content) {
+    editor.innerHTML = articleDialog.form.content || '';
+  }
+}
+
+function syncArticleEditor() {
+  const editor = activeArticleEditor();
+  articleDialog.form.content = editor?.innerHTML || '';
+}
+
+function applyArticleFormat(command) {
+  const editor = activeArticleEditor();
+  if (!editor) {
+    return;
+  }
+  editor.focus();
+  document.execCommand(command, false, null);
+  syncArticleEditor();
+}
+
+function applyArticleBlock(tagName) {
+  const editor = activeArticleEditor();
+  if (!editor) {
+    return;
+  }
+  editor.focus();
+  document.execCommand('formatBlock', false, tagName);
+  syncArticleEditor();
+}
+
+function insertArticleTemplate() {
+  const editor = activeArticleEditor();
+  const html = articleTemplateHtml();
+  if (!editor) {
+    articleDialog.form.content = html;
+    return;
+  }
+
+  editor.focus();
+  if (!stripHtml(articleDialog.form.content).trim()) {
+    editor.innerHTML = html;
+  } else {
+    document.execCommand('insertHTML', false, html);
+  }
+  syncArticleEditor();
 }
 
 async function deleteArticle(row) {
@@ -393,9 +466,19 @@ function emptyArticleForm() {
     title: '',
     version: '1.0',
     status: 'draft',
-    content: '<h3>操作流程</h3><p></p><h3>常见问题</h3><p></p>',
+    content: articleTemplateHtml(),
     change_note: '新增文档',
   };
+}
+
+function articleTemplateHtml() {
+  return '<h3>操作流程</h3><p></p><h3>常见问题</h3><p></p>';
+}
+
+function stripHtml(content) {
+  const element = document.createElement('div');
+  element.innerHTML = content || '';
+  return element.textContent || element.innerText || '';
 }
 
 function emptyCategoryForm() {

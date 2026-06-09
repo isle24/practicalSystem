@@ -1401,12 +1401,34 @@ a {
   line-height: 1.6;
 }
 
+.rich-editor:empty::before {
+  content: attr(data-placeholder);
+  color: var(--muted);
+}
+
 .guide-edit-dialog .rich-editor {
   margin: 10px 16px 16px;
 }
 
 .rich-editor:focus {
   border-color: #8dbdea;
+}
+
+.doc-rich-field {
+  display: grid;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.doc-rich-field .rich-editor-toolbar {
+  padding: 0;
+}
+
+.doc-rich-editor {
+  min-height: 260px;
+  max-height: min(420px, 42vh);
+  color: var(--text);
 }
 
 .internship-panel {
