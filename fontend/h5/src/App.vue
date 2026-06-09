@@ -1257,6 +1257,7 @@ import {
   MessageCircle,
   RefreshCw,
   Route,
+  Search,
   Send,
   UsersRound,
   UserRound,
