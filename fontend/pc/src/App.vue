@@ -2244,8 +2244,17 @@
                     <el-input v-model="logState.filters.keyword" clearable placeholder="关键词、账号、姓名、IP" @keyup.enter="loadLogs(1)" />
                     <el-input v-model="logState.filters.action" clearable placeholder="动作" @keyup.enter="loadLogs(1)" />
                     <el-input v-model="logState.filters.ip" clearable placeholder="IP" @keyup.enter="loadLogs(1)" />
-                    <input v-model="logState.filters.date_from" type="date">
-                    <input v-model="logState.filters.date_to" type="date">
+                    <div class="date-range-filter">
+                      <label>
+                        <span>开始日期</span>
+                        <input v-model="logState.filters.date_from" type="date">
+                      </label>
+                      <em>至</em>
+                      <label>
+                        <span>结束日期</span>
+                        <input v-model="logState.filters.date_to" type="date">
+                      </label>
+                    </div>
                     <el-button :icon="Search" :loading="logState.loading" @click="loadLogs(1)">
                       查询
                     </el-button>
@@ -4225,11 +4234,7 @@ function sidebarItems(win) {
     return statReports;
   }
 
-  return [
-    { key: 'overview', name: '工作台' },
-    { key: 'archive', name: '基础档案' },
-    { key: 'workflow', name: '流程配置' },
-  ];
+  return [];
 }
 
 function openMessageCenter() {

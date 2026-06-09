@@ -835,6 +835,39 @@ a {
   width: 180px;
 }
 
+.date-range-filter {
+  height: 32px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 8px;
+  background: #fff;
+}
+
+.date-range-filter label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.date-range-filter input[type="date"] {
+  width: 126px;
+  height: 28px;
+  border: 0;
+  padding: 0;
+  background: transparent;
+}
+
+.date-range-filter em {
+  color: var(--muted);
+  font-style: normal;
+  font-size: 12px;
+}
+
 .log-payload {
   display: block;
   max-width: 100%;
