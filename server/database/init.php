@@ -612,7 +612,8 @@ function schoolBusinessStatements(): array
         simpleTable('base', ['`company_id` BIGINT UNSIGNED DEFAULT NULL', '`dep_id` BIGINT UNSIGNED DEFAULT NULL', '`address` VARCHAR(255) DEFAULT NULL']),
         simpleTable('base_profession_direction', ['`base_id` BIGINT UNSIGNED NOT NULL', '`profession_id` BIGINT UNSIGNED NOT NULL', '`direction_id` BIGINT UNSIGNED NOT NULL', 'UNIQUE KEY `uk_base_profession_direction` (`base_id`, `profession_id`, `direction_id`)']),
         simpleTable('enterprise_mentor', ['`company_id` BIGINT UNSIGNED DEFAULT NULL', '`mentor_name` VARCHAR(80) DEFAULT NULL', '`mobile` VARCHAR(40) DEFAULT NULL']),
-        simpleTable('arrangement', ['`base_id` BIGINT UNSIGNED DEFAULT NULL', '`dep_id` BIGINT UNSIGNED DEFAULT NULL', '`profession_id` BIGINT UNSIGNED DEFAULT NULL', '`semester` VARCHAR(80) DEFAULT NULL', '`start_date` DATE DEFAULT NULL', '`end_date` DATE DEFAULT NULL']),
+        simpleTable('arrangement', ['`plan_id` BIGINT UNSIGNED DEFAULT NULL', '`base_id` BIGINT UNSIGNED DEFAULT NULL', '`dep_id` BIGINT UNSIGNED DEFAULT NULL', '`profession_id` BIGINT UNSIGNED DEFAULT NULL', '`semester` VARCHAR(80) DEFAULT NULL', '`teacher_id` BIGINT UNSIGNED DEFAULT NULL', '`task_no` VARCHAR(80) DEFAULT NULL', '`batch_no` VARCHAR(80) DEFAULT NULL', '`credit` DECIMAL(5,2) DEFAULT NULL', '`student_count` INT DEFAULT 0', '`start_date` DATE DEFAULT NULL', '`end_date` DATE DEFAULT NULL']),
+        simpleTable('internship_task_class', ['`arrangement_id` BIGINT UNSIGNED NOT NULL', '`grade_id` BIGINT UNSIGNED DEFAULT NULL', '`dep_id` BIGINT UNSIGNED DEFAULT NULL', '`profession_id` BIGINT UNSIGNED DEFAULT NULL', '`class_id` BIGINT UNSIGNED NOT NULL', '`student_count_snapshot` INT DEFAULT 0', 'UNIQUE KEY `uk_task_class` (`arrangement_id`, `class_id`)']),
         simpleTable('application', ['`arrangement_id` BIGINT UNSIGNED DEFAULT NULL', '`student_id` BIGINT UNSIGNED DEFAULT NULL', '`teacher_id` BIGINT UNSIGNED DEFAULT NULL']),
         simpleTable('application_recording', recordingColumns()),
         simpleTable('student_join_teacher', ['`student_id` BIGINT UNSIGNED DEFAULT NULL', '`teacher_id` BIGINT UNSIGNED DEFAULT NULL', '`arrangement_id` BIGINT UNSIGNED DEFAULT NULL']),
@@ -630,7 +631,7 @@ function schoolBusinessStatements(): array
         simpleTable('apply_report_delay', entityColumns(['`student_id` BIGINT UNSIGNED DEFAULT NULL', '`config_key` VARCHAR(120) DEFAULT NULL', '`requested_date` DATE DEFAULT NULL', '`reason` TEXT DEFAULT NULL'])),
         simpleTable('apply_report_delay_recording', recordingColumns()),
         simpleTable('score', entityColumns(['`student_id` BIGINT UNSIGNED DEFAULT NULL', '`score_value` DECIMAL(5,2) DEFAULT NULL'])),
-        simpleTable('internship_plan', ['`dep_id` BIGINT UNSIGNED DEFAULT NULL', '`semester` VARCHAR(80) DEFAULT NULL', '`plan_json` JSON DEFAULT NULL']),
+        simpleTable('internship_plan', ['`source_type` VARCHAR(40) DEFAULT \'edu_system\'', '`course_code` VARCHAR(120) DEFAULT NULL', '`course_name` VARCHAR(180) DEFAULT NULL', '`grade_id` BIGINT UNSIGNED DEFAULT NULL', '`dep_id` BIGINT UNSIGNED DEFAULT NULL', '`profession_id` BIGINT UNSIGNED DEFAULT NULL', '`semester` VARCHAR(80) DEFAULT NULL', '`credit` DECIMAL(5,2) DEFAULT NULL', '`student_count` INT DEFAULT 0', '`score_rule` VARCHAR(40) DEFAULT \'average\'', '`plan_content` JSON DEFAULT NULL', '`submitter_id` BIGINT UNSIGNED DEFAULT NULL']),
         simpleTable('internship_plan_approval', ['`plan_id` BIGINT UNSIGNED DEFAULT NULL', '`reviewer_id` BIGINT UNSIGNED DEFAULT NULL']),
         simpleTable('plan_recording', recordingColumns()),
         simpleTable('insurance', ['`student_id` BIGINT UNSIGNED DEFAULT NULL', '`company_id` BIGINT UNSIGNED DEFAULT NULL', '`policy_no` VARCHAR(120) DEFAULT NULL']),
@@ -916,11 +917,17 @@ function ensureInternshipSchema(PDO $pdo): void
             'position' => "ALTER TABLE `enterprise_mentor` ADD COLUMN `position` VARCHAR(120) DEFAULT NULL AFTER `phone`",
         ],
         'arrangement' => [
-            'base_id' => "ALTER TABLE `arrangement` ADD COLUMN `base_id` BIGINT UNSIGNED DEFAULT NULL AFTER `code`",
+            'plan_id' => "ALTER TABLE `arrangement` ADD COLUMN `plan_id` BIGINT UNSIGNED DEFAULT NULL AFTER `code`",
+            'base_id' => "ALTER TABLE `arrangement` ADD COLUMN `base_id` BIGINT UNSIGNED DEFAULT NULL AFTER `plan_id`",
             'dep_id' => "ALTER TABLE `arrangement` ADD COLUMN `dep_id` BIGINT UNSIGNED DEFAULT NULL AFTER `base_id`",
             'profession_id' => "ALTER TABLE `arrangement` ADD COLUMN `profession_id` BIGINT UNSIGNED DEFAULT NULL AFTER `dep_id`",
             'semester' => "ALTER TABLE `arrangement` ADD COLUMN `semester` VARCHAR(80) DEFAULT NULL AFTER `profession_id`",
-            'type' => "ALTER TABLE `arrangement` ADD COLUMN `type` VARCHAR(40) DEFAULT 'major_external' AFTER `semester`",
+            'teacher_id' => "ALTER TABLE `arrangement` ADD COLUMN `teacher_id` BIGINT UNSIGNED DEFAULT NULL AFTER `semester`",
+            'task_no' => "ALTER TABLE `arrangement` ADD COLUMN `task_no` VARCHAR(80) DEFAULT NULL AFTER `teacher_id`",
+            'batch_no' => "ALTER TABLE `arrangement` ADD COLUMN `batch_no` VARCHAR(80) DEFAULT NULL AFTER `task_no`",
+            'credit' => "ALTER TABLE `arrangement` ADD COLUMN `credit` DECIMAL(5,2) DEFAULT NULL AFTER `batch_no`",
+            'student_count' => "ALTER TABLE `arrangement` ADD COLUMN `student_count` INT DEFAULT 0 AFTER `credit`",
+            'type' => "ALTER TABLE `arrangement` ADD COLUMN `type` VARCHAR(40) DEFAULT 'major_external' AFTER `student_count`",
             'organize_mode' => "ALTER TABLE `arrangement` ADD COLUMN `organize_mode` VARCHAR(40) DEFAULT 'centralized' AFTER `type`",
             'title' => "ALTER TABLE `arrangement` ADD COLUMN `title` VARCHAR(180) DEFAULT NULL AFTER `organize_mode`",
             'start_date' => "ALTER TABLE `arrangement` ADD COLUMN `start_date` DATE DEFAULT NULL AFTER `title`",
@@ -1039,10 +1046,26 @@ function ensureInternshipSchema(PDO $pdo): void
             'reason' => "ALTER TABLE `apply_report_delay` ADD COLUMN `reason` TEXT DEFAULT NULL AFTER `requested_date`",
         ],
         'internship_plan' => [
-            'dep_id' => "ALTER TABLE `internship_plan` ADD COLUMN `dep_id` BIGINT UNSIGNED DEFAULT NULL AFTER `code`",
-            'semester' => "ALTER TABLE `internship_plan` ADD COLUMN `semester` VARCHAR(80) DEFAULT NULL AFTER `dep_id`",
-            'plan_content' => "ALTER TABLE `internship_plan` ADD COLUMN `plan_content` JSON DEFAULT NULL AFTER `semester`",
+            'source_type' => "ALTER TABLE `internship_plan` ADD COLUMN `source_type` VARCHAR(40) DEFAULT 'edu_system' AFTER `code`",
+            'course_code' => "ALTER TABLE `internship_plan` ADD COLUMN `course_code` VARCHAR(120) DEFAULT NULL AFTER `source_type`",
+            'course_name' => "ALTER TABLE `internship_plan` ADD COLUMN `course_name` VARCHAR(180) DEFAULT NULL AFTER `course_code`",
+            'grade_id' => "ALTER TABLE `internship_plan` ADD COLUMN `grade_id` BIGINT UNSIGNED DEFAULT NULL AFTER `course_name`",
+            'dep_id' => "ALTER TABLE `internship_plan` ADD COLUMN `dep_id` BIGINT UNSIGNED DEFAULT NULL AFTER `grade_id`",
+            'profession_id' => "ALTER TABLE `internship_plan` ADD COLUMN `profession_id` BIGINT UNSIGNED DEFAULT NULL AFTER `dep_id`",
+            'semester' => "ALTER TABLE `internship_plan` ADD COLUMN `semester` VARCHAR(80) DEFAULT NULL AFTER `profession_id`",
+            'credit' => "ALTER TABLE `internship_plan` ADD COLUMN `credit` DECIMAL(5,2) DEFAULT NULL AFTER `semester`",
+            'student_count' => "ALTER TABLE `internship_plan` ADD COLUMN `student_count` INT DEFAULT 0 AFTER `credit`",
+            'score_rule' => "ALTER TABLE `internship_plan` ADD COLUMN `score_rule` VARCHAR(40) DEFAULT 'average' AFTER `student_count`",
+            'plan_content' => "ALTER TABLE `internship_plan` ADD COLUMN `plan_content` JSON DEFAULT NULL AFTER `score_rule`",
             'submitter_id' => "ALTER TABLE `internship_plan` ADD COLUMN `submitter_id` BIGINT UNSIGNED DEFAULT NULL AFTER `plan_content`",
+        ],
+        'internship_task_class' => [
+            'arrangement_id' => "ALTER TABLE `internship_task_class` ADD COLUMN `arrangement_id` BIGINT UNSIGNED DEFAULT NULL AFTER `code`",
+            'grade_id' => "ALTER TABLE `internship_task_class` ADD COLUMN `grade_id` BIGINT UNSIGNED DEFAULT NULL AFTER `arrangement_id`",
+            'dep_id' => "ALTER TABLE `internship_task_class` ADD COLUMN `dep_id` BIGINT UNSIGNED DEFAULT NULL AFTER `grade_id`",
+            'profession_id' => "ALTER TABLE `internship_task_class` ADD COLUMN `profession_id` BIGINT UNSIGNED DEFAULT NULL AFTER `dep_id`",
+            'class_id' => "ALTER TABLE `internship_task_class` ADD COLUMN `class_id` BIGINT UNSIGNED DEFAULT NULL AFTER `profession_id`",
+            'student_count_snapshot' => "ALTER TABLE `internship_task_class` ADD COLUMN `student_count_snapshot` INT DEFAULT 0 AFTER `class_id`",
         ],
         'internship_plan_approval' => [
             'plan_id' => "ALTER TABLE `internship_plan_approval` ADD COLUMN `plan_id` BIGINT UNSIGNED DEFAULT NULL AFTER `code`",
@@ -1124,6 +1147,11 @@ function ensureInternshipSchema(PDO $pdo): void
 
     ensureIndex($pdo, 'base_profession_direction', 'uk_base_profession_direction', "ALTER TABLE `base_profession_direction` ADD UNIQUE KEY `uk_base_profession_direction` (`base_id`, `profession_id`, `direction_id`)");
     ensureIndex($pdo, 'arrangement', 'idx_arrangement_scope', "ALTER TABLE `arrangement` ADD KEY `idx_arrangement_scope` (`dep_id`, `profession_id`, `status`)");
+    ensureIndex($pdo, 'arrangement', 'idx_arrangement_plan', "ALTER TABLE `arrangement` ADD KEY `idx_arrangement_plan` (`plan_id`, `teacher_id`, `status`)");
+    ensureIndex($pdo, 'arrangement', 'idx_arrangement_teacher_time', "ALTER TABLE `arrangement` ADD KEY `idx_arrangement_teacher_time` (`teacher_id`, `start_date`, `end_date`)");
+    ensureIndex($pdo, 'internship_plan', 'idx_internship_plan_scope', "ALTER TABLE `internship_plan` ADD KEY `idx_internship_plan_scope` (`grade_id`, `dep_id`, `profession_id`, `status`)");
+    ensureIndex($pdo, 'internship_task_class', 'uk_task_class', "ALTER TABLE `internship_task_class` ADD UNIQUE KEY `uk_task_class` (`arrangement_id`, `class_id`)");
+    ensureIndex($pdo, 'internship_task_class', 'idx_task_class_scope', "ALTER TABLE `internship_task_class` ADD KEY `idx_task_class_scope` (`grade_id`, `dep_id`, `profession_id`, `class_id`)");
     ensureIndex($pdo, 'application', 'idx_application_student', "ALTER TABLE `application` ADD KEY `idx_application_student` (`student_id`, `arrangement_id`, `status`)");
     ensureIndex($pdo, 'student_join_teacher', 'idx_join_application', "ALTER TABLE `student_join_teacher` ADD KEY `idx_join_application` (`application_id`, `application_status`)");
     ensureIndex($pdo, 'pair', 'idx_pair_teacher', "ALTER TABLE `pair` ADD KEY `idx_pair_teacher` (`teacher_id`, `type`, `status`)");
@@ -1694,14 +1722,40 @@ function seedInternshipDemo(PDO $pdo): void
     );
 
     $pdo->exec(
-        "INSERT INTO `arrangement` (`id`, `uuid`, `name`, `base_id`, `dep_id`, `profession_id`, `semester`, `type`, `organize_mode`, `title`, `start_date`, `end_date`, `location`, `description`, `created_by`, `status`)
-         VALUES (1, '00000000-0000-0000-0000-000000100001', '软件技术专业实习安排', 1, 1, 1, '2025-2026-2', 'major_external', 'centralized', '软件技术专业校外实习', '2026-07-01', '2026-08-31', '成都锦城学院实践基地', '默认开发环境实习安排', 1, 'enabled')
+        "INSERT INTO `internship_plan` (`id`, `uuid`, `source_type`, `course_code`, `course_name`, `grade_id`, `dep_id`, `profession_id`, `semester`, `credit`, `student_count`, `score_rule`, `plan_content`, `submitter_id`, `status`)
+         VALUES (1, '00000000-0000-0000-0000-000000100000', 'edu_system', 'SX-RJ-2026', '软件技术专业实习课程', 1, 1, 1, '2025-2026-2', 2.00, 1, 'average', JSON_OBJECT('content', '从教务系统抽取的软件技术专业实习课程计划。'), 1, 'accept')
+         ON DUPLICATE KEY UPDATE
+            `source_type` = VALUES(`source_type`),
+            `course_code` = VALUES(`course_code`),
+            `course_name` = VALUES(`course_name`),
+            `grade_id` = VALUES(`grade_id`),
+            `dep_id` = VALUES(`dep_id`),
+            `profession_id` = VALUES(`profession_id`),
+            `semester` = VALUES(`semester`),
+            `credit` = VALUES(`credit`),
+            `student_count` = VALUES(`student_count`),
+            `score_rule` = VALUES(`score_rule`),
+            `plan_content` = VALUES(`plan_content`),
+            `submitter_id` = VALUES(`submitter_id`),
+            `status` = 'accept',
+            `deleted_at` = NULL"
+    );
+
+    $pdo->exec(
+        "INSERT INTO `arrangement` (`id`, `uuid`, `name`, `plan_id`, `base_id`, `dep_id`, `profession_id`, `semester`, `teacher_id`, `task_no`, `batch_no`, `credit`, `student_count`, `type`, `organize_mode`, `title`, `start_date`, `end_date`, `location`, `description`, `created_by`, `status`)
+         VALUES (1, '00000000-0000-0000-0000-000000100001', '软件技术2601实习任务', 1, 1, 1, 1, '2025-2026-2', 1, 'TASK-RJ-2601-01', '第一批', 2.00, 1, 'major_external', 'centralized', '软件技术2601校外实习任务', '2026-07-01', '2026-08-31', '成都锦城学院实践基地', '默认开发环境实习任务', 1, 'enabled')
          ON DUPLICATE KEY UPDATE
             `name` = VALUES(`name`),
+            `plan_id` = VALUES(`plan_id`),
             `base_id` = VALUES(`base_id`),
             `dep_id` = VALUES(`dep_id`),
             `profession_id` = VALUES(`profession_id`),
             `semester` = VALUES(`semester`),
+            `teacher_id` = VALUES(`teacher_id`),
+            `task_no` = VALUES(`task_no`),
+            `batch_no` = VALUES(`batch_no`),
+            `credit` = VALUES(`credit`),
+            `student_count` = VALUES(`student_count`),
             `type` = VALUES(`type`),
             `organize_mode` = VALUES(`organize_mode`),
             `title` = VALUES(`title`),
@@ -1710,6 +1764,32 @@ function seedInternshipDemo(PDO $pdo): void
             `location` = VALUES(`location`),
             `description` = VALUES(`description`),
             `status` = 'enabled',
+            `deleted_at` = NULL"
+    );
+
+    $pdo->exec(
+        "INSERT INTO `internship_task_class` (`id`, `uuid`, `arrangement_id`, `grade_id`, `dep_id`, `profession_id`, `class_id`, `student_count_snapshot`, `status`)
+         VALUES (1, '00000000-0000-0000-0000-000000100002', 1, 1, 1, 1, 1, 1, 'enabled')
+         ON DUPLICATE KEY UPDATE
+            `grade_id` = VALUES(`grade_id`),
+            `dep_id` = VALUES(`dep_id`),
+            `profession_id` = VALUES(`profession_id`),
+            `student_count_snapshot` = VALUES(`student_count_snapshot`),
+            `status` = 'enabled',
+            `deleted_at` = NULL"
+    );
+
+    $pdo->exec(
+        "INSERT INTO `pair` (`id`, `uuid`, `student_id`, `teacher_id`, `dep_id`, `arrangement_id`, `type`, `entity_type`, `entity_id`, `status`)
+         VALUES (1, '00000000-0000-0000-0000-000000100003', 1, 1, 1, 1, 'internship', 'internship', 1, 'active')
+         ON DUPLICATE KEY UPDATE
+            `teacher_id` = VALUES(`teacher_id`),
+            `dep_id` = VALUES(`dep_id`),
+            `arrangement_id` = VALUES(`arrangement_id`),
+            `type` = 'internship',
+            `entity_type` = 'internship',
+            `entity_id` = VALUES(`entity_id`),
+            `status` = 'active',
             `deleted_at` = NULL"
     );
 

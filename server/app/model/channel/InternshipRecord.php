@@ -68,15 +68,30 @@ class InternshipRecord extends TableRecord
             'teachers' => self::rows($teachers->orderBy('teacher_id')->get(['teacher_id', 'teacher_name', 'teacher_num', 'dep_id', 'profession_id'])),
             'students' => self::rows($students->orderBy('student_id')->get(['student_id', 'name', 'student_num', 'grade_id', 'dep_id', 'profession_id', 'class_id'])),
             'bases' => self::rows(self::applyBaseScope(self::queryTable('base')->where('base.status', 'enabled')->whereNull('base.deleted_at'), $scope)->orderBy('base.id')->get(['base.id', 'base.name', 'base.company_id', 'base.dep_id'])),
+            'plans' => self::rows(self::planOptionQuery($scope)
+                ->orderByDesc('internship_plan.id')
+                ->get([
+                    'internship_plan.id', 'internship_plan.uuid', 'internship_plan.course_code',
+                    'internship_plan.course_name', 'internship_plan.grade_id', 'internship_plan.dep_id',
+                    'internship_plan.profession_id', 'internship_plan.credit', 'internship_plan.student_count',
+                    'internship_plan.score_rule', 'internship_plan.status',
+                    'department.dep_name', 'profession.profession_name', 'grade_list.grade_name',
+                ])),
             'arrangements' => self::rows(self::applyArrangementScope(self::queryTable('arrangement')
+                ->leftJoin('internship_plan', 'arrangement.plan_id', '=', 'internship_plan.id')
                 ->leftJoin('profession', 'arrangement.profession_id', '=', 'profession.profession_id')
+                ->leftJoin('teacher_list', 'arrangement.teacher_id', '=', 'teacher_list.teacher_id')
                 ->whereNull('arrangement.deleted_at'), $scope)
                 ->orderByDesc('arrangement.id')
                 ->get([
                     'arrangement.id', 'arrangement.uuid', 'arrangement.title', 'arrangement.name',
                     'arrangement.type', 'arrangement.organize_mode', 'arrangement.semester',
-                    'arrangement.dep_id', 'arrangement.profession_id', 'profession.grade_id',
+                    'arrangement.plan_id', 'arrangement.teacher_id', 'arrangement.task_no',
+                    'arrangement.batch_no', 'arrangement.credit', 'arrangement.student_count',
+                    'arrangement.dep_id', 'arrangement.profession_id', 'internship_plan.grade_id',
                     'arrangement.start_date', 'arrangement.end_date', 'arrangement.status',
+                    'internship_plan.course_code', 'internship_plan.course_name',
+                    'teacher_list.teacher_name',
                 ])),
             'report_templates' => self::rows(self::queryTable('report_template')->where('status', 'enabled')->whereNull('deleted_at')->orderBy('id')->get(['id', 'uuid', 'name', 'code', 'version', 'online_enabled'])),
         ];
@@ -129,6 +144,19 @@ class InternshipRecord extends TableRecord
         return $query->exists();
     }
 
+    private static function planOptionQuery(array $scope): mixed
+    {
+        $query = self::queryTable('internship_plan')
+            ->leftJoin('department', 'internship_plan.dep_id', '=', 'department.dep_id')
+            ->leftJoin('profession', 'internship_plan.profession_id', '=', 'profession.profession_id')
+            ->leftJoin('grade_list', 'internship_plan.grade_id', '=', 'grade_list.grade_id')
+            ->whereIn('internship_plan.status', ['wait', 'accept', 'enabled'])
+            ->whereNull('internship_plan.deleted_at');
+        self::applyDepProfessionScope($query, $scope, 'internship_plan.dep_id', 'internship_plan.profession_id');
+
+        return $query;
+    }
+
     public static function mentorPage(array $scope, array $filters): array
     {
         $query = self::queryTable('enterprise_mentor')
@@ -147,30 +175,49 @@ class InternshipRecord extends TableRecord
     public static function arrangementPage(array $scope, array $filters): array
     {
         $query = self::applyArrangementScope(self::queryTable('arrangement')
+            ->leftJoin('internship_plan', 'arrangement.plan_id', '=', 'internship_plan.id')
             ->leftJoin('base', 'arrangement.base_id', '=', 'base.id')
             ->leftJoin('department', 'arrangement.dep_id', '=', 'department.dep_id')
             ->leftJoin('profession', 'arrangement.profession_id', '=', 'profession.profession_id')
-            ->leftJoin('grade_list', 'profession.grade_id', '=', 'grade_list.grade_id')
+            ->leftJoin('grade_list', 'internship_plan.grade_id', '=', 'grade_list.grade_id')
+            ->leftJoin('teacher_list', 'arrangement.teacher_id', '=', 'teacher_list.teacher_id')
             ->whereNull('arrangement.deleted_at'), $scope);
         self::filter($query, $filters, 'arrangement.status', 'status');
         self::filter($query, $filters, 'arrangement.type', 'type');
         self::filter($query, $filters, 'arrangement.organize_mode', 'organize_mode');
+        self::filter($query, $filters, 'arrangement.plan_id', 'plan_id');
         self::listFilters($query, $filters, [
             'dep_id' => 'arrangement.dep_id',
             'profession_id' => 'arrangement.profession_id',
-            'grade_id' => 'profession.grade_id',
+            'grade_id' => 'internship_plan.grade_id',
             'semester' => 'arrangement.semester',
         ]);
-        self::keyword($query, $filters, ['arrangement.title', 'arrangement.name', 'base.name', 'department.dep_name', 'profession.profession_name']);
+        self::keyword($query, $filters, [
+            'arrangement.title',
+            'arrangement.name',
+            'arrangement.task_no',
+            'arrangement.batch_no',
+            'base.name',
+            'department.dep_name',
+            'profession.profession_name',
+            'internship_plan.course_code',
+            'internship_plan.course_name',
+            'teacher_list.teacher_name',
+            'teacher_list.teacher_num',
+        ]);
 
         return self::paginate($query->orderByDesc('arrangement.id'), $filters, [
             'arrangement.id', 'arrangement.uuid', 'arrangement.name', 'arrangement.base_id',
+            'arrangement.plan_id', 'arrangement.teacher_id', 'arrangement.task_no',
+            'arrangement.batch_no', 'arrangement.credit', 'arrangement.student_count',
             'arrangement.dep_id', 'arrangement.profession_id', 'arrangement.semester',
             'arrangement.type', 'arrangement.organize_mode', 'arrangement.title',
             'arrangement.start_date', 'arrangement.end_date', 'arrangement.location',
             'arrangement.description', 'arrangement.status', 'arrangement.created_at',
             'base.name as base_name', 'department.dep_name', 'profession.profession_name',
-            'profession.grade_id', 'grade_list.grade_name',
+            'internship_plan.grade_id', 'grade_list.grade_name',
+            'internship_plan.course_code', 'internship_plan.course_name',
+            'internship_plan.score_rule', 'teacher_list.teacher_name',
         ]);
     }
 
@@ -426,20 +473,39 @@ class InternshipRecord extends TableRecord
     {
         $query = self::queryTable('internship_plan')
             ->leftJoin('department', 'internship_plan.dep_id', '=', 'department.dep_id')
+            ->leftJoin('profession', 'internship_plan.profession_id', '=', 'profession.profession_id')
+            ->leftJoin('grade_list', 'internship_plan.grade_id', '=', 'grade_list.grade_id')
             ->leftJoin('account', 'internship_plan.submitter_id', '=', 'account.id')
             ->leftJoin('users', 'account.user_id', '=', 'users.id')
             ->whereNull('internship_plan.deleted_at');
-        self::applyDepProfessionScope($query, $scope, 'internship_plan.dep_id', null);
+        self::applyDepProfessionScope($query, $scope, 'internship_plan.dep_id', 'internship_plan.profession_id');
         self::filter($query, $filters, 'internship_plan.status', 'status');
         self::filter($query, $filters, 'internship_plan.semester', 'semester');
-        self::filter($query, $filters, 'internship_plan.dep_id', 'dep_id');
-        self::keyword($query, $filters, ['internship_plan.semester', 'department.dep_name', 'users.name']);
+        self::listFilters($query, $filters, [
+            'grade_id' => 'internship_plan.grade_id',
+            'dep_id' => 'internship_plan.dep_id',
+            'profession_id' => 'internship_plan.profession_id',
+            'semester' => 'internship_plan.semester',
+        ]);
+        self::keyword($query, $filters, [
+            'internship_plan.course_code',
+            'internship_plan.course_name',
+            'internship_plan.semester',
+            'department.dep_name',
+            'profession.profession_name',
+            'users.name',
+        ]);
 
         return self::paginate($query->orderByDesc('internship_plan.id'), $filters, [
             'internship_plan.id', 'internship_plan.uuid', 'internship_plan.dep_id',
-            'internship_plan.semester', 'internship_plan.plan_content', 'internship_plan.status',
+            'internship_plan.profession_id', 'internship_plan.grade_id',
+            'internship_plan.source_type', 'internship_plan.course_code',
+            'internship_plan.course_name', 'internship_plan.semester',
+            'internship_plan.credit', 'internship_plan.student_count',
+            'internship_plan.score_rule', 'internship_plan.plan_content', 'internship_plan.status',
             'internship_plan.submitter_id', 'internship_plan.created_at',
-            'department.dep_name', 'users.name as submitter_name',
+            'department.dep_name', 'profession.profession_name', 'grade_list.grade_name',
+            'users.name as submitter_name',
         ]);
     }
 
@@ -619,7 +685,7 @@ class InternshipRecord extends TableRecord
         $query = self::queryTable('internship_plan')
             ->where('internship_plan.id', $planId)
             ->whereNull('internship_plan.deleted_at');
-        self::applyDepProfessionScope($query, $scope, 'internship_plan.dep_id', null);
+        self::applyDepProfessionScope($query, $scope, 'internship_plan.dep_id', 'internship_plan.profession_id');
         return $query->exists();
     }
 
@@ -629,6 +695,274 @@ class InternshipRecord extends TableRecord
             ->where('department.dep_id', $depId)
             ->whereNull('department.deleted_at');
         self::applyDepProfessionScope($query, $scope, 'department.dep_id', null);
+        return $query->exists();
+    }
+
+    public static function professionVisible(array $scope, int $professionId): bool
+    {
+        $query = self::queryTable('profession')
+            ->where('profession.profession_id', $professionId)
+            ->whereNull('profession.deleted_at');
+        self::applyDepProfessionScope($query, $scope, 'profession.dep_id', 'profession.profession_id');
+
+        return $query->exists();
+    }
+
+    public static function professionBelongsTo(int $professionId, int $gradeId, int $depId): bool
+    {
+        if ($professionId <= 0 || $gradeId <= 0 || $depId <= 0) {
+            return false;
+        }
+
+        return self::queryTable('profession')
+            ->where('profession_id', $professionId)
+            ->where('grade_id', $gradeId)
+            ->where('dep_id', $depId)
+            ->whereNull('deleted_at')
+            ->exists();
+    }
+
+    public static function teacherVisible(array $scope, int $teacherId): bool
+    {
+        $query = self::queryTable('teacher_list')
+            ->where('teacher_list.teacher_id', $teacherId)
+            ->where('teacher_list.status', 'enabled')
+            ->whereNull('teacher_list.deleted_at');
+        self::applyOptionScope($query, $scope, 'teacher_list.dep_id', 'teacher_list.profession_id');
+        if (($scope['role_type'] ?? '') === 'teacher') {
+            self::whereInOrDeny($query, 'teacher_list.teacher_id', [(int) ($scope['teacher_id'] ?? 0)]);
+        }
+
+        return $query->exists();
+    }
+
+    public static function planRowForTask(int $planId): ?object
+    {
+        if ($planId <= 0) {
+            return null;
+        }
+
+        return self::queryTable('internship_plan')
+            ->where('id', $planId)
+            ->whereNull('deleted_at')
+            ->first([
+                'id', 'course_code', 'course_name', 'grade_id', 'dep_id',
+                'profession_id', 'semester', 'credit', 'student_count',
+                'score_rule', 'status',
+            ]);
+    }
+
+    public static function classRowsByIds(array $classIds, array $scope): array
+    {
+        $classIds = self::ids($classIds);
+        if (!$classIds) {
+            return [];
+        }
+
+        $query = self::applyOptionScope(self::queryTable('class')
+            ->whereIn('class.class_id', $classIds)
+            ->where('class.flag', 'on')
+            ->whereNull('class.deleted_at'), $scope, 'class.dep_id', 'class.profession_id');
+
+        return self::rows($query->orderBy('class.sort')->orderBy('class.class_id')->get([
+            'class.class_id',
+            'class.class_name',
+            'class.class_num',
+            'class.grade_id',
+            'class.dep_id',
+            'class.profession_id',
+        ]));
+    }
+
+    public static function taskClassRows(int $arrangementId): array
+    {
+        if ($arrangementId <= 0) {
+            return [];
+        }
+
+        return self::rows(self::queryTable('internship_task_class')
+            ->leftJoin('class', 'internship_task_class.class_id', '=', 'class.class_id')
+            ->where('internship_task_class.arrangement_id', $arrangementId)
+            ->whereNull('internship_task_class.deleted_at')
+            ->orderBy('class.sort')
+            ->orderBy('internship_task_class.class_id')
+            ->get([
+                'internship_task_class.id',
+                'internship_task_class.arrangement_id',
+                'internship_task_class.grade_id',
+                'internship_task_class.dep_id',
+                'internship_task_class.profession_id',
+                'internship_task_class.class_id',
+                'internship_task_class.student_count_snapshot',
+                'class.class_name',
+                'class.class_num',
+            ]));
+    }
+
+    public static function studentRowsByClassIds(array $classIds): array
+    {
+        $classIds = self::ids($classIds);
+        if (!$classIds) {
+            return [];
+        }
+
+        return self::rows(self::queryTable('students')
+            ->whereIn('class_id', $classIds)
+            ->where('status', 'enabled')
+            ->whereNull('deleted_at')
+            ->orderBy('class_id')
+            ->orderBy('student_id')
+            ->get([
+                'student_id',
+                'name',
+                'student_num',
+                'grade_id',
+                'dep_id',
+                'profession_id',
+                'class_id',
+            ]));
+    }
+
+    public static function syncTaskClasses(int $arrangementId, array $classRows, array $studentCounts, callable $uuidFactory, string $now): void
+    {
+        if ($arrangementId <= 0) {
+            return;
+        }
+
+        $classIds = self::ids(array_column($classRows, 'class_id'));
+        if ($classIds) {
+            self::queryTable('internship_task_class')
+                ->where('arrangement_id', $arrangementId)
+                ->whereNull('deleted_at')
+                ->whereNotIn('class_id', $classIds)
+                ->update([
+                    'status' => 'disabled',
+                    'deleted_at' => $now,
+                    'updated_at' => $now,
+                ]);
+        } else {
+            self::queryTable('internship_task_class')
+                ->where('arrangement_id', $arrangementId)
+                ->whereNull('deleted_at')
+                ->update([
+                    'status' => 'disabled',
+                    'deleted_at' => $now,
+                    'updated_at' => $now,
+                ]);
+        }
+
+        foreach ($classRows as $row) {
+            $classId = (int) ($row['class_id'] ?? 0);
+            if ($classId <= 0) {
+                continue;
+            }
+
+            $values = [
+                'grade_id' => $row['grade_id'] ?? null,
+                'dep_id' => $row['dep_id'] ?? null,
+                'profession_id' => $row['profession_id'] ?? null,
+                'student_count_snapshot' => (int) ($studentCounts[$classId] ?? 0),
+                'status' => 'enabled',
+                'deleted_at' => null,
+                'updated_at' => $now,
+            ];
+            $existing = self::queryTable('internship_task_class')
+                ->where('arrangement_id', $arrangementId)
+                ->where('class_id', $classId)
+                ->first(['id']);
+            if ($existing) {
+                self::updateById('internship_task_class', (int) $existing->id, $values);
+                continue;
+            }
+
+            self::insertRow('internship_task_class', array_merge($values, [
+                'uuid' => $uuidFactory(),
+                'arrangement_id' => $arrangementId,
+                'class_id' => $classId,
+                'created_at' => $now,
+            ]));
+        }
+    }
+
+    public static function syncTaskStudentPairs(int $arrangementId, int $teacherId, ?int $enterpriseMentorId, array $studentRows, callable $uuidFactory, string $now): array
+    {
+        $studentIds = self::ids(array_column($studentRows, 'student_id'));
+        if ($arrangementId <= 0 || $teacherId <= 0) {
+            return ['pair_ids' => [], 'student_ids' => $studentIds];
+        }
+
+        if ($studentIds) {
+            self::queryTable('pair')
+                ->where('arrangement_id', $arrangementId)
+                ->where('type', 'internship')
+                ->where('status', 'active')
+                ->whereNull('deleted_at')
+                ->whereNotIn('student_id', $studentIds)
+                ->update([
+                    'status' => 'removed',
+                    'remove_reason' => '任务班级调整',
+                    'updated_at' => $now,
+                    'deleted_at' => $now,
+                ]);
+        } else {
+            self::queryTable('pair')
+                ->where('arrangement_id', $arrangementId)
+                ->where('type', 'internship')
+                ->where('status', 'active')
+                ->whereNull('deleted_at')
+                ->update([
+                    'status' => 'removed',
+                    'remove_reason' => '任务班级调整',
+                    'updated_at' => $now,
+                    'deleted_at' => $now,
+                ]);
+        }
+
+        $pairIds = [];
+        foreach ($studentRows as $row) {
+            $studentId = (int) ($row['student_id'] ?? 0);
+            if ($studentId <= 0) {
+                continue;
+            }
+
+            $pairIds[] = self::upsertActivePair([
+                'student_id' => $studentId,
+                'teacher_id' => $teacherId,
+                'dep_id' => $row['dep_id'] ?? null,
+                'second_teacher_id' => null,
+                'enterprise_mentor_id' => $enterpriseMentorId,
+                'arrangement_id' => $arrangementId,
+                'type' => 'internship',
+                'entity_type' => 'internship',
+                'entity_id' => $arrangementId,
+                'application_id' => null,
+                'status' => 'active',
+                'updated_at' => $now,
+                'deleted_at' => null,
+            ], $uuidFactory(), $now);
+        }
+
+        return ['pair_ids' => self::ids($pairIds), 'student_ids' => $studentIds];
+    }
+
+    public static function teacherTaskTimeConflictExists(int $teacherId, ?string $startDate, ?string $endDate, ?int $excludeId): bool
+    {
+        if ($teacherId <= 0 || !$startDate || !$endDate) {
+            return false;
+        }
+
+        $query = self::queryTable('arrangement')
+            ->where('teacher_id', $teacherId)
+            ->whereNotNull('start_date')
+            ->whereNotNull('end_date')
+            ->where('start_date', '<=', $endDate)
+            ->where('end_date', '>=', $startDate)
+            ->whereNull('deleted_at')
+            ->where('status', '<>', 'disabled');
+        if ($excludeId && $excludeId > 0) {
+            $query->where('id', '<>', $excludeId);
+        }
+
         return $query->exists();
     }
 
@@ -731,12 +1065,18 @@ class InternshipRecord extends TableRecord
             return [];
         }
 
-        return self::intValues(self::queryTable('pair')
+        $pairIds = self::intValues(self::queryTable('pair')
             ->where('teacher_id', $teacherId)
             ->where('type', 'internship')
             ->where('status', 'active')
             ->whereNull('deleted_at')
             ->pluck('arrangement_id'));
+        $taskIds = self::intValues(self::queryTable('arrangement')
+            ->where('teacher_id', $teacherId)
+            ->whereNull('deleted_at')
+            ->pluck('id'));
+
+        return self::ids(array_merge($pairIds, $taskIds));
     }
 
     public static function arrangementIdsByStudent(int $studentId): array
@@ -764,28 +1104,12 @@ class InternshipRecord extends TableRecord
             return [];
         }
 
-        $student = self::queryTable('students')
+        return self::intValues(self::queryTable('pair')
             ->where('student_id', $studentId)
+            ->where('type', 'internship')
+            ->where('status', 'active')
             ->whereNull('deleted_at')
-            ->first(['dep_id', 'profession_id']);
-        if (!$student) {
-            return [];
-        }
-
-        $query = self::queryTable('arrangement')
-            ->whereNull('deleted_at')
-            ->whereIn('status', ['enabled', 'wait', 'accept']);
-        $query->where(function ($builder) use ($student): void {
-            $builder->whereNull('dep_id')->orWhere('dep_id', (int) $student->dep_id);
-        });
-        $query->where(function ($builder) use ($student): void {
-            $builder->whereNull('profession_id')->orWhere('profession_id', (int) $student->profession_id);
-        });
-
-        return self::ids(array_merge(
-            self::arrangementIdsByStudent($studentId),
-            self::intValues($query->pluck('id'))
-        ));
+            ->pluck('arrangement_id'));
     }
 
     public static function applicationIdsByTeacher(int $teacherId): array

@@ -362,31 +362,24 @@
         </section>
 
         <template v-if="isStudentRole && internship.panel === 'apply'">
-          <section class="mobile-card form-card">
+          <section class="mobile-card">
             <header>
               <ClipboardList :size="20" />
-              <strong>实习申请</strong>
+              <strong>我的实习任务</strong>
             </header>
-            <label>
-              <span>实习安排</span>
-              <select v-model.number="internship.forms.application.arrangement_id">
-                <option v-for="item in internship.options.arrangements" :key="item.id" :value="item.id">
-                  {{ item.title }}
-                </option>
-              </select>
-            </label>
-            <label>
-              <span>备注</span>
-              <textarea v-model="internship.forms.application.remark" rows="3" />
-            </label>
-            <van-button block type="primary" :loading="internship.loading" @click="submitApplication">
-              提交申请
-            </van-button>
+            <van-cell
+              v-for="row in internship.options.arrangements"
+              :key="row.id"
+              :title="row.title"
+              :label="joinFact([row.course_name, row.teacher_name, dateRangeText(row.start_date, row.end_date)])"
+              :value="row.student_count ? `${row.student_count}人` : ''"
+            />
+            <div v-if="!internship.options.arrangements.length" class="mobile-empty">暂无绑定任务</div>
           </section>
           <section class="mobile-card">
             <header>
               <FileClock :size="20" />
-              <strong>申请记录</strong>
+              <strong>历史申请记录</strong>
             </header>
             <van-cell
               v-for="row in internship.lists.applications.items"
@@ -1581,7 +1574,7 @@ const modules = [
   {
     key: 'internship',
     title: '实习管理',
-    desc: '申请、签到、日志和指导关系入口',
+    desc: '任务、签到、日志和指导关系入口',
     icon: BriefcaseBusiness,
     theme: 'blue',
     permission: 'internship:view',
@@ -1764,7 +1757,7 @@ const internshipRoleTitle = computed(() => {
 });
 const internshipRoleDesc = computed(() => {
   if (isStudentRole.value) {
-    return '申请、签到、日志和报告提交';
+    return '查看任务、签到、日志和报告提交';
   }
   if (isTeacherRole.value) {
     return '审核申请、评阅材料和录入成绩';
@@ -1778,7 +1771,7 @@ const internshipPanels = computed(() => {
   if (isStudentRole.value) {
     return [
       { key: 'workbench', name: '概况', icon: Home },
-      { key: 'apply', name: '申请', icon: ClipboardList },
+      { key: 'apply', name: '任务', icon: ClipboardList },
       { key: 'submit', name: '提交', icon: Send },
     ];
   }
@@ -1812,16 +1805,16 @@ const mobileListConfigs = computed(() => ({
   arrangements: {
     key: 'arrangements',
     entity: '',
-    title: '实习安排',
-    shortTitle: '安排',
+    title: '实习任务',
+    shortTitle: '任务',
     icon: CalendarCheck,
-    keywordPlaceholder: '安排、届次、学院、专业',
+    keywordPlaceholder: '任务、课程、届次、学院、专业',
     gradeFilter: true,
     statusOptions: [
       { value: 'enabled', label: '启用' },
       { value: 'disabled', label: '停用' },
     ],
-    emptyText: '暂无实习安排',
+    emptyText: '暂无实习任务',
   },
   plans: {
     key: 'plans',
@@ -2032,13 +2025,13 @@ const manageListTabs = computed(() => [
 const currentReviewListConfig = computed(() => getMobileListConfig(internship.reviewList) || reviewListTabs.value[0] || null);
 const currentManageListConfig = computed(() => getMobileListConfig(internship.manageList) || manageListTabs.value[0] || null);
 const internshipSummaries = computed(() => [
-  { name: '安排', value: internship.overview.arrangements || 0 },
+  { name: '任务', value: internship.overview.arrangements || 0 },
   { name: '待审', value: internship.overview.applications_waiting || 0 },
   { name: '关系', value: internship.overview.active_pairs || 0 },
 ]);
 const studentFlowSteps = [
-  '选择实习安排并提交申请',
-  '教师和管理员审核',
+  '查看管理员分配的实习任务',
+  '按任务确认指导关系',
   '签到、日志、报告按阶段提交',
   '退回或需修改时重新提交',
   '完成归档和成绩确认',
@@ -2076,9 +2069,9 @@ const studentSubmitCards = computed(() => [
 const internshipWorkbenchCells = computed(() => {
   if (isStudentRole.value) {
     return [
-      { title: '可申请安排', label: '当前角色可见的实习安排', value: internship.options.arrangements.length || '-' },
-      { title: '我的申请', label: '申请记录', value: internship.lists.applications.pagination.total || 0 },
-      { title: '指导关系', label: '通过后生成', value: internship.lists.pairs.pagination.total || 0 },
+      { title: '我的任务', label: '已绑定的实习任务', value: internship.options.arrangements.length || '-' },
+      { title: '指导关系', label: '任务级指导绑定', value: internship.lists.pairs.pagination.total || 0 },
+      { title: '历史申请', label: '保留的申请记录', value: internship.lists.applications.pagination.total || 0 },
     ];
   }
   if (isTeacherRole.value) {
@@ -2089,7 +2082,7 @@ const internshipWorkbenchCells = computed(() => {
     ];
   }
   return [
-    { title: '实习安排', label: '全校实习安排', value: internship.overview.arrangements || 0 },
+    { title: '实习任务', label: '全校实习任务', value: internship.overview.arrangements || 0 },
     { title: '待审申请', label: '需要管理员审核', value: internship.overview.applications_waiting || 0 },
     { title: '有效配对', label: '学生与指导教师关系', value: internship.overview.active_pairs || 0 },
   ];
@@ -2224,6 +2217,7 @@ function emptyInternshipOverview() {
 
 function emptyInternshipOptions() {
   return {
+    plans: [],
     arrangements: [],
     grades: [],
     departments: [],

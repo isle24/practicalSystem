@@ -342,7 +342,7 @@
                   <div v-if="hasInternshipToolbarActions(win.panel)" class="internship-toolbar action-only">
                     <div class="data-list-actions">
                       <el-button v-if="win.panel === 'arrangements' && canManageInternship" :icon="CalendarCheck" @click="openArrangementDialog">
-                        新增安排
+                        新增任务
                       </el-button>
                       <el-button v-if="win.panel === 'plans' && canManageInternshipPlan" :icon="FileText" @click="openPlanDialog">
                         新增计划
@@ -372,7 +372,15 @@
                       </header>
 
                       <div v-if="internshipState.dialog.type === 'arrangement'" class="operation-form">
-                        <label><span>标题</span><input v-model="internshipState.arrangementForm.title"></label>
+                        <label>
+                          <span>实习计划</span>
+                          <el-select v-model="internshipState.arrangementForm.plan_id" clearable filterable @change="handleArrangementPlanChange">
+                            <el-option v-for="plan in arrangementPlanOptions()" :key="plan.id" :label="internshipPlanLabel(plan)" :value="plan.id" />
+                          </el-select>
+                        </label>
+                        <label><span>任务标题</span><input v-model="internshipState.arrangementForm.title"></label>
+                        <label><span>任务编号</span><input v-model="internshipState.arrangementForm.task_no"></label>
+                        <label><span>批次</span><input v-model="internshipState.arrangementForm.batch_no"></label>
                         <!-- 暂时隐藏学期输入，后续需要时恢复。 -->
                         <!--
                         <label><span>学期</span><input v-model="internshipState.arrangementForm.semester"></label>
@@ -395,6 +403,19 @@
                             <el-option v-for="profession in arrangementProfessionOptions()" :key="profession.profession_id" :label="profession.profession_name" :value="profession.profession_id" />
                           </el-select>
                         </label>
+                        <label>
+                          <span>负责老师</span>
+                          <el-select v-model="internshipState.arrangementForm.teacher_id" clearable filterable>
+                            <el-option v-for="teacher in arrangementTeacherOptions()" :key="teacher.teacher_id" :label="teacher.teacher_name" :value="teacher.teacher_id" />
+                          </el-select>
+                        </label>
+                        <label>
+                          <span>任务班级</span>
+                          <el-select v-model="internshipState.arrangementForm.class_ids" multiple collapse-tags collapse-tags-tooltip filterable>
+                            <el-option v-for="classItem in arrangementClassOptions()" :key="classItem.class_id" :label="classItem.class_name" :value="classItem.class_id" />
+                          </el-select>
+                        </label>
+                        <label><span>学分</span><input v-model="internshipState.arrangementForm.credit" type="number" min="0" step="0.5"></label>
                         <label>
                           <span>基地</span>
                           <el-select v-model="internshipState.arrangementForm.base_id" clearable filterable>
@@ -427,9 +448,39 @@
                         </label>
                         -->
                         <label>
+                          <span>课程名称</span>
+                          <input v-model="internshipState.planForm.course_name">
+                        </label>
+                        <label>
+                          <span>课程代码</span>
+                          <input v-model="internshipState.planForm.course_code">
+                        </label>
+                        <label>
+                          <span>届次</span>
+                          <el-select v-model="internshipState.planForm.grade_id" filterable @change="handlePlanGradeChange">
+                            <el-option v-for="grade in internshipState.options.grades" :key="grade.grade_id" :label="grade.grade_name" :value="grade.grade_id" />
+                          </el-select>
+                        </label>
+                        <label>
                           <span>学院</span>
-                          <el-select v-model="internshipState.planForm.dep_id" filterable>
+                          <el-select v-model="internshipState.planForm.dep_id" filterable @change="handlePlanDepartmentChange">
                             <el-option v-for="dep in internshipState.options.departments" :key="dep.dep_id" :label="dep.dep_name" :value="dep.dep_id" />
+                          </el-select>
+                        </label>
+                        <label>
+                          <span>专业</span>
+                          <el-select v-model="internshipState.planForm.profession_id" filterable>
+                            <el-option v-for="profession in planProfessionOptions()" :key="profession.profession_id" :label="profession.profession_name" :value="profession.profession_id" />
+                          </el-select>
+                        </label>
+                        <label><span>学分</span><input v-model="internshipState.planForm.credit" type="number" min="0" step="0.5"></label>
+                        <label><span>学生人数</span><input v-model="internshipState.planForm.student_count" type="number" min="0" step="1"></label>
+                        <label>
+                          <span>成绩规则</span>
+                          <el-select v-model="internshipState.planForm.score_rule">
+                            <el-option label="按任务平均" value="average" />
+                            <el-option label="按任务累计" value="sum" />
+                            <el-option label="按权重核定" value="weighted" />
                           </el-select>
                         </label>
                         <label>
@@ -3854,15 +3905,21 @@ const internshipListConfigs = computed(() => ({
   },
   arrangements: {
     listKey: 'arrangements',
-    filename: '实习安排',
-    filters: internshipListFilters('arrangements', ['grade_id', 'dep_id', 'profession_id', 'type', 'organize_mode', 'status', 'keyword']),
+    filename: '实习任务',
+    filters: internshipListFilters('arrangements', ['grade_id', 'dep_id', 'profession_id', 'plan_id', 'type', 'organize_mode', 'status', 'keyword']),
     columns: [
-      { prop: 'title', label: '实习安排', minWidth: 180 },
+      { prop: 'title', label: '实习任务', minWidth: 180 },
+      { key: 'plan', label: '课程计划', minWidth: 180, formatter: row => row.course_name || row.course_code || '-' },
+      { prop: 'teacher_name', label: '负责老师', width: 120 },
+      { prop: 'task_no', label: '任务编号', width: 140 },
+      { prop: 'batch_no', label: '批次', width: 100 },
       // 暂时隐藏学期列，后续需要时恢复。
       // { prop: 'semester', label: '学期', width: 130 },
       { prop: 'grade_name', label: '届次', width: 100 },
       { key: 'type', label: '类型', width: 130, formatter: row => arrangementTypeText(row.type) },
       { key: 'mode', label: '组织方式', width: 100, formatter: row => organizeModeText(row.organize_mode) },
+      { prop: 'credit', label: '学分', width: 80 },
+      { prop: 'student_count', label: '人数', width: 80 },
       { key: 'date', label: '时间', minWidth: 170, formatter: row => `${row.start_date || '-'} 至 ${row.end_date || '-'}` },
       { key: 'scope', label: '范围', minWidth: 190, formatter: row => arrangementScopeText(row) },
       { prop: 'status', label: '状态', width: 90, tag: true, tagType: row => statusTagType(row.status), formatter: row => statusText(row.status) },
@@ -3888,12 +3945,19 @@ const internshipListConfigs = computed(() => ({
   plans: {
     listKey: 'plans',
     filename: '实习计划',
-    filters: internshipListFilters('plans', ['dep_id', 'status', 'keyword']),
+    filters: internshipListFilters('plans', ['grade_id', 'dep_id', 'profession_id', 'status', 'keyword']),
     columns: [
+      { prop: 'course_name', label: '课程名称', minWidth: 180 },
+      { prop: 'course_code', label: '课程代码', width: 130 },
       // 暂时隐藏学期列，后续需要时恢复。
       // { prop: 'semester', label: '学期', width: 130 },
+      { prop: 'grade_name', label: '届次', width: 100 },
       { prop: 'dep_name', label: '学院', minWidth: 150 },
-      { key: 'content', label: '计划内容', minWidth: 260, formatter: row => planContentText(row.plan_content) },
+      { prop: 'profession_name', label: '专业', minWidth: 150 },
+      { prop: 'credit', label: '学分', width: 80 },
+      { prop: 'student_count', label: '人数', width: 80 },
+      { key: 'score_rule', label: '成绩规则', width: 110, formatter: row => scoreRuleText(row.score_rule) },
+      { key: 'content', label: '计划内容', minWidth: 220, formatter: row => planContentText(row.plan_content) },
       { prop: 'submitter_name', label: '提交人', width: 120 },
       { prop: 'status', label: '状态', width: 90, tag: true, tagType: row => statusTagType(row.status), formatter: row => statusText(row.status) },
       { prop: 'created_at', label: '提交时间', width: 168 },
@@ -6792,6 +6856,7 @@ function emptyInternshipOptions() {
     teachers: [],
     students: [],
     bases: [],
+    plans: [],
     arrangements: [],
     report_templates: [],
     review_rules: defaultInternshipReviewRules,
@@ -6819,12 +6884,18 @@ function emptyInternshipFilters() {
 
 function emptyArrangementForm() {
   return {
+    plan_id: null,
     title: '',
+    task_no: '',
+    batch_no: '',
     semester: '',
     grade_id: null,
     base_id: null,
     dep_id: null,
     profession_id: null,
+    teacher_id: null,
+    class_ids: [],
+    credit: '',
     type: 'major_external',
     organize_mode: 'centralized',
     start_date: '',
@@ -6836,8 +6907,16 @@ function emptyArrangementForm() {
 
 function emptyPlanForm() {
   return {
+    source_type: 'edu_system',
+    course_code: '',
+    course_name: '',
+    grade_id: null,
     semester: '',
     dep_id: null,
+    profession_id: null,
+    credit: '',
+    student_count: '',
+    score_rule: 'average',
     content: '',
     status: 'wait',
   };
@@ -7568,6 +7647,7 @@ function internshipFilters(keys, values = {}, options = internshipState.options)
     dep_id: { key: 'dep_id', label: '学院', type: 'select', options: optionItems(filterAcademicDepartments(options, values), 'dep_id', 'dep_name') },
     profession_id: { key: 'profession_id', label: '专业', type: 'select', options: optionItems(filterAcademicItems(options.professions, values, ['grade_id', 'dep_id']), 'profession_id', 'profession_name') },
     class_id: { key: 'class_id', label: '班级', type: 'select', options: optionItems(filterAcademicItems(options.classes, values, ['grade_id', 'dep_id', 'profession_id']), 'class_id', 'class_name') },
+    plan_id: { key: 'plan_id', label: '实习计划', type: 'select', options: optionItems(filterAcademicItems(options.plans, values, ['grade_id', 'dep_id', 'profession_id']), 'id', 'course_name') },
     arrangement_id: { key: 'arrangement_id', label: '实习安排', type: 'select', options: optionItems(filterAcademicItems(options.arrangements, values, ['grade_id', 'dep_id', 'profession_id', 'class_id']), 'id', 'title') },
     config_key: { key: 'config_key', label: '延期类型', type: 'select', options: delayConfigOptions() },
     status: { key: 'status', label: '状态', type: 'select', options: statusOptions() },
@@ -7784,8 +7864,22 @@ function arrangementSelectedProfession() {
   return internshipState.options.professions.find(item => Number(item.profession_id) === professionId) || null;
 }
 
+function arrangementSelectedPlan() {
+  const planId = Number(internshipState.arrangementForm.plan_id || 0);
+  return internshipState.options.plans.find(item => Number(item.id) === planId) || null;
+}
+
 function firstArrangementGrade() {
   return internshipState.options.grades[0] || null;
+}
+
+function internshipPlanLabel(plan) {
+  return [plan.course_name, plan.course_code, plan.grade_name, plan.profession_name].filter(Boolean).join(' / ') || `计划 ${plan.id}`;
+}
+
+function arrangementPlanOptions() {
+  const values = internshipState.arrangementForm;
+  return filterAcademicItems(internshipState.options.plans, values, ['grade_id', 'dep_id', 'profession_id']);
 }
 
 function arrangementDepartmentOptions() {
@@ -7799,6 +7893,31 @@ function arrangementProfessionOptions() {
     const matchGrade = !gradeId || Number(item.grade_id || 0) === gradeId;
     const matchDepartment = !depId || Number(item.dep_id || 0) === depId;
     return matchGrade && matchDepartment;
+  });
+}
+
+function arrangementTeacherOptions() {
+  const depId = Number(internshipState.arrangementForm.dep_id || 0);
+  const professionId = Number(internshipState.arrangementForm.profession_id || 0);
+  return internshipState.options.teachers.filter((teacher) => {
+    const matchDep = !depId || Number(teacher.dep_id || 0) === depId;
+    const matchProfession = !professionId || !teacher.profession_id || Number(teacher.profession_id || 0) === professionId;
+    return matchDep && matchProfession;
+  });
+}
+
+function arrangementClassOptions() {
+  const values = internshipState.arrangementForm;
+  return filterAcademicItems(internshipState.options.classes, values, ['grade_id', 'dep_id', 'profession_id']);
+}
+
+function planProfessionOptions() {
+  return internshipState.options.professions.filter((profession) => {
+    const gradeId = Number(internshipState.planForm.grade_id || 0);
+    const depId = Number(internshipState.planForm.dep_id || 0);
+    const matchGrade = !gradeId || Number(profession.grade_id || 0) === gradeId;
+    const matchDep = !depId || Number(profession.dep_id || 0) === depId;
+    return matchGrade && matchDep;
   });
 }
 
@@ -7819,7 +7938,34 @@ function handleArrangementProfessionChange() {
   internshipState.arrangementForm.grade_id = profession.grade_id || internshipState.arrangementForm.grade_id;
 }
 
+function handleArrangementPlanChange() {
+  const plan = arrangementSelectedPlan();
+  if (!plan) {
+    return;
+  }
+  internshipState.arrangementForm.grade_id = plan.grade_id || null;
+  internshipState.arrangementForm.dep_id = plan.dep_id || null;
+  internshipState.arrangementForm.profession_id = plan.profession_id || null;
+  internshipState.arrangementForm.credit = plan.credit ?? internshipState.arrangementForm.credit;
+  internshipState.arrangementForm.title = internshipState.arrangementForm.title || plan.course_name || '';
+  normalizeArrangementCascade();
+}
+
+function handlePlanGradeChange() {
+  normalizePlanCascade();
+}
+
+function handlePlanDepartmentChange() {
+  normalizePlanCascade();
+}
+
 function normalizeArrangementCascade() {
+  const plan = arrangementSelectedPlan();
+  if (plan) {
+    internshipState.arrangementForm.grade_id = plan.grade_id || internshipState.arrangementForm.grade_id;
+    internshipState.arrangementForm.dep_id = plan.dep_id || internshipState.arrangementForm.dep_id;
+    internshipState.arrangementForm.profession_id = plan.profession_id || internshipState.arrangementForm.profession_id;
+  }
   const profession = arrangementSelectedProfession();
   if (!internshipState.arrangementForm.grade_id && profession?.grade_id) {
     internshipState.arrangementForm.grade_id = profession.grade_id;
@@ -7837,6 +7983,8 @@ function normalizeArrangementCascade() {
   }
 
   normalizeArrangementProfession();
+  normalizeArrangementClasses();
+  normalizeArrangementTeacher();
 }
 
 function normalizeArrangementProfession() {
@@ -7846,6 +7994,38 @@ function normalizeArrangementProfession() {
     return;
   }
   internshipState.arrangementForm.profession_id = options[0]?.profession_id || null;
+}
+
+function normalizeArrangementClasses() {
+  const visibleIds = new Set(arrangementClassOptions().map(item => Number(item.class_id)));
+  internshipState.arrangementForm.class_ids = (internshipState.arrangementForm.class_ids || []).filter(id => visibleIds.has(Number(id)));
+}
+
+function normalizeArrangementTeacher() {
+  const teacherId = Number(internshipState.arrangementForm.teacher_id || 0);
+  if (!teacherId) {
+    return;
+  }
+  if (!arrangementTeacherOptions().some(item => Number(item.teacher_id) === teacherId)) {
+    internshipState.arrangementForm.teacher_id = null;
+  }
+}
+
+function normalizePlanCascade() {
+  const visible = planProfessionOptions();
+  const current = Number(internshipState.planForm.profession_id || 0);
+  if (current && visible.some(item => Number(item.profession_id) === current)) {
+    return;
+  }
+  internshipState.planForm.profession_id = visible[0]?.profession_id || null;
+}
+
+function scoreRuleText(value) {
+  return {
+    average: '按任务平均',
+    sum: '按任务累计',
+    weighted: '按权重核定',
+  }[value] || value || '-';
 }
 
 function statCellText(value) {
@@ -8139,29 +8319,34 @@ function resetInternshipFilters(listKey) {
 
 function openArrangementDialog() {
   const defaults = defaultScopedFilters();
-  const defaultProfession = internshipState.options.professions.find(item => Number(item.profession_id) === Number(defaults.profession_id || 0)) || null;
-  const defaultDepId = defaults.dep_id || defaultProfession?.dep_id || null;
-  const defaultGrade = firstArrangementGrade();
+  const defaultPlan = internshipState.options.plans.find(item => matchAcademicFilters(item, defaults, ['grade_id', 'dep_id', 'profession_id'])) || internshipState.options.plans[0] || null;
   internshipState.arrangementForm = {
     ...emptyArrangementForm(),
+    plan_id: defaultPlan?.id || null,
     base_id: internshipState.options.bases[0]?.id || null,
-    grade_id: defaultProfession?.grade_id || defaultGrade?.grade_id || null,
-    dep_id: defaultDepId,
-    profession_id: defaultProfession?.profession_id || null,
+    grade_id: defaultPlan?.grade_id || defaults.grade_id || firstArrangementGrade()?.grade_id || null,
+    dep_id: defaultPlan?.dep_id || defaults.dep_id || null,
+    profession_id: defaultPlan?.profession_id || defaults.profession_id || null,
+    credit: defaultPlan?.credit ?? '',
   };
   normalizeArrangementCascade();
   internshipState.dialog = {
     ...emptyOperationDialog(),
     type: 'arrangement',
-    title: '新增实习安排',
+    title: '新增实习任务',
   };
 }
 
 function openPlanDialog() {
+  const defaults = defaultScopedFilters();
+  const defaultProfession = internshipState.options.professions.find(item => Number(item.profession_id) === Number(defaults.profession_id || 0)) || null;
   internshipState.planForm = {
     ...emptyPlanForm(),
-    dep_id: defaultScopedFilters().dep_id || internshipState.options.departments[0]?.dep_id || null,
+    grade_id: defaultProfession?.grade_id || defaults.grade_id || internshipState.options.grades[0]?.grade_id || null,
+    dep_id: defaultProfession?.dep_id || defaults.dep_id || internshipState.options.departments[0]?.dep_id || null,
+    profession_id: defaultProfession?.profession_id || defaults.profession_id || null,
   };
+  normalizePlanCascade();
   internshipState.dialog = {
     ...emptyOperationDialog(),
     type: 'plan',
@@ -8705,6 +8890,18 @@ async function saveArrangement() {
   if (!canManageInternship.value) {
     return;
   }
+  if (!internshipState.arrangementForm.plan_id) {
+    internshipState.message = '请选择实习计划';
+    return;
+  }
+  if (!internshipState.arrangementForm.teacher_id) {
+    internshipState.message = '请选择负责老师';
+    return;
+  }
+  if (!internshipState.arrangementForm.class_ids.length) {
+    internshipState.message = '请选择任务班级';
+    return;
+  }
 
   internshipState.loading = true;
   internshipState.message = '';
@@ -8716,17 +8913,26 @@ async function saveArrangement() {
       base_id: internshipState.arrangementForm.base_id || null,
       dep_id: internshipState.arrangementForm.dep_id || null,
       profession_id: internshipState.arrangementForm.profession_id || null,
+      teacher_id: internshipState.arrangementForm.teacher_id || null,
+      class_ids: internshipState.arrangementForm.class_ids,
     });
     internshipState.savedMessage = '已保存';
     internshipState.arrangementForm = {
       ...emptyArrangementForm(),
+      plan_id: internshipState.arrangementForm.plan_id,
       base_id: internshipState.arrangementForm.base_id,
       grade_id: internshipState.arrangementForm.grade_id,
       dep_id: internshipState.arrangementForm.dep_id,
       profession_id: internshipState.arrangementForm.profession_id,
+      teacher_id: internshipState.arrangementForm.teacher_id,
+      credit: internshipState.arrangementForm.credit,
     };
     closeInternshipDialog();
-    await loadInternshipPanel('arrangements');
+    await Promise.all([
+      loadInternshipPanel('arrangements'),
+      loadInternshipPanel('pairs'),
+      loadInternshipOptions(),
+    ]);
   } catch (error) {
     internshipState.message = error.message;
   } finally {
@@ -8759,8 +8965,20 @@ async function savePlan() {
   if (!canManageInternshipPlan.value) {
     return;
   }
+  if (!internshipState.planForm.course_name) {
+    internshipState.message = '请填写课程名称';
+    return;
+  }
+  if (!internshipState.planForm.grade_id) {
+    internshipState.message = '请选择届次';
+    return;
+  }
   if (!internshipState.planForm.dep_id) {
     internshipState.message = '请选择学院';
+    return;
+  }
+  if (!internshipState.planForm.profession_id) {
+    internshipState.message = '请选择专业';
     return;
   }
 
@@ -8768,8 +8986,16 @@ async function savePlan() {
   internshipState.message = '';
   try {
     await saveInternshipPlan({
+      source_type: internshipState.planForm.source_type,
+      course_code: internshipState.planForm.course_code,
+      course_name: internshipState.planForm.course_name,
+      grade_id: internshipState.planForm.grade_id,
       dep_id: internshipState.planForm.dep_id,
+      profession_id: internshipState.planForm.profession_id,
       semester: '',
+      credit: internshipState.planForm.credit || null,
+      student_count: internshipState.planForm.student_count || 0,
+      score_rule: internshipState.planForm.score_rule,
       plan_content: {
         content: internshipState.planForm.content,
       },
@@ -8777,7 +9003,10 @@ async function savePlan() {
     });
     internshipState.planForm = emptyPlanForm();
     closeInternshipDialog();
-    await loadInternshipPanel('plans');
+    await Promise.all([
+      loadInternshipPanel('plans'),
+      loadInternshipOptions(),
+    ]);
   } catch (error) {
     internshipState.message = error.message;
   } finally {

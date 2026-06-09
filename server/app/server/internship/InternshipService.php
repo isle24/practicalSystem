@@ -192,7 +192,7 @@ class InternshipService
 
         return InternshipRecord::arrangementPage($this->scopeContext(), $this->requestFilters($request, [
             'page', 'page_size', 'per_page', 'keyword', 'status', 'type', 'organize_mode',
-            'dep_id', 'profession_id', 'grade_id', 'semester',
+            'plan_id', 'dep_id', 'profession_id', 'grade_id', 'semester',
         ]));
     }
 
@@ -201,26 +201,100 @@ class InternshipService
         $this->requirePermission('internship:manage');
         $this->requireAdminRole();
 
-        $values = [
-            'name' => $this->stringInput($request, 'name', 180) ?: $this->requiredString($request, 'title', 180),
-            'base_id' => $this->optionalInt($request, 'base_id'),
-            'dep_id' => $this->optionalInt($request, 'dep_id'),
-            'profession_id' => $this->optionalInt($request, 'profession_id'),
-            'semester' => $this->nullableString($request, 'semester', 80),
-            'type' => $this->enum($request, 'type', self::ARRANGEMENT_TYPES, 'major_external'),
-            'organize_mode' => $this->enum($request, 'organize_mode', self::ORGANIZE_MODES, 'centralized'),
-            'title' => $this->requiredString($request, 'title', 180),
-            'start_date' => $this->dateInput($request, 'start_date'),
-            'end_date' => $this->dateInput($request, 'end_date'),
-            'location' => $this->nullableString($request, 'location', 255),
-            'description' => $this->nullableString($request, 'description', 2000),
-            'created_by' => CurrentContext::accountId(),
-            'status' => $this->enum($request, 'status', ['enabled', 'disabled', 'draft', 'wait', 'accept', 'modify'], 'enabled'),
-            'updated_at' => $this->now(),
-            'deleted_at' => null,
-        ];
+        $planId = $this->requiredInt($request, 'plan_id');
+        $teacherId = $this->requiredInt($request, 'teacher_id');
+        $classIds = $this->intArray($request->input('class_ids', []));
+        if (!$classIds) {
+            throw new InvalidArgumentException('请选择任务班级');
+        }
+        $title = $this->requiredString($request, 'title', 180);
+        $startDate = $this->requiredDate($request, 'start_date');
+        $endDate = $this->requiredDate($request, 'end_date');
+        if (strtotime($endDate) < strtotime($startDate)) {
+            throw new InvalidArgumentException('结束日期不能早于开始日期');
+        }
 
-        return $this->saveRow('arrangement', $request, $values);
+        $scope = $this->scopeContext();
+        $plan = InternshipRecord::planRowForTask($planId);
+        if (!$plan || !InternshipRecord::planVisible($scope, $planId)) {
+            throw new RuntimeException('实习计划不存在或无权限', 40301);
+        }
+        if (!InternshipRecord::teacherVisible($scope, $teacherId)) {
+            throw new RuntimeException('负责老师不存在或无权限', 40301);
+        }
+
+        $classRows = InternshipRecord::classRowsByIds($classIds, $scope);
+        if (count($classRows) !== count($classIds)) {
+            throw new RuntimeException('任务班级不存在或无权限', 40301);
+        }
+        foreach ($classRows as $classRow) {
+            if ((int) ($classRow['grade_id'] ?? 0) !== (int) ($plan->grade_id ?? 0)
+                || (int) ($classRow['dep_id'] ?? 0) !== (int) ($plan->dep_id ?? 0)
+                || (int) ($classRow['profession_id'] ?? 0) !== (int) ($plan->profession_id ?? 0)) {
+                throw new InvalidArgumentException('任务班级必须属于所选计划的届次、学院和专业');
+            }
+        }
+
+        $existingId = $this->inputRowId($request, 'arrangement');
+        if (InternshipRecord::teacherTaskTimeConflictExists($teacherId, $startDate, $endDate, $existingId)) {
+            throw new InvalidArgumentException('该老师在当前时间段已有任务，请调整时间或负责老师');
+        }
+
+        return $this->connection()->transaction(function () use ($classRows, $endDate, $existingId, $plan, $planId, $request, $startDate, $teacherId, $title): array {
+            $now = $this->now();
+            $studentRows = InternshipRecord::studentRowsByClassIds(array_column($classRows, 'class_id'));
+            $studentCounts = [];
+            foreach ($studentRows as $studentRow) {
+                $classId = (int) ($studentRow['class_id'] ?? 0);
+                $studentCounts[$classId] = ($studentCounts[$classId] ?? 0) + 1;
+            }
+
+            $values = [
+                'plan_id' => $planId,
+                'name' => $this->stringInput($request, 'name', 180) ?: $title,
+                'base_id' => $this->optionalInt($request, 'base_id'),
+                'dep_id' => (int) $plan->dep_id,
+                'profession_id' => (int) $plan->profession_id,
+                'semester' => (string) ($plan->semester ?? ''),
+                'teacher_id' => $teacherId,
+                'task_no' => $this->nullableString($request, 'task_no', 80),
+                'batch_no' => $this->nullableString($request, 'batch_no', 80),
+                'credit' => $this->decimalInput($request, 'credit') ?? ($plan->credit === null ? null : (float) $plan->credit),
+                'student_count' => count($studentRows),
+                'type' => $this->enum($request, 'type', self::ARRANGEMENT_TYPES, 'major_external'),
+                'organize_mode' => $this->enum($request, 'organize_mode', self::ORGANIZE_MODES, 'centralized'),
+                'title' => $title,
+                'start_date' => $startDate,
+                'end_date' => $endDate,
+                'location' => $this->nullableString($request, 'location', 255),
+                'description' => $this->nullableString($request, 'description', 2000),
+                'created_by' => CurrentContext::accountId(),
+                'status' => $this->enum($request, 'status', ['enabled', 'disabled', 'draft', 'wait', 'accept', 'modify'], 'enabled'),
+                'updated_at' => $now,
+                'deleted_at' => null,
+            ];
+
+            $result = $this->saveRow('arrangement', $request, $values);
+            $arrangementId = (int) $result['id'];
+            InternshipRecord::syncTaskClasses($arrangementId, $classRows, $studentCounts, fn (): string => $this->uuid(), $now);
+            $pairResult = InternshipRecord::syncTaskStudentPairs(
+                $arrangementId,
+                $teacherId,
+                $this->optionalInt($request, 'enterprise_mentor_id'),
+                $studentRows,
+                fn (): string => $this->uuid(),
+                $now
+            );
+
+            return [
+                'id' => $arrangementId,
+                'uuid' => $result['uuid'],
+                'class_count' => count($classRows),
+                'pair_count' => count($pairResult['pair_ids']),
+                'student_count' => count($pairResult['student_ids']),
+                'item' => InternshipRecord::activeRowById('arrangement', $arrangementId),
+            ];
+        });
     }
 
     public function applications(Request $request): array
@@ -769,7 +843,7 @@ class InternshipService
         $this->requirePermission('internship:plan');
 
         return InternshipRecord::planPage($this->scopeContext(), $this->requestFilters($request, [
-            'page', 'page_size', 'per_page', 'status', 'dep_id', 'keyword',
+            'page', 'page_size', 'per_page', 'status', 'grade_id', 'dep_id', 'profession_id', 'keyword',
         ]));
     }
 
@@ -779,12 +853,28 @@ class InternshipService
         $this->requireAdminRole();
         $existingId = $this->inputRowId($request, 'internship_plan');
         $fromStatus = $existingId ? InternshipRecord::statusById('internship_plan', $existingId) : 'draft';
+        $gradeId = $this->requiredInt($request, 'grade_id');
         $depId = $this->requiredInt($request, 'dep_id');
+        $professionId = $this->requiredInt($request, 'profession_id');
         $this->assertDepartmentVisible($depId);
+        if (!InternshipRecord::professionVisible($this->scopeContext(), $professionId)) {
+            throw new RuntimeException('专业不存在或无权限', 40301);
+        }
+        if (!InternshipRecord::professionBelongsTo($professionId, $gradeId, $depId)) {
+            throw new InvalidArgumentException('专业必须属于所选届次和学院');
+        }
 
         $values = [
+            'source_type' => $this->enum($request, 'source_type', ['edu_system', 'manual'], 'edu_system'),
+            'course_code' => $this->nullableString($request, 'course_code', 120),
+            'course_name' => $this->requiredString($request, 'course_name', 180),
+            'grade_id' => $gradeId,
             'dep_id' => $depId,
+            'profession_id' => $professionId,
             'semester' => $this->nullableString($request, 'semester', 80),
+            'credit' => $this->decimalInput($request, 'credit'),
+            'student_count' => $this->optionalInt($request, 'student_count') ?? 0,
+            'score_rule' => $this->enum($request, 'score_rule', ['average', 'sum', 'weighted'], 'average'),
             'plan_content' => $this->jsonValue($request->input('plan_content', [])),
             'submitter_id' => CurrentContext::accountId(),
             'status' => $this->enum($request, 'status', ['draft', 'wait'], 'draft'),
