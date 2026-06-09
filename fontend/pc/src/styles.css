@@ -61,6 +61,8 @@ a {
 }
 
 .topbar {
+  position: relative;
+  z-index: 3000;
   display: grid;
   grid-template-columns: 220px minmax(220px, 520px) auto;
   align-items: center;
