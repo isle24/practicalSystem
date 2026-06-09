@@ -5,6 +5,8 @@ namespace app\model\channel;
 class InternshipRecord extends TableRecord
 {
     private const STAT_DATA_LIMIT = 20000;
+    private const TASK_CLASS_ACTIVE_STATUSES = ['active', 'enabled'];
+    private const TASK_CLASS_REMOVED_STATUS = 'removed';
     private const ARCHIVE_MATERIALS = [
         'plan' => '实习计划表',
         'implementation_sheet' => '教学实习实施表',
@@ -1086,7 +1088,7 @@ class InternshipRecord extends TableRecord
         return self::rows(self::queryTable('internship_task_class')
             ->leftJoin('class', 'internship_task_class.class_id', '=', 'class.class_id')
             ->where('internship_task_class.arrangement_id', $arrangementId)
-            ->where('internship_task_class.status', 'enabled')
+            ->whereIn('internship_task_class.status', self::TASK_CLASS_ACTIVE_STATUSES)
             ->whereNull('internship_task_class.deleted_at')
             ->orderBy('class.sort')
             ->orderBy('internship_task_class.class_id')
@@ -1143,7 +1145,7 @@ class InternshipRecord extends TableRecord
             ->where('pair.arrangement_id', $arrangementId)
             ->where('pair.type', 'internship')
             ->where('pair.status', 'active')
-            ->whereNull('pair.deleted_at'), $scope, 'pair.student_id');
+            ->whereNull('pair.deleted_at'), $scope, 'pair.student_id', 'pair.arrangement_id');
 
         return self::rows($query->orderBy('students.class_id')->orderBy('students.student_id')->get([
             'pair.id',
@@ -1178,7 +1180,7 @@ class InternshipRecord extends TableRecord
             ->where('students.status', 'enabled')
             ->whereNull('students.deleted_at')
             ->where('internship_task_class.arrangement_id', $arrangementId)
-            ->where('internship_task_class.status', 'enabled')
+            ->whereIn('internship_task_class.status', self::TASK_CLASS_ACTIVE_STATUSES)
             ->whereNull('internship_task_class.deleted_at');
         self::applyStudentScope($query, $scope, 'students.student_id');
 
@@ -1198,7 +1200,7 @@ class InternshipRecord extends TableRecord
                 ->whereNull('deleted_at')
                 ->whereNotIn('class_id', $classIds)
                 ->update([
-                    'status' => 'disabled',
+                    'status' => self::TASK_CLASS_REMOVED_STATUS,
                     'updated_at' => $now,
                 ]);
         } else {
@@ -1206,7 +1208,7 @@ class InternshipRecord extends TableRecord
                 ->where('arrangement_id', $arrangementId)
                 ->whereNull('deleted_at')
                 ->update([
-                    'status' => 'disabled',
+                    'status' => self::TASK_CLASS_REMOVED_STATUS,
                     'updated_at' => $now,
                 ]);
         }
@@ -1222,7 +1224,7 @@ class InternshipRecord extends TableRecord
                 'dep_id' => $row['dep_id'] ?? null,
                 'profession_id' => $row['profession_id'] ?? null,
                 'student_count_snapshot' => (int) ($studentCounts[$classId] ?? 0),
-                'status' => 'enabled',
+                'status' => 'active',
                 'deleted_at' => null,
                 'updated_at' => $now,
             ];
@@ -1311,10 +1313,10 @@ class InternshipRecord extends TableRecord
 
         self::queryTable('internship_task_class')
             ->where('arrangement_id', $arrangementId)
-            ->where('status', 'enabled')
+            ->whereIn('status', self::TASK_CLASS_ACTIVE_STATUSES)
             ->whereNull('deleted_at')
             ->update([
-                'status' => 'disabled',
+                'status' => self::TASK_CLASS_REMOVED_STATUS,
                 'updated_at' => $now,
             ]);
 

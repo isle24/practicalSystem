@@ -440,6 +440,14 @@
                         <label><span>开始日期</span><input v-model="internshipState.arrangementForm.start_date" type="date"></label>
                         <label><span>结束日期</span><input v-model="internshipState.arrangementForm.end_date" type="date"></label>
                         <label><span>地点</span><input v-model="internshipState.arrangementForm.location"></label>
+                        <label class="span-2">
+                          <span>任务说明</span>
+                          <textarea v-model="internshipState.arrangementForm.description" rows="3" />
+                        </label>
+                        <label v-if="internshipState.arrangementForm.id" class="span-2">
+                          <span>变更原因</span>
+                          <textarea v-model="internshipState.arrangementForm.change_reason" rows="3" />
+                        </label>
                       </div>
 
                       <div v-else-if="internshipState.dialog.type === 'plan'" class="operation-form single">
@@ -484,6 +492,7 @@
                             <el-option label="按任务平均" value="average" />
                             <el-option label="按任务累计" value="sum" />
                             <el-option label="按权重核定" value="weighted" />
+                            <el-option label="人工核定" value="manual" />
                           </el-select>
                         </label>
                         <label>
@@ -7080,6 +7089,8 @@ function emptyArrangementForm() {
     start_date: '',
     end_date: '',
     location: '',
+    description: '',
+    change_reason: '',
     status: 'enabled',
   };
 }
@@ -8204,6 +8215,7 @@ function scoreRuleText(value) {
     average: '按任务平均',
     sum: '按任务累计',
     weighted: '按权重核定',
+    manual: '人工核定',
   }[value] || value || '-';
 }
 
@@ -8526,6 +8538,8 @@ function fillArrangementFormFromDetail(detail) {
     start_date: item.start_date || '',
     end_date: item.end_date || '',
     location: item.location || '',
+    description: item.description || '',
+    change_reason: '',
     status: item.status || 'enabled',
   };
   normalizeArrangementCascade();

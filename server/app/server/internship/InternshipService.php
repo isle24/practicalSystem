@@ -95,6 +95,7 @@ class InternshipService
         'student_count' => ['学生人数', '人数', 'student_count', 'studentcount'],
         'type' => ['类型', '实习类型', 'type'],
         'organize_mode' => ['组织方式', '实习方式', 'organize_mode', 'organizemode'],
+        'change_reason' => ['变更原因', '调整原因', '修改原因', 'change_reason', 'changereason'],
     ];
     private const STUDENT_DOCUMENT_COLUMNS = [
         'students.name as student_name',
@@ -270,6 +271,7 @@ class InternshipService
             'end_date' => $this->requiredDate($request, 'end_date'),
             'location' => $this->nullableString($request, 'location', 255),
             'description' => $this->nullableString($request, 'description', 2000),
+            'change_reason' => $this->nullableString($request, 'change_reason', 1000),
             'status' => $this->enum($request, 'status', ['enabled', 'disabled', 'draft', 'wait', 'accept', 'modify'], 'enabled'),
         ], '手工维护实习任务');
     }
@@ -557,21 +559,34 @@ class InternshipService
         $this->requireAdminRole();
         $id = $this->requiredRowId($request, 'pair');
         $reason = $this->nullableString($request, 'remove_reason', 255);
-        $pair = InternshipRecord::pairRowForManage($this->scopeContext(), $id);
-        if (!$pair) {
-            throw new RuntimeException('任务绑定不存在或无权限', 40301);
-        }
-        if ((string) $pair->status !== 'active') {
-            throw new InvalidArgumentException('仅有效任务绑定可解除', 42204);
-        }
 
-        InternshipRecord::updateById('pair', $id, [
-            'status' => 'removed',
-            'remove_reason' => $reason,
-            'updated_at' => $this->now(),
-        ]);
+        return $this->connection()->transaction(function () use ($id, $reason): array {
+            $pair = InternshipRecord::pairRowForManage($this->scopeContext(), $id);
+            if (!$pair) {
+                throw new RuntimeException('任务绑定不存在或无权限', 40301);
+            }
+            if ((string) $pair->status !== 'active') {
+                throw new InvalidArgumentException('仅有效任务绑定可解除', 42204);
+            }
 
-        return ['id' => $id];
+            InternshipRecord::updateById('pair', $id, [
+                'status' => 'removed',
+                'remove_reason' => $reason,
+                'updated_at' => $this->now(),
+            ]);
+            $this->recordWorkflow(
+                'arrangement_recording',
+                'arrangement',
+                (int) $pair->arrangement_id,
+                'remove_pair',
+                'active',
+                'removed',
+                sprintf('解除学生 %d 的任务绑定：%s', (int) $pair->student_id, $reason ?: '未填写原因'),
+                'modify'
+            );
+
+            return ['id' => $id];
+        });
     }
 
     public function signIns(Request $request): array
@@ -932,7 +947,7 @@ class InternshipService
             'semester' => $this->nullableString($request, 'semester', 80),
             'credit' => $this->decimalInput($request, 'credit'),
             'student_count' => $this->optionalInt($request, 'student_count') ?? 0,
-            'score_rule' => $this->enum($request, 'score_rule', ['average', 'sum', 'weighted'], 'average'),
+            'score_rule' => $this->enum($request, 'score_rule', ['average', 'sum', 'weighted', 'manual'], 'average'),
             'plan_content' => $this->jsonValue($request->input('plan_content', [])),
             'submitter_id' => CurrentContext::accountId(),
             'status' => $this->enum($request, 'status', ['draft', 'wait'], 'draft'),
@@ -1300,6 +1315,9 @@ class InternshipService
             $requiresVersion = in_array($previousStatus, ['enabled', 'accept', 'wait', 'modify'], true)
                 || ($existingId > 0 && InternshipRecord::arrangementHasProcessData($existingId));
             $versionedChange = $actualChange && $requiresVersion;
+            if ($versionedChange && trim((string) ($input['change_reason'] ?? '')) === '') {
+                throw new InvalidArgumentException('已发布或已有过程数据的任务变更必须填写变更原因');
+            }
             $targetId = $versionedChange ? 0 : $existingId;
 
             if ($targetId > 0) {
@@ -1327,7 +1345,7 @@ class InternshipService
                     'change',
                     $before['item']['status'] ?? 'enabled',
                     'changed',
-                    $this->arrangementWorkflowContent($source, $before, null) . '；已保留旧任务历史并生成新任务。',
+                    $this->arrangementWorkflowContent($source, $before, null, (string) ($input['change_reason'] ?? '')) . '；已保留旧任务历史并生成新任务。',
                     'accept'
                 );
             }
@@ -1349,7 +1367,7 @@ class InternshipService
                 $existingId > 0 ? ($versionedChange ? 'create_from_change' : 'change') : 'create',
                 $versionedChange ? 'draft' : ($before['item']['status'] ?? 'draft'),
                 (string) $values['status'],
-                $this->arrangementWorkflowContent($source, $before, $after),
+                $this->arrangementWorkflowContent($source, $before, $after, (string) ($input['change_reason'] ?? '')),
                 'accept'
             );
 
@@ -1443,8 +1461,9 @@ class InternshipService
         ], $this->uuid(), $now);
 
         $taskNo = $this->requiredImportValue($row, 'task_no', '任务编号');
+        $existingArrangementId = InternshipRecord::arrangementIdByPlanTaskNo($planId, $taskNo);
         return $this->persistArrangement([
-            'id' => InternshipRecord::arrangementIdByPlanTaskNo($planId, $taskNo),
+            'id' => $existingArrangementId,
             'plan_id' => $planId,
             'teacher_id' => (int) $teacher['teacher_id'],
             'class_ids' => array_column($classRows, 'class_id'),
@@ -1459,6 +1478,7 @@ class InternshipService
             'end_date' => $endDate,
             'location' => $this->requiredImportValue($row, 'location', '地点'),
             'description' => 'Excel 导入任务分配',
+            'change_reason' => trim((string) ($row['change_reason'] ?? '')) ?: ($existingArrangementId > 0 ? 'Excel 导入任务分配调整' : ''),
             'status' => 'enabled',
         ], 'Excel导入任务分配');
     }
@@ -1530,11 +1550,11 @@ class InternshipService
         return $ids;
     }
 
-    private function arrangementWorkflowContent(string $source, ?array $before, ?array $after): string
+    private function arrangementWorkflowContent(string $source, ?array $before, ?array $after, string $reason = ''): string
     {
         $afterItem = $after['item'] ?? [];
         if (!$before) {
-            return sprintf(
+            $text = sprintf(
                 '%s：%s，负责老师 %s，绑定 %d 个班级、%d 名学生。',
                 $source,
                 $afterItem['title'] ?? '-',
@@ -1542,6 +1562,8 @@ class InternshipService
                 count($after['classes'] ?? []),
                 count($after['students'] ?? [])
             );
+
+            return trim($reason) === '' ? $text : $text . '原因：' . trim($reason);
         }
 
         $beforeItem = $before['item'] ?? [];
@@ -1567,7 +1589,8 @@ class InternshipService
             $changes[] = '班级：' . (implode('、', $beforeClasses) ?: '-') . ' -> ' . (implode('、', $afterClasses) ?: '-');
         }
 
-        return $source . '：' . ($changes ? implode('；', $changes) : '任务信息未发生实质变化');
+        $content = $source . '：' . ($changes ? implode('；', $changes) : '任务信息未发生实质变化');
+        return trim($reason) === '' ? $content : $content . '；原因：' . trim($reason);
     }
 
     private function documentList(Request $request, string $table, array $columns): array

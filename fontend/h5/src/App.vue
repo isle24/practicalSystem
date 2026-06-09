@@ -4119,6 +4119,7 @@ function scoreRuleText(value) {
     average: '平均分',
     sum: '累计分',
     weighted: '按学分加权',
+    manual: '人工核定',
   };
   return names[value] || value || '-';
 }

@@ -1770,13 +1770,13 @@ function seedInternshipDemo(PDO $pdo): void
 
     $pdo->exec(
         "INSERT INTO `internship_task_class` (`id`, `uuid`, `arrangement_id`, `grade_id`, `dep_id`, `profession_id`, `class_id`, `student_count_snapshot`, `status`)
-         VALUES (1, '00000000-0000-0000-0000-000000100002', 1, 1, 1, 1, 1, 1, 'enabled')
+         VALUES (1, '00000000-0000-0000-0000-000000100002', 1, 1, 1, 1, 1, 1, 'active')
          ON DUPLICATE KEY UPDATE
             `grade_id` = VALUES(`grade_id`),
             `dep_id` = VALUES(`dep_id`),
             `profession_id` = VALUES(`profession_id`),
             `student_count_snapshot` = VALUES(`student_count_snapshot`),
-            `status` = 'enabled',
+            `status` = 'active',
             `deleted_at` = NULL"
     );
 
