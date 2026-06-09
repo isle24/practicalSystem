@@ -30,10 +30,33 @@
         <span class="brand-mark">实</span>
         <span>实践管理系统</span>
       </div>
-      <label class="global-search">
-        <Search :size="15" />
-        <input v-model="keyword" type="search" placeholder="搜索模块、学生、企业或文档">
-      </label>
+      <div class="global-search-wrap">
+        <label class="global-search">
+          <Search :size="15" />
+          <input
+            v-model="keyword"
+            type="search"
+            placeholder="搜索模块、学生、企业或文档"
+            @keyup.enter="submitGlobalSearch"
+          >
+        </label>
+        <div v-if="showGlobalSearchResults" class="global-search-results">
+          <button
+            v-for="module in globalSearchResults"
+            :key="module.id"
+            type="button"
+            @mousedown.prevent="openGlobalSearchModule(module)"
+          >
+            <span class="search-result-glyph" :class="module.color">
+              <component :is="module.icon" :size="15" />
+            </span>
+            <span>
+              <strong>{{ module.name }}</strong>
+              <small>{{ module.scope }}</small>
+            </span>
+          </button>
+        </div>
+      </div>
       <div class="top-actions">
         <el-button text :icon="Bell" title="消息中心" @click="openMessageCenter" />
         <el-button v-if="isLoggedIn" text class="operator-button" @click="openProfile">
@@ -56,7 +79,7 @@
     <section class="workspace">
       <nav class="desktop-icons" aria-label="应用模块">
         <a
-          v-for="module in visibleModules"
+          v-for="module in visibleDesktopModules"
           :key="module.id"
           :href="moduleHref(module)"
           class="desktop-icon"
@@ -1925,7 +1948,7 @@
                     </el-table-column>
                     <el-table-column label="操作" width="120" fixed="right">
                       <template #default="{ row }">
-                        <el-button link type="primary" :disabled="!row.url" @click="openFileUrl(row.url)">
+                        <el-button link type="primary" :disabled="!row.url" @click="openFileUrl(row)">
                           打开
                         </el-button>
                       </template>
@@ -2712,6 +2735,7 @@ import ExportTaskCenter from './components/ExportTaskCenter.vue';
 import StudentOwnPanel from './components/StudentOwnPanel.vue';
 import TemplateLibrary from './components/TemplateLibrary.vue';
 import { usePermissions } from './composables/usePermissions';
+import { backendUrl } from './api/client';
 import {
   changeAdminAccountStatus,
   deleteArchiveItem,
@@ -3522,12 +3546,58 @@ const practiceState = reactive({
 
 const openWindows = reactive([]);
 
+const moduleSearchKeywords = {
+  internship: '学生 教师 学院 专业 企业 申请 审核 签到 日志 报告 延期 成绩 归档 实习安排 实习计划 指导关系',
+  training: '实训 项目 任务 过程 记录 成绩 审核',
+  lab: '实验 项目 任务 过程 记录 成绩 审核',
+  stat: '统计 报表 数据 概览 分析 学院 专业 学生 成绩',
+  log: '日志 审计 操作 接口 账号 IP 登录 工作台 基础档案 流程配置',
+  file: '文件 附件 上传 下载 预览 头像 壁纸 材料',
+  doc: '文档 制度 流程 帮助 操作说明',
+  templateLib: '模板 表格 材料 下载 模板库',
+  exportTask: '导出 下载 队列 任务',
+  userManage: '用户 账号 角色 学生 老师 管理员 绑定 日志',
+  gradeManage: '届次 当前届次 年级',
+  departmentManage: '学院 院系 部门',
+  professionManage: '专业',
+  classManage: '班级',
+  companyManage: '企业 单位 基地',
+  config: '设置 配置 菜单 权限 角色 企业微信 操作说明 学校',
+  profile: '个人设置 头像 壁纸 背景 消息接收 密码 资料',
+  message: '消息 通知 待办 审核结果 站内信',
+};
+
 const isLoggedIn = computed(() => Boolean(permissionState.context.account_id));
 const currentRoleType = computed(() => permissionState.context.role_type || '');
 const isStudentRole = computed(() => currentRoleType.value === 'student');
 const isTeacherRole = computed(() => currentRoleType.value === 'teacher');
 const isAdminRole = computed(() => ['super_admin', 'school_admin', 'college_admin', 'profession_admin'].includes(currentRoleType.value));
 const visibleModules = computed(() => modules.filter(canShowModule));
+const globalSearchKeyword = computed(() => keyword.value.trim().toLowerCase());
+const searchCandidateModules = computed(() => {
+  const items = [...visibleModules.value];
+  if (isLoggedIn.value) {
+    items.push(messageModule);
+  }
+  return items;
+});
+const globalSearchResults = computed(() => {
+  const value = globalSearchKeyword.value;
+  if (!value) {
+    return [];
+  }
+  return searchCandidateModules.value
+    .filter(module => moduleSearchText(module).includes(value))
+    .slice(0, 8);
+});
+const visibleDesktopModules = computed(() => {
+  if (!globalSearchKeyword.value) {
+    return visibleModules.value;
+  }
+  const matchedIds = new Set(globalSearchResults.value.map(item => item.id));
+  return visibleModules.value.filter(module => matchedIds.has(module.id));
+});
+const showGlobalSearchResults = computed(() => globalSearchKeyword.value && globalSearchResults.value.length > 0);
 const visibleWindows = computed(() => openWindows.filter(win => !win.minimized));
 const canManageConfig = computed(() => hasPermission('config:manage') && ['super_admin', 'school_admin'].includes(permissionState.context.role_type));
 const canSendMessages = computed(() => ['super_admin', 'school_admin'].includes(currentRoleType.value));
@@ -4599,6 +4669,32 @@ function formatDateKey(date) {
 function renderClock() {
   const now = new Date();
   clock.value = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+}
+
+function moduleSearchText(module) {
+  return [
+    module.id,
+    module.name,
+    module.scope,
+    module.defaultPanel,
+    moduleSearchKeywords[module.id],
+  ].filter(Boolean).join(' ').toLowerCase();
+}
+
+function submitGlobalSearch() {
+  const module = globalSearchResults.value[0];
+  if (module) {
+    openGlobalSearchModule(module);
+  }
+}
+
+function openGlobalSearchModule(module) {
+  keyword.value = '';
+  if (module.id === 'message') {
+    openMessageCenter();
+    return;
+  }
+  openModule(module);
 }
 
 function openModule(module) {
@@ -6251,11 +6347,12 @@ function compactUserAgent(userAgent) {
   return `${os || '设备'} / ${browser || '浏览器'}`;
 }
 
-function openFileUrl(url) {
+function openFileUrl(row) {
+  const url = typeof row === 'string' ? row : row?.url;
   if (!url) {
     return;
   }
-  window.open(url, '_blank', 'noopener');
+  window.open(backendUrl(url), '_blank', 'noopener');
 }
 
 async function loadLogs(page = 1) {

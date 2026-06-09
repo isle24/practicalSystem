@@ -1,5 +1,21 @@
-const apiBase = import.meta.env.VITE_API_BASE || '/api';
+export const apiBase = import.meta.env.VITE_API_BASE || '/api';
 let refreshPromise = null;
+
+export function backendUrl(path = '') {
+  const value = String(path || '').trim();
+  if (!value) {
+    return '';
+  }
+  if (/^https?:\/\//i.test(value)) {
+    return value;
+  }
+
+  const base = import.meta.env.VITE_API_ORIGIN
+    || import.meta.env.VITE_API_PROXY
+    || (/^https?:\/\//i.test(apiBase) ? apiBase : '')
+    || (import.meta.env.DEV ? 'http://127.0.0.1:8787' : window.location.origin);
+  return new URL(value.startsWith('/') ? value : `/${value}`, base).href;
+}
 
 export async function request(path, options = {}) {
   return sendRequest(path, options, true);
