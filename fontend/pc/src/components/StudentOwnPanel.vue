@@ -11,7 +11,7 @@
     </header>
 
     <div v-if="rows.length" class="student-own-grid">
-      <article v-for="row in rows" :key="row.id || row.uuid" class="student-own-card">
+      <article v-for="(row, index) in rows" :key="rowKey(row, index)" class="student-own-card">
         <header>
           <strong>{{ cardTitle(row) }}</strong>
           <el-tag v-if="statusValue(row)" :type="statusType(row)">
@@ -103,7 +103,17 @@ const props = defineProps({
 const emit = defineEmits(['page-change', 'refresh', 'timeline']);
 
 function cardTitle(row) {
-  return row.title || row.arrangement_title || row.student_name || row.name || (row.id ? `记录 ${row.id}` : '记录');
+  return row.title || row.arrangement_title || row.course_name || row.student_name || row.name || (row.id ? `记录 ${row.id}` : '记录');
+}
+
+function rowKey(row, index) {
+  if (row.id || row.uuid) {
+    return row.id || row.uuid;
+  }
+  if (row.plan_id && row.student_id) {
+    return `course-${row.plan_id}-${row.student_id}`;
+  }
+  return `row-${index}`;
 }
 
 function statusValue(row) {

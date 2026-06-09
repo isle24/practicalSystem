@@ -581,6 +581,13 @@ class InternshipService
         $arrangementId = $this->requiredInt($request, 'arrangement_id');
         $this->assertStudentVisible($studentId);
         $this->assertArrangementVisible($arrangementId);
+        $this->assertTaskBindingVisible($studentId, $arrangementId);
+        if ($existingId) {
+            $row = $this->row('journal', $existingId);
+            if ((int) $row->student_id !== $studentId || (int) $row->entity_id !== $arrangementId) {
+                throw new RuntimeException('无数据访问权限', 40301);
+            }
+        }
         $signType = $this->enum($request, 'sign_type', ['gps', 'qrcode', 'manual'], $this->isStudent() ? 'gps' : 'manual');
         $longitude = $this->coordinateInput($request, 'longitude', -180, 180);
         $latitude = $this->coordinateInput($request, 'latitude', -90, 90);
@@ -627,6 +634,13 @@ class InternshipService
         $fromStatus = $existingId ? InternshipRecord::statusById('journal', $existingId) : 'draft';
         $this->assertStudentVisible($studentId);
         $this->assertArrangementVisible($arrangementId);
+        $this->assertTaskBindingVisible($studentId, $arrangementId);
+        if ($existingId) {
+            $row = $this->row('report', $existingId);
+            if ((int) $row->student_id !== $studentId || (int) $row->arrangement_id !== $arrangementId) {
+                throw new RuntimeException('无数据访问权限', 40301);
+            }
+        }
 
         $values = [
             'student_id' => $studentId,
@@ -673,6 +687,7 @@ class InternshipService
         $fromStatus = $existingId ? InternshipRecord::statusById('report', $existingId) : 'draft';
         $this->assertStudentVisible($studentId);
         $this->assertArrangementVisible($arrangementId);
+        $this->assertTaskBindingVisible($studentId, $arrangementId);
 
         $values = [
             'student_id' => $studentId,
@@ -722,10 +737,15 @@ class InternshipService
         $this->assertStudentVisible($studentId);
         if ($entityType === 'internship') {
             $this->assertArrangementVisible($entityId);
+            $this->assertTaskBindingVisible($studentId, $entityId);
         }
         if ($existingId) {
             $row = $this->row('apply_report_delay', $existingId);
             $this->assertStudentVisible((int) $row->student_id);
+            $this->assertTaskBindingVisible((int) $row->student_id, (int) $row->entity_id);
+            if ((int) $row->student_id !== $studentId || (int) $row->entity_id !== $entityId) {
+                throw new RuntimeException('无数据访问权限', 40301);
+            }
         }
 
         $values = [
@@ -759,6 +779,7 @@ class InternshipService
                 throw new RuntimeException('延期申请不存在');
             }
             $this->assertStudentVisible((int) $row->student_id);
+            $this->assertTaskBindingVisible((int) $row->student_id, (int) $row->entity_id);
             if ((string) $row->status !== 'wait') {
                 throw new InvalidArgumentException('仅待审核延期申请可处理', 42204);
             }
@@ -832,6 +853,7 @@ class InternshipService
         $arrangementId = $this->requiredInt($request, 'arrangement_id');
         $this->assertStudentVisible($studentId);
         $this->assertArrangementVisible($arrangementId);
+        $this->assertTaskBindingVisible($studentId, $arrangementId);
 
         $signInScore = $this->decimalInput($request, 'sign_in_score');
         $journalScore = $this->decimalInput($request, 'journal_score');
@@ -964,9 +986,15 @@ class InternshipService
     public function saveInsurance(Request $request): array
     {
         $this->requirePermission('internship:manage');
+        $studentId = $this->requiredInt($request, 'student_id');
+        $arrangementId = $this->requiredInt($request, 'arrangement_id');
+        $this->assertStudentVisible($studentId);
+        $this->assertArrangementVisible($arrangementId);
+        $this->assertTaskBindingVisible($studentId, $arrangementId);
+
         return $this->saveRow('insurance', $request, [
-            'arrangement_id' => $this->requiredInt($request, 'arrangement_id'),
-            'student_id' => $this->requiredInt($request, 'student_id'),
+            'arrangement_id' => $arrangementId,
+            'student_id' => $studentId,
             'insurance_company' => $this->nullableString($request, 'insurance_company', 120),
             'policy_number' => $this->nullableString($request, 'policy_number', 120),
             'insured_amount' => $this->decimalInput($request, 'insured_amount'),
@@ -987,9 +1015,15 @@ class InternshipService
     public function saveSafetyLetter(Request $request): array
     {
         $this->requirePermission($this->isStudent() ? 'internship:apply' : 'internship:manage');
+        $studentId = $this->isStudent() ? $this->currentStudentId(true) : $this->requiredInt($request, 'student_id');
+        $arrangementId = $this->requiredInt($request, 'arrangement_id');
+        $this->assertStudentVisible($studentId);
+        $this->assertArrangementVisible($arrangementId);
+        $this->assertTaskBindingVisible($studentId, $arrangementId);
+
         return $this->saveRow('safety_letter_sign', $request, [
-            'arrangement_id' => $this->requiredInt($request, 'arrangement_id'),
-            'student_id' => $this->isStudent() ? $this->currentStudentId(true) : $this->requiredInt($request, 'student_id'),
+            'arrangement_id' => $arrangementId,
+            'student_id' => $studentId,
             'template_id' => $this->optionalInt($request, 'template_id'),
             'signed_at' => $this->dateTimeInput($request, 'signed_at'),
             'signature_file_id' => $this->optionalInt($request, 'signature_file_id'),
@@ -1133,6 +1167,7 @@ class InternshipService
                 throw new RuntimeException('数据不存在');
             }
             $this->assertStudentVisible((int) $row->student_id);
+            $this->assertTaskBindingVisible((int) $row->student_id, $this->reviewWorkArrangementId($table, $row));
             if ((string) $row->status !== 'wait') {
                 throw new InvalidArgumentException('仅待审核数据可评阅', 42204);
             }
@@ -1706,6 +1741,13 @@ class InternshipService
         }
     }
 
+    private function assertTaskBindingVisible(int $studentId, int $arrangementId): void
+    {
+        if (!InternshipRecord::taskBindingVisible($this->scopeContext(), $studentId, $arrangementId)) {
+            throw new RuntimeException('学生未绑定该实习任务或无数据访问权限', 40301);
+        }
+    }
+
     private function assertApplicationVisible(int $applicationId): void
     {
         if (!InternshipRecord::applicationVisible($this->scopeContext(), $applicationId)) {
@@ -1852,6 +1894,27 @@ class InternshipService
             return;
         }
         $this->assertStudentVisible((int) $row->student_id);
+        if (in_array($entity, ['journal', 'report', 'delay'], true)) {
+            $this->assertTaskBindingVisible((int) $row->student_id, $this->reviewEntityArrangementId($entity, $row));
+        }
+    }
+
+    private function reviewWorkArrangementId(string $table, object $row): int
+    {
+        return match ($table) {
+            'journal' => (int) $row->entity_id,
+            'report' => (int) $row->arrangement_id,
+            default => 0,
+        };
+    }
+
+    private function reviewEntityArrangementId(string $entity, object $row): int
+    {
+        return match ($entity) {
+            'journal', 'delay' => (int) $row->entity_id,
+            'report' => (int) $row->arrangement_id,
+            default => 0,
+        };
     }
 
     private function timelineCycles(array $records, array $reviews): array

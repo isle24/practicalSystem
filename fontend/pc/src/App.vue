@@ -502,7 +502,7 @@
                       <div v-else-if="internshipState.dialog.type === 'score'" class="operation-form">
                         <label>
                           <span>学生</span>
-                          <el-select v-model="internshipState.scoreForm.pair_id" filterable placeholder="选择指导关系" @change="selectScorePair">
+                          <el-select v-model="internshipState.scoreForm.pair_id" filterable placeholder="选择任务绑定学生" @change="selectScorePair">
                             <el-option
                               v-for="pair in internshipState.lists.pairs.items"
                               :key="pair.id"
@@ -735,19 +735,19 @@
                       </div>
                       <StudentOwnPanel
                         v-else-if="isStudentRole"
-                        :description="studentPanelMeta('applications').description"
-                        :empty-text="studentPanelMeta('applications').emptyText"
-                        :fields="studentPanelFields('applications')"
+                        :description="studentPanelMeta(activeOverviewTab).description"
+                        :empty-text="studentPanelMeta(activeOverviewTab).emptyText"
+                        :fields="studentPanelFields(activeOverviewTab)"
                         :loading="internshipState.loading"
-                        :pagination="studentPanelList('applications').pagination"
-                        :rows="studentPanelList('applications').items"
+                        :pagination="studentPanelList(activeOverviewTab).pagination"
+                        :rows="studentPanelList(activeOverviewTab).items"
                         :status-formatter="statusText"
                         :status-tag-type="statusTagType"
-                        timeline-entity="application"
-                        :title="studentPanelMeta('applications').title"
-                        @page-change="page => loadInternshipPanel('applications', page)"
-                        @refresh="loadInternshipPanel('applications')"
-                        @timeline="row => openTimelineDialog('application', row)"
+                        :timeline-entity="studentTimelineEntity(activeOverviewTab)"
+                        :title="studentPanelMeta(activeOverviewTab).title"
+                        @page-change="page => loadInternshipPanel(activeOverviewTab, page)"
+                        @refresh="loadInternshipPanel(activeOverviewTab)"
+                        @timeline="row => openTimelineDialog(studentTimelineEntity(activeOverviewTab), row)"
                       />
                       <section v-else-if="activeOverviewTab === 'arrangements'" class="internship-card overview-card-single">
                         <header>
@@ -774,7 +774,7 @@
                       </section>
                       <section v-else class="internship-card overview-card-single">
                         <header>
-                          <strong>待处理申请</strong>
+                          <strong>补充申请</strong>
                           <small>{{ internshipState.overview.applications_waiting || 0 }} 条</small>
                         </header>
                         <el-table :data="internshipState.lists.applications.items" height="100%" stripe>
@@ -1090,6 +1090,21 @@
                         />
                       </section>
                     </div>
+                  </template>
+
+                  <template v-else-if="win.panel === 'courseScores'">
+                    <DataListPanel
+                      :columns="internshipListConfigs.courseScores.columns"
+                      :filters="internshipListConfigs.courseScores.filters"
+                      :filter-values="internshipState.filters.courseScores"
+                      :loading="internshipState.loading"
+                      :pagination="internshipState.lists.courseScores.pagination"
+                      :rows="internshipState.lists.courseScores.items"
+                      @filter-change="setInternshipFilter('courseScores', $event)"
+                      @page-change="page => loadInternshipPanel('courseScores', page)"
+                      @reset="resetInternshipFilters('courseScores')"
+                      @search="loadInternshipPanel('courseScores', 1)"
+                    />
                   </template>
 
                   <template v-else-if="win.panel === 'documents'">
@@ -3242,7 +3257,7 @@ const modules = [
     name: '实习管理',
     icon: BriefcaseBusiness,
     color: 'blue',
-    scope: '学院 / 专业 / 指导关系',
+    scope: '学院 / 专业 / 任务绑定',
     viewPermission: 'internship:view',
     managePermission: 'internship:manage',
   },
@@ -3676,14 +3691,15 @@ const internshipSidebarItems = [
   { key: 'plans', name: '实习计划', icon: FileText, permission: 'internship:plan' },
   { key: 'syllabusGuides', name: '大纲指导书', icon: BookOpen },
   { key: 'implementationSheets', name: '实施表', icon: ClipboardList },
-  { key: 'applications', name: '申请审核', icon: ClipboardList },
-  { key: 'pairs', name: '指导关系', icon: UsersRound },
+  { key: 'applications', name: '补充申请', icon: ClipboardList },
+  { key: 'pairs', name: '任务绑定', icon: UsersRound },
   { key: 'signIns', name: '签到记录', icon: MapPin },
   { key: 'journals', name: '实习日志', icon: FileClock },
   { key: 'reports', name: '实习报告', icon: FileText },
   { key: 'teacherWorkReports', name: '教师工作报告', icon: FileText },
   { key: 'delays', name: '延期申请', icon: FileClock },
   { key: 'scores', name: '成绩管理', icon: GraduationCap },
+  { key: 'courseScores', name: '课程成绩', icon: GraduationCap },
   { key: 'inspections', name: '巡查记录', icon: Search, permission: 'internship:archive' },
   { key: 'documents', name: '归档材料', icon: FolderOpen },
 ];
@@ -3753,7 +3769,7 @@ const practiceState = reactive({
 const openWindows = reactive([]);
 
 const moduleSearchKeywords = {
-  internship: '学生 教师 学院 专业 企业 申请 审核 签到 日志 报告 延期 成绩 归档 实习安排 实习计划 指导关系',
+  internship: '学生 教师 学院 专业 企业 任务 绑定 补充申请 审核 签到 日志 报告 延期 成绩 归档 实习安排 实习计划',
   training: '实训 项目 任务 过程 记录 成绩 审核',
   lab: '实验 项目 任务 过程 记录 成绩 审核',
   stat: '统计 报表 数据 概览 分析 学院 专业 学生 成绩',
@@ -3814,10 +3830,10 @@ const canApproveInternship = computed(() => hasPermission('internship:approve') 
 const canManagePractice = module => hasPermission(`${module}:manage`) && !isStudentRole.value;
 const canApprovePractice = module => hasPermission(`${module}:approve`) && !isStudentRole.value;
 const statReports = [
-  { key: 'overview', name: '实习总览', description: '实习安排、申请、指导关系和过程材料汇总。', icon: ChartColumn },
+  { key: 'overview', name: '实习总览', description: '实习任务、任务绑定和过程材料汇总。', icon: ChartColumn },
   { key: 'department', name: '学院统计', description: '按学院统计学生参与、审核进度和成绩分布。', icon: Building2 },
   { key: 'profession', name: '专业统计', description: '按专业统计实习覆盖、提交进度和材料归档。', icon: GraduationCap },
-  { key: 'teacher', name: '指导统计', description: '按指导关系统计教师指导数量和评阅进度。', icon: UsersRound },
+  { key: 'teacher', name: '任务老师统计', description: '按任务老师统计学生数量和评阅进度。', icon: UsersRound },
   { key: 'student', name: '学生过程统计', description: '查看学生申请、签到、日志、报告、成绩的过程状态。', icon: UserRound },
   { key: 'archive', name: '归档材料统计', description: '统计保险、安全承诺和报告归档材料完整性。', icon: FolderOpen },
   { key: 'practice_score_sheet', name: '实验实训成绩记载表', description: '按教学计划生成考勤、项目实操、课程报告和总分记载表。', icon: Table2 },
@@ -3833,8 +3849,8 @@ const guideModuleOptions = computed(() => modules.map(item => ({
 const statCards = computed(() => {
   const cards = statState.cards.length ? statState.cards : [
     { name: '实习安排', value: internshipState.overview.arrangements || 0, desc: '可见数据内安排数量' },
-    { name: '待审申请', value: internshipState.overview.applications_waiting || 0, desc: '等待审核的申请' },
-    { name: '指导关系', value: internshipState.overview.active_pairs || 0, desc: '有效师生指导关系' },
+    { name: '补充申请', value: internshipState.overview.applications_waiting || 0, desc: '特殊场景待审核申请' },
+    { name: '任务绑定', value: internshipState.overview.active_pairs || 0, desc: '有效任务级师生绑定' },
     { name: '今日日志', value: internshipState.overview.journals_waiting || 0, desc: '待评阅实习日志' },
   ];
   return cards.map((item, index) => ({
@@ -3966,24 +3982,31 @@ function canShowModule(module) {
 
 const internshipOverviewCards = computed(() => [
   { name: '实习安排', value: internshipState.overview.arrangements || 0, theme: 'primary', icon: CalendarCheck },
-  { name: '待审申请', value: internshipState.overview.applications_waiting || 0, theme: 'amber', icon: ClipboardList },
-  { name: '指导关系', value: internshipState.overview.active_pairs || 0, theme: 'green', icon: UsersRound },
+  { name: '补充申请', value: internshipState.overview.applications_waiting || 0, theme: 'amber', icon: ClipboardList },
+  { name: '任务绑定', value: internshipState.overview.active_pairs || 0, theme: 'green', icon: UsersRound },
   { name: '待评日志', value: internshipState.overview.journals_waiting || 0, theme: 'teal', icon: FileClock },
   { name: '待评报告', value: internshipState.overview.reports_waiting || 0, theme: 'primary', icon: FileText },
   { name: '今日签到', value: internshipState.overview.today_sign_ins || 0, theme: 'green', icon: MapPin },
 ]);
 const internshipOverviewTabs = computed(() => {
   const tabs = [
-    { key: 'metrics', name: '数据概览', count: `${internshipOverviewCards.value.length} 项` },
   ];
   if (isStudentRole.value) {
-    tabs.push({
-      key: 'applications',
-      name: '我的申请',
-      count: studentPanelList('applications').pagination.total || 0,
-    });
+    tabs.push(
+      {
+        key: 'arrangements',
+        name: '我的任务',
+        count: studentPanelList('arrangements').pagination.total || 0,
+      },
+      {
+        key: 'applications',
+        name: '补充申请',
+        count: studentPanelList('applications').pagination.total || 0,
+      },
+    );
     return tabs;
   }
+  tabs.push({ key: 'metrics', name: '数据概览', count: `${internshipOverviewCards.value.length} 项` });
   tabs.push(
     {
       key: 'arrangements',
@@ -3992,7 +4015,7 @@ const internshipOverviewTabs = computed(() => {
     },
     {
       key: 'applications',
-      name: '待处理申请',
+      name: '补充申请',
       count: internshipState.overview.applications_waiting || 0,
     },
   );
@@ -4042,7 +4065,7 @@ const internshipListConfigs = computed(() => ({
   },
   applications: {
     listKey: 'applications',
-    filename: '实习申请',
+    filename: '补充申请',
     filters: internshipListFilters('applications', ['grade_id', 'dep_id', 'profession_id', 'class_id', 'status', 'keyword']),
     columns: [
       { prop: 'student_name', label: '学生', width: 110 },
@@ -4080,13 +4103,13 @@ const internshipListConfigs = computed(() => ({
   },
   pairs: {
     listKey: 'pairs',
-    filename: '指导关系',
+    filename: '任务绑定',
     filters: internshipListFilters('pairs', ['grade_id', 'dep_id', 'profession_id', 'class_id', 'status', 'keyword']),
     columns: [
       { prop: 'student_name', label: '学生', width: 120 },
       { prop: 'student_num', label: '学号', width: 130 },
       { prop: 'grade_name', label: '届次', width: 100 },
-      { prop: 'teacher_name', label: '指导教师', width: 120 },
+      { prop: 'teacher_name', label: '负责老师', width: 120 },
       { prop: 'arrangement_title', label: '实习安排', minWidth: 190 },
       { prop: 'status', label: '状态', width: 90, tag: true, tagType: row => statusTagType(row.status), formatter: row => statusText(row.status) },
       { prop: 'created_at', label: '创建时间', width: 168 },
@@ -4264,7 +4287,7 @@ const internshipListConfigs = computed(() => ({
       { prop: 'arrangement_title', label: '实习安排', minWidth: 190 },
       { prop: 'dep_name', label: '学院', minWidth: 130 },
       { prop: 'profession_name', label: '专业', minWidth: 130 },
-      { prop: 'teacher_name', label: '指导教师', width: 120 },
+      { prop: 'teacher_name', label: '负责老师', width: 120 },
       { prop: 'signed_count', label: '已签承诺', width: 100 },
       { prop: 'unsigned_count', label: '未签承诺', width: 100 },
       { key: 'insurance_verified', label: '保险核验', width: 100, formatter: row => row.insurance_verified === 'true' ? '已核验' : '未核验' },
@@ -4279,8 +4302,8 @@ const internshipListConfigs = computed(() => ({
     columns: [
       { prop: 'grade_name', label: '届次', width: 100 },
       { prop: 'arrangement_title', label: '实习安排', minWidth: 190 },
-      { prop: 'teacher_name', label: '指导教师', width: 120 },
-      { prop: 'guidance_count', label: '指导人数', width: 100 },
+      { prop: 'teacher_name', label: '任务老师', width: 120 },
+      { prop: 'guidance_count', label: '负责人数', width: 100 },
       { prop: 'summary', label: '工作总结', minWidth: 220 },
       { prop: 'problems', label: '问题', minWidth: 180 },
       { prop: 'suggestions', label: '建议', minWidth: 180 },
@@ -4314,14 +4337,15 @@ function internshipRolePanelName(key) {
 
   const names = {
     overview: '总览',
-    arrangements: '可申请安排',
-    applications: '我的申请',
-    pairs: '指导教师',
+    arrangements: '我的任务',
+    applications: '补充申请',
+    pairs: '任务老师',
     signIns: '我的签到',
     journals: '我的日志',
     reports: '我的报告',
     delays: '我的延期',
     scores: '我的成绩',
+    courseScores: '课程成绩',
     documents: '我的材料',
   };
   return names[key] || internshipSidebarItems.find(item => item.key === key)?.name || '实习管理';
@@ -4334,7 +4358,7 @@ function internshipSidebarItemVisible(item) {
   if (!isStudentRole.value) {
     return true;
   }
-  return ['overview', 'arrangements', 'applications', 'pairs', 'signIns', 'journals', 'reports', 'delays', 'scores', 'documents'].includes(item.key);
+  return ['overview', 'arrangements', 'applications', 'pairs', 'signIns', 'journals', 'reports', 'delays', 'scores', 'courseScores', 'documents'].includes(item.key);
 }
 
 function isInternshipReadOnlyListPanel(panel) {
@@ -4368,7 +4392,7 @@ function hasInternshipToolbarActions(panel) {
 }
 
 function isStudentOwnPanel(panel) {
-  return isStudentRole.value && ['arrangements', 'applications', 'pairs', 'signIns', 'journals', 'reports', 'delays', 'scores'].includes(panel);
+  return isStudentRole.value && ['arrangements', 'applications', 'pairs', 'signIns', 'journals', 'reports', 'delays', 'scores', 'courseScores'].includes(panel);
 }
 
 function studentPanelList(panel) {
@@ -4388,19 +4412,19 @@ function studentTimelineEntity(panel) {
 function studentPanelMeta(panel) {
   const metas = {
     arrangements: {
-      title: '可申请安排',
-      description: '展示与本人学院、专业匹配的实习安排。',
-      emptyText: '暂无可申请实习安排',
+      title: '我的任务',
+      description: '展示管理员已分配给当前学生的实习任务。',
+      emptyText: '暂无实习任务',
     },
     applications: {
-      title: '我的申请',
-      description: '只展示当前学生本人的实习申请和审核状态。',
-      emptyText: '暂无实习申请',
+      title: '补充申请',
+      description: '只展示分散、自主等特殊场景下当前学生本人的补充申请。',
+      emptyText: '暂无补充申请',
     },
     pairs: {
-      title: '指导教师',
-      description: '展示当前学生本人的指导关系。',
-      emptyText: '暂无指导关系',
+      title: '任务老师',
+      description: '展示当前学生每个实习任务绑定的负责老师。',
+      emptyText: '暂无任务老师',
     },
     signIns: {
       title: '我的签到',
@@ -4424,8 +4448,13 @@ function studentPanelMeta(panel) {
     },
     scores: {
       title: '我的成绩',
-      description: '展示当前学生本人的实习成绩。',
+      description: '展示当前学生本人按任务记录的实习成绩。',
       emptyText: '暂无成绩记录',
+    },
+    courseScores: {
+      title: '课程成绩',
+      description: '展示当前学生本人按课程计划汇总后的最终成绩。',
+      emptyText: '暂无课程成绩',
     },
     archiveMaterials: {
       title: '我的归档材料',
@@ -4465,7 +4494,7 @@ function studentPanelFields(panel) {
     ],
     pairs: [
       { key: 'grade_name', label: '届次' },
-      { key: 'teacher_name', label: '指导教师' },
+      { key: 'teacher_name', label: '任务老师' },
       { key: 'arrangement_title', label: '实习安排' },
       { key: 'created_at', label: '创建时间' },
     ],
@@ -4505,6 +4534,15 @@ function studentPanelFields(panel) {
       { key: 'report_score', label: '报告' },
       { key: 'enterprise_score', label: '企业' },
       { key: 'final_score', label: '总评' },
+    ],
+    courseScores: [
+      { key: 'grade_name', label: '届次' },
+      { key: 'course_name', label: '课程计划', formatter: row => row.course_name || row.course_code || '-' },
+      { key: 'score_rule', label: '成绩规则', formatter: row => scoreRuleText(row.score_rule) },
+      { key: 'task_count', label: '任务数' },
+      { key: 'scored_task_count', label: '已评分' },
+      { key: 'course_final_score', label: '课程成绩', formatter: row => row.course_final_score ?? '-' },
+      { key: 'task_score_text', label: '任务成绩' },
     ],
     archiveMaterials: [
       { key: 'grade_name', label: '届次' },
@@ -5018,7 +5056,7 @@ function fallbackGuideContent(win) {
   ];
   const map = {
     internship: [
-      { title: '实习业务', lines: ['学生端只显示本人申请、签到、日志、报告和材料。', '教师端默认按指导关系查看学生，审核类操作会进入确认弹窗并记录流程。', '管理员端通过列表筛选、记录查看和归档材料完成过程监管。'] },
+      { title: '实习业务', lines: ['学生端以管理员分配的本人实习任务为主，按任务提交签到、日志、报告和材料。', '教师端默认按任务查看绑定学生，审核类操作会进入确认弹窗并记录流程。', '管理员端通过计划、任务、班级绑定、记录查看和归档材料完成过程监管。'] },
     ],
     config: [
       { title: '系统配置', lines: ['菜单管理用于维护主菜单、业务菜单、列表和按钮节点。', '角色权限按菜单树授权，按钮节点用于控制页面内操作。', '组织范围用于配置学院、专业、班级、企业等数据边界。'] },
@@ -5066,7 +5104,7 @@ function stripHtml(content) {
 function guideTemplateHtml(title = '操作说明') {
   return [
     `<section><h3>${escapeHtml(title)}操作流程</h3><ol><li>进入对应模块，按角色查看可处理事项。</li><li>根据页面提示完成提交、审核、退回或查看记录。</li><li>审核类操作会写入流程记录和审核意见。</li></ol></section>`,
-    '<section><h3>流程规则</h3><p>学生仅处理本人业务，教师按指导关系处理，管理员按学院、专业等组织范围处理。</p></section>',
+    '<section><h3>流程规则</h3><p>学生仅处理本人任务，教师按任务绑定处理学生，管理员按届次、学院、专业和班级范围处理。</p></section>',
     '<section><h3>常见问题</h3><ul><li>看不到数据时，先确认当前角色和组织范围是否正确。</li><li>材料或记录异常时，可通过记录查看追溯每次提交和审核。</li></ul></section>',
   ].join('');
 }

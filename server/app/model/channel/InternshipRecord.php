@@ -39,10 +39,10 @@ class InternshipRecord extends TableRecord
         return [
             'arrangements' => (int) self::applyArrangementScope(self::queryTable('arrangement')->whereNull('deleted_at'), $scope)->count(),
             'applications_waiting' => (int) self::applyApplicationScope(self::queryTable('application')->whereNull('deleted_at')->where('status', 'wait'), $scope)->count(),
-            'active_pairs' => (int) self::applyStudentScope(self::queryTable('pair')->where('type', 'internship')->where('status', 'active')->whereNull('deleted_at'), $scope, 'pair.student_id')->count(),
-            'journals_waiting' => (int) self::applyStudentScope(self::queryTable('journal')->where('entity_type', 'internship')->where('status', 'wait')->whereNull('deleted_at'), $scope, 'journal.student_id')->count(),
-            'reports_waiting' => (int) self::applyStudentScope(self::queryTable('report')->where('status', 'wait')->whereNull('deleted_at'), $scope, 'report.student_id')->count(),
-            'today_sign_ins' => (int) self::applyStudentScope(self::queryTable('sign_in')->where('entity_type', 'internship')->where('date', $today)->whereNull('deleted_at'), $scope, 'sign_in.student_id')->count(),
+            'active_pairs' => (int) self::applyStudentTaskScope(self::queryTable('pair')->where('type', 'internship')->where('status', 'active')->whereNull('deleted_at'), $scope, 'pair.student_id', 'pair.arrangement_id')->count(),
+            'journals_waiting' => (int) self::applyStudentTaskScope(self::queryTable('journal')->where('entity_type', 'internship')->where('status', 'wait')->whereNull('deleted_at'), $scope, 'journal.student_id', 'journal.entity_id')->count(),
+            'reports_waiting' => (int) self::applyStudentTaskScope(self::queryTable('report')->where('status', 'wait')->whereNull('deleted_at'), $scope, 'report.student_id', 'report.arrangement_id')->count(),
+            'today_sign_ins' => (int) self::applyStudentTaskScope(self::queryTable('sign_in')->where('entity_type', 'internship')->where('date', $today)->whereNull('deleted_at'), $scope, 'sign_in.student_id', 'sign_in.entity_id')->count(),
         ];
     }
 
@@ -299,13 +299,13 @@ class InternshipRecord extends TableRecord
 
     public static function pairPage(array $scope, array $filters): array
     {
-        $query = self::applyStudentScope(self::queryTable('pair')
+        $query = self::applyStudentTaskScope(self::queryTable('pair')
             ->leftJoin('students', 'pair.student_id', '=', 'students.student_id')
             ->leftJoin('teacher_list', 'pair.teacher_id', '=', 'teacher_list.teacher_id')
             ->leftJoin('arrangement', 'pair.arrangement_id', '=', 'arrangement.id')
             ->leftJoin('grade_list', 'students.grade_id', '=', 'grade_list.grade_id')
             ->where('pair.type', 'internship')
-            ->whereNull('pair.deleted_at'), $scope, 'pair.student_id');
+            ->whereNull('pair.deleted_at'), $scope, 'pair.student_id', 'pair.arrangement_id');
         self::filter($query, $filters, 'pair.status', 'status');
         self::filter($query, $filters, 'pair.arrangement_id', 'arrangement_id');
         self::listFilters($query, $filters, [
@@ -329,12 +329,12 @@ class InternshipRecord extends TableRecord
 
     public static function signInPage(array $scope, array $filters): array
     {
-        $query = self::applyStudentScope(self::queryTable('sign_in')
+        $query = self::applyStudentTaskScope(self::queryTable('sign_in')
             ->leftJoin('students', 'sign_in.student_id', '=', 'students.student_id')
             ->leftJoin('arrangement', 'sign_in.entity_id', '=', 'arrangement.id')
             ->leftJoin('grade_list', 'students.grade_id', '=', 'grade_list.grade_id')
             ->where('sign_in.entity_type', 'internship')
-            ->whereNull('sign_in.deleted_at'), $scope, 'sign_in.student_id');
+            ->whereNull('sign_in.deleted_at'), $scope, 'sign_in.student_id', 'sign_in.entity_id');
         self::filter($query, $filters, 'sign_in.entity_id', 'arrangement_id');
         self::filter($query, $filters, 'sign_in.date', 'date');
         self::listFilters($query, $filters, [
@@ -359,13 +359,13 @@ class InternshipRecord extends TableRecord
 
     public static function journalPage(array $scope, array $filters): array
     {
-        $query = self::applyStudentScope(self::queryTable('journal')
+        $query = self::applyStudentTaskScope(self::queryTable('journal')
             ->leftJoin('students', 'journal.student_id', '=', 'students.student_id')
             ->leftJoin('arrangement', 'journal.entity_id', '=', 'arrangement.id')
             ->leftJoin('teacher_list', 'journal.teacher_id', '=', 'teacher_list.teacher_id')
             ->leftJoin('grade_list', 'students.grade_id', '=', 'grade_list.grade_id')
             ->where('journal.entity_type', 'internship')
-            ->whereNull('journal.deleted_at'), $scope, 'journal.student_id');
+            ->whereNull('journal.deleted_at'), $scope, 'journal.student_id', 'journal.entity_id');
         self::filter($query, $filters, 'journal.status', 'status');
         self::filter($query, $filters, 'journal.entity_id', 'arrangement_id');
         self::listFilters($query, $filters, [
@@ -390,12 +390,12 @@ class InternshipRecord extends TableRecord
 
     public static function reportPage(array $scope, array $filters): array
     {
-        $query = self::applyStudentScope(self::queryTable('report')
+        $query = self::applyStudentTaskScope(self::queryTable('report')
             ->leftJoin('students', 'report.student_id', '=', 'students.student_id')
             ->leftJoin('arrangement', 'report.arrangement_id', '=', 'arrangement.id')
             ->leftJoin('teacher_list', 'report.teacher_id', '=', 'teacher_list.teacher_id')
             ->leftJoin('grade_list', 'students.grade_id', '=', 'grade_list.grade_id')
-            ->whereNull('report.deleted_at'), $scope, 'report.student_id');
+            ->whereNull('report.deleted_at'), $scope, 'report.student_id', 'report.arrangement_id');
         self::filter($query, $filters, 'report.status', 'status');
         self::filter($query, $filters, 'report.arrangement_id', 'arrangement_id');
         self::listFilters($query, $filters, [
@@ -421,14 +421,14 @@ class InternshipRecord extends TableRecord
 
     public static function delayPage(array $scope, array $filters): array
     {
-        $query = self::applyStudentScope(self::queryTable('apply_report_delay')
+        $query = self::applyStudentTaskScope(self::queryTable('apply_report_delay')
             ->leftJoin('students', 'apply_report_delay.student_id', '=', 'students.student_id')
             ->leftJoin('arrangement', 'apply_report_delay.entity_id', '=', 'arrangement.id')
             ->leftJoin('department', 'students.dep_id', '=', 'department.dep_id')
             ->leftJoin('profession', 'students.profession_id', '=', 'profession.profession_id')
             ->leftJoin('grade_list', 'students.grade_id', '=', 'grade_list.grade_id')
             ->where('apply_report_delay.entity_type', 'internship')
-            ->whereNull('apply_report_delay.deleted_at'), $scope, 'apply_report_delay.student_id');
+            ->whereNull('apply_report_delay.deleted_at'), $scope, 'apply_report_delay.student_id', 'apply_report_delay.entity_id');
         self::filter($query, $filters, 'apply_report_delay.status', 'status');
         self::filter($query, $filters, 'apply_report_delay.config_key', 'config_key');
         self::filter($query, $filters, 'apply_report_delay.entity_id', 'arrangement_id');
@@ -463,12 +463,12 @@ class InternshipRecord extends TableRecord
 
     public static function scorePage(array $scope, array $filters): array
     {
-        $query = self::applyStudentScope(self::queryTable('score')
+        $query = self::applyStudentTaskScope(self::queryTable('score')
             ->leftJoin('students', 'score.student_id', '=', 'students.student_id')
             ->leftJoin('arrangement', 'score.arrangement_id', '=', 'arrangement.id')
             ->leftJoin('teacher_list', 'score.teacher_id', '=', 'teacher_list.teacher_id')
             ->leftJoin('grade_list', 'students.grade_id', '=', 'grade_list.grade_id')
-            ->whereNull('score.deleted_at'), $scope, 'score.student_id');
+            ->whereNull('score.deleted_at'), $scope, 'score.student_id', 'score.arrangement_id');
         self::filter($query, $filters, 'score.arrangement_id', 'arrangement_id');
         self::listFilters($query, $filters, [
             'dep_id' => 'students.dep_id',
@@ -492,7 +492,7 @@ class InternshipRecord extends TableRecord
 
     public static function courseScorePage(array $scope, array $filters): array
     {
-        $query = self::applyStudentScope(self::queryTable('score')
+        $query = self::applyStudentTaskScope(self::queryTable('score')
             ->leftJoin('students', 'score.student_id', '=', 'students.student_id')
             ->leftJoin('class', 'students.class_id', '=', 'class.class_id')
             ->leftJoin('department', 'students.dep_id', '=', 'department.dep_id')
@@ -502,7 +502,7 @@ class InternshipRecord extends TableRecord
             ->leftJoin('internship_plan', 'arrangement.plan_id', '=', 'internship_plan.id')
             ->whereNull('score.deleted_at')
             ->whereNull('arrangement.deleted_at')
-            ->whereNull('internship_plan.deleted_at'), $scope, 'score.student_id');
+            ->whereNull('internship_plan.deleted_at'), $scope, 'score.student_id', 'score.arrangement_id');
         self::filter($query, $filters, 'arrangement.plan_id', 'plan_id');
         self::filter($query, $filters, 'score.arrangement_id', 'arrangement_id');
         self::listFilters($query, $filters, [
@@ -661,7 +661,7 @@ class InternshipRecord extends TableRecord
             $query->leftJoin('students', "{$table}.student_id", '=', 'students.student_id')
                 ->leftJoin('arrangement', "{$table}.arrangement_id", '=', 'arrangement.id')
                 ->leftJoin('grade_list', 'students.grade_id', '=', 'grade_list.grade_id');
-            self::applyStudentScope($query, $scope, "{$table}.student_id");
+            self::applyStudentTaskScope($query, $scope, "{$table}.student_id", "{$table}.arrangement_id");
             self::listFilters($query, $filters, [
                 'dep_id' => 'students.dep_id',
                 'profession_id' => 'students.profession_id',
@@ -1072,7 +1072,7 @@ class InternshipRecord extends TableRecord
             return [];
         }
 
-        $query = self::applyStudentScope(self::queryTable('pair')
+        $query = self::applyStudentTaskScope(self::queryTable('pair')
             ->leftJoin('students', 'pair.student_id', '=', 'students.student_id')
             ->leftJoin('class', 'students.class_id', '=', 'class.class_id')
             ->leftJoin('department', 'students.dep_id', '=', 'department.dep_id')
@@ -1506,6 +1506,44 @@ class InternshipRecord extends TableRecord
         return self::ids([(int) $pair->teacher_id, (int) $pair->second_teacher_id]);
     }
 
+    public static function taskBindingVisible(array $scope, int $studentId, int $arrangementId): bool
+    {
+        if ($studentId <= 0 || $arrangementId <= 0) {
+            return false;
+        }
+        if (!self::arrangementVisible($scope, $arrangementId)) {
+            return false;
+        }
+
+        $query = self::queryTable('pair')
+            ->where('pair.student_id', $studentId)
+            ->where('pair.arrangement_id', $arrangementId)
+            ->where('pair.type', 'internship')
+            ->where('pair.status', 'active')
+            ->whereNull('pair.deleted_at');
+        self::applyStudentScope($query, $scope, 'pair.student_id');
+
+        $roleType = (string) ($scope['role_type'] ?? '');
+        if ($roleType === 'teacher') {
+            $teacherId = (int) ($scope['teacher_id'] ?? 0);
+            if ($teacherId <= 0) {
+                return false;
+            }
+            $query->where(function ($builder) use ($teacherId): void {
+                $builder->where('pair.teacher_id', $teacherId)
+                    ->orWhere('pair.second_teacher_id', $teacherId);
+            });
+        }
+        if ($roleType === 'student') {
+            $query->where('pair.student_id', (int) ($scope['student_id'] ?? 0));
+        }
+        if ($roleType === 'enterprise') {
+            self::whereInOrDeny($query, 'pair.arrangement_id', $scope['owned_arrangement_ids'] ?? []);
+        }
+
+        return $query->exists();
+    }
+
     public static function applicationWithTeachers(int $id): ?array
     {
         $row = self::queryTable('application')
@@ -1768,12 +1806,12 @@ class InternshipRecord extends TableRecord
 
     private static function statPairs(array $scope, array $filters): array
     {
-        $query = self::applyStudentScope(self::queryTable('pair')
+        $query = self::applyStudentTaskScope(self::queryTable('pair')
             ->leftJoin('students', 'pair.student_id', '=', 'students.student_id')
             ->leftJoin('arrangement', 'pair.arrangement_id', '=', 'arrangement.id')
             ->leftJoin('teacher_list', 'pair.teacher_id', '=', 'teacher_list.teacher_id')
             ->where('pair.type', 'internship')
-            ->whereNull('pair.deleted_at'), $scope, 'pair.student_id');
+            ->whereNull('pair.deleted_at'), $scope, 'pair.student_id', 'pair.arrangement_id');
         self::statStudentListFilters($query, $filters, 'students', 'arrangement');
         self::keyword($query, $filters, ['students.name', 'students.student_num', 'arrangement.title', 'teacher_list.teacher_name']);
 
@@ -1787,11 +1825,11 @@ class InternshipRecord extends TableRecord
 
     private static function statSignIns(array $scope, array $filters): array
     {
-        $query = self::applyStudentScope(self::queryTable('sign_in')
+        $query = self::applyStudentTaskScope(self::queryTable('sign_in')
             ->leftJoin('students', 'sign_in.student_id', '=', 'students.student_id')
             ->leftJoin('arrangement', 'sign_in.entity_id', '=', 'arrangement.id')
             ->where('sign_in.entity_type', 'internship')
-            ->whereNull('sign_in.deleted_at'), $scope, 'sign_in.student_id');
+            ->whereNull('sign_in.deleted_at'), $scope, 'sign_in.student_id', 'sign_in.entity_id');
         self::statStudentListFilters($query, $filters, 'students', 'arrangement');
         self::keyword($query, $filters, ['students.name', 'students.student_num', 'arrangement.title', 'sign_in.location'], [
             self::pairTeacherKeyword('sign_in.student_id', 'sign_in.entity_id'),
@@ -1806,11 +1844,11 @@ class InternshipRecord extends TableRecord
 
     private static function statJournals(array $scope, array $filters): array
     {
-        $query = self::applyStudentScope(self::queryTable('journal')
+        $query = self::applyStudentTaskScope(self::queryTable('journal')
             ->leftJoin('students', 'journal.student_id', '=', 'students.student_id')
             ->leftJoin('arrangement', 'journal.entity_id', '=', 'arrangement.id')
             ->where('journal.entity_type', 'internship')
-            ->whereNull('journal.deleted_at'), $scope, 'journal.student_id');
+            ->whereNull('journal.deleted_at'), $scope, 'journal.student_id', 'journal.entity_id');
         self::statStudentListFilters($query, $filters, 'students', 'arrangement');
         self::keyword($query, $filters, ['students.name', 'students.student_num', 'journal.title', 'arrangement.title'], [
             self::pairTeacherKeyword('journal.student_id', 'journal.entity_id'),
@@ -1826,10 +1864,10 @@ class InternshipRecord extends TableRecord
 
     private static function statReports(array $scope, array $filters): array
     {
-        $query = self::applyStudentScope(self::queryTable('report')
+        $query = self::applyStudentTaskScope(self::queryTable('report')
             ->leftJoin('students', 'report.student_id', '=', 'students.student_id')
             ->leftJoin('arrangement', 'report.arrangement_id', '=', 'arrangement.id')
-            ->whereNull('report.deleted_at'), $scope, 'report.student_id');
+            ->whereNull('report.deleted_at'), $scope, 'report.student_id', 'report.arrangement_id');
         self::statStudentListFilters($query, $filters, 'students', 'arrangement');
         self::keyword($query, $filters, ['students.name', 'students.student_num', 'report.title', 'arrangement.title'], [
             self::pairTeacherKeyword('report.student_id', 'report.arrangement_id'),
@@ -1845,11 +1883,11 @@ class InternshipRecord extends TableRecord
 
     private static function statScores(array $scope, array $filters): array
     {
-        $query = self::applyStudentScope(self::queryTable('score')
+        $query = self::applyStudentTaskScope(self::queryTable('score')
             ->leftJoin('students', 'score.student_id', '=', 'students.student_id')
             ->leftJoin('arrangement', 'score.arrangement_id', '=', 'arrangement.id')
             ->leftJoin('teacher_list', 'score.teacher_id', '=', 'teacher_list.teacher_id')
-            ->whereNull('score.deleted_at'), $scope, 'score.student_id');
+            ->whereNull('score.deleted_at'), $scope, 'score.student_id', 'score.arrangement_id');
         self::statStudentListFilters($query, $filters, 'students', 'arrangement');
         self::keyword($query, $filters, ['students.name', 'students.student_num', 'arrangement.title', 'teacher_list.teacher_name', 'teacher_list.teacher_num']);
 
@@ -1864,10 +1902,10 @@ class InternshipRecord extends TableRecord
 
     private static function statInsurances(array $scope, array $filters): array
     {
-        $query = self::applyStudentScope(self::queryTable('insurance')
+        $query = self::applyStudentTaskScope(self::queryTable('insurance')
             ->leftJoin('students', 'insurance.student_id', '=', 'students.student_id')
             ->leftJoin('arrangement', 'insurance.arrangement_id', '=', 'arrangement.id')
-            ->whereNull('insurance.deleted_at'), $scope, 'insurance.student_id');
+            ->whereNull('insurance.deleted_at'), $scope, 'insurance.student_id', 'insurance.arrangement_id');
         self::statStudentListFilters($query, $filters, 'students', 'arrangement');
         self::keyword($query, $filters, ['students.name', 'students.student_num', 'insurance.insurance_company', 'insurance.policy_number', 'arrangement.title'], [
             self::pairTeacherKeyword('insurance.student_id', 'insurance.arrangement_id'),
@@ -1883,10 +1921,10 @@ class InternshipRecord extends TableRecord
 
     private static function statSafetyLetters(array $scope, array $filters): array
     {
-        $query = self::applyStudentScope(self::queryTable('safety_letter_sign')
+        $query = self::applyStudentTaskScope(self::queryTable('safety_letter_sign')
             ->leftJoin('students', 'safety_letter_sign.student_id', '=', 'students.student_id')
             ->leftJoin('arrangement', 'safety_letter_sign.arrangement_id', '=', 'arrangement.id')
-            ->whereNull('safety_letter_sign.deleted_at'), $scope, 'safety_letter_sign.student_id');
+            ->whereNull('safety_letter_sign.deleted_at'), $scope, 'safety_letter_sign.student_id', 'safety_letter_sign.arrangement_id');
         self::statStudentListFilters($query, $filters, 'students', 'arrangement');
         self::keyword($query, $filters, ['students.name', 'students.student_num', 'arrangement.title'], [
             self::pairTeacherKeyword('safety_letter_sign.student_id', 'safety_letter_sign.arrangement_id'),
@@ -2002,9 +2040,9 @@ class InternshipRecord extends TableRecord
 
         return [
             ['name' => '参与学生', 'value' => count($participantIds), 'desc' => '当前筛选范围内有过程记录的学生'],
-            ['name' => '申请总数', 'value' => count($data['applications']), 'desc' => '学生提交的实习申请数量'],
-            ['name' => '通过申请', 'value' => $accepted, 'desc' => '状态为通过的申请数量'],
-            ['name' => '指导关系', 'value' => self::countRows($data['pairs'], static fn (array $row): bool => (string) ($row['status'] ?? '') === 'active'), 'desc' => '有效师生指导关系'],
+            ['name' => '补充申请', 'value' => count($data['applications']), 'desc' => '特殊场景补充申请数量'],
+            ['name' => '通过补申', 'value' => $accepted, 'desc' => '状态为通过的补充申请数量'],
+            ['name' => '任务绑定', 'value' => self::countRows($data['pairs'], static fn (array $row): bool => (string) ($row['status'] ?? '') === 'active'), 'desc' => '有效任务级师生绑定'],
             ['name' => '平均成绩', 'value' => self::averageText(self::scoreValues($data['scores'])), 'desc' => '已录入总评成绩平均值'],
             ['name' => '今日签到', 'value' => $todaySignIns, 'desc' => '今天完成的实习签到'],
         ];
@@ -2613,9 +2651,9 @@ class InternshipRecord extends TableRecord
         return [
             ['key' => 'arrangement_title', 'label' => '实习安排', 'min_width' => 180],
             ['key' => 'scope', 'label' => '范围', 'min_width' => 180],
-            ['key' => 'applications', 'label' => '申请', 'width' => 90],
-            ['key' => 'accepted_applications', 'label' => '通过', 'width' => 90],
-            ['key' => 'active_pairs', 'label' => '指导关系', 'width' => 100],
+            ['key' => 'applications', 'label' => '补申', 'width' => 90],
+            ['key' => 'accepted_applications', 'label' => '通过补申', 'width' => 90],
+            ['key' => 'active_pairs', 'label' => '任务绑定', 'width' => 100],
             ['key' => 'sign_ins', 'label' => '签到', 'width' => 90],
             ['key' => 'journals', 'label' => '日志', 'width' => 90],
             ['key' => 'reports', 'label' => '报告', 'width' => 90],
@@ -2639,10 +2677,10 @@ class InternshipRecord extends TableRecord
             ['key' => 'name', 'label' => $name, 'min_width' => 160],
             ['key' => 'students', 'label' => '参与学生', 'width' => 100],
             ['key' => 'arrangements', 'label' => '关联安排', 'width' => 100],
-            ['key' => 'applications', 'label' => '申请', 'width' => 90],
-            ['key' => 'accepted_applications', 'label' => '通过', 'width' => 90],
+            ['key' => 'applications', 'label' => '补申', 'width' => 90],
+            ['key' => 'accepted_applications', 'label' => '通过补申', 'width' => 90],
             ['key' => 'accept_rate', 'label' => '通过率', 'width' => 100],
-            ['key' => 'active_pairs', 'label' => '指导关系', 'width' => 100],
+            ['key' => 'active_pairs', 'label' => '任务绑定', 'width' => 100],
             ['key' => 'avg_score', 'label' => '平均分', 'width' => 100],
         ];
     }
@@ -2650,11 +2688,11 @@ class InternshipRecord extends TableRecord
     private static function teacherStatColumns(): array
     {
         return [
-            ['key' => 'teacher_name', 'label' => '指导教师', 'min_width' => 150],
+            ['key' => 'teacher_name', 'label' => '任务老师', 'min_width' => 150],
             ['key' => 'teacher_num', 'label' => '工号', 'width' => 120],
             ['key' => 'students', 'label' => '学生', 'width' => 90],
             ['key' => 'arrangements', 'label' => '安排', 'width' => 90],
-            ['key' => 'active_pairs', 'label' => '指导关系', 'width' => 100],
+            ['key' => 'active_pairs', 'label' => '任务绑定', 'width' => 100],
             ['key' => 'journals_waiting', 'label' => '待评日志', 'width' => 100],
             ['key' => 'reports_waiting', 'label' => '待评报告', 'width' => 100],
             ['key' => 'avg_score', 'label' => '平均分', 'width' => 100],
@@ -2939,6 +2977,39 @@ class InternshipRecord extends TableRecord
     {
         if (array_key_exists('visible_student_ids', $scope) && $scope['visible_student_ids'] !== null) {
             self::whereInOrDeny($query, $column, $scope['visible_student_ids']);
+        }
+
+        return $query;
+    }
+
+    private static function applyStudentTaskScope(mixed $query, array $scope, string $studentColumn, string $arrangementColumn): mixed
+    {
+        self::applyStudentScope($query, $scope, $studentColumn);
+        $roleType = (string) ($scope['role_type'] ?? '');
+        if ($roleType === 'teacher') {
+            $teacherId = (int) ($scope['teacher_id'] ?? 0);
+            if ($teacherId <= 0) {
+                return $query->whereRaw('1 = 0');
+            }
+            return $query->whereExists(function ($subQuery) use ($arrangementColumn, $studentColumn, $teacherId): void {
+                $subQuery->selectRaw('1')
+                    ->from('pair as task_pair')
+                    ->whereColumn('task_pair.student_id', $studentColumn)
+                    ->whereColumn('task_pair.arrangement_id', $arrangementColumn)
+                    ->where('task_pair.type', 'internship')
+                    ->where('task_pair.status', 'active')
+                    ->whereNull('task_pair.deleted_at')
+                    ->where(function ($teacherQuery) use ($teacherId): void {
+                        $teacherQuery->where('task_pair.teacher_id', $teacherId)
+                            ->orWhere('task_pair.second_teacher_id', $teacherId);
+                    });
+            });
+        }
+        if ($roleType === 'student') {
+            self::whereInOrDeny($query, $arrangementColumn, $scope['visible_arrangement_ids'] ?? []);
+        }
+        if ($roleType === 'enterprise') {
+            self::whereInOrDeny($query, $arrangementColumn, $scope['owned_arrangement_ids'] ?? []);
         }
 
         return $query;
