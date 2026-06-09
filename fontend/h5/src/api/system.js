@@ -239,6 +239,10 @@ export function fetchInternshipScores(params = {}) {
   return internshipList('scores', params);
 }
 
+export function fetchInternshipCourseScores(params = {}) {
+  return internshipList('course-scores', params);
+}
+
 export function fetchInternshipStats(params = {}) {
   return internshipList('stats', params);
 }

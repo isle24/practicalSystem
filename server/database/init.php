@@ -613,6 +613,7 @@ function schoolBusinessStatements(): array
         simpleTable('base_profession_direction', ['`base_id` BIGINT UNSIGNED NOT NULL', '`profession_id` BIGINT UNSIGNED NOT NULL', '`direction_id` BIGINT UNSIGNED NOT NULL', 'UNIQUE KEY `uk_base_profession_direction` (`base_id`, `profession_id`, `direction_id`)']),
         simpleTable('enterprise_mentor', ['`company_id` BIGINT UNSIGNED DEFAULT NULL', '`mentor_name` VARCHAR(80) DEFAULT NULL', '`mobile` VARCHAR(40) DEFAULT NULL']),
         simpleTable('arrangement', ['`plan_id` BIGINT UNSIGNED DEFAULT NULL', '`base_id` BIGINT UNSIGNED DEFAULT NULL', '`dep_id` BIGINT UNSIGNED DEFAULT NULL', '`profession_id` BIGINT UNSIGNED DEFAULT NULL', '`semester` VARCHAR(80) DEFAULT NULL', '`teacher_id` BIGINT UNSIGNED DEFAULT NULL', '`task_no` VARCHAR(80) DEFAULT NULL', '`batch_no` VARCHAR(80) DEFAULT NULL', '`credit` DECIMAL(5,2) DEFAULT NULL', '`student_count` INT DEFAULT 0', '`start_date` DATE DEFAULT NULL', '`end_date` DATE DEFAULT NULL']),
+        simpleTable('arrangement_recording', recordingColumns()),
         simpleTable('internship_task_class', ['`arrangement_id` BIGINT UNSIGNED NOT NULL', '`grade_id` BIGINT UNSIGNED DEFAULT NULL', '`dep_id` BIGINT UNSIGNED DEFAULT NULL', '`profession_id` BIGINT UNSIGNED DEFAULT NULL', '`class_id` BIGINT UNSIGNED NOT NULL', '`student_count_snapshot` INT DEFAULT 0', 'UNIQUE KEY `uk_task_class` (`arrangement_id`, `class_id`)']),
         simpleTable('application', ['`arrangement_id` BIGINT UNSIGNED DEFAULT NULL', '`student_id` BIGINT UNSIGNED DEFAULT NULL', '`teacher_id` BIGINT UNSIGNED DEFAULT NULL']),
         simpleTable('application_recording', recordingColumns()),
@@ -1137,7 +1138,7 @@ function ensureInternshipSchema(PDO $pdo): void
         }
     }
 
-    foreach (['application_recording', 'journal_recording', 'report_recording', 'join_recording', 'apply_report_delay_recording', 'plan_recording'] as $table) {
+    foreach (['application_recording', 'arrangement_recording', 'journal_recording', 'report_recording', 'join_recording', 'apply_report_delay_recording', 'plan_recording'] as $table) {
         ensureColumn($pdo, $table, 'parent_id', "ALTER TABLE `{$table}` ADD COLUMN `parent_id` BIGINT UNSIGNED DEFAULT NULL AFTER `code`");
         ensureColumn($pdo, $table, 'action', "ALTER TABLE `{$table}` ADD COLUMN `action` VARCHAR(40) DEFAULT NULL AFTER `parent_id`");
         ensureColumn($pdo, $table, 'operator_id', "ALTER TABLE `{$table}` ADD COLUMN `operator_id` BIGINT UNSIGNED DEFAULT NULL AFTER `action`");

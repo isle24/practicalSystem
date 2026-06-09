@@ -491,6 +491,14 @@
               <small>{{ stageDeadlineText('journal_deadline') }}</small>
             </header>
             <label>
+              <span>实习任务</span>
+              <select v-model.number="internship.forms.journal.arrangement_id">
+                <option v-for="item in internship.options.arrangements" :key="item.id" :value="item.id">
+                  {{ item.title }}
+                </option>
+              </select>
+            </label>
+            <label>
               <span>标题</span>
               <input v-model="internship.forms.journal.title">
             </label>
@@ -509,6 +517,14 @@
               <strong>实习报告</strong>
               <small>{{ stageDeadlineText('report_deadline') }}</small>
             </header>
+            <label>
+              <span>实习任务</span>
+              <select v-model.number="internship.forms.report.arrangement_id">
+                <option v-for="item in internship.options.arrangements" :key="item.id" :value="item.id">
+                  {{ item.title }}
+                </option>
+              </select>
+            </label>
             <label>
               <span>标题</span>
               <input v-model="internship.forms.report.title">
@@ -766,7 +782,7 @@
           <section class="mobile-card">
             <header>
               <GraduationCap :size="20" />
-              <strong>成绩记录</strong>
+              <strong>任务成绩记录</strong>
             </header>
             <section class="mobile-list-tools" :class="mobileListToolClass(getMobileListConfig('scores'))">
               <select
@@ -795,6 +811,51 @@
             <div class="mobile-list-footer">
               <span>共 {{ internship.lists.scores.pagination.total || 0 }} 条</span>
               <button v-if="canLoadMore('scores')" :disabled="internship.loading" @click="loadMoreInternshipList('scores')">
+                加载更多
+              </button>
+            </div>
+          </section>
+
+          <section class="mobile-card">
+            <header>
+              <GraduationCap :size="20" />
+              <strong>课程成绩汇总</strong>
+            </header>
+            <section class="mobile-list-tools" :class="mobileListToolClass(getMobileListConfig('courseScores'))">
+              <select
+                v-for="filter in mobileListSelectFilters(getMobileListConfig('courseScores'))"
+                :key="filter.key"
+                v-model="internship.filters.courseScores[filter.key]"
+                :aria-label="filter.label"
+                @change="handleMobileListFilterChange('courseScores', filter.key)"
+              >
+                <option value="">{{ filter.placeholder }}</option>
+                <option v-for="item in filter.options" :key="item.value" :value="item.value">
+                  {{ item.label }}
+                </option>
+              </select>
+              <input class="mobile-keyword-input" v-model="internship.filters.courseScores.keyword" placeholder="学生、学号、课程、任务" @keyup.enter="reloadInternshipList('courseScores')">
+              <button type="button" :disabled="internship.loading" @click="reloadInternshipList('courseScores')">查询</button>
+            </section>
+            <van-cell
+              v-for="row in internship.lists.courseScores.items"
+              :key="`${row.plan_id}-${row.student_id}`"
+              :title="joinFact([row.student_name, row.student_num]) || '学生成绩'"
+              :label="joinFact([row.course_name || row.course_code, `任务 ${row.scored_task_count || 0}/${row.task_count || 0}`])"
+              :value="row.course_final_score !== null && row.course_final_score !== undefined ? `${row.course_final_score} 分` : '-'"
+            >
+              <template #label>
+                <div class="mobile-cell-meta">
+                  <span v-for="(fact, index) in mobileListFacts('courseScores', row)" :key="`${fact}-${index}`">
+                    {{ fact }}
+                  </span>
+                </div>
+              </template>
+            </van-cell>
+            <div v-if="!internship.lists.courseScores.items.length" class="mobile-empty">暂无课程成绩汇总</div>
+            <div class="mobile-list-footer">
+              <span>共 {{ internship.lists.courseScores.pagination.total || 0 }} 条</span>
+              <button v-if="canLoadMore('courseScores')" :disabled="internship.loading" @click="loadMoreInternshipList('courseScores')">
                 加载更多
               </button>
             </div>
@@ -1286,6 +1347,7 @@ import {
   fetchInternshipPlans,
   fetchInternshipReports,
   fetchInternshipSafetyLetters,
+  fetchInternshipCourseScores,
   fetchInternshipScores,
   fetchInternshipSignIns,
   fetchInternshipSyllabusGuides,
@@ -1462,6 +1524,7 @@ const internship = reactive({
     teacherWorkReports: emptyPagedList(),
     delays: emptyPagedList(),
     scores: emptyPagedList(),
+    courseScores: emptyPagedList(),
     inspections: emptyPagedList(),
     archiveMaterials: emptyPagedList(),
     insurances: emptyPagedList(),
@@ -1480,6 +1543,7 @@ const internship = reactive({
     teacherWorkReports: emptyInternshipFilters(),
     delays: emptyInternshipFilters(),
     scores: emptyInternshipFilters(),
+    courseScores: emptyInternshipFilters(),
     inspections: emptyInternshipFilters(),
     archiveMaterials: emptyInternshipFilters(),
     insurances: emptyInternshipFilters(),
@@ -1937,13 +2001,24 @@ const mobileListConfigs = computed(() => ({
   scores: {
     key: 'scores',
     entity: '',
-    title: '实习成绩',
-    shortTitle: '成绩',
+    title: '任务成绩',
+    shortTitle: '任务成绩',
     icon: GraduationCap,
     keywordPlaceholder: '学生、学号、安排、教师',
     gradeFilter: true,
     statusOptions: [],
     emptyText: '暂无成绩记录',
+  },
+  courseScores: {
+    key: 'courseScores',
+    entity: '',
+    title: '课程成绩汇总',
+    shortTitle: '课程成绩',
+    icon: GraduationCap,
+    keywordPlaceholder: '学生、学号、课程、任务',
+    gradeFilter: true,
+    statusOptions: [],
+    emptyText: '暂无课程成绩汇总',
   },
   inspections: {
     key: 'inspections',
@@ -2019,6 +2094,7 @@ const manageListTabs = computed(() => [
   'teacherWorkReports',
   'delays',
   'scores',
+  'courseScores',
   'inspections',
   'archiveMaterials',
 ].map(getMobileListConfig).filter(Boolean));
@@ -2242,6 +2318,7 @@ const studentScopedListKeys = new Set([
   'reports',
   'delays',
   'scores',
+  'courseScores',
   'archiveMaterials',
   'insurances',
   'safetyLetters',
@@ -2391,6 +2468,7 @@ function mobileListTitle(key, row) {
     teacherWorkReports: joinFact([row.teacher_name, row.arrangement_title]) || `工作报告ID ${row.id}`,
     delays: joinFact([student, delayConfigText(row.config_key)]) || `延期ID ${row.id}`,
     scores: student || `成绩ID ${row.id}`,
+    courseScores: joinFact([row.student_name, row.student_num]) || `课程成绩 ${row.plan_id}-${row.student_id}`,
     inspections: joinFact([row.arrangement_title, row.student_name]) || `巡查ID ${row.id}`,
     archiveMaterials: student || arrangement || `归档ID ${row.id}`,
     insurances: student || row.insurance_company || `保险ID ${row.id}`,
@@ -2405,6 +2483,9 @@ function mobileListValue(key, row) {
   }
   if (key === 'scores') {
     return row.final_score !== null && row.final_score !== undefined ? `总评 ${row.final_score}` : '-';
+  }
+  if (key === 'courseScores') {
+    return row.course_final_score !== null && row.course_final_score !== undefined ? `${row.course_final_score} 分` : '-';
   }
   if (key === 'insurances') {
     return row.policy_number || statusText(row.status);
@@ -2509,6 +2590,14 @@ function mobileListFacts(key, row) {
       namedFact('安排', arrangement),
       namedFact('评分人', row.teacher_name || row.teacher_num),
       namedFact('分项', scoreBreakdownText(row)),
+    ],
+    courseScores: [
+      namedFact('届次', row.grade_name),
+      namedFact('学院专业', joinFact([row.dep_name, row.profession_name])),
+      namedFact('班级', row.class_name),
+      namedFact('课程', joinFact([row.course_code, row.course_name])),
+      namedFact('成绩规则', scoreRuleText(row.score_rule)),
+      namedFact('任务成绩', row.task_score_text),
     ],
     inspections: [
       namedFact('届次', row.grade_name),
@@ -2667,6 +2756,7 @@ function internshipFetcher(key) {
     reports: fetchInternshipReports,
     delays: fetchInternshipDelays,
     scores: fetchInternshipScores,
+    courseScores: fetchInternshipCourseScores,
     syllabusGuides: fetchInternshipSyllabusGuides,
     implementationSheets: fetchInternshipImplementationSheets,
     teacherWorkReports: fetchInternshipTeacherWorkReports,
@@ -2986,6 +3076,8 @@ function applyDefaultInternshipSelection() {
   if (firstArrangement) {
     internship.forms.application.arrangement_id ||= firstArrangement.id;
     internship.forms.sign.arrangement_id ||= firstArrangement.id;
+    internship.forms.journal.arrangement_id ||= firstArrangement.id;
+    internship.forms.report.arrangement_id ||= firstArrangement.id;
     internship.forms.delay.arrangement_id ||= firstArrangement.id;
   }
 }
@@ -3049,6 +3141,7 @@ async function loadInternshipPanelData() {
     const [pairs] = await Promise.all([
       fetchInternshipPairs({ page: 1, page_size: 100 }),
       loadInternshipList('scores'),
+      loadInternshipList('courseScores'),
     ]);
     setPagedList('pairs', pairs);
     const firstPair = internship.lists.pairs.items[0];
@@ -3127,18 +3220,24 @@ async function submitSignIn() {
 }
 
 async function submitJournal() {
+  const arrangementId = internship.forms.journal.arrangement_id || internship.forms.sign.arrangement_id;
+  if (!arrangementId) {
+    internship.message = '请选择实习任务';
+    showToast(internship.message);
+    return;
+  }
   internship.loading = true;
   internship.message = '';
   try {
     await saveInternshipJournal({
       id: internship.forms.journal.id || undefined,
-      arrangement_id: internship.forms.journal.arrangement_id || internship.forms.sign.arrangement_id,
+      arrangement_id: arrangementId,
       title: internship.forms.journal.title,
       content: internship.forms.journal.content,
       status: 'wait',
     });
     internship.forms.journal.id = null;
-    internship.forms.journal.arrangement_id = null;
+    internship.forms.journal.arrangement_id = arrangementId;
     internship.forms.journal.title = '';
     internship.forms.journal.content = '';
     internship.message = '日志已提交';
@@ -3151,19 +3250,25 @@ async function submitJournal() {
 }
 
 async function submitReport() {
+  const arrangementId = internship.forms.report.arrangement_id || internship.forms.sign.arrangement_id;
+  if (!arrangementId) {
+    internship.message = '请选择实习任务';
+    showToast(internship.message);
+    return;
+  }
   internship.loading = true;
   internship.message = '';
   try {
     await saveInternshipReport({
       id: internship.forms.report.id || undefined,
-      arrangement_id: internship.forms.report.arrangement_id || internship.forms.sign.arrangement_id,
+      arrangement_id: arrangementId,
       template_id: internship.options.report_templates[0]?.id || null,
       title: internship.forms.report.title,
       content: internship.forms.report.content,
       status: 'wait',
     });
     internship.forms.report.id = null;
-    internship.forms.report.arrangement_id = null;
+    internship.forms.report.arrangement_id = arrangementId;
     internship.forms.report.title = '';
     internship.forms.report.content = '';
     internship.message = '报告已提交';
@@ -4001,6 +4106,15 @@ function arrangementTypeText(value) {
   return names[value] || value || '-';
 }
 
+function scoreRuleText(value) {
+  const names = {
+    average: '平均分',
+    sum: '累计分',
+    weighted: '按学分加权',
+  };
+  return names[value] || value || '-';
+}
+
 function organizeModeText(value) {
   const names = {
     centralized: '集中',
@@ -4035,8 +4149,17 @@ function openStudentSubmitSection(section) {
 }
 
 function currentArrangement() {
+  const formArrangementId = {
+    journal: internship.forms.journal.arrangement_id,
+    report: internship.forms.report.arrangement_id,
+    delay: internship.forms.delay.arrangement_id,
+    sign: internship.forms.sign.arrangement_id,
+  }[internship.submitSection];
   const arrangementId = Number(
-    internship.forms.sign.arrangement_id
+    formArrangementId
+    || internship.forms.sign.arrangement_id
+    || internship.forms.journal.arrangement_id
+    || internship.forms.report.arrangement_id
     || internship.forms.application.arrangement_id
     || internship.forms.delay.arrangement_id
     || 0,

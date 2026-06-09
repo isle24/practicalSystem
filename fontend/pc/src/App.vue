@@ -344,6 +344,9 @@
                       <el-button v-if="win.panel === 'arrangements' && canManageInternship" :icon="CalendarCheck" @click="openArrangementDialog">
                         新增任务
                       </el-button>
+                      <el-button v-if="win.panel === 'arrangements' && canManageInternship" :icon="Upload" :loading="internshipState.importing" @click="chooseArrangementImportExcel">
+                        导入任务分配
+                      </el-button>
                       <el-button v-if="win.panel === 'plans' && canManageInternshipPlan" :icon="FileText" @click="openPlanDialog">
                         新增计划
                       </el-button>
@@ -365,7 +368,7 @@
                   />
 
                   <div v-if="internshipState.dialog.type" class="operation-mask" @click.self="closeInternshipDialog">
-                    <section class="operation-dialog">
+                    <section class="operation-dialog" :class="{ 'task-detail-dialog': internshipState.dialog.type === 'arrangementDetail' }">
                       <header>
                         <strong>{{ internshipState.dialog.title }}</strong>
                         <button type="button" @click="closeInternshipDialog">关闭</button>
@@ -574,6 +577,73 @@
                         </label>
                       </div>
 
+                      <div v-else-if="internshipState.dialog.type === 'arrangementDetail'" class="operation-form single">
+                        <section class="task-detail-view">
+                          <div class="task-detail-grid">
+                            <article>
+                              <span>课程计划</span>
+                              <strong>{{ internshipState.arrangementDetail.item?.course_name || '-' }}</strong>
+                            </article>
+                            <article>
+                              <span>负责老师</span>
+                              <strong>{{ internshipState.arrangementDetail.item?.teacher_name || '-' }}</strong>
+                            </article>
+                            <article>
+                              <span>任务编号</span>
+                              <strong>{{ internshipState.arrangementDetail.item?.task_no || '-' }}</strong>
+                            </article>
+                            <article>
+                              <span>批次</span>
+                              <strong>{{ internshipState.arrangementDetail.item?.batch_no || '-' }}</strong>
+                            </article>
+                            <article>
+                              <span>时间</span>
+                              <strong>{{ dateRangeText(internshipState.arrangementDetail.item?.start_date, internshipState.arrangementDetail.item?.end_date) }}</strong>
+                            </article>
+                            <article>
+                              <span>地点</span>
+                              <strong>{{ internshipState.arrangementDetail.item?.location || '-' }}</strong>
+                            </article>
+                            <article>
+                              <span>绑定班级</span>
+                              <strong>{{ internshipState.arrangementDetail.classes.length }} 个</strong>
+                            </article>
+                            <article>
+                              <span>绑定学生</span>
+                              <strong>{{ internshipState.arrangementDetail.students.length }} 人</strong>
+                            </article>
+                          </div>
+                          <div class="task-detail-section">
+                            <header>
+                              <strong>绑定班级</strong>
+                              <small>{{ internshipState.arrangementDetail.classes.length }} 个</small>
+                            </header>
+                            <el-table :data="internshipState.arrangementDetail.classes" max-height="220" stripe>
+                              <el-table-column prop="class_name" label="班级" min-width="150" />
+                              <el-table-column prop="class_num" label="班号" width="120" />
+                              <el-table-column prop="student_count_snapshot" label="学生数" width="90" />
+                            </el-table>
+                          </div>
+                          <div class="task-detail-section">
+                            <header>
+                              <strong>绑定学生</strong>
+                              <small>{{ internshipState.arrangementDetail.students.length }} 人</small>
+                            </header>
+                            <el-table :data="internshipState.arrangementDetail.students" max-height="280" stripe>
+                              <el-table-column prop="student_name" label="学生" width="120" />
+                              <el-table-column prop="student_num" label="学号" width="130" />
+                              <el-table-column prop="class_name" label="班级" min-width="150" />
+                              <el-table-column prop="teacher_name" label="负责老师" width="120" />
+                              <el-table-column prop="status" label="状态" width="90">
+                                <template #default="{ row }">
+                                  <el-tag :type="statusTagType(row.status)">{{ statusText(row.status) }}</el-tag>
+                                </template>
+                              </el-table-column>
+                            </el-table>
+                          </div>
+                        </section>
+                      </div>
+
                       <div v-else-if="['review', 'reopen'].includes(internshipState.dialog.type)" class="operation-form single">
                         <p>{{ internshipState.dialog.description }}</p>
                         <label>
@@ -772,7 +842,19 @@
                         @page-change="page => loadInternshipPanel('arrangements', page)"
                         @reset="resetInternshipFilters('arrangements')"
                         @search="loadInternshipPanel('arrangements', 1)"
-                      />
+                      >
+                        <template #actions="{ row }">
+                          <el-button size="small" type="primary" plain @click="openArrangementDetail(row)">
+                            详情
+                          </el-button>
+                          <el-button size="small" type="success" plain @click="openTimelineDialog('arrangement', row)">
+                            记录
+                          </el-button>
+                          <el-button v-if="canManageInternship" size="small" type="primary" link @click="openArrangementDialog(row)">
+                            编辑
+                          </el-button>
+                        </template>
+                      </DataListPanel>
                     </div>
                   </template>
 
@@ -976,7 +1058,7 @@
                   </template>
 
                   <template v-else-if="win.panel === 'scores'">
-                    <div class="internship-list-only">
+                    <div class="internship-score-workspace">
                       <DataListPanel
                         :columns="internshipListConfigs.scores.columns"
                         :filters="internshipListConfigs.scores.filters"
@@ -989,6 +1071,24 @@
                         @reset="resetInternshipFilters('scores')"
                         @search="loadInternshipPanel('scores', 1)"
                       />
+                      <section class="course-score-panel">
+                        <header>
+                          <strong>课程成绩汇总</strong>
+                          <small>按实习计划的成绩规则汇总同一学生多个任务成绩</small>
+                        </header>
+                        <DataListPanel
+                          :columns="internshipListConfigs.courseScores.columns"
+                          :filters="internshipListConfigs.courseScores.filters"
+                          :filter-values="internshipState.filters.courseScores"
+                          :loading="internshipState.loading"
+                          :pagination="internshipState.lists.courseScores.pagination"
+                          :rows="internshipState.lists.courseScores.items"
+                          @filter-change="setInternshipFilter('courseScores', $event)"
+                          @page-change="page => loadInternshipPanel('courseScores', page)"
+                          @reset="resetInternshipFilters('courseScores')"
+                          @search="loadInternshipPanel('courseScores', 1)"
+                        />
+                      </section>
                     </div>
                   </template>
 
@@ -2767,6 +2867,13 @@
       hidden
       @change="handleArchiveImportFile"
     >
+    <input
+      ref="arrangementImportInputRef"
+      type="file"
+      accept=".xls,.xlsx"
+      hidden
+      @change="handleArrangementImportFile"
+    >
   </main>
 </template>
 
@@ -2829,9 +2936,11 @@ import {
   fetchSwitchableAccounts,
   fetchInternshipArchiveMaterials,
   fetchInternshipApplications,
+  fetchInternshipArrangementDetail,
   fetchInternshipArrangements,
   fetchInternshipDelays,
   fetchInternshipBaseFlows,
+  fetchInternshipCourseScores,
   fetchInternshipInsurances,
   fetchInternshipJournals,
   fetchInternshipOptions,
@@ -2865,6 +2974,7 @@ import {
   fetchWechatConfig,
   generateAdminLoginPasskey,
   importArchiveExcel,
+  importInternshipArrangementAssignments,
   deleteMenu as deleteMenuApi,
   deleteOperationGuide,
   login as loginApi,
@@ -2906,6 +3016,7 @@ const loginNameInput = ref(null);
 const wallpaperSectionRef = ref(null);
 const archiveImportInputRef = ref(null);
 const archiveImportType = ref('');
+const arrangementImportInputRef = ref(null);
 const focusedWindowId = ref(null);
 const zIndexSeed = ref(20);
 const wallpaperCacheKey = 'practical_pc_wallpaper';
@@ -3582,10 +3693,12 @@ const internshipState = reactive({
   message: '',
   savedMessage: '',
   reviewOpinion: '',
+  importing: false,
   overviewTab: 'metrics',
   dialog: emptyOperationDialog(),
   overview: emptyInternshipOverview(),
   options: emptyInternshipOptions(),
+  arrangementDetail: emptyArrangementDetail(),
   arrangementForm: emptyArrangementForm(),
   planForm: emptyPlanForm(),
   scoreForm: emptyScoreForm(),
@@ -3603,6 +3716,7 @@ const internshipState = reactive({
     teacherWorkReports: emptyInternshipFilters(),
     delays: emptyInternshipFilters(),
     scores: emptyInternshipFilters(),
+    courseScores: emptyInternshipFilters(),
     inspections: emptyInternshipFilters(),
     archiveMaterials: emptyInternshipFilters(),
     baseFlows: emptyInternshipFilters(),
@@ -3622,6 +3736,7 @@ const internshipState = reactive({
     teacherWorkReports: emptyPagedList(),
     delays: emptyPagedList(),
     scores: emptyPagedList(),
+    courseScores: emptyPagedList(),
     inspections: emptyPagedList(),
     archiveMaterials: emptyPagedList(),
     baseFlows: emptyPagedList(),
@@ -4048,6 +4163,23 @@ const internshipListConfigs = computed(() => ({
       { prop: 'enterprise_score', label: '企业', width: 80 },
       { prop: 'final_score', label: '总评', width: 90 },
       { prop: 'teacher_name', label: '评分人', width: 110 },
+    ],
+  },
+  courseScores: {
+    listKey: 'courseScores',
+    filename: '课程成绩汇总',
+    filters: internshipListFilters('courseScores', ['grade_id', 'dep_id', 'profession_id', 'class_id', 'plan_id', 'keyword']),
+    columns: [
+      { prop: 'student_name', label: '学生', width: 110 },
+      { prop: 'student_num', label: '学号', width: 130 },
+      { prop: 'grade_name', label: '届次', width: 100 },
+      { prop: 'course_name', label: '课程计划', minWidth: 180 },
+      { key: 'score_rule', label: '成绩规则', width: 110, formatter: row => scoreRuleText(row.score_rule) },
+      { prop: 'task_count', label: '任务数', width: 80 },
+      { prop: 'scored_task_count', label: '已评分', width: 80 },
+      { key: 'course_final_score', label: '课程成绩', width: 100, formatter: row => row.course_final_score ?? '-' },
+      { prop: 'task_score_text', label: '任务成绩', minWidth: 240 },
+      { prop: 'class_name', label: '班级', minWidth: 130 },
     ],
   },
   archiveMaterials: {
@@ -6863,6 +6995,14 @@ function emptyInternshipOptions() {
   };
 }
 
+function emptyArrangementDetail() {
+  return {
+    item: null,
+    classes: [],
+    students: [],
+  };
+}
+
 function emptyInternshipFilters() {
   return {
     keyword: '',
@@ -8317,7 +8457,61 @@ function resetInternshipFilters(listKey) {
   loadInternshipPanel(listKey, 1);
 }
 
-function openArrangementDialog() {
+async function loadArrangementDetail(id) {
+  if (!id) {
+    return emptyArrangementDetail();
+  }
+  return fetchInternshipArrangementDetail({ id });
+}
+
+function fillArrangementFormFromDetail(detail) {
+  const item = detail.item || {};
+  internshipState.arrangementForm = {
+    ...emptyArrangementForm(),
+    id: item.id || null,
+    uuid: item.uuid || '',
+    plan_id: item.plan_id || null,
+    title: item.title || item.name || '',
+    task_no: item.task_no || '',
+    batch_no: item.batch_no || '',
+    semester: item.semester || '',
+    grade_id: item.grade_id || null,
+    base_id: item.base_id || null,
+    dep_id: item.dep_id || null,
+    profession_id: item.profession_id || null,
+    teacher_id: item.teacher_id || null,
+    class_ids: (detail.classes || []).map(row => row.class_id).filter(Boolean),
+    credit: item.credit ?? '',
+    type: item.type || 'major_external',
+    organize_mode: item.organize_mode || 'centralized',
+    start_date: item.start_date || '',
+    end_date: item.end_date || '',
+    location: item.location || '',
+    status: item.status || 'enabled',
+  };
+  normalizeArrangementCascade();
+}
+
+async function openArrangementDialog(row = null) {
+  if (row?.id) {
+    internshipState.loading = true;
+    internshipState.message = '';
+    try {
+      const detail = await loadArrangementDetail(row.id);
+      fillArrangementFormFromDetail(detail);
+      internshipState.dialog = {
+        ...emptyOperationDialog(),
+        type: 'arrangement',
+        title: '编辑实习任务',
+      };
+    } catch (error) {
+      internshipState.message = error.message;
+    } finally {
+      internshipState.loading = false;
+    }
+    return;
+  }
+
   const defaults = defaultScopedFilters();
   const defaultPlan = internshipState.options.plans.find(item => matchAcademicFilters(item, defaults, ['grade_id', 'dep_id', 'profession_id'])) || internshipState.options.plans[0] || null;
   internshipState.arrangementForm = {
@@ -8335,6 +8529,29 @@ function openArrangementDialog() {
     type: 'arrangement',
     title: '新增实习任务',
   };
+}
+
+async function openArrangementDetail(row) {
+  if (!row?.id) {
+    return;
+  }
+  internshipState.loading = true;
+  internshipState.message = '';
+  try {
+    internshipState.arrangementDetail = {
+      ...emptyArrangementDetail(),
+      ...(await loadArrangementDetail(row.id)),
+    };
+    internshipState.dialog = {
+      ...emptyOperationDialog(),
+      type: 'arrangementDetail',
+      title: '实习任务详情',
+    };
+  } catch (error) {
+    internshipState.message = error.message;
+  } finally {
+    internshipState.loading = false;
+  }
 }
 
 function openPlanDialog() {
@@ -8448,6 +8665,7 @@ async function openTimelineDialog(entity, row) {
 
 function closeInternshipDialog() {
   internshipState.dialog = emptyOperationDialog();
+  internshipState.arrangementDetail = emptyArrangementDetail();
 }
 
 async function confirmInternshipDialog() {
@@ -8533,6 +8751,7 @@ function reviewEntityName(entity) {
     journal: '实习日志',
     report: '实习报告',
     plan: '实习计划',
+    arrangement: '实习任务',
     delay: '延期申请',
   };
   return names[entity] || '审核事项';
@@ -8838,12 +9057,16 @@ async function loadInternshipPanel(panel = 'overview', page = 1) {
     } else if (panel === 'delays') {
       setPagedList('delays', await fetchInternshipDelays(params('delays')));
     } else if (panel === 'scores') {
-      const [scores, pairs] = await Promise.all([
+      const [scores, pairs, courseScores] = await Promise.all([
         fetchInternshipScores(params('scores')),
         fetchInternshipPairs({ page: 1, page_size: 100 }),
+        fetchInternshipCourseScores(params('courseScores')),
       ]);
       setPagedList('scores', scores);
       setPagedList('pairs', pairs);
+      setPagedList('courseScores', courseScores);
+    } else if (panel === 'courseScores') {
+      setPagedList('courseScores', await fetchInternshipCourseScores(params('courseScores')));
     } else if (panel === 'documents') {
       setPagedList('archiveMaterials', await fetchInternshipArchiveMaterials(params('archiveMaterials')));
     } else if (panel === 'inspections') {
@@ -8936,6 +9159,44 @@ async function saveArrangement() {
   } catch (error) {
     internshipState.message = error.message;
   } finally {
+    internshipState.loading = false;
+  }
+}
+
+function chooseArrangementImportExcel() {
+  if (!canManageInternship.value) {
+    return;
+  }
+  if (arrangementImportInputRef.value) {
+    arrangementImportInputRef.value.value = '';
+    arrangementImportInputRef.value.click();
+  }
+}
+
+async function handleArrangementImportFile(event) {
+  const file = event.target.files?.[0];
+  event.target.value = '';
+  if (!file || !canManageInternship.value) {
+    return;
+  }
+
+  internshipState.importing = true;
+  internshipState.loading = true;
+  internshipState.message = '';
+  try {
+    const result = await importInternshipArrangementAssignments(file);
+    const errors = (result.errors || []).map(item => `第${item.row}行：${item.message}`).join('；');
+    internshipState.savedMessage = `导入完成：新增 ${result.created || 0}，更新 ${result.updated || 0}，失败 ${result.failed || 0}`;
+    internshipState.message = errors ? `${internshipState.savedMessage}。${errors}` : '';
+    await Promise.all([
+      loadInternshipPanel('arrangements'),
+      loadInternshipPanel('pairs'),
+      loadInternshipOptions(),
+    ]);
+  } catch (error) {
+    internshipState.message = error.message;
+  } finally {
+    internshipState.importing = false;
     internshipState.loading = false;
   }
 }

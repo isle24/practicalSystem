@@ -150,6 +150,38 @@ class TableRecord extends BaseModel
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
     }
 
+    public static function ensureRecordingTable(string $table): void
+    {
+        if (!preg_match('/^[a-z_]+_recording$/', $table)) {
+            return;
+        }
+
+        self::connection()->statement("CREATE TABLE IF NOT EXISTS `{$table}` (
+            `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            `uuid` CHAR(36) DEFAULT NULL,
+            `name` VARCHAR(180) DEFAULT NULL,
+            `code` VARCHAR(120) DEFAULT NULL,
+            `status` VARCHAR(40) DEFAULT 'enabled',
+            `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+            `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            `deleted_at` DATETIME DEFAULT NULL,
+            `entity_type` VARCHAR(40) DEFAULT NULL,
+            `entity_id` BIGINT UNSIGNED DEFAULT NULL,
+            `parent_id` BIGINT UNSIGNED DEFAULT NULL,
+            `action` VARCHAR(40) DEFAULT NULL,
+            `operator_id` BIGINT UNSIGNED DEFAULT NULL,
+            `from_status` VARCHAR(40) DEFAULT NULL,
+            `to_status` VARCHAR(40) DEFAULT NULL,
+            `opinion` TEXT DEFAULT NULL,
+            `content` TEXT DEFAULT NULL,
+            PRIMARY KEY (`id`),
+            UNIQUE KEY `uk_uuid` (`uuid`),
+            KEY `idx_status` (`status`),
+            KEY `idx_entity` (`entity_type`, `entity_id`),
+            KEY `idx_parent` (`parent_id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    }
+
     private static function applyOperationLogFilters(mixed $query, string $table, array $filters): mixed
     {
         $keyword = trim((string) ($filters['keyword'] ?? ''));

@@ -1731,6 +1731,37 @@ a {
   grid-template-columns: minmax(0, 1fr);
 }
 
+.internship-score-workspace {
+  min-height: 0;
+  height: 100%;
+  display: grid;
+  grid-template-rows: minmax(260px, 1fr) minmax(240px, 0.9fr);
+  gap: 12px;
+}
+
+.course-score-panel {
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 8px;
+}
+
+.course-score-panel > header {
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.course-score-panel > header strong {
+  font-size: 14px;
+}
+
+.course-score-panel > header small {
+  color: var(--muted);
+}
+
 .internship-card {
   min-height: 0;
   border: 1px solid var(--line);
@@ -1928,6 +1959,10 @@ a {
   width: min(960px, calc(100vw - 48px));
 }
 
+.operation-dialog.task-detail-dialog {
+  width: min(980px, calc(100vw - 48px));
+}
+
 .operation-dialog.guide-edit-dialog {
   width: min(860px, calc(100vw - 48px));
   max-height: min(720px, calc(100vh - 72px));
@@ -2018,6 +2053,57 @@ a {
   min-height: 110px;
   padding-top: 8px;
   resize: vertical;
+}
+
+.task-detail-view {
+  display: grid;
+  gap: 14px;
+}
+
+.task-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.task-detail-grid article {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: #fbfcfe;
+}
+
+.task-detail-grid span {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.task-detail-grid strong {
+  display: block;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.task-detail-section {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+  background: #fff;
+}
+
+.task-detail-section header {
+  min-height: 40px;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--line);
+  background: #fbfcfe;
 }
 
 .user-detail-body {
@@ -2398,6 +2484,10 @@ a {
   .guide-dialog {
     width: calc(100vw - 36px);
     max-height: calc(100vh - 36px);
+  }
+
+  .task-detail-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .guide-admin-fields,

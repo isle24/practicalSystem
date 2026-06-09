@@ -441,8 +441,21 @@ export function fetchInternshipArrangements(params = {}) {
   return internshipList('arrangements', params);
 }
 
+export function fetchInternshipArrangementDetail(params = {}) {
+  return internshipList('arrangement-detail', params);
+}
+
 export function saveInternshipArrangement(payload) {
   return internshipPost('save-arrangement', payload);
+}
+
+export function importInternshipArrangementAssignments(file) {
+  const body = new FormData();
+  body.append('file', file);
+  return request('/internship/import-arrangement-assignments', {
+    method: 'POST',
+    body,
+  });
 }
 
 export function fetchInternshipApplications(params = {}) {
@@ -539,6 +552,10 @@ export function reviewInternshipPlan(payload) {
 
 export function fetchInternshipScores(params = {}) {
   return internshipList('scores', params);
+}
+
+export function fetchInternshipCourseScores(params = {}) {
+  return internshipList('course-scores', params);
 }
 
 export function fetchInternshipStats(params = {}) {

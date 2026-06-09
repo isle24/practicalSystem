@@ -57,9 +57,19 @@ class InternshipController
         return $this->handle(fn (): array => $this->service()->arrangements($request));
     }
 
+    public function arrangementDetail(Request $request): Response
+    {
+        return $this->handle(fn (): array => $this->service()->arrangementDetail($request));
+    }
+
     public function saveArrangement(Request $request): Response
     {
         return $this->handle(fn (): array => $this->service()->saveArrangement($request));
+    }
+
+    public function importArrangementAssignments(Request $request): Response
+    {
+        return $this->handle(fn (): array => $this->service()->importArrangementAssignments($request));
     }
 
     public function applications(Request $request): Response
@@ -165,6 +175,11 @@ class InternshipController
     public function scores(Request $request): Response
     {
         return $this->handle(fn (): array => $this->service()->scores($request));
+    }
+
+    public function courseScores(Request $request): Response
+    {
+        return $this->handle(fn (): array => $this->service()->courseScores($request));
     }
 
     public function stats(Request $request): Response

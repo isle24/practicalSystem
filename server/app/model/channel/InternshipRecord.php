@@ -221,6 +221,52 @@ class InternshipRecord extends TableRecord
         ]);
     }
 
+    public static function arrangementDetail(array $scope, int $arrangementId): ?array
+    {
+        if ($arrangementId <= 0 || !self::arrangementVisible($scope, $arrangementId)) {
+            return null;
+        }
+
+        $item = self::arrangementRow($arrangementId);
+        if (!$item) {
+            return null;
+        }
+
+        return [
+            'item' => $item,
+            'classes' => self::taskClassRows($arrangementId),
+            'students' => self::taskStudentRows($scope, $arrangementId),
+        ];
+    }
+
+    private static function arrangementRow(int $arrangementId): ?array
+    {
+        $row = self::queryTable('arrangement')
+            ->leftJoin('internship_plan', 'arrangement.plan_id', '=', 'internship_plan.id')
+            ->leftJoin('base', 'arrangement.base_id', '=', 'base.id')
+            ->leftJoin('department', 'arrangement.dep_id', '=', 'department.dep_id')
+            ->leftJoin('profession', 'arrangement.profession_id', '=', 'profession.profession_id')
+            ->leftJoin('grade_list', 'internship_plan.grade_id', '=', 'grade_list.grade_id')
+            ->leftJoin('teacher_list', 'arrangement.teacher_id', '=', 'teacher_list.teacher_id')
+            ->where('arrangement.id', $arrangementId)
+            ->whereNull('arrangement.deleted_at')
+            ->first([
+                'arrangement.id', 'arrangement.uuid', 'arrangement.name', 'arrangement.base_id',
+                'arrangement.plan_id', 'arrangement.teacher_id', 'arrangement.task_no',
+                'arrangement.batch_no', 'arrangement.credit', 'arrangement.student_count',
+                'arrangement.dep_id', 'arrangement.profession_id', 'arrangement.semester',
+                'arrangement.type', 'arrangement.organize_mode', 'arrangement.title',
+                'arrangement.start_date', 'arrangement.end_date', 'arrangement.location',
+                'arrangement.description', 'arrangement.status', 'arrangement.created_at',
+                'base.name as base_name', 'department.dep_name', 'profession.profession_name',
+                'internship_plan.grade_id', 'grade_list.grade_name',
+                'internship_plan.course_code', 'internship_plan.course_name',
+                'internship_plan.score_rule', 'teacher_list.teacher_name',
+            ]);
+
+        return $row ? self::rows([$row])[0] : null;
+    }
+
     public static function applicationPage(array $scope, array $filters): array
     {
         $query = self::applyApplicationScope(self::queryTable('application')
@@ -442,6 +488,62 @@ class InternshipRecord extends TableRecord
             'students.student_num', 'students.grade_id', 'grade_list.grade_name',
             'teacher_list.teacher_name', 'arrangement.title as arrangement_title',
         ]);
+    }
+
+    public static function courseScorePage(array $scope, array $filters): array
+    {
+        $query = self::applyStudentScope(self::queryTable('score')
+            ->leftJoin('students', 'score.student_id', '=', 'students.student_id')
+            ->leftJoin('class', 'students.class_id', '=', 'class.class_id')
+            ->leftJoin('department', 'students.dep_id', '=', 'department.dep_id')
+            ->leftJoin('profession', 'students.profession_id', '=', 'profession.profession_id')
+            ->leftJoin('grade_list', 'students.grade_id', '=', 'grade_list.grade_id')
+            ->leftJoin('arrangement', 'score.arrangement_id', '=', 'arrangement.id')
+            ->leftJoin('internship_plan', 'arrangement.plan_id', '=', 'internship_plan.id')
+            ->whereNull('score.deleted_at')
+            ->whereNull('arrangement.deleted_at')
+            ->whereNull('internship_plan.deleted_at'), $scope, 'score.student_id');
+        self::filter($query, $filters, 'arrangement.plan_id', 'plan_id');
+        self::filter($query, $filters, 'score.arrangement_id', 'arrangement_id');
+        self::listFilters($query, $filters, [
+            'dep_id' => 'students.dep_id',
+            'profession_id' => 'students.profession_id',
+            'grade_id' => 'students.grade_id',
+            'class_id' => 'students.class_id',
+        ]);
+        self::keyword($query, $filters, [
+            'students.name',
+            'students.student_num',
+            'class.class_name',
+            'internship_plan.course_code',
+            'internship_plan.course_name',
+            'arrangement.title',
+        ]);
+
+        $rows = self::rows($query->orderByDesc('score.id')->limit(self::STAT_DATA_LIMIT)->get([
+            'score.id',
+            'score.student_id',
+            'score.arrangement_id',
+            'score.final_score',
+            'arrangement.title as arrangement_title',
+            'arrangement.credit as arrangement_credit',
+            'arrangement.plan_id',
+            'internship_plan.course_code',
+            'internship_plan.course_name',
+            'internship_plan.score_rule',
+            'students.name as student_name',
+            'students.student_num',
+            'students.grade_id',
+            'students.dep_id',
+            'students.profession_id',
+            'students.class_id',
+            'grade_list.grade_name',
+            'department.dep_name',
+            'profession.profession_name',
+            'class.class_name',
+        ]));
+
+        return self::paginateArrayRows(self::courseScoreRows($rows), $filters);
     }
 
     public static function statReport(array $scope, array $filters, string $today): array
@@ -752,6 +854,147 @@ class InternshipRecord extends TableRecord
             ]);
     }
 
+    public static function gradeRowByName(string $gradeName): ?array
+    {
+        $row = self::queryTable('grade_list')
+            ->where('grade_name', $gradeName)
+            ->where('flag', 'on')
+            ->whereNull('deleted_at')
+            ->first(['grade_id', 'grade_name']);
+
+        return $row ? self::rows([$row])[0] : null;
+    }
+
+    public static function departmentRowByName(string $depName, array $scope): ?array
+    {
+        $query = self::queryTable('department')
+            ->where('dep_name', $depName)
+            ->where('flag', 'on')
+            ->whereNull('deleted_at');
+        self::applyDepProfessionScope($query, $scope, 'department.dep_id', null);
+        $row = $query->first(['dep_id', 'dep_name']);
+
+        return $row ? self::rows([$row])[0] : null;
+    }
+
+    public static function professionRowByName(string $professionName, int $gradeId, int $depId, array $scope): ?array
+    {
+        $query = self::queryTable('profession')
+            ->where('profession_name', $professionName)
+            ->where('grade_id', $gradeId)
+            ->where('dep_id', $depId)
+            ->where('flag', 'on')
+            ->whereNull('deleted_at');
+        self::applyDepProfessionScope($query, $scope, 'profession.dep_id', 'profession.profession_id');
+        $row = $query->first(['profession_id', 'profession_name', 'grade_id', 'dep_id']);
+
+        return $row ? self::rows([$row])[0] : null;
+    }
+
+    public static function teacherImportRow(string $teacherNum, ?string $teacherName, array $scope): ?array
+    {
+        $row = null;
+        if ($teacherNum !== '') {
+            $query = self::queryTable('teacher_list')
+                ->where('teacher_num', $teacherNum)
+                ->where('status', 'enabled')
+                ->whereNull('deleted_at');
+            self::applyOptionScope($query, $scope, 'teacher_list.dep_id', 'teacher_list.profession_id');
+            $row = $query->first(['teacher_id', 'teacher_name', 'teacher_num', 'dep_id', 'profession_id']);
+        }
+        if (!$row && $teacherName) {
+            $query = self::queryTable('teacher_list')
+                ->where('teacher_name', $teacherName)
+                ->where('status', 'enabled')
+                ->whereNull('deleted_at');
+            self::applyOptionScope($query, $scope, 'teacher_list.dep_id', 'teacher_list.profession_id');
+            $row = $query->first(['teacher_id', 'teacher_name', 'teacher_num', 'dep_id', 'profession_id']);
+        }
+
+        return $row ? self::rows([$row])[0] : null;
+    }
+
+    public static function classRowsByNames(int $gradeId, int $depId, int $professionId, array $classNames, array $scope): array
+    {
+        $classNames = array_values(array_unique(array_filter(array_map('trim', $classNames))));
+        if (!$classNames) {
+            return [];
+        }
+
+        $query = self::applyOptionScope(self::queryTable('class')
+            ->where('class.grade_id', $gradeId)
+            ->where('class.dep_id', $depId)
+            ->where('class.profession_id', $professionId)
+            ->whereIn('class.class_name', $classNames)
+            ->where('class.flag', 'on')
+            ->whereNull('class.deleted_at'), $scope, 'class.dep_id', 'class.profession_id');
+
+        return self::rows($query->orderBy('class.sort')->orderBy('class.class_id')->get([
+            'class.class_id',
+            'class.class_name',
+            'class.class_num',
+            'class.grade_id',
+            'class.dep_id',
+            'class.profession_id',
+        ]));
+    }
+
+    public static function planIdForImport(array $values, string $uuid, string $now): int
+    {
+        $query = self::queryTable('internship_plan')
+            ->where('grade_id', (int) $values['grade_id'])
+            ->where('dep_id', (int) $values['dep_id'])
+            ->where('profession_id', (int) $values['profession_id'])
+            ->whereNull('deleted_at');
+        $courseCode = trim((string) ($values['course_code'] ?? ''));
+        if ($courseCode !== '') {
+            $query->where('course_code', $courseCode);
+        } else {
+            $query->where('course_name', (string) $values['course_name']);
+        }
+
+        $row = $query->first(['id']);
+        $payload = [
+            'source_type' => 'edu_system',
+            'course_code' => $courseCode ?: null,
+            'course_name' => (string) $values['course_name'],
+            'grade_id' => (int) $values['grade_id'],
+            'dep_id' => (int) $values['dep_id'],
+            'profession_id' => (int) $values['profession_id'],
+            'semester' => $values['semester'] ?? '',
+            'credit' => $values['credit'] ?? null,
+            'student_count' => (int) ($values['student_count'] ?? 0),
+            'score_rule' => $values['score_rule'] ?? 'average',
+            'plan_content' => json_encode($values['plan_content'] ?? [], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+            'status' => 'enabled',
+            'updated_at' => $now,
+            'deleted_at' => null,
+        ];
+        if ($row) {
+            self::updateById('internship_plan', (int) $row->id, $payload);
+            return (int) $row->id;
+        }
+
+        return self::insertRow('internship_plan', array_merge($payload, [
+            'uuid' => $uuid,
+            'submitter_id' => $values['submitter_id'] ?? null,
+            'created_at' => $now,
+        ]));
+    }
+
+    public static function arrangementIdByPlanTaskNo(int $planId, string $taskNo): int
+    {
+        if ($planId <= 0 || trim($taskNo) === '') {
+            return 0;
+        }
+
+        return (int) (self::queryTable('arrangement')
+            ->where('plan_id', $planId)
+            ->where('task_no', $taskNo)
+            ->whereNull('deleted_at')
+            ->value('id') ?: 0);
+    }
+
     public static function classRowsByIds(array $classIds, array $scope): array
     {
         $classIds = self::ids($classIds);
@@ -821,6 +1064,44 @@ class InternshipRecord extends TableRecord
                 'profession_id',
                 'class_id',
             ]));
+    }
+
+    public static function taskStudentRows(array $scope, int $arrangementId): array
+    {
+        if ($arrangementId <= 0) {
+            return [];
+        }
+
+        $query = self::applyStudentScope(self::queryTable('pair')
+            ->leftJoin('students', 'pair.student_id', '=', 'students.student_id')
+            ->leftJoin('class', 'students.class_id', '=', 'class.class_id')
+            ->leftJoin('department', 'students.dep_id', '=', 'department.dep_id')
+            ->leftJoin('profession', 'students.profession_id', '=', 'profession.profession_id')
+            ->leftJoin('teacher_list', 'pair.teacher_id', '=', 'teacher_list.teacher_id')
+            ->where('pair.arrangement_id', $arrangementId)
+            ->where('pair.type', 'internship')
+            ->where('pair.status', 'active')
+            ->whereNull('pair.deleted_at'), $scope, 'pair.student_id');
+
+        return self::rows($query->orderBy('students.class_id')->orderBy('students.student_id')->get([
+            'pair.id',
+            'pair.uuid',
+            'pair.student_id',
+            'pair.teacher_id',
+            'pair.enterprise_mentor_id',
+            'pair.arrangement_id',
+            'pair.status',
+            'students.name as student_name',
+            'students.student_num',
+            'students.grade_id',
+            'students.dep_id',
+            'students.profession_id',
+            'students.class_id',
+            'class.class_name',
+            'department.dep_name',
+            'profession.profession_name',
+            'teacher_list.teacher_name',
+        ]));
     }
 
     public static function syncTaskClasses(int $arrangementId, array $classRows, array $studentCounts, callable $uuidFactory, string $now): void
@@ -1331,6 +1612,7 @@ class InternshipRecord extends TableRecord
 
     public static function recordingRows(string $table, int $parentId): array
     {
+        self::ensureRecordingTable($table);
         return self::queryTable($table)
             ->where('parent_id', $parentId)
             ->whereNull('deleted_at')
@@ -2450,6 +2732,88 @@ class InternshipRecord extends TableRecord
                 'total' => $total,
             ],
         ];
+    }
+
+    private static function courseScoreRows(array $rows): array
+    {
+        $groups = [];
+        foreach ($rows as $row) {
+            $planId = (int) ($row['plan_id'] ?? 0);
+            $studentId = (int) ($row['student_id'] ?? 0);
+            if ($planId <= 0 || $studentId <= 0) {
+                continue;
+            }
+            $key = "{$planId}:{$studentId}";
+            if (!isset($groups[$key])) {
+                $groups[$key] = [
+                    'plan_id' => $planId,
+                    'student_id' => $studentId,
+                    'student_name' => $row['student_name'] ?? '',
+                    'student_num' => $row['student_num'] ?? '',
+                    'course_code' => $row['course_code'] ?? '',
+                    'course_name' => $row['course_name'] ?? '',
+                    'score_rule' => $row['score_rule'] ?? 'average',
+                    'grade_name' => $row['grade_name'] ?? '',
+                    'dep_name' => $row['dep_name'] ?? '',
+                    'profession_name' => $row['profession_name'] ?? '',
+                    'class_name' => $row['class_name'] ?? '',
+                    'task_scores' => [],
+                ];
+            }
+            $groups[$key]['task_scores'][] = [
+                'arrangement_id' => (int) ($row['arrangement_id'] ?? 0),
+                'arrangement_title' => $row['arrangement_title'] ?? '',
+                'credit' => is_numeric($row['arrangement_credit'] ?? null) ? (float) $row['arrangement_credit'] : null,
+                'final_score' => is_numeric($row['final_score'] ?? null) ? (float) $row['final_score'] : null,
+            ];
+        }
+
+        $items = [];
+        foreach ($groups as $group) {
+            $scores = array_values(array_filter($group['task_scores'], static fn (array $score): bool => $score['final_score'] !== null));
+            $group['task_count'] = count($group['task_scores']);
+            $group['scored_task_count'] = count($scores);
+            $group['course_final_score'] = self::courseFinalScore($scores, (string) ($group['score_rule'] ?? 'average'));
+            $group['task_score_text'] = implode('；', array_map(static function (array $score): string {
+                return sprintf('%s：%s', $score['arrangement_title'] ?: '-', $score['final_score'] ?? '-');
+            }, $group['task_scores']));
+            $items[] = $group;
+        }
+
+        usort($items, static function (array $left, array $right): int {
+            $course = strcmp((string) ($left['course_name'] ?? ''), (string) ($right['course_name'] ?? ''));
+            if ($course !== 0) {
+                return $course;
+            }
+
+            return strcmp((string) ($left['student_num'] ?? ''), (string) ($right['student_num'] ?? ''));
+        });
+
+        return $items;
+    }
+
+    private static function courseFinalScore(array $scores, string $rule): ?float
+    {
+        if (!$scores) {
+            return null;
+        }
+        $values = array_map(static fn (array $score): float => (float) $score['final_score'], $scores);
+        if ($rule === 'sum') {
+            return round(array_sum($values), 2);
+        }
+        if ($rule === 'weighted') {
+            $weightTotal = 0.0;
+            $total = 0.0;
+            foreach ($scores as $score) {
+                $weight = is_numeric($score['credit'] ?? null) && (float) $score['credit'] > 0 ? (float) $score['credit'] : 1.0;
+                $weightTotal += $weight;
+                $total += ((float) $score['final_score']) * $weight;
+            }
+
+            return round($total / max(1.0, $weightTotal), 2);
+        }
+
+        return round(array_sum($values) / count($values), 2);
     }
 
     private static function indexRows(array $rows, string $key): array

@@ -7,9 +7,11 @@ use app\model\channel\PracticeRecord;
 use app\server\CurrentContext;
 use app\server\config\ConfigService;
 use InvalidArgumentException;
+use PhpOffice\PhpSpreadsheet\IOFactory;
 use RuntimeException;
 use support\Request;
 use Throwable;
+use Webman\Http\UploadFile;
 
 class InternshipService
 {
@@ -52,12 +54,48 @@ class InternshipService
     ];
     private const REVIEW_ENTITY_CONFIG = [
         'application' => ['table' => 'application', 'recording' => 'application_recording'],
+        'arrangement' => ['table' => 'arrangement', 'recording' => 'arrangement_recording'],
         'journal' => ['table' => 'journal', 'recording' => 'journal_recording'],
         'report' => ['table' => 'report', 'recording' => 'report_recording'],
         'plan' => ['table' => 'internship_plan', 'recording' => 'plan_recording'],
         'delay' => ['table' => 'apply_report_delay', 'recording' => 'apply_report_delay_recording'],
     ];
     private const DELAY_CONFIG_KEYS = ['report_deadline', 'journal_deadline'];
+    private const EXCEL_EXTENSIONS = ['xls', 'xlsx'];
+    private const EXCEL_MAX_SIZE = 10485760;
+    private const EXCEL_MAX_ROWS = 5000;
+    private const ARRANGEMENT_IMPORT_REQUIRED = [
+        'grade_name',
+        'dep_name',
+        'profession_name',
+        'course_name',
+        'credit',
+        'task_no',
+        'teacher_num',
+        'start_date',
+        'end_date',
+        'location',
+        'class_names',
+    ];
+    private const ARRANGEMENT_IMPORT_HEADERS = [
+        'grade_name' => ['届次', '届次名称', '年级', '年级名称', 'grade', 'grade_name'],
+        'dep_name' => ['学院', '学院名称', '院系', '院系名称', 'department', 'department_name', 'dep_name'],
+        'profession_name' => ['专业', '专业名称', 'profession', 'profession_name', 'major', 'major_name'],
+        'course_code' => ['课程代码', '课程编号', 'course_code', 'coursecode'],
+        'course_name' => ['课程名称', '课程', 'course_name', 'coursename'],
+        'credit' => ['学分', 'credit'],
+        'task_no' => ['任务编号', '任务号', 'task_no', 'taskno'],
+        'batch_no' => ['批次', '批次号', 'batch', 'batch_no'],
+        'teacher_num' => ['老师工号', '教师工号', '教师编号', 'teacher_num', 'teachernum'],
+        'teacher_name' => ['老师姓名', '教师姓名', '负责老师', 'teacher_name', 'teachername'],
+        'start_date' => ['开始日期', '开始时间', 'start_date', 'startdate'],
+        'end_date' => ['结束日期', '结束时间', 'end_date', 'enddate'],
+        'location' => ['地点', '实习地点', 'location'],
+        'class_names' => ['班级', '班级名称', '任务班级', 'class', 'class_name'],
+        'student_count' => ['学生人数', '人数', 'student_count', 'studentcount'],
+        'type' => ['类型', '实习类型', 'type'],
+        'organize_mode' => ['组织方式', '实习方式', 'organize_mode', 'organizemode'],
+    ];
     private const STUDENT_DOCUMENT_COLUMNS = [
         'students.name as student_name',
         'students.student_num',
@@ -196,105 +234,83 @@ class InternshipService
         ]));
     }
 
+    public function arrangementDetail(Request $request): array
+    {
+        $this->requirePermission('internship:view');
+        $id = $this->requiredRowId($request, 'arrangement');
+        $detail = InternshipRecord::arrangementDetail($this->scopeContext(), $id);
+        if (!$detail) {
+            throw new RuntimeException('实习任务不存在或无权限', 40301);
+        }
+
+        return $detail;
+    }
+
     public function saveArrangement(Request $request): array
     {
         $this->requirePermission('internship:manage');
         $this->requireAdminRole();
 
-        $planId = $this->requiredInt($request, 'plan_id');
-        $teacherId = $this->requiredInt($request, 'teacher_id');
-        $classIds = $this->intArray($request->input('class_ids', []));
-        if (!$classIds) {
-            throw new InvalidArgumentException('请选择任务班级');
-        }
-        $title = $this->requiredString($request, 'title', 180);
-        $startDate = $this->requiredDate($request, 'start_date');
-        $endDate = $this->requiredDate($request, 'end_date');
-        if (strtotime($endDate) < strtotime($startDate)) {
-            throw new InvalidArgumentException('结束日期不能早于开始日期');
-        }
+        return $this->persistArrangement([
+            'id' => $this->inputRowId($request, 'arrangement'),
+            'uuid' => $this->nullableString($request, 'uuid', 36),
+            'plan_id' => $this->requiredInt($request, 'plan_id'),
+            'teacher_id' => $this->requiredInt($request, 'teacher_id'),
+            'class_ids' => $this->intArray($request->input('class_ids', [])),
+            'title' => $this->requiredString($request, 'title', 180),
+            'name' => $this->stringInput($request, 'name', 180) ?: $this->requiredString($request, 'title', 180),
+            'base_id' => $this->optionalInt($request, 'base_id'),
+            'enterprise_mentor_id' => $this->optionalInt($request, 'enterprise_mentor_id'),
+            'task_no' => $this->nullableString($request, 'task_no', 80),
+            'batch_no' => $this->nullableString($request, 'batch_no', 80),
+            'credit' => $this->decimalInput($request, 'credit'),
+            'type' => $this->enum($request, 'type', self::ARRANGEMENT_TYPES, 'major_external'),
+            'organize_mode' => $this->enum($request, 'organize_mode', self::ORGANIZE_MODES, 'centralized'),
+            'start_date' => $this->requiredDate($request, 'start_date'),
+            'end_date' => $this->requiredDate($request, 'end_date'),
+            'location' => $this->nullableString($request, 'location', 255),
+            'description' => $this->nullableString($request, 'description', 2000),
+            'status' => $this->enum($request, 'status', ['enabled', 'disabled', 'draft', 'wait', 'accept', 'modify'], 'enabled'),
+        ], '手工维护实习任务');
+    }
 
-        $scope = $this->scopeContext();
-        $plan = InternshipRecord::planRowForTask($planId);
-        if (!$plan || !InternshipRecord::planVisible($scope, $planId)) {
-            throw new RuntimeException('实习计划不存在或无权限', 40301);
-        }
-        if (!InternshipRecord::teacherVisible($scope, $teacherId)) {
-            throw new RuntimeException('负责老师不存在或无权限', 40301);
-        }
+    public function importArrangementAssignments(Request $request): array
+    {
+        $this->requirePermission('internship:manage');
+        $this->requireAdminRole();
 
-        $classRows = InternshipRecord::classRowsByIds($classIds, $scope);
-        if (count($classRows) !== count($classIds)) {
-            throw new RuntimeException('任务班级不存在或无权限', 40301);
-        }
-        foreach ($classRows as $classRow) {
-            if ((int) ($classRow['grade_id'] ?? 0) !== (int) ($plan->grade_id ?? 0)
-                || (int) ($classRow['dep_id'] ?? 0) !== (int) ($plan->dep_id ?? 0)
-                || (int) ($classRow['profession_id'] ?? 0) !== (int) ($plan->profession_id ?? 0)) {
-                throw new InvalidArgumentException('任务班级必须属于所选计划的届次、学院和专业');
+        $rows = $this->arrangementImportRows($this->excelFile($request));
+        $summary = [
+            'total' => count($rows),
+            'created' => 0,
+            'updated' => 0,
+            'failed' => 0,
+            'class_count' => 0,
+            'student_count' => 0,
+            'errors' => [],
+        ];
+        foreach ($rows as $row) {
+            try {
+                $result = $this->importArrangementRow($row);
+                if (($result['created'] ?? false) === true) {
+                    $summary['created']++;
+                } else {
+                    $summary['updated']++;
+                }
+                $summary['class_count'] += (int) ($result['class_count'] ?? 0);
+                $summary['student_count'] += (int) ($result['student_count'] ?? 0);
+            } catch (Throwable $exception) {
+                $summary['failed']++;
+                if (count($summary['errors']) < 30) {
+                    $summary['errors'][] = [
+                        'row' => (int) ($row['row_number'] ?? 0),
+                        'message' => $exception->getMessage(),
+                    ];
+                }
             }
         }
 
-        $existingId = $this->inputRowId($request, 'arrangement');
-        if (InternshipRecord::teacherTaskTimeConflictExists($teacherId, $startDate, $endDate, $existingId)) {
-            throw new InvalidArgumentException('该老师在当前时间段已有任务，请调整时间或负责老师');
-        }
-
-        return $this->connection()->transaction(function () use ($classRows, $endDate, $existingId, $plan, $planId, $request, $startDate, $teacherId, $title): array {
-            $now = $this->now();
-            $studentRows = InternshipRecord::studentRowsByClassIds(array_column($classRows, 'class_id'));
-            $studentCounts = [];
-            foreach ($studentRows as $studentRow) {
-                $classId = (int) ($studentRow['class_id'] ?? 0);
-                $studentCounts[$classId] = ($studentCounts[$classId] ?? 0) + 1;
-            }
-
-            $values = [
-                'plan_id' => $planId,
-                'name' => $this->stringInput($request, 'name', 180) ?: $title,
-                'base_id' => $this->optionalInt($request, 'base_id'),
-                'dep_id' => (int) $plan->dep_id,
-                'profession_id' => (int) $plan->profession_id,
-                'semester' => (string) ($plan->semester ?? ''),
-                'teacher_id' => $teacherId,
-                'task_no' => $this->nullableString($request, 'task_no', 80),
-                'batch_no' => $this->nullableString($request, 'batch_no', 80),
-                'credit' => $this->decimalInput($request, 'credit') ?? ($plan->credit === null ? null : (float) $plan->credit),
-                'student_count' => count($studentRows),
-                'type' => $this->enum($request, 'type', self::ARRANGEMENT_TYPES, 'major_external'),
-                'organize_mode' => $this->enum($request, 'organize_mode', self::ORGANIZE_MODES, 'centralized'),
-                'title' => $title,
-                'start_date' => $startDate,
-                'end_date' => $endDate,
-                'location' => $this->nullableString($request, 'location', 255),
-                'description' => $this->nullableString($request, 'description', 2000),
-                'created_by' => CurrentContext::accountId(),
-                'status' => $this->enum($request, 'status', ['enabled', 'disabled', 'draft', 'wait', 'accept', 'modify'], 'enabled'),
-                'updated_at' => $now,
-                'deleted_at' => null,
-            ];
-
-            $result = $this->saveRow('arrangement', $request, $values);
-            $arrangementId = (int) $result['id'];
-            InternshipRecord::syncTaskClasses($arrangementId, $classRows, $studentCounts, fn (): string => $this->uuid(), $now);
-            $pairResult = InternshipRecord::syncTaskStudentPairs(
-                $arrangementId,
-                $teacherId,
-                $this->optionalInt($request, 'enterprise_mentor_id'),
-                $studentRows,
-                fn (): string => $this->uuid(),
-                $now
-            );
-
-            return [
-                'id' => $arrangementId,
-                'uuid' => $result['uuid'],
-                'class_count' => count($classRows),
-                'pair_count' => count($pairResult['pair_ids']),
-                'student_count' => count($pairResult['student_ids']),
-                'item' => InternshipRecord::activeRowById('arrangement', $arrangementId),
-            ];
-        });
+        return $summary;
     }
 
     public function applications(Request $request): array
@@ -772,6 +788,16 @@ class InternshipService
         ]));
     }
 
+    public function courseScores(Request $request): array
+    {
+        $this->requirePermission('internship:view');
+
+        return InternshipRecord::courseScorePage($this->scopeContext(), $this->requestFilters($request, [
+            'page', 'page_size', 'per_page', 'keyword', 'plan_id', 'arrangement_id',
+            'dep_id', 'profession_id', 'grade_id', 'class_id',
+        ]));
+    }
+
     public function stats(Request $request): array
     {
         $this->requirePermission('stat:view');
@@ -1125,6 +1151,278 @@ class InternshipService
 
             return ['id' => $id, 'status' => $status];
         });
+    }
+
+    private function persistArrangement(array $input, string $source): array
+    {
+        $planId = (int) ($input['plan_id'] ?? 0);
+        $teacherId = (int) ($input['teacher_id'] ?? 0);
+        $classIds = $this->intArray($input['class_ids'] ?? []);
+        $title = trim((string) ($input['title'] ?? ''));
+        $startDate = (string) ($input['start_date'] ?? '');
+        $endDate = (string) ($input['end_date'] ?? '');
+        $existingId = (int) ($input['id'] ?? 0);
+
+        if ($planId <= 0) {
+            throw new InvalidArgumentException('请选择实习计划');
+        }
+        if ($teacherId <= 0) {
+            throw new InvalidArgumentException('请选择负责老师');
+        }
+        if (!$classIds) {
+            throw new InvalidArgumentException('请选择任务班级');
+        }
+        if ($title === '') {
+            throw new InvalidArgumentException('任务标题不能为空');
+        }
+        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $startDate) || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $endDate)) {
+            throw new InvalidArgumentException('任务日期无效');
+        }
+        if (strtotime($endDate) < strtotime($startDate)) {
+            throw new InvalidArgumentException('结束日期不能早于开始日期');
+        }
+
+        $scope = $this->scopeContext();
+        $plan = InternshipRecord::planRowForTask($planId);
+        if (!$plan || !InternshipRecord::planVisible($scope, $planId)) {
+            throw new RuntimeException('实习计划不存在或无权限', 40301);
+        }
+        if ($existingId > 0) {
+            $this->assertArrangementVisible($existingId);
+        }
+        if (!InternshipRecord::teacherVisible($scope, $teacherId)) {
+            throw new RuntimeException('负责老师不存在或无权限', 40301);
+        }
+
+        $classRows = InternshipRecord::classRowsByIds($classIds, $scope);
+        if (count($classRows) !== count($classIds)) {
+            throw new RuntimeException('任务班级不存在或无权限', 40301);
+        }
+        foreach ($classRows as $classRow) {
+            if ((int) ($classRow['grade_id'] ?? 0) !== (int) ($plan->grade_id ?? 0)
+                || (int) ($classRow['dep_id'] ?? 0) !== (int) ($plan->dep_id ?? 0)
+                || (int) ($classRow['profession_id'] ?? 0) !== (int) ($plan->profession_id ?? 0)) {
+                throw new InvalidArgumentException('任务班级必须属于所选计划的届次、学院和专业');
+            }
+        }
+        if (InternshipRecord::teacherTaskTimeConflictExists($teacherId, $startDate, $endDate, $existingId ?: null)) {
+            throw new InvalidArgumentException('该老师在当前时间段已有任务，请调整时间或负责老师');
+        }
+
+        return $this->connection()->transaction(function () use ($classRows, $endDate, $existingId, $input, $plan, $planId, $source, $startDate, $teacherId, $title): array {
+            $now = $this->now();
+            $studentRows = InternshipRecord::studentRowsByClassIds(array_column($classRows, 'class_id'));
+            $studentCounts = [];
+            foreach ($studentRows as $studentRow) {
+                $classId = (int) ($studentRow['class_id'] ?? 0);
+                $studentCounts[$classId] = ($studentCounts[$classId] ?? 0) + 1;
+            }
+
+            $before = $existingId > 0 ? InternshipRecord::arrangementDetail($this->scopeContext(), $existingId) : null;
+            $values = [
+                'plan_id' => $planId,
+                'name' => trim((string) ($input['name'] ?? '')) ?: $title,
+                'base_id' => $input['base_id'] ?? null,
+                'dep_id' => (int) $plan->dep_id,
+                'profession_id' => (int) $plan->profession_id,
+                'semester' => (string) ($plan->semester ?? ''),
+                'teacher_id' => $teacherId,
+                'task_no' => $input['task_no'] ?? null,
+                'batch_no' => $input['batch_no'] ?? null,
+                'credit' => $input['credit'] ?? ($plan->credit === null ? null : (float) $plan->credit),
+                'student_count' => count($studentRows),
+                'type' => $input['type'] ?? 'major_external',
+                'organize_mode' => $input['organize_mode'] ?? 'centralized',
+                'title' => $title,
+                'start_date' => $startDate,
+                'end_date' => $endDate,
+                'location' => $input['location'] ?? null,
+                'description' => $input['description'] ?? null,
+                'created_by' => CurrentContext::accountId(),
+                'status' => $input['status'] ?? 'enabled',
+                'updated_at' => $now,
+                'deleted_at' => null,
+            ];
+
+            if ($existingId > 0) {
+                InternshipRecord::updateById('arrangement', $existingId, $values);
+                $arrangementId = $existingId;
+                $uuid = (string) InternshipRecord::uuidById('arrangement', $existingId);
+            } else {
+                $uuid = (string) ($input['uuid'] ?? '') ?: $this->uuid();
+                $arrangementId = InternshipRecord::insertRow('arrangement', array_merge($values, [
+                    'uuid' => $uuid,
+                    'created_at' => $now,
+                ]));
+            }
+
+            InternshipRecord::syncTaskClasses($arrangementId, $classRows, $studentCounts, fn (): string => $this->uuid(), $now);
+            $pairResult = InternshipRecord::syncTaskStudentPairs(
+                $arrangementId,
+                $teacherId,
+                $input['enterprise_mentor_id'] ?? null,
+                $studentRows,
+                fn (): string => $this->uuid(),
+                $now
+            );
+            $after = InternshipRecord::arrangementDetail($this->scopeContext(), $arrangementId);
+            $this->recordWorkflow(
+                'arrangement_recording',
+                'arrangement',
+                $arrangementId,
+                $existingId > 0 ? 'change' : 'create',
+                $before['item']['status'] ?? 'draft',
+                (string) $values['status'],
+                $this->arrangementWorkflowContent($source, $before, $after),
+                'accept'
+            );
+
+            return [
+                'id' => $arrangementId,
+                'uuid' => $uuid,
+                'created' => $existingId <= 0,
+                'class_count' => count($classRows),
+                'pair_count' => count($pairResult['pair_ids']),
+                'student_count' => count($pairResult['student_ids']),
+                'item' => InternshipRecord::activeRowById('arrangement', $arrangementId),
+            ];
+        });
+    }
+
+    private function importArrangementRow(array $row): array
+    {
+        if (!empty($row['invalid_message'])) {
+            throw new InvalidArgumentException((string) $row['invalid_message']);
+        }
+
+        $scope = $this->scopeContext();
+        $grade = InternshipRecord::gradeRowByName($this->requiredImportValue($row, 'grade_name', '届次'));
+        if (!$grade) {
+            throw new InvalidArgumentException('届次不存在');
+        }
+        $department = InternshipRecord::departmentRowByName($this->requiredImportValue($row, 'dep_name', '学院'), $scope);
+        if (!$department) {
+            throw new InvalidArgumentException('学院不存在或无权限');
+        }
+        $profession = InternshipRecord::professionRowByName(
+            $this->requiredImportValue($row, 'profession_name', '专业'),
+            (int) $grade['grade_id'],
+            (int) $department['dep_id'],
+            $scope
+        );
+        if (!$profession) {
+            throw new InvalidArgumentException('专业不存在或不属于所选届次学院');
+        }
+        $teacher = InternshipRecord::teacherImportRow(
+            trim((string) ($row['teacher_num'] ?? '')),
+            trim((string) ($row['teacher_name'] ?? '')) ?: null,
+            $scope
+        );
+        if (!$teacher) {
+            throw new InvalidArgumentException('负责老师不存在或无权限');
+        }
+
+        $classNames = $this->splitImportList($this->requiredImportValue($row, 'class_names', '班级'));
+        $classRows = InternshipRecord::classRowsByNames(
+            (int) $grade['grade_id'],
+            (int) $department['dep_id'],
+            (int) $profession['profession_id'],
+            $classNames,
+            $scope
+        );
+        $foundClassNames = array_map(static fn (array $item): string => (string) ($item['class_name'] ?? ''), $classRows);
+        $missingClassNames = array_values(array_diff($classNames, $foundClassNames));
+        if ($missingClassNames) {
+            throw new InvalidArgumentException('班级不存在：' . implode('、', $missingClassNames));
+        }
+
+        $credit = $this->decimalImportValue($row['credit'] ?? null);
+        if ($credit === null) {
+            throw new InvalidArgumentException('学分无效');
+        }
+        $startDate = $this->dateImportValue($row['start_date'] ?? null);
+        $endDate = $this->dateImportValue($row['end_date'] ?? null);
+        if (!$startDate || !$endDate) {
+            throw new InvalidArgumentException('任务日期无效');
+        }
+
+        $now = $this->now();
+        $planId = InternshipRecord::planIdForImport([
+            'course_code' => trim((string) ($row['course_code'] ?? '')),
+            'course_name' => $this->requiredImportValue($row, 'course_name', '课程名称'),
+            'grade_id' => (int) $grade['grade_id'],
+            'dep_id' => (int) $department['dep_id'],
+            'profession_id' => (int) $profession['profession_id'],
+            'semester' => '',
+            'credit' => $credit,
+            'student_count' => $this->optionalImportInt($row['student_count'] ?? null) ?? 0,
+            'score_rule' => 'average',
+            'submitter_id' => CurrentContext::accountId(),
+            'plan_content' => [
+                'source' => '任务分配导入',
+                'row_number' => (int) ($row['row_number'] ?? 0),
+            ],
+        ], $this->uuid(), $now);
+
+        $taskNo = $this->requiredImportValue($row, 'task_no', '任务编号');
+        return $this->persistArrangement([
+            'id' => InternshipRecord::arrangementIdByPlanTaskNo($planId, $taskNo),
+            'plan_id' => $planId,
+            'teacher_id' => (int) $teacher['teacher_id'],
+            'class_ids' => array_column($classRows, 'class_id'),
+            'title' => $this->requiredImportValue($row, 'course_name', '课程名称') . ' ' . $taskNo,
+            'name' => $this->requiredImportValue($row, 'course_name', '课程名称') . ' ' . $taskNo,
+            'task_no' => $taskNo,
+            'batch_no' => trim((string) ($row['batch_no'] ?? '')) ?: null,
+            'credit' => $credit,
+            'type' => $this->arrangementTypeImportValue($row['type'] ?? null),
+            'organize_mode' => $this->organizeModeImportValue($row['organize_mode'] ?? null),
+            'start_date' => $startDate,
+            'end_date' => $endDate,
+            'location' => $this->requiredImportValue($row, 'location', '地点'),
+            'description' => 'Excel 导入任务分配',
+            'status' => 'enabled',
+        ], 'Excel导入任务分配');
+    }
+
+    private function arrangementWorkflowContent(string $source, ?array $before, ?array $after): string
+    {
+        $afterItem = $after['item'] ?? [];
+        if (!$before) {
+            return sprintf(
+                '%s：%s，负责老师 %s，绑定 %d 个班级、%d 名学生。',
+                $source,
+                $afterItem['title'] ?? '-',
+                $afterItem['teacher_name'] ?? '-',
+                count($after['classes'] ?? []),
+                count($after['students'] ?? [])
+            );
+        }
+
+        $beforeItem = $before['item'] ?? [];
+        $changes = [];
+        foreach ([
+            'teacher_name' => '负责老师',
+            'start_date' => '开始日期',
+            'end_date' => '结束日期',
+            'location' => '地点',
+            'credit' => '学分',
+            'student_count' => '学生人数',
+            'status' => '状态',
+        ] as $field => $label) {
+            $old = (string) ($beforeItem[$field] ?? '');
+            $new = (string) ($afterItem[$field] ?? '');
+            if ($old !== $new) {
+                $changes[] = "{$label}：{$old} -> {$new}";
+            }
+        }
+        $beforeClasses = array_map(static fn (array $item): string => (string) ($item['class_name'] ?? ''), $before['classes'] ?? []);
+        $afterClasses = array_map(static fn (array $item): string => (string) ($item['class_name'] ?? ''), $after['classes'] ?? []);
+        if ($beforeClasses !== $afterClasses) {
+            $changes[] = '班级：' . (implode('、', $beforeClasses) ?: '-') . ' -> ' . (implode('、', $afterClasses) ?: '-');
+        }
+
+        return $source . '：' . ($changes ? implode('；', $changes) : '任务信息未发生实质变化');
     }
 
     private function documentList(Request $request, string $table, array $columns): array
@@ -1753,6 +2051,7 @@ class InternshipService
 
     private function record(string $table, int $parentId, string $action, ?string $from, string $to, ?string $content): int
     {
+        InternshipRecord::ensureRecordingTable($table);
         return InternshipRecord::insertRow($table, [
             'uuid' => $this->uuid(),
             'parent_id' => $parentId,
@@ -1821,6 +2120,85 @@ class InternshipService
         return (int) $value;
     }
 
+    private function requiredImportValue(array $row, string $field, string $label): string
+    {
+        $value = trim((string) ($row[$field] ?? ''));
+        if ($value === '') {
+            throw new InvalidArgumentException("缺少{$label}");
+        }
+
+        return $value;
+    }
+
+    private function optionalImportInt(mixed $value): ?int
+    {
+        $value = trim((string) $value);
+        return is_numeric($value) ? (int) $value : null;
+    }
+
+    private function decimalImportValue(mixed $value): ?float
+    {
+        $value = trim((string) $value);
+        return is_numeric($value) ? round((float) $value, 2) : null;
+    }
+
+    private function dateImportValue(mixed $value): ?string
+    {
+        if ($value instanceof \DateTimeInterface) {
+            return $value->format('Y-m-d');
+        }
+        if (is_numeric($value)) {
+            $timestamp = ((int) $value - 25569) * 86400;
+            if ($timestamp > 0) {
+                return gmdate('Y-m-d', $timestamp);
+            }
+        }
+        $text = trim((string) $value);
+        if (preg_match('/^\d{4}[-\/.]\d{1,2}[-\/.]\d{1,2}$/', $text)) {
+            $timestamp = strtotime(str_replace(['/', '.'], '-', $text));
+            return $timestamp ? date('Y-m-d', $timestamp) : null;
+        }
+
+        return null;
+    }
+
+    private function splitImportList(string $value): array
+    {
+        return array_values(array_filter(array_map('trim', preg_split('/[,，、;；\\s]+/u', $value) ?: [])));
+    }
+
+    private function arrangementTypeImportValue(mixed $value): string
+    {
+        $text = trim((string) $value);
+        $map = [
+            '认知校内' => 'cognition_internal',
+            '认知校外' => 'cognition_external',
+            '专业校内' => 'major_internal',
+            '专业校外' => 'major_external',
+            '生产实习' => 'production',
+            '毕业实习' => 'graduation',
+        ];
+        $value = $map[$text] ?? $text;
+
+        return in_array($value, self::ARRANGEMENT_TYPES, true) ? $value : 'major_external';
+    }
+
+    private function organizeModeImportValue(mixed $value): string
+    {
+        $text = trim((string) $value);
+        $map = [
+            '集中' => 'centralized',
+            '分散' => 'distributed',
+            '自主' => 'autonomous',
+            '集中实习' => 'centralized',
+            '分散实习' => 'distributed',
+            '自主实习' => 'autonomous',
+        ];
+        $value = $map[$text] ?? $text;
+
+        return in_array($value, self::ORGANIZE_MODES, true) ? $value : 'centralized';
+    }
+
     private function optionalInt(Request $request, string $key): ?int
     {
         $value = $request->input($key);
@@ -1885,6 +2263,163 @@ class InternshipService
     {
         $value = (string) $request->input($key, $default);
         return in_array($value, $values, true) ? $value : $default;
+    }
+
+    private function excelFile(Request $request): UploadFile
+    {
+        $file = $request->file('file');
+        if (!$file instanceof UploadFile || !$file->isValid()) {
+            throw new InvalidArgumentException('上传文件无效');
+        }
+        $extension = strtolower($file->getUploadExtension());
+        if (!in_array($extension, self::EXCEL_EXTENSIONS, true)) {
+            throw new InvalidArgumentException('仅支持 xls、xlsx 文件');
+        }
+        if ($file->getSize() > self::EXCEL_MAX_SIZE) {
+            throw new InvalidArgumentException('文件大小不能超过 10MB');
+        }
+
+        return $file;
+    }
+
+    private function arrangementImportRows(UploadFile $file): array
+    {
+        $spreadsheet = IOFactory::load($file->getPathname());
+        try {
+            $sheetRows = $spreadsheet->getActiveSheet()->toArray(null, false, true, true);
+            [$mapping, $startRow] = $this->arrangementImportHeader($sheetRows);
+            $items = [];
+            foreach ($sheetRows as $rowNumber => $row) {
+                if ((int) $rowNumber < $startRow) {
+                    continue;
+                }
+
+                $item = ['row_number' => (int) $rowNumber];
+                foreach ($mapping as $key => $column) {
+                    $item[$key] = $this->excelCellString($row[$column] ?? '');
+                }
+                if ($this->importRowEmpty($item)) {
+                    continue;
+                }
+                $missing = [];
+                foreach (self::ARRANGEMENT_IMPORT_REQUIRED as $field) {
+                    if (($item[$field] ?? '') === '') {
+                        $missing[] = $this->arrangementImportLabel($field);
+                    }
+                }
+                if ($missing) {
+                    $item['invalid_message'] = '缺少' . implode('、', $missing);
+                }
+                $items[] = $item;
+                if (count($items) > self::EXCEL_MAX_ROWS) {
+                    throw new InvalidArgumentException('单次最多导入 5000 行');
+                }
+            }
+            if (!$items) {
+                throw new InvalidArgumentException('Excel 中没有可导入的数据');
+            }
+
+            return $items;
+        } finally {
+            $spreadsheet->disconnectWorksheets();
+        }
+    }
+
+    private function arrangementImportHeader(array $sheetRows): array
+    {
+        foreach (array_slice($sheetRows, 0, 5, true) as $rowNumber => $row) {
+            $mapping = [];
+            foreach ($row as $column => $value) {
+                $key = $this->arrangementImportHeaderKey($value);
+                if ($key && !isset($mapping[$key])) {
+                    $mapping[$key] = $column;
+                }
+            }
+            if (count(array_intersect(self::ARRANGEMENT_IMPORT_REQUIRED, array_keys($mapping))) === count(self::ARRANGEMENT_IMPORT_REQUIRED)) {
+                return [$mapping, (int) $rowNumber + 1];
+            }
+        }
+
+        return [[
+            'grade_name' => 'A',
+            'dep_name' => 'B',
+            'profession_name' => 'C',
+            'course_name' => 'D',
+            'credit' => 'E',
+            'task_no' => 'F',
+            'teacher_num' => 'G',
+            'start_date' => 'H',
+            'end_date' => 'I',
+            'location' => 'J',
+            'class_names' => 'K',
+        ], 1];
+    }
+
+    private function arrangementImportHeaderKey(mixed $value): ?string
+    {
+        $header = $this->normalizeExcelText((string) $value);
+        if ($header === '') {
+            return null;
+        }
+        foreach (self::ARRANGEMENT_IMPORT_HEADERS as $key => $aliases) {
+            foreach ($aliases as $alias) {
+                if ($header === $this->normalizeExcelText($alias)) {
+                    return $key;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private function importRowEmpty(array $row): bool
+    {
+        foreach (self::ARRANGEMENT_IMPORT_HEADERS as $field => $_aliases) {
+            if (($row[$field] ?? '') !== '') {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private function arrangementImportLabel(string $field): string
+    {
+        return match ($field) {
+            'grade_name' => '届次',
+            'dep_name' => '学院',
+            'profession_name' => '专业',
+            'course_name' => '课程名称',
+            'credit' => '学分',
+            'task_no' => '任务编号',
+            'teacher_num' => '老师工号',
+            'start_date' => '开始日期',
+            'end_date' => '结束日期',
+            'location' => '地点',
+            'class_names' => '班级',
+            default => '字段',
+        };
+    }
+
+    private function excelCellString(mixed $value): string
+    {
+        if ($value instanceof \DateTimeInterface) {
+            $value = $value->format('Y-m-d');
+        } elseif (is_float($value) && floor($value) === $value) {
+            $value = (string) (int) $value;
+        } else {
+            $value = (string) $value;
+        }
+
+        $value = trim((string) preg_replace('/\s+/u', ' ', $value));
+        return function_exists('mb_substr') ? mb_substr($value, 0, 180) : substr($value, 0, 180);
+    }
+
+    private function normalizeExcelText(string $value): string
+    {
+        $value = trim($value);
+        $value = function_exists('mb_strtolower') ? mb_strtolower($value) : strtolower($value);
+        return (string) preg_replace('/[\s　_\-:：()（）]+/u', '', $value);
     }
 
     private function dateInput(Request $request, string $key): ?string
