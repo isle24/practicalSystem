@@ -101,7 +101,7 @@
           </label>
           <label>
             <span>分类</span>
-            <el-select v-model="articleDialog.form.category_id" clearable filterable placeholder="选择分类">
+            <el-select v-model="articleDialog.form.category_id" clearable filterable placeholder="选择分类" @change="syncArticleVisibleRolesByCategory">
               <el-option v-for="item in flatCategories" :key="item.id" :label="item.name" :value="item.id" />
             </el-select>
           </label>
@@ -115,6 +115,12 @@
               <el-option label="草稿" value="draft" />
               <el-option label="发布" value="published" />
               <el-option label="归档" value="archived" />
+            </el-select>
+          </label>
+          <label>
+            <span>适用角色</span>
+            <el-select v-model="articleDialog.form.visible_roles" multiple collapse-tags collapse-tags-tooltip>
+              <el-option v-for="item in roleOptions" :key="item.value" :label="item.label" :value="item.value" />
             </el-select>
           </label>
           <label class="span-2">
@@ -231,6 +237,13 @@ const filters = reactive({
   status: 'all',
   keyword: '',
 });
+const roleOptions = [
+  { value: 'all', label: '全员' },
+  { value: 'admin', label: '管理员' },
+  { value: 'teacher', label: '教师' },
+  { value: 'student', label: '学生' },
+  { value: 'enterprise', label: '企业' },
+];
 const pagination = reactive({
   page: 1,
   page_size: 20,
@@ -280,6 +293,9 @@ async function loadArticles(page = 1) {
     });
     articles.value = data.items || [];
     Object.assign(pagination, data.pagination || {});
+    if (selectedArticle.value && !articles.value.some(item => Number(item.id) === Number(selectedArticle.value.id))) {
+      selectedArticle.value = null;
+    }
     if (!selectedArticle.value && articles.value.length) {
       await openDetail(articles.value[0]);
     }
@@ -312,6 +328,7 @@ function openArticleDialog(row = null) {
     title: row.title || '',
     version: row.version || '1.0',
     status: row.status || 'draft',
+    visible_roles: Array.isArray(row.visible_roles) && row.visible_roles.length ? row.visible_roles : defaultVisibleRoles(row),
     content: selectedArticle.value?.id === row.id ? selectedArticle.value.content : '',
     change_note: '更新文档',
   } : emptyArticleForm();
@@ -465,10 +482,32 @@ function emptyArticleForm() {
     category_id: '',
     title: '',
     version: '1.0',
+    visible_roles: ['all'],
     status: 'draft',
     content: articleTemplateHtml(),
     change_note: '新增文档',
   };
+}
+
+function defaultVisibleRoles(row) {
+  const code = row?.category_code || '';
+  if (code === 'admin_help') {
+    return ['admin'];
+  }
+  if (code === 'teacher_help') {
+    return ['teacher', 'admin'];
+  }
+  if (code === 'student_help') {
+    return ['student', 'teacher', 'admin'];
+  }
+  return ['all'];
+}
+
+function syncArticleVisibleRolesByCategory() {
+  const category = flatCategories.value.find(item => Number(item.id) === Number(articleDialog.form.category_id));
+  articleDialog.form.visible_roles = defaultVisibleRoles({
+    category_code: category?.code || '',
+  });
 }
 
 function articleTemplateHtml() {

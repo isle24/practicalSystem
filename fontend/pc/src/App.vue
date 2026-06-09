@@ -3722,7 +3722,7 @@ const selectedWechatMenu = computed(() => {
   return main;
 });
 const visibleInternshipSidebarItems = computed(() => internshipSidebarItems
-  .filter(item => !item.permission || hasPermission(item.permission))
+  .filter(internshipSidebarItemVisible)
   .map((item) => ({
     ...item,
     name: internshipRolePanelName(item.key),
@@ -4117,9 +4117,8 @@ function internshipRolePanelName(key) {
   }
 
   const names = {
-    overview: '我的实习',
+    overview: '总览',
     arrangements: '可申请安排',
-    plans: '实习计划',
     applications: '我的申请',
     pairs: '指导教师',
     signIns: '我的签到',
@@ -4129,7 +4128,17 @@ function internshipRolePanelName(key) {
     scores: '我的成绩',
     documents: '我的材料',
   };
-  return names[key] || '我的实习';
+  return names[key] || internshipSidebarItems.find(item => item.key === key)?.name || '实习管理';
+}
+
+function internshipSidebarItemVisible(item) {
+  if (item.permission && !hasPermission(item.permission)) {
+    return false;
+  }
+  if (!isStudentRole.value) {
+    return true;
+  }
+  return ['overview', 'arrangements', 'applications', 'pairs', 'signIns', 'journals', 'reports', 'delays', 'scores', 'documents'].includes(item.key);
 }
 
 function isInternshipReadOnlyListPanel(panel) {

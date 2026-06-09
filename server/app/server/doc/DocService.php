@@ -14,10 +14,12 @@ class DocService
     public function categories(): array
     {
         $this->requireLogin();
+        $canManage = $this->canManage();
+        $roleType = CurrentContext::roleType();
 
         return [
-            'items' => DocRecord::categoryRows($this->canManage()),
-            'tree' => DocRecord::categoryTree($this->canManage()),
+            'items' => DocRecord::categoryRows($canManage, $roleType),
+            'tree' => DocRecord::categoryTree($canManage, $roleType),
         ];
     }
 
@@ -26,7 +28,7 @@ class DocService
         $this->requireLogin();
         $this->requireView();
 
-        return DocRecord::articlePage($filters, $this->canManage());
+        return DocRecord::articlePage($filters, $this->canManage(), CurrentContext::roleType());
     }
 
     public function detail(int $id): array
@@ -37,7 +39,7 @@ class DocService
             throw new InvalidArgumentException('id 无效');
         }
 
-        $article = DocRecord::articleDetail($id, $this->canManage(), true);
+        $article = DocRecord::articleDetail($id, $this->canManage(), true, CurrentContext::roleType());
         if (!$article) {
             throw new InvalidArgumentException('文档不存在或未发布');
         }
@@ -93,6 +95,7 @@ class DocService
             'name' => $this->requiredString($payload['title'] ?? '', '文档标题', 180),
             'content' => $this->cleanContent((string) ($payload['content'] ?? '')),
             'version' => $this->nullableString($payload['version'] ?? null, 40) ?: '1.0',
+            'visible_roles' => $this->visibleRoles($payload['visible_roles'] ?? null, $this->nullableInt($payload['category_id'] ?? null)),
             'status' => $status,
             'author_id' => CurrentContext::accountId(),
             'published_at' => $status === 'published' ? ($payload['published_at'] ?? $now) : null,
@@ -102,7 +105,7 @@ class DocService
 
         return [
             'id' => $articleId,
-            'article' => DocRecord::articleDetail($articleId, true, false),
+            'article' => DocRecord::articleDetail($articleId, true, false, CurrentContext::roleType()),
         ];
     }
 
@@ -192,5 +195,14 @@ class DocService
     {
         $value = (string) $value;
         return in_array($value, $values, true) ? $value : $default;
+    }
+
+    private function visibleRoles(mixed $value, ?int $categoryId): array
+    {
+        $roles = is_array($value) ? $value : explode(',', (string) ($value ?? ''));
+        $roles = array_values(array_unique(array_filter(array_map(static fn ($role): string => trim((string) $role), $roles))));
+        $allowed = ['all', 'admin', 'super_admin', 'school_admin', 'college_admin', 'profession_admin', 'teacher', 'student', 'enterprise'];
+        $roles = array_values(array_filter($roles, static fn (string $role): bool => in_array($role, $allowed, true)));
+        return $roles ?: DocRecord::defaultVisibleRolesForCategory($categoryId);
     }
 }

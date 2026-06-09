@@ -8,11 +8,11 @@ class DocRecord extends TableRecord
 {
     private static array $schemaReady = [];
 
-    public static function categoryTree(bool $includeDisabled = false): array
+    public static function categoryTree(bool $includeDisabled = false, ?string $roleType = null): array
     {
         self::ensureSchema();
 
-        $rows = self::categoryRows($includeDisabled);
+        $rows = self::categoryRows($includeDisabled, $roleType);
         $indexed = [];
         foreach ($rows as $row) {
             $row['children'] = [];
@@ -33,7 +33,7 @@ class DocRecord extends TableRecord
         return $tree;
     }
 
-    public static function categoryRows(bool $includeDisabled = false): array
+    public static function categoryRows(bool $includeDisabled = false, ?string $roleType = null): array
     {
         self::ensureSchema();
 
@@ -42,21 +42,27 @@ class DocRecord extends TableRecord
             $query->where('status', 'enabled');
         }
 
-        return $query
+        $rows = $query
             ->orderBy('sort')
             ->orderBy('id')
             ->get(['id', 'parent_id', 'code', 'name', 'icon', 'sort', 'status', 'created_at', 'updated_at'])
             ->map(static fn ($row): array => self::categoryRow($row))
             ->all();
+
+        if ($includeDisabled || $roleType === null || $roleType === '') {
+            return $rows;
+        }
+
+        return self::filterVisibleCategoryRows($rows, self::visibleCategoryIds($roleType));
     }
 
-    public static function articlePage(array $filters, bool $includeUnpublished): array
+    public static function articlePage(array $filters, bool $includeUnpublished, ?string $roleType = null): array
     {
         self::ensureSchema();
 
         $page = max(1, (int) ($filters['page'] ?? 1));
         $pageSize = min(100, max(10, (int) ($filters['page_size'] ?? 20)));
-        $query = self::applyArticleFilters(self::articleQuery(), $filters, $includeUnpublished);
+        $query = self::applyArticleFilters(self::articleQuery(), $filters, $includeUnpublished, $roleType);
         $total = (int) (clone $query)->count();
         $items = $query
             ->orderByDesc(new Expression('COALESCE(doc_article.published_at, doc_article.updated_at, doc_article.created_at)'))
@@ -76,13 +82,14 @@ class DocRecord extends TableRecord
         ];
     }
 
-    public static function articleDetail(int $id, bool $includeUnpublished, bool $increaseViewCount = false): ?array
+    public static function articleDetail(int $id, bool $includeUnpublished, bool $increaseViewCount = false, ?string $roleType = null): ?array
     {
         self::ensureSchema();
 
         $query = self::articleQuery()->where('doc_article.id', $id);
         if (!$includeUnpublished) {
             $query->where('doc_article.status', 'published');
+            self::applyVisibleRoleFilter($query, $roleType);
         }
 
         $row = $query->first(self::articleColumns(true));
@@ -130,6 +137,7 @@ class DocRecord extends TableRecord
             unset($values['id']);
             $now = $values['updated_at'] ?? date('Y-m-d H:i:s');
             $values['updated_at'] = $now;
+            $values['visible_roles'] = self::jsonListValue($values['visible_roles'] ?? ['all']);
 
             if ($id > 0) {
                 self::queryTable('doc_article')
@@ -208,6 +216,21 @@ class DocRecord extends TableRecord
             ->all();
     }
 
+    public static function defaultVisibleRolesForCategory(?int $categoryId): array
+    {
+        self::ensureSchema();
+        if (!$categoryId) {
+            return ['all'];
+        }
+
+        $code = (string) (self::queryTable('doc_category')
+            ->where('id', $categoryId)
+            ->whereNull('deleted_at')
+            ->value('code') ?? '');
+
+        return self::defaultVisibleRolesByCategoryCode($code);
+    }
+
     public static function ensureSchema(): void
     {
         $connection = self::connection();
@@ -229,10 +252,11 @@ class DocRecord extends TableRecord
             ->whereNull('doc_article.deleted_at');
     }
 
-    private static function applyArticleFilters(mixed $query, array $filters, bool $includeUnpublished): mixed
+    private static function applyArticleFilters(mixed $query, array $filters, bool $includeUnpublished, ?string $roleType): mixed
     {
         if (!$includeUnpublished) {
             $query->where('doc_article.status', 'published');
+            self::applyVisibleRoleFilter($query, $roleType);
         } else {
             $status = trim((string) ($filters['status'] ?? ''));
             if ($status !== '' && $status !== 'all') {
@@ -270,6 +294,7 @@ class DocRecord extends TableRecord
             'doc_article.author_id',
             'doc_article.view_count',
             'doc_article.published_at',
+            'doc_article.visible_roles',
             'doc_article.created_at',
             'doc_article.updated_at',
             'doc_category.name as category_name',
@@ -298,6 +323,7 @@ class DocRecord extends TableRecord
             'status' => $row->status,
             'author_id' => $row->author_id === null ? null : (int) $row->author_id,
             'author_name' => $row->author_name ?: $row->login_name,
+            'visible_roles' => self::visibleRolesFromValue($row->visible_roles ?? null, $row->category_code ?? null),
             'view_count' => (int) ($row->view_count ?? 0),
             'published_at' => $row->published_at,
             'created_at' => $row->created_at,
@@ -309,6 +335,148 @@ class DocRecord extends TableRecord
         }
 
         return $data;
+    }
+
+    private static function applyVisibleRoleFilter(mixed $query, ?string $roleType): void
+    {
+        $roles = self::roleVisibleKeys($roleType);
+        if (!$roles) {
+            $query->whereRaw('1 = 0');
+            return;
+        }
+
+        $query->where(function ($builder) use ($roleType, $roles): void {
+            $builder->where(function ($legacy) use ($roleType): void {
+                $legacy->whereNull('doc_article.visible_roles');
+                self::applyLegacyCategoryVisibleRoleFilter($legacy, $roleType);
+            });
+
+            foreach ($roles as $role) {
+                $builder->orWhereRaw('JSON_CONTAINS(doc_article.visible_roles, ?)', [json_encode($role, JSON_UNESCAPED_UNICODE)]);
+            }
+        });
+    }
+
+    private static function applyLegacyCategoryVisibleRoleFilter(mixed $query, ?string $roleType): void
+    {
+        $allowedCodes = self::legacyVisibleCategoryCodes($roleType);
+        if (!$allowedCodes) {
+            $query->whereRaw('1 = 0');
+            return;
+        }
+
+        $query->where(function ($builder) use ($allowedCodes): void {
+            $builder->whereNull('doc_category.code')
+                ->orWhere('doc_category.code', '')
+                ->orWhereIn('doc_category.code', $allowedCodes);
+        });
+    }
+
+    private static function visibleCategoryIds(?string $roleType): array
+    {
+        $query = self::articleQuery()->where('doc_article.status', 'published');
+        self::applyVisibleRoleFilter($query, $roleType);
+
+        return $query
+            ->whereNotNull('doc_article.category_id')
+            ->distinct()
+            ->pluck('doc_article.category_id')
+            ->map(static fn ($id): int => (int) $id)
+            ->filter(static fn (int $id): bool => $id > 0)
+            ->values()
+            ->all();
+    }
+
+    private static function filterVisibleCategoryRows(array $rows, array $visibleIds): array
+    {
+        if (!$visibleIds) {
+            return [];
+        }
+
+        $ids = array_fill_keys($visibleIds, true);
+        $byId = [];
+        foreach ($rows as $row) {
+            $byId[(int) $row['id']] = $row;
+        }
+
+        foreach ($visibleIds as $id) {
+            $parentId = (int) ($byId[$id]['parent_id'] ?? 0);
+            while ($parentId > 0 && isset($byId[$parentId])) {
+                $ids[$parentId] = true;
+                $parentId = (int) ($byId[$parentId]['parent_id'] ?? 0);
+            }
+        }
+
+        return array_values(array_filter($rows, static fn (array $row): bool => isset($ids[(int) $row['id']])));
+    }
+
+    private static function visibleRolesFromValue(mixed $value, ?string $categoryCode): array
+    {
+        if (is_string($value) && $value !== '') {
+            $decoded = json_decode($value, true);
+            $value = json_last_error() === JSON_ERROR_NONE ? $decoded : [];
+        }
+        if (!is_array($value) || !$value) {
+            return self::defaultVisibleRolesByCategoryCode((string) $categoryCode);
+        }
+
+        return array_values(array_unique(array_filter(array_map(static fn ($role): string => trim((string) $role), $value))));
+    }
+
+    private static function roleVisibleKeys(?string $roleType): array
+    {
+        $roleType = trim((string) ($roleType ?? ''));
+        if ($roleType === '') {
+            return [];
+        }
+
+        $roles = ['all', $roleType];
+        if (in_array($roleType, ['super_admin', 'school_admin', 'college_admin', 'profession_admin'], true)) {
+            $roles[] = 'admin';
+        }
+
+        return array_values(array_unique($roles));
+    }
+
+    private static function legacyVisibleCategoryCodes(?string $roleType): array
+    {
+        $roleType = trim((string) ($roleType ?? ''));
+        if ($roleType === 'student') {
+            return ['practice_flow', 'student_help'];
+        }
+        if ($roleType === 'teacher') {
+            return ['practice_flow', 'student_help', 'teacher_help'];
+        }
+        if (in_array($roleType, ['super_admin', 'school_admin', 'college_admin', 'profession_admin'], true)) {
+            return ['practice_flow', 'student_help', 'teacher_help', 'admin_help'];
+        }
+        if ($roleType === 'enterprise') {
+            return ['practice_flow'];
+        }
+
+        return ['practice_flow'];
+    }
+
+    private static function defaultVisibleRolesByCategoryCode(string $code): array
+    {
+        return match ($code) {
+            'student_help' => ['student', 'teacher', 'admin'],
+            'teacher_help' => ['teacher', 'admin'],
+            'admin_help' => ['admin'],
+            default => ['all'],
+        };
+    }
+
+    private static function jsonListValue(mixed $value): string
+    {
+        if (is_string($value) && $value !== '') {
+            $decoded = json_decode($value, true);
+            $value = json_last_error() === JSON_ERROR_NONE ? $decoded : explode(',', $value);
+        }
+        $values = is_array($value) ? $value : [];
+        $values = array_values(array_unique(array_filter(array_map(static fn ($item): string => trim((string) $item), $values))));
+
+        return json_encode($values ?: ['all'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     }
 
     private static function categoryRow(object $row): array
@@ -365,6 +533,7 @@ class DocRecord extends TableRecord
             `author_id` BIGINT UNSIGNED DEFAULT NULL,
             `view_count` INT UNSIGNED DEFAULT 0,
             `published_at` DATETIME DEFAULT NULL,
+            `visible_roles` JSON DEFAULT NULL,
             PRIMARY KEY (`id`),
             UNIQUE KEY `uk_uuid` (`uuid`),
             KEY `idx_category_status` (`category_id`, `status`),
@@ -413,6 +582,7 @@ class DocRecord extends TableRecord
                 'author_id' => "ALTER TABLE `doc_article` ADD COLUMN `author_id` BIGINT UNSIGNED DEFAULT NULL AFTER `version`",
                 'view_count' => "ALTER TABLE `doc_article` ADD COLUMN `view_count` INT UNSIGNED DEFAULT 0 AFTER `author_id`",
                 'published_at' => "ALTER TABLE `doc_article` ADD COLUMN `published_at` DATETIME DEFAULT NULL AFTER `view_count`",
+                'visible_roles' => "ALTER TABLE `doc_article` ADD COLUMN `visible_roles` JSON DEFAULT NULL AFTER `published_at`",
             ],
             'doc_article_history' => [
                 'article_id' => "ALTER TABLE `doc_article_history` ADD COLUMN `article_id` BIGINT UNSIGNED DEFAULT NULL AFTER `deleted_at`",
