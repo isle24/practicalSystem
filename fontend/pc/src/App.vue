@@ -350,7 +350,7 @@
                       <el-button v-if="win.panel === 'plans' && canManageInternshipPlan" :icon="FileText" @click="openPlanDialog">
                         新增计划
                       </el-button>
-                      <el-button v-if="win.panel === 'scores' && canManageInternship" :icon="GraduationCap" @click="openScoreDialog">
+                      <el-button v-if="win.panel === 'scores' && canSaveInternshipScore" :icon="GraduationCap" @click="openScoreDialog">
                         录入成绩
                       </el-button>
                       <el-button v-if="win.panel === 'baseFlows' && canManageInternship" :icon="Plus" @click="openBaseFlowDialog">
@@ -947,7 +947,7 @@
                       @search="loadInternshipPanel('pairs', 1)"
                     >
                       <template #actions="{ row }">
-                        <el-button v-if="canManageInternship" link type="primary" @click="prepareScore(row)">录入</el-button>
+                        <el-button v-if="canSaveInternshipScore" link type="primary" @click="prepareScore(row)">录入</el-button>
                       </template>
                     </DataListPanel>
                   </template>
@@ -3825,6 +3825,7 @@ const canManageConfig = computed(() => hasPermission('config:manage') && ['super
 const canViewUserAdmin = computed(() => ['super_admin', 'school_admin', 'college_admin', 'profession_admin'].includes(permissionState.context.role_type));
 const canSendMessages = computed(() => ['super_admin', 'school_admin'].includes(currentRoleType.value));
 const canManageInternship = computed(() => hasPermission('internship:manage'));
+const canSaveInternshipScore = computed(() => hasPermission('internship:score') || canManageInternship.value);
 const canManageInternshipPlan = computed(() => hasPermission('internship:plan') && isAdminRole.value);
 const canApproveInternship = computed(() => hasPermission('internship:approve') && !isStudentRole.value);
 const canManagePractice = module => hasPermission(`${module}:manage`) && !isStudentRole.value;
@@ -4386,7 +4387,7 @@ function hasInternshipToolbarActions(panel) {
     return canManageInternshipPlan.value;
   }
   if (panel === 'scores') {
-    return canManageInternship.value;
+    return canSaveInternshipScore.value;
   }
   return false;
 }
@@ -8340,7 +8341,7 @@ function semesterOptions() {
 }
 
 function statusOptions() {
-  return ['draft', 'wait', 'accept', 'modify', 'refuse', 'enabled', 'disabled', 'active', 'removed'].map(value => ({
+  return ['draft', 'wait', 'accept', 'modify', 'refuse', 'enabled', 'disabled', 'changed', 'active', 'removed'].map(value => ({
     value,
     label: statusText(value),
   }));
@@ -8785,7 +8786,7 @@ function reviewRuleMaxText(entity, status) {
 
 function reviewEntityName(entity) {
   const names = {
-    application: '实习申请',
+    application: '补充申请',
     journal: '实习日志',
     report: '实习报告',
     plan: '实习计划',
@@ -8934,7 +8935,7 @@ function timelineContent(item) {
 
 function isGenericSubmitContent(value) {
   return [
-    '提交实习申请',
+    '提交补充申请',
     '提交实习日志',
     '提交实习报告',
     '提交延期申请',
@@ -9413,7 +9414,7 @@ function selectScorePair(pairId) {
 }
 
 async function saveScore() {
-  if (!canManageInternship.value || !internshipState.scoreForm.student_id || !internshipState.scoreForm.arrangement_id) {
+  if (!canSaveInternshipScore.value || !internshipState.scoreForm.student_id || !internshipState.scoreForm.arrangement_id) {
     internshipState.message = '请先选择学生和实习安排';
     return;
   }
@@ -9491,6 +9492,7 @@ function statusText(value) {
     refuse: '已退回',
     enabled: '启用',
     disabled: '停用',
+    changed: '已变更',
     pending: '待处理',
     skipped: '跳过',
     active: '有效',
@@ -9514,7 +9516,7 @@ function statusTagType(value) {
   if (['wait', 'pending', 'draft'].includes(value)) {
     return 'warning';
   }
-  if (['modify', 'removed', 'disabled', 'not_required'].includes(value)) {
+  if (['modify', 'removed', 'disabled', 'changed', 'not_required'].includes(value)) {
     return 'info';
   }
   if (['refuse', 'incomplete', 'missing'].includes(value)) {

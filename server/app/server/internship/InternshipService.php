@@ -334,6 +334,7 @@ class InternshipService
 
         $this->assertStudentVisible($studentId);
         $this->assertArrangementVisible($arrangementId);
+        $this->assertTaskBindingVisible($studentId, $arrangementId);
 
         if (!$existingId) {
             $existingId = InternshipRecord::applicationIdByStudentArrangement($studentId, $arrangementId);
@@ -362,13 +363,9 @@ class InternshipService
             'student_id' => $studentId,
             'arrangement_id' => $arrangementId,
         ])['id'];
-        $teacherIds = $this->intArray($request->input('teacher_ids', []));
-        if (!$teacherIds && $this->isStudent()) {
-            $teacherIds = InternshipRecord::activePairTeacherIds($studentId, $arrangementId);
-        }
-        $this->syncJoinTeachers($id, $studentId, $arrangementId, $teacherIds);
+        $this->syncJoinTeachers($id, $studentId, $arrangementId, InternshipRecord::activePairTeacherIds($studentId, $arrangementId));
         if ($status === 'wait') {
-            $this->recordWorkflow('application_recording', 'application', $id, 'submit', $fromStatus, 'wait', $values['remark'] ?: '提交实习申请', 'wait');
+            $this->recordWorkflow('application_recording', 'application', $id, 'submit', $fromStatus, 'wait', $values['remark'] ?: '提交补充申请', 'wait');
         }
 
         return ['id' => $id, 'item' => $this->application($id)];
@@ -380,6 +377,7 @@ class InternshipService
         $id = $this->requiredRowId($request, 'application');
         $row = $this->row('application', $id);
         $this->assertStudentVisible((int) $row->student_id);
+        $this->assertTaskBindingVisible((int) $row->student_id, (int) $row->arrangement_id);
         if ((string) $row->status === 'accept') {
             throw new RuntimeException('该实习安排不可重复申请', 42201);
         }
@@ -390,9 +388,8 @@ class InternshipService
             'admin_status' => 'pending',
             'updated_at' => $this->now(),
         ]);
-        $teacherIds = InternshipRecord::activePairTeacherIds((int) $row->student_id, (int) $row->arrangement_id);
-        $this->syncJoinTeachers($id, (int) $row->student_id, (int) $row->arrangement_id, $teacherIds);
-        $this->recordWorkflow('application_recording', 'application', $id, 'submit', (string) $row->status, 'wait', (string) ($row->remark ?: '提交实习申请'), 'wait');
+        $this->syncJoinTeachers($id, (int) $row->student_id, (int) $row->arrangement_id, InternshipRecord::activePairTeacherIds((int) $row->student_id, (int) $row->arrangement_id));
+        $this->recordWorkflow('application_recording', 'application', $id, 'submit', (string) $row->status, 'wait', (string) ($row->remark ?: '提交补充申请'), 'wait');
 
         return ['id' => $id, 'item' => $this->application($id)];
     }
@@ -407,11 +404,11 @@ class InternshipService
         return $this->connection()->transaction(function () use ($id, $status, $opinion): array {
             $row = InternshipRecord::lockActiveRowById('application', $id);
             if (!$row) {
-                throw new RuntimeException('实习申请不存在');
+                throw new RuntimeException('补充申请不存在');
             }
             $this->assertApplicationVisible((int) $row->id);
             if ((string) $row->status !== 'wait') {
-                throw new InvalidArgumentException('仅待审核实习申请可处理', 42204);
+                throw new InvalidArgumentException('仅待审核补充申请可处理', 42204);
             }
 
             $updates = ['updated_at' => $this->now()];
@@ -525,9 +522,15 @@ class InternshipService
 
         $studentId = $this->requiredInt($request, 'student_id');
         $arrangementId = $this->requiredInt($request, 'arrangement_id');
-        $teacherId = $this->requiredInt($request, 'teacher_id');
+        $teacherId = InternshipRecord::arrangementTeacherId($arrangementId);
         $this->assertStudentVisible($studentId);
         $this->assertArrangementVisible($arrangementId);
+        if ($teacherId <= 0) {
+            throw new RuntimeException('实习任务未设置负责老师', 42201);
+        }
+        if (!InternshipRecord::taskClassStudentVisible($this->scopeContext(), $studentId, $arrangementId)) {
+            throw new RuntimeException('学生不属于该实习任务绑定班级', 42201);
+        }
 
         $values = [
             'student_id' => $studentId,
@@ -554,6 +557,13 @@ class InternshipService
         $this->requireAdminRole();
         $id = $this->requiredRowId($request, 'pair');
         $reason = $this->nullableString($request, 'remove_reason', 255);
+        $pair = InternshipRecord::pairRowForManage($this->scopeContext(), $id);
+        if (!$pair) {
+            throw new RuntimeException('任务绑定不存在或无权限', 40301);
+        }
+        if ((string) $pair->status !== 'active') {
+            throw new InvalidArgumentException('仅有效任务绑定可解除', 42204);
+        }
 
         InternshipRecord::updateById('pair', $id, [
             'status' => 'removed',
@@ -582,12 +592,6 @@ class InternshipService
         $this->assertStudentVisible($studentId);
         $this->assertArrangementVisible($arrangementId);
         $this->assertTaskBindingVisible($studentId, $arrangementId);
-        if ($existingId) {
-            $row = $this->row('journal', $existingId);
-            if ((int) $row->student_id !== $studentId || (int) $row->entity_id !== $arrangementId) {
-                throw new RuntimeException('无数据访问权限', 40301);
-            }
-        }
         $signType = $this->enum($request, 'sign_type', ['gps', 'qrcode', 'manual'], $this->isStudent() ? 'gps' : 'manual');
         $longitude = $this->coordinateInput($request, 'longitude', -180, 180);
         $latitude = $this->coordinateInput($request, 'latitude', -90, 90);
@@ -636,8 +640,8 @@ class InternshipService
         $this->assertArrangementVisible($arrangementId);
         $this->assertTaskBindingVisible($studentId, $arrangementId);
         if ($existingId) {
-            $row = $this->row('report', $existingId);
-            if ((int) $row->student_id !== $studentId || (int) $row->arrangement_id !== $arrangementId) {
+            $row = $this->row('journal', $existingId);
+            if ((int) $row->student_id !== $studentId || (int) $row->entity_id !== $arrangementId) {
                 throw new RuntimeException('无数据访问权限', 40301);
             }
         }
@@ -688,6 +692,12 @@ class InternshipService
         $this->assertStudentVisible($studentId);
         $this->assertArrangementVisible($arrangementId);
         $this->assertTaskBindingVisible($studentId, $arrangementId);
+        if ($existingId) {
+            $row = $this->row('report', $existingId);
+            if ((int) $row->student_id !== $studentId || (int) $row->arrangement_id !== $arrangementId) {
+                throw new RuntimeException('无数据访问权限', 40301);
+            }
+        }
 
         $values = [
             'student_id' => $studentId,
@@ -848,7 +858,7 @@ class InternshipService
 
     public function saveScore(Request $request): array
     {
-        $this->requirePermission($this->isEnterprise() ? 'internship:score' : 'internship:manage');
+        $this->requirePermission($this->canScoreWithoutManage() ? 'internship:score' : 'internship:manage');
         $studentId = $this->requiredInt($request, 'student_id');
         $arrangementId = $this->requiredInt($request, 'arrangement_id');
         $this->assertStudentVisible($studentId);
@@ -876,7 +886,7 @@ class InternshipService
             'enterprise_score' => $enterpriseScore,
             'enterprise_comment' => $this->nullableString($request, 'enterprise_comment', 2000),
             'final_score' => $final,
-            'teacher_id' => $this->isTeacher() ? $this->currentTeacherId(true) : $this->optionalInt($request, 'teacher_id'),
+            'teacher_id' => $this->scoreTeacherId($request, $arrangementId),
             'comment' => $this->nullableString($request, 'comment', 2000),
             'status' => 'accept',
             'updated_at' => $this->now(),
@@ -1254,6 +1264,9 @@ class InternshipService
             }
 
             $before = $existingId > 0 ? InternshipRecord::arrangementDetail($this->scopeContext(), $existingId) : null;
+            if (($before['item']['status'] ?? null) === 'changed') {
+                throw new InvalidArgumentException('历史任务不可直接修改');
+            }
             $values = [
                 'plan_id' => $planId,
                 'name' => trim((string) ($input['name'] ?? '')) ?: $title,
@@ -1278,17 +1291,45 @@ class InternshipService
                 'updated_at' => $now,
                 'deleted_at' => null,
             ];
+            $bindingRowsChanged = $existingId > 0 && $before
+                ? $this->arrangementBindingRowsChanged($before['classes'] ?? [], $classRows, 'class_id')
+                    || $this->arrangementBindingRowsChanged($before['students'] ?? [], $studentRows, 'student_id')
+                : false;
+            $actualChange = $existingId > 0 && $this->arrangementValuesChanged($before['item'] ?? [], $values, $bindingRowsChanged);
+            $previousStatus = (string) ($before['item']['status'] ?? 'draft');
+            $requiresVersion = in_array($previousStatus, ['enabled', 'accept', 'wait', 'modify'], true)
+                || ($existingId > 0 && InternshipRecord::arrangementHasProcessData($existingId));
+            $versionedChange = $actualChange && $requiresVersion;
+            $targetId = $versionedChange ? 0 : $existingId;
 
-            if ($existingId > 0) {
-                InternshipRecord::updateById('arrangement', $existingId, $values);
-                $arrangementId = $existingId;
-                $uuid = (string) InternshipRecord::uuidById('arrangement', $existingId);
+            if ($targetId > 0) {
+                InternshipRecord::updateById('arrangement', $targetId, $values);
+                $arrangementId = $targetId;
+                $uuid = (string) InternshipRecord::uuidById('arrangement', $targetId);
             } else {
-                $uuid = (string) ($input['uuid'] ?? '') ?: $this->uuid();
+                $uuid = $versionedChange ? $this->uuid() : ((string) ($input['uuid'] ?? '') ?: $this->uuid());
                 $arrangementId = InternshipRecord::insertRow('arrangement', array_merge($values, [
                     'uuid' => $uuid,
                     'created_at' => $now,
                 ]));
+            }
+
+            if ($versionedChange) {
+                InternshipRecord::updateById('arrangement', $existingId, [
+                    'status' => 'changed',
+                    'updated_at' => $now,
+                ]);
+                InternshipRecord::closeArrangementActiveBindings($existingId, '任务变更生成新版本', $now);
+                $this->recordWorkflow(
+                    'arrangement_recording',
+                    'arrangement',
+                    $existingId,
+                    'change',
+                    $before['item']['status'] ?? 'enabled',
+                    'changed',
+                    $this->arrangementWorkflowContent($source, $before, null) . '；已保留旧任务历史并生成新任务。',
+                    'accept'
+                );
             }
 
             InternshipRecord::syncTaskClasses($arrangementId, $classRows, $studentCounts, fn (): string => $this->uuid(), $now);
@@ -1305,8 +1346,8 @@ class InternshipService
                 'arrangement_recording',
                 'arrangement',
                 $arrangementId,
-                $existingId > 0 ? 'change' : 'create',
-                $before['item']['status'] ?? 'draft',
+                $existingId > 0 ? ($versionedChange ? 'create_from_change' : 'change') : 'create',
+                $versionedChange ? 'draft' : ($before['item']['status'] ?? 'draft'),
                 (string) $values['status'],
                 $this->arrangementWorkflowContent($source, $before, $after),
                 'accept'
@@ -1315,7 +1356,9 @@ class InternshipService
             return [
                 'id' => $arrangementId,
                 'uuid' => $uuid,
-                'created' => $existingId <= 0,
+                'created' => $existingId <= 0 || $versionedChange,
+                'versioned_change' => $versionedChange,
+                'previous_id' => $versionedChange ? $existingId : null,
                 'class_count' => count($classRows),
                 'pair_count' => count($pairResult['pair_ids']),
                 'student_count' => count($pairResult['student_ids']),
@@ -1420,6 +1463,73 @@ class InternshipService
         ], 'Excel导入任务分配');
     }
 
+    private function arrangementValuesChanged(array $before, array $values, bool $studentRowsChanged): bool
+    {
+        if ($studentRowsChanged) {
+            return true;
+        }
+
+        foreach ([
+            'plan_id',
+            'base_id',
+            'dep_id',
+            'profession_id',
+            'teacher_id',
+            'task_no',
+            'batch_no',
+            'credit',
+            'type',
+            'organize_mode',
+            'title',
+            'start_date',
+            'end_date',
+            'location',
+            'description',
+            'status',
+        ] as $field) {
+            if ($this->normalizedCompareValue($before[$field] ?? null) !== $this->normalizedCompareValue($values[$field] ?? null)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function arrangementBindingRowsChanged(array $beforeRows, array $afterRows, string $key): bool
+    {
+        $beforeIds = $this->idsFromRows($beforeRows, $key);
+        $afterIds = $this->idsFromRows($afterRows, $key);
+
+        return $beforeIds !== $afterIds;
+    }
+
+    private function normalizedCompareValue(mixed $value): string
+    {
+        if ($value === null) {
+            return '';
+        }
+        if (is_float($value) || is_int($value) || is_numeric($value)) {
+            return rtrim(rtrim(sprintf('%.6F', (float) $value), '0'), '.');
+        }
+
+        return trim((string) $value);
+    }
+
+    private function idsFromRows(array $rows, string $key): array
+    {
+        $ids = [];
+        foreach ($rows as $row) {
+            $id = (int) ($row[$key] ?? 0);
+            if ($id > 0) {
+                $ids[] = $id;
+            }
+        }
+        $ids = array_values(array_unique($ids));
+        sort($ids);
+
+        return $ids;
+    }
+
     private function arrangementWorkflowContent(string $source, ?array $before, ?array $after): string
     {
         $afterItem = $after['item'] ?? [];
@@ -1473,7 +1583,7 @@ class InternshipService
     {
         $item = InternshipRecord::applicationWithTeachers($id);
         if (!$item) {
-            throw new RuntimeException('实习申请不存在');
+            throw new RuntimeException('补充申请不存在');
         }
 
         return $item;
@@ -1530,37 +1640,8 @@ class InternshipService
         }
 
         InternshipRecord::updateById('application', (int) $application->id, ['status' => 'accept', 'updated_at' => $this->now()]);
-        $this->createPairFromApplication((int) $application->id);
 
         return 'accept';
-    }
-
-    private function createPairFromApplication(int $applicationId): void
-    {
-        $application = InternshipRecord::rowById('application', $applicationId);
-        if (!$application) {
-            return;
-        }
-
-        $joins = InternshipRecord::acceptedJoinTeachers($applicationId);
-        if (!$joins) {
-            return;
-        }
-
-        $this->upsertActivePair([
-            'student_id' => (int) $application->student_id,
-            'teacher_id' => (int) $joins[0]->teacher_id,
-            'dep_id' => $this->studentDepId((int) $application->student_id),
-            'second_teacher_id' => isset($joins[1]) ? (int) $joins[1]->teacher_id : null,
-            'arrangement_id' => (int) $application->arrangement_id,
-            'type' => 'internship',
-            'entity_type' => 'internship',
-            'entity_id' => (int) $application->arrangement_id,
-            'application_id' => (int) $application->id,
-            'status' => 'active',
-            'updated_at' => $this->now(),
-            'deleted_at' => null,
-        ]);
     }
 
     private function upsertActivePair(array $values): int
@@ -1621,7 +1702,6 @@ class InternshipService
                 'enterprise' => $this->enterpriseArrangementIds(),
                 default => [],
             },
-            'application_ids' => $roleType === 'teacher' ? $this->teacherApplicationIds() : [],
             'base_ids' => $roleType === 'enterprise' ? $this->enterpriseBaseIds() : [],
         ];
     }
@@ -1692,16 +1772,6 @@ class InternshipService
         }
 
         return InternshipRecord::visibleArrangementIdsByStudent($studentId);
-    }
-
-    private function teacherApplicationIds(): array
-    {
-        $teacherId = $this->currentTeacherId(false);
-        if (!$teacherId) {
-            return [];
-        }
-
-        return InternshipRecord::applicationIdsByTeacher($teacherId);
     }
 
     private function enterpriseBaseIds(): array
@@ -1782,6 +1852,21 @@ class InternshipService
         if (!in_array(CurrentContext::roleType(), self::ADMIN_ROLE_TYPES, true)) {
             throw new RuntimeException('无操作权限', 40300);
         }
+    }
+
+    private function canScoreWithoutManage(): bool
+    {
+        return $this->isTeacher() || $this->isEnterprise();
+    }
+
+    private function scoreTeacherId(Request $request, int $arrangementId): ?int
+    {
+        if ($this->isTeacher()) {
+            return $this->currentTeacherId(true);
+        }
+
+        $teacherId = $this->optionalInt($request, 'teacher_id') ?: InternshipRecord::arrangementTeacherId($arrangementId);
+        return $teacherId > 0 ? $teacherId : null;
     }
 
     private function isTeacher(): bool

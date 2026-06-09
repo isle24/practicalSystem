@@ -1733,7 +1733,7 @@ const roleNameMap = {
   school_admin: '学校管理员',
   college_admin: '学院管理员',
   profession_admin: '专业管理员',
-  teacher: '指导老师',
+  teacher: '任务老师',
   student: '学生',
   enterprise: '企业导师',
 };
@@ -1758,7 +1758,7 @@ const scopeNameMap = {
   dep_id: '学院',
   profession_id: '专业',
   company_id: '企业',
-  teacher_user_id: '本人指导学生',
+  teacher_user_id: '本人任务学生',
   student_user_id: '本人实习数据',
 };
 const roleDisplayText = computed(() => state.context.role_name || roleNameMap[roleType.value] || state.context.role_id || '未登录');
@@ -1812,7 +1812,7 @@ const internshipRoleTitle = computed(() => {
     return '学生实习';
   }
   if (isTeacherRole.value) {
-    return '教师指导';
+    return '任务指导';
   }
   if (isAdminRole.value) {
     return '实习管理';
@@ -3726,7 +3726,7 @@ function validatePracticeReason(module, entity, status, reason, label = null) {
 
 function reviewEntityName(entity) {
   const names = {
-    application: '实习申请',
+    application: '补充申请',
     journal: '实习日志',
     report: '实习报告',
     plan: '实习计划',
@@ -3986,7 +3986,7 @@ function timelineContent(item) {
 
 function isGenericSubmitContent(value) {
   return [
-    '提交实习申请',
+    '提交补充申请',
     '提交实习日志',
     '提交实习报告',
     '提交延期申请',
@@ -4290,6 +4290,7 @@ function statusText(value) {
     skipped: '跳过',
     enabled: '启用',
     disabled: '停用',
+    changed: '已变更',
     pending: '待处理',
     active: '有效',
     removed: '已移除',
