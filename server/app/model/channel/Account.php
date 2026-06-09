@@ -291,7 +291,10 @@ class Account extends BaseModel
                 if ($mobile !== '') {
                     $builder->orWhere('users.mobile', $mobile);
                 }
-            });
+            })
+            ->whereNotNull('role.id')
+            ->where('role.status', 'enabled')
+            ->whereNull('role.deleted_at');
 
         return $query
             ->orderBy('role.sort')

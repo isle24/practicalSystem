@@ -65,34 +65,25 @@
           </span>
           <span>{{ operatorName }}</span>
         </el-button>
-        <el-dropdown
-          v-if="isLoggedIn && switchAccountState.items.length > 1"
-          trigger="click"
-          @command="switchLoginAccount"
-        >
-          <el-button class="switch-account-button" :loading="switchAccountState.loading">
+        <div v-if="isLoggedIn && switchableLoginAccounts.length > 0" class="switch-account-wrap">
+          <el-button class="switch-account-button" :loading="switchAccountState.loading" @click="toggleSwitchAccountMenu">
             <UsersRound :size="15" />
             切换身份
           </el-button>
-          <template #dropdown>
-            <el-dropdown-menu class="switch-account-menu">
-              <el-dropdown-item
-                v-for="account in switchAccountState.items"
-                :key="account.id"
-                :command="account.id"
-                :disabled="account.is_current"
-              >
-                <span class="switch-account-item">
-                  <strong>
-                    {{ switchAccountName(account) }}
-                    <em v-if="account.is_current">当前</em>
-                  </strong>
-                  <small>{{ switchAccountMeta(account) }}</small>
-                </span>
-              </el-dropdown-item>
-            </el-dropdown-menu>
-          </template>
-        </el-dropdown>
+          <div v-if="switchAccountState.open" class="switch-account-menu">
+            <button
+              v-for="account in switchableLoginAccounts"
+              :key="account.id"
+              type="button"
+              class="switch-account-item"
+              @click="switchLoginAccount(account.id)"
+            >
+              <strong>{{ switchAccountName(account) }}</strong>
+              <small>{{ switchAccountMeta(account) }}</small>
+            </button>
+          </div>
+        </div>
+        <div v-if="switchAccountState.open && switchableLoginAccounts.length > 0" class="switch-account-backdrop" @click="switchAccountState.open = false" />
         <span v-if="!isLoggedIn">{{ operatorName }}</span>
         <el-button v-if="!isLoggedIn" text :icon="LogIn" @click="focusLogin">
           登录
@@ -2879,6 +2870,7 @@ const loginState = reactive({
 });
 const switchAccountState = reactive({
   loading: false,
+  open: false,
   items: [],
   message: '',
 });
@@ -3735,6 +3727,14 @@ const parentMenuTreeOptions = computed(() => [
   },
 ]);
 const operatorName = computed(() => permissionState.context.user_name || (permissionState.context.user_id ? `用户 ${permissionState.context.user_id}` : '未登录'));
+const switchableLoginAccounts = computed(() => {
+  const currentAccountId = Number(permissionState.context.account_id || 0);
+  return (switchAccountState.items || []).filter((account) => {
+    const accountId = Number(account?.id || 0);
+    const hasRole = Boolean(account?.role_id || account?.role_type || account?.role_name);
+    return accountId > 0 && accountId !== currentAccountId && !account?.is_current && account?.status !== 'disabled' && hasRole;
+  });
+});
 const schoolDataText = computed(() => {
   if (!isLoggedIn.value) {
     return '未登录';
@@ -5343,6 +5343,7 @@ async function refreshAuthenticatedSession(resetWorkspace = false) {
 
 async function loadSwitchableAccounts() {
   if (!isLoggedIn.value) {
+    switchAccountState.open = false;
     switchAccountState.items = [];
     switchAccountState.message = '';
     return;
@@ -5353,7 +5354,11 @@ async function loadSwitchableAccounts() {
   try {
     const data = await fetchSwitchableAccounts();
     switchAccountState.items = data.accounts || [];
+    if (!switchableLoginAccounts.value.length) {
+      switchAccountState.open = false;
+    }
   } catch (error) {
+    switchAccountState.open = false;
     switchAccountState.items = [];
     switchAccountState.message = error.message;
   } finally {
@@ -5361,13 +5366,23 @@ async function loadSwitchableAccounts() {
   }
 }
 
+function toggleSwitchAccountMenu() {
+  if (switchAccountState.loading || !switchableLoginAccounts.value.length) {
+    switchAccountState.open = false;
+    return;
+  }
+  switchAccountState.open = !switchAccountState.open;
+}
+
 async function switchLoginAccount(accountId) {
   const targetId = Number(accountId || 0);
   if (!targetId || targetId === Number(permissionState.context.account_id || 0) || switchAccountState.loading) {
+    switchAccountState.open = false;
     return;
   }
 
   switchAccountState.loading = true;
+  switchAccountState.open = false;
   switchAccountState.message = '';
   try {
     await switchAccount({

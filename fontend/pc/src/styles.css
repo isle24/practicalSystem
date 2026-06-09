@@ -208,6 +208,11 @@ a {
   background: #fff center / cover no-repeat;
 }
 
+.switch-account-wrap {
+  position: relative;
+  z-index: 260;
+}
+
 .switch-account-button {
   height: 30px;
   display: inline-flex;
@@ -221,13 +226,41 @@ a {
 }
 
 .switch-account-menu {
-  min-width: 190px;
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 261;
+  width: 232px;
+  display: grid;
+  gap: 4px;
+  padding: 7px;
+  border: 1px solid rgba(196, 207, 218, .92);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, .98);
+  box-shadow: 0 16px 34px rgba(31, 45, 62, .18);
 }
 
 .switch-account-item {
   display: grid;
   gap: 2px;
-  min-width: 150px;
+  width: 100%;
+  min-width: 0;
+  padding: 9px 10px;
+  border-radius: 7px;
+  color: var(--text);
+  text-align: left;
+  background: transparent;
+}
+
+.switch-account-item:hover {
+  background: #eef5fb;
+}
+
+.switch-account-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 250;
+  background: transparent;
 }
 
 .switch-account-item strong {
