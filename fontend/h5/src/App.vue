@@ -376,14 +376,6 @@
               </select>
             </label>
             <label>
-              <span>指导教师</span>
-              <select v-model.number="internship.forms.application.teacher_id">
-                <option v-for="teacher in internship.options.teachers" :key="teacher.teacher_id" :value="teacher.teacher_id">
-                  {{ teacher.teacher_name }}
-                </option>
-              </select>
-            </label>
-            <label>
               <span>备注</span>
               <textarea v-model="internship.forms.application.remark" rows="3" />
             </label>
@@ -1483,7 +1475,6 @@ const internship = reactive({
   forms: {
     application: {
       arrangement_id: null,
-      teacher_id: null,
       remark: '',
     },
     sign: {
@@ -2957,14 +2948,10 @@ function handlePracticeAction(module, action, row) {
 
 function applyDefaultInternshipSelection() {
   const firstArrangement = internship.options.arrangements[0];
-  const firstTeacher = internship.options.teachers[0];
   if (firstArrangement) {
     internship.forms.application.arrangement_id ||= firstArrangement.id;
     internship.forms.sign.arrangement_id ||= firstArrangement.id;
     internship.forms.delay.arrangement_id ||= firstArrangement.id;
-  }
-  if (firstTeacher) {
-    internship.forms.application.teacher_id ||= firstTeacher.teacher_id;
   }
 }
 
@@ -3064,7 +3051,6 @@ async function submitApplication() {
       arrangement_id: internship.forms.application.arrangement_id,
       type: 'centralized',
       status: 'wait',
-      teacher_ids: internship.forms.application.teacher_id ? [internship.forms.application.teacher_id] : [],
       remark: internship.forms.application.remark,
     });
     internship.forms.application.remark = '';
@@ -4406,7 +4392,7 @@ function resetInternshipState() {
   Object.keys(internship.filters).forEach((key) => {
     internship.filters[key] = emptyInternshipFilters();
   });
-  internship.forms.application = { arrangement_id: null, teacher_id: null, remark: '' };
+  internship.forms.application = { arrangement_id: null, remark: '' };
   internship.forms.sign = { arrangement_id: null, location: '' };
   internship.forms.journal = { id: null, arrangement_id: null, title: '', content: '' };
   internship.forms.report = { id: null, arrangement_id: null, title: '', content: '' };

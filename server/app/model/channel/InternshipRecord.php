@@ -880,6 +880,27 @@ class InternshipRecord extends TableRecord
         ]));
     }
 
+    public static function activePairTeacherIds(int $studentId, int $arrangementId): array
+    {
+        if ($studentId <= 0 || $arrangementId <= 0) {
+            return [];
+        }
+
+        $pair = self::queryTable('pair')
+            ->where('student_id', $studentId)
+            ->where('arrangement_id', $arrangementId)
+            ->where('type', 'internship')
+            ->where('status', 'active')
+            ->whereNull('deleted_at')
+            ->orderByDesc('id')
+            ->first(['teacher_id', 'second_teacher_id']);
+        if (!$pair) {
+            return [];
+        }
+
+        return self::ids([(int) $pair->teacher_id, (int) $pair->second_teacher_id]);
+    }
+
     public static function applicationWithTeachers(int $id): ?array
     {
         $row = self::queryTable('application')

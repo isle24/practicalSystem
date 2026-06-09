@@ -272,7 +272,11 @@ class InternshipService
             'student_id' => $studentId,
             'arrangement_id' => $arrangementId,
         ])['id'];
-        $this->syncJoinTeachers($id, $studentId, $arrangementId, $this->intArray($request->input('teacher_ids', [])));
+        $teacherIds = $this->intArray($request->input('teacher_ids', []));
+        if (!$teacherIds && $this->isStudent()) {
+            $teacherIds = InternshipRecord::activePairTeacherIds($studentId, $arrangementId);
+        }
+        $this->syncJoinTeachers($id, $studentId, $arrangementId, $teacherIds);
         if ($status === 'wait') {
             $this->recordWorkflow('application_recording', 'application', $id, 'submit', $fromStatus, 'wait', $values['remark'] ?: '提交实习申请', 'wait');
         }
@@ -296,6 +300,8 @@ class InternshipService
             'admin_status' => 'pending',
             'updated_at' => $this->now(),
         ]);
+        $teacherIds = InternshipRecord::activePairTeacherIds((int) $row->student_id, (int) $row->arrangement_id);
+        $this->syncJoinTeachers($id, (int) $row->student_id, (int) $row->arrangement_id, $teacherIds);
         $this->recordWorkflow('application_recording', 'application', $id, 'submit', (string) $row->status, 'wait', (string) ($row->remark ?: '提交实习申请'), 'wait');
 
         return ['id' => $id, 'item' => $this->application($id)];
