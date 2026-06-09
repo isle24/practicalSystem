@@ -2879,7 +2879,6 @@ const switchAccountState = reactive({
 const loginPageState = reactive({
   loading: false,
   message: '',
-  school_code: '2184',
   school_name: '成都锦城学院',
   login_background_url: '',
 });
@@ -9054,7 +9053,6 @@ function applyProfileData(data) {
 
 function applyLoginPageData(data) {
   const payload = data?.data && typeof data.data === 'object' ? data.data : data || {};
-  loginPageState.school_code = payload.school_code || '2184';
   loginPageState.school_name = payload.school_name || '成都锦城学院';
   loginPageState.login_background_url = payload.login_background_url || payload.url || '';
 }

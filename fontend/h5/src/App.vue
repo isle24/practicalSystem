@@ -116,7 +116,6 @@
           <van-cell title="登录账号" :value="accountText" />
           <van-cell title="当前角色" :value="roleDisplayText" />
           <van-cell title="所属学校" :value="schoolText" />
-          <van-cell title="学校代码" :value="schoolCodeText" />
           <van-cell title="数据范围" :label="scopeDetailText" :value="scopeText" />
           <van-cell v-if="hasPermission('doc:view')" title="文档中心" value="查看" is-link @click="activeTab = 'doc'" />
           <van-cell v-if="hasPermission('template:view')" title="模板库" value="下载" is-link @click="activeTab = 'templateLib'" />
@@ -1677,7 +1676,6 @@ const roleText = computed(() => roleDisplayText.value);
 const userText = computed(() => state.context.user_name || state.context.name || state.context.login_name || '未登录');
 const accountText = computed(() => state.context.login_name || '-');
 const schoolText = computed(() => state.context.school_name || '成都锦城学院');
-const schoolCodeText = computed(() => state.context.school_code || '2184');
 const schoolShortText = computed(() => schoolText.value.replace('成都', '').replace('学院', '') || schoolText.value);
 const scopeText = computed(() => {
   if (!isLoggedIn.value) {
