@@ -42,19 +42,25 @@ input {
 
 .mobile-top {
   min-height: 82px;
-  display: flex;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  justify-content: space-between;
   gap: 12px;
   padding: calc(14px + env(safe-area-inset-top)) 18px 14px;
   color: #fff;
   background: linear-gradient(135deg, #1f73d2, #0f8f7e);
 }
 
-.mobile-top div {
+.mobile-title {
   min-width: 0;
   display: grid;
   gap: 4px;
+}
+
+.mobile-history-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .mobile-top span {
@@ -82,6 +88,10 @@ input {
   place-items: center;
   color: #fff;
   background: rgba(255, 255, 255, .14);
+}
+
+.mobile-top button:disabled {
+  opacity: .42;
 }
 
 .mobile-login {

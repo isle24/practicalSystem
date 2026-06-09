@@ -1,7 +1,15 @@
 <template>
   <main class="mobile-shell">
     <header class="mobile-top">
-      <div>
+      <div class="mobile-history-actions">
+        <button aria-label="后退" title="后退" :disabled="!canGoMobileBack" @click="goMobileBack">
+          <ChevronLeft :size="18" />
+        </button>
+        <button aria-label="前进" title="前进" :disabled="!canGoMobileForward" @click="goMobileForward">
+          <ChevronRight :size="18" />
+        </button>
+      </div>
+      <div class="mobile-title">
         <span>实践管理系统</span>
         <strong>{{ currentPage.title }}</strong>
       </div>
@@ -1229,13 +1237,14 @@
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { showToast } from 'vant';
 import {
   BriefcaseBusiness,
   BookOpen,
   CalendarCheck,
   CheckCircle2,
+  ChevronLeft,
   ChevronRight,
   ClipboardList,
   FileClock,
@@ -1545,6 +1554,11 @@ const practiceReviewDialog = reactive({
   row: null,
   reason: '',
 });
+const mobileNavigationState = reactive({
+  backStack: [],
+  forwardStack: [],
+  restoring: false,
+});
 
 const modules = [
   {
@@ -1614,6 +1628,8 @@ const summaries = computed(() => [
 ]);
 const messageUnreadCount = computed(() => Number(messageState.summary.unread || 0));
 const messageGroups = computed(() => groupMessagesByDay(messageState.items));
+const canGoMobileBack = computed(() => mobileNavigationState.backStack.length > 0);
+const canGoMobileForward = computed(() => mobileNavigationState.forwardStack.length > 0);
 
 const isLoggedIn = computed(() => Boolean(state.context.account_id));
 const roleType = computed(() => state.context.role_type || '');
@@ -4442,7 +4458,7 @@ function handleAuthExpired(event) {
   state.error = message;
   loginState.loading = false;
   loginState.message = message;
-  activeTab.value = 'home';
+  resetMobileNavigationToHome();
   resetMobileLocalState();
   showToast(message);
 }
@@ -4553,6 +4569,88 @@ function formatDateKey(date) {
     String(date.getMonth() + 1).padStart(2, '0'),
     String(date.getDate()).padStart(2, '0'),
   ].join('-');
+}
+
+function mobileNavigationSnapshot() {
+  return {
+    tab: activeTab.value,
+    internshipPanel: internship.panel,
+    internshipSubmitSection: internship.submitSection,
+    internshipReviewList: internship.reviewList,
+    internshipManageList: internship.manageList,
+    trainingPanel: practice.training.panel,
+    labPanel: practice.lab.panel,
+  };
+}
+
+function mobileNavigationKey() {
+  return JSON.stringify(mobileNavigationSnapshot());
+}
+
+async function applyMobileNavigationKey(key) {
+  let snapshot = null;
+  try {
+    snapshot = JSON.parse(key);
+  } catch {
+    return;
+  }
+
+  mobileNavigationState.restoring = true;
+  activeTab.value = snapshot.tab || 'home';
+  internship.panel = snapshot.internshipPanel || 'workbench';
+  internship.submitSection = snapshot.internshipSubmitSection || '';
+  internship.reviewList = snapshot.internshipReviewList || 'applications';
+  internship.manageList = snapshot.internshipManageList || 'arrangements';
+  practice.training.panel = snapshot.trainingPanel || practice.training.panel;
+  practice.lab.panel = snapshot.labPanel || practice.lab.panel;
+  await nextTick();
+  mobileNavigationState.restoring = false;
+}
+
+async function goMobileBack() {
+  if (!canGoMobileBack.value) {
+    return;
+  }
+
+  const current = mobileNavigationKey();
+  const target = mobileNavigationState.backStack.pop();
+  if (!target) {
+    return;
+  }
+  if (current !== target) {
+    mobileNavigationState.forwardStack.push(current);
+  }
+  await applyMobileNavigationKey(target);
+}
+
+async function goMobileForward() {
+  if (!canGoMobileForward.value) {
+    return;
+  }
+
+  const current = mobileNavigationKey();
+  const target = mobileNavigationState.forwardStack.pop();
+  if (!target) {
+    return;
+  }
+  if (current !== target) {
+    mobileNavigationState.backStack.push(current);
+  }
+  await applyMobileNavigationKey(target);
+}
+
+function clearMobileNavigation() {
+  mobileNavigationState.backStack.splice(0);
+  mobileNavigationState.forwardStack.splice(0);
+}
+
+function resetMobileNavigationToHome() {
+  mobileNavigationState.restoring = true;
+  activeTab.value = 'home';
+  clearMobileNavigation();
+  nextTick(() => {
+    mobileNavigationState.restoring = false;
+  });
 }
 
 async function refreshMobilePage() {
@@ -4707,7 +4805,7 @@ async function submitLogout() {
   loginState.message = '';
   try {
     await logoutApi();
-    activeTab.value = 'home';
+    resetMobileNavigationToHome();
     resetMobileLocalState();
     await load();
   } catch (error) {
@@ -4752,6 +4850,18 @@ watch(visibleMobileModules, () => {
   if (!['home', 'mine', 'message'].includes(activeTab.value) && !visibleMobileModules.value.some(module => module.key === activeTab.value)) {
     activeTab.value = 'home';
   }
+});
+
+watch(() => mobileNavigationKey(), (current, previous) => {
+  if (mobileNavigationState.restoring || !previous || current === previous) {
+    return;
+  }
+
+  mobileNavigationState.backStack.push(previous);
+  if (mobileNavigationState.backStack.length > 40) {
+    mobileNavigationState.backStack.shift();
+  }
+  mobileNavigationState.forwardStack.splice(0);
 });
 
 onMounted(async () => {
