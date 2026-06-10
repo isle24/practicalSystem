@@ -1559,6 +1559,23 @@ class InternshipRecord extends TableRecord
         return $teacherId ? (int) $teacherId : null;
     }
 
+    public static function teacherAccountId(int $teacherId): ?int
+    {
+        if ($teacherId <= 0) {
+            return null;
+        }
+
+        $accountId = self::queryTable('teacher_list')
+            ->join('account', 'teacher_list.user_id', '=', 'account.user_id')
+            ->where('teacher_list.teacher_id', $teacherId)
+            ->where('account.status', 'enabled')
+            ->whereNull('teacher_list.deleted_at')
+            ->whereNull('account.deleted_at')
+            ->value('account.id');
+
+        return $accountId ? (int) $accountId : null;
+    }
+
     public static function studentIdByUser(int $userId): ?int
     {
         $studentId = self::queryTable('students')
@@ -1587,6 +1604,45 @@ class InternshipRecord extends TableRecord
             ->value('user_id');
 
         return $userId ? (int) $userId : null;
+    }
+
+    public static function studentAccountId(int $studentId): ?int
+    {
+        if ($studentId <= 0) {
+            return null;
+        }
+
+        $accountId = self::queryTable('students')
+            ->join('account', 'students.user_id', '=', 'account.user_id')
+            ->where('students.student_id', $studentId)
+            ->where('account.status', 'enabled')
+            ->whereNull('students.deleted_at')
+            ->whereNull('account.deleted_at')
+            ->value('account.id');
+
+        return $accountId ? (int) $accountId : null;
+    }
+
+    public static function arrangementStudentAccountIds(int $arrangementId): array
+    {
+        if ($arrangementId <= 0) {
+            return [];
+        }
+
+        return self::queryTable('pair')
+            ->join('students', 'pair.student_id', '=', 'students.student_id')
+            ->join('account', 'students.user_id', '=', 'account.user_id')
+            ->where('pair.arrangement_id', $arrangementId)
+            ->where('pair.type', 'internship')
+            ->where('pair.status', 'active')
+            ->where('account.status', 'enabled')
+            ->whereNull('pair.deleted_at')
+            ->whereNull('students.deleted_at')
+            ->whereNull('account.deleted_at')
+            ->distinct()
+            ->pluck('account.id')
+            ->map(static fn ($id): int => (int) $id)
+            ->all();
     }
 
     public static function depIdsByProfessionIds(array $professionIds): array

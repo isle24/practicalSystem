@@ -6,6 +6,7 @@ use app\model\channel\InternshipRecord;
 use app\model\channel\PracticeRecord;
 use app\server\CurrentContext;
 use app\server\config\ConfigService;
+use app\server\message\MessageService;
 use InvalidArgumentException;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 use RuntimeException;
@@ -1183,6 +1184,14 @@ class InternshipService
             $final,
             $values['teacher_id']
         );
+        $this->notifyInternshipAccounts(
+            [$this->studentAccountId($studentId)],
+            '实习任务成绩已核定',
+            '你的实习任务成绩已核定，任务 ID：' . $arrangementId . '，总评：' . ($final ?? '未填写') . '。',
+            'result',
+            'score',
+            (int) $result['id']
+        );
 
         return $result;
     }
@@ -1732,6 +1741,7 @@ class InternshipService
                 $this->arrangementWorkflowContent($source, $before, $after, (string) ($input['change_reason'] ?? '')),
                 'accept'
             );
+            $this->notifyArrangementPublished($arrangementId, $after['item'] ?? [], $versionedChange);
 
             return [
                 'id' => $arrangementId,
@@ -2155,6 +2165,57 @@ class InternshipService
         return $result;
     }
 
+    private function notifyArrangementPublished(int $arrangementId, array $item, bool $changed): void
+    {
+        $teacherId = (int) ($item['teacher_id'] ?? 0);
+        $accountIds = array_merge(
+            [$this->teacherAccountId($teacherId)],
+            InternshipRecord::arrangementStudentAccountIds($arrangementId)
+        );
+        $title = $changed ? '实习任务变更已生效' : '实习任务已发布';
+        $taskTitle = trim((string) ($item['title'] ?? ''));
+        $startDate = trim((string) ($item['start_date'] ?? ''));
+        $endDate = trim((string) ($item['end_date'] ?? ''));
+        $dateText = $startDate !== '' && $endDate !== '' ? $startDate . ' 至 ' . $endDate : ($startDate ?: $endDate);
+        $location = trim((string) ($item['location'] ?? ''));
+        $parts = array_filter([
+            $taskTitle !== '' ? '任务：' . $taskTitle : '任务 ID：' . $arrangementId,
+            $dateText !== '' ? '时间：' . $dateText : null,
+            $location !== '' ? '地点：' . $location : null,
+        ]);
+
+        $this->notifyInternshipAccounts(
+            $accountIds,
+            $title,
+            implode('；', $parts),
+            $changed ? 'audit' : 'todo',
+            'arrangement',
+            $arrangementId
+        );
+    }
+
+    private function notifyInternshipAccounts(array $accountIds, string $title, string $content, string $type, string $entityType, int $entityId): void
+    {
+        $accountIds = array_values(array_unique(array_filter(array_map('intval', $accountIds), static fn (int $id): bool => $id > 0)));
+        if (!$accountIds) {
+            return;
+        }
+
+        try {
+            (new MessageService())->send([
+                'send_scope' => 'custom',
+                'account_ids' => $accountIds,
+                'title' => $title,
+                'content' => $content,
+                'type' => $type,
+                'level' => 'important',
+                'entity_type' => $entityType,
+                'entity_id' => $entityId,
+            ], 0, '实习系统');
+        } catch (Throwable) {
+        }
+    }
+
     private function scopeContext(): array
     {
         $roleType = CurrentContext::roleType();
@@ -2437,6 +2498,16 @@ class InternshipService
     private function studentDepId(int $studentId): ?int
     {
         return InternshipRecord::studentDepId($studentId);
+    }
+
+    private function studentAccountId(int $studentId): ?int
+    {
+        return InternshipRecord::studentAccountId($studentId);
+    }
+
+    private function teacherAccountId(int $teacherId): ?int
+    {
+        return InternshipRecord::teacherAccountId($teacherId);
     }
 
     private function row(string $table, int $id): object
