@@ -60,6 +60,10 @@ class InternshipService
             'accept' => ['min' => 0, 'max' => 300],
             'modify' => ['min' => 8, 'max' => 800],
         ],
+        'score' => [
+            'accept' => ['min' => 0, 'max' => 300],
+            'modify' => ['min' => 5, 'max' => 500],
+        ],
         'plan' => [
             'accept' => ['min' => 0, 'max' => 300],
             'modify' => ['min' => 8, 'max' => 800],
@@ -77,6 +81,7 @@ class InternshipService
         'sign_in' => ['table' => 'sign_in', 'recording' => 'sign_in_recording'],
         'journal' => ['table' => 'journal', 'recording' => 'journal_recording'],
         'report' => ['table' => 'report', 'recording' => 'report_recording'],
+        'score' => ['table' => 'score', 'recording' => 'score_recording'],
         'plan' => ['table' => 'internship_plan', 'recording' => 'plan_recording'],
         'delay' => ['table' => 'apply_report_delay', 'recording' => 'apply_report_delay_recording'],
     ];
@@ -1115,6 +1120,9 @@ class InternshipService
         $this->assertStudentVisible($studentId);
         $this->assertArrangementVisible($arrangementId);
         $this->assertTaskBindingVisible($studentId, $arrangementId);
+        $scoreId = $this->inputRowId($request, 'score')
+            ?: InternshipRecord::activeIdByFields('score', ['student_id' => $studentId, 'arrangement_id' => $arrangementId]);
+        $fromStatus = $scoreId > 0 ? InternshipRecord::statusById('score', $scoreId) : 'draft';
 
         $signInScore = $this->decimalInput($request, 'sign_in_score');
         $journalScore = $this->decimalInput($request, 'journal_score');
@@ -1144,7 +1152,21 @@ class InternshipService
             'deleted_at' => null,
         ];
 
-        return $this->saveRow('score', $request, $values, ['student_id' => $studentId, 'arrangement_id' => $arrangementId]);
+        $result = $this->saveRow('score', $request, $values, ['student_id' => $studentId, 'arrangement_id' => $arrangementId]);
+        $this->recordWorkflow(
+            'score_recording',
+            'score',
+            (int) $result['id'],
+            $scoreId > 0 ? 'change' : 'submit',
+            $fromStatus,
+            'accept',
+            $this->scoreWorkflowContent($values),
+            'accept',
+            $final,
+            $values['teacher_id']
+        );
+
+        return $result;
     }
 
     public function plans(Request $request): array
@@ -2413,7 +2435,7 @@ class InternshipService
             return;
         }
         $this->assertStudentVisible((int) $row->student_id);
-        if (in_array($entity, ['sign_in', 'journal', 'report', 'delay'], true)) {
+        if (in_array($entity, ['sign_in', 'journal', 'report', 'score', 'delay'], true)) {
             $this->assertTaskBindingVisible((int) $row->student_id, $this->reviewEntityArrangementId($entity, $row));
         }
     }
@@ -2431,7 +2453,7 @@ class InternshipService
     {
         return match ($entity) {
             'sign_in', 'journal', 'delay' => (int) $row->entity_id,
-            'report' => (int) $row->arrangement_id,
+            'report', 'score' => (int) $row->arrangement_id,
             default => 0,
         };
     }
@@ -3094,6 +3116,20 @@ class InternshipService
         ]);
 
         return '提交实习签到；' . implode('；', $parts);
+    }
+
+    private function scoreWorkflowContent(array $values): string
+    {
+        $parts = array_filter([
+            $values['sign_in_score'] !== null ? '签到：' . $values['sign_in_score'] : '',
+            $values['journal_score'] !== null ? '日志：' . $values['journal_score'] : '',
+            $values['report_score'] !== null ? '报告：' . $values['report_score'] : '',
+            $values['enterprise_score'] !== null ? '企业：' . $values['enterprise_score'] : '',
+            $values['final_score'] !== null ? '总评：' . $values['final_score'] : '',
+            !empty($values['comment']) ? '评语：' . (string) $values['comment'] : '',
+        ]);
+
+        return '核定实习任务成绩；' . implode('；', $parts);
     }
 
     private function now(): string

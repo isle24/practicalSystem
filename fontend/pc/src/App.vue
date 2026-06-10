@@ -1115,7 +1115,13 @@
                         @page-change="page => loadInternshipPanel('scores', page)"
                         @reset="resetInternshipFilters('scores')"
                         @search="loadInternshipPanel('scores', 1)"
-                      />
+                      >
+                        <template #actions="{ row }">
+                          <el-button size="small" type="primary" plain @click="openTimelineDialog('score', row)">
+                            记录
+                          </el-button>
+                        </template>
+                      </DataListPanel>
                       <section class="course-score-panel">
                         <header>
                           <strong>课程成绩汇总</strong>
@@ -4484,6 +4490,7 @@ function studentTimelineEntity(panel) {
     journals: 'journal',
     reports: 'report',
     delays: 'delay',
+    scores: 'score',
   };
   return map[panel] || '';
 }
@@ -8922,6 +8929,7 @@ function reviewEntityName(entity) {
     sign_in: '实习签到',
     journal: '实习日志',
     report: '实习报告',
+    score: '实习成绩',
     plan: '实习计划',
     arrangement: '实习任务',
     arrangement_change: '任务变更',

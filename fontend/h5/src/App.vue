@@ -805,9 +805,11 @@
             <van-cell
               v-for="row in internship.lists.scores.items"
               :key="row.id"
+              clickable
               :title="row.student_name || row.student_num"
               :label="`${row.arrangement_title || '-'} / 总评 ${row.final_score ?? '-'}`"
               :value="row.teacher_name || '-'"
+              @click="openTimelineDialog('score', row)"
             />
             <div v-if="!internship.lists.scores.items.length" class="mobile-empty">暂无成绩记录</div>
             <div class="mobile-list-footer">
@@ -2030,7 +2032,7 @@ const mobileListConfigs = computed(() => ({
   },
   scores: {
     key: 'scores',
-    entity: '',
+    entity: 'score',
     title: '任务成绩',
     shortTitle: '任务成绩',
     icon: GraduationCap,
@@ -3805,6 +3807,7 @@ function reviewEntityName(entity) {
     sign_in: '实习签到',
     journal: '实习日志',
     report: '实习报告',
+    score: '实习成绩',
     plan: '实习计划',
     delay: '延期申请',
   };

@@ -635,6 +635,7 @@ function schoolBusinessStatements(): array
         simpleTable('apply_report_delay', entityColumns(['`student_id` BIGINT UNSIGNED DEFAULT NULL', '`config_key` VARCHAR(120) DEFAULT NULL', '`requested_date` DATE DEFAULT NULL', '`reason` TEXT DEFAULT NULL'])),
         simpleTable('apply_report_delay_recording', recordingColumns()),
         simpleTable('score', entityColumns(['`student_id` BIGINT UNSIGNED DEFAULT NULL', '`score_value` DECIMAL(5,2) DEFAULT NULL'])),
+        simpleTable('score_recording', recordingColumns()),
         simpleTable('internship_plan', ['`source_type` VARCHAR(40) DEFAULT \'edu_system\'', '`course_code` VARCHAR(120) DEFAULT NULL', '`course_name` VARCHAR(180) DEFAULT NULL', '`grade_id` BIGINT UNSIGNED DEFAULT NULL', '`dep_id` BIGINT UNSIGNED DEFAULT NULL', '`profession_id` BIGINT UNSIGNED DEFAULT NULL', '`semester` VARCHAR(80) DEFAULT NULL', '`credit` DECIMAL(5,2) DEFAULT NULL', '`student_count` INT DEFAULT 0', '`score_rule` VARCHAR(40) DEFAULT \'average\'', '`plan_content` JSON DEFAULT NULL', '`submitter_id` BIGINT UNSIGNED DEFAULT NULL']),
         simpleTable('internship_plan_approval', ['`plan_id` BIGINT UNSIGNED DEFAULT NULL', '`reviewer_id` BIGINT UNSIGNED DEFAULT NULL']),
         simpleTable('plan_recording', recordingColumns()),
@@ -1154,7 +1155,7 @@ function ensureInternshipSchema(PDO $pdo): void
         }
     }
 
-    foreach (['application_recording', 'arrangement_recording', 'arrangement_change_recording', 'sign_in_recording', 'journal_recording', 'report_recording', 'join_recording', 'apply_report_delay_recording', 'plan_recording'] as $table) {
+    foreach (['application_recording', 'arrangement_recording', 'arrangement_change_recording', 'sign_in_recording', 'journal_recording', 'report_recording', 'join_recording', 'apply_report_delay_recording', 'score_recording', 'plan_recording'] as $table) {
         ensureColumn($pdo, $table, 'parent_id', "ALTER TABLE `{$table}` ADD COLUMN `parent_id` BIGINT UNSIGNED DEFAULT NULL AFTER `code`");
         ensureColumn($pdo, $table, 'action', "ALTER TABLE `{$table}` ADD COLUMN `action` VARCHAR(40) DEFAULT NULL AFTER `parent_id`");
         ensureColumn($pdo, $table, 'operator_id', "ALTER TABLE `{$table}` ADD COLUMN `operator_id` BIGINT UNSIGNED DEFAULT NULL AFTER `action`");
