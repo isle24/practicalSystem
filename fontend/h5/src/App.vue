@@ -1924,7 +1924,7 @@ const mobileListConfigs = computed(() => ({
   },
   syllabusGuides: {
     key: 'syllabusGuides',
-    entity: '',
+    entity: 'syllabus_guide',
     title: '大纲指导书',
     shortTitle: '大纲',
     icon: BookOpen,
@@ -1938,7 +1938,7 @@ const mobileListConfigs = computed(() => ({
   },
   implementationSheets: {
     key: 'implementationSheets',
-    entity: '',
+    entity: 'implementation_sheet',
     title: '实施表',
     shortTitle: '实施',
     icon: ClipboardList,
@@ -2010,7 +2010,7 @@ const mobileListConfigs = computed(() => ({
   },
   teacherWorkReports: {
     key: 'teacherWorkReports',
-    entity: '',
+    entity: 'teacher_work_report',
     title: '教师工作报告',
     shortTitle: '工作报告',
     icon: FileText,
@@ -2054,7 +2054,7 @@ const mobileListConfigs = computed(() => ({
   },
   inspections: {
     key: 'inspections',
-    entity: '',
+    entity: 'inspection',
     title: '巡查记录',
     shortTitle: '巡查',
     icon: Search,
@@ -2083,7 +2083,7 @@ const mobileListConfigs = computed(() => ({
   },
   insurances: {
     key: 'insurances',
-    entity: '',
+    entity: 'insurance',
     title: '保险记录',
     shortTitle: '保险',
     icon: FileText,
@@ -2094,7 +2094,7 @@ const mobileListConfigs = computed(() => ({
   },
   safetyLetters: {
     key: 'safetyLetters',
-    entity: '',
+    entity: 'safety_letter',
     title: '安全承诺',
     shortTitle: '承诺',
     icon: CheckCircle2,
@@ -3810,6 +3810,12 @@ function reviewEntityName(entity) {
     score: '实习成绩',
     plan: '实习计划',
     delay: '延期申请',
+    insurance: '保险记录',
+    safety_letter: '安全承诺',
+    syllabus_guide: '大纲指导书',
+    implementation_sheet: '实施表',
+    teacher_work_report: '教师工作报告',
+    inspection: '巡查记录',
   };
   return names[entity] || '审核事项';
 }

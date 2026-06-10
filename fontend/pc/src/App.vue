@@ -939,7 +939,13 @@
                       @page-change="page => loadInternshipPanel(win.panel, page)"
                       @reset="resetInternshipFilters(win.panel)"
                       @search="loadInternshipPanel(win.panel, 1)"
-                    />
+                    >
+                      <template #actions="{ row }">
+                        <el-button v-if="internshipTimelineEntity(win.panel)" size="small" type="primary" plain @click="openTimelineDialog(internshipTimelineEntity(win.panel), row)">
+                          记录
+                        </el-button>
+                      </template>
+                    </DataListPanel>
                   </template>
 
                   <template v-else-if="win.panel === 'applications'">
@@ -4447,6 +4453,18 @@ function internshipSidebarItemVisible(item) {
 
 function isInternshipReadOnlyListPanel(panel) {
   return ['syllabusGuides', 'implementationSheets', 'teacherWorkReports', 'inspections'].includes(panel);
+}
+
+function internshipTimelineEntity(panel) {
+  const map = {
+    syllabusGuides: 'syllabus_guide',
+    implementationSheets: 'implementation_sheet',
+    teacherWorkReports: 'teacher_work_report',
+    inspections: 'inspection',
+    insurances: 'insurance',
+    safetyLetters: 'safety_letter',
+  };
+  return map[panel] || '';
 }
 
 function internshipListFilters(listKey, adminKeys) {
@@ -8934,6 +8952,12 @@ function reviewEntityName(entity) {
     arrangement: '实习任务',
     arrangement_change: '任务变更',
     delay: '延期申请',
+    insurance: '保险记录',
+    safety_letter: '安全承诺',
+    syllabus_guide: '大纲指导书',
+    implementation_sheet: '实施表',
+    teacher_work_report: '教师工作报告',
+    inspection: '巡查记录',
   };
   return names[entity] || '审核事项';
 }

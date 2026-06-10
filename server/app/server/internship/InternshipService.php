@@ -84,6 +84,12 @@ class InternshipService
         'score' => ['table' => 'score', 'recording' => 'score_recording'],
         'plan' => ['table' => 'internship_plan', 'recording' => 'plan_recording'],
         'delay' => ['table' => 'apply_report_delay', 'recording' => 'apply_report_delay_recording'],
+        'insurance' => ['table' => 'insurance', 'recording' => 'insurance_recording'],
+        'safety_letter' => ['table' => 'safety_letter_sign', 'recording' => 'safety_letter_recording'],
+        'syllabus_guide' => ['table' => 'syllabus_guide', 'recording' => 'syllabus_guide_recording'],
+        'implementation_sheet' => ['table' => 'implementation_sheet', 'recording' => 'implementation_sheet_recording'],
+        'teacher_work_report' => ['table' => 'teacher_work_report', 'recording' => 'teacher_work_report_recording'],
+        'inspection' => ['table' => 'inspection_record', 'recording' => 'inspection_recording'],
     ];
     private const DELAY_CONFIG_KEYS = ['report_deadline', 'journal_deadline'];
     private const EXCEL_EXTENSIONS = ['xls', 'xlsx'];
@@ -1294,7 +1300,7 @@ class InternshipService
         $this->assertArrangementVisible($arrangementId);
         $this->assertTaskBindingVisible($studentId, $arrangementId);
 
-        return $this->saveRow('insurance', $request, [
+        $values = [
             'arrangement_id' => $arrangementId,
             'student_id' => $studentId,
             'insurance_company' => $this->nullableString($request, 'insurance_company', 120),
@@ -1306,7 +1312,15 @@ class InternshipService
             'status' => 'enabled',
             'updated_at' => $this->now(),
             'deleted_at' => null,
-        ]);
+        ];
+
+        return $this->saveWorkflowRow('insurance', 'insurance', 'insurance_recording', $request, $values, $this->workflowContent('保存保险记录', $values, [
+            'insurance_company' => '保险公司',
+            'policy_number' => '保单号',
+            'insured_amount' => '保额',
+            'start_date' => '开始日期',
+            'end_date' => '结束日期',
+        ]));
     }
 
     public function safetyLetters(Request $request): array
@@ -1325,7 +1339,7 @@ class InternshipService
         $status = $this->enum($request, 'status', ['pending', 'signed'], 'pending');
         $signedAt = $this->dateTimeInput($request, 'signed_at');
 
-        return $this->saveRow('safety_letter_sign', $request, [
+        $values = [
             'arrangement_id' => $arrangementId,
             'student_id' => $studentId,
             'template_id' => $this->optionalInt($request, 'template_id'),
@@ -1334,7 +1348,12 @@ class InternshipService
             'status' => $status,
             'updated_at' => $this->now(),
             'deleted_at' => null,
-        ]);
+        ];
+
+        return $this->saveWorkflowRow('safety_letter_sign', 'safety_letter', 'safety_letter_recording', $request, $values, $this->workflowContent('保存安全承诺', $values, [
+            'status' => '状态',
+            'signed_at' => '签署时间',
+        ]));
     }
 
     public function syllabusGuides(Request $request): array
@@ -1349,8 +1368,10 @@ class InternshipService
     public function saveSyllabusGuide(Request $request): array
     {
         $this->requirePermission('internship:manage');
-        return $this->saveRow('syllabus_guide', $request, [
-            'arrangement_id' => $this->requiredInt($request, 'arrangement_id'),
+        $arrangementId = $this->requiredInt($request, 'arrangement_id');
+        $this->assertArrangementVisible($arrangementId);
+        $values = [
+            'arrangement_id' => $arrangementId,
             'dep_id' => $this->optionalInt($request, 'dep_id'),
             'profession_id' => $this->optionalInt($request, 'profession_id'),
             'title' => $this->requiredString($request, 'title', 180),
@@ -1360,7 +1381,12 @@ class InternshipService
             'status' => $this->enum($request, 'status', ['draft', 'published'], 'draft'),
             'updated_at' => $this->now(),
             'deleted_at' => null,
-        ]);
+        ];
+
+        return $this->saveWorkflowRow('syllabus_guide', 'syllabus_guide', 'syllabus_guide_recording', $request, $values, $this->workflowContent('保存实习大纲及指导书', $values, [
+            'title' => '标题',
+            'status' => '状态',
+        ]));
     }
 
     public function implementationSheets(Request $request): array
@@ -1381,8 +1407,10 @@ class InternshipService
     public function saveImplementationSheet(Request $request): array
     {
         $this->requirePermission('internship:manage');
-        return $this->saveRow('implementation_sheet', $request, [
-            'arrangement_id' => $this->requiredInt($request, 'arrangement_id'),
+        $arrangementId = $this->requiredInt($request, 'arrangement_id');
+        $this->assertArrangementVisible($arrangementId);
+        $values = [
+            'arrangement_id' => $arrangementId,
             'teacher_id' => $this->optionalInt($request, 'teacher_id') ?? $this->currentTeacherId(false),
             'plan_ref_id' => $this->optionalInt($request, 'plan_ref_id'),
             'syllabus_ref_id' => $this->optionalInt($request, 'syllabus_ref_id'),
@@ -1394,7 +1422,15 @@ class InternshipService
             'status' => $this->enum($request, 'status', ['draft', 'confirmed'], 'draft'),
             'updated_at' => $this->now(),
             'deleted_at' => null,
-        ]);
+        ];
+
+        return $this->saveWorkflowRow('implementation_sheet', 'implementation_sheet', 'implementation_sheet_recording', $request, $values, $this->workflowContent('保存教学实习实施表', $values, [
+            'signed_count' => '已签承诺',
+            'unsigned_count' => '未签承诺',
+            'insurance_verified' => '保险核验',
+            'confirmed_at' => '确认时间',
+            'status' => '状态',
+        ]));
     }
 
     public function teacherWorkReports(Request $request): array
@@ -1414,8 +1450,10 @@ class InternshipService
     public function saveTeacherWorkReport(Request $request): array
     {
         $this->requirePermission('internship:report');
-        return $this->saveRow('teacher_work_report', $request, [
-            'arrangement_id' => $this->requiredInt($request, 'arrangement_id'),
+        $arrangementId = $this->requiredInt($request, 'arrangement_id');
+        $this->assertArrangementVisible($arrangementId);
+        $values = [
+            'arrangement_id' => $arrangementId,
             'teacher_id' => $this->isTeacher() ? $this->currentTeacherId(true) : $this->requiredInt($request, 'teacher_id'),
             'guidance_count' => $this->optionalInt($request, 'guidance_count') ?? 0,
             'summary' => $this->nullableString($request, 'summary', 10000),
@@ -1425,7 +1463,15 @@ class InternshipService
             'status' => $this->enum($request, 'status', ['draft', 'wait', 'accept', 'modify'], 'draft'),
             'updated_at' => $this->now(),
             'deleted_at' => null,
-        ]);
+        ];
+
+        return $this->saveWorkflowRow('teacher_work_report', 'teacher_work_report', 'teacher_work_report_recording', $request, $values, $this->workflowContent('保存实习指导教师工作报告', $values, [
+            'guidance_count' => '负责人数',
+            'summary' => '工作总结',
+            'problems' => '问题',
+            'suggestions' => '建议',
+            'status' => '状态',
+        ]));
     }
 
     public function inspections(Request $request): array
@@ -1441,10 +1487,17 @@ class InternshipService
     {
         $this->requirePermission('internship:archive');
         $this->requireAdminRole();
-        return $this->saveRow('inspection_record', $request, [
+        $arrangementId = $this->requiredInt($request, 'arrangement_id');
+        $studentId = $this->optionalInt($request, 'student_id');
+        $this->assertArrangementVisible($arrangementId);
+        if ($studentId) {
+            $this->assertStudentVisible($studentId);
+            $this->assertTaskBindingVisible($studentId, $arrangementId);
+        }
+        $values = [
             'semester' => $this->requiredString($request, 'semester', 80),
-            'arrangement_id' => $this->requiredInt($request, 'arrangement_id'),
-            'student_id' => $this->optionalInt($request, 'student_id'),
+            'arrangement_id' => $arrangementId,
+            'student_id' => $studentId,
             'inspector_id' => CurrentContext::accountId(),
             'items' => $this->jsonValue($request->input('items', [])),
             'result' => $this->enum($request, 'result', ['pass', 'fail'], 'pass'),
@@ -1452,7 +1505,12 @@ class InternshipService
             'status' => 'enabled',
             'updated_at' => $this->now(),
             'deleted_at' => null,
-        ]);
+        ];
+
+        return $this->saveWorkflowRow('inspection_record', 'inspection', 'inspection_recording', $request, $values, $this->workflowContent('保存实习巡查记录', $values, [
+            'result' => '巡查结果',
+            'remark' => '说明',
+        ]));
     }
 
     private function reviewStudentWork(Request $request, string $table, string $recordingTable): array
@@ -2071,6 +2129,20 @@ class InternshipService
         return ['id' => $id, 'uuid' => $uuid];
     }
 
+    private function saveWorkflowRow(string $table, string $entity, string $recordingTable, Request $request, array $values, string $content, array $unique = []): array
+    {
+        $existingId = $this->inputRowId($request, $table);
+        if (!$existingId && $unique) {
+            $existingId = InternshipRecord::activeIdByFields($table, $unique);
+        }
+        $fromStatus = $existingId ? InternshipRecord::statusById($table, $existingId) : 'draft';
+        $result = $this->saveRow($table, $request, $values, $unique);
+        $toStatus = (string) ($values['status'] ?? 'enabled');
+        $this->recordWorkflow($recordingTable, $entity, (int) $result['id'], $existingId ? 'change' : 'submit', $fromStatus, $toStatus, $content, $toStatus);
+
+        return $result;
+    }
+
     private function scopeContext(): array
     {
         $roleType = CurrentContext::roleType();
@@ -2434,8 +2506,16 @@ class InternshipService
             }
             return;
         }
+        if (in_array($entity, ['syllabus_guide', 'implementation_sheet', 'teacher_work_report', 'inspection'], true)) {
+            $this->assertArrangementVisible((int) $row->arrangement_id);
+            if ($entity === 'inspection' && (int) ($row->student_id ?? 0) > 0) {
+                $this->assertStudentVisible((int) $row->student_id);
+                $this->assertTaskBindingVisible((int) $row->student_id, (int) $row->arrangement_id);
+            }
+            return;
+        }
         $this->assertStudentVisible((int) $row->student_id);
-        if (in_array($entity, ['sign_in', 'journal', 'report', 'score', 'delay'], true)) {
+        if (in_array($entity, ['sign_in', 'journal', 'report', 'score', 'delay', 'insurance', 'safety_letter'], true)) {
             $this->assertTaskBindingVisible((int) $row->student_id, $this->reviewEntityArrangementId($entity, $row));
         }
     }
@@ -2453,7 +2533,7 @@ class InternshipService
     {
         return match ($entity) {
             'sign_in', 'journal', 'delay' => (int) $row->entity_id,
-            'report', 'score' => (int) $row->arrangement_id,
+            'report', 'score', 'insurance', 'safety_letter' => (int) $row->arrangement_id,
             default => 0,
         };
     }
@@ -3130,6 +3210,26 @@ class InternshipService
         ]);
 
         return '核定实习任务成绩；' . implode('；', $parts);
+    }
+
+    private function workflowContent(string $title, array $values, array $labels): string
+    {
+        $parts = [];
+        foreach ($labels as $key => $label) {
+            $value = $values[$key] ?? null;
+            if ($value === null || $value === '') {
+                continue;
+            }
+            $parts[] = $label . '：' . $this->workflowValue($value);
+        }
+
+        return $title . ($parts ? '；' . implode('；', $parts) : '');
+    }
+
+    private function workflowValue(mixed $value): string
+    {
+        $text = is_scalar($value) ? (string) $value : $this->jsonValue($value);
+        return mb_strlen($text) > 180 ? mb_substr($text, 0, 180) . '...' : $text;
     }
 
     private function now(): string

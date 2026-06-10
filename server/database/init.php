@@ -640,11 +640,17 @@ function schoolBusinessStatements(): array
         simpleTable('internship_plan_approval', ['`plan_id` BIGINT UNSIGNED DEFAULT NULL', '`reviewer_id` BIGINT UNSIGNED DEFAULT NULL']),
         simpleTable('plan_recording', recordingColumns()),
         simpleTable('insurance', ['`student_id` BIGINT UNSIGNED DEFAULT NULL', '`company_id` BIGINT UNSIGNED DEFAULT NULL', '`policy_no` VARCHAR(120) DEFAULT NULL']),
+        simpleTable('insurance_recording', recordingColumns()),
         simpleTable('safety_letter_sign', ['`student_id` BIGINT UNSIGNED DEFAULT NULL', '`signed_at` DATETIME DEFAULT NULL']),
+        simpleTable('safety_letter_recording', recordingColumns()),
         simpleTable('syllabus_guide', ['`dep_id` BIGINT UNSIGNED DEFAULT NULL', '`file_id` BIGINT UNSIGNED DEFAULT NULL']),
+        simpleTable('syllabus_guide_recording', recordingColumns()),
         simpleTable('implementation_sheet', ['`arrangement_id` BIGINT UNSIGNED DEFAULT NULL', '`sheet_json` JSON DEFAULT NULL']),
+        simpleTable('implementation_sheet_recording', recordingColumns()),
         simpleTable('teacher_work_report', ['`teacher_id` BIGINT UNSIGNED DEFAULT NULL', '`semester` VARCHAR(80) DEFAULT NULL']),
+        simpleTable('teacher_work_report_recording', recordingColumns()),
         simpleTable('inspection_record', ['`inspector_id` BIGINT UNSIGNED DEFAULT NULL', '`entity_type` VARCHAR(40) DEFAULT NULL', '`entity_id` BIGINT UNSIGNED DEFAULT NULL']),
+        simpleTable('inspection_recording', recordingColumns()),
         simpleTable('base_application', ['`base_id` BIGINT UNSIGNED DEFAULT NULL', '`dep_id` BIGINT UNSIGNED DEFAULT NULL', '`base_type` VARCHAR(40) DEFAULT NULL']),
         simpleTable('base_usage', ['`base_id` BIGINT UNSIGNED DEFAULT NULL', '`dep_id` BIGINT UNSIGNED DEFAULT NULL', '`usage_type` VARCHAR(80) DEFAULT NULL']),
         simpleTable('base_result', ['`base_id` BIGINT UNSIGNED DEFAULT NULL', '`dep_id` BIGINT UNSIGNED DEFAULT NULL', '`result_type` VARCHAR(80) DEFAULT NULL']),
@@ -1155,7 +1161,7 @@ function ensureInternshipSchema(PDO $pdo): void
         }
     }
 
-    foreach (['application_recording', 'arrangement_recording', 'arrangement_change_recording', 'sign_in_recording', 'journal_recording', 'report_recording', 'join_recording', 'apply_report_delay_recording', 'score_recording', 'plan_recording'] as $table) {
+    foreach (['application_recording', 'arrangement_recording', 'arrangement_change_recording', 'sign_in_recording', 'journal_recording', 'report_recording', 'join_recording', 'apply_report_delay_recording', 'score_recording', 'plan_recording', 'insurance_recording', 'safety_letter_recording', 'syllabus_guide_recording', 'implementation_sheet_recording', 'teacher_work_report_recording', 'inspection_recording'] as $table) {
         ensureColumn($pdo, $table, 'parent_id', "ALTER TABLE `{$table}` ADD COLUMN `parent_id` BIGINT UNSIGNED DEFAULT NULL AFTER `code`");
         ensureColumn($pdo, $table, 'action', "ALTER TABLE `{$table}` ADD COLUMN `action` VARCHAR(40) DEFAULT NULL AFTER `parent_id`");
         ensureColumn($pdo, $table, 'operator_id', "ALTER TABLE `{$table}` ADD COLUMN `operator_id` BIGINT UNSIGNED DEFAULT NULL AFTER `action`");
