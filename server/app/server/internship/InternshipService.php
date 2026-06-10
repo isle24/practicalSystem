@@ -778,7 +778,19 @@ class InternshipService
             'deleted_at' => null,
         ];
 
-        return ['id' => $this->upsertActivePair($values)];
+        $id = $this->upsertActivePair($values);
+        $this->recordWorkflow(
+            'arrangement_recording',
+            'arrangement',
+            $arrangementId,
+            'add_pair',
+            'draft',
+            'active',
+            sprintf('新增学生 %d 的任务绑定，负责老师 %d。', $studentId, $teacherId),
+            'accept'
+        );
+
+        return ['id' => $id];
     }
 
     public function removePair(Request $request): array
