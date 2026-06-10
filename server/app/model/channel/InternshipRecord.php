@@ -3223,6 +3223,9 @@ class InternshipRecord extends TableRecord
         if (!$scores) {
             return null;
         }
+        if ($rule === 'manual') {
+            return null;
+        }
         $values = array_map(static fn (array $score): float => (float) $score['final_score'], $scores);
         if ($rule === 'sum') {
             return round(array_sum($values), 2);
