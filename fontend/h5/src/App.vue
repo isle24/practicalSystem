@@ -2661,6 +2661,7 @@ function mobileListFacts(key, row) {
       namedFact('安排', arrangement),
       namedFact('类型', row.arrangement_type_text),
       namedFact('进度', row.material_progress),
+      namedFact('抽检', row.inspection_record_status),
       namedFact('缺失', row.missing_materials),
     ],
     insurances: [

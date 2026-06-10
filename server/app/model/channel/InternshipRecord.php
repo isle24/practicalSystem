@@ -18,6 +18,7 @@ class InternshipRecord extends TableRecord
         'report' => '实习/实训报告',
         'graduation_appraisal' => '毕业实习报告及成绩鉴定表',
         'teacher_work_report' => '实习指导教师工作报告',
+        'inspection_record' => '抽检记录',
         'insurance' => '保险单',
     ];
     private const ARCHIVE_REQUIREMENTS = [
@@ -2088,6 +2089,7 @@ class InternshipRecord extends TableRecord
         $syllabusGuides = self::statSyllabusGuides($scope, $filters);
         $implementationSheets = self::statImplementationSheets($scope, $filters);
         $teacherWorkReports = self::statTeacherWorkReports($scope, $filters);
+        $inspections = self::statInspections($scope, $filters);
 
         return [
             'students' => $students,
@@ -2108,6 +2110,7 @@ class InternshipRecord extends TableRecord
             'syllabus_guides' => $syllabusGuides,
             'implementation_sheets' => $implementationSheets,
             'teacher_work_reports' => $teacherWorkReports,
+            'inspections' => $inspections,
         ];
     }
 
@@ -2384,6 +2387,32 @@ class InternshipRecord extends TableRecord
             'teacher_work_report.id', 'teacher_work_report.arrangement_id',
             'teacher_work_report.teacher_id', 'teacher_work_report.status',
             'arrangement.title as arrangement_title', 'teacher_list.teacher_name',
+        ]);
+    }
+
+    private static function statInspections(array $scope, array $filters): array
+    {
+        $query = self::applyArrangementScope(self::queryTable('inspection_record')
+            ->leftJoin('students', 'inspection_record.student_id', '=', 'students.student_id')
+            ->leftJoin('arrangement', 'inspection_record.arrangement_id', '=', 'arrangement.id')
+            ->leftJoin('internship_plan', 'arrangement.plan_id', '=', 'internship_plan.id')
+            ->whereNull('inspection_record.deleted_at'), $scope);
+        self::listFilters($query, $filters, [
+            'dep_id' => 'arrangement.dep_id',
+            'profession_id' => 'arrangement.profession_id',
+            'grade_id' => 'internship_plan.grade_id',
+            'class_id' => 'students.class_id',
+            'semester' => 'arrangement.semester',
+            'arrangement_id' => 'arrangement.id',
+        ]);
+        self::keyword($query, $filters, ['students.name', 'students.student_num', 'arrangement.title', 'inspection_record.remark']);
+
+        return self::statRows($query->orderByDesc('inspection_record.id'), [
+            'inspection_record.id', 'inspection_record.student_id',
+            'inspection_record.arrangement_id', 'inspection_record.result',
+            'inspection_record.status', 'inspection_record.remark',
+            'students.dep_id', 'students.profession_id', 'students.grade_id',
+            'arrangement.title as arrangement_title', 'arrangement.semester',
         ]);
     }
 
@@ -2711,8 +2740,8 @@ class InternshipRecord extends TableRecord
                 'label' => $label,
                 'required' => $isRequired,
                 'archived' => $isRequired && $state['archived'],
-                'status' => $isRequired ? ($state['archived'] ? 'archived' : 'missing') : 'not_required',
-                'text' => $isRequired ? ($state['archived'] ? $state['text'] : '待补齐') : '不适用',
+                'status' => $isRequired ? ($state['archived'] ? 'archived' : 'missing') : ($state['archived'] ? 'archived' : 'not_required'),
+                'text' => $isRequired ? ($state['archived'] ? $state['text'] : '待补齐') : ($state['archived'] ? $state['text'] : '不适用'),
                 'source_status' => $state['source_status'],
             ];
         }
@@ -2732,6 +2761,7 @@ class InternshipRecord extends TableRecord
             'report' => self::archiveReportState($data['reports'], $studentId, $arrangementId),
             'graduation_appraisal' => self::archiveGraduationAppraisalState($data, $studentId, $arrangementId),
             'teacher_work_report' => self::archiveArrangementState($data['teacher_work_reports'], $arrangementId, ['accept', 'enabled']),
+            'inspection_record' => self::archiveInspectionState($data['inspections'], $studentId, $arrangementId),
             'insurance' => self::archiveInsuranceState($data['insurances'], $studentId, $arrangementId),
             default => ['archived' => false, 'text' => '待补齐', 'source_status' => null],
         };
@@ -2843,6 +2873,27 @@ class InternshipRecord extends TableRecord
             'text' => $archived ? '已归档' : '待补齐',
             'source_status' => $archived ? 'enabled' : null,
         ];
+    }
+
+    private static function archiveInspectionState(array $rows, int $studentId, int $arrangementId): array
+    {
+        foreach ($rows as $row) {
+            if ((int) ($row['arrangement_id'] ?? 0) !== $arrangementId) {
+                continue;
+            }
+            $rowStudentId = (int) ($row['student_id'] ?? 0);
+            if ($rowStudentId > 0 && $rowStudentId !== $studentId) {
+                continue;
+            }
+            $result = (string) ($row['result'] ?? '');
+            return [
+                'archived' => true,
+                'text' => $result === 'fail' ? '抽检不通过' : '抽检通过',
+                'source_status' => $result ?: 'pass',
+            ];
+        }
+
+        return ['archived' => false, 'text' => '不适用', 'source_status' => null];
     }
 
     private static function archiveRequiredKeys(string $type): array

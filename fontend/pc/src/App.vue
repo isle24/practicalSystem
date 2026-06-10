@@ -4319,6 +4319,7 @@ const internshipListConfigs = computed(() => ({
       { prop: 'report_status', label: '实习报告', width: 95 },
       { prop: 'graduation_appraisal_status', label: '鉴定表', width: 95 },
       { prop: 'teacher_work_report_status', label: '教师工作报告', width: 120 },
+      { prop: 'inspection_record_status', label: '抽检记录', width: 95 },
       { prop: 'insurance_status', label: '保险单', width: 95 },
       { prop: 'missing_materials', label: '缺失材料', minWidth: 240 },
       { prop: 'archive_status_text', label: '归档状态', width: 100 },
@@ -4655,6 +4656,7 @@ function studentPanelFields(panel) {
       // 暂时隐藏学期字段，后续需要时恢复。
       // { key: 'semester', label: '学期' },
       { key: 'material_progress', label: '归档进度' },
+      { key: 'inspection_record_status', label: '抽检记录' },
       { key: 'missing_materials', label: '缺失材料' },
     ],
     insurances: [
