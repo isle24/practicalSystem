@@ -74,6 +74,7 @@ class InternshipService
         'application' => ['table' => 'application', 'recording' => 'application_recording'],
         'arrangement' => ['table' => 'arrangement', 'recording' => 'arrangement_recording'],
         'arrangement_change' => ['table' => 'arrangement_change', 'recording' => 'arrangement_change_recording'],
+        'sign_in' => ['table' => 'sign_in', 'recording' => 'sign_in_recording'],
         'journal' => ['table' => 'journal', 'recording' => 'journal_recording'],
         'report' => ['table' => 'report', 'recording' => 'report_recording'],
         'plan' => ['table' => 'internship_plan', 'recording' => 'plan_recording'],
@@ -821,6 +822,8 @@ class InternshipService
         $studentId = $this->isStudent() ? $this->currentStudentId(true) : $this->requiredInt($request, 'student_id');
         $arrangementId = $this->requiredInt($request, 'arrangement_id');
         $signDate = $this->dateInput($request, 'date') ?: date('Y-m-d');
+        $existingId = $this->inputRowId($request, 'sign_in');
+        $fromStatus = $existingId ? InternshipRecord::statusById('sign_in', $existingId) : 'draft';
         $this->assertStudentVisible($studentId);
         $this->assertArrangementVisible($arrangementId);
         $this->assertTaskBindingVisible($studentId, $arrangementId);
@@ -830,6 +833,12 @@ class InternshipService
         $latitude = $this->coordinateInput($request, 'latitude', -90, 90);
         if ($this->isStudent() && $signType === 'gps' && ($longitude === null || $latitude === null)) {
             throw new InvalidArgumentException('GPS 定位坐标不能为空', 42201);
+        }
+        if ($existingId) {
+            $row = $this->row('sign_in', $existingId);
+            if ((int) $row->student_id !== $studentId || (int) $row->entity_id !== $arrangementId) {
+                throw new RuntimeException('无数据访问权限', 40301);
+            }
         }
 
         $values = [
@@ -848,7 +857,10 @@ class InternshipService
             'deleted_at' => null,
         ];
 
-        return $this->saveRow('sign_in', $request, $values);
+        $result = $this->saveRow('sign_in', $request, $values);
+        $this->recordWorkflow('sign_in_recording', 'sign_in', (int) $result['id'], 'submit', $fromStatus, 'accept', $this->signInWorkflowContent($values), 'accept');
+
+        return $result;
     }
 
     public function journals(Request $request): array
@@ -2401,7 +2413,7 @@ class InternshipService
             return;
         }
         $this->assertStudentVisible((int) $row->student_id);
-        if (in_array($entity, ['journal', 'report', 'delay'], true)) {
+        if (in_array($entity, ['sign_in', 'journal', 'report', 'delay'], true)) {
             $this->assertTaskBindingVisible((int) $row->student_id, $this->reviewEntityArrangementId($entity, $row));
         }
     }
@@ -2418,7 +2430,7 @@ class InternshipService
     private function reviewEntityArrangementId(string $entity, object $row): int
     {
         return match ($entity) {
-            'journal', 'delay' => (int) $row->entity_id,
+            'sign_in', 'journal', 'delay' => (int) $row->entity_id,
             'report' => (int) $row->arrangement_id,
             default => 0,
         };
@@ -3066,6 +3078,22 @@ class InternshipService
         }
 
         return trim($opinion ?? '') === '' ? $text : $text . '；意见：' . trim((string) $opinion);
+    }
+
+    private function signInWorkflowContent(array $values): string
+    {
+        $parts = array_filter([
+            '日期：' . (string) ($values['date'] ?? ''),
+            '时间：' . (string) ($values['sign_time'] ?? ''),
+            '方式：' . (string) ($values['sign_type'] ?? ''),
+            !empty($values['location']) ? '地点：' . (string) $values['location'] : '',
+            isset($values['longitude'], $values['latitude']) && $values['longitude'] !== null && $values['latitude'] !== null
+                ? '坐标：' . $values['longitude'] . ',' . $values['latitude']
+                : '',
+            !empty($values['remark']) ? '备注：' . (string) $values['remark'] : '',
+        ]);
+
+        return '提交实习签到；' . implode('；', $parts);
     }
 
     private function now(): string

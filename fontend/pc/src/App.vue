@@ -1003,7 +1003,13 @@
                       @page-change="page => loadInternshipPanel('signIns', page)"
                       @reset="resetInternshipFilters('signIns')"
                       @search="loadInternshipPanel('signIns', 1)"
-                    />
+                    >
+                      <template #actions="{ row }">
+                        <el-button size="small" type="primary" plain @click="openTimelineDialog('sign_in', row)">
+                          记录
+                        </el-button>
+                      </template>
+                    </DataListPanel>
                   </template>
 
                   <template v-else-if="win.panel === 'journals'">
@@ -4474,6 +4480,7 @@ function studentPanelList(panel) {
 function studentTimelineEntity(panel) {
   const map = {
     applications: 'application',
+    signIns: 'sign_in',
     journals: 'journal',
     reports: 'report',
     delays: 'delay',
@@ -8912,6 +8919,7 @@ function reviewRuleMaxText(entity, status) {
 function reviewEntityName(entity) {
   const names = {
     application: '补充申请',
+    sign_in: '实习签到',
     journal: '实习日志',
     report: '实习报告',
     plan: '实习计划',
@@ -9062,6 +9070,7 @@ function timelineContent(item) {
 function isGenericSubmitContent(value) {
   return [
     '提交补充申请',
+    '提交实习签到',
     '提交实习日志',
     '提交实习报告',
     '提交延期申请',
@@ -9075,6 +9084,7 @@ function submissionSnapshotText(entity, row) {
   }
   const textMap = {
     application: row.remark || row.arrangement_title,
+    sign_in: [row.date, row.sign_time, row.location].filter(Boolean).join(' / '),
     journal: [row.title, row.content].filter(Boolean).join('：'),
     report: [row.title, row.content].filter(Boolean).join('：'),
     plan: planContentText(row.plan_content),

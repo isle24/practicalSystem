@@ -471,9 +471,11 @@
             <van-cell
               v-for="row in internship.lists.signIns.items"
               :key="row.id"
+              clickable
               :title="row.arrangement_title || '实习签到'"
               :label="`${row.date || '-'} / ${row.sign_time || '-'} / ${row.location || '-'}`"
               :value="signTypeText(row.sign_type)"
+              @click="openTimelineDialog('sign_in', row)"
             />
             <div v-if="!internship.lists.signIns.items.length" class="mobile-empty">暂无签到记录</div>
             <div class="mobile-list-footer">
@@ -1973,7 +1975,7 @@ const mobileListConfigs = computed(() => ({
   },
   signIns: {
     key: 'signIns',
-    entity: '',
+    entity: 'sign_in',
     title: '签到记录',
     shortTitle: '签到',
     icon: MapPin,
@@ -3800,6 +3802,7 @@ function reviewEntityName(entity) {
   const names = {
     arrangement_change: '任务变更',
     application: '补充申请',
+    sign_in: '实习签到',
     journal: '实习日志',
     report: '实习报告',
     plan: '实习计划',
@@ -4089,6 +4092,7 @@ function isGenericSubmitContent(value) {
     '提交实习报告',
     '提交延期申请',
     '提交实习计划',
+    '提交实习签到',
   ].includes(String(value || '').trim());
 }
 
@@ -4098,6 +4102,7 @@ function submissionSnapshotText(entity, row) {
   }
   const textMap = {
     application: row.remark || row.arrangement_title,
+    sign_in: [row.date, row.sign_time, row.location].filter(Boolean).join(' / '),
     journal: [row.title, row.content].filter(Boolean).join('：'),
     report: [row.title, row.content].filter(Boolean).join('：'),
     plan: planContentText(row.plan_content, 120),
