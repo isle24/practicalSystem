@@ -18,6 +18,9 @@ class ProfileController
 
     private const NOTIFY_CHANNELS = ['system', 'wechat', 'email'];
 
+    /**
+     * 获取个人设置
+     */
     #[OperationLog('获取个人设置')]
     public function settings(Request $request): Response
     {
@@ -32,6 +35,9 @@ class ProfileController
         }
     }
 
+    /**
+     * 保存个人设置
+     */
     #[OperationLog('保存个人设置')]
     public function saveSettings(Request $request): Response
     {
@@ -78,6 +84,9 @@ class ProfileController
         }
     }
 
+    /**
+     * 上传个人素材
+     */
     #[OperationLog('上传个人素材')]
     public function uploadAsset(Request $request): Response
     {

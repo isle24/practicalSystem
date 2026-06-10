@@ -14,6 +14,9 @@ class LogController
 {
     use Responds;
 
+    /**
+     * 查询操作日志
+     */
     #[OperationLog('查询操作日志')]
     public function list(Request $request): Response
     {

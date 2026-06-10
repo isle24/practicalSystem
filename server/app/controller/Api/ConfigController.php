@@ -17,6 +17,9 @@ class ConfigController
 
     private const SCHOOL_ADMIN_ROLE_TYPES = ['super_admin', 'school_admin'];
 
+    /**
+     * 查询系统配置
+     */
     #[OperationLog('查询系统配置')]
     public function items(Request $request): Response
     {
@@ -35,6 +38,9 @@ class ConfigController
         }
     }
 
+    /**
+     * 查询登录页配置
+     */
     #[OperationLog('查询登录页配置')]
     public function loginPage(Request $request): Response
     {
@@ -45,6 +51,9 @@ class ConfigController
         }
     }
 
+    /**
+     * 上传登录背景图
+     */
     #[OperationLog('上传登录背景图')]
     public function uploadLoginBackground(Request $request): Response
     {
@@ -74,6 +83,9 @@ class ConfigController
         }
     }
 
+    /**
+     * 保存系统配置
+     */
     #[OperationLog('保存系统配置')]
     public function save(Request $request): Response
     {

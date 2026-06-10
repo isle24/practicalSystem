@@ -13,30 +13,45 @@ class FileController
 {
     use Responds;
 
+    /**
+     * 校验文件秒传
+     */
     #[OperationLog('校验文件秒传')]
     public function check(Request $request): Response
     {
         return $this->handle(fn (): array => (new FileService())->check($request));
     }
 
+    /**
+     * 上传文件
+     */
     #[OperationLog('上传文件')]
     public function upload(Request $request): Response
     {
         return $this->handle(fn (): array => (new FileService())->upload($request));
     }
 
+    /**
+     * 查询文件列表
+     */
     #[OperationLog('查询文件列表')]
     public function list(Request $request): Response
     {
         return $this->handle(fn (): array => (new FileService())->list($request));
     }
 
+    /**
+     * 查看文件详情
+     */
     #[OperationLog('查看文件详情')]
     public function info(Request $request): Response
     {
         return $this->handle(fn (): array => (new FileService())->info($this->intInput($request, 'id') ?: $this->intInput($request, 'file_id')));
     }
 
+    /**
+     * 查询文件关联
+     */
     #[OperationLog('查询文件关联')]
     public function relations(Request $request): Response
     {
@@ -49,6 +64,9 @@ class FileController
         ]);
     }
 
+    /**
+     * 绑定文件关联
+     */
     #[OperationLog('绑定文件关联')]
     public function attach(Request $request): Response
     {
@@ -60,12 +78,18 @@ class FileController
         ));
     }
 
+    /**
+     * 解绑文件关联
+     */
     #[OperationLog('解绑文件关联')]
     public function detach(Request $request): Response
     {
         return $this->handle(fn (): array => (new FileService())->detach($request));
     }
 
+    /**
+     * 删除文件
+     */
     #[OperationLog('删除文件')]
     public function delete(Request $request): Response
     {
@@ -75,6 +99,9 @@ class FileController
         ));
     }
 
+    /**
+     * 获取文件下载信息
+     */
     #[OperationLog('获取文件下载信息')]
     public function download(Request $request): Response
     {

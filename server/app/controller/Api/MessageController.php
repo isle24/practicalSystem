@@ -16,6 +16,9 @@ class MessageController
 
     private const ADMIN_ROLES = ['super_admin', 'school_admin'];
 
+    /**
+     * 查询消息列表
+     */
     #[OperationLog('查询消息列表')]
     public function list(Request $request): Response
     {
@@ -34,6 +37,9 @@ class MessageController
         }
     }
 
+    /**
+     * 查询消息摘要
+     */
     #[OperationLog('查询消息摘要')]
     public function summary(Request $request): Response
     {
@@ -44,6 +50,9 @@ class MessageController
         }
     }
 
+    /**
+     * 标记消息已读
+     */
     #[OperationLog('标记消息已读')]
     public function read(Request $request): Response
     {
@@ -58,6 +67,9 @@ class MessageController
         }
     }
 
+    /**
+     * 查询消息发送对象
+     */
     #[OperationLog('查询消息发送对象')]
     public function targets(Request $request): Response
     {
@@ -76,6 +88,9 @@ class MessageController
         }
     }
 
+    /**
+     * 发送消息
+     */
     #[OperationLog('发送消息')]
     public function send(Request $request): Response
     {

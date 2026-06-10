@@ -13,42 +13,63 @@ class LabController
 {
     use Responds;
 
+    /**
+     * 查看实验总览
+     */
     #[OperationLog('查看实验总览')]
     public function overview(Request $request): Response
     {
         return $this->handle(fn (): array => $this->service()->overview($request));
     }
 
+    /**
+     * 获取实验筛选选项
+     */
     #[OperationLog('获取实验筛选选项')]
     public function options(Request $request): Response
     {
         return $this->handle(fn (): array => $this->service()->options($request));
     }
 
+    /**
+     * 查询实验列表
+     */
     #[OperationLog('查询实验列表')]
     public function list(Request $request): Response
     {
         return $this->handle(fn (): array => $this->service()->list($request));
     }
 
+    /**
+     * 保存实验记录
+     */
     #[OperationLog('保存实验记录')]
     public function save(Request $request): Response
     {
         return $this->handle(fn (): array => $this->service()->save($request));
     }
 
+    /**
+     * 审核实验记录
+     */
     #[OperationLog('审核实验记录')]
     public function review(Request $request): Response
     {
         return $this->handle(fn (): array => $this->service()->review($request));
     }
 
+    /**
+     * 发起实验通过后修改
+     */
     #[OperationLog('发起实验通过后修改')]
     public function requestModification(Request $request): Response
     {
         return $this->handle(fn (): array => $this->service()->requestModification($request));
     }
 
+    /**
+     * 查看实验流程记录
+     */
     #[OperationLog('查看实验流程记录')]
     public function timeline(Request $request): Response
     {

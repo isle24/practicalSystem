@@ -27,6 +27,9 @@ class AdminController
     private const ADMIN_ROLE_TYPES = ['super_admin', 'school_admin'];
     private const USER_VIEW_ROLE_TYPES = ['super_admin', 'school_admin', 'college_admin', 'profession_admin'];
 
+    /**
+     * 查询角色列表
+     */
     #[OperationLog('查询角色列表')]
     public function roles(Request $request): Response
     {
@@ -43,6 +46,9 @@ class AdminController
         }
     }
 
+    /**
+     * 查询菜单树
+     */
     #[OperationLog('查询菜单树')]
     public function menus(Request $request): Response
     {
@@ -62,6 +68,9 @@ class AdminController
         }
     }
 
+    /**
+     * 查询角色权限
+     */
     #[OperationLog('查询角色权限')]
     public function rolePermissions(Request $request): Response
     {
@@ -82,6 +91,9 @@ class AdminController
         }
     }
 
+    /**
+     * 保存菜单
+     */
     #[OperationLog('保存菜单')]
     public function saveMenu(Request $request): Response
     {
@@ -137,6 +149,9 @@ class AdminController
         }
     }
 
+    /**
+     * 删除菜单
+     */
     #[OperationLog('删除菜单')]
     public function deleteMenu(Request $request): Response
     {
@@ -163,6 +178,9 @@ class AdminController
         }
     }
 
+    /**
+     * 保存角色菜单权限
+     */
     #[OperationLog('保存角色菜单权限')]
     public function saveRoleMenus(Request $request): Response
     {
@@ -190,6 +208,9 @@ class AdminController
         }
     }
 
+    /**
+     * 查询用户列表
+     */
     #[OperationLog('查询用户列表')]
     public function accounts(Request $request): Response
     {
@@ -211,6 +232,9 @@ class AdminController
         }
     }
 
+    /**
+     * 查看用户详情
+     */
     #[OperationLog('查看用户详情')]
     public function accountDetail(Request $request): Response
     {
@@ -245,6 +269,9 @@ class AdminController
         }
     }
 
+    /**
+     * 生成管理员一键登录链接
+     */
     #[OperationLog('生成管理员一键登录链接')]
     public function loginPasskey(Request $request): Response
     {
@@ -265,6 +292,9 @@ class AdminController
         }
     }
 
+    /**
+     * 保存用户账号
+     */
     #[OperationLog('保存用户账号')]
     public function saveAccount(Request $request): Response
     {
@@ -340,6 +370,9 @@ class AdminController
         }
     }
 
+    /**
+     * 修改用户状态
+     */
     #[OperationLog('修改用户状态')]
     public function changeAccountStatus(Request $request): Response
     {
@@ -377,6 +410,9 @@ class AdminController
         }
     }
 
+    /**
+     * 重置用户密码
+     */
     #[OperationLog('重置用户密码')]
     public function resetAccountPassword(Request $request): Response
     {
@@ -403,6 +439,9 @@ class AdminController
         }
     }
 
+    /**
+     * 查询用户管理选项
+     */
     #[OperationLog('查询用户管理选项')]
     public function options(Request $request): Response
     {
@@ -425,6 +464,9 @@ class AdminController
         }
     }
 
+    /**
+     * 查询账号组织权限范围
+     */
     #[OperationLog('查询账号组织权限范围')]
     public function organizationScopes(Request $request): Response
     {
@@ -444,6 +486,9 @@ class AdminController
         }
     }
 
+    /**
+     * 保存账号组织权限范围
+     */
     #[OperationLog('保存账号组织权限范围')]
     public function saveOrganizationScopes(Request $request): Response
     {

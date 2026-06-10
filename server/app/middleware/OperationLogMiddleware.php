@@ -104,16 +104,35 @@ class OperationLogMiddleware implements MiddlewareInterface
         }
 
         try {
-            $attributes = (new ReflectionMethod($controller, $action))->getAttributes(OperationLog::class);
-            if (!$attributes) {
-                return $cache[$key] = null;
-            }
-
-            $name = trim($attributes[0]->newInstance()->name);
+            $method = new ReflectionMethod($controller, $action);
+            $attributes = $method->getAttributes(OperationLog::class);
+            $name = $attributes ? trim($attributes[0]->newInstance()->name) : $this->docCommentName($method);
             return $cache[$key] = ($name === '' ? null : $name);
         } catch (Throwable) {
             return $cache[$key] = null;
         }
+    }
+
+    private function docCommentName(ReflectionMethod $method): string
+    {
+        $comment = (string) $method->getDocComment();
+        if ($comment === '') {
+            return '';
+        }
+
+        $comment = preg_replace('/^\/\*\*|\*\/$/', '', trim($comment));
+        if (!is_string($comment)) {
+            return '';
+        }
+
+        foreach (preg_split('/\R/', $comment) ?: [] as $line) {
+            $line = trim((string) preg_replace('/^\s*\*\s?/', '', $line));
+            if ($line !== '' && !str_starts_with($line, '@')) {
+                return mb_substr($line, 0, 120);
+            }
+        }
+
+        return '';
     }
 
     private function statusCode(?Response $response): int

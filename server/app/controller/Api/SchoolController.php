@@ -15,6 +15,9 @@ class SchoolController
 {
     use Responds;
 
+    /**
+     * 获取当前学校连接
+     */
     #[OperationLog('获取当前学校连接')]
     public function current(Request $request): Response
     {
@@ -28,6 +31,9 @@ class SchoolController
         ]);
     }
 
+    /**
+     * 解析学校连接
+     */
     #[OperationLog('解析学校连接')]
     public function resolve(Request $request): Response
     {

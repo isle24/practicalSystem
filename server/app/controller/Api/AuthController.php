@@ -15,6 +15,9 @@ class AuthController
 {
     use Responds;
 
+    /**
+     * 登录
+     */
     #[OperationLog('登录')]
     public function login(Request $request): Response
     {
@@ -31,6 +34,9 @@ class AuthController
         }
     }
 
+    /**
+     * 刷新登录状态
+     */
     #[OperationLog('刷新登录状态')]
     public function refresh(Request $request): Response
     {
@@ -48,6 +54,9 @@ class AuthController
         }
     }
 
+    /**
+     * 退出登录
+     */
     #[OperationLog('退出登录')]
     public function logout(Request $request): Response
     {
@@ -57,6 +66,9 @@ class AuthController
             ->cookie($cookies['refresh'], '', 0, '/', '', false, true, 'Lax');
     }
 
+    /**
+     * 查询可切换账号
+     */
     #[OperationLog('查询可切换账号')]
     public function switchableAccounts(Request $request): Response
     {
@@ -67,6 +79,9 @@ class AuthController
         }
     }
 
+    /**
+     * 切换登录身份
+     */
     #[OperationLog('切换登录身份')]
     public function switchAccount(Request $request): Response
     {
@@ -80,6 +95,9 @@ class AuthController
         }
     }
 
+    /**
+     * 一键登录
+     */
     #[OperationLog('一键登录')]
     public function passkeyLogin(Request $request): Response
     {
@@ -94,6 +112,9 @@ class AuthController
         }
     }
 
+    /**
+     * 获取登录上下文
+     */
     #[OperationLog('获取登录上下文')]
     public function context(Request $request): Response
     {
@@ -115,6 +136,9 @@ class AuthController
         return $this->ok(CurrentContext::all());
     }
 
+    /**
+     * 查询当前账号角色
+     */
     #[OperationLog('查询当前账号角色')]
     public function roles(Request $request): Response
     {

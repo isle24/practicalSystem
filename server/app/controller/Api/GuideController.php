@@ -14,6 +14,9 @@ class GuideController
 {
     use Responds;
 
+    /**
+     * 获取模块操作说明
+     */
     #[OperationLog('获取模块操作说明')]
     public function current(Request $request): Response
     {
@@ -36,6 +39,9 @@ class GuideController
         }
     }
 
+    /**
+     * 查询操作说明列表
+     */
     #[OperationLog('查询操作说明列表')]
     public function list(Request $request): Response
     {
@@ -52,6 +58,9 @@ class GuideController
         }
     }
 
+    /**
+     * 保存操作说明
+     */
     #[OperationLog('保存操作说明')]
     public function save(Request $request): Response
     {
@@ -81,6 +90,9 @@ class GuideController
         }
     }
 
+    /**
+     * 删除操作说明
+     */
     #[OperationLog('删除操作说明')]
     public function delete(Request $request): Response
     {

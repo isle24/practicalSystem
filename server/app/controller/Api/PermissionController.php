@@ -15,6 +15,9 @@ class PermissionController
 {
     use Responds;
 
+    /**
+     * 获取当前菜单权限
+     */
     #[OperationLog('获取当前菜单权限')]
     public function menus(Request $request): Response
     {
@@ -33,6 +36,9 @@ class PermissionController
         }
     }
 
+    /**
+     * 获取当前权限码
+     */
     #[OperationLog('获取当前权限码')]
     public function codes(Request $request): Response
     {
@@ -47,6 +53,9 @@ class PermissionController
         }
     }
 
+    /**
+     * 获取当前数据权限范围
+     */
     #[OperationLog('获取当前数据权限范围')]
     public function scope(Request $request): Response
     {
@@ -62,6 +71,9 @@ class PermissionController
         }
     }
 
+    /**
+     * 获取数据筛选范围
+     */
     #[OperationLog('获取数据筛选范围')]
     public function filter(Request $request): Response
     {

@@ -17,12 +17,18 @@ class WechatController
 
     private const MENU_TYPES = ['click', 'view', 'miniprogram'];
 
+    /**
+     * 查询企业微信代理配置
+     */
     #[OperationLog('查询企业微信代理配置')]
     public function proxy(Request $request): Response
     {
         return $this->config($request);
     }
 
+    /**
+     * 查询企业微信配置
+     */
     #[OperationLog('查询企业微信配置')]
     public function config(Request $request): Response
     {
@@ -37,12 +43,18 @@ class WechatController
         }
     }
 
+    /**
+     * 保存企业微信代理配置
+     */
     #[OperationLog('保存企业微信代理配置')]
     public function saveProxy(Request $request): Response
     {
         return $this->saveConfig($request);
     }
 
+    /**
+     * 保存企业微信配置
+     */
     #[OperationLog('保存企业微信配置')]
     public function saveConfig(Request $request): Response
     {

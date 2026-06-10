@@ -13,12 +13,18 @@ class TemplateController
 {
     use Responds;
 
+    /**
+     * 查询模板分类
+     */
     #[OperationLog('查询模板分类')]
     public function categories(Request $request): Response
     {
         return $this->handle(fn (): array => (new TemplateService())->categories());
     }
 
+    /**
+     * 查询模板列表
+     */
     #[OperationLog('查询模板列表')]
     public function list(Request $request): Response
     {
@@ -31,30 +37,45 @@ class TemplateController
         ]));
     }
 
+    /**
+     * 上传模板文件
+     */
     #[OperationLog('上传模板文件')]
     public function upload(Request $request): Response
     {
         return $this->handle(fn (): array => (new TemplateService())->upload($request), '已上传');
     }
 
+    /**
+     * 保存模板分类
+     */
     #[OperationLog('保存模板分类')]
     public function saveCategory(Request $request): Response
     {
         return $this->handle(fn (): array => (new TemplateService())->saveCategory((array) $request->all()), '已保存');
     }
 
+    /**
+     * 保存模板
+     */
     #[OperationLog('保存模板')]
     public function save(Request $request): Response
     {
         return $this->handle(fn (): array => (new TemplateService())->saveTemplate((array) $request->all()), '已保存');
     }
 
+    /**
+     * 删除模板
+     */
     #[OperationLog('删除模板')]
     public function delete(Request $request): Response
     {
         return $this->handle(fn (): array => (new TemplateService())->deleteTemplate($this->intInput($request, 'id')), '已删除');
     }
 
+    /**
+     * 获取模板下载信息
+     */
     #[OperationLog('获取模板下载信息')]
     public function download(Request $request): Response
     {

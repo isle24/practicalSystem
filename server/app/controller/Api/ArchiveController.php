@@ -76,6 +76,9 @@ class ArchiveController
         ],
     ];
 
+    /**
+     * 查询基础档案列表
+     */
     #[OperationLog('查询基础档案列表')]
     public function list(Request $request): Response
     {
@@ -91,6 +94,9 @@ class ArchiveController
         }
     }
 
+    /**
+     * 保存基础档案
+     */
     #[OperationLog('保存基础档案')]
     public function save(Request $request): Response
     {
@@ -127,6 +133,9 @@ class ArchiveController
         }
     }
 
+    /**
+     * 删除基础档案
+     */
     #[OperationLog('删除基础档案')]
     public function delete(Request $request): Response
     {
@@ -148,6 +157,9 @@ class ArchiveController
         }
     }
 
+    /**
+     * 导入基础档案Excel
+     */
     #[OperationLog('导入基础档案Excel')]
     public function importExcel(Request $request): Response
     {
