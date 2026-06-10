@@ -985,6 +985,7 @@ function ensureInternshipSchema(PDO $pdo): void
             'application_id' => "ALTER TABLE `pair` ADD COLUMN `application_id` BIGINT UNSIGNED DEFAULT NULL AFTER `entity_id`",
             'remove_reason' => "ALTER TABLE `pair` ADD COLUMN `remove_reason` VARCHAR(255) DEFAULT NULL AFTER `application_id`",
             'is_anonymous' => "ALTER TABLE `pair` ADD COLUMN `is_anonymous` ENUM('false','true') DEFAULT 'false' AFTER `remove_reason`",
+            'active_flag' => "ALTER TABLE `pair` ADD COLUMN `active_flag` TINYINT GENERATED ALWAYS AS (CASE WHEN `status` = 'active' AND `deleted_at` IS NULL THEN 1 ELSE NULL END) STORED AFTER `is_anonymous`",
         ],
         'sign_in' => [
             'student_id' => "ALTER TABLE `sign_in` ADD COLUMN `student_id` BIGINT UNSIGNED DEFAULT NULL AFTER `code`",
@@ -1158,25 +1159,34 @@ function ensureInternshipSchema(PDO $pdo): void
         ensureColumn($pdo, $table, 'operator_id', "ALTER TABLE `{$table}` ADD COLUMN `operator_id` BIGINT UNSIGNED DEFAULT NULL AFTER `action`");
         ensureColumn($pdo, $table, 'content', "ALTER TABLE `{$table}` ADD COLUMN `content` TEXT DEFAULT NULL AFTER `operator_id`");
         ensureIndex($pdo, $table, 'idx_parent', "ALTER TABLE `{$table}` ADD KEY `idx_parent` (`parent_id`)");
+        ensureIndex($pdo, $table, "idx_{$table}_timeline", "ALTER TABLE `{$table}` ADD KEY `idx_{$table}_timeline` (`parent_id`, `action`, `created_at`)");
     }
 
     ensureIndex($pdo, 'base_profession_direction', 'uk_base_profession_direction', "ALTER TABLE `base_profession_direction` ADD UNIQUE KEY `uk_base_profession_direction` (`base_id`, `profession_id`, `direction_id`)");
     ensureIndex($pdo, 'arrangement', 'idx_arrangement_scope', "ALTER TABLE `arrangement` ADD KEY `idx_arrangement_scope` (`dep_id`, `profession_id`, `status`)");
     ensureIndex($pdo, 'arrangement', 'idx_arrangement_plan', "ALTER TABLE `arrangement` ADD KEY `idx_arrangement_plan` (`plan_id`, `teacher_id`, `status`)");
+    ensureIndex($pdo, 'arrangement', 'idx_arrangement_plan_task', "ALTER TABLE `arrangement` ADD KEY `idx_arrangement_plan_task` (`plan_id`, `task_no`, `status`)");
     ensureIndex($pdo, 'arrangement', 'idx_arrangement_teacher_time', "ALTER TABLE `arrangement` ADD KEY `idx_arrangement_teacher_time` (`teacher_id`, `start_date`, `end_date`)");
     ensureIndex($pdo, 'arrangement_change', 'idx_arrangement_change_task', "ALTER TABLE `arrangement_change` ADD KEY `idx_arrangement_change_task` (`arrangement_id`, `status`)");
     ensureIndex($pdo, 'arrangement_change', 'idx_arrangement_change_submitter', "ALTER TABLE `arrangement_change` ADD KEY `idx_arrangement_change_submitter` (`submitter_id`, `status`)");
     ensureIndex($pdo, 'internship_plan', 'idx_internship_plan_scope', "ALTER TABLE `internship_plan` ADD KEY `idx_internship_plan_scope` (`grade_id`, `dep_id`, `profession_id`, `status`)");
+    ensureIndex($pdo, 'internship_plan_approval', 'idx_plan_approval_flow', "ALTER TABLE `internship_plan_approval` ADD KEY `idx_plan_approval_flow` (`plan_id`, `approval_level`, `status`, `created_at`)");
     ensureIndex($pdo, 'internship_task_class', 'uk_task_class', "ALTER TABLE `internship_task_class` ADD UNIQUE KEY `uk_task_class` (`arrangement_id`, `class_id`)");
     ensureIndex($pdo, 'internship_task_class', 'idx_task_class_scope', "ALTER TABLE `internship_task_class` ADD KEY `idx_task_class_scope` (`grade_id`, `dep_id`, `profession_id`, `class_id`)");
     ensureIndex($pdo, 'application', 'idx_application_student', "ALTER TABLE `application` ADD KEY `idx_application_student` (`student_id`, `arrangement_id`, `status`)");
     ensureIndex($pdo, 'student_join_teacher', 'idx_join_application', "ALTER TABLE `student_join_teacher` ADD KEY `idx_join_application` (`application_id`, `application_status`)");
     ensureIndex($pdo, 'pair', 'idx_pair_teacher', "ALTER TABLE `pair` ADD KEY `idx_pair_teacher` (`teacher_id`, `type`, `status`)");
     ensureIndex($pdo, 'pair', 'idx_pair_student', "ALTER TABLE `pair` ADD KEY `idx_pair_student` (`student_id`, `type`, `status`)");
+    ensureIndex($pdo, 'pair', 'idx_pair_task_scope', "ALTER TABLE `pair` ADD KEY `idx_pair_task_scope` (`arrangement_id`, `student_id`, `type`, `status`)");
+    ensureIndex($pdo, 'pair', 'uk_pair_active', "ALTER TABLE `pair` ADD UNIQUE KEY `uk_pair_active` (`student_id`, `type`, `arrangement_id`, `active_flag`)");
     ensureIndex($pdo, 'sign_in', 'idx_sign_student_date', "ALTER TABLE `sign_in` ADD KEY `idx_sign_student_date` (`student_id`, `entity_type`, `entity_id`, `date`)");
     ensureIndex($pdo, 'journal', 'idx_journal_student_date', "ALTER TABLE `journal` ADD KEY `idx_journal_student_date` (`student_id`, `entity_type`, `entity_id`, `date`)");
     ensureIndex($pdo, 'report', 'idx_report_student_arrangement', "ALTER TABLE `report` ADD KEY `idx_report_student_arrangement` (`student_id`, `arrangement_id`, `status`)");
+    ensureIndex($pdo, 'review_opinion', 'idx_review_entity', "ALTER TABLE `review_opinion` ADD KEY `idx_review_entity` (`entity_type`, `entity_id`, `status`, `created_at`)");
+    ensureIndex($pdo, 'apply_report_delay', 'idx_delay_student_entity', "ALTER TABLE `apply_report_delay` ADD KEY `idx_delay_student_entity` (`student_id`, `entity_type`, `entity_id`, `status`)");
     ensureIndex($pdo, 'score', 'idx_score_student_arrangement', "ALTER TABLE `score` ADD KEY `idx_score_student_arrangement` (`student_id`, `arrangement_id`)");
+    ensureIndex($pdo, 'insurance', 'idx_insurance_student_task_date', "ALTER TABLE `insurance` ADD KEY `idx_insurance_student_task_date` (`student_id`, `arrangement_id`, `status`, `start_date`, `end_date`)");
+    ensureIndex($pdo, 'safety_letter_sign', 'idx_safety_student_task_status', "ALTER TABLE `safety_letter_sign` ADD KEY `idx_safety_student_task_status` (`student_id`, `arrangement_id`, `status`, `signed_at`)");
 }
 
 function ensurePracticeSchema(PDO $pdo): void
