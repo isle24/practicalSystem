@@ -153,7 +153,7 @@ class InternshipRecord extends TableRecord
             ->leftJoin('department', 'internship_plan.dep_id', '=', 'department.dep_id')
             ->leftJoin('profession', 'internship_plan.profession_id', '=', 'profession.profession_id')
             ->leftJoin('grade_list', 'internship_plan.grade_id', '=', 'grade_list.grade_id')
-            ->whereIn('internship_plan.status', ['wait', 'accept', 'enabled'])
+            ->whereIn('internship_plan.status', ['accept', 'enabled'])
             ->whereNull('internship_plan.deleted_at');
         self::applyDepProfessionScope($query, $scope, 'internship_plan.dep_id', 'internship_plan.profession_id');
 
@@ -688,7 +688,7 @@ class InternshipRecord extends TableRecord
         ];
     }
 
-    public static function planPage(array $scope, array $filters): array
+    public static function planPage(array $scope, array $filters, array $approvalLevels = []): array
     {
         $query = self::queryTable('internship_plan')
             ->leftJoin('department', 'internship_plan.dep_id', '=', 'department.dep_id')
@@ -715,7 +715,7 @@ class InternshipRecord extends TableRecord
             'users.name',
         ]);
 
-        return self::paginate($query->orderByDesc('internship_plan.id'), $filters, [
+        $page = self::paginate($query->orderByDesc('internship_plan.id'), $filters, [
             'internship_plan.id', 'internship_plan.uuid', 'internship_plan.dep_id',
             'internship_plan.profession_id', 'internship_plan.grade_id',
             'internship_plan.source_type', 'internship_plan.course_code',
@@ -726,6 +726,15 @@ class InternshipRecord extends TableRecord
             'department.dep_name', 'profession.profession_name', 'grade_list.grade_name',
             'users.name as submitter_name',
         ]);
+
+        if ($approvalLevels) {
+            foreach ($page['items'] as &$item) {
+                $item = array_merge($item, self::planApprovalProgress((int) $item['id'], $approvalLevels, (string) ($item['status'] ?? '')));
+            }
+            unset($item);
+        }
+
+        return $page;
     }
 
     public static function insertPlanApproval(int $planId, array $values, string $planStatus, string $now): int
@@ -737,6 +746,76 @@ class InternshipRecord extends TableRecord
         ]);
 
         return $approvalId;
+    }
+
+    public static function planApprovalProgress(int $planId, array $approvalLevels, ?string $planStatus = null): array
+    {
+        $total = count($approvalLevels);
+        $latestSubmit = self::queryTable('plan_recording')
+            ->where('parent_id', $planId)
+            ->where('action', 'submit')
+            ->whereNull('deleted_at')
+            ->orderByDesc('id')
+            ->first(['id', 'created_at']);
+
+        $query = self::queryTable('internship_plan_approval')
+            ->where('plan_id', $planId)
+            ->whereNull('deleted_at');
+        if ($latestSubmit && $latestSubmit->created_at) {
+            $query->where('created_at', '>=', $latestSubmit->created_at);
+        }
+
+        $records = self::rows($query
+            ->orderBy('approval_level')
+            ->orderBy('id')
+            ->get(['id', 'uuid', 'plan_id', 'approver_id', 'approval_level', 'level_name', 'opinion', 'status', 'created_at']));
+
+        $approvedByLevel = [];
+        foreach ($records as $record) {
+            if ((string) ($record['status'] ?? '') !== 'accept') {
+                continue;
+            }
+            $level = (int) ($record['approval_level'] ?? 0);
+            if ($level > 0) {
+                $approvedByLevel[$level] = $record;
+            }
+        }
+
+        $completedLevel = 0;
+        for ($level = 1; $level <= $total; $level++) {
+            if (!isset($approvedByLevel[$level])) {
+                break;
+            }
+            $completedLevel = $level;
+        }
+
+        $nextLevel = $completedLevel < $total ? $completedLevel + 1 : null;
+        $effectiveNextLevel = $planStatus === null || $planStatus === 'wait' ? $nextLevel : null;
+        $nextName = $effectiveNextLevel ? (string) ($approvalLevels[$effectiveNextLevel]['name'] ?? "第{$effectiveNextLevel}级") : null;
+
+        return [
+            'approval_total' => $total,
+            'approval_completed_level' => $completedLevel,
+            'approval_progress_text' => "{$completedLevel}/{$total}",
+            'next_level' => $effectiveNextLevel,
+            'next_approval_level' => $effectiveNextLevel,
+            'next_approval_name' => $nextName,
+            'next_approval_role_types' => $effectiveNextLevel ? ($approvalLevels[$effectiveNextLevel]['role_types'] ?? []) : [],
+            'current_approval_name' => self::planCurrentApprovalName($planStatus, $nextName),
+            'approval_records' => $records,
+            'approved_records_by_level' => $approvedByLevel,
+        ];
+    }
+
+    private static function planCurrentApprovalName(?string $planStatus, ?string $nextName): string
+    {
+        return match ($planStatus) {
+            'draft' => '草稿',
+            'modify' => '退回修改',
+            'accept', 'enabled' => '审核完成',
+            'wait', null => $nextName ?: '审核完成',
+            default => $nextName ?: (string) $planStatus,
+        };
     }
 
     public static function syllabusGuidePage(array $scope, array $filters): array
@@ -1076,12 +1155,13 @@ class InternshipRecord extends TableRecord
         ]));
     }
 
-    public static function planIdForImport(array $values, string $uuid, string $now): int
+    public static function approvedPlanIdForImport(array $values): int
     {
         $query = self::queryTable('internship_plan')
             ->where('grade_id', (int) $values['grade_id'])
             ->where('dep_id', (int) $values['dep_id'])
             ->where('profession_id', (int) $values['profession_id'])
+            ->whereIn('status', ['accept', 'enabled'])
             ->whereNull('deleted_at');
         $courseCode = trim((string) ($values['course_code'] ?? ''));
         if ($courseCode !== '') {
@@ -1090,33 +1170,7 @@ class InternshipRecord extends TableRecord
             $query->where('course_name', (string) $values['course_name']);
         }
 
-        $row = $query->first(['id']);
-        $payload = [
-            'source_type' => 'edu_system',
-            'course_code' => $courseCode ?: null,
-            'course_name' => (string) $values['course_name'],
-            'grade_id' => (int) $values['grade_id'],
-            'dep_id' => (int) $values['dep_id'],
-            'profession_id' => (int) $values['profession_id'],
-            'semester' => $values['semester'] ?? '',
-            'credit' => $values['credit'] ?? null,
-            'student_count' => (int) ($values['student_count'] ?? 0),
-            'score_rule' => $values['score_rule'] ?? 'average',
-            'plan_content' => json_encode($values['plan_content'] ?? [], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
-            'status' => 'enabled',
-            'updated_at' => $now,
-            'deleted_at' => null,
-        ];
-        if ($row) {
-            self::updateById('internship_plan', (int) $row->id, $payload);
-            return (int) $row->id;
-        }
-
-        return self::insertRow('internship_plan', array_merge($payload, [
-            'uuid' => $uuid,
-            'submitter_id' => $values['submitter_id'] ?? null,
-            'created_at' => $now,
-        ]));
+        return (int) ($query->orderByDesc('id')->value('id') ?: 0);
     }
 
     public static function arrangementIdByPlanTaskNo(int $planId, string $taskNo): int

@@ -22,6 +22,19 @@ class InternshipService
     private const ARRANGEMENT_TYPES = ['cognition_internal', 'cognition_external', 'major_internal', 'major_external', 'production', 'graduation'];
     private const ORGANIZE_MODES = ['centralized', 'distributed', 'autonomous'];
     private const STAT_REPORTS = ['overview', 'department', 'profession', 'teacher', 'student', 'archive', 'practice_score_sheet'];
+    private const PLAN_APPROVAL_LEVELS = [
+        1 => ['name' => '系主任', 'role_types' => ['college_admin']],
+        2 => ['name' => '教务科', 'role_types' => ['school_admin']],
+        3 => ['name' => '主管院长', 'role_types' => ['college_admin']],
+        4 => ['name' => '教务处', 'role_types' => ['school_admin']],
+        5 => ['name' => '处领导', 'role_types' => ['school_admin']],
+    ];
+    private const PLAN_APPROVER_DISTINCT_LEVELS = [
+        2 => [1],
+        3 => [1, 2],
+        4 => [3],
+        5 => [2, 4],
+    ];
     private const BASE_FLOW_TABLES = [
         'application' => 'base_application',
         'usage' => 'base_usage',
@@ -1120,7 +1133,7 @@ class InternshipService
 
         return InternshipRecord::planPage($this->scopeContext(), $this->requestFilters($request, [
             'page', 'page_size', 'per_page', 'status', 'grade_id', 'dep_id', 'profession_id', 'keyword',
-        ]));
+        ]), self::PLAN_APPROVAL_LEVELS);
     }
 
     public function savePlan(Request $request): array
@@ -1174,10 +1187,8 @@ class InternshipService
         $planId = $this->requiredRowId($request, 'internship_plan');
         $status = $this->enum($request, 'status', ['accept', 'modify'], 'accept');
         $opinion = $this->reviewOpinionInput($request, 'plan', $status);
-        $level = $this->optionalInt($request, 'approval_level') ?? 1;
-        $levelName = $this->nullableString($request, 'level_name', 80);
 
-        return $this->connection()->transaction(function () use ($planId, $status, $opinion, $level, $levelName): array {
+        return $this->connection()->transaction(function () use ($planId, $status, $opinion, $request): array {
             $now = $this->now();
             $row = InternshipRecord::lockActiveRowById('internship_plan', $planId);
             if (!$row) {
@@ -1188,6 +1199,19 @@ class InternshipService
                 throw new InvalidArgumentException('仅待审核实习计划可处理', 42204);
             }
             $from = (string) $row->status;
+            $progress = InternshipRecord::planApprovalProgress($planId, self::PLAN_APPROVAL_LEVELS);
+            $level = (int) ($progress['next_level'] ?? 1);
+            if ($level <= 0 || !isset(self::PLAN_APPROVAL_LEVELS[$level])) {
+                throw new InvalidArgumentException('实习计划审核进度异常', 42205);
+            }
+            $requestLevel = $this->optionalInt($request, 'approval_level');
+            if ($requestLevel && $requestLevel !== $level) {
+                throw new InvalidArgumentException('当前实习计划不在所选审核节点', 42205);
+            }
+            $levelName = (string) (self::PLAN_APPROVAL_LEVELS[$level]['name'] ?? '审核节点');
+            $this->assertPlanApproverAllowed($level, $progress['approved_records_by_level'] ?? []);
+            $planStatus = $status === 'modify' ? 'modify' : ($level >= count(self::PLAN_APPROVAL_LEVELS) ? 'accept' : 'wait');
+            $content = $this->planReviewContent($level, $levelName, $status, $opinion, $planStatus);
 
             $approvalId = InternshipRecord::insertPlanApproval($planId, [
                 'uuid' => $this->uuid(),
@@ -1199,10 +1223,18 @@ class InternshipService
                 'status' => $status,
                 'created_at' => $now,
                 'updated_at' => $now,
-            ], $status, $now);
-            $this->recordWorkflow('plan_recording', 'plan', $planId, 'review', $from, $status, $opinion ?: '实习计划审核', $status);
+            ], $planStatus, $now);
+            $this->recordWorkflow('plan_recording', 'plan', $planId, 'review', $from, $planStatus, $content, $status);
 
-            return ['id' => $approvalId, 'plan_id' => $planId];
+            return [
+                'id' => $approvalId,
+                'plan_id' => $planId,
+                'approval_level' => $level,
+                'level_name' => $levelName,
+                'status' => $planStatus,
+                'next_approval_level' => $planStatus === 'wait' ? $level + 1 : null,
+                'next_level_name' => $planStatus === 'wait' ? (self::PLAN_APPROVAL_LEVELS[$level + 1]['name'] ?? null) : null,
+            ];
         });
     }
 
@@ -1450,6 +1482,9 @@ class InternshipService
         if (!$plan || !InternshipRecord::planVisible($scope, $planId)) {
             throw new RuntimeException('实习计划不存在或无权限', 40301);
         }
+        if (!in_array((string) ($plan->status ?? ''), ['accept', 'enabled'], true)) {
+            throw new InvalidArgumentException('实习计划审核通过后才可拆分任务');
+        }
         if ($existingId > 0) {
             $this->assertArrangementVisible($existingId);
         }
@@ -1648,23 +1683,16 @@ class InternshipService
             throw new InvalidArgumentException('任务日期无效');
         }
 
-        $now = $this->now();
-        $planId = InternshipRecord::planIdForImport([
+        $planId = InternshipRecord::approvedPlanIdForImport([
             'course_code' => trim((string) ($row['course_code'] ?? '')),
             'course_name' => $this->requiredImportValue($row, 'course_name', '课程名称'),
             'grade_id' => (int) $grade['grade_id'],
             'dep_id' => (int) $department['dep_id'],
             'profession_id' => (int) $profession['profession_id'],
-            'semester' => '',
-            'credit' => $credit,
-            'student_count' => $this->optionalImportInt($row['student_count'] ?? null) ?? 0,
-            'score_rule' => 'average',
-            'submitter_id' => CurrentContext::accountId(),
-            'plan_content' => [
-                'source' => '任务分配导入',
-                'row_number' => (int) ($row['row_number'] ?? 0),
-            ],
-        ], $this->uuid(), $now);
+        ]);
+        if ($planId <= 0) {
+            throw new InvalidArgumentException('未找到已审核通过的实习计划，请先完成计划五级审核');
+        }
 
         $taskNo = $this->requiredImportValue($row, 'task_no', '任务编号');
         $existingArrangementId = InternshipRecord::arrangementIdByPlanTaskNo($planId, $taskNo);
@@ -2142,6 +2170,28 @@ class InternshipService
     {
         if (!InternshipRecord::planVisible($this->scopeContext(), $planId)) {
             throw new RuntimeException('无数据访问权限', 40301);
+        }
+    }
+
+    private function assertPlanApproverAllowed(int $level, array $approvedRecordsByLevel): void
+    {
+        $config = self::PLAN_APPROVAL_LEVELS[$level] ?? null;
+        if (!$config) {
+            throw new InvalidArgumentException('实习计划审核节点无效', 42205);
+        }
+
+        $roleType = CurrentContext::roleType();
+        $allowedRoles = $config['role_types'] ?? [];
+        if ($roleType !== 'super_admin' && !in_array($roleType, $allowedRoles, true)) {
+            throw new RuntimeException('当前角色不能处理该审核节点', 40300);
+        }
+
+        $accountId = CurrentContext::accountId();
+        foreach (self::PLAN_APPROVER_DISTINCT_LEVELS[$level] ?? [] as $distinctLevel) {
+            $record = $approvedRecordsByLevel[$distinctLevel] ?? null;
+            if ($record && (int) ($record['approver_id'] ?? 0) === (int) $accountId) {
+                throw new InvalidArgumentException('同一审批人不能处理该计划的相邻或互斥审核节点', 42206);
+            }
         }
     }
 
@@ -2964,6 +3014,22 @@ class InternshipService
         }
 
         return trim($planContent) ?: '提交实习计划';
+    }
+
+    private function planReviewContent(int $level, string $levelName, string $reviewStatus, ?string $opinion, string $planStatus): string
+    {
+        $action = $reviewStatus === 'accept' ? '通过' : '退回';
+        $text = sprintf('实习计划第 %d 级审核（%s）%s', $level, $levelName, $action);
+        if ($planStatus === 'wait') {
+            $nextName = self::PLAN_APPROVAL_LEVELS[$level + 1]['name'] ?? '下一审核节点';
+            $text .= "，流转至{$nextName}";
+        } elseif ($planStatus === 'accept') {
+            $text .= '，五级审核完成';
+        } elseif ($planStatus === 'modify') {
+            $text .= '，退回修改后需重新提交';
+        }
+
+        return trim($opinion ?? '') === '' ? $text : $text . '；意见：' . trim((string) $opinion);
     }
 
     private function now(): string

@@ -4167,6 +4167,8 @@ const internshipListConfigs = computed(() => ({
       { key: 'score_rule', label: '成绩规则', width: 110, formatter: row => scoreRuleText(row.score_rule) },
       { key: 'content', label: '计划内容', minWidth: 220, formatter: row => planContentText(row.plan_content) },
       { prop: 'submitter_name', label: '提交人', width: 120 },
+      { prop: 'approval_progress_text', label: '审核进度', width: 100 },
+      { prop: 'current_approval_name', label: '当前节点', width: 110 },
       { prop: 'status', label: '状态', width: 90, tag: true, tagType: row => statusTagType(row.status), formatter: row => statusText(row.status) },
       { prop: 'created_at', label: '提交时间', width: 168 },
     ],
@@ -8766,11 +8768,13 @@ function openReviewDialog(entity, row, status) {
     return;
   }
   const actionText = status === 'accept' ? '通过' : '退回';
+  const target = row.title || row.course_name || row.arrangement_title || row.student_name || row.id;
+  const nodeText = entity === 'plan' && row.current_approval_name ? `当前节点：${row.current_approval_name}。` : '';
   internshipState.dialog = {
     ...emptyOperationDialog(),
     type: 'review',
     title: `${actionText}${reviewEntityName(entity)}`,
-    description: `请确认是否${actionText}「${row.title || row.arrangement_title || row.student_name || row.id}」。`,
+    description: `请确认是否${actionText}「${target}」。${nodeText}`,
     entity,
     status,
     row,
@@ -9085,7 +9089,7 @@ function canReviewRow(row, entity) {
     return false;
   }
   if (entity === 'plan') {
-    return canManageInternshipPlan.value;
+    return canManageInternshipPlan.value && canReviewPlanLevel(row);
   }
   if (entity === 'arrangement_change') {
     return canManageInternship.value || canApproveInternship.value;
@@ -9103,6 +9107,14 @@ function canReviewRow(row, entity) {
     return false;
   }
   return canApproveInternship.value;
+}
+
+function canReviewPlanLevel(row) {
+  if (currentRoleType.value === 'super_admin') {
+    return true;
+  }
+  const roles = Array.isArray(row.next_approval_role_types) ? row.next_approval_role_types : [];
+  return roles.includes(currentRoleType.value);
 }
 
 function canRequestModification(row, entity) {
@@ -9490,6 +9502,7 @@ async function reviewPlan(row, status, opinion = '') {
   try {
     await reviewInternshipPlan({
       id: row.id,
+      approval_level: row.next_approval_level || undefined,
       status,
       opinion: opinion || (status === 'accept' ? '同意' : '请修改后重新提交'),
     });

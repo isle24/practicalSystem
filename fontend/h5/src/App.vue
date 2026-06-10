@@ -2559,6 +2559,8 @@ function mobileListFacts(key, row) {
       // namedFact('学期', row.semester),
       namedFact('学院', row.dep_name),
       namedFact('提交人', row.submitter_name),
+      namedFact('审核进度', row.approval_progress_text),
+      namedFact('当前节点', row.current_approval_name),
       namedFact('内容', planContentText(row.plan_content, 48)),
     ],
     syllabusGuides: [
@@ -3652,6 +3654,7 @@ async function reviewPlan(row, status, opinion) {
   try {
     await reviewInternshipPlan({
       id: row.id,
+      approval_level: row.next_approval_level || undefined,
       status,
       opinion: opinion || defaultReviewOpinion('plan', status),
     });
@@ -3827,7 +3830,7 @@ function canReviewRow(row, entity) {
     return false;
   }
   if (entity === 'plan') {
-    return canReviewInternshipPlan.value;
+    return canReviewInternshipPlan.value && canReviewPlanLevel(row);
   }
   if (entity === 'arrangement_change') {
     return isAdminRole.value && (hasPermission('internship:manage') || hasPermission('internship:approve'));
@@ -3845,6 +3848,14 @@ function canReviewRow(row, entity) {
     return false;
   }
   return canReviewInternship.value;
+}
+
+function canReviewPlanLevel(row) {
+  if (roleType.value === 'super_admin') {
+    return true;
+  }
+  const roles = Array.isArray(row.next_approval_role_types) ? row.next_approval_role_types : [];
+  return roles.includes(roleType.value);
 }
 
 function canRequestModification(row, entity) {
@@ -3911,6 +3922,8 @@ function reviewTargetDetails(entity, row) {
       // detailItem('学期', row.semester),
       detailItem('学院', row.dep_name),
       detailItem('提交人', row.submitter_name),
+      detailItem('审核进度', row.approval_progress_text),
+      detailItem('当前节点', row.current_approval_name),
       detailItem('计划摘要', planContentText(row.plan_content, 100)),
     ],
     delay: [
