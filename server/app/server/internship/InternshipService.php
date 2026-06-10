@@ -483,6 +483,7 @@ class InternshipService
                 $opinion ?: ($status === 'accept' ? '同意任务变更' : '任务变更退回'),
                 $status
             );
+            $this->notifyArrangementChangeReviewed($change, $original, $status, $opinion, $newArrangementId);
             if ($status !== 'accept') {
                 $this->recordWorkflow(
                     'arrangement_recording',
@@ -2164,6 +2165,31 @@ class InternshipService
         $this->recordWorkflow($recordingTable, $entity, (int) $result['id'], $existingId ? 'change' : 'submit', $fromStatus, $toStatus, $content, $toStatus);
 
         return $result;
+    }
+
+    private function notifyArrangementChangeReviewed(object $change, object $arrangement, string $status, ?string $opinion, ?int $newArrangementId): void
+    {
+        $titles = [
+            'accept' => '实习任务变更已通过',
+            'modify' => '实习任务变更需修改',
+            'refuse' => '实习任务变更未通过',
+        ];
+        $title = $titles[$status] ?? '实习任务变更已处理';
+        $taskTitle = trim((string) ($arrangement->title ?? $arrangement->name ?? ''));
+        $parts = array_filter([
+            $taskTitle !== '' ? '任务：' . $taskTitle : '任务 ID：' . (int) ($change->arrangement_id ?? 0),
+            $newArrangementId ? '新任务 ID：' . $newArrangementId : null,
+            $opinion ? '意见：' . $opinion : null,
+        ]);
+
+        $this->notifyInternshipAccounts(
+            [(int) ($change->submitter_id ?? 0)],
+            $title,
+            implode('；', $parts),
+            $status === 'modify' ? 'todo' : 'result',
+            'arrangement_change',
+            (int) ($change->id ?? 0)
+        );
     }
 
     private function notifyPlanReviewed(object $row, int $planId, string $planStatus, string $levelName, ?string $opinion): void
