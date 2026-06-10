@@ -2,6 +2,7 @@
 
 namespace app\controller\Api;
 
+use app\attribute\OperationLog;
 use app\controller\Api\Concerns\Responds;
 use app\server\CurrentContext;
 use app\server\school\SchoolConnectionManager;
@@ -14,6 +15,7 @@ class SchoolController
 {
     use Responds;
 
+    #[OperationLog('获取当前学校连接')]
     public function current(Request $request): Response
     {
         return $this->ok([
@@ -26,6 +28,7 @@ class SchoolController
         ]);
     }
 
+    #[OperationLog('解析学校连接')]
     public function resolve(Request $request): Response
     {
         try {

@@ -2,6 +2,7 @@
 
 namespace app\controller\Api;
 
+use app\attribute\OperationLog;
 use app\controller\Api\Concerns\Responds;
 use app\server\CurrentContext;
 use app\server\message\MessageService;
@@ -15,6 +16,7 @@ class MessageController
 
     private const ADMIN_ROLES = ['super_admin', 'school_admin'];
 
+    #[OperationLog('查询消息列表')]
     public function list(Request $request): Response
     {
         try {
@@ -32,6 +34,7 @@ class MessageController
         }
     }
 
+    #[OperationLog('查询消息摘要')]
     public function summary(Request $request): Response
     {
         try {
@@ -41,6 +44,7 @@ class MessageController
         }
     }
 
+    #[OperationLog('标记消息已读')]
     public function read(Request $request): Response
     {
         try {
@@ -54,6 +58,7 @@ class MessageController
         }
     }
 
+    #[OperationLog('查询消息发送对象')]
     public function targets(Request $request): Response
     {
         if (!in_array(CurrentContext::roleType(), self::ADMIN_ROLES, true)) {
@@ -71,6 +76,7 @@ class MessageController
         }
     }
 
+    #[OperationLog('发送消息')]
     public function send(Request $request): Response
     {
         if (!in_array(CurrentContext::roleType(), self::ADMIN_ROLES, true)) {

@@ -2,6 +2,7 @@
 
 namespace app\controller\Api;
 
+use app\attribute\OperationLog;
 use app\controller\Api\Concerns\Responds;
 use app\server\CurrentContext;
 use app\server\config\ConfigService;
@@ -16,11 +17,13 @@ class WechatController
 
     private const MENU_TYPES = ['click', 'view', 'miniprogram'];
 
+    #[OperationLog('查询企业微信代理配置')]
     public function proxy(Request $request): Response
     {
         return $this->config($request);
     }
 
+    #[OperationLog('查询企业微信配置')]
     public function config(Request $request): Response
     {
         if (!$this->can('wechat:proxy')) {
@@ -34,11 +37,13 @@ class WechatController
         }
     }
 
+    #[OperationLog('保存企业微信代理配置')]
     public function saveProxy(Request $request): Response
     {
         return $this->saveConfig($request);
     }
 
+    #[OperationLog('保存企业微信配置')]
     public function saveConfig(Request $request): Response
     {
         if (!$this->can('wechat:proxy:save')) {

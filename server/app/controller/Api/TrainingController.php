@@ -2,6 +2,7 @@
 
 namespace app\controller\Api;
 
+use app\attribute\OperationLog;
 use app\controller\Api\Concerns\Responds;
 use app\server\practice\PracticeService;
 use support\Request;
@@ -12,36 +13,43 @@ class TrainingController
 {
     use Responds;
 
+    #[OperationLog('查看实训总览')]
     public function overview(Request $request): Response
     {
         return $this->handle(fn (): array => $this->service()->overview($request));
     }
 
+    #[OperationLog('获取实训筛选选项')]
     public function options(Request $request): Response
     {
         return $this->handle(fn (): array => $this->service()->options($request));
     }
 
+    #[OperationLog('查询实训列表')]
     public function list(Request $request): Response
     {
         return $this->handle(fn (): array => $this->service()->list($request));
     }
 
+    #[OperationLog('保存实训记录')]
     public function save(Request $request): Response
     {
         return $this->handle(fn (): array => $this->service()->save($request));
     }
 
+    #[OperationLog('审核实训记录')]
     public function review(Request $request): Response
     {
         return $this->handle(fn (): array => $this->service()->review($request));
     }
 
+    #[OperationLog('发起实训通过后修改')]
     public function requestModification(Request $request): Response
     {
         return $this->handle(fn (): array => $this->service()->requestModification($request));
     }
 
+    #[OperationLog('查看实训流程记录')]
     public function timeline(Request $request): Response
     {
         return $this->handle(fn (): array => $this->service()->timeline($request));

@@ -2,6 +2,7 @@
 
 namespace app\controller\Api;
 
+use app\attribute\OperationLog;
 use app\controller\Api\Concerns\Responds;
 use app\model\channel\OperationGuide;
 use app\server\CurrentContext;
@@ -13,6 +14,7 @@ class GuideController
 {
     use Responds;
 
+    #[OperationLog('获取模块操作说明')]
     public function current(Request $request): Response
     {
         if (!CurrentContext::accountId()) {
@@ -34,6 +36,7 @@ class GuideController
         }
     }
 
+    #[OperationLog('查询操作说明列表')]
     public function list(Request $request): Response
     {
         if (!in_array('guide:view', CurrentContext::permissionCodes(), true)) {
@@ -49,6 +52,7 @@ class GuideController
         }
     }
 
+    #[OperationLog('保存操作说明')]
     public function save(Request $request): Response
     {
         if (!in_array('guide:save', CurrentContext::permissionCodes(), true)) {
@@ -77,6 +81,7 @@ class GuideController
         }
     }
 
+    #[OperationLog('删除操作说明')]
     public function delete(Request $request): Response
     {
         if (!in_array('guide:delete', CurrentContext::permissionCodes(), true)) {

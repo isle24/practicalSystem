@@ -2,6 +2,7 @@
 
 namespace app\controller\Api;
 
+use app\attribute\OperationLog;
 use app\controller\Api\Concerns\Responds;
 use app\model\channel\TableRecord as ChannelTable;
 use app\server\CurrentContext;
@@ -75,6 +76,7 @@ class ArchiveController
         ],
     ];
 
+    #[OperationLog('查询基础档案列表')]
     public function list(Request $request): Response
     {
         if (!$this->isAdmin()) {
@@ -89,6 +91,7 @@ class ArchiveController
         }
     }
 
+    #[OperationLog('保存基础档案')]
     public function save(Request $request): Response
     {
         if (!$this->isAdmin()) {
@@ -124,6 +127,7 @@ class ArchiveController
         }
     }
 
+    #[OperationLog('删除基础档案')]
     public function delete(Request $request): Response
     {
         if (!$this->isAdmin()) {
@@ -144,6 +148,7 @@ class ArchiveController
         }
     }
 
+    #[OperationLog('导入基础档案Excel')]
     public function importExcel(Request $request): Response
     {
         if (!$this->isAdmin()) {

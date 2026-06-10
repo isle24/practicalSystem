@@ -2,6 +2,7 @@
 
 namespace app\controller\Api;
 
+use app\attribute\OperationLog;
 use app\controller\Api\Concerns\Responds;
 use app\server\template\TemplateService;
 use support\Request;
@@ -12,11 +13,13 @@ class TemplateController
 {
     use Responds;
 
+    #[OperationLog('查询模板分类')]
     public function categories(Request $request): Response
     {
         return $this->handle(fn (): array => (new TemplateService())->categories());
     }
 
+    #[OperationLog('查询模板列表')]
     public function list(Request $request): Response
     {
         return $this->handle(fn (): array => (new TemplateService())->list([
@@ -28,26 +31,31 @@ class TemplateController
         ]));
     }
 
+    #[OperationLog('上传模板文件')]
     public function upload(Request $request): Response
     {
         return $this->handle(fn (): array => (new TemplateService())->upload($request), '已上传');
     }
 
+    #[OperationLog('保存模板分类')]
     public function saveCategory(Request $request): Response
     {
         return $this->handle(fn (): array => (new TemplateService())->saveCategory((array) $request->all()), '已保存');
     }
 
+    #[OperationLog('保存模板')]
     public function save(Request $request): Response
     {
         return $this->handle(fn (): array => (new TemplateService())->saveTemplate((array) $request->all()), '已保存');
     }
 
+    #[OperationLog('删除模板')]
     public function delete(Request $request): Response
     {
         return $this->handle(fn (): array => (new TemplateService())->deleteTemplate($this->intInput($request, 'id')), '已删除');
     }
 
+    #[OperationLog('获取模板下载信息')]
     public function download(Request $request): Response
     {
         return $this->handle(fn (): array => (new TemplateService())->download($this->intInput($request, 'id')));

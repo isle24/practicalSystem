@@ -2,6 +2,7 @@
 
 namespace app\controller\Api;
 
+use app\attribute\OperationLog;
 use app\controller\Api\Concerns\Responds;
 use app\model\channel\TableRecord as ChannelTable;
 use app\model\channel\User;
@@ -17,6 +18,7 @@ class ProfileController
 
     private const NOTIFY_CHANNELS = ['system', 'wechat', 'email'];
 
+    #[OperationLog('获取个人设置')]
     public function settings(Request $request): Response
     {
         if (!CurrentContext::accountId()) {
@@ -30,6 +32,7 @@ class ProfileController
         }
     }
 
+    #[OperationLog('保存个人设置')]
     public function saveSettings(Request $request): Response
     {
         $accountId = CurrentContext::accountId();
@@ -75,6 +78,7 @@ class ProfileController
         }
     }
 
+    #[OperationLog('上传个人素材')]
     public function uploadAsset(Request $request): Response
     {
         $accountId = CurrentContext::accountId();

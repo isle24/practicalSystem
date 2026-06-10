@@ -2,8 +2,10 @@
 
 namespace app\middleware;
 
+use app\attribute\OperationLog;
 use app\model\channel\TableRecord;
 use app\server\CurrentContext;
+use ReflectionMethod;
 use Throwable;
 use Webman\Http\Request;
 use Webman\Http\Response;
@@ -49,15 +51,19 @@ class OperationLogMiddleware implements MiddlewareInterface
         try {
             $path = '/' . trim($request->path(), '/');
             $method = strtoupper($request->method());
+            $operation = $this->operationName($request);
             $statusCode = $exception ? 500 : $this->statusCode($response);
             $responsePayload = $this->responsePayload($response, $exception);
             TableRecord::writeOperationLog([
                 'account_id' => CurrentContext::accountId() ?: null,
-                'action' => mb_substr($method . ' ' . $path, 0, 120),
+                'action' => mb_substr($operation ?: $method . ' ' . $path, 0, 120),
                 'ip' => mb_substr((string) $request->getRealIp(), 0, 80),
                 'payload' => [
+                    'operation' => $operation,
                     'method' => $method,
                     'path' => $path,
+                    'controller' => is_string($request->controller ?? null) ? $request->controller : null,
+                    'action_method' => is_string($request->action ?? null) ? $request->action : null,
                     'status_code' => $statusCode,
                     'duration_ms' => round((microtime(true) - $startedAt) * 1000, 2),
                     'query' => $this->mask($this->requestQuery($request)),
@@ -81,6 +87,33 @@ class OperationLogMiddleware implements MiddlewareInterface
 
         $path = '/' . trim($request->path(), '/');
         return str_starts_with($path, '/api/');
+    }
+
+    private function operationName(Request $request): ?string
+    {
+        $controller = is_string($request->controller ?? null) ? $request->controller : '';
+        $action = is_string($request->action ?? null) ? $request->action : '';
+        if ($controller === '' || $action === '' || !class_exists($controller) || !method_exists($controller, $action)) {
+            return null;
+        }
+
+        static $cache = [];
+        $key = $controller . '::' . $action;
+        if (array_key_exists($key, $cache)) {
+            return $cache[$key];
+        }
+
+        try {
+            $attributes = (new ReflectionMethod($controller, $action))->getAttributes(OperationLog::class);
+            if (!$attributes) {
+                return $cache[$key] = null;
+            }
+
+            $name = trim($attributes[0]->newInstance()->name);
+            return $cache[$key] = ($name === '' ? null : $name);
+        } catch (Throwable) {
+            return $cache[$key] = null;
+        }
     }
 
     private function statusCode(?Response $response): int

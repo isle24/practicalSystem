@@ -2,6 +2,7 @@
 
 namespace app\controller\Api;
 
+use app\attribute\OperationLog;
 use app\controller\Api\Concerns\Responds;
 use app\server\CurrentContext;
 use app\server\config\ConfigService;
@@ -16,6 +17,7 @@ class ConfigController
 
     private const SCHOOL_ADMIN_ROLE_TYPES = ['super_admin', 'school_admin'];
 
+    #[OperationLog('查询系统配置')]
     public function items(Request $request): Response
     {
         if (!$this->canManageSchoolConfig()) {
@@ -33,6 +35,7 @@ class ConfigController
         }
     }
 
+    #[OperationLog('查询登录页配置')]
     public function loginPage(Request $request): Response
     {
         try {
@@ -42,6 +45,7 @@ class ConfigController
         }
     }
 
+    #[OperationLog('上传登录背景图')]
     public function uploadLoginBackground(Request $request): Response
     {
         if (!$this->canManageSchoolConfig()) {
@@ -70,6 +74,7 @@ class ConfigController
         }
     }
 
+    #[OperationLog('保存系统配置')]
     public function save(Request $request): Response
     {
         if (!$this->canManageSchoolConfig()) {

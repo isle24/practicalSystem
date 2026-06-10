@@ -2,6 +2,7 @@
 
 namespace app\controller\Api;
 
+use app\attribute\OperationLog;
 use app\controller\Api\Concerns\Responds;
 use app\server\CurrentContext;
 use app\server\rbac\DataScopeService;
@@ -14,6 +15,7 @@ class PermissionController
 {
     use Responds;
 
+    #[OperationLog('获取当前菜单权限')]
     public function menus(Request $request): Response
     {
         try {
@@ -31,6 +33,7 @@ class PermissionController
         }
     }
 
+    #[OperationLog('获取当前权限码')]
     public function codes(Request $request): Response
     {
         try {
@@ -44,6 +47,7 @@ class PermissionController
         }
     }
 
+    #[OperationLog('获取当前数据权限范围')]
     public function scope(Request $request): Response
     {
         try {
@@ -58,6 +62,7 @@ class PermissionController
         }
     }
 
+    #[OperationLog('获取数据筛选范围')]
     public function filter(Request $request): Response
     {
         try {

@@ -2,6 +2,7 @@
 
 namespace app\controller\Api;
 
+use app\attribute\OperationLog;
 use app\controller\Api\Concerns\Responds;
 use app\model\channel\TableRecord as ChannelTable;
 use app\server\CurrentContext;
@@ -13,6 +14,7 @@ class LogController
 {
     use Responds;
 
+    #[OperationLog('查询操作日志')]
     public function list(Request $request): Response
     {
         if (!in_array('log:view', CurrentContext::permissionCodes(), true)) {

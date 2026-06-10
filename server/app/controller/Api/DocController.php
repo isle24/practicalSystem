@@ -2,6 +2,7 @@
 
 namespace app\controller\Api;
 
+use app\attribute\OperationLog;
 use app\controller\Api\Concerns\Responds;
 use app\server\doc\DocService;
 use support\Request;
@@ -12,11 +13,13 @@ class DocController
 {
     use Responds;
 
+    #[OperationLog('查询文档分类')]
     public function categories(Request $request): Response
     {
         return $this->handle(fn (): array => (new DocService())->categories());
     }
 
+    #[OperationLog('查询文档列表')]
     public function list(Request $request): Response
     {
         return $this->handle(fn (): array => (new DocService())->list([
@@ -28,26 +31,31 @@ class DocController
         ]));
     }
 
+    #[OperationLog('查看文档详情')]
     public function detail(Request $request): Response
     {
         return $this->handle(fn (): array => (new DocService())->detail($this->intInput($request, 'id')));
     }
 
+    #[OperationLog('查看文档历史')]
     public function history(Request $request): Response
     {
         return $this->handle(fn (): array => (new DocService())->history($this->intInput($request, 'article_id') ?: $this->intInput($request, 'id')));
     }
 
+    #[OperationLog('保存文档分类')]
     public function saveCategory(Request $request): Response
     {
         return $this->handle(fn (): array => (new DocService())->saveCategory((array) $request->all()), '已保存');
     }
 
+    #[OperationLog('保存文档')]
     public function save(Request $request): Response
     {
         return $this->handle(fn (): array => (new DocService())->saveArticle((array) $request->all()), '已保存');
     }
 
+    #[OperationLog('删除文档')]
     public function delete(Request $request): Response
     {
         return $this->handle(fn (): array => (new DocService())->deleteArticle($this->intInput($request, 'id')), '已删除');

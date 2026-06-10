@@ -2,6 +2,7 @@
 
 namespace app\controller\Api;
 
+use app\attribute\OperationLog;
 use app\controller\Api\Concerns\Responds;
 use app\server\auth\AuthService;
 use app\server\CurrentContext;
@@ -14,6 +15,7 @@ class AuthController
 {
     use Responds;
 
+    #[OperationLog('登录')]
     public function login(Request $request): Response
     {
         try {
@@ -29,6 +31,7 @@ class AuthController
         }
     }
 
+    #[OperationLog('刷新登录状态')]
     public function refresh(Request $request): Response
     {
         try {
@@ -45,6 +48,7 @@ class AuthController
         }
     }
 
+    #[OperationLog('退出登录')]
     public function logout(Request $request): Response
     {
         $cookies = (new AuthService())->cookieNames();
@@ -53,6 +57,7 @@ class AuthController
             ->cookie($cookies['refresh'], '', 0, '/', '', false, true, 'Lax');
     }
 
+    #[OperationLog('查询可切换账号')]
     public function switchableAccounts(Request $request): Response
     {
         try {
@@ -62,6 +67,7 @@ class AuthController
         }
     }
 
+    #[OperationLog('切换登录身份')]
     public function switchAccount(Request $request): Response
     {
         try {
@@ -74,6 +80,7 @@ class AuthController
         }
     }
 
+    #[OperationLog('一键登录')]
     public function passkeyLogin(Request $request): Response
     {
         try {
@@ -87,6 +94,7 @@ class AuthController
         }
     }
 
+    #[OperationLog('获取登录上下文')]
     public function context(Request $request): Response
     {
         if (!CurrentContext::accountId()) {
@@ -107,6 +115,7 @@ class AuthController
         return $this->ok(CurrentContext::all());
     }
 
+    #[OperationLog('查询当前账号角色')]
     public function roles(Request $request): Response
     {
         try {

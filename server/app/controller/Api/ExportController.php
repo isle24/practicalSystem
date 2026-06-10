@@ -2,6 +2,7 @@
 
 namespace app\controller\Api;
 
+use app\attribute\OperationLog;
 use app\controller\Api\Concerns\Responds;
 use app\server\export\ExportTaskService;
 use support\Request;
@@ -12,6 +13,7 @@ class ExportController
 {
     use Responds;
 
+    #[OperationLog('查询导出任务列表')]
     public function list(Request $request): Response
     {
         return $this->handle(fn (): array => (new ExportTaskService())->list([
@@ -25,16 +27,19 @@ class ExportController
         ]));
     }
 
+    #[OperationLog('查看导出任务详情')]
     public function detail(Request $request): Response
     {
         return $this->handle(fn (): array => (new ExportTaskService())->detail($this->intInput($request, 'id')));
     }
 
+    #[OperationLog('创建导出任务')]
     public function create(Request $request): Response
     {
         return $this->handle(fn (): array => (new ExportTaskService())->create((array) $request->all()), '已创建导出任务');
     }
 
+    #[OperationLog('重试导出任务')]
     public function retry(Request $request): Response
     {
         return $this->handle(fn (): array => (new ExportTaskService())->retry($this->intInput($request, 'id')), '已重新排队');
