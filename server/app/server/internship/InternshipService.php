@@ -1294,6 +1294,7 @@ class InternshipService
                 'updated_at' => $now,
             ], $planStatus, $now);
             $this->recordWorkflow('plan_recording', 'plan', $planId, 'review', $from, $planStatus, $content, $status);
+            $this->notifyPlanReviewed($row, $planId, $planStatus, $levelName, $opinion);
 
             return [
                 'id' => $approvalId,
@@ -2163,6 +2164,32 @@ class InternshipService
         $this->recordWorkflow($recordingTable, $entity, (int) $result['id'], $existingId ? 'change' : 'submit', $fromStatus, $toStatus, $content, $toStatus);
 
         return $result;
+    }
+
+    private function notifyPlanReviewed(object $row, int $planId, string $planStatus, string $levelName, ?string $opinion): void
+    {
+        if (!in_array($planStatus, ['accept', 'modify'], true)) {
+            return;
+        }
+
+        $title = $planStatus === 'accept' ? '实习计划已审核通过' : '实习计划需修改';
+        $course = trim((string) ($row->course_name ?? ''));
+        $courseCode = trim((string) ($row->course_code ?? ''));
+        $parts = array_filter([
+            $course !== '' ? '课程：' . $course : '计划 ID：' . $planId,
+            $courseCode !== '' ? '课程代码：' . $courseCode : null,
+            '审核节点：' . $levelName,
+            $opinion ? '意见：' . $opinion : null,
+        ]);
+
+        $this->notifyInternshipAccounts(
+            [(int) ($row->submitter_id ?? 0)],
+            $title,
+            implode('；', $parts),
+            $planStatus === 'accept' ? 'result' : 'todo',
+            'plan',
+            $planId
+        );
     }
 
     private function notifyArrangementPublished(int $arrangementId, array $item, bool $changed): void
