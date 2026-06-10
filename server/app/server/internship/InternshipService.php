@@ -291,7 +291,7 @@ class InternshipService
             'name' => $this->stringInput($request, 'name', 180) ?: $this->requiredString($request, 'title', 180),
             'base_id' => $this->optionalInt($request, 'base_id'),
             'enterprise_mentor_id' => $this->optionalInt($request, 'enterprise_mentor_id'),
-            'task_no' => $this->nullableString($request, 'task_no', 80),
+            'task_no' => $this->requiredString($request, 'task_no', 80),
             'batch_no' => $this->nullableString($request, 'batch_no', 80),
             'credit' => $this->decimalInput($request, 'credit'),
             'type' => $this->enum($request, 'type', self::ARRANGEMENT_TYPES, 'major_external'),
@@ -820,9 +820,11 @@ class InternshipService
         $this->requirePermission($this->isStudent() ? 'internship:sign' : 'internship:manage');
         $studentId = $this->isStudent() ? $this->currentStudentId(true) : $this->requiredInt($request, 'student_id');
         $arrangementId = $this->requiredInt($request, 'arrangement_id');
+        $signDate = $this->dateInput($request, 'date') ?: date('Y-m-d');
         $this->assertStudentVisible($studentId);
         $this->assertArrangementVisible($arrangementId);
         $this->assertTaskBindingVisible($studentId, $arrangementId);
+        $this->assertStudentStartPrerequisites($studentId, $arrangementId, $signDate);
         $signType = $this->enum($request, 'sign_type', ['gps', 'qrcode', 'manual'], $this->isStudent() ? 'gps' : 'manual');
         $longitude = $this->coordinateInput($request, 'longitude', -180, 180);
         $latitude = $this->coordinateInput($request, 'latitude', -90, 90);
@@ -834,7 +836,7 @@ class InternshipService
             'student_id' => $studentId,
             'entity_type' => 'internship',
             'entity_id' => $arrangementId,
-            'date' => $this->dateInput($request, 'date') ?: date('Y-m-d'),
+            'date' => $signDate,
             'sign_time' => $this->dateTimeInput($request, 'sign_time') ?: $this->now(),
             'sign_type' => $signType,
             'location' => $this->nullableString($request, 'location', 255),
@@ -870,6 +872,9 @@ class InternshipService
         $this->assertStudentVisible($studentId);
         $this->assertArrangementVisible($arrangementId);
         $this->assertTaskBindingVisible($studentId, $arrangementId);
+        if ($status === 'wait') {
+            $this->assertStudentStartPrerequisites($studentId, $arrangementId, $this->dateInput($request, 'date') ?: date('Y-m-d'));
+        }
         if ($existingId) {
             $row = $this->row('journal', $existingId);
             if ((int) $row->student_id !== $studentId || (int) $row->entity_id !== $arrangementId) {
@@ -923,6 +928,9 @@ class InternshipService
         $this->assertStudentVisible($studentId);
         $this->assertArrangementVisible($arrangementId);
         $this->assertTaskBindingVisible($studentId, $arrangementId);
+        if ($status === 'wait') {
+            $this->assertStudentStartPrerequisites($studentId, $arrangementId, date('Y-m-d'));
+        }
         if ($existingId) {
             $row = $this->row('report', $existingId);
             if ((int) $row->student_id !== $studentId || (int) $row->arrangement_id !== $arrangementId) {
@@ -1280,14 +1288,16 @@ class InternshipService
         $this->assertStudentVisible($studentId);
         $this->assertArrangementVisible($arrangementId);
         $this->assertTaskBindingVisible($studentId, $arrangementId);
+        $status = $this->enum($request, 'status', ['pending', 'signed'], 'pending');
+        $signedAt = $this->dateTimeInput($request, 'signed_at');
 
         return $this->saveRow('safety_letter_sign', $request, [
             'arrangement_id' => $arrangementId,
             'student_id' => $studentId,
             'template_id' => $this->optionalInt($request, 'template_id'),
-            'signed_at' => $this->dateTimeInput($request, 'signed_at'),
+            'signed_at' => $status === 'signed' ? ($signedAt ?: $this->now()) : $signedAt,
             'signature_file_id' => $this->optionalInt($request, 'signature_file_id'),
-            'status' => $this->enum($request, 'status', ['pending', 'signed'], 'pending'),
+            'status' => $status,
             'updated_at' => $this->now(),
             'deleted_at' => null,
         ]);
@@ -1456,6 +1466,7 @@ class InternshipService
         $title = trim((string) ($input['title'] ?? ''));
         $startDate = (string) ($input['start_date'] ?? '');
         $endDate = (string) ($input['end_date'] ?? '');
+        $taskNo = trim((string) ($input['task_no'] ?? ''));
         $existingId = (int) ($input['id'] ?? 0);
 
         if ($planId <= 0) {
@@ -1469,6 +1480,9 @@ class InternshipService
         }
         if ($title === '') {
             throw new InvalidArgumentException('任务标题不能为空');
+        }
+        if ($taskNo === '') {
+            throw new InvalidArgumentException('任务编号不能为空');
         }
         if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $startDate) || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $endDate)) {
             throw new InvalidArgumentException('任务日期无效');
@@ -1506,8 +1520,11 @@ class InternshipService
         if (InternshipRecord::teacherTaskTimeConflictExists($teacherId, $startDate, $endDate, $existingId ?: null)) {
             throw new InvalidArgumentException('该老师在当前时间段已有任务，请调整时间或负责老师');
         }
+        if (InternshipRecord::arrangementTaskNoExists($planId, $taskNo, $existingId ?: null)) {
+            throw new InvalidArgumentException('同一实习计划下任务编号不能重复');
+        }
 
-        return $this->connection()->transaction(function () use ($classRows, $endDate, $existingId, $input, $plan, $planId, $source, $startDate, $teacherId, $title): array {
+        return $this->connection()->transaction(function () use ($classRows, $endDate, $existingId, $input, $plan, $planId, $source, $startDate, $taskNo, $teacherId, $title): array {
             $now = $this->now();
             $studentRows = InternshipRecord::studentRowsByClassIds(array_column($classRows, 'class_id'));
             $studentCounts = [];
@@ -1528,7 +1545,7 @@ class InternshipService
                 'profession_id' => (int) $plan->profession_id,
                 'semester' => (string) ($plan->semester ?? ''),
                 'teacher_id' => $teacherId,
-                'task_no' => $input['task_no'] ?? null,
+                'task_no' => $taskNo,
                 'batch_no' => $input['batch_no'] ?? null,
                 'credit' => $input['credit'] ?? ($plan->credit === null ? null : (float) $plan->credit),
                 'student_count' => count($studentRows),
@@ -1875,6 +1892,9 @@ class InternshipService
         if (trim((string) ($payload['title'] ?? '')) === '') {
             throw new InvalidArgumentException('任务标题不能为空');
         }
+        if (trim((string) ($payload['task_no'] ?? '')) === '') {
+            throw new InvalidArgumentException('任务编号不能为空');
+        }
         if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', (string) ($payload['start_date'] ?? ''))) {
             throw new InvalidArgumentException('开始日期无效');
         }
@@ -2157,6 +2177,22 @@ class InternshipService
         if (!InternshipRecord::taskBindingVisible($this->scopeContext(), $studentId, $arrangementId)) {
             throw new RuntimeException('学生未绑定该实习任务或无数据访问权限', 40301);
         }
+    }
+
+    private function assertStudentStartPrerequisites(int $studentId, int $arrangementId, ?string $date = null): void
+    {
+        $state = InternshipRecord::studentStartPrerequisiteState($studentId, $arrangementId, $date);
+        $missing = $state['missing'] ?? [];
+        if (empty($state['required']) || !$missing) {
+            return;
+        }
+
+        $labels = [
+            'insurance' => '有效保险记录',
+            'safety_letter' => '已签署安全承诺书',
+        ];
+        $names = array_map(static fn (string $key): string => $labels[$key] ?? $key, $missing);
+        throw new InvalidArgumentException('校外实习开始前需完成：' . implode('、', $names), 42207);
     }
 
     private function assertApplicationVisible(int $applicationId): void

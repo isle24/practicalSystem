@@ -382,7 +382,7 @@
                           </el-select>
                         </label>
                         <label><span>任务标题</span><input v-model="internshipState.arrangementForm.title"></label>
-                        <label><span>任务编号</span><input v-model="internshipState.arrangementForm.task_no"></label>
+                        <label><span>任务编号</span><input v-model="internshipState.arrangementForm.task_no" placeholder="同一计划下唯一"></label>
                         <label><span>批次</span><input v-model="internshipState.arrangementForm.batch_no"></label>
                         <!-- 暂时隐藏学期输入，后续需要时恢复。 -->
                         <!--
@@ -9294,6 +9294,10 @@ async function saveArrangement() {
   const form = internshipState.arrangementForm;
   if (!internshipState.arrangementForm.plan_id) {
     internshipState.message = '请选择实习计划';
+    return;
+  }
+  if (!String(internshipState.arrangementForm.task_no || '').trim()) {
+    internshipState.message = '请填写任务编号';
     return;
   }
   if (!internshipState.arrangementForm.teacher_id) {

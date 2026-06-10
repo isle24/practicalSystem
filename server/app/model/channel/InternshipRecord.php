@@ -7,6 +7,7 @@ class InternshipRecord extends TableRecord
     private const STAT_DATA_LIMIT = 20000;
     private const TASK_CLASS_ACTIVE_STATUSES = ['active', 'enabled'];
     private const TASK_CLASS_REMOVED_STATUS = 'removed';
+    private const EXTERNAL_ARRANGEMENT_TYPES = ['cognition_external', 'major_external', 'production', 'graduation'];
     private const ARCHIVE_MATERIALS = [
         'plan' => '实习计划表',
         'implementation_sheet' => '教学实习实施表',
@@ -1188,6 +1189,24 @@ class InternshipRecord extends TableRecord
             ->value('id') ?: 0);
     }
 
+    public static function arrangementTaskNoExists(int $planId, string $taskNo, ?int $excludeId = null): bool
+    {
+        if ($planId <= 0 || trim($taskNo) === '') {
+            return false;
+        }
+
+        $query = self::queryTable('arrangement')
+            ->where('plan_id', $planId)
+            ->where('task_no', trim($taskNo))
+            ->where('status', '<>', 'changed')
+            ->whereNull('deleted_at');
+        if ($excludeId && $excludeId > 0) {
+            $query->where('id', '<>', $excludeId);
+        }
+
+        return $query->exists();
+    }
+
     public static function arrangementHasProcessData(int $arrangementId): bool
     {
         if ($arrangementId <= 0) {
@@ -1813,6 +1832,57 @@ class InternshipRecord extends TableRecord
         }
 
         return $query->exists();
+    }
+
+    public static function studentStartPrerequisiteState(int $studentId, int $arrangementId, ?string $date = null): array
+    {
+        $arrangement = self::queryTable('arrangement')
+            ->where('id', $arrangementId)
+            ->whereNull('deleted_at')
+            ->first(['id', 'type']);
+        if (!$arrangement || !in_array((string) $arrangement->type, self::EXTERNAL_ARRANGEMENT_TYPES, true)) {
+            return [
+                'required' => false,
+                'missing' => [],
+            ];
+        }
+
+        $date = $date ?: date('Y-m-d');
+        $missing = [];
+        if (!self::hasValidInsurance($studentId, $arrangementId, $date)) {
+            $missing[] = 'insurance';
+        }
+        if (!self::hasSignedSafetyLetter($studentId, $arrangementId)) {
+            $missing[] = 'safety_letter';
+        }
+
+        return [
+            'required' => true,
+            'missing' => $missing,
+        ];
+    }
+
+    private static function hasValidInsurance(int $studentId, int $arrangementId, string $date): bool
+    {
+        return self::queryTable('insurance')
+            ->where('student_id', $studentId)
+            ->where('arrangement_id', $arrangementId)
+            ->where('status', 'enabled')
+            ->whereDate('start_date', '<=', $date)
+            ->whereDate('end_date', '>=', $date)
+            ->whereNull('deleted_at')
+            ->exists();
+    }
+
+    private static function hasSignedSafetyLetter(int $studentId, int $arrangementId): bool
+    {
+        return self::queryTable('safety_letter_sign')
+            ->where('student_id', $studentId)
+            ->where('arrangement_id', $arrangementId)
+            ->where('status', 'signed')
+            ->whereNotNull('signed_at')
+            ->whereNull('deleted_at')
+            ->exists();
     }
 
     public static function applicationWithTeachers(int $id): ?array
