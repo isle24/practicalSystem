@@ -774,12 +774,23 @@
             </header>
             <label>
               <span>学生</span>
+              <input
+                v-model="internship.filters.pairs.keyword"
+                placeholder="搜索学生、学号或任务"
+                @keyup.enter="reloadScorePairs"
+              >
+            </label>
+            <label>
+              <span>任务绑定</span>
               <select v-model.number="internship.forms.score.pair_id" @change="selectScorePair">
                 <option v-for="pair in internship.lists.pairs.items" :key="pair.id" :value="pair.id">
                   {{ pair.student_name }} / {{ pair.arrangement_title }}
                 </option>
               </select>
             </label>
+            <van-button block plain type="primary" :loading="internship.loading" @click="reloadScorePairs">
+              查询绑定学生
+            </van-button>
             <label><span>签到成绩</span><input v-model="internship.forms.score.sign_in_score" type="number"></label>
             <label><span>日志成绩</span><input v-model="internship.forms.score.journal_score" type="number"></label>
             <label><span>报告成绩</span><input v-model="internship.forms.score.report_score" type="number"></label>
@@ -3212,7 +3223,7 @@ async function loadInternshipPanelData() {
   if (internship.panel === 'score') {
     if (isTeacherRole.value) {
       const [pairs] = await Promise.all([
-        fetchInternshipPairs({ page: 1, page_size: 100 }),
+        fetchInternshipPairs({ page: 1, page_size: 50, keyword: internship.filters.pairs.keyword || '' }),
         loadInternshipList('scores'),
         loadInternshipList('courseScores'),
       ]);
@@ -3232,6 +3243,32 @@ async function loadInternshipPanelData() {
   }
   if (internship.panel === 'manage') {
     await loadInternshipList(currentManageListConfig.value?.key || 'arrangements');
+  }
+}
+
+async function reloadScorePairs() {
+  internship.loading = true;
+  internship.message = '';
+  try {
+    const pairs = await fetchInternshipPairs({
+      page: 1,
+      page_size: 50,
+      keyword: internship.filters.pairs.keyword || '',
+    });
+    setPagedList('pairs', pairs);
+    const firstPair = internship.lists.pairs.items[0];
+    if (firstPair) {
+      internship.forms.score.pair_id = firstPair.id;
+      selectScorePair();
+    } else {
+      internship.forms.score.pair_id = null;
+      internship.forms.score.student_id = null;
+      internship.forms.score.arrangement_id = null;
+    }
+  } catch (error) {
+    internship.message = error.message;
+  } finally {
+    internship.loading = false;
   }
 }
 

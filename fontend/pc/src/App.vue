@@ -511,7 +511,16 @@
                       <div v-else-if="internshipState.dialog.type === 'score'" class="operation-form">
                         <label>
                           <span>学生</span>
-                          <el-select v-model="internshipState.scoreForm.pair_id" filterable placeholder="选择任务绑定学生" @change="selectScorePair">
+                          <el-select
+                            v-model="internshipState.scoreForm.pair_id"
+                            filterable
+                            remote
+                            reserve-keyword
+                            :remote-method="searchScorePairs"
+                            :loading="internshipState.scorePairLoading"
+                            placeholder="搜索学生、学号或任务"
+                            @change="selectScorePair"
+                          >
                             <el-option
                               v-for="pair in internshipState.lists.pairs.items"
                               :key="pair.id"
@@ -3809,6 +3818,7 @@ const internshipState = reactive({
   arrangementForm: emptyArrangementForm(),
   planForm: emptyPlanForm(),
   scoreForm: emptyScoreForm(),
+  scorePairLoading: false,
   courseScoreForm: emptyCourseScoreForm(),
   baseFlowForm: emptyBaseFlowForm(),
   filters: {
@@ -7260,6 +7270,25 @@ function emptyScoreForm() {
   };
 }
 
+async function searchScorePairs(keyword = '') {
+  if (!canSaveInternshipScore.value) {
+    return;
+  }
+  internshipState.scorePairLoading = true;
+  try {
+    const pairs = await fetchInternshipPairs({
+      page: 1,
+      page_size: 50,
+      keyword,
+    });
+    setPagedList('pairs', pairs);
+  } catch (error) {
+    internshipState.message = error.message;
+  } finally {
+    internshipState.scorePairLoading = false;
+  }
+}
+
 function emptyCourseScoreForm() {
   return {
     plan_id: null,
@@ -8823,7 +8852,7 @@ function openScoreDialog(row = null) {
     fillScoreFormFromExisting(row.student_id, row.arrangement_id, row);
   }
   if (!internshipState.lists.pairs.items.length) {
-    loadInternshipPanel('pairs', 1);
+    searchScorePairs();
   }
   internshipState.dialog = {
     ...emptyOperationDialog(),
@@ -9359,7 +9388,7 @@ async function loadInternshipPanel(panel = 'overview', page = 1) {
     } else if (panel === 'scores') {
       const [scores, pairs, courseScores] = await Promise.all([
         fetchInternshipScores(params('scores')),
-        fetchInternshipPairs({ page: 1, page_size: 100 }),
+        fetchInternshipPairs({ page: 1, page_size: 50, keyword: internshipState.filters.pairs.keyword || '' }),
         fetchInternshipCourseScores(params('courseScores')),
       ]);
       setPagedList('scores', scores);
