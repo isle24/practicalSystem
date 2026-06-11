@@ -4146,6 +4146,7 @@ const internshipListConfigs = computed(() => ({
       // 暂时隐藏学期列，后续需要时恢复。
       // { prop: 'semester', label: '学期', width: 130 },
       { prop: 'grade_name', label: '届次', width: 100 },
+      { prop: 'class_names', label: '绑定班级', minWidth: 180 },
       { key: 'type', label: '类型', width: 130, formatter: row => arrangementTypeText(row.type) },
       { key: 'mode', label: '组织方式', width: 100, formatter: row => organizeModeText(row.organize_mode) },
       { prop: 'credit', label: '学分', width: 80 },

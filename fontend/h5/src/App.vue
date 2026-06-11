@@ -2548,6 +2548,7 @@ function mobileListFacts(key, row) {
       namedFact('类型', arrangementTypeText(row.type)),
       namedFact('方式', organizeModeText(row.organize_mode)),
       namedFact('时间', dateRangeText(row.start_date, row.end_date)),
+      namedFact('绑定班级', row.class_names),
       namedFact('范围', joinFact([row.dep_name || '全校', row.profession_name || '全部专业', row.grade_name])),
     ],
     arrangementChanges: [

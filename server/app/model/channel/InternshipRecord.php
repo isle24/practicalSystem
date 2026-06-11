@@ -211,7 +211,7 @@ class InternshipRecord extends TableRecord
             'teacher_list.teacher_num',
         ]);
 
-        return self::paginate($query->orderByDesc('arrangement.id'), $filters, [
+        $page = self::paginate($query->orderByDesc('arrangement.id'), $filters, [
             'arrangement.id', 'arrangement.uuid', 'arrangement.name', 'arrangement.base_id',
             'arrangement.plan_id', 'arrangement.teacher_id', 'arrangement.task_no',
             'arrangement.batch_no', 'arrangement.credit', 'arrangement.student_count',
@@ -224,6 +224,9 @@ class InternshipRecord extends TableRecord
             'internship_plan.course_code', 'internship_plan.course_name',
             'internship_plan.score_rule', 'teacher_list.teacher_name',
         ]);
+
+        $page['items'] = self::appendArrangementClassNames($page['items'] ?? []);
+        return $page;
     }
 
     public static function arrangementDetail(array $scope, int $arrangementId): ?array
@@ -1307,6 +1310,44 @@ class InternshipRecord extends TableRecord
                 'class.class_name',
                 'class.class_num',
             ]));
+    }
+
+    private static function appendArrangementClassNames(array $items): array
+    {
+        $arrangementIds = self::ids(array_column($items, 'id'));
+        if (!$arrangementIds) {
+            return $items;
+        }
+
+        $classRows = self::rows(self::queryTable('internship_task_class')
+            ->leftJoin('class', 'internship_task_class.class_id', '=', 'class.class_id')
+            ->whereIn('internship_task_class.arrangement_id', $arrangementIds)
+            ->whereIn('internship_task_class.status', self::TASK_CLASS_ACTIVE_STATUSES)
+            ->whereNull('internship_task_class.deleted_at')
+            ->orderBy('class.sort')
+            ->orderBy('internship_task_class.class_id')
+            ->get([
+                'internship_task_class.arrangement_id',
+                'class.class_name',
+            ]));
+
+        $names = [];
+        foreach ($classRows as $row) {
+            $arrangementId = (int) ($row['arrangement_id'] ?? 0);
+            $className = trim((string) ($row['class_name'] ?? ''));
+            if ($arrangementId <= 0 || $className === '') {
+                continue;
+            }
+            $names[$arrangementId][] = $className;
+        }
+
+        foreach ($items as &$item) {
+            $arrangementId = (int) ($item['id'] ?? 0);
+            $item['class_names'] = implode('、', array_values(array_unique($names[$arrangementId] ?? [])));
+        }
+        unset($item);
+
+        return $items;
     }
 
     public static function studentRowsByClassIds(array $classIds): array
