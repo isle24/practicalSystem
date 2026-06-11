@@ -8809,6 +8809,7 @@ function openScoreDialog(row = null) {
     internshipState.scoreForm.pair_id = row.id;
     internshipState.scoreForm.student_id = row.student_id;
     internshipState.scoreForm.arrangement_id = row.arrangement_id;
+    fillScoreFormFromExisting(row.student_id, row.arrangement_id);
   }
   if (!internshipState.lists.pairs.items.length) {
     loadInternshipPanel('pairs', 1);
@@ -9698,7 +9699,9 @@ function prepareScore(row) {
   if (win) {
     win.panel = 'scores';
   }
-  loadInternshipPanel('scores');
+  loadInternshipPanel('scores').then(() => {
+    fillScoreFormFromExisting(row.student_id, row.arrangement_id);
+  });
 }
 
 function selectScorePair(pairId) {
@@ -9708,6 +9711,25 @@ function selectScorePair(pairId) {
   }
   internshipState.scoreForm.student_id = pair.student_id;
   internshipState.scoreForm.arrangement_id = pair.arrangement_id;
+  fillScoreFormFromExisting(pair.student_id, pair.arrangement_id);
+}
+
+function fillScoreFormFromExisting(studentId, arrangementId) {
+  const score = internshipState.lists.scores.items.find(item =>
+    Number(item.student_id) === Number(studentId) && Number(item.arrangement_id) === Number(arrangementId));
+  if (!score) {
+    internshipState.scoreForm.sign_in_score = '';
+    internshipState.scoreForm.journal_score = '';
+    internshipState.scoreForm.report_score = '';
+    internshipState.scoreForm.enterprise_score = '';
+    internshipState.scoreForm.comment = '';
+    return;
+  }
+  internshipState.scoreForm.sign_in_score = score.sign_in_score ?? '';
+  internshipState.scoreForm.journal_score = score.journal_score ?? '';
+  internshipState.scoreForm.report_score = score.report_score ?? '';
+  internshipState.scoreForm.enterprise_score = score.enterprise_score ?? '';
+  internshipState.scoreForm.comment = score.comment || '';
 }
 
 async function saveScore() {
