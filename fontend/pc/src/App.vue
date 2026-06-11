@@ -801,7 +801,7 @@
                       </section>
                       <section v-else class="internship-card overview-card-single">
                         <header>
-                          <strong>补充申请</strong>
+                          <strong>特殊申请</strong>
                           <small>{{ internshipState.overview.applications_waiting || 0 }} 条</small>
                         </header>
                         <el-table :data="internshipState.lists.applications.items" height="100%" stripe>
@@ -3788,14 +3788,14 @@ const internshipSidebarItems = [
   { key: 'baseFlows', name: '基地建设', icon: Building2, permission: 'internship:manage' },
   { key: 'plans', name: '实习计划', icon: FileText, permission: 'internship:plan' },
   { key: 'arrangements', name: '实习任务', icon: CalendarCheck },
+  { key: 'pairs', name: '任务绑定', icon: UsersRound },
   { key: 'arrangementChanges', name: '任务变更', icon: Workflow, permission: 'internship:manage' },
   { key: 'syllabusGuides', name: '大纲指导书', icon: BookOpen },
   { key: 'implementationSheets', name: '实施表', icon: ClipboardList },
-  { key: 'applications', name: '补充申请', icon: ClipboardList },
-  { key: 'pairs', name: '任务绑定', icon: UsersRound },
   { key: 'signIns', name: '签到记录', icon: MapPin },
   { key: 'journals', name: '实习日志', icon: FileClock },
   { key: 'reports', name: '实习报告', icon: FileText },
+  { key: 'applications', name: '特殊申请', icon: ClipboardList },
   { key: 'teacherWorkReports', name: '教师工作报告', icon: FileText },
   { key: 'delays', name: '延期申请', icon: FileClock },
   { key: 'scores', name: '成绩管理', icon: GraduationCap },
@@ -3873,7 +3873,7 @@ const practiceState = reactive({
 const openWindows = reactive([]);
 
 const moduleSearchKeywords = {
-  internship: '学生 教师 学院 专业 企业 任务 绑定 补充申请 审核 签到 日志 报告 延期 成绩 归档 实习任务 实习计划',
+  internship: '学生 教师 学院 专业 企业 任务 绑定 特殊申请 审核 签到 日志 报告 延期 成绩 归档 实习任务 实习计划',
   training: '实训 项目 任务 过程 记录 成绩 审核',
   lab: '实验 项目 任务 过程 记录 成绩 审核',
   stat: '统计 报表 数据 概览 分析 学院 专业 学生 成绩',
@@ -3954,9 +3954,9 @@ const guideModuleOptions = computed(() => modules.map(item => ({
 const statCards = computed(() => {
   const cards = statState.cards.length ? statState.cards : [
     { name: '实习任务', value: internshipState.overview.arrangements || 0, desc: '可见数据内任务数量' },
-    { name: '补充申请', value: internshipState.overview.applications_waiting || 0, desc: '特殊场景待审核申请' },
     { name: '任务绑定', value: internshipState.overview.active_pairs || 0, desc: '有效任务级师生绑定' },
-    { name: '今日日志', value: internshipState.overview.journals_waiting || 0, desc: '待评阅实习日志' },
+    { name: '待评日志', value: internshipState.overview.journals_waiting || 0, desc: '待评阅实习日志' },
+    { name: '特殊申请', value: internshipState.overview.applications_waiting || 0, desc: '分散、自主等场景待审申请' },
   ];
   return cards.map((item, index) => ({
     ...item,
@@ -4087,11 +4087,11 @@ function canShowModule(module) {
 
 const internshipOverviewCards = computed(() => [
   { name: '实习任务', value: internshipState.overview.arrangements || 0, theme: 'primary', icon: CalendarCheck },
-  { name: '补充申请', value: internshipState.overview.applications_waiting || 0, theme: 'amber', icon: ClipboardList },
   { name: '任务绑定', value: internshipState.overview.active_pairs || 0, theme: 'green', icon: UsersRound },
   { name: '待评日志', value: internshipState.overview.journals_waiting || 0, theme: 'teal', icon: FileClock },
   { name: '待评报告', value: internshipState.overview.reports_waiting || 0, theme: 'primary', icon: FileText },
   { name: '今日签到', value: internshipState.overview.today_sign_ins || 0, theme: 'green', icon: MapPin },
+  { name: '特殊申请', value: internshipState.overview.applications_waiting || 0, theme: 'amber', icon: ClipboardList },
 ]);
 const internshipOverviewTabs = computed(() => {
   const tabs = [
@@ -4105,7 +4105,7 @@ const internshipOverviewTabs = computed(() => {
       },
       {
         key: 'applications',
-        name: '补充申请',
+        name: '特殊申请',
         count: studentPanelList('applications').pagination.total || 0,
       },
     );
@@ -4120,7 +4120,7 @@ const internshipOverviewTabs = computed(() => {
     },
     {
       key: 'applications',
-      name: '补充申请',
+      name: '特殊申请',
       count: internshipState.overview.applications_waiting || 0,
     },
   );
@@ -4190,7 +4190,7 @@ const internshipListConfigs = computed(() => ({
   },
   applications: {
     listKey: 'applications',
-    filename: '补充申请',
+    filename: '特殊申请',
     filters: internshipListFilters('applications', ['grade_id', 'dep_id', 'profession_id', 'class_id', 'status', 'keyword']),
     columns: [
       { prop: 'student_name', label: '学生', width: 110 },
@@ -4470,7 +4470,7 @@ function internshipRolePanelName(key) {
   const names = {
     overview: '总览',
     arrangements: '我的任务',
-    applications: '补充申请',
+    applications: '特殊申请',
     pairs: '任务老师',
     signIns: '我的签到',
     journals: '我的日志',
@@ -4568,9 +4568,9 @@ function studentPanelMeta(panel) {
       emptyText: '暂无实习任务',
     },
     applications: {
-      title: '补充申请',
-      description: '只展示分散、自主等特殊场景下当前学生本人的补充申请。',
-      emptyText: '暂无补充申请',
+      title: '特殊申请',
+      description: '只展示分散、自主等特殊场景下当前学生本人的申请。',
+      emptyText: '暂无特殊申请',
     },
     pairs: {
       title: '任务老师',
@@ -9052,7 +9052,7 @@ function reviewRuleMaxText(entity, status) {
 
 function reviewEntityName(entity) {
   const names = {
-    application: '补充申请',
+    application: '特殊申请',
     sign_in: '实习签到',
     journal: '实习日志',
     report: '实习报告',
@@ -9210,6 +9210,7 @@ function timelineContent(item) {
 
 function isGenericSubmitContent(value) {
   return [
+    '提交特殊申请',
     '提交补充申请',
     '提交实习签到',
     '提交实习日志',

@@ -597,7 +597,7 @@ class InternshipService
         ])['id'];
         $this->syncJoinTeachers($id, $studentId, $arrangementId, InternshipRecord::activePairTeacherIds($studentId, $arrangementId));
         if ($status === 'wait') {
-            $this->recordWorkflow('application_recording', 'application', $id, 'submit', $fromStatus, 'wait', $values['remark'] ?: '提交补充申请', 'wait');
+            $this->recordWorkflow('application_recording', 'application', $id, 'submit', $fromStatus, 'wait', $values['remark'] ?: '提交特殊申请', 'wait');
         }
 
         return ['id' => $id, 'item' => $this->application($id)];
@@ -621,7 +621,7 @@ class InternshipService
             'updated_at' => $this->now(),
         ]);
         $this->syncJoinTeachers($id, (int) $row->student_id, (int) $row->arrangement_id, InternshipRecord::activePairTeacherIds((int) $row->student_id, (int) $row->arrangement_id));
-        $this->recordWorkflow('application_recording', 'application', $id, 'submit', (string) $row->status, 'wait', (string) ($row->remark ?: '提交补充申请'), 'wait');
+        $this->recordWorkflow('application_recording', 'application', $id, 'submit', (string) $row->status, 'wait', (string) ($row->remark ?: '提交特殊申请'), 'wait');
 
         return ['id' => $id, 'item' => $this->application($id)];
     }
@@ -636,11 +636,11 @@ class InternshipService
         return $this->connection()->transaction(function () use ($id, $status, $opinion): array {
             $row = InternshipRecord::lockActiveRowById('application', $id);
             if (!$row) {
-                throw new RuntimeException('补充申请不存在');
+                throw new RuntimeException('特殊申请不存在');
             }
             $this->assertApplicationVisible((int) $row->id);
             if ((string) $row->status !== 'wait') {
-                throw new InvalidArgumentException('仅待审核补充申请可处理', 42204);
+                throw new InvalidArgumentException('仅待审核特殊申请可处理', 42204);
             }
 
             $updates = ['updated_at' => $this->now()];
@@ -2111,7 +2111,7 @@ class InternshipService
     {
         $item = InternshipRecord::applicationWithTeachers($id);
         if (!$item) {
-            throw new RuntimeException('补充申请不存在');
+            throw new RuntimeException('特殊申请不存在');
         }
 
         return $item;

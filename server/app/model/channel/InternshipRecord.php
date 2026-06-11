@@ -2771,8 +2771,8 @@ class InternshipRecord extends TableRecord
 
         return [
             ['name' => '参与学生', 'value' => count($participantIds), 'desc' => '当前筛选范围内有过程记录的学生'],
-            ['name' => '补充申请', 'value' => count($data['applications']), 'desc' => '特殊场景补充申请数量'],
-            ['name' => '通过补申', 'value' => $accepted, 'desc' => '状态为通过的补充申请数量'],
+            ['name' => '特殊申请', 'value' => count($data['applications']), 'desc' => '分散、自主等特殊场景申请数量'],
+            ['name' => '通过申请', 'value' => $accepted, 'desc' => '状态为通过的特殊申请数量'],
             ['name' => '任务绑定', 'value' => self::countRows($data['pairs'], static fn (array $row): bool => (string) ($row['status'] ?? '') === 'active'), 'desc' => '有效任务级师生绑定'],
             ['name' => '平均成绩', 'value' => self::averageText(self::scoreValues($data['scores'])), 'desc' => '已录入总评成绩平均值'],
             ['name' => '今日签到', 'value' => $todaySignIns, 'desc' => '今天完成的实习签到'],
@@ -3410,8 +3410,8 @@ class InternshipRecord extends TableRecord
         return [
             ['key' => 'arrangement_title', 'label' => '实习安排', 'min_width' => 180],
             ['key' => 'scope', 'label' => '范围', 'min_width' => 180],
-            ['key' => 'applications', 'label' => '补申', 'width' => 90],
-            ['key' => 'accepted_applications', 'label' => '通过补申', 'width' => 90],
+            ['key' => 'applications', 'label' => '特殊申请', 'width' => 100],
+            ['key' => 'accepted_applications', 'label' => '通过申请', 'width' => 90],
             ['key' => 'active_pairs', 'label' => '任务绑定', 'width' => 100],
             ['key' => 'sign_ins', 'label' => '签到', 'width' => 90],
             ['key' => 'journals', 'label' => '日志', 'width' => 90],
@@ -3436,8 +3436,8 @@ class InternshipRecord extends TableRecord
             ['key' => 'name', 'label' => $name, 'min_width' => 160],
             ['key' => 'students', 'label' => '参与学生', 'width' => 100],
             ['key' => 'arrangements', 'label' => '关联安排', 'width' => 100],
-            ['key' => 'applications', 'label' => '补申', 'width' => 90],
-            ['key' => 'accepted_applications', 'label' => '通过补申', 'width' => 90],
+            ['key' => 'applications', 'label' => '特殊申请', 'width' => 100],
+            ['key' => 'accepted_applications', 'label' => '通过申请', 'width' => 90],
             ['key' => 'accept_rate', 'label' => '通过率', 'width' => 100],
             ['key' => 'active_pairs', 'label' => '任务绑定', 'width' => 100],
             ['key' => 'avg_score', 'label' => '平均分', 'width' => 100],

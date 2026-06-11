@@ -203,27 +203,27 @@ class InternshipController
     }
 
     /**
-     * 查询实习配对
+     * 查询实习任务绑定
      */
-    #[OperationLog('查询实习配对')]
+    #[OperationLog('查询实习任务绑定')]
     public function pairs(Request $request): Response
     {
         return $this->handle(fn (): array => $this->service()->pairs($request));
     }
 
     /**
-     * 保存实习配对
+     * 保存实习任务绑定
      */
-    #[OperationLog('保存实习配对')]
+    #[OperationLog('保存实习任务绑定')]
     public function savePair(Request $request): Response
     {
         return $this->handle(fn (): array => $this->service()->savePair($request));
     }
 
     /**
-     * 删除实习配对
+     * 删除实习任务绑定
      */
-    #[OperationLog('删除实习配对')]
+    #[OperationLog('删除实习任务绑定')]
     public function removePair(Request $request): Response
     {
         return $this->handle(fn (): array => $this->service()->removePair($request));
