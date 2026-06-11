@@ -187,7 +187,11 @@ class InternshipRecord extends TableRecord
             ->leftJoin('grade_list', 'internship_plan.grade_id', '=', 'grade_list.grade_id')
             ->leftJoin('teacher_list', 'arrangement.teacher_id', '=', 'teacher_list.teacher_id')
             ->whereNull('arrangement.deleted_at'), $scope);
-        self::filter($query, $filters, 'arrangement.status', 'status');
+        if (self::hasFilterValue($filters, 'status')) {
+            self::filter($query, $filters, 'arrangement.status', 'status');
+        } else {
+            $query->where('arrangement.status', '<>', 'changed');
+        }
         self::filter($query, $filters, 'arrangement.type', 'type');
         self::filter($query, $filters, 'arrangement.organize_mode', 'organize_mode');
         self::filter($query, $filters, 'arrangement.plan_id', 'plan_id');
@@ -3851,6 +3855,11 @@ class InternshipRecord extends TableRecord
         if ($value !== null && $value !== '') {
             $query->where($column, $value);
         }
+    }
+
+    private static function hasFilterValue(array $filters, string $key): bool
+    {
+        return isset($filters[$key]) && $filters[$key] !== null && $filters[$key] !== '';
     }
 
     private static function listFilters(mixed $query, array $filters, array $columns): void
