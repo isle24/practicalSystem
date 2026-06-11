@@ -2595,7 +2595,7 @@ function mobileListFacts(key, row) {
       namedFact('计划人数', row.student_count),
       namedFact('任务数', row.task_count),
       namedFact('任务覆盖', row.task_coverage_text),
-      namedFact('成绩进度', row.task_score_progress_text),
+      namedFact('任务评分', row.task_score_progress_text),
       namedFact('提交人', row.submitter_name),
       namedFact('审核进度', row.approval_progress_text),
       namedFact('当前节点', row.current_approval_name),

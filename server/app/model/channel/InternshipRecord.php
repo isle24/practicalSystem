@@ -1491,7 +1491,9 @@ class InternshipRecord extends TableRecord
                 'arrangement.plan_id',
                 new Expression('COUNT(DISTINCT arrangement.id) as task_count'),
                 new Expression('COUNT(DISTINCT pair.student_id) as task_student_count'),
+                new Expression('COUNT(DISTINCT pair.id) as task_binding_count'),
                 new Expression("COUNT(DISTINCT CASE WHEN score.id IS NOT NULL THEN pair.student_id END) as scored_student_count"),
+                new Expression("COUNT(DISTINCT CASE WHEN score.id IS NOT NULL THEN pair.id END) as scored_task_binding_count"),
             ]));
 
         $progress = [];
@@ -1503,7 +1505,9 @@ class InternshipRecord extends TableRecord
             $progress[$planId] = [
                 'task_count' => (int) ($row['task_count'] ?? 0),
                 'task_student_count' => (int) ($row['task_student_count'] ?? 0),
+                'task_binding_count' => (int) ($row['task_binding_count'] ?? 0),
                 'scored_student_count' => (int) ($row['scored_student_count'] ?? 0),
+                'scored_task_binding_count' => (int) ($row['scored_task_binding_count'] ?? 0),
             ];
         }
 
@@ -1512,12 +1516,15 @@ class InternshipRecord extends TableRecord
             $item = array_merge($item, $progress[$planId] ?? [
                 'task_count' => 0,
                 'task_student_count' => 0,
+                'task_binding_count' => 0,
                 'scored_student_count' => 0,
+                'scored_task_binding_count' => 0,
             ]);
             $expected = (int) ($item['student_count'] ?? 0);
             $covered = (int) ($item['task_student_count'] ?? 0);
+            $taskBindings = (int) ($item['task_binding_count'] ?? 0);
             $item['task_coverage_text'] = $expected > 0 ? "{$covered}/{$expected}" : (string) $covered;
-            $item['task_score_progress_text'] = ((int) ($item['scored_student_count'] ?? 0)) . '/' . $covered;
+            $item['task_score_progress_text'] = ((int) ($item['scored_task_binding_count'] ?? 0)) . '/' . $taskBindings;
         }
         unset($item);
 
