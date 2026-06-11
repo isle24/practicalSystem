@@ -370,10 +370,18 @@
             <van-cell
               v-for="row in internship.options.arrangements"
               :key="row.id"
+              clickable
               :title="row.title"
               :label="joinFact([row.course_name, row.teacher_name, dateRangeText(row.start_date, row.end_date)])"
               :value="row.student_count ? `${row.student_count}人` : ''"
-            />
+              @click="openTimelineDialog('arrangement', row)"
+            >
+              <template #right-icon>
+                <div class="cell-actions">
+                  <button @click.stop="openTimelineDialog('arrangement', row)">记录</button>
+                </div>
+              </template>
+            </van-cell>
             <div v-if="!internship.options.arrangements.length" class="mobile-empty">暂无绑定任务</div>
           </section>
           <section class="mobile-card">
@@ -1882,7 +1890,7 @@ const delayStatusOptions = [
 const mobileListConfigs = computed(() => ({
   arrangements: {
     key: 'arrangements',
-    entity: '',
+    entity: 'arrangement',
     title: '实习任务',
     shortTitle: '任务',
     icon: CalendarCheck,
@@ -3812,6 +3820,7 @@ function validatePracticeReason(module, entity, status, reason, label = null) {
 
 function reviewEntityName(entity) {
   const names = {
+    arrangement: '实习任务',
     arrangement_change: '任务变更',
     application: '补充申请',
     sign_in: '实习签到',

@@ -4539,6 +4539,7 @@ function studentPanelList(panel) {
 
 function studentTimelineEntity(panel) {
   const map = {
+    arrangements: 'arrangement',
     applications: 'application',
     signIns: 'sign_in',
     journals: 'journal',
