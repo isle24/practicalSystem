@@ -2591,6 +2591,11 @@ function mobileListFacts(key, row) {
       // 暂时隐藏学期字段，后续需要时恢复。
       // namedFact('学期', row.semester),
       namedFact('学院', row.dep_name),
+      namedFact('专业', row.profession_name),
+      namedFact('计划人数', row.student_count),
+      namedFact('任务数', row.task_count),
+      namedFact('任务覆盖', row.task_coverage_text),
+      namedFact('成绩进度', row.task_score_progress_text),
       namedFact('提交人', row.submitter_name),
       namedFact('审核进度', row.approval_progress_text),
       namedFact('当前节点', row.current_approval_name),
