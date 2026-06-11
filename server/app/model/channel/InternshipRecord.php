@@ -2373,23 +2373,24 @@ class InternshipRecord extends TableRecord
     private static function statArrangements(array $scope, array $filters): array
     {
         $query = self::applyArrangementScope(self::queryTable('arrangement')
+            ->leftJoin('internship_plan', 'arrangement.plan_id', '=', 'internship_plan.id')
             ->leftJoin('department', 'arrangement.dep_id', '=', 'department.dep_id')
             ->leftJoin('profession', 'arrangement.profession_id', '=', 'profession.profession_id')
-            ->leftJoin('grade_list', 'profession.grade_id', '=', 'grade_list.grade_id')
+            ->leftJoin('grade_list', 'internship_plan.grade_id', '=', 'grade_list.grade_id')
             ->where('arrangement.status', '<>', 'changed')
             ->whereNull('arrangement.deleted_at'), $scope);
         self::listFilters($query, $filters, [
             'dep_id' => 'arrangement.dep_id',
             'profession_id' => 'arrangement.profession_id',
-            'grade_id' => 'profession.grade_id',
+            'grade_id' => 'internship_plan.grade_id',
             'semester' => 'arrangement.semester',
         ]);
-        self::keyword($query, $filters, ['arrangement.title', 'arrangement.name', 'department.dep_name', 'profession.profession_name']);
+        self::keyword($query, $filters, ['arrangement.title', 'arrangement.name', 'internship_plan.course_code', 'internship_plan.course_name', 'department.dep_name', 'profession.profession_name']);
 
         return self::statRows($query->orderByDesc('arrangement.id'), [
-            'arrangement.id', 'arrangement.title', 'arrangement.name', 'arrangement.semester',
+            'arrangement.id', 'arrangement.plan_id', 'arrangement.title', 'arrangement.name', 'arrangement.semester',
             'arrangement.dep_id', 'arrangement.profession_id', 'arrangement.type', 'arrangement.status',
-            'profession.grade_id', 'department.dep_name', 'profession.profession_name', 'grade_list.grade_name',
+            'internship_plan.grade_id', 'department.dep_name', 'profession.profession_name', 'grade_list.grade_name',
         ]);
     }
 
@@ -2553,15 +2554,30 @@ class InternshipRecord extends TableRecord
     {
         $query = self::queryTable('internship_plan')
             ->leftJoin('department', 'internship_plan.dep_id', '=', 'department.dep_id')
+            ->leftJoin('profession', 'internship_plan.profession_id', '=', 'profession.profession_id')
+            ->leftJoin('grade_list', 'internship_plan.grade_id', '=', 'grade_list.grade_id')
             ->whereNull('internship_plan.deleted_at');
-        self::applyDepProfessionScope($query, $scope, 'internship_plan.dep_id', null);
+        self::applyDepProfessionScope($query, $scope, 'internship_plan.dep_id', 'internship_plan.profession_id');
         self::filter($query, $filters, 'internship_plan.semester', 'semester');
-        self::filter($query, $filters, 'internship_plan.dep_id', 'dep_id');
-        self::keyword($query, $filters, ['internship_plan.semester', 'department.dep_name']);
+        self::listFilters($query, $filters, [
+            'dep_id' => 'internship_plan.dep_id',
+            'profession_id' => 'internship_plan.profession_id',
+            'grade_id' => 'internship_plan.grade_id',
+        ]);
+        self::keyword($query, $filters, [
+            'internship_plan.course_code',
+            'internship_plan.course_name',
+            'internship_plan.semester',
+            'department.dep_name',
+            'profession.profession_name',
+            'grade_list.grade_name',
+        ]);
 
         return self::statRows($query->orderByDesc('internship_plan.id'), [
-            'internship_plan.id', 'internship_plan.dep_id', 'internship_plan.semester',
-            'internship_plan.status', 'department.dep_name',
+            'internship_plan.id', 'internship_plan.course_code', 'internship_plan.course_name',
+            'internship_plan.grade_id', 'internship_plan.dep_id', 'internship_plan.profession_id',
+            'internship_plan.semester', 'internship_plan.status',
+            'department.dep_name', 'profession.profession_name', 'grade_list.grade_name',
         ]);
     }
 
@@ -2990,9 +3006,15 @@ class InternshipRecord extends TableRecord
     private static function archivePlanState(array $plans, array $arrangement): array
     {
         foreach ($plans as $plan) {
+            if ((int) ($arrangement['plan_id'] ?? 0) > 0 && (int) ($plan['id'] ?? 0) !== (int) ($arrangement['plan_id'] ?? 0)) {
+                continue;
+            }
             $sameSemester = (string) ($plan['semester'] ?? '') === (string) ($arrangement['semester'] ?? '');
             $sameDepartment = (int) ($plan['dep_id'] ?? 0) === 0 || (int) ($plan['dep_id'] ?? 0) === (int) ($arrangement['dep_id'] ?? 0);
-            if ($sameSemester && $sameDepartment) {
+            $sameProfession = (int) ($plan['profession_id'] ?? 0) === 0 || (int) ($plan['profession_id'] ?? 0) === (int) ($arrangement['profession_id'] ?? 0);
+            $samePlan = (int) ($arrangement['plan_id'] ?? 0) > 0
+                || ($sameSemester && $sameDepartment && $sameProfession);
+            if ($samePlan) {
                 $status = (string) ($plan['status'] ?? '');
                 return [
                     'archived' => in_array($status, ['accept', 'enabled'], true),

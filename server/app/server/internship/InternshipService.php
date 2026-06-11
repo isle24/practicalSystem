@@ -17,7 +17,7 @@ use Webman\Http\UploadFile;
 class InternshipService
 {
     private const ADMIN_ROLE_TYPES = ['super_admin', 'school_admin', 'college_admin', 'profession_admin'];
-    private const WORKFLOW_STATUS = ['draft', 'wait', 'accept', 'modify', 'enabled', 'changing', 'changed', 'disabled'];
+    private const WORKFLOW_STATUS = ['draft', 'wait', 'accept', 'modify', 'enabled', 'completed', 'changing', 'changed', 'disabled'];
     private const APPLICATION_REVIEW_STATUS = ['accept', 'modify', 'skipped'];
     private const JOIN_STATUS = ['applying', 'accept', 'refuse'];
     private const ARRANGEMENT_TYPES = ['cognition_internal', 'cognition_external', 'major_internal', 'major_external', 'production', 'graduation'];

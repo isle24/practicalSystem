@@ -1890,6 +1890,7 @@ const mobileListConfigs = computed(() => ({
     gradeFilter: true,
     statusOptions: [
       { value: 'enabled', label: '启用' },
+      { value: 'completed', label: '已完成' },
       { value: 'changing', label: '变更中' },
       { value: 'changed', label: '已变更' },
       { value: 'disabled', label: '停用' },
@@ -2545,10 +2546,13 @@ function mobileListFacts(key, row) {
     arrangements: [
       // 暂时隐藏学期字段，后续需要时恢复。
       // namedFact('学期', row.semester),
+      namedFact('任务编号', row.task_no),
+      namedFact('批次', row.batch_no),
       namedFact('类型', arrangementTypeText(row.type)),
       namedFact('方式', organizeModeText(row.organize_mode)),
       namedFact('时间', dateRangeText(row.start_date, row.end_date)),
       namedFact('绑定班级', row.class_names),
+      namedFact('学生数', row.student_count),
       namedFact('范围', joinFact([row.dep_name || '全校', row.profession_name || '全部专业', row.grade_name])),
     ],
     arrangementChanges: [
