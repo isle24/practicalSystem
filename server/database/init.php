@@ -20,6 +20,7 @@ $masterDb = (string) $env('DB_NAME', 'practical_master');
 $templateDb = (string) $env('SCHOOL_TEMPLATE_DB', 'practical_template');
 $defaultSchoolDb = (string) $env('DEFAULT_SCHOOL_DB', 'practical_default');
 $defaultDomain = (string) $env('DEFAULT_SCHOOL_DOMAIN', '127.0.0.1');
+$appUrl = (string) $env('APP_URL', '');
 $wechatProxyUrl = (string) $env('WECHAT_PROXY_URL', '');
 
 $pdo = new PDO(
@@ -46,6 +47,7 @@ seedMaster($master, [
     'charset' => $charset,
     'defaultSchoolDb' => $defaultSchoolDb,
     'defaultDomain' => $defaultDomain,
+    'appDomain' => appDomain($appUrl),
 ]);
 
 foreach ([$templateDb, $defaultSchoolDb] as $schoolDb) {
@@ -204,13 +206,26 @@ function seedMaster(PDO $pdo, array $config): void
         $config['charset'],
     ]);
 
-    foreach (array_unique([$config['defaultDomain'], 'localhost', '127.0.0.1']) as $domain) {
+    foreach (array_unique([$config['defaultDomain'], $config['appDomain'], 'localhost', '127.0.0.1']) as $domain) {
+        if (!$domain) {
+            continue;
+        }
         $pdo->prepare(
             "INSERT INTO `authorizations` (`authorization_domain`, `school_id`, `database_id`, `status`)
              VALUES (?, 1, 1, 'enabled')
              ON DUPLICATE KEY UPDATE `school_id` = 1, `database_id` = 1, `status` = 'enabled'"
         )->execute([$domain]);
     }
+}
+
+function appDomain(string $appUrl): string
+{
+    $parts = parse_url($appUrl);
+    if (!is_array($parts) || empty($parts['host'])) {
+        return '';
+    }
+
+    return (string) $parts['host'] . (isset($parts['port']) ? ':' . (int) $parts['port'] : '');
 }
 
 function createSchoolSchema(PDO $pdo): void

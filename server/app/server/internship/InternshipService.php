@@ -324,7 +324,7 @@ class InternshipService
         $this->requireAdminRole();
 
         $arrangementId = $this->requiredInt($request, 'arrangement_id');
-        $this->assertArrangementVisible($arrangementId);
+        $this->assertCurrentArrangementVisible($arrangementId);
         $detail = InternshipRecord::arrangementDetail($this->scopeContext(), $arrangementId);
         if (!$detail) {
             throw new RuntimeException('实习任务不存在或无权限', 40301);
@@ -565,7 +565,7 @@ class InternshipService
         $existingId = $this->inputRowId($request, 'application');
 
         $this->assertStudentVisible($studentId);
-        $this->assertArrangementVisible($arrangementId);
+        $this->assertCurrentArrangementVisible($arrangementId);
         $this->assertTaskBindingVisible($studentId, $arrangementId);
 
         if (!$existingId) {
@@ -639,6 +639,7 @@ class InternshipService
                 throw new RuntimeException('特殊申请不存在');
             }
             $this->assertApplicationVisible((int) $row->id);
+            $this->assertTaskBindingVisible((int) $row->student_id, (int) $row->arrangement_id);
             if ((string) $row->status !== 'wait') {
                 throw new InvalidArgumentException('仅待审核特殊申请可处理', 42204);
             }
@@ -709,7 +710,7 @@ class InternshipService
             if (!$row) {
                 throw new RuntimeException('数据不存在');
             }
-            $this->assertReviewEntityVisible($entity, $row);
+            $this->assertReviewEntityWritable($entity, $row);
             if ((string) $row->status !== 'accept') {
                 throw new InvalidArgumentException('仅已通过数据可改回修改', 42203);
             }
@@ -756,7 +757,7 @@ class InternshipService
         $arrangementId = $this->requiredInt($request, 'arrangement_id');
         $teacherId = InternshipRecord::arrangementTeacherId($arrangementId);
         $this->assertStudentVisible($studentId);
-        $this->assertArrangementVisible($arrangementId);
+        $this->assertCurrentArrangementVisible($arrangementId);
         if ($teacherId <= 0) {
             throw new RuntimeException('实习任务未设置负责老师', 42201);
         }
@@ -852,7 +853,7 @@ class InternshipService
         $existingId = $this->inputRowId($request, 'sign_in');
         $fromStatus = $existingId ? InternshipRecord::statusById('sign_in', $existingId) : 'draft';
         $this->assertStudentVisible($studentId);
-        $this->assertArrangementVisible($arrangementId);
+        $this->assertCurrentArrangementVisible($arrangementId);
         $this->assertTaskBindingVisible($studentId, $arrangementId);
         $this->assertStudentStartPrerequisites($studentId, $arrangementId, $signDate);
         $signType = $this->enum($request, 'sign_type', ['gps', 'qrcode', 'manual'], $this->isStudent() ? 'gps' : 'manual');
@@ -909,7 +910,7 @@ class InternshipService
         $existingId = $this->inputRowId($request, 'journal');
         $fromStatus = $existingId ? InternshipRecord::statusById('journal', $existingId) : 'draft';
         $this->assertStudentVisible($studentId);
-        $this->assertArrangementVisible($arrangementId);
+        $this->assertCurrentArrangementVisible($arrangementId);
         $this->assertTaskBindingVisible($studentId, $arrangementId);
         if ($status === 'wait') {
             $this->assertStudentStartPrerequisites($studentId, $arrangementId, $this->dateInput($request, 'date') ?: date('Y-m-d'));
@@ -965,7 +966,7 @@ class InternshipService
         $existingId = $this->inputRowId($request, 'report');
         $fromStatus = $existingId ? InternshipRecord::statusById('report', $existingId) : 'draft';
         $this->assertStudentVisible($studentId);
-        $this->assertArrangementVisible($arrangementId);
+        $this->assertCurrentArrangementVisible($arrangementId);
         $this->assertTaskBindingVisible($studentId, $arrangementId);
         if ($status === 'wait') {
             $this->assertStudentStartPrerequisites($studentId, $arrangementId, date('Y-m-d'));
@@ -1024,7 +1025,7 @@ class InternshipService
 
         $this->assertStudentVisible($studentId);
         if ($entityType === 'internship') {
-            $this->assertArrangementVisible($entityId);
+            $this->assertCurrentArrangementVisible($entityId);
             $this->assertTaskBindingVisible($studentId, $entityId);
         }
         if ($existingId) {
@@ -1174,7 +1175,7 @@ class InternshipService
         $studentId = $this->requiredInt($request, 'student_id');
         $arrangementId = $this->requiredInt($request, 'arrangement_id');
         $this->assertStudentVisible($studentId);
-        $this->assertArrangementVisible($arrangementId);
+        $this->assertCurrentArrangementVisible($arrangementId);
         $this->assertTaskBindingVisible($studentId, $arrangementId);
         $scoreId = $this->inputRowId($request, 'score')
             ?: InternshipRecord::activeIdByFields('score', ['student_id' => $studentId, 'arrangement_id' => $arrangementId]);
@@ -1371,7 +1372,7 @@ class InternshipService
         $studentId = $this->requiredInt($request, 'student_id');
         $arrangementId = $this->requiredInt($request, 'arrangement_id');
         $this->assertStudentVisible($studentId);
-        $this->assertArrangementVisible($arrangementId);
+        $this->assertCurrentArrangementVisible($arrangementId);
         $this->assertTaskBindingVisible($studentId, $arrangementId);
 
         $values = [
@@ -1408,7 +1409,7 @@ class InternshipService
         $studentId = $this->isStudent() ? $this->currentStudentId(true) : $this->requiredInt($request, 'student_id');
         $arrangementId = $this->requiredInt($request, 'arrangement_id');
         $this->assertStudentVisible($studentId);
-        $this->assertArrangementVisible($arrangementId);
+        $this->assertCurrentArrangementVisible($arrangementId);
         $this->assertTaskBindingVisible($studentId, $arrangementId);
         $status = $this->enum($request, 'status', ['pending', 'signed'], 'pending');
         $signedAt = $this->dateTimeInput($request, 'signed_at');
@@ -1443,7 +1444,7 @@ class InternshipService
     {
         $this->requirePermission('internship:manage');
         $arrangementId = $this->requiredInt($request, 'arrangement_id');
-        $this->assertArrangementVisible($arrangementId);
+        $this->assertCurrentArrangementVisible($arrangementId);
         $values = [
             'arrangement_id' => $arrangementId,
             'dep_id' => $this->optionalInt($request, 'dep_id'),
@@ -1482,7 +1483,7 @@ class InternshipService
     {
         $this->requirePermission('internship:manage');
         $arrangementId = $this->requiredInt($request, 'arrangement_id');
-        $this->assertArrangementVisible($arrangementId);
+        $this->assertCurrentArrangementVisible($arrangementId);
         $values = [
             'arrangement_id' => $arrangementId,
             'teacher_id' => $this->optionalInt($request, 'teacher_id') ?? $this->currentTeacherId(false),
@@ -1525,7 +1526,7 @@ class InternshipService
     {
         $this->requirePermission('internship:report');
         $arrangementId = $this->requiredInt($request, 'arrangement_id');
-        $this->assertArrangementVisible($arrangementId);
+        $this->assertCurrentArrangementVisible($arrangementId);
         $values = [
             'arrangement_id' => $arrangementId,
             'teacher_id' => $this->isTeacher() ? $this->currentTeacherId(true) : $this->requiredInt($request, 'teacher_id'),
@@ -1563,7 +1564,7 @@ class InternshipService
         $this->requireAdminRole();
         $arrangementId = $this->requiredInt($request, 'arrangement_id');
         $studentId = $this->optionalInt($request, 'student_id');
-        $this->assertArrangementVisible($arrangementId);
+        $this->assertCurrentArrangementVisible($arrangementId);
         if ($studentId) {
             $this->assertStudentVisible($studentId);
             $this->assertTaskBindingVisible($studentId, $arrangementId);
@@ -2455,6 +2456,13 @@ class InternshipService
         }
     }
 
+    private function assertCurrentArrangementVisible(int $arrangementId): void
+    {
+        if (!InternshipRecord::currentArrangementVisible($this->scopeContext(), $arrangementId)) {
+            throw new RuntimeException('实习任务不存在、已变更或无数据访问权限', 40301);
+        }
+    }
+
     private function assertTaskBindingVisible(int $studentId, int $arrangementId): void
     {
         if (!InternshipRecord::taskBindingVisible($this->scopeContext(), $studentId, $arrangementId)) {
@@ -2705,6 +2713,25 @@ class InternshipService
         if (in_array($entity, ['sign_in', 'journal', 'report', 'score', 'delay', 'insurance', 'safety_letter'], true)) {
             $this->assertTaskBindingVisible((int) $row->student_id, $this->reviewEntityArrangementId($entity, $row));
         }
+    }
+
+    private function assertReviewEntityWritable(string $entity, object $row): void
+    {
+        if ($entity === 'application') {
+            $this->assertApplicationVisible((int) $row->id);
+            $this->assertTaskBindingVisible((int) $row->student_id, (int) $row->arrangement_id);
+            return;
+        }
+        if (in_array($entity, ['syllabus_guide', 'implementation_sheet', 'teacher_work_report', 'inspection'], true)) {
+            $this->assertCurrentArrangementVisible((int) $row->arrangement_id);
+            if ($entity === 'inspection' && (int) ($row->student_id ?? 0) > 0) {
+                $this->assertStudentVisible((int) $row->student_id);
+                $this->assertTaskBindingVisible((int) $row->student_id, (int) $row->arrangement_id);
+            }
+            return;
+        }
+
+        $this->assertReviewEntityVisible($entity, $row);
     }
 
     private function reviewWorkArrangementId(string $table, object $row): int

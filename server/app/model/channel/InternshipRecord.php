@@ -1080,6 +1080,14 @@ class InternshipRecord extends TableRecord
             ->exists();
     }
 
+    public static function currentArrangementVisible(array $scope, int $arrangementId): bool
+    {
+        return self::currentArrangementQuery(self::applyArrangementScope(self::queryTable('arrangement')
+            ->where('arrangement.id', $arrangementId)
+            ->whereNull('arrangement.deleted_at'), $scope))
+            ->exists();
+    }
+
     public static function applicationVisible(array $scope, int $applicationId): bool
     {
         return self::applyApplicationScope(self::queryTable('application')
@@ -1501,7 +1509,7 @@ class InternshipRecord extends TableRecord
 
     public static function taskClassStudentVisible(array $scope, int $studentId, int $arrangementId): bool
     {
-        if ($studentId <= 0 || $arrangementId <= 0 || !self::arrangementVisible($scope, $arrangementId)) {
+        if ($studentId <= 0 || $arrangementId <= 0 || !self::currentArrangementVisible($scope, $arrangementId)) {
             return false;
         }
 
@@ -1750,16 +1758,20 @@ class InternshipRecord extends TableRecord
         return $query->exists();
     }
 
-    public static function arrangementTeacherId(int $arrangementId): int
+    public static function arrangementTeacherId(int $arrangementId, bool $currentOnly = true): int
     {
         if ($arrangementId <= 0) {
             return 0;
         }
 
-        return (int) (self::queryTable('arrangement')
+        $query = self::queryTable('arrangement')
             ->where('id', $arrangementId)
-            ->whereNull('deleted_at')
-            ->value('teacher_id') ?: 0);
+            ->whereNull('deleted_at');
+        if ($currentOnly) {
+            self::currentArrangementQuery($query, 'status');
+        }
+
+        return (int) ($query->value('teacher_id') ?: 0);
     }
 
     public static function teacherIdByUser(int $userId): ?int
@@ -2144,7 +2156,7 @@ class InternshipRecord extends TableRecord
         if ($studentId <= 0 || $arrangementId <= 0) {
             return false;
         }
-        if (!self::arrangementVisible($scope, $arrangementId)) {
+        if (!self::currentArrangementVisible($scope, $arrangementId)) {
             return false;
         }
 
