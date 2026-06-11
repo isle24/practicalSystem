@@ -585,13 +585,22 @@ class InternshipRecord extends TableRecord
 
     public static function scorePage(array $scope, array $filters): array
     {
-        $query = self::applyStudentTaskScope(self::queryTable('score')
-            ->leftJoin('students', 'score.student_id', '=', 'students.student_id')
-            ->leftJoin('arrangement', 'score.arrangement_id', '=', 'arrangement.id')
+        $query = self::applyStudentTaskScope(self::queryTable('pair')
+            ->leftJoin('students', 'pair.student_id', '=', 'students.student_id')
+            ->leftJoin('arrangement', 'pair.arrangement_id', '=', 'arrangement.id')
+            ->leftJoin('score', function ($join): void {
+                $join->on('score.student_id', '=', 'pair.student_id')
+                    ->on('score.arrangement_id', '=', 'pair.arrangement_id')
+                    ->whereNull('score.deleted_at');
+            })
             ->leftJoin('teacher_list', 'score.teacher_id', '=', 'teacher_list.teacher_id')
             ->leftJoin('grade_list', 'students.grade_id', '=', 'grade_list.grade_id')
-            ->whereNull('score.deleted_at'), $scope, 'score.student_id', 'score.arrangement_id');
-        self::filter($query, $filters, 'score.arrangement_id', 'arrangement_id');
+            ->where('pair.type', 'internship')
+            ->where('pair.status', 'active')
+            ->whereNull('pair.deleted_at')
+            ->whereNull('students.deleted_at')
+            ->whereNull('arrangement.deleted_at'), $scope, 'pair.student_id', 'pair.arrangement_id');
+        self::filter($query, $filters, 'pair.arrangement_id', 'arrangement_id');
         self::listFilters($query, $filters, [
             'dep_id' => 'students.dep_id',
             'profession_id' => 'students.profession_id',
@@ -601,12 +610,17 @@ class InternshipRecord extends TableRecord
         ]);
         self::keyword($query, $filters, ['students.name', 'students.student_num', 'arrangement.title', 'teacher_list.teacher_name', 'teacher_list.teacher_num']);
 
-        return self::paginate($query->orderByDesc('score.id'), $filters, [
-            'score.id', 'score.uuid', 'score.student_id', 'score.arrangement_id',
+        return self::paginate($query->orderByDesc('pair.id'), $filters, [
+            'score.id',
+            'score.uuid',
+            'pair.id as pair_id',
+            'pair.student_id',
+            'pair.arrangement_id',
             'score.sign_in_score', 'score.journal_score', 'score.report_score',
             'score.sign_in_weight', 'score.journal_weight', 'score.report_weight',
             'score.enterprise_score', 'score.enterprise_comment', 'score.final_score',
-            'score.teacher_id', 'score.comment', 'students.name as student_name',
+            'score.teacher_id', 'score.comment', 'score.status',
+            'students.name as student_name',
             'students.student_num', 'students.grade_id', 'grade_list.grade_name',
             'teacher_list.teacher_name', 'arrangement.title as arrangement_title',
         ]);

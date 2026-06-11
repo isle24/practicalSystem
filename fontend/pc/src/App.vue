@@ -1132,7 +1132,10 @@
                         @search="loadInternshipPanel('scores', 1)"
                       >
                         <template #actions="{ row }">
-                          <el-button size="small" type="primary" plain @click="openTimelineDialog('score', row)">
+                          <el-button v-if="canSaveInternshipScore" link type="primary" @click="openScoreDialog(row)">
+                            {{ row.id ? '修改' : '录入' }}
+                          </el-button>
+                          <el-button v-if="row.id" size="small" type="primary" plain @click="openTimelineDialog('score', row)">
                             记录
                           </el-button>
                         </template>
@@ -4294,6 +4297,7 @@ const internshipListConfigs = computed(() => ({
       { prop: 'student_name', label: '学生', width: 110 },
       { prop: 'grade_name', label: '届次', width: 100 },
       { prop: 'arrangement_title', label: '实习安排', minWidth: 180 },
+      { key: 'score_status', label: '评分状态', width: 90, tag: true, tagType: row => row.id ? 'success' : 'warning', formatter: row => row.id ? '已评分' : '待评分' },
       { prop: 'sign_in_score', label: '签到', width: 80 },
       { prop: 'journal_score', label: '日志', width: 80 },
       { prop: 'report_score', label: '报告', width: 80 },
@@ -8806,7 +8810,7 @@ function openPlanDialog() {
 function openScoreDialog(row = null) {
   internshipState.scoreForm = emptyScoreForm();
   if (row) {
-    internshipState.scoreForm.pair_id = row.id;
+    internshipState.scoreForm.pair_id = row.pair_id || row.id;
     internshipState.scoreForm.student_id = row.student_id;
     internshipState.scoreForm.arrangement_id = row.arrangement_id;
     fillScoreFormFromExisting(row.student_id, row.arrangement_id);

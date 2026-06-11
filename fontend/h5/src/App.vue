@@ -2638,6 +2638,7 @@ function mobileListFacts(key, row) {
     scores: [
       namedFact('届次', row.grade_name),
       namedFact('安排', arrangement),
+      namedFact('评分状态', row.id ? '已评分' : '待评分'),
       namedFact('评分人', row.teacher_name || row.teacher_num),
       namedFact('分项', scoreBreakdownText(row)),
     ],
