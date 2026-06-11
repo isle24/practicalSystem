@@ -430,6 +430,9 @@ class InternshipRecord extends TableRecord
             ->leftJoin('students', 'pair.student_id', '=', 'students.student_id')
             ->leftJoin('teacher_list', 'pair.teacher_id', '=', 'teacher_list.teacher_id')
             ->leftJoin('arrangement', 'pair.arrangement_id', '=', 'arrangement.id')
+            ->leftJoin('department', 'students.dep_id', '=', 'department.dep_id')
+            ->leftJoin('profession', 'students.profession_id', '=', 'profession.profession_id')
+            ->leftJoin('class', 'students.class_id', '=', 'class.class_id')
             ->leftJoin('score', function ($join): void {
                 $join->on('score.student_id', '=', 'pair.student_id')
                     ->on('score.arrangement_id', '=', 'pair.arrangement_id')
@@ -451,15 +454,29 @@ class InternshipRecord extends TableRecord
             'class_id' => 'students.class_id',
             'semester' => 'arrangement.semester',
         ]);
-        self::keyword($query, $filters, ['students.name', 'students.student_num', 'teacher_list.teacher_name', 'teacher_list.teacher_num', 'arrangement.title']);
+        self::keyword($query, $filters, [
+            'students.name',
+            'students.student_num',
+            'teacher_list.teacher_name',
+            'teacher_list.teacher_num',
+            'arrangement.title',
+            'arrangement.task_no',
+            'arrangement.batch_no',
+            'department.dep_name',
+            'profession.profession_name',
+            'class.class_name',
+        ]);
 
         return self::paginate($query->orderByDesc('pair.id'), $filters, [
             'pair.id', 'pair.uuid', 'pair.student_id', 'pair.teacher_id', 'pair.dep_id',
             'pair.second_teacher_id', 'pair.enterprise_mentor_id', 'pair.arrangement_id',
             'pair.application_id', 'pair.status', 'pair.remove_reason', 'pair.created_at',
             'students.name as student_name', 'students.student_num',
-            'students.grade_id', 'grade_list.grade_name',
-            'teacher_list.teacher_name', 'arrangement.title as arrangement_title',
+            'students.grade_id', 'students.dep_id as student_dep_id',
+            'students.profession_id as student_profession_id', 'students.class_id',
+            'grade_list.grade_name', 'department.dep_name', 'profession.profession_name',
+            'class.class_name', 'teacher_list.teacher_name',
+            'arrangement.title as arrangement_title', 'arrangement.task_no', 'arrangement.batch_no',
             'score.id as score_id', 'score.sign_in_score', 'score.journal_score',
             'score.report_score', 'score.enterprise_score', 'score.final_score',
             'score.comment as score_comment',

@@ -2623,8 +2623,12 @@ function mobileListFacts(key, row) {
     pairs: [
       namedFact('学号', row.student_num),
       namedFact('届次', row.grade_name),
-      namedFact('教师', row.teacher_name || row.teacher_num),
+      namedFact('学院专业', joinFact([row.dep_name, row.profession_name])),
+      namedFact('班级', row.class_name),
       namedFact('任务', arrangement),
+      namedFact('任务编号', row.task_no),
+      namedFact('批次', row.batch_no),
+      namedFact('教师', row.teacher_name || row.teacher_num),
       namedFact('创建', row.created_at),
     ],
     signIns: [
