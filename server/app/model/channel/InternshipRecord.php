@@ -2623,8 +2623,9 @@ class InternshipRecord extends TableRecord
 
         return self::statRows($query->orderByDesc('arrangement.id'), [
             'arrangement.id', 'arrangement.plan_id', 'arrangement.title', 'arrangement.name', 'arrangement.semester',
-            'arrangement.dep_id', 'arrangement.profession_id', 'arrangement.type', 'arrangement.status',
-            'internship_plan.grade_id', 'department.dep_name', 'profession.profession_name', 'grade_list.grade_name',
+            'arrangement.dep_id', 'arrangement.profession_id', 'arrangement.credit', 'arrangement.type', 'arrangement.status',
+            'internship_plan.grade_id', 'internship_plan.course_code', 'internship_plan.course_name',
+            'internship_plan.score_rule', 'department.dep_name', 'profession.profession_name', 'grade_list.grade_name',
         ]);
     }
 
@@ -3108,6 +3109,8 @@ class InternshipRecord extends TableRecord
                 'grade_name' => $student['grade_name'] ?? '-',
                 'dep_name' => $student['dep_name'] ?? '-',
                 'profession_name' => $student['profession_name'] ?? '-',
+                'course_name' => $arrangement['course_name'] ?? '-',
+                'course_code' => $arrangement['course_code'] ?? '',
                 'arrangement_title' => $arrangement['title'] ?? ($application['arrangement_title'] ?? '-'),
                 'application_status' => $application['status'] ?? '-',
                 'pair_status' => $pair['status'] ?? '-',
@@ -3115,10 +3118,55 @@ class InternshipRecord extends TableRecord
                 'journals' => self::countByPair($data['journals'], $studentId, $arrangementId),
                 'report_status' => $report['status'] ?? '-',
                 'final_score' => $score['final_score'] ?? '-',
+                ...self::studentCourseScoreStat($data, $studentId, $arrangement),
             ];
         }
 
         return $rows;
+    }
+
+    private static function studentCourseScoreStat(array $data, int $studentId, array $arrangement): array
+    {
+        $planId = (int) ($arrangement['plan_id'] ?? 0);
+        if ($studentId <= 0 || $planId <= 0) {
+            return [
+                'course_score_status' => '待汇总',
+                'course_final_score' => '-',
+                'course_task_progress' => '0/0',
+            ];
+        }
+
+        $taskRows = [];
+        foreach ($data['pairs'] as $pair) {
+            if ((int) ($pair['student_id'] ?? 0) !== $studentId) {
+                continue;
+            }
+            $pairArrangement = $data['arrangement_map'][(int) ($pair['arrangement_id'] ?? 0)] ?? [];
+            if ((int) ($pairArrangement['plan_id'] ?? 0) === $planId) {
+                $taskRows[] = $pair;
+            }
+        }
+
+        $scoreRows = [];
+        foreach ($taskRows as $pair) {
+            $score = self::firstByPair($data['scores'], $studentId, (int) ($pair['arrangement_id'] ?? 0));
+            if ($score && is_numeric($score['final_score'] ?? null)) {
+                $pairArrangement = $data['arrangement_map'][(int) ($pair['arrangement_id'] ?? 0)] ?? [];
+                $scoreRows[] = [
+                    'final_score' => (float) $score['final_score'],
+                    'credit' => is_numeric($pairArrangement['credit'] ?? null) ? (float) $pairArrangement['credit'] : null,
+                ];
+            }
+        }
+
+        $taskCount = count($taskRows);
+        $scoredCount = count($scoreRows);
+        $complete = $taskCount > 0 && $taskCount === $scoredCount;
+        return [
+            'course_score_status' => $complete ? '已汇总' : '待汇总',
+            'course_final_score' => $complete ? self::courseFinalScore($scoreRows, (string) ($arrangement['score_rule'] ?? 'average')) : '-',
+            'course_task_progress' => "{$scoredCount}/{$taskCount}",
+        ];
     }
 
     private static function archiveStatRows(array $data): array
@@ -3634,6 +3682,7 @@ class InternshipRecord extends TableRecord
             ['key' => 'grade_name', 'label' => '届次', 'width' => 110],
             ['key' => 'dep_name', 'label' => '学院', 'min_width' => 150],
             ['key' => 'profession_name', 'label' => '专业', 'min_width' => 150],
+            ['key' => 'course_name', 'label' => '课程计划', 'min_width' => 180],
             ['key' => 'arrangement_title', 'label' => '实习安排', 'min_width' => 180],
             ['key' => 'application_status', 'label' => '申请', 'width' => 90, 'type' => 'status'],
             ['key' => 'pair_status', 'label' => '绑定', 'width' => 90, 'type' => 'status'],
@@ -3641,6 +3690,9 @@ class InternshipRecord extends TableRecord
             ['key' => 'journals', 'label' => '日志', 'width' => 80],
             ['key' => 'report_status', 'label' => '报告', 'width' => 90, 'type' => 'status'],
             ['key' => 'final_score', 'label' => '总评', 'width' => 90],
+            ['key' => 'course_task_progress', 'label' => '任务评分', 'width' => 100],
+            ['key' => 'course_score_status', 'label' => '课程汇总', 'width' => 100],
+            ['key' => 'course_final_score', 'label' => '课程成绩', 'width' => 100],
         ];
     }
 
