@@ -8813,7 +8813,7 @@ function openScoreDialog(row = null) {
     internshipState.scoreForm.pair_id = row.pair_id || row.id;
     internshipState.scoreForm.student_id = row.student_id;
     internshipState.scoreForm.arrangement_id = row.arrangement_id;
-    fillScoreFormFromExisting(row.student_id, row.arrangement_id);
+    fillScoreFormFromExisting(row.student_id, row.arrangement_id, row);
   }
   if (!internshipState.lists.pairs.items.length) {
     loadInternshipPanel('pairs', 1);
@@ -9715,13 +9715,14 @@ function selectScorePair(pairId) {
   }
   internshipState.scoreForm.student_id = pair.student_id;
   internshipState.scoreForm.arrangement_id = pair.arrangement_id;
-  fillScoreFormFromExisting(pair.student_id, pair.arrangement_id);
+  fillScoreFormFromExisting(pair.student_id, pair.arrangement_id, pair);
 }
 
-function fillScoreFormFromExisting(studentId, arrangementId) {
+function fillScoreFormFromExisting(studentId, arrangementId, fallback = null) {
   const score = internshipState.lists.scores.items.find(item =>
     Number(item.student_id) === Number(studentId) && Number(item.arrangement_id) === Number(arrangementId));
-  if (!score) {
+  const source = score || (fallback?.score_id ? fallback : null);
+  if (!source) {
     internshipState.scoreForm.sign_in_score = '';
     internshipState.scoreForm.journal_score = '';
     internshipState.scoreForm.report_score = '';
@@ -9729,11 +9730,11 @@ function fillScoreFormFromExisting(studentId, arrangementId) {
     internshipState.scoreForm.comment = '';
     return;
   }
-  internshipState.scoreForm.sign_in_score = score.sign_in_score ?? '';
-  internshipState.scoreForm.journal_score = score.journal_score ?? '';
-  internshipState.scoreForm.report_score = score.report_score ?? '';
-  internshipState.scoreForm.enterprise_score = score.enterprise_score ?? '';
-  internshipState.scoreForm.comment = score.comment || '';
+  internshipState.scoreForm.sign_in_score = source.sign_in_score ?? '';
+  internshipState.scoreForm.journal_score = source.journal_score ?? '';
+  internshipState.scoreForm.report_score = source.report_score ?? '';
+  internshipState.scoreForm.enterprise_score = source.enterprise_score ?? '';
+  internshipState.scoreForm.comment = source.comment || source.score_comment || '';
 }
 
 async function saveScore() {

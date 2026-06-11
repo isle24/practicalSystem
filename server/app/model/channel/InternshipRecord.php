@@ -422,6 +422,11 @@ class InternshipRecord extends TableRecord
             ->leftJoin('students', 'pair.student_id', '=', 'students.student_id')
             ->leftJoin('teacher_list', 'pair.teacher_id', '=', 'teacher_list.teacher_id')
             ->leftJoin('arrangement', 'pair.arrangement_id', '=', 'arrangement.id')
+            ->leftJoin('score', function ($join): void {
+                $join->on('score.student_id', '=', 'pair.student_id')
+                    ->on('score.arrangement_id', '=', 'pair.arrangement_id')
+                    ->whereNull('score.deleted_at');
+            })
             ->leftJoin('grade_list', 'students.grade_id', '=', 'grade_list.grade_id')
             ->where('pair.type', 'internship')
             ->whereNull('pair.deleted_at'), $scope, 'pair.student_id', 'pair.arrangement_id');
@@ -446,6 +451,9 @@ class InternshipRecord extends TableRecord
             'students.name as student_name', 'students.student_num',
             'students.grade_id', 'grade_list.grade_name',
             'teacher_list.teacher_name', 'arrangement.title as arrangement_title',
+            'score.id as score_id', 'score.sign_in_score', 'score.journal_score',
+            'score.report_score', 'score.enterprise_score', 'score.final_score',
+            'score.comment as score_comment',
         ]);
     }
 

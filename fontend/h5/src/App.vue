@@ -4186,23 +4186,24 @@ function selectScorePair() {
   }
   internship.forms.score.student_id = pair.student_id;
   internship.forms.score.arrangement_id = pair.arrangement_id;
-  fillScoreFormFromExisting(pair.student_id, pair.arrangement_id);
+  fillScoreFormFromExisting(pair.student_id, pair.arrangement_id, pair);
 }
 
-function fillScoreFormFromExisting(studentId, arrangementId) {
+function fillScoreFormFromExisting(studentId, arrangementId, fallback = null) {
   const score = internship.lists.scores.items.find(item =>
     Number(item.student_id) === Number(studentId) && Number(item.arrangement_id) === Number(arrangementId));
-  if (!score) {
+  const source = score || (fallback?.score_id ? fallback : null);
+  if (!source) {
     internship.forms.score.sign_in_score = '';
     internship.forms.score.journal_score = '';
     internship.forms.score.report_score = '';
     internship.forms.score.enterprise_score = '';
     return;
   }
-  internship.forms.score.sign_in_score = score.sign_in_score ?? '';
-  internship.forms.score.journal_score = score.journal_score ?? '';
-  internship.forms.score.report_score = score.report_score ?? '';
-  internship.forms.score.enterprise_score = score.enterprise_score ?? '';
+  internship.forms.score.sign_in_score = source.sign_in_score ?? '';
+  internship.forms.score.journal_score = source.journal_score ?? '';
+  internship.forms.score.report_score = source.report_score ?? '';
+  internship.forms.score.enterprise_score = source.enterprise_score ?? '';
 }
 
 async function submitScore() {
