@@ -611,24 +611,32 @@ class InternshipRecord extends TableRecord
 
     public static function courseScorePage(array $scope, array $filters): array
     {
-        $query = self::applyStudentTaskScope(self::queryTable('score')
-            ->leftJoin('students', 'score.student_id', '=', 'students.student_id')
+        $query = self::applyStudentTaskScope(self::queryTable('pair')
+            ->leftJoin('students', 'pair.student_id', '=', 'students.student_id')
             ->leftJoin('class', 'students.class_id', '=', 'class.class_id')
             ->leftJoin('department', 'students.dep_id', '=', 'department.dep_id')
             ->leftJoin('profession', 'students.profession_id', '=', 'profession.profession_id')
             ->leftJoin('grade_list', 'students.grade_id', '=', 'grade_list.grade_id')
-            ->leftJoin('arrangement', 'score.arrangement_id', '=', 'arrangement.id')
+            ->leftJoin('arrangement', 'pair.arrangement_id', '=', 'arrangement.id')
             ->leftJoin('internship_plan', 'arrangement.plan_id', '=', 'internship_plan.id')
+            ->leftJoin('score', function ($join): void {
+                $join->on('score.student_id', '=', 'pair.student_id')
+                    ->on('score.arrangement_id', '=', 'pair.arrangement_id')
+                    ->whereNull('score.deleted_at');
+            })
             ->leftJoin('course_score', function ($join): void {
                 $join->on('course_score.plan_id', '=', 'arrangement.plan_id')
-                    ->on('course_score.student_id', '=', 'score.student_id')
+                    ->on('course_score.student_id', '=', 'pair.student_id')
                     ->whereNull('course_score.deleted_at');
             })
-            ->whereNull('score.deleted_at')
+            ->where('pair.type', 'internship')
+            ->where('pair.status', 'active')
+            ->whereNull('pair.deleted_at')
+            ->whereNull('students.deleted_at')
             ->whereNull('arrangement.deleted_at')
-            ->whereNull('internship_plan.deleted_at'), $scope, 'score.student_id', 'score.arrangement_id');
+            ->whereNull('internship_plan.deleted_at'), $scope, 'pair.student_id', 'pair.arrangement_id');
         self::filter($query, $filters, 'arrangement.plan_id', 'plan_id');
-        self::filter($query, $filters, 'score.arrangement_id', 'arrangement_id');
+        self::filter($query, $filters, 'pair.arrangement_id', 'arrangement_id');
         self::listFilters($query, $filters, [
             'dep_id' => 'students.dep_id',
             'profession_id' => 'students.profession_id',
@@ -644,10 +652,11 @@ class InternshipRecord extends TableRecord
             'arrangement.title',
         ]);
 
-        $rows = self::rows($query->orderByDesc('score.id')->limit(self::STAT_DATA_LIMIT)->get([
-            'score.id',
-            'score.student_id',
-            'score.arrangement_id',
+        $rows = self::rows($query->orderByDesc('pair.id')->limit(self::STAT_DATA_LIMIT)->get([
+            'pair.id as pair_id',
+            'score.id as score_id',
+            'pair.student_id',
+            'pair.arrangement_id',
             'score.final_score',
             'arrangement.title as arrangement_title',
             'arrangement.credit as arrangement_credit',
@@ -1592,14 +1601,16 @@ class InternshipRecord extends TableRecord
             return null;
         }
 
-        $accountId = self::queryTable('score')
-            ->join('arrangement', 'score.arrangement_id', '=', 'arrangement.id')
-            ->join('students', 'score.student_id', '=', 'students.student_id')
+        $accountId = self::queryTable('pair')
+            ->join('arrangement', 'pair.arrangement_id', '=', 'arrangement.id')
+            ->join('students', 'pair.student_id', '=', 'students.student_id')
             ->join('account', 'students.user_id', '=', 'account.user_id')
             ->where('arrangement.plan_id', $planId)
-            ->where('score.student_id', $studentId)
+            ->where('pair.student_id', $studentId)
+            ->where('pair.type', 'internship')
+            ->where('pair.status', 'active')
             ->where('account.status', 'enabled')
-            ->whereNull('score.deleted_at')
+            ->whereNull('pair.deleted_at')
             ->whereNull('arrangement.deleted_at')
             ->whereNull('students.deleted_at')
             ->whereNull('account.deleted_at')
@@ -1614,15 +1625,17 @@ class InternshipRecord extends TableRecord
             return false;
         }
 
-        return self::applyStudentTaskScope(self::queryTable('score')
-            ->join('arrangement', 'score.arrangement_id', '=', 'arrangement.id')
+        return self::applyStudentTaskScope(self::queryTable('pair')
+            ->join('arrangement', 'pair.arrangement_id', '=', 'arrangement.id')
             ->join('internship_plan', 'arrangement.plan_id', '=', 'internship_plan.id')
             ->where('arrangement.plan_id', $planId)
-            ->where('score.student_id', $studentId)
+            ->where('pair.student_id', $studentId)
+            ->where('pair.type', 'internship')
+            ->where('pair.status', 'active')
             ->where('internship_plan.score_rule', 'manual')
-            ->whereNull('score.deleted_at')
+            ->whereNull('pair.deleted_at')
             ->whereNull('arrangement.deleted_at')
-            ->whereNull('internship_plan.deleted_at'), $scope, 'score.student_id', 'score.arrangement_id')
+            ->whereNull('internship_plan.deleted_at'), $scope, 'pair.student_id', 'pair.arrangement_id')
             ->exists();
     }
 
