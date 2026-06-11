@@ -12,6 +12,9 @@ use Webman\MiddlewareInterface;
 
 class PermissionMiddleware implements MiddlewareInterface
 {
+    /**
+     * 校验当前账号是否具备接口权限码。
+     */
     public function process(Request $request, callable $handler): Response
     {
         try {

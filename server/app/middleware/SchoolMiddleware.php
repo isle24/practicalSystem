@@ -11,6 +11,9 @@ use Webman\MiddlewareInterface;
 
 class SchoolMiddleware implements MiddlewareInterface
 {
+    /**
+     * 解析学校并初始化学校业务库连接。
+     */
     public function process(Request $request, callable $handler): Response
     {
         try {

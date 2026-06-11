@@ -7,6 +7,9 @@ use support\Response;
 
 class IndexController
 {
+    /**
+     * 根据访问环境跳转到 PC 或 H5 入口。
+     */
     public function index(Request $request): Response
     {
         $defaultTarget = $this->defaultTarget($request);
@@ -16,6 +19,9 @@ class IndexController
         ]);
     }
 
+    /**
+     * 根据请求头判断默认前端入口。
+     */
     private function defaultTarget(Request $request): string
     {
         $mobileHint = strtolower((string) $request->header('sec-ch-ua-mobile', ''));
@@ -31,6 +37,9 @@ class IndexController
         return '/pc/index.html';
     }
 
+    /**
+     * 生成前端入口跳转页。
+     */
     private function redirectPage(string $defaultTarget): string
     {
         $defaultTarget = htmlspecialchars($defaultTarget, ENT_QUOTES, 'UTF-8');
@@ -70,11 +79,17 @@ class IndexController
 EOF;
     }
 
+    /**
+     * 渲染框架默认视图。
+     */
     public function view(Request $request)
     {
         return view('index/view', ['name' => 'webman']);
     }
 
+    /**
+     * 返回框架默认 JSON 响应。
+     */
     public function json(Request $request)
     {
         return json(['code' => 0, 'msg' => 'ok']);

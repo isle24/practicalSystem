@@ -10,6 +10,9 @@ use Webman\MiddlewareInterface;
 
 class DataScopeMiddleware implements MiddlewareInterface
 {
+    /**
+     * 计算当前请求的数据权限范围。
+     */
     public function process(Request $request, callable $handler): Response
     {
         try {

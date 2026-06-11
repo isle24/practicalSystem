@@ -11,6 +11,9 @@ use Webman\MiddlewareInterface;
 
 class AuthMiddleware implements MiddlewareInterface
 {
+    /**
+     * 解析登录令牌并写入当前请求上下文。
+     */
     public function process(Request $request, callable $handler): Response
     {
         $token = $this->token($request);
@@ -25,6 +28,9 @@ class AuthMiddleware implements MiddlewareInterface
         return $handler($request);
     }
 
+    /**
+     * 从 Cookie 或 Authorization 头读取登录令牌。
+     */
     private function token(Request $request): string
     {
         $cookieToken = $request->cookie('jwt', '');

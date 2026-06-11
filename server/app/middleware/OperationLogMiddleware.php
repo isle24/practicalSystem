@@ -27,6 +27,9 @@ class OperationLogMiddleware implements MiddlewareInterface
         'encoding_aes_key',
     ];
 
+    /**
+     * 执行请求并记录接口操作日志。
+     */
     public function process(Request $request, callable $handler): Response
     {
         $startedAt = microtime(true);
@@ -42,6 +45,9 @@ class OperationLogMiddleware implements MiddlewareInterface
         return $response;
     }
 
+    /**
+     * 写入当前接口请求的操作日志。
+     */
     private function record(Request $request, ?Response $response, float $startedAt, ?Throwable $exception = null): void
     {
         if (!$this->shouldRecord($request)) {
@@ -78,6 +84,9 @@ class OperationLogMiddleware implements MiddlewareInterface
         }
     }
 
+    /**
+     * 判断当前请求是否需要写操作日志。
+     */
     private function shouldRecord(Request $request): bool
     {
         $method = strtoupper($request->method());
@@ -89,6 +98,9 @@ class OperationLogMiddleware implements MiddlewareInterface
         return str_starts_with($path, '/api/');
     }
 
+    /**
+     * 获取接口动作名称，优先读取 OperationLog 属性。
+     */
     private function operationName(Request $request): ?string
     {
         $controller = is_string($request->controller ?? null) ? $request->controller : '';
@@ -113,6 +125,9 @@ class OperationLogMiddleware implements MiddlewareInterface
         }
     }
 
+    /**
+     * 从方法注释读取接口动作名称。
+     */
     private function docCommentName(ReflectionMethod $method): string
     {
         $comment = (string) $method->getDocComment();
@@ -135,6 +150,9 @@ class OperationLogMiddleware implements MiddlewareInterface
         return '';
     }
 
+    /**
+     * 获取响应 HTTP 状态码。
+     */
     private function statusCode(?Response $response): int
     {
         if ($response && method_exists($response, 'getStatusCode')) {
@@ -144,6 +162,9 @@ class OperationLogMiddleware implements MiddlewareInterface
         return 200;
     }
 
+    /**
+     * 读取响应中的业务状态和提示消息。
+     */
     private function responsePayload(?Response $response, ?Throwable $exception): array
     {
         if ($exception) {
@@ -182,11 +203,17 @@ class OperationLogMiddleware implements MiddlewareInterface
         ];
     }
 
+    /**
+     * 读取请求查询参数。
+     */
     private function requestQuery(Request $request): array
     {
         return method_exists($request, 'get') ? (array) $request->get() : [];
     }
 
+    /**
+     * 读取请求输入参数。
+     */
     private function requestInput(Request $request): array
     {
         if (!method_exists($request, 'all')) {
@@ -196,6 +223,9 @@ class OperationLogMiddleware implements MiddlewareInterface
         return (array) ($request->all() ?: []);
     }
 
+    /**
+     * 脱敏请求参数。
+     */
     private function mask(mixed $value, ?string $key = null): mixed
     {
         if ($key !== null && $this->isSensitiveKey($key)) {
@@ -221,6 +251,9 @@ class OperationLogMiddleware implements MiddlewareInterface
         return $value;
     }
 
+    /**
+     * 判断参数名是否为敏感字段。
+     */
     private function isSensitiveKey(string $key): bool
     {
         $key = strtolower($key);
