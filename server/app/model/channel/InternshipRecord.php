@@ -619,6 +619,11 @@ class InternshipRecord extends TableRecord
             ->leftJoin('grade_list', 'students.grade_id', '=', 'grade_list.grade_id')
             ->leftJoin('arrangement', 'score.arrangement_id', '=', 'arrangement.id')
             ->leftJoin('internship_plan', 'arrangement.plan_id', '=', 'internship_plan.id')
+            ->leftJoin('course_score', function ($join): void {
+                $join->on('course_score.plan_id', '=', 'arrangement.plan_id')
+                    ->on('course_score.student_id', '=', 'score.student_id')
+                    ->whereNull('course_score.deleted_at');
+            })
             ->whereNull('score.deleted_at')
             ->whereNull('arrangement.deleted_at')
             ->whereNull('internship_plan.deleted_at'), $scope, 'score.student_id', 'score.arrangement_id');
@@ -650,6 +655,10 @@ class InternshipRecord extends TableRecord
             'internship_plan.course_code',
             'internship_plan.course_name',
             'internship_plan.score_rule',
+            'course_score.id as manual_score_id',
+            'course_score.score_value as manual_score',
+            'course_score.remark as manual_score_remark',
+            'course_score.updated_at as manual_score_updated_at',
             'students.name as student_name',
             'students.student_num',
             'students.grade_id',
@@ -1575,6 +1584,75 @@ class InternshipRecord extends TableRecord
             ->value('account.id');
 
         return $accountId ? (int) $accountId : null;
+    }
+
+    public static function courseScoreStudentAccountId(int $planId, int $studentId): ?int
+    {
+        if ($planId <= 0 || $studentId <= 0) {
+            return null;
+        }
+
+        $accountId = self::queryTable('score')
+            ->join('arrangement', 'score.arrangement_id', '=', 'arrangement.id')
+            ->join('students', 'score.student_id', '=', 'students.student_id')
+            ->join('account', 'students.user_id', '=', 'account.user_id')
+            ->where('arrangement.plan_id', $planId)
+            ->where('score.student_id', $studentId)
+            ->where('account.status', 'enabled')
+            ->whereNull('score.deleted_at')
+            ->whereNull('arrangement.deleted_at')
+            ->whereNull('students.deleted_at')
+            ->whereNull('account.deleted_at')
+            ->value('account.id');
+
+        return $accountId ? (int) $accountId : null;
+    }
+
+    public static function courseScoreManualWritable(array $scope, int $planId, int $studentId): bool
+    {
+        if ($planId <= 0 || $studentId <= 0) {
+            return false;
+        }
+
+        return self::applyStudentTaskScope(self::queryTable('score')
+            ->join('arrangement', 'score.arrangement_id', '=', 'arrangement.id')
+            ->join('internship_plan', 'arrangement.plan_id', '=', 'internship_plan.id')
+            ->where('arrangement.plan_id', $planId)
+            ->where('score.student_id', $studentId)
+            ->where('internship_plan.score_rule', 'manual')
+            ->whereNull('score.deleted_at')
+            ->whereNull('arrangement.deleted_at')
+            ->whereNull('internship_plan.deleted_at'), $scope, 'score.student_id', 'score.arrangement_id')
+            ->exists();
+    }
+
+    public static function saveManualCourseScore(int $planId, int $studentId, float $scoreValue, int $operatorId, ?string $remark, string $uuid, string $now): array
+    {
+        $values = [
+            'score_value' => $scoreValue,
+            'operator_id' => $operatorId > 0 ? $operatorId : null,
+            'remark' => $remark,
+            'status' => 'enabled',
+            'deleted_at' => null,
+            'updated_at' => $now,
+        ];
+        $existing = self::queryTable('course_score')
+            ->where('plan_id', $planId)
+            ->where('student_id', $studentId)
+            ->first(['id', 'uuid']);
+        if ($existing) {
+            self::updateById('course_score', (int) $existing->id, $values);
+            return ['id' => (int) $existing->id, 'uuid' => (string) $existing->uuid];
+        }
+
+        $id = self::insertRow('course_score', array_merge($values, [
+            'uuid' => $uuid,
+            'plan_id' => $planId,
+            'student_id' => $studentId,
+            'created_at' => $now,
+        ]));
+
+        return ['id' => $id, 'uuid' => (string) self::uuidById('course_score', $id)];
     }
 
     public static function studentIdByUser(int $userId): ?int
@@ -3234,6 +3312,10 @@ class InternshipRecord extends TableRecord
                     'dep_name' => $row['dep_name'] ?? '',
                     'profession_name' => $row['profession_name'] ?? '',
                     'class_name' => $row['class_name'] ?? '',
+                    'manual_score_id' => is_numeric($row['manual_score_id'] ?? null) ? (int) $row['manual_score_id'] : null,
+                    'manual_score' => is_numeric($row['manual_score'] ?? null) ? (float) $row['manual_score'] : null,
+                    'manual_score_remark' => $row['manual_score_remark'] ?? '',
+                    'manual_score_updated_at' => $row['manual_score_updated_at'] ?? null,
                     'task_scores' => [],
                 ];
             }
@@ -3250,7 +3332,7 @@ class InternshipRecord extends TableRecord
             $scores = array_values(array_filter($group['task_scores'], static fn (array $score): bool => $score['final_score'] !== null));
             $group['task_count'] = count($group['task_scores']);
             $group['scored_task_count'] = count($scores);
-            $group['course_final_score'] = self::courseFinalScore($scores, (string) ($group['score_rule'] ?? 'average'));
+            $group['course_final_score'] = self::courseFinalScore($scores, (string) ($group['score_rule'] ?? 'average'), $group['manual_score']);
             $group['task_score_text'] = implode('；', array_map(static function (array $score): string {
                 return sprintf('%s：%s', $score['arrangement_title'] ?: '-', $score['final_score'] ?? '-');
             }, $group['task_scores']));
@@ -3269,12 +3351,12 @@ class InternshipRecord extends TableRecord
         return $items;
     }
 
-    private static function courseFinalScore(array $scores, string $rule): ?float
+    private static function courseFinalScore(array $scores, string $rule, mixed $manualScore = null): ?float
     {
-        if (!$scores) {
-            return null;
-        }
         if ($rule === 'manual') {
+            return is_numeric($manualScore) ? round((float) $manualScore, 2) : null;
+        }
+        if (!$scores) {
             return null;
         }
         $values = array_map(static fn (array $score): float => (float) $score['final_score'], $scores);

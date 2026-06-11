@@ -2646,6 +2646,8 @@ function mobileListFacts(key, row) {
       namedFact('班级', row.class_name),
       namedFact('课程', joinFact([row.course_code, row.course_name])),
       namedFact('成绩规则', scoreRuleText(row.score_rule)),
+      namedFact('课程成绩', row.course_final_score ?? ''),
+      namedFact('核定说明', previewText(row.manual_score_remark, 42)),
       namedFact('任务成绩', row.task_score_text),
     ],
     inspections: [

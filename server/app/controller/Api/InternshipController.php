@@ -347,6 +347,15 @@ class InternshipController
     }
 
     /**
+     * 核定课程成绩
+     */
+    #[OperationLog('核定课程成绩')]
+    public function saveCourseScore(Request $request): Response
+    {
+        return $this->handle(fn (): array => $this->service()->saveCourseScore($request));
+    }
+
+    /**
      * 查看实习统计报表
      */
     #[OperationLog('查看实习统计报表')]

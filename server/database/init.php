@@ -636,6 +636,7 @@ function schoolBusinessStatements(): array
         simpleTable('apply_report_delay_recording', recordingColumns()),
         simpleTable('score', entityColumns(['`student_id` BIGINT UNSIGNED DEFAULT NULL', '`score_value` DECIMAL(5,2) DEFAULT NULL'])),
         simpleTable('score_recording', recordingColumns()),
+        simpleTable('course_score', ['`plan_id` BIGINT UNSIGNED DEFAULT NULL', '`student_id` BIGINT UNSIGNED DEFAULT NULL', '`score_value` DECIMAL(5,2) DEFAULT NULL', '`operator_id` BIGINT UNSIGNED DEFAULT NULL', '`remark` TEXT DEFAULT NULL', 'UNIQUE KEY `uk_course_score` (`plan_id`, `student_id`)']),
         simpleTable('internship_plan', ['`source_type` VARCHAR(40) DEFAULT \'edu_system\'', '`course_code` VARCHAR(120) DEFAULT NULL', '`course_name` VARCHAR(180) DEFAULT NULL', '`grade_id` BIGINT UNSIGNED DEFAULT NULL', '`dep_id` BIGINT UNSIGNED DEFAULT NULL', '`profession_id` BIGINT UNSIGNED DEFAULT NULL', '`semester` VARCHAR(80) DEFAULT NULL', '`credit` DECIMAL(5,2) DEFAULT NULL', '`student_count` INT DEFAULT 0', '`score_rule` VARCHAR(40) DEFAULT \'average\'', '`plan_content` JSON DEFAULT NULL', '`submitter_id` BIGINT UNSIGNED DEFAULT NULL']),
         simpleTable('internship_plan_approval', ['`plan_id` BIGINT UNSIGNED DEFAULT NULL', '`reviewer_id` BIGINT UNSIGNED DEFAULT NULL']),
         simpleTable('plan_recording', recordingColumns()),
@@ -1056,6 +1057,13 @@ function ensureInternshipSchema(PDO $pdo): void
             'teacher_id' => "ALTER TABLE `score` ADD COLUMN `teacher_id` BIGINT UNSIGNED DEFAULT NULL AFTER `final_score`",
             'comment' => "ALTER TABLE `score` ADD COLUMN `comment` TEXT DEFAULT NULL AFTER `teacher_id`",
         ],
+        'course_score' => [
+            'plan_id' => "ALTER TABLE `course_score` ADD COLUMN `plan_id` BIGINT UNSIGNED DEFAULT NULL AFTER `code`",
+            'student_id' => "ALTER TABLE `course_score` ADD COLUMN `student_id` BIGINT UNSIGNED DEFAULT NULL AFTER `plan_id`",
+            'score_value' => "ALTER TABLE `course_score` ADD COLUMN `score_value` DECIMAL(5,2) DEFAULT NULL AFTER `student_id`",
+            'operator_id' => "ALTER TABLE `course_score` ADD COLUMN `operator_id` BIGINT UNSIGNED DEFAULT NULL AFTER `score_value`",
+            'remark' => "ALTER TABLE `course_score` ADD COLUMN `remark` TEXT DEFAULT NULL AFTER `operator_id`",
+        ],
         'review_opinion' => [
             'recording_id' => "ALTER TABLE `review_opinion` ADD COLUMN `recording_id` BIGINT UNSIGNED DEFAULT NULL AFTER `entity_id`",
             'teacher_id' => "ALTER TABLE `review_opinion` ADD COLUMN `teacher_id` BIGINT UNSIGNED DEFAULT NULL AFTER `recording_id`",
@@ -1193,6 +1201,8 @@ function ensureInternshipSchema(PDO $pdo): void
     ensureIndex($pdo, 'review_opinion', 'idx_review_entity', "ALTER TABLE `review_opinion` ADD KEY `idx_review_entity` (`entity_type`, `entity_id`, `status`, `created_at`)");
     ensureIndex($pdo, 'apply_report_delay', 'idx_delay_student_entity', "ALTER TABLE `apply_report_delay` ADD KEY `idx_delay_student_entity` (`student_id`, `entity_type`, `entity_id`, `status`)");
     ensureIndex($pdo, 'score', 'idx_score_student_arrangement', "ALTER TABLE `score` ADD KEY `idx_score_student_arrangement` (`student_id`, `arrangement_id`)");
+    ensureIndex($pdo, 'course_score', 'uk_course_score', "ALTER TABLE `course_score` ADD UNIQUE KEY `uk_course_score` (`plan_id`, `student_id`)");
+    ensureIndex($pdo, 'course_score', 'idx_course_score_student', "ALTER TABLE `course_score` ADD KEY `idx_course_score_student` (`student_id`, `status`)");
     ensureIndex($pdo, 'insurance', 'idx_insurance_student_task_date', "ALTER TABLE `insurance` ADD KEY `idx_insurance_student_task_date` (`student_id`, `arrangement_id`, `status`, `start_date`, `end_date`)");
     ensureIndex($pdo, 'safety_letter_sign', 'idx_safety_student_task_status', "ALTER TABLE `safety_letter_sign` ADD KEY `idx_safety_student_task_status` (`student_id`, `arrangement_id`, `status`, `signed_at`)");
 }

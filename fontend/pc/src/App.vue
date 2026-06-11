@@ -527,6 +527,15 @@
                         <label><span>评语</span><input v-model="internshipState.scoreForm.comment"></label>
                       </div>
 
+                      <div v-else-if="internshipState.dialog.type === 'courseScore'" class="operation-form single">
+                        <p>{{ internshipState.dialog.description }}</p>
+                        <label><span>课程成绩</span><input v-model="internshipState.courseScoreForm.score_value" type="number" min="0" max="100" step="0.1"></label>
+                        <label>
+                          <span>核定说明</span>
+                          <textarea v-model="internshipState.courseScoreForm.remark" rows="4" maxlength="1000" />
+                        </label>
+                      </div>
+
                       <div v-else-if="internshipState.dialog.type === 'baseFlow'" class="operation-form">
                         <label>
                           <span>流程类型</span>
@@ -1144,7 +1153,13 @@
                           @page-change="page => loadInternshipPanel('courseScores', page)"
                           @reset="resetInternshipFilters('courseScores')"
                           @search="loadInternshipPanel('courseScores', 1)"
-                        />
+                        >
+                          <template #actions="{ row }">
+                            <el-button v-if="canSaveManualCourseScore(row)" link type="primary" @click="openCourseScoreDialog(row)">
+                              核定
+                            </el-button>
+                          </template>
+                        </DataListPanel>
                       </section>
                     </div>
                   </template>
@@ -1161,7 +1176,13 @@
                       @page-change="page => loadInternshipPanel('courseScores', page)"
                       @reset="resetInternshipFilters('courseScores')"
                       @search="loadInternshipPanel('courseScores', 1)"
-                    />
+                    >
+                      <template #actions="{ row }">
+                        <el-button v-if="canSaveManualCourseScore(row)" link type="primary" @click="openCourseScoreDialog(row)">
+                          核定
+                        </el-button>
+                      </template>
+                    </DataListPanel>
                   </template>
 
                   <template v-else-if="win.panel === 'documents'">
@@ -3069,6 +3090,7 @@ import {
   saveInternshipArrangement,
   saveInternshipArrangementChange,
   saveInternshipBaseFlow,
+  saveInternshipCourseScore,
   saveInternshipPlan,
   saveInternshipScore,
   savePracticeItem,
@@ -3784,6 +3806,7 @@ const internshipState = reactive({
   arrangementForm: emptyArrangementForm(),
   planForm: emptyPlanForm(),
   scoreForm: emptyScoreForm(),
+  courseScoreForm: emptyCourseScoreForm(),
   baseFlowForm: emptyBaseFlowForm(),
   filters: {
     arrangements: emptyInternshipFilters(),
@@ -4292,6 +4315,8 @@ const internshipListConfigs = computed(() => ({
       { prop: 'scored_task_count', label: '已评分', width: 80 },
       { key: 'course_final_score', label: '课程成绩', width: 100, formatter: row => row.course_final_score ?? '-' },
       { prop: 'task_score_text', label: '任务成绩', minWidth: 240 },
+      { prop: 'manual_score_remark', label: '核定说明', minWidth: 160 },
+      { prop: 'manual_score_updated_at', label: '核定时间', width: 168 },
       { prop: 'class_name', label: '班级', minWidth: 130 },
     ],
   },
@@ -4494,6 +4519,10 @@ function hasInternshipToolbarActions(panel) {
   return false;
 }
 
+function canSaveManualCourseScore(row) {
+  return canSaveInternshipScore.value && row?.score_rule === 'manual';
+}
+
 function isStudentOwnPanel(panel) {
   return isStudentRole.value && ['arrangements', 'applications', 'pairs', 'signIns', 'journals', 'reports', 'delays', 'scores', 'courseScores'].includes(panel);
 }
@@ -4647,6 +4676,7 @@ function studentPanelFields(panel) {
       { key: 'task_count', label: '任务数' },
       { key: 'scored_task_count', label: '已评分' },
       { key: 'course_final_score', label: '课程成绩', formatter: row => row.course_final_score ?? '-' },
+      { key: 'manual_score_remark', label: '核定说明' },
       { key: 'task_score_text', label: '任务成绩' },
     ],
     archiveMaterials: [
@@ -7222,6 +7252,15 @@ function emptyScoreForm() {
   };
 }
 
+function emptyCourseScoreForm() {
+  return {
+    plan_id: null,
+    student_id: null,
+    score_value: '',
+    remark: '',
+  };
+}
+
 function emptyBaseFlowForm(row = {}) {
   return {
     id: row.id || null,
@@ -8780,6 +8819,27 @@ function openScoreDialog(row = null) {
   };
 }
 
+function openCourseScoreDialog(row) {
+  if (!canSaveManualCourseScore(row)) {
+    internshipState.message = '仅人工核定规则的课程成绩可维护';
+    return;
+  }
+  internshipState.courseScoreForm = {
+    ...emptyCourseScoreForm(),
+    plan_id: row.plan_id,
+    student_id: row.student_id,
+    score_value: row.manual_score ?? row.course_final_score ?? '',
+    remark: row.manual_score_remark || '',
+  };
+  internshipState.dialog = {
+    ...emptyOperationDialog(),
+    type: 'courseScore',
+    title: '核定课程成绩',
+    description: `${row.student_name || '-'} / ${row.course_name || row.course_code || '-'}`,
+    row,
+  };
+}
+
 function openBaseFlowDialog(row = null) {
   const form = emptyBaseFlowForm(row || {});
   if (!row) {
@@ -8860,6 +8920,7 @@ async function openTimelineDialog(entity, row) {
 function closeInternshipDialog() {
   internshipState.dialog = emptyOperationDialog();
   internshipState.arrangementDetail = emptyArrangementDetail();
+  internshipState.courseScoreForm = emptyCourseScoreForm();
 }
 
 async function confirmInternshipDialog() {
@@ -8873,6 +8934,10 @@ async function confirmInternshipDialog() {
   }
   if (internshipState.dialog.type === 'score') {
     await saveScore();
+    return;
+  }
+  if (internshipState.dialog.type === 'courseScore') {
+    await saveCourseScore();
     return;
   }
   if (internshipState.dialog.type === 'baseFlow') {
@@ -9672,6 +9737,38 @@ async function saveScore() {
   }
 }
 
+async function saveCourseScore() {
+  const scoreValue = numericOrNull(internshipState.courseScoreForm.score_value);
+  if (!canSaveInternshipScore.value || !internshipState.courseScoreForm.plan_id || !internshipState.courseScoreForm.student_id) {
+    internshipState.message = '请选择需要核定的课程成绩';
+    return;
+  }
+  if (scoreValue === null || scoreValue < 0 || scoreValue > 100) {
+    internshipState.message = '课程成绩必须在 0 到 100 之间';
+    return;
+  }
+
+  internshipState.loading = true;
+  internshipState.message = '';
+  try {
+    await saveInternshipCourseScore({
+      plan_id: internshipState.courseScoreForm.plan_id,
+      student_id: internshipState.courseScoreForm.student_id,
+      score_value: scoreValue,
+      remark: internshipState.courseScoreForm.remark,
+    });
+    closeInternshipDialog();
+    await Promise.all([
+      loadInternshipPanel('courseScores', internshipState.lists.courseScores.pagination.page || 1),
+      loadInternshipPanel('scores', internshipState.lists.scores.pagination.page || 1),
+    ]);
+  } catch (error) {
+    internshipState.message = error.message;
+  } finally {
+    internshipState.loading = false;
+  }
+}
+
 function numericOrNull(value) {
   return value === '' || value === null || value === undefined ? null : Number(value);
 }
@@ -9832,6 +9929,7 @@ function resetInternshipState() {
   internshipState.arrangementForm = emptyArrangementForm();
   internshipState.planForm = emptyPlanForm();
   internshipState.scoreForm = emptyScoreForm();
+  internshipState.courseScoreForm = emptyCourseScoreForm();
   internshipState.baseFlowForm = emptyBaseFlowForm();
   Object.keys(internshipState.filters).forEach((key) => {
     internshipState.filters[key] = emptyInternshipFilters();

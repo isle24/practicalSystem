@@ -1105,6 +1105,40 @@ class InternshipService
         ]));
     }
 
+    public function saveCourseScore(Request $request): array
+    {
+        $this->requirePermission('internship:score');
+        $planId = $this->requiredInt($request, 'plan_id');
+        $studentId = $this->requiredInt($request, 'student_id');
+        $scoreValue = $this->decimalInput($request, 'score_value');
+        if ($scoreValue === null || $scoreValue < 0 || $scoreValue > 100) {
+            throw new InvalidArgumentException('课程成绩必须在 0 到 100 之间');
+        }
+        if (!InternshipRecord::courseScoreManualWritable($this->scopeContext(), $planId, $studentId)) {
+            throw new RuntimeException('仅人工核定规则的课程成绩可维护', 40301);
+        }
+
+        $result = InternshipRecord::saveManualCourseScore(
+            $planId,
+            $studentId,
+            $scoreValue,
+            CurrentContext::accountId() ?: 0,
+            $this->nullableString($request, 'remark', 1000),
+            $this->uuid(),
+            $this->now()
+        );
+        $this->notifyInternshipAccounts(
+            [InternshipRecord::courseScoreStudentAccountId($planId, $studentId)],
+            '实习课程成绩已核定',
+            '你的实习课程成绩已核定，总评：' . $scoreValue . '。',
+            'result',
+            'course_score',
+            (int) $result['id']
+        );
+
+        return $result;
+    }
+
     public function stats(Request $request): array
     {
         $this->requirePermission('stat:view');

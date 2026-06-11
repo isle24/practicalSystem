@@ -570,6 +570,10 @@ export function fetchInternshipCourseScores(params = {}) {
   return internshipList('course-scores', params);
 }
 
+export function saveInternshipCourseScore(payload) {
+  return internshipPost('save-course-score', payload);
+}
+
 export function fetchInternshipStats(params = {}) {
   return internshipList('stats', params);
 }
