@@ -260,6 +260,8 @@ class InternshipRecord extends TableRecord
             ->leftJoin('arrangement', 'arrangement_change.arrangement_id', '=', 'arrangement.id')
             ->leftJoin('internship_plan', 'arrangement.plan_id', '=', 'internship_plan.id')
             ->leftJoin('teacher_list', 'arrangement.teacher_id', '=', 'teacher_list.teacher_id')
+            ->leftJoin('arrangement as new_arrangement', 'arrangement_change.new_arrangement_id', '=', 'new_arrangement.id')
+            ->leftJoin('teacher_list as new_teacher_list', 'new_arrangement.teacher_id', '=', 'new_teacher_list.teacher_id')
             ->leftJoin('account as submit_account', 'arrangement_change.submitter_id', '=', 'submit_account.id')
             ->leftJoin('users as submit_user', 'submit_account.user_id', '=', 'submit_user.id')
             ->leftJoin('account as review_account', 'arrangement_change.reviewer_id', '=', 'review_account.id')
@@ -308,6 +310,10 @@ class InternshipRecord extends TableRecord
             'internship_plan.grade_id',
             'internship_plan.course_name',
             'teacher_list.teacher_name',
+            'new_arrangement.title as new_arrangement_title',
+            'new_arrangement.task_no as new_task_no',
+            'new_arrangement.batch_no as new_batch_no',
+            'new_teacher_list.teacher_name as new_teacher_name',
             'submit_user.name as submitter_name',
             'review_user.name as reviewer_name',
         ]);
