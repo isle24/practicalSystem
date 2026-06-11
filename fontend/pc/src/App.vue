@@ -4297,7 +4297,7 @@ const internshipListConfigs = computed(() => ({
       { prop: 'student_name', label: '学生', width: 110 },
       { prop: 'grade_name', label: '届次', width: 100 },
       { prop: 'arrangement_title', label: '实习安排', minWidth: 180 },
-      { key: 'score_status', label: '评分状态', width: 90, tag: true, tagType: row => row.id ? 'success' : 'warning', formatter: row => row.id ? '已评分' : '待评分' },
+      { key: 'score_status', label: '评分状态', width: 90, tag: true, tagType: row => row.final_score !== null && row.final_score !== undefined ? 'success' : 'warning', formatter: row => row.final_score !== null && row.final_score !== undefined ? '已评分' : '待评分' },
       { prop: 'sign_in_score', label: '签到', width: 80 },
       { prop: 'journal_score', label: '日志', width: 80 },
       { prop: 'report_score', label: '报告', width: 80 },
@@ -4316,6 +4316,7 @@ const internshipListConfigs = computed(() => ({
       { prop: 'grade_name', label: '届次', width: 100 },
       { prop: 'course_name', label: '课程计划', minWidth: 180 },
       { key: 'score_rule', label: '成绩规则', width: 110, formatter: row => scoreRuleText(row.score_rule) },
+      { key: 'course_score_status', label: '汇总状态', width: 100, tag: true, tagType: row => row.course_score_status === 'complete' ? 'success' : 'warning', formatter: row => courseScoreStatusText(row.course_score_status) },
       { prop: 'task_count', label: '任务数', width: 80 },
       { prop: 'scored_task_count', label: '已评分', width: 80 },
       { key: 'course_final_score', label: '课程成绩', width: 100, formatter: row => row.course_final_score ?? '-' },
@@ -4678,6 +4679,7 @@ function studentPanelFields(panel) {
       { key: 'grade_name', label: '届次' },
       { key: 'course_name', label: '课程计划', formatter: row => row.course_name || row.course_code || '-' },
       { key: 'score_rule', label: '成绩规则', formatter: row => scoreRuleText(row.score_rule) },
+      { key: 'course_score_status', label: '汇总状态', formatter: row => courseScoreStatusText(row.course_score_status) },
       { key: 'task_count', label: '任务数' },
       { key: 'scored_task_count', label: '已评分' },
       { key: 'course_final_score', label: '课程成绩', formatter: row => row.course_final_score ?? '-' },
@@ -8360,6 +8362,10 @@ function scoreRuleText(value) {
   }[value] || value || '-';
 }
 
+function courseScoreStatusText(value) {
+  return value === 'complete' ? '已汇总' : '待汇总';
+}
+
 function statCellText(value) {
   return value === null || value === undefined || value === '' ? '-' : value;
 }
@@ -9850,6 +9856,7 @@ function statusText(value) {
     changing: '变更中',
     disabled: '停用',
     changed: '已变更',
+    completed: '已完成',
     pending: '待处理',
     skipped: '跳过',
     active: '有效',
@@ -9867,7 +9874,7 @@ function statusText(value) {
 }
 
 function statusTagType(value) {
-  if (['accept', 'enabled', 'active', 'signed', 'complete', 'archived', 'confirmed', 'published'].includes(value)) {
+  if (['accept', 'enabled', 'active', 'signed', 'complete', 'completed', 'archived', 'confirmed', 'published'].includes(value)) {
     return 'success';
   }
   if (['wait', 'pending', 'draft', 'changing'].includes(value)) {

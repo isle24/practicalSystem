@@ -1571,6 +1571,72 @@ class InternshipRecord extends TableRecord
         return ['pair_ids' => self::ids($pairIds), 'student_ids' => $studentIds];
     }
 
+    public static function refreshArrangementScoreStatus(int $arrangementId, string $now): array
+    {
+        $progress = self::arrangementScoreProgress($arrangementId);
+        $row = self::queryTable('arrangement')
+            ->where('id', $arrangementId)
+            ->whereNull('deleted_at')
+            ->first(['id', 'status']);
+        $fromStatus = $row ? (string) $row->status : null;
+        $toStatus = $fromStatus;
+        $completed = $progress['student_count'] > 0
+            && $progress['scored_student_count'] >= $progress['student_count'];
+
+        if ($completed && in_array($fromStatus, ['enabled', 'accept'], true)) {
+            $toStatus = 'completed';
+            self::updateById('arrangement', $arrangementId, [
+                'status' => $toStatus,
+                'updated_at' => $now,
+            ]);
+        } elseif (!$completed && $fromStatus === 'completed') {
+            $toStatus = 'enabled';
+            self::updateById('arrangement', $arrangementId, [
+                'status' => $toStatus,
+                'updated_at' => $now,
+            ]);
+        }
+
+        return array_merge($progress, [
+            'completed' => $completed,
+            'from_status' => $fromStatus,
+            'to_status' => $toStatus,
+            'status_changed' => $fromStatus !== null && $fromStatus !== $toStatus,
+        ]);
+    }
+
+    public static function arrangementScoreProgress(int $arrangementId): array
+    {
+        if ($arrangementId <= 0) {
+            return [
+                'student_count' => 0,
+                'scored_student_count' => 0,
+            ];
+        }
+
+        $base = self::queryTable('pair')
+            ->where('pair.arrangement_id', $arrangementId)
+            ->where('pair.type', 'internship')
+            ->where('pair.status', 'active')
+            ->whereNull('pair.deleted_at');
+
+        $studentCount = (int) (clone $base)->distinct()->count('pair.student_id');
+        $scoredStudentCount = (int) (clone $base)
+            ->join('score', function ($join): void {
+                $join->on('score.student_id', '=', 'pair.student_id')
+                    ->on('score.arrangement_id', '=', 'pair.arrangement_id')
+                    ->whereNotNull('score.final_score')
+                    ->whereNull('score.deleted_at');
+            })
+            ->distinct()
+            ->count('pair.student_id');
+
+        return [
+            'student_count' => $studentCount,
+            'scored_student_count' => $scoredStudentCount,
+        ];
+    }
+
     public static function closeArrangementActiveBindings(int $arrangementId, string $reason, string $now): void
     {
         if ($arrangementId <= 0) {
@@ -3408,9 +3474,15 @@ class InternshipRecord extends TableRecord
             $scores = array_values(array_filter($group['task_scores'], static fn (array $score): bool => $score['final_score'] !== null));
             $group['task_count'] = count($group['task_scores']);
             $group['scored_task_count'] = count($scores);
-            $group['course_final_score'] = self::courseFinalScore($scores, (string) ($group['score_rule'] ?? 'average'), $group['manual_score']);
+            $scoreRule = (string) ($group['score_rule'] ?? 'average');
+            $completed = $scoreRule === 'manual'
+                ? is_numeric($group['manual_score'])
+                : ($group['task_count'] > 0 && $group['scored_task_count'] === $group['task_count']);
+            $group['course_score_status'] = $completed ? 'complete' : 'pending';
+            $group['course_final_score'] = $completed ? self::courseFinalScore($scores, $scoreRule, $group['manual_score']) : null;
             $group['task_score_text'] = implode('；', array_map(static function (array $score): string {
-                return sprintf('%s：%s', $score['arrangement_title'] ?: '-', $score['final_score'] ?? '-');
+                $credit = is_numeric($score['credit'] ?? null) ? '，学分 ' . $score['credit'] : '';
+                return sprintf('%s：%s%s', $score['arrangement_title'] ?: '-', $score['final_score'] ?? '待评分', $credit);
             }, $group['task_scores']));
             $items[] = $group;
         }

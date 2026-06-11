@@ -791,6 +791,7 @@ class InternshipService
             sprintf('新增学生 %d 的任务绑定，负责老师 %d。', $studentId, $teacherId),
             'accept'
         );
+        $this->refreshArrangementScoreWorkflow($arrangementId);
 
         return ['id' => $id];
     }
@@ -826,6 +827,7 @@ class InternshipService
                 sprintf('解除学生 %d 的任务绑定：%s', (int) $pair->student_id, $reason ?: '未填写原因'),
                 'modify'
             );
+            $this->refreshArrangementScoreWorkflow((int) $pair->arrangement_id);
 
             return ['id' => $id];
         });
@@ -1185,7 +1187,21 @@ class InternshipService
         $journalWeight = $this->decimalInput($request, 'journal_weight') ?? 30;
         $reportWeight = $this->decimalInput($request, 'report_weight') ?? 50;
         $enterpriseScore = $this->decimalInput($request, 'enterprise_score');
+        $this->assertScoreRange([
+            '签到成绩' => $signInScore,
+            '日志成绩' => $journalScore,
+            '报告成绩' => $reportScore,
+            '企业成绩' => $enterpriseScore,
+        ]);
+        $this->assertWeightRange([
+            '签到权重' => $signWeight,
+            '日志权重' => $journalWeight,
+            '报告权重' => $reportWeight,
+        ]);
         $final = $this->finalScore($signInScore, $journalScore, $reportScore, $signWeight, $journalWeight, $reportWeight, $enterpriseScore);
+        if ($final === null) {
+            throw new InvalidArgumentException('至少填写一项任务成绩');
+        }
 
         $values = [
             'student_id' => $studentId,
@@ -1219,6 +1235,7 @@ class InternshipService
             $final,
             $values['teacher_id']
         );
+        $this->refreshArrangementScoreWorkflow($arrangementId);
         $this->notifyInternshipAccounts(
             [$this->studentAccountId($studentId)],
             '实习任务成绩已核定',
@@ -3320,6 +3337,24 @@ class InternshipService
         return $number >= $min && $number <= $max ? $number : null;
     }
 
+    private function assertScoreRange(array $scores): void
+    {
+        foreach ($scores as $label => $score) {
+            if ($score !== null && ($score < 0 || $score > 100)) {
+                throw new InvalidArgumentException("{$label}必须在 0 到 100 之间");
+            }
+        }
+    }
+
+    private function assertWeightRange(array $weights): void
+    {
+        foreach ($weights as $label => $weight) {
+            if ($weight < 0 || $weight > 100) {
+                throw new InvalidArgumentException("{$label}必须在 0 到 100 之间");
+            }
+        }
+    }
+
     private function jsonValue(mixed $value): string
     {
         return json_encode(is_string($value) ? (json_decode($value, true) ?: $value) : $value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
@@ -3380,6 +3415,31 @@ class InternshipService
         ]);
 
         return '核定实习任务成绩；' . implode('；', $parts);
+    }
+
+    private function refreshArrangementScoreWorkflow(int $arrangementId): void
+    {
+        $progress = InternshipRecord::refreshArrangementScoreStatus($arrangementId, $this->now());
+        if (!($progress['status_changed'] ?? false)) {
+            return;
+        }
+
+        $toStatus = (string) ($progress['to_status'] ?? '');
+        $action = $toStatus === 'completed' ? 'complete' : 'reopen';
+        $content = $toStatus === 'completed'
+            ? sprintf('任务绑定学生 %d 人，已完成评分 %d 人，任务自动标记完成。', (int) $progress['student_count'], (int) $progress['scored_student_count'])
+            : sprintf('任务绑定学生 %d 人，已完成评分 %d 人，任务恢复为启用状态。', (int) $progress['student_count'], (int) $progress['scored_student_count']);
+
+        $this->recordWorkflow(
+            'arrangement_recording',
+            'arrangement',
+            $arrangementId,
+            $action,
+            (string) ($progress['from_status'] ?? 'enabled'),
+            $toStatus,
+            $content,
+            $toStatus === 'completed' ? 'accept' : 'modify'
+        );
     }
 
     private function workflowContent(string $title, array $values, array $labels): string

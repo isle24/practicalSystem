@@ -2638,7 +2638,7 @@ function mobileListFacts(key, row) {
     scores: [
       namedFact('届次', row.grade_name),
       namedFact('安排', arrangement),
-      namedFact('评分状态', row.id ? '已评分' : '待评分'),
+      namedFact('评分状态', row.final_score !== null && row.final_score !== undefined ? '已评分' : '待评分'),
       namedFact('评分人', row.teacher_name || row.teacher_num),
       namedFact('分项', scoreBreakdownText(row)),
     ],
@@ -2648,6 +2648,7 @@ function mobileListFacts(key, row) {
       namedFact('班级', row.class_name),
       namedFact('课程', joinFact([row.course_code, row.course_name])),
       namedFact('成绩规则', scoreRuleText(row.score_rule)),
+      namedFact('汇总状态', courseScoreStatusText(row.course_score_status)),
       namedFact('课程成绩', row.course_final_score ?? ''),
       namedFact('核定说明', previewText(row.manual_score_remark, 42)),
       namedFact('任务成绩', row.task_score_text),
@@ -4272,6 +4273,10 @@ function scoreRuleText(value) {
   return names[value] || value || '-';
 }
 
+function courseScoreStatusText(value) {
+  return value === 'complete' ? '已汇总' : '待汇总';
+}
+
 function organizeModeText(value) {
   const names = {
     centralized: '集中',
@@ -4441,6 +4446,7 @@ function statusText(value) {
     changing: '变更中',
     disabled: '停用',
     changed: '已变更',
+    completed: '已完成',
     pending: '待处理',
     active: '有效',
     removed: '已移除',
