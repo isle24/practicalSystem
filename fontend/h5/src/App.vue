@@ -435,7 +435,7 @@
               <strong>签到</strong>
             </header>
             <label>
-              <span>实习安排</span>
+              <span>实习任务</span>
               <select v-model.number="internship.forms.sign.arrangement_id">
                 <option v-for="item in internship.options.arrangements" :key="item.id" :value="item.id">
                   {{ item.title }}
@@ -554,7 +554,7 @@
               <strong>延期申请</strong>
             </header>
             <label>
-              <span>实习安排</span>
+              <span>实习任务</span>
               <select v-model.number="internship.forms.delay.arrangement_id">
                 <option v-for="item in internship.options.arrangements" :key="item.id" :value="item.id">
                   {{ item.title }}
@@ -1965,7 +1965,7 @@ const mobileListConfigs = computed(() => ({
     title: '补充申请',
     shortTitle: '补申',
     icon: ClipboardList,
-    keywordPlaceholder: '学生、学号、实习安排、教师',
+    keywordPlaceholder: '学生、学号、实习任务、教师',
     gradeFilter: true,
     statusOptions: reviewStatusOptions,
     emptyText: '暂无补充申请',
@@ -2124,9 +2124,9 @@ const reviewListTabs = computed(() => {
   return keys.map(getMobileListConfig).filter(Boolean);
 });
 const manageListTabs = computed(() => [
+  'plans',
   'arrangements',
   'arrangementChanges',
-  'plans',
   'syllabusGuides',
   'implementationSheets',
   'pairs',
@@ -2495,10 +2495,10 @@ function listTotal(key) {
 
 function mobileListTitle(key, row) {
   const student = row.student_name || row.student_num || (row.student_id ? `学生ID ${row.student_id}` : '');
-  const arrangement = row.arrangement_title || (row.arrangement_id ? `安排ID ${row.arrangement_id}` : '');
+  const arrangement = row.arrangement_title || (row.arrangement_id ? `任务ID ${row.arrangement_id}` : '');
   const changePayload = arrangementChangePayload(row);
   const titles = {
-    arrangements: row.title || row.name || `安排ID ${row.id}`,
+    arrangements: row.title || row.name || `任务ID ${row.id}`,
     arrangementChanges: changePayload.title || row.arrangement_title || `变更ID ${row.id}`,
     // 暂时隐藏学期展示，后续需要时恢复 row.semester。
     plans: row.dep_name || `计划ID ${row.id}`,
@@ -2548,7 +2548,7 @@ function mobileListValue(key, row) {
 
 function mobileListFacts(key, row) {
   const student = joinFact([row.student_name, row.student_num]);
-  const arrangement = row.arrangement_title || (row.arrangement_id ? `安排ID ${row.arrangement_id}` : '');
+  const arrangement = row.arrangement_title || (row.arrangement_id ? `任务ID ${row.arrangement_id}` : '');
   const changePayload = arrangementChangePayload(row);
   const facts = {
     arrangements: [
@@ -2582,14 +2582,14 @@ function mobileListFacts(key, row) {
     ],
     syllabusGuides: [
       namedFact('届次', row.grade_name),
-      namedFact('安排', arrangement),
+      namedFact('任务', arrangement),
       namedFact('学院专业', joinFact([row.dep_name, row.profession_name])),
       namedFact('录入人', row.creator_name),
       namedFact('内容', previewText(row.content, 42)),
     ],
     implementationSheets: [
       namedFact('届次', row.grade_name),
-      namedFact('安排', arrangement),
+      namedFact('任务', arrangement),
       namedFact('学院专业', joinFact([row.dep_name, row.profession_name])),
       namedFact('教师', row.teacher_name),
       namedFact('承诺签署', `${row.signed_count || 0}/${Number(row.signed_count || 0) + Number(row.unsigned_count || 0)}`),
@@ -2598,7 +2598,7 @@ function mobileListFacts(key, row) {
     applications: [
       namedFact('学号', row.student_num),
       namedFact('届次', row.grade_name),
-      namedFact('安排', arrangement),
+      namedFact('任务', arrangement),
       namedFact('学院专业', joinFact([row.dep_name, row.profession_name])),
       namedFact('教师审核', statusText(row.teacher_status)),
       namedFact('管理审核', statusText(row.admin_status)),
@@ -2608,13 +2608,13 @@ function mobileListFacts(key, row) {
       namedFact('学号', row.student_num),
       namedFact('届次', row.grade_name),
       namedFact('教师', row.teacher_name || row.teacher_num),
-      namedFact('安排', arrangement),
+      namedFact('任务', arrangement),
       namedFact('创建', row.created_at),
     ],
     signIns: [
       namedFact('学生', student),
       namedFact('届次', row.grade_name),
-      namedFact('安排', arrangement),
+      namedFact('任务', arrangement),
       namedFact('时间', joinFact([row.date, row.sign_time])),
       namedFact('地点', row.location),
     ],
@@ -2622,19 +2622,19 @@ function mobileListFacts(key, row) {
       namedFact('学生', student),
       namedFact('届次', row.grade_name),
       namedFact('日期', row.date || row.created_at),
-      namedFact('安排', arrangement),
+      namedFact('任务', arrangement),
       namedFact('内容', previewText(row.content, 42)),
     ],
     reports: [
       namedFact('学生', student),
       namedFact('届次', row.grade_name),
-      namedFact('安排', arrangement),
+      namedFact('任务', arrangement),
       namedFact('提交', row.submitted_at || row.created_at),
       namedFact('内容', previewText(row.content, 42)),
     ],
     teacherWorkReports: [
       namedFact('届次', row.grade_name),
-      namedFact('安排', arrangement),
+      namedFact('任务', arrangement),
       namedFact('教师', row.teacher_name),
       namedFact('指导人数', row.guidance_count),
       namedFact('总结', previewText(row.summary, 42)),
@@ -2642,14 +2642,14 @@ function mobileListFacts(key, row) {
     delays: [
       namedFact('学生', student),
       namedFact('届次', row.grade_name),
-      namedFact('安排', arrangement),
+      namedFact('任务', arrangement),
       namedFact('延期类型', delayConfigText(row.config_key)),
       namedFact('延期至', row.requested_date),
       namedFact('原因', previewText(row.reason, 42)),
     ],
     scores: [
       namedFact('届次', row.grade_name),
-      namedFact('安排', arrangement),
+      namedFact('任务', arrangement),
       namedFact('评分状态', row.final_score !== null && row.final_score !== undefined ? '已评分' : '待评分'),
       namedFact('评分人', row.teacher_name || row.teacher_num),
       namedFact('分项', scoreBreakdownText(row)),
@@ -2667,7 +2667,7 @@ function mobileListFacts(key, row) {
     ],
     inspections: [
       namedFact('届次', row.grade_name),
-      namedFact('安排', arrangement),
+      namedFact('任务', arrangement),
       namedFact('学生', student),
       namedFact('巡查人', row.inspector_name),
       namedFact('说明', previewText(row.remark, 42)),
@@ -2675,7 +2675,7 @@ function mobileListFacts(key, row) {
     archiveMaterials: [
       namedFact('学生', student || (row.student_id ? `学生ID ${row.student_id}` : '')),
       namedFact('届次', row.grade_name),
-      namedFact('安排', arrangement),
+      namedFact('任务', arrangement),
       namedFact('类型', row.arrangement_type_text),
       namedFact('进度', row.material_progress),
       namedFact('抽检', row.inspection_record_status),
@@ -2684,14 +2684,14 @@ function mobileListFacts(key, row) {
     insurances: [
       namedFact('学生', student || (row.student_id ? `学生ID ${row.student_id}` : '')),
       namedFact('届次', row.grade_name),
-      namedFact('安排', arrangement),
+      namedFact('任务', arrangement),
       namedFact('保险公司', row.insurance_company),
       namedFact('时间', dateRangeText(row.start_date, row.end_date)),
     ],
     safetyLetters: [
       namedFact('学生', student || (row.student_id ? `学生ID ${row.student_id}` : '')),
       namedFact('届次', row.grade_name),
-      namedFact('安排', arrangement),
+      namedFact('任务', arrangement),
       namedFact('签署', row.signed_at),
     ],
   };
@@ -3361,7 +3361,7 @@ async function submitReport() {
 
 async function submitDelay() {
   if (!internship.forms.delay.arrangement_id) {
-    internship.message = '请选择实习安排';
+    internship.message = '请选择实习任务';
     showToast(internship.message);
     return;
   }
@@ -3912,12 +3912,12 @@ function reviewTargetDetails(entity, row) {
     return [];
   }
   const student = joinFact([row.student_name, row.student_num]);
-  const arrangement = row.arrangement_title || (row.arrangement_id ? `安排ID ${row.arrangement_id}` : '');
+  const arrangement = row.arrangement_title || (row.arrangement_id ? `任务ID ${row.arrangement_id}` : '');
   const changePayload = arrangementChangePayload(row);
   const base = [
     detailItem('审核模块', reviewEntityName(entity)),
     detailItem('学生', student || (row.student_id ? `学生ID ${row.student_id}` : '')),
-    detailItem('实习安排', arrangement),
+    detailItem('实习任务', arrangement),
   ];
 
   const details = {

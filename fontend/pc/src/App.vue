@@ -769,11 +769,11 @@
                       />
                       <section v-else-if="activeOverviewTab === 'arrangements'" class="internship-card overview-card-single">
                         <header>
-                          <strong>近期安排</strong>
+                          <strong>近期任务</strong>
                           <small>{{ internshipState.lists.arrangements.pagination.total || 0 }} 条</small>
                         </header>
                         <el-table :data="internshipState.lists.arrangements.items" height="100%" stripe>
-                          <el-table-column prop="title" label="安排" min-width="170" />
+                          <el-table-column prop="title" label="任务" min-width="170" />
                           <!-- 暂时隐藏学期列，后续需要时恢复。 -->
                           <!--
                           <el-table-column prop="semester" label="学期" width="130" />
@@ -797,7 +797,7 @@
                         </header>
                         <el-table :data="internshipState.lists.applications.items" height="100%" stripe>
                           <el-table-column prop="student_name" label="学生" width="110" />
-                          <el-table-column prop="arrangement_title" label="实习安排" min-width="170" />
+                          <el-table-column prop="arrangement_title" label="实习任务" min-width="170" />
                           <el-table-column label="状态" width="90">
                             <template #default="{ row }">
                               <el-tag :type="statusTagType(row.status)">{{ statusText(row.status) }}</el-tag>
@@ -3777,9 +3777,9 @@ const fileState = reactive({
 const internshipSidebarItems = [
   { key: 'overview', name: '总览', icon: ChartColumn },
   { key: 'baseFlows', name: '基地建设', icon: Building2, permission: 'internship:manage' },
-  { key: 'arrangements', name: '实习安排', icon: CalendarCheck },
-  { key: 'arrangementChanges', name: '任务变更', icon: Workflow, permission: 'internship:manage' },
   { key: 'plans', name: '实习计划', icon: FileText, permission: 'internship:plan' },
+  { key: 'arrangements', name: '实习任务', icon: CalendarCheck },
+  { key: 'arrangementChanges', name: '任务变更', icon: Workflow, permission: 'internship:manage' },
   { key: 'syllabusGuides', name: '大纲指导书', icon: BookOpen },
   { key: 'implementationSheets', name: '实施表', icon: ClipboardList },
   { key: 'applications', name: '补充申请', icon: ClipboardList },
@@ -3863,7 +3863,7 @@ const practiceState = reactive({
 const openWindows = reactive([]);
 
 const moduleSearchKeywords = {
-  internship: '学生 教师 学院 专业 企业 任务 绑定 补充申请 审核 签到 日志 报告 延期 成绩 归档 实习安排 实习计划',
+  internship: '学生 教师 学院 专业 企业 任务 绑定 补充申请 审核 签到 日志 报告 延期 成绩 归档 实习任务 实习计划',
   training: '实训 项目 任务 过程 记录 成绩 审核',
   lab: '实验 项目 任务 过程 记录 成绩 审核',
   stat: '统计 报表 数据 概览 分析 学院 专业 学生 成绩',
@@ -3943,7 +3943,7 @@ const guideModuleOptions = computed(() => modules.map(item => ({
 })));
 const statCards = computed(() => {
   const cards = statState.cards.length ? statState.cards : [
-    { name: '实习安排', value: internshipState.overview.arrangements || 0, desc: '可见数据内安排数量' },
+    { name: '实习任务', value: internshipState.overview.arrangements || 0, desc: '可见数据内任务数量' },
     { name: '补充申请', value: internshipState.overview.applications_waiting || 0, desc: '特殊场景待审核申请' },
     { name: '任务绑定', value: internshipState.overview.active_pairs || 0, desc: '有效任务级师生绑定' },
     { name: '今日日志', value: internshipState.overview.journals_waiting || 0, desc: '待评阅实习日志' },
@@ -4076,7 +4076,7 @@ function canShowModule(module) {
 }
 
 const internshipOverviewCards = computed(() => [
-  { name: '实习安排', value: internshipState.overview.arrangements || 0, theme: 'primary', icon: CalendarCheck },
+  { name: '实习任务', value: internshipState.overview.arrangements || 0, theme: 'primary', icon: CalendarCheck },
   { name: '补充申请', value: internshipState.overview.applications_waiting || 0, theme: 'amber', icon: ClipboardList },
   { name: '任务绑定', value: internshipState.overview.active_pairs || 0, theme: 'green', icon: UsersRound },
   { name: '待评日志', value: internshipState.overview.journals_waiting || 0, theme: 'teal', icon: FileClock },
@@ -4105,7 +4105,7 @@ const internshipOverviewTabs = computed(() => {
   tabs.push(
     {
       key: 'arrangements',
-      name: '近期安排',
+      name: '近期任务',
       count: internshipState.lists.arrangements.pagination.total || 0,
     },
     {
@@ -4186,7 +4186,7 @@ const internshipListConfigs = computed(() => ({
       { prop: 'student_name', label: '学生', width: 110 },
       { prop: 'student_num', label: '学号', width: 130 },
       { prop: 'grade_name', label: '届次', width: 100 },
-      { prop: 'arrangement_title', label: '实习安排', minWidth: 190 },
+      { prop: 'arrangement_title', label: '实习任务', minWidth: 190 },
       { prop: 'dep_name', label: '学院', minWidth: 130 },
       { prop: 'profession_name', label: '专业', minWidth: 130 },
       { prop: 'status', label: '申请状态', width: 100, tag: true, tagType: row => statusTagType(row.status), formatter: row => statusText(row.status) },
@@ -4227,7 +4227,7 @@ const internshipListConfigs = computed(() => ({
       { prop: 'student_num', label: '学号', width: 130 },
       { prop: 'grade_name', label: '届次', width: 100 },
       { prop: 'teacher_name', label: '负责老师', width: 120 },
-      { prop: 'arrangement_title', label: '实习安排', minWidth: 190 },
+      { prop: 'arrangement_title', label: '实习任务', minWidth: 190 },
       { prop: 'status', label: '状态', width: 90, tag: true, tagType: row => statusTagType(row.status), formatter: row => statusText(row.status) },
       { prop: 'created_at', label: '创建时间', width: 168 },
     ],
@@ -4240,7 +4240,7 @@ const internshipListConfigs = computed(() => ({
       { prop: 'student_name', label: '学生', width: 110 },
       { prop: 'student_num', label: '学号', width: 130 },
       { prop: 'grade_name', label: '届次', width: 100 },
-      { prop: 'arrangement_title', label: '实习安排', minWidth: 180 },
+      { prop: 'arrangement_title', label: '实习任务', minWidth: 180 },
       { prop: 'date', label: '日期', width: 110 },
       { prop: 'sign_time', label: '签到时间', width: 168 },
       { prop: 'location', label: '地点', minWidth: 150 },
@@ -4281,7 +4281,7 @@ const internshipListConfigs = computed(() => ({
       { prop: 'student_name', label: '学生', width: 110 },
       { prop: 'student_num', label: '学号', width: 130 },
       { prop: 'grade_name', label: '届次', width: 100 },
-      { prop: 'arrangement_title', label: '实习安排', minWidth: 190 },
+      { prop: 'arrangement_title', label: '实习任务', minWidth: 190 },
       { key: 'config_key', label: '延期类型', width: 110, formatter: row => delayConfigText(row.config_key) },
       { prop: 'requested_date', label: '申请延期至', width: 120 },
       { prop: 'reason', label: '原因', minWidth: 220 },
@@ -4296,7 +4296,7 @@ const internshipListConfigs = computed(() => ({
     columns: [
       { prop: 'student_name', label: '学生', width: 110 },
       { prop: 'grade_name', label: '届次', width: 100 },
-      { prop: 'arrangement_title', label: '实习安排', minWidth: 180 },
+      { prop: 'arrangement_title', label: '实习任务', minWidth: 180 },
       { key: 'score_status', label: '评分状态', width: 90, tag: true, tagType: row => row.final_score !== null && row.final_score !== undefined ? 'success' : 'warning', formatter: row => row.final_score !== null && row.final_score !== undefined ? '已评分' : '待评分' },
       { prop: 'sign_in_score', label: '签到', width: 80 },
       { prop: 'journal_score', label: '日志', width: 80 },
@@ -4336,7 +4336,7 @@ const internshipListConfigs = computed(() => ({
       { prop: 'grade_name', label: '届次', width: 100 },
       { prop: 'dep_name', label: '学院', minWidth: 130 },
       { prop: 'profession_name', label: '专业', minWidth: 130 },
-      { prop: 'arrangement_title', label: '实习安排', minWidth: 190 },
+      { prop: 'arrangement_title', label: '实习任务', minWidth: 190 },
       { prop: 'arrangement_type_text', label: '实习类型', width: 110 },
       // 暂时隐藏学期列，后续需要时恢复。
       // { prop: 'semester', label: '学期', width: 120 },
@@ -4364,7 +4364,7 @@ const internshipListConfigs = computed(() => ({
       { prop: 'student_name', label: '学生', width: 110 },
       { prop: 'student_num', label: '学号', width: 130 },
       { prop: 'grade_name', label: '届次', width: 100 },
-      { prop: 'arrangement_title', label: '实习安排', minWidth: 180 },
+      { prop: 'arrangement_title', label: '实习任务', minWidth: 180 },
       { prop: 'insurance_company', label: '保险公司', minWidth: 160 },
       { prop: 'policy_number', label: '保单号', minWidth: 150 },
       { prop: 'start_date', label: '开始', width: 110 },
@@ -4379,7 +4379,7 @@ const internshipListConfigs = computed(() => ({
       { prop: 'student_name', label: '学生', width: 110 },
       { prop: 'student_num', label: '学号', width: 130 },
       { prop: 'grade_name', label: '届次', width: 100 },
-      { prop: 'arrangement_title', label: '实习安排', minWidth: 180 },
+      { prop: 'arrangement_title', label: '实习任务', minWidth: 180 },
       { prop: 'signed_at', label: '签署时间', minWidth: 160 },
       { key: 'status', label: '状态', width: 90, formatter: row => statusText(row.status) },
     ],
@@ -4391,7 +4391,7 @@ const internshipListConfigs = computed(() => ({
     columns: [
       { prop: 'title', label: '标题', minWidth: 180 },
       { prop: 'grade_name', label: '届次', width: 100 },
-      { prop: 'arrangement_title', label: '实习安排', minWidth: 190 },
+      { prop: 'arrangement_title', label: '实习任务', minWidth: 190 },
       { prop: 'dep_name', label: '学院', minWidth: 130 },
       { prop: 'profession_name', label: '专业', minWidth: 130 },
       { prop: 'creator_name', label: '录入人', width: 110 },
@@ -4406,7 +4406,7 @@ const internshipListConfigs = computed(() => ({
     filters: internshipListFilters('implementationSheets', ['grade_id', 'dep_id', 'profession_id', 'arrangement_id', 'status', 'keyword']),
     columns: [
       { prop: 'grade_name', label: '届次', width: 100 },
-      { prop: 'arrangement_title', label: '实习安排', minWidth: 190 },
+      { prop: 'arrangement_title', label: '实习任务', minWidth: 190 },
       { prop: 'dep_name', label: '学院', minWidth: 130 },
       { prop: 'profession_name', label: '专业', minWidth: 130 },
       { prop: 'teacher_name', label: '负责老师', width: 120 },
@@ -4423,7 +4423,7 @@ const internshipListConfigs = computed(() => ({
     filters: internshipListFilters('teacherWorkReports', ['grade_id', 'dep_id', 'profession_id', 'arrangement_id', 'status', 'keyword']),
     columns: [
       { prop: 'grade_name', label: '届次', width: 100 },
-      { prop: 'arrangement_title', label: '实习安排', minWidth: 190 },
+      { prop: 'arrangement_title', label: '实习任务', minWidth: 190 },
       { prop: 'teacher_name', label: '任务老师', width: 120 },
       { prop: 'guidance_count', label: '负责人数', width: 100 },
       { prop: 'summary', label: '工作总结', minWidth: 220 },
@@ -4439,7 +4439,7 @@ const internshipListConfigs = computed(() => ({
     filters: internshipListFilters('inspections', ['grade_id', 'dep_id', 'profession_id', 'class_id', 'arrangement_id', 'result', 'keyword']),
     columns: [
       { prop: 'grade_name', label: '届次', width: 100 },
-      { prop: 'arrangement_title', label: '实习安排', minWidth: 190 },
+      { prop: 'arrangement_title', label: '实习任务', minWidth: 190 },
       { prop: 'student_name', label: '学生', width: 110 },
       { prop: 'student_num', label: '学号', width: 130 },
       { prop: 'dep_name', label: '学院', minWidth: 130 },
@@ -4628,7 +4628,7 @@ function studentPanelFields(panel) {
     ],
     applications: [
       { key: 'grade_name', label: '届次' },
-      { key: 'arrangement_title', label: '实习安排' },
+      { key: 'arrangement_title', label: '实习任务' },
       { key: 'teacher_status', label: '教师审核', formatter: row => statusText(row.teacher_status) },
       { key: 'admin_status', label: '管理审核', formatter: row => statusText(row.admin_status) },
       { key: 'created_at', label: '提交时间' },
@@ -4636,12 +4636,12 @@ function studentPanelFields(panel) {
     pairs: [
       { key: 'grade_name', label: '届次' },
       { key: 'teacher_name', label: '任务老师' },
-      { key: 'arrangement_title', label: '实习安排' },
+      { key: 'arrangement_title', label: '实习任务' },
       { key: 'created_at', label: '创建时间' },
     ],
     signIns: [
       { key: 'grade_name', label: '届次' },
-      { key: 'arrangement_title', label: '实习安排' },
+      { key: 'arrangement_title', label: '实习任务' },
       { key: 'date', label: '日期' },
       { key: 'sign_time', label: '签到时间' },
       { key: 'sign_type', label: '方式', formatter: row => signTypeText(row.sign_type) },
@@ -4649,19 +4649,19 @@ function studentPanelFields(panel) {
     ],
     journals: [
       { key: 'grade_name', label: '届次' },
-      { key: 'arrangement_title', label: '实习安排' },
+      { key: 'arrangement_title', label: '实习任务' },
       { key: 'date', label: '日期' },
       { key: 'content', label: '内容' },
     ],
     reports: [
       { key: 'grade_name', label: '届次' },
-      { key: 'arrangement_title', label: '实习安排' },
+      { key: 'arrangement_title', label: '实习任务' },
       { key: 'submitted_at', label: '提交时间' },
       { key: 'content', label: '内容' },
     ],
     delays: [
       { key: 'grade_name', label: '届次' },
-      { key: 'arrangement_title', label: '实习安排' },
+      { key: 'arrangement_title', label: '实习任务' },
       { key: 'config_key', label: '延期类型', formatter: row => delayConfigText(row.config_key) },
       { key: 'requested_date', label: '申请延期至' },
       { key: 'reason', label: '原因' },
@@ -4669,7 +4669,7 @@ function studentPanelFields(panel) {
     ],
     scores: [
       { key: 'grade_name', label: '届次' },
-      { key: 'arrangement_title', label: '实习安排' },
+      { key: 'arrangement_title', label: '实习任务' },
       { key: 'sign_in_score', label: '签到' },
       { key: 'journal_score', label: '日志' },
       { key: 'report_score', label: '报告' },
@@ -4689,7 +4689,7 @@ function studentPanelFields(panel) {
     ],
     archiveMaterials: [
       { key: 'grade_name', label: '届次' },
-      { key: 'arrangement_title', label: '实习安排' },
+      { key: 'arrangement_title', label: '实习任务' },
       { key: 'arrangement_type_text', label: '实习类型' },
       // 暂时隐藏学期字段，后续需要时恢复。
       // { key: 'semester', label: '学期' },
@@ -4699,7 +4699,7 @@ function studentPanelFields(panel) {
     ],
     insurances: [
       { key: 'grade_name', label: '届次' },
-      { key: 'arrangement_title', label: '实习安排' },
+      { key: 'arrangement_title', label: '实习任务' },
       { key: 'insurance_company', label: '保险公司' },
       { key: 'policy_number', label: '保单号' },
       { key: 'start_date', label: '开始日期' },
@@ -4707,7 +4707,7 @@ function studentPanelFields(panel) {
     ],
     safetyLetters: [
       { key: 'grade_name', label: '届次' },
-      { key: 'arrangement_title', label: '实习安排' },
+      { key: 'arrangement_title', label: '实习任务' },
       { key: 'signed_at', label: '签署时间' },
     ],
   };
@@ -7982,7 +7982,7 @@ function internshipFilters(keys, values = {}, options = internshipState.options)
     profession_id: { key: 'profession_id', label: '专业', type: 'select', options: optionItems(filterAcademicItems(options.professions, values, ['grade_id', 'dep_id']), 'profession_id', 'profession_name') },
     class_id: { key: 'class_id', label: '班级', type: 'select', options: optionItems(filterAcademicItems(options.classes, values, ['grade_id', 'dep_id', 'profession_id']), 'class_id', 'class_name') },
     plan_id: { key: 'plan_id', label: '实习计划', type: 'select', options: optionItems(filterAcademicItems(options.plans, values, ['grade_id', 'dep_id', 'profession_id']), 'id', 'course_name') },
-    arrangement_id: { key: 'arrangement_id', label: '实习安排', type: 'select', options: optionItems(filterAcademicItems(options.arrangements, values, ['grade_id', 'dep_id', 'profession_id', 'class_id']), 'id', 'title') },
+    arrangement_id: { key: 'arrangement_id', label: '实习任务', type: 'select', options: optionItems(filterAcademicItems(options.arrangements, values, ['grade_id', 'dep_id', 'profession_id', 'class_id']), 'id', 'title') },
     config_key: { key: 'config_key', label: '延期类型', type: 'select', options: delayConfigOptions() },
     status: { key: 'status', label: '状态', type: 'select', options: statusOptions() },
     archive_status: { key: 'archive_status', label: '归档状态', type: 'select', options: archiveStatusOptions() },
@@ -9746,7 +9746,7 @@ function fillScoreFormFromExisting(studentId, arrangementId, fallback = null) {
 
 async function saveScore() {
   if (!canSaveInternshipScore.value || !internshipState.scoreForm.student_id || !internshipState.scoreForm.arrangement_id) {
-    internshipState.message = '请先选择学生和实习安排';
+    internshipState.message = '请先选择学生和实习任务';
     return;
   }
 
