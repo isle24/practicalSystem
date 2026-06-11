@@ -2,6 +2,8 @@
 
 namespace app\model\channel;
 
+use Illuminate\Database\Query\Expression;
+
 class InternshipRecord extends TableRecord
 {
     private const STAT_DATA_LIMIT = 20000;
@@ -640,14 +642,39 @@ class InternshipRecord extends TableRecord
 
     public static function courseScorePage(array $scope, array $filters): array
     {
-        $query = self::applyStudentTaskScope(self::queryTable('pair')
-            ->leftJoin('students', 'pair.student_id', '=', 'students.student_id')
-            ->leftJoin('class', 'students.class_id', '=', 'class.class_id')
-            ->leftJoin('department', 'students.dep_id', '=', 'department.dep_id')
-            ->leftJoin('profession', 'students.profession_id', '=', 'profession.profession_id')
-            ->leftJoin('grade_list', 'students.grade_id', '=', 'grade_list.grade_id')
-            ->leftJoin('arrangement', 'pair.arrangement_id', '=', 'arrangement.id')
-            ->leftJoin('internship_plan', 'arrangement.plan_id', '=', 'internship_plan.id')
+        $page = max(1, (int) ($filters['page'] ?? 1));
+        $pageSize = min(100, max(1, (int) ($filters['page_size'] ?? $filters['per_page'] ?? 20)));
+        $totalRow = (clone self::courseScoreBaseQuery($scope, $filters))
+            ->selectRaw("COUNT(DISTINCT CONCAT(arrangement.plan_id, ':', pair.student_id)) as total")
+            ->first();
+        $total = (int) ($totalRow->total ?? 0);
+        $groupsQuery = self::courseScoreBaseQuery($scope, $filters)
+            ->groupBy('arrangement.plan_id', 'pair.student_id');
+        $groups = self::rows($groupsQuery
+            ->orderBy(new Expression('MIN(internship_plan.course_name)'))
+            ->orderBy(new Expression('MIN(students.student_num)'))
+            ->forPage($page, $pageSize)
+            ->get([
+                'arrangement.plan_id',
+                'pair.student_id',
+            ]));
+        $keys = array_values(array_filter(array_map(static function (array $row): string {
+            $planId = (int) ($row['plan_id'] ?? 0);
+            $studentId = (int) ($row['student_id'] ?? 0);
+            return $planId > 0 && $studentId > 0 ? "{$planId}:{$studentId}" : '';
+        }, $groups)));
+        if (!$keys) {
+            return [
+                'items' => [],
+                'pagination' => [
+                    'page' => $page,
+                    'page_size' => $pageSize,
+                    'total' => $total,
+                ],
+            ];
+        }
+
+        $rows = self::rows(self::courseScoreBaseQuery($scope, $filters)
             ->leftJoin('score', function ($join): void {
                 $join->on('score.student_id', '=', 'pair.student_id')
                     ->on('score.arrangement_id', '=', 'pair.arrangement_id')
@@ -658,6 +685,56 @@ class InternshipRecord extends TableRecord
                     ->on('course_score.student_id', '=', 'pair.student_id')
                     ->whereNull('course_score.deleted_at');
             })
+            ->whereIn(new Expression("CONCAT(arrangement.plan_id, ':', pair.student_id)"), $keys)
+            ->orderByDesc('pair.id')
+            ->get([
+                'pair.id as pair_id',
+                'score.id as score_id',
+                'pair.student_id',
+                'pair.arrangement_id',
+                'score.final_score',
+                'arrangement.title as arrangement_title',
+                'arrangement.credit as arrangement_credit',
+                'arrangement.plan_id',
+                'internship_plan.course_code',
+                'internship_plan.course_name',
+                'internship_plan.score_rule',
+                'course_score.id as manual_score_id',
+                'course_score.score_value as manual_score',
+                'course_score.remark as manual_score_remark',
+                'course_score.updated_at as manual_score_updated_at',
+                'students.name as student_name',
+                'students.student_num',
+                'students.grade_id',
+                'students.dep_id',
+                'students.profession_id',
+                'students.class_id',
+                'grade_list.grade_name',
+                'department.dep_name',
+                'profession.profession_name',
+                'class.class_name',
+            ]));
+
+        return [
+            'items' => self::courseScoreRows($rows),
+            'pagination' => [
+                'page' => $page,
+                'page_size' => $pageSize,
+                'total' => $total,
+            ],
+        ];
+    }
+
+    private static function courseScoreBaseQuery(array $scope, array $filters): mixed
+    {
+        $query = self::applyStudentTaskScope(self::queryTable('pair')
+            ->leftJoin('students', 'pair.student_id', '=', 'students.student_id')
+            ->leftJoin('class', 'students.class_id', '=', 'class.class_id')
+            ->leftJoin('department', 'students.dep_id', '=', 'department.dep_id')
+            ->leftJoin('profession', 'students.profession_id', '=', 'profession.profession_id')
+            ->leftJoin('grade_list', 'students.grade_id', '=', 'grade_list.grade_id')
+            ->leftJoin('arrangement', 'pair.arrangement_id', '=', 'arrangement.id')
+            ->leftJoin('internship_plan', 'arrangement.plan_id', '=', 'internship_plan.id')
             ->where('pair.type', 'internship')
             ->where('pair.status', 'active')
             ->whereNull('pair.deleted_at')
@@ -681,35 +758,7 @@ class InternshipRecord extends TableRecord
             'arrangement.title',
         ]);
 
-        $rows = self::rows($query->orderByDesc('pair.id')->limit(self::STAT_DATA_LIMIT)->get([
-            'pair.id as pair_id',
-            'score.id as score_id',
-            'pair.student_id',
-            'pair.arrangement_id',
-            'score.final_score',
-            'arrangement.title as arrangement_title',
-            'arrangement.credit as arrangement_credit',
-            'arrangement.plan_id',
-            'internship_plan.course_code',
-            'internship_plan.course_name',
-            'internship_plan.score_rule',
-            'course_score.id as manual_score_id',
-            'course_score.score_value as manual_score',
-            'course_score.remark as manual_score_remark',
-            'course_score.updated_at as manual_score_updated_at',
-            'students.name as student_name',
-            'students.student_num',
-            'students.grade_id',
-            'students.dep_id',
-            'students.profession_id',
-            'students.class_id',
-            'grade_list.grade_name',
-            'department.dep_name',
-            'profession.profession_name',
-            'class.class_name',
-        ]));
-
-        return self::paginateArrayRows(self::courseScoreRows($rows), $filters);
+        return $query;
     }
 
     public static function statReport(array $scope, array $filters, string $today): array
