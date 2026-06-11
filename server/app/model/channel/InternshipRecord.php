@@ -711,6 +711,7 @@ class InternshipRecord extends TableRecord
                     ->on('score.arrangement_id', '=', 'pair.arrangement_id')
                     ->whereNull('score.deleted_at');
             })
+            ->leftJoin('teacher_list as score_teacher', 'score.teacher_id', '=', 'score_teacher.teacher_id')
             ->leftJoin('course_score', function ($join): void {
                 $join->on('course_score.plan_id', '=', 'arrangement.plan_id')
                     ->on('course_score.student_id', '=', 'pair.student_id')
@@ -724,6 +725,8 @@ class InternshipRecord extends TableRecord
                 'pair.student_id',
                 'pair.arrangement_id',
                 'score.final_score',
+                'score.updated_at as score_updated_at',
+                'score_teacher.teacher_name as score_teacher_name',
                 'arrangement.title as arrangement_title',
                 'arrangement.credit as arrangement_credit',
                 'arrangement.plan_id',
@@ -3731,6 +3734,8 @@ class InternshipRecord extends TableRecord
                 'arrangement_title' => $row['arrangement_title'] ?? '',
                 'credit' => is_numeric($row['arrangement_credit'] ?? null) ? (float) $row['arrangement_credit'] : null,
                 'final_score' => is_numeric($row['final_score'] ?? null) ? (float) $row['final_score'] : null,
+                'score_teacher_name' => $row['score_teacher_name'] ?? '',
+                'score_updated_at' => $row['score_updated_at'] ?? null,
             ];
         }
 
@@ -3747,7 +3752,11 @@ class InternshipRecord extends TableRecord
             $group['course_final_score'] = $completed ? self::courseFinalScore($scores, $scoreRule, $group['manual_score']) : null;
             $group['task_score_text'] = implode('；', array_map(static function (array $score): string {
                 $credit = is_numeric($score['credit'] ?? null) ? '，学分 ' . $score['credit'] : '';
-                return sprintf('%s：%s%s', $score['arrangement_title'] ?: '-', $score['final_score'] ?? '待评分', $credit);
+                $teacher = trim((string) ($score['score_teacher_name'] ?? ''));
+                $teacherText = $teacher !== '' ? '，评分人 ' . $teacher : '';
+                $time = trim((string) ($score['score_updated_at'] ?? ''));
+                $timeText = $time !== '' ? '，时间 ' . $time : '';
+                return sprintf('%s：%s%s%s%s', $score['arrangement_title'] ?: '-', $score['final_score'] ?? '待评分', $credit, $teacherText, $timeText);
             }, $group['task_scores']));
             $items[] = $group;
         }
