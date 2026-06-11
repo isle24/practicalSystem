@@ -4164,6 +4164,8 @@ const internshipListConfigs = computed(() => ({
       { key: 'mode', label: '组织方式', width: 100, formatter: row => organizeModeText(row.organize_mode) },
       { prop: 'credit', label: '学分', width: 80 },
       { prop: 'student_count', label: '人数', width: 80 },
+      { prop: 'task_binding_count', label: '绑定人数', width: 90 },
+      { prop: 'task_score_progress_text', label: '任务评分', width: 100 },
       { key: 'date', label: '时间', minWidth: 170, formatter: row => `${row.start_date || '-'} 至 ${row.end_date || '-'}` },
       { key: 'scope', label: '范围', minWidth: 190, formatter: row => arrangementScopeText(row) },
       { prop: 'status', label: '状态', width: 90, tag: true, tagType: row => statusTagType(row.status), formatter: row => statusText(row.status) },

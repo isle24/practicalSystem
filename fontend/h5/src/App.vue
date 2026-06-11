@@ -2577,6 +2577,8 @@ function mobileListFacts(key, row) {
       namedFact('时间', dateRangeText(row.start_date, row.end_date)),
       namedFact('绑定班级', row.class_names),
       namedFact('学生数', row.student_count),
+      namedFact('绑定人数', row.task_binding_count),
+      namedFact('任务评分', row.task_score_progress_text),
       namedFact('范围', joinFact([row.dep_name || '全校', row.profession_name || '全部专业', row.grade_name])),
     ],
     arrangementChanges: [

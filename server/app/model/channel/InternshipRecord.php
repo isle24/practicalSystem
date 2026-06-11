@@ -232,7 +232,7 @@ class InternshipRecord extends TableRecord
             'internship_plan.score_rule', 'teacher_list.teacher_name',
         ]);
 
-        $page['items'] = self::appendArrangementClassNames($page['items'] ?? []);
+        $page['items'] = self::appendArrangementProgress(self::appendArrangementClassNames($page['items'] ?? []));
         return $page;
     }
 
@@ -1463,6 +1463,56 @@ class InternshipRecord extends TableRecord
         foreach ($items as &$item) {
             $arrangementId = (int) ($item['id'] ?? 0);
             $item['class_names'] = implode('、', array_values(array_unique($names[$arrangementId] ?? [])));
+        }
+        unset($item);
+
+        return $items;
+    }
+
+    private static function appendArrangementProgress(array $items): array
+    {
+        $arrangementIds = self::ids(array_column($items, 'id'));
+        if (!$arrangementIds) {
+            return $items;
+        }
+
+        $rows = self::rows(self::queryTable('pair')
+            ->leftJoin('score', function ($join): void {
+                $join->on('score.student_id', '=', 'pair.student_id')
+                    ->on('score.arrangement_id', '=', 'pair.arrangement_id')
+                    ->whereNotNull('score.final_score')
+                    ->whereNull('score.deleted_at');
+            })
+            ->whereIn('pair.arrangement_id', $arrangementIds)
+            ->where('pair.type', 'internship')
+            ->where('pair.status', 'active')
+            ->whereNull('pair.deleted_at')
+            ->groupBy('pair.arrangement_id')
+            ->get([
+                'pair.arrangement_id',
+                new Expression('COUNT(DISTINCT pair.id) as task_binding_count'),
+                new Expression("COUNT(DISTINCT CASE WHEN score.id IS NOT NULL THEN pair.id END) as scored_task_binding_count"),
+            ]));
+
+        $progress = [];
+        foreach ($rows as $row) {
+            $arrangementId = (int) ($row['arrangement_id'] ?? 0);
+            if ($arrangementId <= 0) {
+                continue;
+            }
+            $progress[$arrangementId] = [
+                'task_binding_count' => (int) ($row['task_binding_count'] ?? 0),
+                'scored_task_binding_count' => (int) ($row['scored_task_binding_count'] ?? 0),
+            ];
+        }
+
+        foreach ($items as &$item) {
+            $arrangementId = (int) ($item['id'] ?? 0);
+            $item = array_merge($item, $progress[$arrangementId] ?? [
+                'task_binding_count' => 0,
+                'scored_task_binding_count' => 0,
+            ]);
+            $item['task_score_progress_text'] = ((int) ($item['scored_task_binding_count'] ?? 0)) . '/' . ((int) ($item['task_binding_count'] ?? 0));
         }
         unset($item);
 
