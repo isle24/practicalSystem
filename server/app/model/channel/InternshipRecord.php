@@ -1623,6 +1623,12 @@ class InternshipRecord extends TableRecord
             ->leftJoin('department', 'students.dep_id', '=', 'department.dep_id')
             ->leftJoin('profession', 'students.profession_id', '=', 'profession.profession_id')
             ->leftJoin('teacher_list', 'pair.teacher_id', '=', 'teacher_list.teacher_id')
+            ->leftJoin('score', function ($join): void {
+                $join->on('score.student_id', '=', 'pair.student_id')
+                    ->on('score.arrangement_id', '=', 'pair.arrangement_id')
+                    ->whereNull('score.deleted_at');
+            })
+            ->leftJoin('teacher_list as score_teacher', 'score.teacher_id', '=', 'score_teacher.teacher_id')
             ->where('pair.arrangement_id', $arrangementId)
             ->where('pair.type', 'internship')
             ->where('pair.status', 'active')
@@ -1646,6 +1652,11 @@ class InternshipRecord extends TableRecord
             'department.dep_name',
             'profession.profession_name',
             'teacher_list.teacher_name',
+            'score.id as score_id',
+            'score.final_score',
+            'score.status as score_status',
+            'score.updated_at as score_updated_at',
+            'score_teacher.teacher_name as score_teacher_name',
         ]));
     }
 

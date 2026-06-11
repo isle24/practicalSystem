@@ -661,6 +661,15 @@
                               <el-table-column prop="student_num" label="学号" width="130" />
                               <el-table-column prop="class_name" label="班级" min-width="150" />
                               <el-table-column prop="teacher_name" label="负责老师" width="120" />
+                              <el-table-column label="评分状态" width="100">
+                                <template #default="{ row }">
+                                  <el-tag :type="row.final_score !== null && row.final_score !== undefined ? 'success' : 'warning'">
+                                    {{ row.final_score !== null && row.final_score !== undefined ? '已评分' : '待评分' }}
+                                  </el-tag>
+                                </template>
+                              </el-table-column>
+                              <el-table-column prop="final_score" label="总评" width="90" />
+                              <el-table-column prop="score_teacher_name" label="评分人" width="120" />
                               <el-table-column prop="status" label="状态" width="90">
                                 <template #default="{ row }">
                                   <el-tag :type="statusTagType(row.status)">{{ statusText(row.status) }}</el-tag>
