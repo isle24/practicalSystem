@@ -1677,6 +1677,9 @@ class InternshipService
         $result = $this->connection()->transaction(function () use ($classRows, $endDate, $existingId, $input, $plan, $planId, $source, $startDate, $taskNo, $teacherId, $title): array {
             $now = $this->now();
             $studentRows = InternshipRecord::studentRowsByClassIds(array_column($classRows, 'class_id'));
+            if (!$studentRows) {
+                throw new InvalidArgumentException('所选任务班级暂无可绑定学生');
+            }
             $studentCounts = [];
             foreach ($studentRows as $studentRow) {
                 $classId = (int) ($studentRow['class_id'] ?? 0);
