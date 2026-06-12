@@ -284,6 +284,11 @@ class InternshipRecord extends TableRecord
             'review_user.name',
             'teacher_list.teacher_name',
             'teacher_list.teacher_num',
+            'new_arrangement.title',
+            'new_arrangement.task_no',
+            'new_arrangement.batch_no',
+            'new_teacher_list.teacher_name',
+            'new_teacher_list.teacher_num',
         ]);
 
         return self::paginate($query->orderByDesc('arrangement_change.id'), $filters, [
