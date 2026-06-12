@@ -358,7 +358,7 @@ class InternshipService
             $this->ensureRecordingTable('arrangement_recording');
         }
 
-        return $this->connection()->transaction(function () use ($changeId, $opinion, $status): array {
+        $result = $this->connection()->transaction(function () use ($changeId, $opinion, $status): array {
             $change = InternshipRecord::lockArrangementChangeRow($this->scopeContext(), $changeId);
             if (!$change) {
                 throw new RuntimeException('任务变更单不存在或无权限', 40301);
@@ -381,6 +381,7 @@ class InternshipService
                     'id' => $arrangementId,
                     'change_reason' => (string) $change->reason,
                     'approved_change' => true,
+                    'suppress_notify' => true,
                     'status' => 'enabled',
                 ]), '审核通过任务变更');
                 $newArrangementId = (int) ($result['id'] ?? 0);
@@ -414,7 +415,6 @@ class InternshipService
                 $opinion ?: ($status === 'accept' ? '同意任务变更' : '任务变更退回'),
                 $status
             );
-            $this->notifyArrangementChangeReviewed($change, $original, $status, $opinion, $newArrangementId);
             if ($status !== 'accept') {
                 $this->recordWorkflow(
                     'arrangement_recording',
@@ -433,8 +433,15 @@ class InternshipService
                 'status' => $status,
                 'arrangement_id' => $arrangementId,
                 'new_arrangement_id' => $newArrangementId,
+                'notify_change' => $change,
+                'notify_arrangement' => $original,
             ];
         });
+
+        $this->notifyArrangementChangeReviewed($result['notify_change'], $result['notify_arrangement'], $status, $opinion, $result['new_arrangement_id']);
+        unset($result['notify_change'], $result['notify_arrangement']);
+
+        return $result;
     }
 
     public function importArrangementAssignments(Request $request): array
@@ -1149,6 +1156,8 @@ class InternshipService
         if ($final === null) {
             throw new InvalidArgumentException('至少填写一项任务成绩');
         }
+        $this->ensureRecordingTable('score_recording');
+        $this->ensureRecordingTable('arrangement_recording');
 
         $values = [
             'student_id' => $studentId,
@@ -1257,7 +1266,7 @@ class InternshipService
         $opinion = $this->reviewOpinionInput($request, 'plan', $status);
         $this->ensureRecordingTable('plan_recording');
 
-        return $this->connection()->transaction(function () use ($planId, $status, $opinion, $request): array {
+        $result = $this->connection()->transaction(function () use ($planId, $status, $opinion, $request): array {
             $now = $this->now();
             $row = InternshipRecord::lockActiveRowById('internship_plan', $planId);
             if (!$row) {
@@ -1294,7 +1303,6 @@ class InternshipService
                 'updated_at' => $now,
             ], $planStatus, $now);
             $this->recordWorkflow('plan_recording', 'plan', $planId, 'review', $from, $planStatus, $content, $status);
-            $this->notifyPlanReviewed($row, $planId, $planStatus, $levelName, $opinion);
 
             return [
                 'id' => $approvalId,
@@ -1304,8 +1312,14 @@ class InternshipService
                 'status' => $planStatus,
                 'next_approval_level' => $planStatus === 'wait' ? $level + 1 : null,
                 'next_level_name' => $planStatus === 'wait' ? (self::PLAN_APPROVAL_LEVELS[$level + 1]['name'] ?? null) : null,
+                'notify_plan' => $row,
             ];
         });
+
+        $this->notifyPlanReviewed($result['notify_plan'], $planId, $result['status'], $result['level_name'], $opinion);
+        unset($result['notify_plan']);
+
+        return $result;
     }
 
     public function insurances(Request $request): array
@@ -1648,8 +1662,9 @@ class InternshipService
         if (InternshipRecord::arrangementTaskNoExists($planId, $taskNo, $existingId ?: null)) {
             throw new InvalidArgumentException('同一实习计划下任务编号不能重复');
         }
+        $this->ensureRecordingTable('arrangement_recording');
 
-        return $this->connection()->transaction(function () use ($classRows, $endDate, $existingId, $input, $plan, $planId, $source, $startDate, $taskNo, $teacherId, $title): array {
+        $result = $this->connection()->transaction(function () use ($classRows, $endDate, $existingId, $input, $plan, $planId, $source, $startDate, $taskNo, $teacherId, $title): array {
             $now = $this->now();
             $studentRows = InternshipRecord::studentRowsByClassIds(array_column($classRows, 'class_id'));
             $studentCounts = [];
@@ -1753,8 +1768,6 @@ class InternshipService
                 $this->arrangementWorkflowContent($source, $before, $after, (string) ($input['change_reason'] ?? '')),
                 'accept'
             );
-            $this->notifyArrangementPublished($arrangementId, $after['item'] ?? [], $versionedChange);
-
             return [
                 'id' => $arrangementId,
                 'uuid' => $uuid,
@@ -1767,6 +1780,12 @@ class InternshipService
                 'item' => InternshipRecord::activeRowById('arrangement', $arrangementId),
             ];
         });
+
+        if (empty($input['suppress_notify'])) {
+            $this->notifyArrangementPublished((int) $result['id'], $result['item'] ? (array) $result['item'] : [], (bool) $result['versioned_change']);
+        }
+
+        return $result;
     }
 
     private function importArrangementRow(array $row): array
