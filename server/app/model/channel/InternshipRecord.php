@@ -717,6 +717,8 @@ class InternshipRecord extends TableRecord
                     ->on('course_score.student_id', '=', 'pair.student_id')
                     ->whereNull('course_score.deleted_at');
             })
+            ->leftJoin('account as course_score_account', 'course_score.operator_id', '=', 'course_score_account.id')
+            ->leftJoin('users as course_score_user', 'course_score_account.user_id', '=', 'course_score_user.id')
             ->whereIn(new Expression("CONCAT(arrangement.plan_id, ':', pair.student_id)"), $keys)
             ->orderByDesc('pair.id')
             ->get([
@@ -737,6 +739,8 @@ class InternshipRecord extends TableRecord
                 'course_score.score_value as manual_score',
                 'course_score.remark as manual_score_remark',
                 'course_score.updated_at as manual_score_updated_at',
+                'course_score_user.name as manual_score_operator_name',
+                'course_score_account.login_name as manual_score_operator_login',
                 'students.name as student_name',
                 'students.student_num',
                 'students.grade_id',
@@ -3832,6 +3836,8 @@ class InternshipRecord extends TableRecord
                     'manual_score' => is_numeric($row['manual_score'] ?? null) ? (float) $row['manual_score'] : null,
                     'manual_score_remark' => $row['manual_score_remark'] ?? '',
                     'manual_score_updated_at' => $row['manual_score_updated_at'] ?? null,
+                    'manual_score_operator_name' => $row['manual_score_operator_name'] ?? '',
+                    'manual_score_operator_login' => $row['manual_score_operator_login'] ?? '',
                     'task_scores' => [],
                 ];
             }

@@ -4354,6 +4354,7 @@ const internshipListConfigs = computed(() => ({
       { key: 'course_final_score', label: '课程成绩', width: 100, formatter: row => row.course_final_score ?? '-' },
       { prop: 'task_score_text', label: '任务成绩', minWidth: 240 },
       { prop: 'manual_score_remark', label: '核定说明', minWidth: 160 },
+      { key: 'manual_score_operator_name', label: '核定人', width: 110, formatter: row => row.manual_score_operator_name || row.manual_score_operator_login || '-' },
       { prop: 'manual_score_updated_at', label: '核定时间', width: 168 },
       { prop: 'class_name', label: '班级', minWidth: 130 },
     ],
@@ -4717,6 +4718,7 @@ function studentPanelFields(panel) {
       { key: 'scored_task_count', label: '已评分' },
       { key: 'course_final_score', label: '课程成绩', formatter: row => row.course_final_score ?? '-' },
       { key: 'manual_score_remark', label: '核定说明' },
+      { key: 'manual_score_operator_name', label: '核定人', formatter: row => row.manual_score_operator_name || row.manual_score_operator_login || '-' },
       { key: 'task_score_text', label: '任务成绩' },
     ],
     archiveMaterials: [

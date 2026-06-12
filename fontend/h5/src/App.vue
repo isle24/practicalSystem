@@ -2693,6 +2693,7 @@ function mobileListFacts(key, row) {
       namedFact('汇总状态', courseScoreStatusText(row.course_score_status)),
       namedFact('课程成绩', row.course_final_score ?? ''),
       namedFact('核定说明', previewText(row.manual_score_remark, 42)),
+      namedFact('核定人', row.manual_score_operator_name || row.manual_score_operator_login),
       namedFact('任务成绩', row.task_score_text),
     ],
     inspections: [
