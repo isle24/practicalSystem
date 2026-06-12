@@ -3,7 +3,9 @@
 namespace app\controller\Api;
 
 use app\attribute\OperationLog;
+use app\controller\Api\Concerns\PracticeEntityNames;
 use app\controller\Api\Concerns\Responds;
+use app\server\OperationLogContext;
 use app\server\practice\PracticeService;
 use support\Request;
 use support\Response;
@@ -12,6 +14,7 @@ use Throwable;
 class LabController
 {
     use Responds;
+    use PracticeEntityNames;
 
     /**
      * 查看实验总览
@@ -64,6 +67,7 @@ class LabController
     #[OperationLog('发起实验通过后修改')]
     public function requestModification(Request $request): Response
     {
+        OperationLogContext::setName('发起实验' . $this->practiceEntityName($request) . '通过后修改');
         return $this->handle(fn (): array => $this->service()->requestModification($request));
     }
 
@@ -73,6 +77,7 @@ class LabController
     #[OperationLog('查看实验流程记录')]
     public function timeline(Request $request): Response
     {
+        OperationLogContext::setName('查看实验' . $this->practiceEntityName($request) . '流程记录');
         return $this->handle(fn (): array => $this->service()->timeline($request));
     }
 
