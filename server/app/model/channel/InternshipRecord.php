@@ -2537,6 +2537,7 @@ class InternshipRecord extends TableRecord
         $journals = self::statJournals($scope, $filters);
         $reports = self::statReports($scope, $filters);
         $scores = self::statScores($scope, $filters);
+        $courseScores = self::statCourseScores($scope, $filters);
         $insurances = self::statInsurances($scope, $filters);
         $safetyLetters = self::statSafetyLetters($scope, $filters);
         $plans = self::statPlans($scope, $filters);
@@ -2558,6 +2559,7 @@ class InternshipRecord extends TableRecord
             'journals' => $journals,
             'reports' => $reports,
             'scores' => $scores,
+            'course_scores' => $courseScores,
             'insurances' => $insurances,
             'safety_letters' => $safetyLetters,
             'plans' => $plans,
@@ -2750,6 +2752,38 @@ class InternshipRecord extends TableRecord
             'score.enterprise_score', 'score.final_score',
             'students.dep_id', 'students.profession_id', 'students.grade_id',
             'teacher_list.teacher_name', 'arrangement.title as arrangement_title', 'arrangement.semester',
+        ]);
+    }
+
+    private static function statCourseScores(array $scope, array $filters): array
+    {
+        $query = self::applyStudentTaskScope(self::queryTable('course_score')
+            ->join('internship_plan', 'course_score.plan_id', '=', 'internship_plan.id')
+            ->join('arrangement', 'arrangement.plan_id', '=', 'internship_plan.id')
+            ->join('pair', function ($join): void {
+                $join->on('pair.arrangement_id', '=', 'arrangement.id')
+                    ->on('pair.student_id', '=', 'course_score.student_id')
+                    ->where('pair.type', 'internship')
+                    ->where('pair.status', 'active')
+                    ->whereNull('pair.deleted_at');
+            })
+            ->join('students', 'course_score.student_id', '=', 'students.student_id')
+            ->where('internship_plan.score_rule', 'manual')
+            ->whereNull('course_score.deleted_at')
+            ->whereNull('internship_plan.deleted_at')
+            ->whereNull('arrangement.deleted_at')
+            ->whereNull('students.deleted_at'), $scope, 'course_score.student_id', 'arrangement.id');
+        self::currentArrangementQuery($query);
+        self::statStudentListFilters($query, $filters, 'students', 'arrangement');
+        self::keyword($query, $filters, ['students.name', 'students.student_num', 'internship_plan.course_code', 'internship_plan.course_name']);
+
+        return self::statRows($query->groupBy('course_score.id')->orderByDesc('course_score.id'), [
+            'course_score.id',
+            'course_score.plan_id',
+            'course_score.student_id',
+            'course_score.score_value',
+            'course_score.status',
+            'course_score.updated_at',
         ]);
     }
 
@@ -3135,6 +3169,15 @@ class InternshipRecord extends TableRecord
                 'course_task_progress' => '0/0',
             ];
         }
+        if ((string) ($arrangement['score_rule'] ?? '') === 'manual') {
+            $manualScore = self::firstCourseScore($data['course_scores'] ?? [], $studentId, $planId);
+            $hasManualScore = $manualScore && is_numeric($manualScore['score_value'] ?? null);
+            return [
+                'course_score_status' => $hasManualScore ? '已核定' : '待核定',
+                'course_final_score' => $hasManualScore ? round((float) $manualScore['score_value'], 2) : '-',
+                'course_task_progress' => '人工核定',
+            ];
+        }
 
         $taskRows = [];
         foreach ($data['pairs'] as $pair) {
@@ -3167,6 +3210,17 @@ class InternshipRecord extends TableRecord
             'course_final_score' => $complete ? self::courseFinalScore($scoreRows, (string) ($arrangement['score_rule'] ?? 'average')) : '-',
             'course_task_progress' => "{$scoredCount}/{$taskCount}",
         ];
+    }
+
+    private static function firstCourseScore(array $rows, int $studentId, int $planId): ?array
+    {
+        foreach ($rows as $row) {
+            if ((int) ($row['student_id'] ?? 0) === $studentId && (int) ($row['plan_id'] ?? 0) === $planId) {
+                return $row;
+            }
+        }
+
+        return null;
     }
 
     private static function archiveStatRows(array $data): array
