@@ -358,7 +358,35 @@ class InternshipService
             $this->ensureRecordingTable('arrangement_recording');
         }
 
-        $result = $this->connection()->transaction(function () use ($changeId, $opinion, $status): array {
+        $change = InternshipRecord::lockArrangementChangeRow($this->scopeContext(), $changeId);
+        if (!$change) {
+            throw new RuntimeException('任务变更单不存在或无权限', 40301);
+        }
+        if ((string) $change->status !== 'wait') {
+            throw new InvalidArgumentException('仅待审核任务变更可处理', 42204);
+        }
+        $arrangementId = (int) $change->arrangement_id;
+        $original = InternshipRecord::activeRowById('arrangement', $arrangementId);
+        if (!$original) {
+            throw new RuntimeException('原任务不存在');
+        }
+
+        $newArrangementId = null;
+        $toStatus = $status;
+        if ($status === 'accept') {
+            $payload = $this->arrangementChangePayload($change);
+            $arrangementResult = $this->persistArrangement(array_merge($payload, [
+                'id' => $arrangementId,
+                'change_reason' => (string) $change->reason,
+                'approved_change' => true,
+                'suppress_notify' => true,
+                'status' => 'enabled',
+            ]), '审核通过任务变更');
+            $newArrangementId = (int) ($arrangementResult['id'] ?? 0);
+            $toStatus = 'accept';
+        }
+
+        $result = $this->connection()->transaction(function () use ($arrangementId, $change, $changeId, $newArrangementId, $opinion, $status, $toStatus): array {
             $change = InternshipRecord::lockArrangementChangeRow($this->scopeContext(), $changeId);
             if (!$change) {
                 throw new RuntimeException('任务变更单不存在或无权限', 40301);
@@ -367,26 +395,8 @@ class InternshipService
                 throw new InvalidArgumentException('仅待审核任务变更可处理', 42204);
             }
 
-            $arrangementId = (int) $change->arrangement_id;
-            $original = InternshipRecord::activeRowById('arrangement', $arrangementId);
-            if (!$original) {
-                throw new RuntimeException('原任务不存在');
-            }
-            $payload = $this->arrangementChangePayload($change);
             $now = $this->now();
-            $newArrangementId = null;
-
-            if ($status === 'accept') {
-                $result = $this->persistArrangement(array_merge($payload, [
-                    'id' => $arrangementId,
-                    'change_reason' => (string) $change->reason,
-                    'approved_change' => true,
-                    'suppress_notify' => true,
-                    'status' => 'enabled',
-                ]), '审核通过任务变更');
-                $newArrangementId = (int) ($result['id'] ?? 0);
-                $toStatus = 'accept';
-            } else {
+            if ($status !== 'accept') {
                 $restoreStatus = in_array((string) ($change->from_status ?? ''), self::WORKFLOW_STATUS, true)
                     ? (string) $change->from_status
                     : 'enabled';
@@ -394,7 +404,6 @@ class InternshipService
                     'status' => $restoreStatus,
                     'updated_at' => $now,
                 ]);
-                $toStatus = $status;
             }
 
             InternshipRecord::updateById('arrangement_change', $changeId, [
@@ -433,13 +442,10 @@ class InternshipService
                 'status' => $status,
                 'arrangement_id' => $arrangementId,
                 'new_arrangement_id' => $newArrangementId,
-                'notify_change' => $change,
-                'notify_arrangement' => $original,
             ];
         });
 
-        $this->notifyArrangementChangeReviewed($result['notify_change'], $result['notify_arrangement'], $status, $opinion, $result['new_arrangement_id']);
-        unset($result['notify_change'], $result['notify_arrangement']);
+        $this->notifyArrangementChangeReviewed($change, $original, $status, $opinion, $newArrangementId);
 
         return $result;
     }
@@ -2133,6 +2139,12 @@ class InternshipService
         }
 
         $beforeItem = $before['item'] ?? [];
+        if (!$after) {
+            $title = trim((string) ($beforeItem['title'] ?? ''));
+            $content = $source . '：原任务' . ($title !== '' ? '「' . $title . '」' : '') . '已归档为历史版本';
+            return trim($reason) === '' ? $content : $content . '；原因：' . trim($reason);
+        }
+
         $changes = [];
         foreach ([
             'teacher_name' => '负责老师',
