@@ -2253,6 +2253,10 @@ class InternshipService
 
     private function reviewJoinTeacher(int $applicationId, string $status): void
     {
+        if (!in_array($status, ['accept', 'modify'], true)) {
+            return;
+        }
+
         $teacherId = $this->currentTeacherId(true);
         $joinStatus = $status === 'accept' ? 'accept' : 'refuse';
         InternshipRecord::updateJoinTeacherStatus($applicationId, $teacherId, $joinStatus, $this->now());
