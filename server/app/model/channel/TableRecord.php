@@ -152,7 +152,12 @@ class TableRecord extends BaseModel
 
     public static function ensureRecordingTable(string $table): void
     {
+        static $ensured = [];
+
         if (!preg_match('/^[a-z_]+_recording$/', $table)) {
+            return;
+        }
+        if (isset($ensured[$table])) {
             return;
         }
 
@@ -180,6 +185,8 @@ class TableRecord extends BaseModel
             KEY `idx_entity` (`entity_type`, `entity_id`),
             KEY `idx_parent` (`parent_id`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        $ensured[$table] = true;
     }
 
     private static function applyOperationLogFilters(mixed $query, string $table, array $filters): mixed

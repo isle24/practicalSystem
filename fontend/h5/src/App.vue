@@ -681,7 +681,8 @@
               :value="statusText(row.status)"
             >
               <template #right-icon>
-                <div class="cell-actions">
+                <div class="cell-actions record-status-actions">
+                  <button v-if="canEditStudentWork(row)" @click.stop="editStudentWork('delay', row)">修改</button>
                   <button @click.stop="openTimelineDialog('delay', row)">记录</button>
                 </div>
               </template>
@@ -1639,6 +1640,7 @@ const internship = reactive({
       content: '',
     },
     delay: {
+      id: null,
       arrangement_id: null,
       config_key: 'report_deadline',
       requested_date: '',
@@ -3478,12 +3480,14 @@ async function submitDelay() {
   internship.message = '';
   try {
     await saveInternshipDelay({
+      id: internship.forms.delay.id || undefined,
       entity_type: 'internship',
       entity_id: internship.forms.delay.arrangement_id,
       config_key: internship.forms.delay.config_key,
       requested_date: internship.forms.delay.requested_date,
       reason: internship.forms.delay.reason,
     });
+    internship.forms.delay.id = null;
     internship.forms.delay.requested_date = '';
     internship.forms.delay.reason = '';
     internship.message = '延期申请已提交';
@@ -3521,6 +3525,16 @@ function editStudentWork(type, row) {
     internship.forms.report.content = row.content || '';
     internship.forms.sign.arrangement_id = row.arrangement_id || internship.forms.sign.arrangement_id;
     internship.message = '已载入报告内容，请修改后重新提交';
+  }
+  if (type === 'delay') {
+    internship.submitSection = 'delay';
+    internship.forms.delay.id = row.id || null;
+    internship.forms.delay.arrangement_id = row.arrangement_id || row.entity_id || null;
+    internship.forms.delay.config_key = row.config_key || 'report_deadline';
+    internship.forms.delay.requested_date = row.requested_date || '';
+    internship.forms.delay.reason = row.reason || '';
+    internship.forms.sign.arrangement_id = row.arrangement_id || row.entity_id || internship.forms.sign.arrangement_id;
+    internship.message = '已载入延期申请，请修改后重新提交';
   }
 }
 
@@ -4926,7 +4940,7 @@ function resetInternshipState() {
   internship.forms.sign = { arrangement_id: null, location: '', longitude: null, latitude: null, accuracy: null, located_at: '', locating: false, gps_error: '' };
   internship.forms.journal = { id: null, arrangement_id: null, title: '', content: '' };
   internship.forms.report = { id: null, arrangement_id: null, title: '', content: '' };
-  internship.forms.delay = { arrangement_id: null, config_key: 'report_deadline', requested_date: '', reason: '' };
+  internship.forms.delay = { id: null, arrangement_id: null, config_key: 'report_deadline', requested_date: '', reason: '' };
   internship.forms.score = {
     pair_id: null,
     student_id: null,

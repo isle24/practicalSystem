@@ -353,6 +353,10 @@ class InternshipService
         $changeId = $this->requiredRowId($request, 'arrangement_change');
         $status = $this->enum($request, 'status', ['accept', 'modify', 'refuse'], 'accept');
         $opinion = $this->reviewOpinionInput($request, 'arrangement_change', $status);
+        $this->ensureRecordingTable('arrangement_change_recording');
+        if ($status === 'accept') {
+            $this->ensureRecordingTable('arrangement_recording');
+        }
 
         return $this->connection()->transaction(function () use ($changeId, $opinion, $status): array {
             $change = InternshipRecord::lockArrangementChangeRow($this->scopeContext(), $changeId);
@@ -562,6 +566,7 @@ class InternshipService
         $id = $this->requiredRowId($request, 'application');
         $status = $this->enum($request, 'status', self::APPLICATION_REVIEW_STATUS, 'accept');
         $opinion = $this->reviewOpinionInput($request, 'application', $status);
+        $this->ensureRecordingTable('application_recording');
 
         return $this->connection()->transaction(function () use ($id, $status, $opinion): array {
             $row = InternshipRecord::lockActiveRowById('application', $id);
@@ -634,6 +639,7 @@ class InternshipService
         $config = self::REVIEW_ENTITY_CONFIG[$entity];
         $id = $this->requiredRowId($request, $config['table']);
         $opinion = $this->reviewOpinionInput($request, $entity, 'modify', '修改理由');
+        $this->ensureRecordingTable($config['recording']);
 
         return $this->connection()->transaction(function () use ($entity, $config, $id, $opinion): array {
             $row = InternshipRecord::lockActiveRowById($config['table'], $id);
@@ -733,6 +739,7 @@ class InternshipService
         $this->requireAdminRole();
         $id = $this->requiredRowId($request, 'pair');
         $reason = $this->nullableString($request, 'remove_reason', 255);
+        $this->ensureRecordingTable('arrangement_recording');
 
         return $this->connection()->transaction(function () use ($id, $reason): array {
             $pair = InternshipRecord::pairRowForManage($this->scopeContext(), $id);
@@ -954,6 +961,7 @@ class InternshipService
         $configKey = $this->enum($request, 'config_key', self::DELAY_CONFIG_KEYS, 'report_deadline');
         $existingId = $this->inputRowId($request, 'apply_report_delay');
         $fromStatus = $existingId ? InternshipRecord::statusById('apply_report_delay', $existingId) : 'draft';
+        $this->assertStudentWorkCanSubmit($existingId, $fromStatus, '延期申请');
 
         $this->assertStudentVisible($studentId);
         if ($entityType === 'internship') {
@@ -993,8 +1001,9 @@ class InternshipService
         $id = $this->requiredRowId($request, 'apply_report_delay');
         $status = $this->enum($request, 'status', ['accept', 'refuse'], 'accept');
         $opinion = $this->reviewOpinionInput($request, 'delay', $status);
+        $this->ensureRecordingTable('apply_report_delay_recording');
 
-        return $this->connection()->transaction(function () use ($id, $status, $opinion): array {
+        $result = $this->connection()->transaction(function () use ($id, $status, $opinion): array {
             $row = InternshipRecord::lockActiveRowById('apply_report_delay', $id);
             if (!$row) {
                 throw new RuntimeException('延期申请不存在');
@@ -1009,15 +1018,20 @@ class InternshipService
                 'status' => $status,
                 'updated_at' => $this->now(),
             ]);
-            if ($status === 'accept') {
-                $this->saveDelayConfig($row);
-            }
 
             $action = $this->isTeacher() ? 'teacher_review' : 'admin_review';
             $this->recordWorkflow('apply_report_delay_recording', 'delay', $id, $action, (string) $row->status, $status, $opinion ?: '延期申请审核', $status);
 
-            return ['id' => $id, 'status' => $status];
+            return ['id' => $id, 'status' => $status, 'delay' => $row];
         });
+
+        if ($status === 'accept') {
+            $this->saveDelayConfig($result['delay']);
+        }
+
+        unset($result['delay']);
+
+        return $result;
     }
 
     public function scores(Request $request): array
@@ -1241,6 +1255,7 @@ class InternshipService
         $planId = $this->requiredRowId($request, 'internship_plan');
         $status = $this->enum($request, 'status', ['accept', 'modify'], 'accept');
         $opinion = $this->reviewOpinionInput($request, 'plan', $status);
+        $this->ensureRecordingTable('plan_recording');
 
         return $this->connection()->transaction(function () use ($planId, $status, $opinion, $request): array {
             $now = $this->now();
@@ -1529,6 +1544,7 @@ class InternshipService
         $score = $this->decimalInput($request, 'score');
         $teacherId = $this->isTeacher() ? $this->currentTeacherId(true) : $this->optionalInt($request, 'teacher_id');
         $now = $this->now();
+        $this->ensureRecordingTable($recordingTable);
 
         return $this->connection()->transaction(function () use ($table, $recordingTable, $id, $status, $opinion, $score, $teacherId, $now): array {
             $row = InternshipRecord::lockActiveRowById($table, $id);
@@ -1937,6 +1953,8 @@ class InternshipService
     {
         $item = $detail['item'] ?? [];
         $now = $this->now();
+        $this->ensureRecordingTable('arrangement_change_recording');
+        $this->ensureRecordingTable('arrangement_recording');
 
         return $this->connection()->transaction(function () use ($arrangementId, $changeId, $item, $now, $payload, $reason, $status): array {
             if ($status === 'wait') {
@@ -3611,6 +3629,11 @@ class InternshipService
     private function connection(): mixed
     {
         return InternshipRecord::connection();
+    }
+
+    private function ensureRecordingTable(string $table): void
+    {
+        InternshipRecord::ensureRecordingTable($table);
     }
 
     private function deadlineConfigs(): array
