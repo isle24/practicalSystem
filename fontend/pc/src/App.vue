@@ -9585,7 +9585,8 @@ async function handleArrangementImportFile(event) {
   try {
     const result = await importInternshipArrangementAssignments(file);
     const errors = (result.errors || []).map(item => `第${item.row}行：${item.message}`).join('；');
-    internshipState.savedMessage = `导入完成：新增 ${result.created || 0}，更新 ${result.updated || 0}，失败 ${result.failed || 0}`;
+    const changeText = result.change_submitted ? `，提交变更 ${result.change_submitted}` : '';
+    internshipState.savedMessage = `导入完成：新增 ${result.created || 0}，更新 ${result.updated || 0}${changeText}，失败 ${result.failed || 0}`;
     internshipState.message = errors ? `${internshipState.savedMessage}。${errors}` : '';
     await Promise.all([
       loadInternshipPanel('arrangements'),

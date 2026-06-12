@@ -342,80 +342,7 @@ class InternshipService
         }
         $payload = $this->arrangementPayloadFromRequest($request, $detail);
         $changeId = $this->optionalInt($request, 'change_id');
-        $now = $this->now();
-
-        return $this->connection()->transaction(function () use ($arrangementId, $changeId, $item, $now, $payload, $reason, $request, $status): array {
-            if ($status === 'wait') {
-                $pendingId = InternshipRecord::pendingArrangementChangeId($arrangementId);
-                if ($pendingId > 0 && $pendingId !== (int) $changeId) {
-                    throw new InvalidArgumentException('该任务已有待审核变更，请先处理');
-                }
-            }
-            if ($changeId) {
-                $change = InternshipRecord::arrangementChangeRow($this->scopeContext(), $changeId);
-                if (!$change) {
-                    throw new RuntimeException('任务变更单不存在或无权限', 40301);
-                }
-                if (!in_array((string) $change->status, ['draft', 'modify'], true)) {
-                    throw new InvalidArgumentException('仅草稿或退回的变更单可重新提交', 42204);
-                }
-            }
-
-            $values = [
-                'arrangement_id' => $arrangementId,
-                'payload' => $this->jsonValue($payload),
-                'reason' => $reason,
-                'from_status' => (string) ($item['status'] ?? 'enabled'),
-                'submitter_id' => CurrentContext::accountId(),
-                'submitted_at' => $status === 'wait' ? $now : null,
-                'reviewer_id' => null,
-                'review_opinion' => null,
-                'reviewed_at' => null,
-                'new_arrangement_id' => null,
-                'status' => $status,
-                'updated_at' => $now,
-                'deleted_at' => null,
-            ];
-            if ($changeId) {
-                InternshipRecord::updateById('arrangement_change', $changeId, $values);
-                $result = ['id' => $changeId];
-            } else {
-                $result = [
-                    'id' => InternshipRecord::insertRow('arrangement_change', array_merge($values, [
-                        'uuid' => $this->uuid(),
-                        'created_at' => $now,
-                    ])),
-                ];
-            }
-            if ($status === 'wait') {
-                InternshipRecord::updateById('arrangement', $arrangementId, [
-                    'status' => 'changing',
-                    'updated_at' => $now,
-                ]);
-                $this->recordWorkflow(
-                    'arrangement_change_recording',
-                    'arrangement_change',
-                    (int) $result['id'],
-                    'submit',
-                    (string) ($item['status'] ?? 'enabled'),
-                    'wait',
-                    $this->arrangementChangeContent($payload, $reason),
-                    'wait'
-                );
-                $this->recordWorkflow(
-                    'arrangement_recording',
-                    'arrangement',
-                    $arrangementId,
-                    'change_submit',
-                    (string) ($item['status'] ?? 'enabled'),
-                    'changing',
-                    '发起任务变更：' . $reason,
-                    'wait'
-                );
-            }
-
-            return ['id' => (int) $result['id'], 'status' => $status];
-        });
+        return $this->submitArrangementChange($arrangementId, $detail, $payload, $reason, $status, $changeId);
     }
 
     public function reviewArrangementChange(Request $request): array
@@ -516,6 +443,7 @@ class InternshipService
             'total' => count($rows),
             'created' => 0,
             'updated' => 0,
+            'change_submitted' => 0,
             'failed' => 0,
             'class_count' => 0,
             'student_count' => 0,
@@ -526,6 +454,8 @@ class InternshipService
                 $result = $this->importArrangementRow($row);
                 if (($result['created'] ?? false) === true) {
                     $summary['created']++;
+                } elseif (($result['change_submitted'] ?? false) === true) {
+                    $summary['change_submitted']++;
                 } else {
                     $summary['updated']++;
                 }
@@ -1878,10 +1808,14 @@ class InternshipService
         if ($planId <= 0) {
             throw new InvalidArgumentException('未找到已审核通过的实习计划，请先完成计划五级审核');
         }
+        $plan = InternshipRecord::planRowForTask($planId);
+        if (!$plan) {
+            throw new InvalidArgumentException('实习计划不存在');
+        }
 
         $taskNo = $this->requiredImportValue($row, 'task_no', '任务编号');
         $existingArrangementId = InternshipRecord::arrangementIdByPlanTaskNo($planId, $taskNo);
-        return $this->persistArrangement([
+        $payload = [
             'id' => $existingArrangementId,
             'plan_id' => $planId,
             'teacher_id' => (int) $teacher['teacher_id'],
@@ -1897,9 +1831,173 @@ class InternshipService
             'end_date' => $endDate,
             'location' => $this->requiredImportValue($row, 'location', '地点'),
             'description' => 'Excel 导入任务分配',
-            'change_reason' => '',
+            'change_reason' => trim((string) ($row['change_reason'] ?? '')),
             'status' => 'enabled',
-        ], 'Excel导入任务分配');
+        ];
+        if ($existingArrangementId <= 0) {
+            return $this->persistArrangement($payload, 'Excel导入任务分配');
+        }
+
+        $detail = InternshipRecord::arrangementDetail($scope, $existingArrangementId);
+        if (!$detail) {
+            throw new RuntimeException('实习任务不存在或无权限', 40301);
+        }
+        $item = $detail['item'] ?? [];
+        if (($item['status'] ?? '') === 'changed') {
+            throw new InvalidArgumentException('历史任务不可导入调整');
+        }
+        $payload = $this->mergeExistingArrangementImportPayload($payload, $item);
+        $studentRows = InternshipRecord::studentRowsByClassIds(array_column($classRows, 'class_id'));
+        if (!$this->arrangementImportRequiresChangeReview($detail, $payload, $plan, $classRows, $studentRows)) {
+            return $this->persistArrangement($payload, 'Excel导入任务分配');
+        }
+        if ($payload['change_reason'] === '') {
+            throw new InvalidArgumentException('已发布或已有过程数据的任务导入调整必须填写变更原因');
+        }
+
+        $change = $this->submitArrangementChange(
+            $existingArrangementId,
+            $detail,
+            $payload,
+            $payload['change_reason'],
+            'wait',
+            null
+        );
+
+        return [
+            'id' => $existingArrangementId,
+            'created' => false,
+            'change_submitted' => true,
+            'change_id' => (int) $change['id'],
+            'class_count' => count($classRows),
+            'student_count' => count($studentRows),
+        ];
+    }
+
+    private function mergeExistingArrangementImportPayload(array $payload, array $item): array
+    {
+        foreach (['base_id', 'enterprise_mentor_id', 'batch_no', 'location', 'description'] as $field) {
+            if (($payload[$field] ?? null) === null || trim((string) ($payload[$field] ?? '')) === '') {
+                $payload[$field] = $item[$field] ?? null;
+            }
+        }
+        if (($payload['description'] ?? '') === 'Excel 导入任务分配') {
+            $payload['description'] = $item['description'] ?? null;
+        }
+
+        return $payload;
+    }
+
+    private function arrangementImportRequiresChangeReview(array $detail, array $payload, object $plan, array $classRows, array $studentRows): bool
+    {
+        $bindingRowsChanged = $this->arrangementBindingRowsChanged($detail['classes'] ?? [], $classRows, 'class_id')
+            || $this->arrangementBindingRowsChanged($detail['students'] ?? [], $studentRows, 'student_id');
+        $values = [
+            'plan_id' => (int) ($payload['plan_id'] ?? 0),
+            'base_id' => $payload['base_id'] ?? null,
+            'dep_id' => (int) ($plan->dep_id ?? 0),
+            'profession_id' => (int) ($plan->profession_id ?? 0),
+            'teacher_id' => (int) ($payload['teacher_id'] ?? 0),
+            'task_no' => trim((string) ($payload['task_no'] ?? '')),
+            'batch_no' => $payload['batch_no'] ?? null,
+            'credit' => $payload['credit'] ?? ($plan->credit === null ? null : (float) $plan->credit),
+            'type' => $payload['type'] ?? 'major_external',
+            'organize_mode' => $payload['organize_mode'] ?? 'centralized',
+            'title' => trim((string) ($payload['title'] ?? '')),
+            'start_date' => (string) ($payload['start_date'] ?? ''),
+            'end_date' => (string) ($payload['end_date'] ?? ''),
+            'location' => $payload['location'] ?? null,
+            'description' => $payload['description'] ?? null,
+            'status' => $payload['status'] ?? 'enabled',
+        ];
+        if (!$this->arrangementValuesChanged($detail['item'] ?? [], $values, $bindingRowsChanged)) {
+            return false;
+        }
+
+        $arrangementId = (int) ($detail['item']['id'] ?? 0);
+        $previousStatus = (string) ($detail['item']['status'] ?? 'draft');
+
+        return in_array($previousStatus, ['enabled', 'accept', 'wait', 'modify', 'changing'], true)
+            || InternshipRecord::arrangementHasProcessData($arrangementId);
+    }
+
+    private function submitArrangementChange(int $arrangementId, array $detail, array $payload, string $reason, string $status, ?int $changeId): array
+    {
+        $item = $detail['item'] ?? [];
+        $now = $this->now();
+
+        return $this->connection()->transaction(function () use ($arrangementId, $changeId, $item, $now, $payload, $reason, $status): array {
+            if ($status === 'wait') {
+                $pendingId = InternshipRecord::pendingArrangementChangeId($arrangementId);
+                if ($pendingId > 0 && $pendingId !== (int) $changeId) {
+                    throw new InvalidArgumentException('该任务已有待审核变更，请先处理');
+                }
+            }
+            if ($changeId) {
+                $change = InternshipRecord::arrangementChangeRow($this->scopeContext(), $changeId);
+                if (!$change) {
+                    throw new RuntimeException('任务变更单不存在或无权限', 40301);
+                }
+                if (!in_array((string) $change->status, ['draft', 'modify'], true)) {
+                    throw new InvalidArgumentException('仅草稿或退回的变更单可重新提交', 42204);
+                }
+            }
+
+            $values = [
+                'arrangement_id' => $arrangementId,
+                'payload' => $this->jsonValue($payload),
+                'reason' => $reason,
+                'from_status' => (string) ($item['status'] ?? 'enabled'),
+                'submitter_id' => CurrentContext::accountId(),
+                'submitted_at' => $status === 'wait' ? $now : null,
+                'reviewer_id' => null,
+                'review_opinion' => null,
+                'reviewed_at' => null,
+                'new_arrangement_id' => null,
+                'status' => $status,
+                'updated_at' => $now,
+                'deleted_at' => null,
+            ];
+            if ($changeId) {
+                InternshipRecord::updateById('arrangement_change', $changeId, $values);
+                $result = ['id' => $changeId];
+            } else {
+                $result = [
+                    'id' => InternshipRecord::insertRow('arrangement_change', array_merge($values, [
+                        'uuid' => $this->uuid(),
+                        'created_at' => $now,
+                    ])),
+                ];
+            }
+            if ($status === 'wait') {
+                InternshipRecord::updateById('arrangement', $arrangementId, [
+                    'status' => 'changing',
+                    'updated_at' => $now,
+                ]);
+                $this->recordWorkflow(
+                    'arrangement_change_recording',
+                    'arrangement_change',
+                    (int) $result['id'],
+                    'submit',
+                    (string) ($item['status'] ?? 'enabled'),
+                    'wait',
+                    $this->arrangementChangeContent($payload, $reason),
+                    'wait'
+                );
+                $this->recordWorkflow(
+                    'arrangement_recording',
+                    'arrangement',
+                    $arrangementId,
+                    'change_submit',
+                    (string) ($item['status'] ?? 'enabled'),
+                    'changing',
+                    '发起任务变更：' . $reason,
+                    'wait'
+                );
+            }
+
+            return ['id' => (int) $result['id'], 'status' => $status];
+        });
     }
 
     private function arrangementValuesChanged(array $before, array $values, bool $studentRowsChanged): bool
