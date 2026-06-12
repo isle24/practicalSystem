@@ -839,6 +839,7 @@ class InternshipService
         $status = $this->enum($request, 'status', ['draft', 'wait'], 'draft');
         $existingId = $this->inputRowId($request, 'journal');
         $fromStatus = $existingId ? InternshipRecord::statusById('journal', $existingId) : 'draft';
+        $this->assertStudentWorkCanSubmit($existingId, $fromStatus, '实习日志');
         $this->assertStudentVisible($studentId);
         $this->assertCurrentArrangementVisible($arrangementId);
         $this->assertTaskBindingVisible($studentId, $arrangementId);
@@ -895,6 +896,7 @@ class InternshipService
         $status = $this->enum($request, 'status', ['draft', 'wait'], 'draft');
         $existingId = $this->inputRowId($request, 'report');
         $fromStatus = $existingId ? InternshipRecord::statusById('report', $existingId) : 'draft';
+        $this->assertStudentWorkCanSubmit($existingId, $fromStatus, '实习报告');
         $this->assertStudentVisible($studentId);
         $this->assertCurrentArrangementVisible($arrangementId);
         $this->assertTaskBindingVisible($studentId, $arrangementId);
@@ -1553,6 +1555,16 @@ class InternshipService
 
             return ['id' => $id, 'status' => $status];
         });
+    }
+
+    private function assertStudentWorkCanSubmit(?int $existingId, string $fromStatus, string $label): void
+    {
+        if (!$existingId) {
+            return;
+        }
+        if (!in_array($fromStatus, ['draft', 'modify'], true)) {
+            throw new InvalidArgumentException($label . '当前状态不可直接重新提交，请先走通过后修改或等待审核处理', 42204);
+        }
     }
 
     private function persistArrangement(array $input, string $source): array
