@@ -384,6 +384,35 @@
             </van-cell>
             <div v-if="!internship.options.arrangements.length" class="mobile-empty">暂无绑定任务</div>
           </section>
+          <section class="mobile-card form-card">
+            <header>
+              <ClipboardList :size="20" />
+              <strong>提交特殊申请</strong>
+            </header>
+            <label>
+              <span>实习任务</span>
+              <select v-model.number="internship.forms.application.arrangement_id">
+                <option v-for="item in internship.options.arrangements" :key="item.id" :value="item.id">
+                  {{ item.title }}
+                </option>
+              </select>
+            </label>
+            <label>
+              <span>申请类型</span>
+              <select v-model="internship.forms.application.type">
+                <option value="centralized">集中实习</option>
+                <option value="distributed">分散实习</option>
+                <option value="autonomous">自主实习</option>
+              </select>
+            </label>
+            <label>
+              <span>申请说明</span>
+              <textarea v-model="internship.forms.application.remark" rows="4" />
+            </label>
+            <van-button block type="primary" :loading="internship.loading" @click="submitApplication">
+              提交申请
+            </van-button>
+          </section>
           <section class="mobile-card">
             <header>
               <FileClock :size="20" />
@@ -1584,6 +1613,7 @@ const internship = reactive({
   forms: {
     application: {
       arrangement_id: null,
+      type: 'distributed',
       remark: '',
     },
     sign: {
@@ -3308,12 +3338,23 @@ async function switchMobileList(type, key) {
 }
 
 async function submitApplication() {
+  if (!internship.forms.application.arrangement_id) {
+    internship.message = '请选择实习任务';
+    showToast(internship.message);
+    return;
+  }
+  if (!String(internship.forms.application.remark || '').trim()) {
+    internship.message = '请填写申请说明';
+    showToast(internship.message);
+    return;
+  }
+
   internship.loading = true;
   internship.message = '';
   try {
     await saveInternshipApplication({
       arrangement_id: internship.forms.application.arrangement_id,
-      type: 'centralized',
+      type: internship.forms.application.type || 'distributed',
       status: 'wait',
       remark: internship.forms.application.remark,
     });
@@ -4871,7 +4912,7 @@ function resetInternshipState() {
   Object.keys(internship.filters).forEach((key) => {
     internship.filters[key] = emptyInternshipFilters();
   });
-  internship.forms.application = { arrangement_id: null, remark: '' };
+  internship.forms.application = { arrangement_id: null, type: 'distributed', remark: '' };
   internship.forms.sign = { arrangement_id: null, location: '', longitude: null, latitude: null, accuracy: null, located_at: '', locating: false, gps_error: '' };
   internship.forms.journal = { id: null, arrangement_id: null, title: '', content: '' };
   internship.forms.report = { id: null, arrangement_id: null, title: '', content: '' };
