@@ -92,6 +92,7 @@ class InternshipService
         'teacher_work_report' => ['table' => 'teacher_work_report', 'recording' => 'teacher_work_report_recording'],
         'inspection' => ['table' => 'inspection_record', 'recording' => 'inspection_recording'],
     ];
+    private const REQUEST_MODIFICATION_ENTITIES = ['application', 'journal', 'report', 'plan', 'delay'];
     private const DELAY_CONFIG_KEYS = ['report_deadline', 'journal_deadline'];
     private const EXCEL_EXTENSIONS = ['xls', 'xlsx'];
     private const EXCEL_MAX_SIZE = 10485760;
@@ -649,6 +650,9 @@ class InternshipService
     {
         $this->requirePermission('internship:approve');
         $entity = $this->reviewEntity($request);
+        if (!in_array($entity, self::REQUEST_MODIFICATION_ENTITIES, true)) {
+            throw new InvalidArgumentException('该业务不支持通过后修改', 42202);
+        }
         $config = self::REVIEW_ENTITY_CONFIG[$entity];
         $id = $this->requiredRowId($request, $config['table']);
         $opinion = $this->reviewOpinionInput($request, $entity, 'modify', '修改理由');

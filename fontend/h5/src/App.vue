@@ -4005,11 +4005,11 @@ function canRequestModification(row, entity) {
   if (!row || row.status !== 'accept') {
     return false;
   }
+  if (!['application', 'journal', 'report', 'plan', 'delay'].includes(entity)) {
+    return false;
+  }
   if (entity === 'plan') {
     return canReviewInternshipPlan.value;
-  }
-  if (entity === 'arrangement_change') {
-    return false;
   }
   return canReviewInternship.value;
 }
