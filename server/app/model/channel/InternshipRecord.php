@@ -1601,7 +1601,7 @@ class InternshipRecord extends TableRecord
             return [];
         }
 
-        return self::rows(self::queryTable('students')
+        return self::uniqueStudentRows(self::rows(self::queryTable('students')
             ->whereIn('class_id', $classIds)
             ->where('status', 'enabled')
             ->whereNull('deleted_at')
@@ -1615,7 +1615,21 @@ class InternshipRecord extends TableRecord
                 'dep_id',
                 'profession_id',
                 'class_id',
-            ]));
+            ])));
+    }
+
+    private static function uniqueStudentRows(array $rows): array
+    {
+        $unique = [];
+        foreach ($rows as $row) {
+            $studentId = (int) ($row['student_id'] ?? 0);
+            if ($studentId <= 0 || isset($unique[$studentId])) {
+                continue;
+            }
+            $unique[$studentId] = $row;
+        }
+
+        return array_values($unique);
     }
 
     public static function taskStudentRows(array $scope, int $arrangementId): array
