@@ -908,6 +908,12 @@
                       @search="loadInternshipPanel('arrangementChanges', 1)"
                     >
                       <template #actions="{ row }">
+                        <el-button size="small" type="primary" plain @click="openArrangementDetail(row.arrangement_id)">
+                          原任务
+                        </el-button>
+                        <el-button v-if="row.new_arrangement_id" size="small" type="success" plain @click="openArrangementDetail(row.new_arrangement_id)">
+                          生效任务
+                        </el-button>
                         <el-button v-if="canReviewRow(row, 'arrangement_change')" link type="primary" @click="openReviewDialog('arrangement_change', row, 'accept')">
                           通过
                         </el-button>
@@ -4191,7 +4197,7 @@ const internshipListConfigs = computed(() => ({
       { prop: 'task_no', label: '任务编号', width: 140 },
       { key: 'change_title', label: '拟变更任务', minWidth: 190, formatter: row => row.payload?.title || '-' },
       { key: 'change_date', label: '拟变更时间', minWidth: 170, formatter: row => `${row.payload?.start_date || '-'} 至 ${row.payload?.end_date || '-'}` },
-      { prop: 'new_arrangement_title', label: '生效任务', minWidth: 190 },
+      { key: 'new_arrangement_title', label: '生效任务', minWidth: 190, formatter: row => row.new_arrangement_title || '-' },
       { prop: 'new_task_no', label: '新任务编号', width: 140 },
       { prop: 'new_teacher_name', label: '新负责老师', width: 120 },
       { prop: 'reason', label: '变更原因', minWidth: 220 },
@@ -8828,7 +8834,8 @@ async function openArrangementDialog(row = null) {
 }
 
 async function openArrangementDetail(row) {
-  if (!row?.id) {
+  const id = typeof row === 'number' ? row : Number(row?.id || 0);
+  if (!id) {
     return;
   }
   internshipState.loading = true;
@@ -8836,7 +8843,7 @@ async function openArrangementDetail(row) {
   try {
     internshipState.arrangementDetail = {
       ...emptyArrangementDetail(),
-      ...(await loadArrangementDetail(row.id)),
+      ...(await loadArrangementDetail(id)),
     };
     internshipState.dialog = {
       ...emptyOperationDialog(),
