@@ -2497,11 +2497,29 @@ class InternshipRecord extends TableRecord
     {
         self::ensureRecordingTable($table);
         return self::queryTable($table)
-            ->where('parent_id', $parentId)
-            ->whereNull('deleted_at')
-            ->orderBy('created_at')
-            ->orderBy('id')
-            ->get(['id', 'uuid', 'parent_id', 'entity_type', 'entity_id', 'action', 'operator_id', 'from_status', 'to_status', 'opinion', 'content', 'status', 'created_at'])
+            ->leftJoin('account as operator_account', "{$table}.operator_id", '=', 'operator_account.id')
+            ->leftJoin('users as operator_user', 'operator_account.user_id', '=', 'operator_user.id')
+            ->where("{$table}.parent_id", $parentId)
+            ->whereNull("{$table}.deleted_at")
+            ->orderBy("{$table}.created_at")
+            ->orderBy("{$table}.id")
+            ->get([
+                "{$table}.id",
+                "{$table}.uuid",
+                "{$table}.parent_id",
+                "{$table}.entity_type",
+                "{$table}.entity_id",
+                "{$table}.action",
+                "{$table}.operator_id",
+                "{$table}.from_status",
+                "{$table}.to_status",
+                "{$table}.opinion",
+                "{$table}.content",
+                "{$table}.status",
+                "{$table}.created_at",
+                'operator_user.name as operator_name',
+                'operator_account.login_name as operator_login_name',
+            ])
             ->map(static fn ($row): array => $row->getAttributes())
             ->all();
     }
@@ -2509,12 +2527,31 @@ class InternshipRecord extends TableRecord
     public static function reviewOpinionRows(string $entityType, int $entityId): array
     {
         return self::queryTable('review_opinion')
-            ->where('entity_type', $entityType)
-            ->where('entity_id', $entityId)
-            ->whereNull('deleted_at')
-            ->orderBy('created_at')
-            ->orderBy('id')
-            ->get(['id', 'uuid', 'entity_type', 'entity_id', 'recording_id', 'teacher_id', 'reviewer_id', 'opinion', 'score', 'status', 'created_at'])
+            ->leftJoin('account as reviewer_account', 'review_opinion.reviewer_id', '=', 'reviewer_account.id')
+            ->leftJoin('users as reviewer_user', 'reviewer_account.user_id', '=', 'reviewer_user.id')
+            ->leftJoin('teacher_list', 'review_opinion.teacher_id', '=', 'teacher_list.teacher_id')
+            ->where('review_opinion.entity_type', $entityType)
+            ->where('review_opinion.entity_id', $entityId)
+            ->whereNull('review_opinion.deleted_at')
+            ->orderBy('review_opinion.created_at')
+            ->orderBy('review_opinion.id')
+            ->get([
+                'review_opinion.id',
+                'review_opinion.uuid',
+                'review_opinion.entity_type',
+                'review_opinion.entity_id',
+                'review_opinion.recording_id',
+                'review_opinion.teacher_id',
+                'review_opinion.reviewer_id',
+                'review_opinion.opinion',
+                'review_opinion.score',
+                'review_opinion.status',
+                'review_opinion.created_at',
+                'reviewer_user.name as reviewer_name',
+                'reviewer_account.login_name as reviewer_login_name',
+                'teacher_list.teacher_name',
+                'teacher_list.teacher_num',
+            ])
             ->map(static fn ($row): array => $row->getAttributes())
             ->all();
     }

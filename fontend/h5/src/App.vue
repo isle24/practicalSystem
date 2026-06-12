@@ -4151,7 +4151,7 @@ function timelineCycleKey(cycle, index) {
 function timelineCycleTitle(cycle) {
   const prefix = cycle.sequence ? `第 ${cycle.sequence} 次提交` : '提交记录';
   if (cycle.record) {
-    return `${prefix}：${statusText(cycle.record.from_status)} -> ${statusText(cycle.record.to_status)}`;
+    return `${prefix}${timelineOperatorText(cycle.record)}：${statusText(cycle.record.from_status)} -> ${statusText(cycle.record.to_status)}`;
   }
   return cycle.sequence ? `第 ${cycle.sequence} 次流程记录` : '流程记录';
 }
@@ -4173,10 +4173,10 @@ function timelineBranchKey(branch, index) {
 
 function timelineBranchTitle(branch) {
   if (branch.record) {
-    return `${workflowActionText(branch.record.action)}：${statusText(branch.record.from_status)} -> ${statusText(branch.record.to_status)}`;
+    return `${workflowActionText(branch.record.action)}${timelineOperatorText(branch.record)}：${statusText(branch.record.from_status)} -> ${statusText(branch.record.to_status)}`;
   }
   const review = branch.review || branch.reviews?.[0];
-  return `审核：${statusText(review?.status)}`;
+  return `审核${timelineReviewerText(review)}：${statusText(review?.status)}`;
 }
 
 function timelineBranchTime(branch) {
@@ -4198,6 +4198,16 @@ function timelineBranchContent(branch) {
     return branch.record.content || branch.record.opinion || '';
   }
   return branch.review?.opinion || '';
+}
+
+function timelineOperatorText(record) {
+  const name = record?.operator_name || record?.operator_login_name;
+  return name ? `（${name}）` : '';
+}
+
+function timelineReviewerText(review) {
+  const name = review?.reviewer_name || review?.teacher_name || review?.reviewer_login_name || review?.teacher_num;
+  return name ? `（${name}）` : '';
 }
 
 function isModifyAfterAcceptBranch(branch) {
