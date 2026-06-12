@@ -4,6 +4,7 @@ namespace app\controller\Api;
 
 use app\attribute\OperationLog;
 use app\controller\Api\Concerns\Responds;
+use app\server\OperationLogContext;
 use app\server\internship\InternshipService;
 use support\Request;
 use support\Response;
@@ -190,6 +191,7 @@ class InternshipController
     #[OperationLog('查看实习流程记录')]
     public function timeline(Request $request): Response
     {
+        OperationLogContext::setName('查看' . $this->workflowEntityName($request) . '流程记录');
         return $this->handle(fn (): array => $this->service()->timeline($request));
     }
 
@@ -199,6 +201,7 @@ class InternshipController
     #[OperationLog('发起通过后修改')]
     public function requestModification(Request $request): Response
     {
+        OperationLogContext::setName('发起' . $this->workflowEntityName($request) . '通过后修改');
         return $this->handle(fn (): array => $this->service()->requestModification($request));
     }
 
@@ -547,5 +550,30 @@ class InternshipController
     private function service(): InternshipService
     {
         return new InternshipService();
+    }
+
+    /**
+     * 获取流程记录实体名称。
+     */
+    private function workflowEntityName(Request $request): string
+    {
+        return match ((string) $request->input('entity', '')) {
+            'application' => '实习申请',
+            'arrangement' => '实习任务',
+            'arrangement_change' => '实习任务变更',
+            'sign_in' => '实习签到',
+            'journal' => '实习日志',
+            'report' => '实习报告',
+            'score' => '实习成绩',
+            'plan' => '实习计划',
+            'delay' => '延期申请',
+            'insurance' => '保险记录',
+            'safety_letter' => '安全承诺书',
+            'syllabus_guide' => '实习大纲指导书',
+            'implementation_sheet' => '实施计划表',
+            'teacher_work_report' => '教师工作报告',
+            'inspection' => '实习巡查记录',
+            default => '实习流程',
+        };
     }
 }

@@ -5,6 +5,7 @@ namespace app\middleware;
 use app\attribute\OperationLog;
 use app\model\channel\TableRecord;
 use app\server\CurrentContext;
+use app\server\OperationLogContext;
 use ReflectionMethod;
 use Throwable;
 use Webman\Http\Request;
@@ -103,6 +104,11 @@ class OperationLogMiddleware implements MiddlewareInterface
      */
     private function operationName(Request $request): ?string
     {
+        $contextName = OperationLogContext::name();
+        if ($contextName) {
+            return $contextName;
+        }
+
         $controller = is_string($request->controller ?? null) ? $request->controller : '';
         $action = is_string($request->action ?? null) ? $request->action : '';
         if ($controller === '' || $action === '' || !class_exists($controller) || !method_exists($controller, $action)) {
