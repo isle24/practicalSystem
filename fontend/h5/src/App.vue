@@ -1294,6 +1294,66 @@
     </van-popup>
 
     <van-popup
+      v-model:show="practiceExecutionDialog.visible"
+      round
+      position="bottom"
+      safe-area-inset-bottom
+    >
+      <section class="review-sheet">
+        <header>
+          <strong>{{ practiceExecutionDialogTitle }}</strong>
+          <span>{{ practiceExecutionDialogSubtitle }}</span>
+        </header>
+        <label>
+          <span>项目</span>
+          <select v-model.number="practiceExecutionDialog.form.project_id">
+            <option v-for="item in practiceModule(practiceExecutionDialog.module).options.projects" :key="item.id" :value="item.id">
+              {{ item.title || item.course_name }}
+            </option>
+          </select>
+        </label>
+        <template v-if="practiceExecutionDialog.execution === 'sign_in'">
+          <label>
+            <span>位置</span>
+            <input v-model="practiceExecutionDialog.form.location" placeholder="GPS 定位或现场位置">
+          </label>
+          <label>
+            <span>经度</span>
+            <input v-model="practiceExecutionDialog.form.longitude" type="number">
+          </label>
+          <label>
+            <span>纬度</span>
+            <input v-model="practiceExecutionDialog.form.latitude" type="number">
+          </label>
+        </template>
+        <template v-else>
+          <label>
+            <span>标题</span>
+            <input v-model="practiceExecutionDialog.form.title">
+          </label>
+          <label>
+            <span>日期</span>
+            <input v-model="practiceExecutionDialog.form.date" type="date">
+          </label>
+          <label>
+            <span>内容</span>
+            <textarea v-model="practiceExecutionDialog.form.content" rows="5" />
+          </label>
+        </template>
+        <label>
+          <span>备注</span>
+          <textarea v-model="practiceExecutionDialog.form.remark" rows="3" />
+        </label>
+        <div class="sheet-actions">
+          <button type="button" @click="closePracticeExecutionDialog">取消</button>
+          <button type="button" :disabled="practiceModule(practiceExecutionDialog.module).loading" @click="submitPracticeExecution">
+            提交
+          </button>
+        </div>
+      </section>
+    </van-popup>
+
+    <van-popup
       v-model:show="internship.timelineDialog.visible"
       round
       position="bottom"
@@ -1415,11 +1475,14 @@ import {
   fetchPracticeList,
   fetchPracticeOptions,
   fetchPracticeOverview,
+  fetchPracticeExecutionList,
+  fetchPracticeExecutionTimeline,
   fetchPracticeTimeline,
   fetchTemplateCategories,
   fetchTemplateList,
   markMessagesRead,
   requestInternshipModification,
+  requestPracticeExecutionModification,
   requestPracticeModification,
   reviewInternshipApplication,
   reviewInternshipArrangementChange,
@@ -1427,6 +1490,7 @@ import {
   reviewInternshipJournal,
   reviewInternshipPlan,
   reviewInternshipReport,
+  reviewPracticeExecution,
   reviewPracticeItem,
   saveInternshipApplication,
   saveInternshipDelay,
@@ -1434,6 +1498,8 @@ import {
   saveInternshipReport,
   saveInternshipScore,
   saveInternshipSignIn,
+  savePracticeExecution,
+  savePracticeProjectScore,
   passkeyLogin,
   login as loginApi,
   logout as logoutApi,
@@ -1691,6 +1757,24 @@ const practiceReviewDialog = reactive({
   status: 'accept',
   row: null,
   reason: '',
+});
+const practiceExecutionDialog = reactive({
+  visible: false,
+  module: 'training',
+  panel: 'journals',
+  execution: 'journal',
+  row: null,
+  form: {
+    id: null,
+    project_id: null,
+    title: '',
+    date: '',
+    content: '',
+    location: '',
+    longitude: '',
+    latitude: '',
+    remark: '',
+  },
 });
 const mobileNavigationState = reactive({
   backStack: [],
@@ -2269,6 +2353,9 @@ const practicePanelDefinitions = [
   { key: 'plans', entity: 'plan', title: '教学计划', shortTitle: '计划', icon: FileText, review: true, emptyText: '暂无教学计划' },
   { key: 'schedules', entity: 'schedule', title: '课表安排', shortTitle: '课表', icon: CalendarCheck, review: false, emptyText: '暂无课表安排' },
   { key: 'projects', entity: 'project', title: '项目发布', shortTitle: '项目', icon: ClipboardList, review: false, emptyText: '暂无项目' },
+  { key: 'signIns', entity: 'sign_in', execution: 'sign_in', title: '签到记录', shortTitle: '签到', icon: MapPin, review: false, emptyText: '暂无签到记录' },
+  { key: 'journals', entity: 'journal', execution: 'journal', title: '过程日志', shortTitle: '日志', icon: FileClock, review: true, emptyText: '暂无日志记录' },
+  { key: 'reports', entity: 'report', execution: 'report', title: '总结报告', shortTitle: '报告', icon: FileText, review: true, emptyText: '暂无报告记录' },
   { key: 'syllabus', entity: 'syllabus', title: '大纲编写', shortTitle: '大纲', icon: BookOpen, review: true, emptyText: '暂无大纲' },
   { key: 'lessonPlans', entity: 'lessonPlan', title: '教案编写', shortTitle: '教案', icon: FileText, review: true, emptyText: '暂无教案' },
   { key: 'gradeRules', entity: 'gradeRule', title: '成绩比例', shortTitle: '比例', icon: GraduationCap, review: false, emptyText: '暂无成绩比例' },
@@ -2307,6 +2394,14 @@ const practiceReviewTargetDetails = computed(() => {
     detailItem('当前状态', statusText(row.status)),
   ].filter(Boolean);
 });
+const practiceExecutionDialogTitle = computed(() => {
+  const names = { sign_in: '签到', journal: '提交日志', report: '提交报告' };
+  return `${practiceModuleName(practiceExecutionDialog.module)}${names[practiceExecutionDialog.execution] || '提交'}`;
+});
+const practiceExecutionDialogSubtitle = computed(() => {
+  const project = practiceModule(practiceExecutionDialog.module).options.projects.find(item => Number(item.id) === Number(practiceExecutionDialog.form.project_id || 0));
+  return project?.title || project?.course_name || '请选择项目';
+});
 
 function emptyPagedList() {
   return {
@@ -2320,7 +2415,7 @@ function emptyPagedList() {
 }
 
 function createPracticeState() {
-  const panels = ['plans', 'schedules', 'projects', 'syllabus', 'lessonPlans', 'gradeRules', 'scores', 'reflections'];
+  const panels = ['plans', 'schedules', 'projects', 'signIns', 'journals', 'reports', 'syllabus', 'lessonPlans', 'gradeRules', 'scores', 'reflections'];
   return {
     loading: false,
     message: '',
@@ -2345,6 +2440,7 @@ function createPracticeState() {
       rooms: [],
       plans: [],
       schedules: [],
+      projects: [],
       review_rules: {},
     },
     filters: Object.fromEntries(panels.map(panel => [panel, emptyPracticeFilters()])),
@@ -2970,7 +3066,7 @@ function practiceModuleName(module) {
 
 function practicePanels(module) {
   if (isStudentRole.value) {
-    return practicePanelDefinitions.filter(item => ['projects', 'schedules', 'scores'].includes(item.key));
+    return practicePanelDefinitions.filter(item => ['projects', 'signIns', 'journals', 'reports', 'scores'].includes(item.key));
   }
   if (isTeacherRole.value) {
     return practicePanelDefinitions.filter(item => item.key !== 'gradeRules');
@@ -2990,6 +3086,7 @@ function practiceSummaries(module) {
     { name: '待审计划', value: overview.plans_waiting || 0 },
     { name: '课表', value: overview.schedules || 0 },
     { name: '项目', value: overview.projects || 0 },
+    { name: '日志', value: practiceModule(module).lists.journals.pagination.total || 0 },
     { name: '今日课表', value: overview.today_schedules || 0 },
   ];
 }
@@ -3034,6 +3131,22 @@ function practiceQueryParams(module, page = 1) {
   return params;
 }
 
+function practiceExecutionQueryParams(module, page = 1) {
+  const state = practiceModule(module);
+  const panel = currentPracticePanel(module);
+  const filters = state.filters[panel.key] || {};
+  const params = {
+    page,
+    page_size: state.lists[panel.key]?.pagination.page_size || 10,
+  };
+  Object.entries(filters).forEach(([key, value]) => {
+    if (value !== '' && value !== null && value !== undefined) {
+      params[key] = value;
+    }
+  });
+  return params;
+}
+
 async function loadPractice(module) {
   if (!isLoggedIn.value || !hasPermission(`${module}:view`)) {
     return;
@@ -3060,7 +3173,9 @@ async function loadPractice(module) {
 async function loadPracticeList(module, page = 1, append = false) {
   const state = practiceModule(module);
   const panel = currentPracticePanel(module);
-  const data = await fetchPracticeList(module, practiceQueryParams(module, page));
+  const data = panel.execution
+    ? await fetchPracticeExecutionList(module, panel.execution, practiceExecutionQueryParams(module, page))
+    : await fetchPracticeList(module, practiceQueryParams(module, page));
   const items = data.items || [];
   state.lists[panel.key].items = append ? [...state.lists[panel.key].items, ...items] : items;
   state.lists[panel.key].pagination = {
@@ -3132,6 +3247,12 @@ function switchPracticePanel(module, panel) {
 
 function practiceRowTitle(module, row) {
   const panel = currentPracticePanel(module).key;
+  if (panel === 'signIns') {
+    return row.project_title || row.title || '签到记录';
+  }
+  if (['journals', 'reports'].includes(panel)) {
+    return row.title || row.project_title || `记录 ${row.id}`;
+  }
   if (panel === 'scores') {
     return row.student_name || row.student_num || row.title || `成绩 ${row.id}`;
   }
@@ -3146,6 +3267,12 @@ function practiceRowTitle(module, row) {
 
 function practiceRowValue(module, row) {
   const panel = currentPracticePanel(module).key;
+  if (panel === 'signIns') {
+    return row.date || row.sign_time || statusText(row.status);
+  }
+  if (['journals', 'reports'].includes(panel)) {
+    return statusText(row.status);
+  }
   if (panel === 'schedules') {
     return row.schedule_date || statusText(row.status);
   }
@@ -3178,6 +3305,24 @@ function practiceRowFacts(module, row) {
       namedFact('日期', joinFact([row.start_date, row.end_date])),
       namedFact('绑定学生', row.bound_student_count ?? row.student_count),
     ],
+    signIns: [
+      namedFact('项目', row.project_title),
+      namedFact('学生', joinFact([row.student_name, row.student_num])),
+      namedFact('负责老师', row.teacher_name),
+      namedFact('位置', row.location),
+    ],
+    journals: [
+      namedFact('项目', row.project_title),
+      namedFact('学生', joinFact([row.student_name, row.student_num])),
+      namedFact('日期', row.date || row.created_at),
+      namedFact('内容', previewText(row.content, 52)),
+    ],
+    reports: [
+      namedFact('项目', row.project_title),
+      namedFact('学生', joinFact([row.student_name, row.student_num])),
+      namedFact('提交', row.submitted_at || row.created_at),
+      namedFact('内容', previewText(row.content, 52)),
+    ],
     scores: [
       namedFact('学号', row.student_num),
       namedFact('计划', row.plan_title),
@@ -3200,6 +3345,29 @@ function practiceRowFacts(module, row) {
 
 function practiceRowActions(module, row) {
   const panel = currentPracticePanel(module);
+  if (panel.key === 'projects' && isStudentRole.value) {
+    return [
+      { key: 'signIn', label: '签到' },
+      { key: 'journal', label: '日志' },
+      { key: 'report', label: '报告' },
+    ];
+  }
+  if (panel.execution) {
+    const actions = [{ key: 'timeline', label: '记录' }];
+    if (isStudentRole.value && ['journals', 'reports'].includes(panel.key) && ['draft', 'modify'].includes(row.status || '')) {
+      actions.unshift({ key: 'editExecution', label: '修改' });
+    }
+    if (!isStudentRole.value && row.status === 'wait' && hasPermission(`${module}:approve`) && panel.review) {
+      actions.push(
+        { key: 'accept', label: '通过' },
+        { key: 'modify', label: '退回' },
+      );
+    }
+    if (!isStudentRole.value && row.status === 'accept' && hasPermission(`${module}:approve`) && panel.review) {
+      actions.push({ key: 'reopen', label: '通过后修改' });
+    }
+    return actions;
+  }
   if (!panel.review) {
     return [];
   }
@@ -3218,6 +3386,17 @@ function practiceRowActions(module, row) {
 
 function handlePracticeAction(module, action, row) {
   const panel = currentPracticePanel(module);
+  if (['signIn', 'journal', 'report'].includes(action.key)) {
+    openPracticeExecutionDialog(module, action.key === 'signIn' ? 'signIns' : `${action.key}s`, null, {
+      projectId: row.id,
+      projectTitle: row.title || row.course_name,
+    });
+    return;
+  }
+  if (action.key === 'editExecution') {
+    openPracticeExecutionDialog(module, panel.key, row);
+    return;
+  }
   if (action.key === 'timeline') {
     openPracticeTimeline(module, panel, row);
     return;
@@ -3628,13 +3807,83 @@ async function openPracticeTimeline(module, panel, row) {
   internship.timelineDialog.cycles = [];
   internship.timelineDialog.message = '';
   try {
-    const data = await fetchPracticeTimeline(module, { entity: panel.entity, id: row.id });
+    const data = panel.execution
+      ? await fetchPracticeExecutionTimeline(module, { execution: panel.execution, id: row.id })
+      : await fetchPracticeTimeline(module, { entity: panel.entity, id: row.id });
     internship.timelineDialog.cycles = data.cycles || [];
     internship.timelineDialog.items = data.items || data.records || [];
   } catch (error) {
     internship.timelineDialog.message = error.message;
   } finally {
     internship.timelineDialog.loading = false;
+  }
+}
+
+function openPracticeExecutionDialog(module, panelKey, row = null, context = {}) {
+  const panel = practicePanelDefinitions.find(item => item.key === panelKey) || currentPracticePanel(module);
+  const projectId = context.projectId
+    || (panel.key === 'projects'
+      ? row?.id
+      : row?.project_id || row?.entity_id || practiceModule(module).options.projects[0]?.id || null);
+  practiceExecutionDialog.visible = true;
+  practiceExecutionDialog.module = module;
+  practiceExecutionDialog.panel = panel.key;
+  practiceExecutionDialog.execution = panel.execution || 'journal';
+  practiceExecutionDialog.row = row;
+  practiceExecutionDialog.form = {
+    id: context.projectId ? null : (panel.execution && row?.id ? row.id : null),
+    project_id: projectId,
+    title: panel.execution ? (row?.title || context.projectTitle || '') : '',
+    date: row?.date || '',
+    content: row?.content || '',
+    location: row?.location || '',
+    longitude: row?.longitude || '',
+    latitude: row?.latitude || '',
+    remark: row?.remark || '',
+  };
+}
+
+function closePracticeExecutionDialog() {
+  practiceExecutionDialog.visible = false;
+  practiceExecutionDialog.row = null;
+}
+
+async function submitPracticeExecution() {
+  const state = practiceModule(practiceExecutionDialog.module);
+  const execution = practiceExecutionDialog.execution;
+  if (!practiceExecutionDialog.form.project_id) {
+    state.message = '请选择项目';
+    showToast(state.message);
+    return;
+  }
+  if (execution !== 'sign_in' && !String(practiceExecutionDialog.form.content || '').trim()) {
+    state.message = '请填写内容';
+    showToast(state.message);
+    return;
+  }
+  state.loading = true;
+  state.message = '';
+  try {
+    await savePracticeExecution(practiceExecutionDialog.module, execution, {
+      id: practiceExecutionDialog.form.id || undefined,
+      project_id: practiceExecutionDialog.form.project_id,
+      title: practiceExecutionDialog.form.title,
+      date: practiceExecutionDialog.form.date,
+      content: practiceExecutionDialog.form.content,
+      location: practiceExecutionDialog.form.location,
+      longitude: practiceExecutionDialog.form.longitude,
+      latitude: practiceExecutionDialog.form.latitude,
+      remark: practiceExecutionDialog.form.remark,
+      status: execution === 'sign_in' ? 'signed' : 'wait',
+    });
+    closePracticeExecutionDialog();
+    state.panel = practiceExecutionDialog.panel;
+    await loadPractice(practiceExecutionDialog.module);
+    showToast('已提交');
+  } catch (error) {
+    state.message = error.message;
+  } finally {
+    state.loading = false;
   }
 }
 
@@ -3682,12 +3931,30 @@ async function confirmPracticeReview() {
       opinion: practiceReviewDialog.reason,
     };
     if (practiceReviewDialog.mode === 'reopen') {
-      await requestPracticeModification(practiceReviewDialog.module, payload);
+      const panel = practicePanelDefinitions.find(item => item.key === practiceReviewDialog.panel);
+      if (panel?.execution) {
+        await requestPracticeExecutionModification(practiceReviewDialog.module, {
+          execution: panel.execution,
+          id: practiceReviewDialog.row.id,
+          opinion: practiceReviewDialog.reason,
+        });
+      } else {
+        await requestPracticeModification(practiceReviewDialog.module, payload);
+      }
     } else {
-      await reviewPracticeItem(practiceReviewDialog.module, {
-        ...payload,
-        status: practiceReviewDialog.status,
-      });
+      const panel = practicePanelDefinitions.find(item => item.key === practiceReviewDialog.panel);
+      if (panel?.execution) {
+        await reviewPracticeExecution(practiceReviewDialog.module, panel.execution, {
+          id: practiceReviewDialog.row.id,
+          status: practiceReviewDialog.status,
+          opinion: practiceReviewDialog.reason,
+        });
+      } else {
+        await reviewPracticeItem(practiceReviewDialog.module, {
+          ...payload,
+          status: practiceReviewDialog.status,
+        });
+      }
     }
     closePracticeReviewDialog();
     await loadPractice(practiceReviewDialog.module);

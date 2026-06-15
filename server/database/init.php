@@ -654,12 +654,12 @@ function schoolBusinessStatements(): array
         simpleTable('student_join_teacher', ['`student_id` BIGINT UNSIGNED DEFAULT NULL', '`teacher_id` BIGINT UNSIGNED DEFAULT NULL', '`arrangement_id` BIGINT UNSIGNED DEFAULT NULL']),
         simpleTable('join_recording', recordingColumns()),
         simpleTable('pair', ['`student_id` BIGINT UNSIGNED DEFAULT NULL', '`teacher_id` BIGINT UNSIGNED DEFAULT NULL', '`type` ENUM(\'internship\',\'training\',\'lab\') DEFAULT \'internship\'', '`arrangement_id` BIGINT UNSIGNED DEFAULT NULL', '`entity_type` VARCHAR(40) DEFAULT NULL', '`entity_id` BIGINT UNSIGNED DEFAULT NULL', '`active_flag` TINYINT GENERATED ALWAYS AS (CASE WHEN `status` = \'active\' AND `deleted_at` IS NULL THEN 1 ELSE NULL END) STORED', 'UNIQUE KEY `uk_pair_active` (`student_id`, `type`, `arrangement_id`, `active_flag`)']),
-        simpleTable('sign_in', entityColumns(['`student_id` BIGINT UNSIGNED DEFAULT NULL', '`teacher_id` BIGINT UNSIGNED DEFAULT NULL', '`sign_time` DATETIME DEFAULT NULL', '`longitude` DECIMAL(10,6) DEFAULT NULL', '`latitude` DECIMAL(10,6) DEFAULT NULL'])),
+        simpleTable('sign_in', entityColumns(['`student_id` BIGINT UNSIGNED DEFAULT NULL', '`teacher_id` BIGINT UNSIGNED DEFAULT NULL', '`sign_time` DATETIME DEFAULT NULL', '`date` DATE DEFAULT NULL', '`longitude` DECIMAL(10,6) DEFAULT NULL', '`latitude` DECIMAL(10,6) DEFAULT NULL', '`location` VARCHAR(255) DEFAULT NULL', '`sign_type` VARCHAR(40) DEFAULT \'gps\'', '`remark` TEXT DEFAULT NULL'])),
         simpleTable('sign_in_recording', recordingColumns()),
         simpleTable('sign_in_qrcode', entityColumns(['`teacher_id` BIGINT UNSIGNED DEFAULT NULL', '`token` VARCHAR(120) DEFAULT NULL', '`expires_at` DATETIME DEFAULT NULL'])),
-        simpleTable('journal', entityColumns(['`student_id` BIGINT UNSIGNED DEFAULT NULL', '`title` VARCHAR(180) DEFAULT NULL', '`content` TEXT DEFAULT NULL'])),
+        simpleTable('journal', entityColumns(['`student_id` BIGINT UNSIGNED DEFAULT NULL', '`teacher_id` BIGINT UNSIGNED DEFAULT NULL', '`date` DATE DEFAULT NULL', '`title` VARCHAR(180) DEFAULT NULL', '`content` TEXT DEFAULT NULL', '`remark` TEXT DEFAULT NULL'])),
         simpleTable('journal_recording', recordingColumns()),
-        simpleTable('report', entityColumns(['`student_id` BIGINT UNSIGNED DEFAULT NULL', '`template_id` BIGINT UNSIGNED DEFAULT NULL', '`submitted_at` DATETIME DEFAULT NULL'])),
+        simpleTable('report', entityColumns(['`student_id` BIGINT UNSIGNED DEFAULT NULL', '`teacher_id` BIGINT UNSIGNED DEFAULT NULL', '`date` DATE DEFAULT NULL', '`title` VARCHAR(180) DEFAULT NULL', '`content` TEXT DEFAULT NULL', '`template_id` BIGINT UNSIGNED DEFAULT NULL', '`submitted_at` DATETIME DEFAULT NULL', '`remark` TEXT DEFAULT NULL'])),
         simpleTable('report_recording', recordingColumns()),
         simpleTable('report_template', ['`template_json` JSON DEFAULT NULL']),
         simpleTable('review_opinion', entityColumns(['`reviewer_id` BIGINT UNSIGNED DEFAULT NULL', '`opinion` TEXT DEFAULT NULL'])),
@@ -695,7 +695,7 @@ function schoolBusinessStatements(): array
         simpleTable('practice_syllabus', practiceCommonColumns(['`submitter_id` BIGINT UNSIGNED DEFAULT NULL'])),
         simpleTable('practice_lesson_plan', practiceCommonColumns(['`submitter_id` BIGINT UNSIGNED DEFAULT NULL'])),
         simpleTable('practice_grade_rule', practiceCommonColumns(['`ratio_json` JSON DEFAULT NULL'])),
-        simpleTable('practice_score', practiceCommonColumns(['`student_id` BIGINT UNSIGNED DEFAULT NULL', '`rule_id` BIGINT UNSIGNED DEFAULT NULL', '`score_items` JSON DEFAULT NULL', '`score_value` DECIMAL(5,2) DEFAULT NULL'])),
+        simpleTable('practice_score', practiceCommonColumns(['`project_id` BIGINT UNSIGNED DEFAULT NULL', '`student_id` BIGINT UNSIGNED DEFAULT NULL', '`rule_id` BIGINT UNSIGNED DEFAULT NULL', '`score_items` JSON DEFAULT NULL', '`score_value` DECIMAL(5,2) DEFAULT NULL'])),
         simpleTable('practice_reflection', practiceCommonColumns(['`submitter_id` BIGINT UNSIGNED DEFAULT NULL'])),
         simpleTable('practice_room', ['`module_type` ENUM(\'training\',\'lab\') DEFAULT \'training\'', '`dep_id` BIGINT UNSIGNED DEFAULT NULL', '`room_type` VARCHAR(80) DEFAULT NULL', '`capacity` INT DEFAULT 0', '`location` VARCHAR(255) DEFAULT NULL', '`manager_id` BIGINT UNSIGNED DEFAULT NULL']),
         simpleTable('practice_recording', array_merge(['`parent_id` BIGINT UNSIGNED DEFAULT NULL', '`module_type` ENUM(\'training\',\'lab\') DEFAULT \'training\'', '`action` VARCHAR(40) DEFAULT NULL', '`content` TEXT DEFAULT NULL'], recordingColumns())),
@@ -1232,6 +1232,7 @@ function ensureInternshipSchema(PDO $pdo): void
     ensureIndex($pdo, 'sign_in', 'idx_sign_student_date', "ALTER TABLE `sign_in` ADD KEY `idx_sign_student_date` (`student_id`, `entity_type`, `entity_id`, `date`)");
     ensureIndex($pdo, 'journal', 'idx_journal_student_date', "ALTER TABLE `journal` ADD KEY `idx_journal_student_date` (`student_id`, `entity_type`, `entity_id`, `date`)");
     ensureIndex($pdo, 'report', 'idx_report_student_arrangement', "ALTER TABLE `report` ADD KEY `idx_report_student_arrangement` (`student_id`, `arrangement_id`, `status`)");
+    ensureIndex($pdo, 'report', 'idx_report_student_entity', "ALTER TABLE `report` ADD KEY `idx_report_student_entity` (`student_id`, `entity_type`, `entity_id`, `status`)");
     ensureIndex($pdo, 'review_opinion', 'idx_review_entity', "ALTER TABLE `review_opinion` ADD KEY `idx_review_entity` (`entity_type`, `entity_id`, `status`, `created_at`)");
     ensureIndex($pdo, 'apply_report_delay', 'idx_delay_student_entity', "ALTER TABLE `apply_report_delay` ADD KEY `idx_delay_student_entity` (`student_id`, `entity_type`, `entity_id`, `status`)");
     ensureIndex($pdo, 'score', 'idx_score_student_arrangement', "ALTER TABLE `score` ADD KEY `idx_score_student_arrangement` (`student_id`, `arrangement_id`)");
@@ -1300,6 +1301,7 @@ function ensurePracticeSchema(PDO $pdo): void
             'ratio_json' => "ALTER TABLE `practice_grade_rule` ADD COLUMN `ratio_json` JSON DEFAULT NULL AFTER `remark`",
         ],
         'practice_score' => [
+            'project_id' => "ALTER TABLE `practice_score` ADD COLUMN `project_id` BIGINT UNSIGNED DEFAULT NULL AFTER `remark`",
             'student_id' => "ALTER TABLE `practice_score` ADD COLUMN `student_id` BIGINT UNSIGNED DEFAULT NULL AFTER `remark`",
             'rule_id' => "ALTER TABLE `practice_score` ADD COLUMN `rule_id` BIGINT UNSIGNED DEFAULT NULL AFTER `student_id`",
             'score_items' => "ALTER TABLE `practice_score` ADD COLUMN `score_items` JSON DEFAULT NULL AFTER `rule_id`",
@@ -1332,6 +1334,7 @@ function ensurePracticeSchema(PDO $pdo): void
     ensureIndex($pdo, 'practice_schedule', 'idx_practice_schedule_date', "ALTER TABLE `practice_schedule` ADD KEY `idx_practice_schedule_date` (`module_type`, `schedule_date`, `status`)");
     ensureIndex($pdo, 'practice_project', 'idx_practice_project_schedule', "ALTER TABLE `practice_project` ADD KEY `idx_practice_project_schedule` (`module_type`, `schedule_id`, `status`)");
     ensureIndex($pdo, 'practice_score', 'idx_practice_score_student', "ALTER TABLE `practice_score` ADD KEY `idx_practice_score_student` (`module_type`, `student_id`, `status`)");
+    ensureIndex($pdo, 'practice_score', 'idx_practice_score_project', "ALTER TABLE `practice_score` ADD KEY `idx_practice_score_project` (`module_type`, `project_id`, `student_id`, `status`)");
     ensureIndex($pdo, 'practice_room', 'idx_practice_room_module', "ALTER TABLE `practice_room` ADD KEY `idx_practice_room_module` (`module_type`, `dep_id`, `status`)");
     ensureIndex($pdo, 'practice_recording', 'idx_practice_recording_entity', "ALTER TABLE `practice_recording` ADD KEY `idx_practice_recording_entity` (`module_type`, `entity_type`, `entity_id`)");
     ensureIndex($pdo, 'practice_recording', 'idx_practice_recording_parent', "ALTER TABLE `practice_recording` ADD KEY `idx_practice_recording_parent` (`parent_id`)");
@@ -1354,6 +1357,32 @@ function ensurePracticeSchema(PDO $pdo): void
     }
     ensureIndexColumns($pdo, 'practice_project_student', 'uk_project_student', ['project_id', 'student_id', 'active_flag'], "ALTER TABLE `practice_project_student` ADD UNIQUE KEY `uk_project_student` (`project_id`, `student_id`, `active_flag`)");
     ensureIndex($pdo, 'practice_project_student', 'idx_project_student', "ALTER TABLE `practice_project_student` ADD KEY `idx_project_student` (`module_type`, `student_id`, `status`)");
+
+    $executionColumns = [
+        'sign_in' => [
+            'date' => "ALTER TABLE `sign_in` ADD COLUMN `date` DATE DEFAULT NULL AFTER `sign_time`",
+            'location' => "ALTER TABLE `sign_in` ADD COLUMN `location` VARCHAR(255) DEFAULT NULL AFTER `latitude`",
+            'sign_type' => "ALTER TABLE `sign_in` ADD COLUMN `sign_type` VARCHAR(40) DEFAULT 'gps' AFTER `location`",
+            'remark' => "ALTER TABLE `sign_in` ADD COLUMN `remark` TEXT DEFAULT NULL AFTER `sign_type`",
+        ],
+        'journal' => [
+            'teacher_id' => "ALTER TABLE `journal` ADD COLUMN `teacher_id` BIGINT UNSIGNED DEFAULT NULL AFTER `student_id`",
+            'date' => "ALTER TABLE `journal` ADD COLUMN `date` DATE DEFAULT NULL AFTER `teacher_id`",
+            'remark' => "ALTER TABLE `journal` ADD COLUMN `remark` TEXT DEFAULT NULL AFTER `content`",
+        ],
+        'report' => [
+            'teacher_id' => "ALTER TABLE `report` ADD COLUMN `teacher_id` BIGINT UNSIGNED DEFAULT NULL AFTER `student_id`",
+            'date' => "ALTER TABLE `report` ADD COLUMN `date` DATE DEFAULT NULL AFTER `teacher_id`",
+            'title' => "ALTER TABLE `report` ADD COLUMN `title` VARCHAR(180) DEFAULT NULL AFTER `date`",
+            'content' => "ALTER TABLE `report` ADD COLUMN `content` TEXT DEFAULT NULL AFTER `title`",
+            'remark' => "ALTER TABLE `report` ADD COLUMN `remark` TEXT DEFAULT NULL AFTER `submitted_at`",
+        ],
+    ];
+    foreach ($executionColumns as $table => $columns) {
+        foreach ($columns as $column => $ddl) {
+            ensureColumn($pdo, $table, $column, $ddl);
+        }
+    }
 
     $baseFlowColumns = [
         'base_application' => [

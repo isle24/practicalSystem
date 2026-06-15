@@ -37,6 +37,12 @@ class PracticeService
         'room' => ['permission' => 'manage', 'title' => '实验实训室', 'review' => false],
     ];
 
+    private const EXECUTIONS = [
+        'sign_in' => ['title' => '签到', 'review' => false],
+        'journal' => ['title' => '日志', 'review' => true],
+        'report' => ['title' => '报告', 'review' => true],
+    ];
+
     private const REVIEW_RULES = [
         'plan' => [
             'accept' => ['min' => 0, 'max' => 300],
@@ -51,6 +57,14 @@ class PracticeService
             'modify' => ['min' => 8, 'max' => 800],
         ],
         'reflection' => [
+            'accept' => ['min' => 0, 'max' => 300],
+            'modify' => ['min' => 8, 'max' => 800],
+        ],
+        'journal' => [
+            'accept' => ['min' => 0, 'max' => 200],
+            'modify' => ['min' => 5, 'max' => 500],
+        ],
+        'report' => [
             'accept' => ['min' => 0, 'max' => 300],
             'modify' => ['min' => 8, 'max' => 800],
         ],
@@ -204,6 +218,410 @@ class PracticeService
             'reviews' => $reviews,
             'cycles' => $this->timelineCycles($records, $reviews),
         ];
+    }
+
+    public function signIns(Request $request): array
+    {
+        $this->requirePermission('view');
+
+        return PracticeRecord::executionPage($this->scopeContext(), $this->moduleType, 'sign_in', $this->requestFilters($request));
+    }
+
+    public function saveSignIn(Request $request): array
+    {
+        $this->requirePermission('view');
+        $project = $this->projectForExecution($request);
+        $studentId = $this->executionStudentId($request, $project);
+        $projectStudent = PracticeRecord::projectStudentRow($this->moduleType, (int) $project['id'], $studentId);
+        if (!$projectStudent) {
+            throw new RuntimeException('学生未绑定该项目', 40301);
+        }
+
+        $values = [
+            'uuid' => $this->uuid(),
+            'student_id' => $studentId,
+            'entity_type' => $this->moduleType,
+            'entity_id' => (int) $project['id'],
+            'teacher_id' => (int) ($projectStudent['teacher_id'] ?? ($project['teacher_id'] ?? 0)) ?: null,
+            'sign_time' => $this->dateTimeInput($request, 'sign_time') ?: $this->now(),
+            'date' => $this->dateInput($request, 'date') ?: date('Y-m-d'),
+            'longitude' => $this->decimalInput($request, 'longitude'),
+            'latitude' => $this->decimalInput($request, 'latitude'),
+            'location' => $this->nullableString($request, 'location', 255),
+            'sign_type' => $this->enum($request, 'sign_type', ['gps', 'qrcode', 'manual'], $this->isStudent() ? 'gps' : 'manual'),
+            'remark' => $this->nullableString($request, 'remark', 1000),
+            'status' => 'signed',
+            'created_at' => $this->now(),
+            'updated_at' => $this->now(),
+            'deleted_at' => null,
+        ];
+        $id = PracticeRecord::insertExecution('sign_in', $values);
+        $this->recordExecutionWorkflow('sign_in', $id, 'submit', 'draft', 'signed', $this->executionContent('sign_in', $values), null);
+
+        return ['id' => $id];
+    }
+
+    public function journals(Request $request): array
+    {
+        $this->requirePermission('view');
+
+        return PracticeRecord::executionPage($this->scopeContext(), $this->moduleType, 'journal', $this->requestFilters($request));
+    }
+
+    public function saveJournal(Request $request): array
+    {
+        return $this->saveReviewExecution($request, 'journal');
+    }
+
+    public function reviewJournal(Request $request): array
+    {
+        return $this->reviewExecution($request, 'journal');
+    }
+
+    public function reports(Request $request): array
+    {
+        $this->requirePermission('view');
+
+        return PracticeRecord::executionPage($this->scopeContext(), $this->moduleType, 'report', $this->requestFilters($request));
+    }
+
+    public function saveReport(Request $request): array
+    {
+        return $this->saveReviewExecution($request, 'report');
+    }
+
+    public function reviewReport(Request $request): array
+    {
+        return $this->reviewExecution($request, 'report');
+    }
+
+    public function requestExecutionModification(Request $request): array
+    {
+        $execution = $this->executionInput($request);
+        if (!(self::EXECUTIONS[$execution]['review'] ?? false)) {
+            throw new InvalidArgumentException('该执行记录不支持通过后修改');
+        }
+        $this->requirePermission('approve');
+        $id = $this->requiredInt($request, 'id');
+        $opinion = $this->reviewOpinionInput($request, $execution, 'modify', '修改理由');
+
+        return PracticeRecord::connection()->transaction(function () use ($execution, $id, $opinion): array {
+            $row = PracticeRecord::lockExecutionRow($this->scopeContext(), $this->moduleType, $execution, $id);
+            if (!$row) {
+                throw new RuntimeException('数据不存在或无权限', 40301);
+            }
+            if ((string) $row->status !== 'accept') {
+                throw new InvalidArgumentException('仅已通过数据可改回修改', 42203);
+            }
+
+            PracticeRecord::updateExecution($execution, $id, [
+                'status' => 'modify',
+                'updated_at' => $this->now(),
+            ]);
+            $this->recordExecutionWorkflow($execution, $id, 'modify_after_accept', 'accept', 'modify', $opinion ?: '通过后要求修改', 'modify');
+
+            return ['id' => $id, 'status' => 'modify'];
+        });
+    }
+
+    public function saveScore(Request $request): array
+    {
+        $this->requireEntityPermission('score');
+        $project = $this->projectForExecution($request);
+        $studentId = $this->executionStudentId($request, $project);
+        $projectStudent = PracticeRecord::projectStudentRow($this->moduleType, (int) $project['id'], $studentId);
+        if (!$projectStudent) {
+            throw new RuntimeException('学生未绑定该项目', 40301);
+        }
+        if ($this->isTeacher() && (int) ($projectStudent['teacher_id'] ?? 0) !== (int) $this->currentTeacherId(true)) {
+            throw new RuntimeException('无数据访问权限', 40301);
+        }
+
+        $scoreItems = $request->input('score_items', []);
+        if (!is_array($scoreItems)) {
+            $scoreItems = [];
+        }
+        foreach (['attendance_score', 'material_score', 'report_score'] as $key) {
+            $value = $this->decimalInput($request, $key);
+            if ($value !== null) {
+                $scoreItems[$key] = $value;
+            }
+        }
+        $scoreValue = $this->decimalInput($request, 'score_value');
+        if ($scoreValue === null) {
+            $scores = array_filter($scoreItems, 'is_numeric');
+            $scoreValue = $scores ? round(array_sum(array_map('floatval', $scores)) / count($scores), 2) : null;
+        }
+
+        $id = PracticeRecord::upsertPracticeScore($this->moduleType, [
+            'uuid' => $this->uuid(),
+            'module_type' => $this->moduleType,
+            'project_id' => (int) $project['id'],
+            'plan_id' => (int) ($project['plan_id'] ?? 0) ?: null,
+            'grade_id' => (int) ($projectStudent['grade_id'] ?? 0) ?: null,
+            'dep_id' => (int) ($projectStudent['dep_id'] ?? 0) ?: null,
+            'profession_id' => (int) ($projectStudent['profession_id'] ?? 0) ?: null,
+            'class_id' => (int) ($projectStudent['class_id'] ?? 0) ?: null,
+            'teacher_id' => (int) ($projectStudent['teacher_id'] ?? ($project['teacher_id'] ?? 0)) ?: null,
+            'student_id' => $studentId,
+            'course_name' => $project['course_name'] ?? null,
+            'title' => $this->nullableString($request, 'title', 180) ?: (($project['title'] ?? '') . '成绩'),
+            'score_items' => $this->jsonValue($scoreItems),
+            'score_value' => $scoreValue,
+            'status' => $this->enum($request, 'status', ['draft', 'wait', 'accept'], 'accept'),
+            'updated_at' => $this->now(),
+            'deleted_at' => null,
+            'created_at' => $this->now(),
+        ]);
+
+        return ['id' => $id];
+    }
+
+    public function executionTimeline(Request $request): array
+    {
+        $this->requirePermission('view');
+        $execution = $this->executionInput($request);
+        $id = $this->requiredInt($request, 'id');
+        $row = PracticeRecord::activeExecutionRow($this->scopeContext(), $this->moduleType, $execution, $id);
+        if (!$row) {
+            throw new RuntimeException('数据不存在或无权限', 40301);
+        }
+        $entityType = $this->executionEntityType($execution);
+        $records = PracticeRecord::recordingRows($entityType, $id);
+        $reviews = PracticeRecord::reviewOpinionRows($entityType, $id);
+
+        return [
+            'execution' => $execution,
+            'id' => $id,
+            'records' => $records,
+            'reviews' => $reviews,
+            'cycles' => $this->timelineCycles($records, $reviews),
+        ];
+    }
+
+    /**
+     * 保存需审核的执行材料。
+     */
+    private function saveReviewExecution(Request $request, string $execution): array
+    {
+        if (!(self::EXECUTIONS[$execution]['review'] ?? false)) {
+            throw new InvalidArgumentException('该执行记录不需要审核');
+        }
+        $this->requirePermission('view');
+        $project = $this->projectForExecution($request);
+        $studentId = $this->executionStudentId($request, $project);
+        $projectStudent = PracticeRecord::projectStudentRow($this->moduleType, (int) $project['id'], $studentId);
+        if (!$projectStudent) {
+            throw new RuntimeException('学生未绑定该项目', 40301);
+        }
+
+        $id = $this->optionalInt($request, 'id');
+        $status = $this->enum($request, 'status', ['draft', 'wait'], 'wait');
+        $values = $this->executionValues($request, $execution, $project, $projectStudent, $studentId, $status);
+
+        return PracticeRecord::connection()->transaction(function () use ($execution, $id, $values, $status): array {
+            $fromStatus = 'draft';
+            if ($id) {
+                $row = PracticeRecord::lockExecutionRow($this->scopeContext(), $this->moduleType, $execution, $id);
+                if (!$row) {
+                    throw new RuntimeException('数据不存在或无权限', 40301);
+                }
+                if (!in_array((string) $row->status, ['draft', 'modify'], true)) {
+                    throw new InvalidArgumentException('仅草稿或需修改状态可重新提交', 42204);
+                }
+                $fromStatus = (string) $row->status;
+                PracticeRecord::updateExecution($execution, $id, $values);
+            } else {
+                $id = PracticeRecord::insertExecution($execution, array_merge($values, [
+                    'uuid' => $this->uuid(),
+                    'created_at' => $this->now(),
+                ]));
+            }
+
+            if ($status === 'wait') {
+                $this->recordExecutionWorkflow($execution, $id, 'submit', $fromStatus, 'wait', $this->executionContent($execution, $values), 'wait');
+            }
+
+            return ['id' => $id, 'status' => $status];
+        });
+    }
+
+    /**
+     * 审核执行材料。
+     */
+    private function reviewExecution(Request $request, string $execution): array
+    {
+        if (!(self::EXECUTIONS[$execution]['review'] ?? false)) {
+            throw new InvalidArgumentException('该执行记录不需要审核');
+        }
+        $this->requirePermission('approve');
+        $id = $this->requiredInt($request, 'id');
+        $status = $this->enum($request, 'status', ['accept', 'modify'], 'accept');
+        $opinion = $this->reviewOpinionInput($request, $execution, $status);
+
+        return PracticeRecord::connection()->transaction(function () use ($execution, $id, $status, $opinion): array {
+            $row = PracticeRecord::lockExecutionRow($this->scopeContext(), $this->moduleType, $execution, $id);
+            if (!$row) {
+                throw new RuntimeException('数据不存在或无权限', 40301);
+            }
+            if ((string) $row->status !== 'wait') {
+                throw new InvalidArgumentException('仅待审核数据可处理', 42204);
+            }
+
+            PracticeRecord::updateExecution($execution, $id, [
+                'status' => $status,
+                'updated_at' => $this->now(),
+            ]);
+            $this->recordExecutionWorkflow($execution, $id, 'review', 'wait', $status, $opinion ?: '审核处理', $status);
+
+            return ['id' => $id, 'status' => $status];
+        });
+    }
+
+    /**
+     * 读取可执行项目。
+     */
+    private function projectForExecution(Request $request): array
+    {
+        $projectId = $this->requiredInt($request, 'project_id');
+        $project = PracticeRecord::projectExecutionRow($this->scopeContext(), $this->moduleType, $projectId);
+        if (!$project) {
+            throw new RuntimeException('项目不存在或无权限', 40301);
+        }
+
+        return $project;
+    }
+
+    /**
+     * 解析执行学生。
+     */
+    private function executionStudentId(Request $request, array $project): int
+    {
+        if ($this->isStudent()) {
+            return $this->currentStudentId(true);
+        }
+
+        $studentId = $this->requiredInt($request, 'student_id');
+        $projectStudent = PracticeRecord::projectStudentRow($this->moduleType, (int) $project['id'], $studentId);
+        if (!$projectStudent) {
+            throw new RuntimeException('学生未绑定该项目', 40301);
+        }
+        if ($this->isTeacher() && (int) ($projectStudent['teacher_id'] ?? 0) !== (int) $this->currentTeacherId(true)) {
+            throw new RuntimeException('无数据访问权限', 40301);
+        }
+
+        return $studentId;
+    }
+
+    /**
+     * 生成执行材料保存数据。
+     */
+    private function executionValues(Request $request, string $execution, array $project, array $projectStudent, int $studentId, string $status): array
+    {
+        $title = $this->nullableString($request, 'title', 180)
+            ?: ((self::EXECUTIONS[$execution]['title'] ?? '材料') . ' - ' . ($project['title'] ?? '项目'));
+        $content = $this->requiredString($request, 'content', 30000);
+        $values = [
+            'student_id' => $studentId,
+            'teacher_id' => (int) ($projectStudent['teacher_id'] ?? ($project['teacher_id'] ?? 0)) ?: null,
+            'entity_type' => $this->moduleType,
+            'entity_id' => (int) $project['id'],
+            'date' => $this->dateInput($request, 'date') ?: date('Y-m-d'),
+            'title' => $title,
+            'content' => $content,
+            'remark' => $this->nullableString($request, 'remark', 2000),
+            'status' => $status,
+            'updated_at' => $this->now(),
+            'deleted_at' => null,
+        ];
+
+        if ($execution === 'report') {
+            $values['template_id'] = $this->optionalInt($request, 'template_id');
+            $values['submitted_at'] = $status === 'wait' ? $this->now() : $this->dateTimeInput($request, 'submitted_at');
+        }
+
+        return $values;
+    }
+
+    /**
+     * 写入执行流转记录。
+     */
+    private function recordExecutionWorkflow(string $execution, int $entityId, string $action, ?string $from, string $to, ?string $content, ?string $reviewStatus): int
+    {
+        $entityType = $this->executionEntityType($execution);
+        $recordingId = PracticeRecord::insertRecording([
+            'uuid' => $this->uuid(),
+            'parent_id' => $entityId,
+            'module_type' => $this->moduleType,
+            'entity_type' => $entityType,
+            'entity_id' => $entityId,
+            'action' => $action,
+            'operator_id' => CurrentContext::accountId(),
+            'from_status' => $from,
+            'to_status' => $to,
+            'opinion' => $content,
+            'content' => $content,
+            'status' => 'enabled',
+            'created_at' => $this->now(),
+            'updated_at' => $this->now(),
+        ]);
+
+        if ($reviewStatus !== null) {
+            PracticeRecord::insertReviewOpinion([
+                'uuid' => $this->uuid(),
+                'entity_type' => $entityType,
+                'entity_id' => $entityId,
+                'recording_id' => $recordingId,
+                'teacher_id' => $this->currentTeacherId(false),
+                'reviewer_id' => CurrentContext::accountId(),
+                'opinion' => $action === 'submit' ? null : $content,
+                'status' => $reviewStatus,
+                'created_at' => $this->now(),
+                'updated_at' => $this->now(),
+            ]);
+        }
+
+        return $recordingId;
+    }
+
+    /**
+     * 生成执行流转摘要。
+     */
+    private function executionContent(string $execution, array $values): string
+    {
+        return trim(implode("\n", array_filter([
+            self::EXECUTIONS[$execution]['title'] ?? $execution,
+            $values['title'] ?? null,
+            $values['date'] ?? null,
+            $values['content'] ?? null,
+            $values['location'] ?? null,
+            $values['remark'] ?? null,
+        ]))) ?: '提交记录';
+    }
+
+    /**
+     * 解析执行类型。
+     */
+    private function executionInput(Request $request): string
+    {
+        $execution = (string) $request->input('execution', '');
+        if (!isset(self::EXECUTIONS[$execution])) {
+            throw new InvalidArgumentException('execution 无效');
+        }
+
+        return $execution;
+    }
+
+    /**
+     * 生成执行记录类型。
+     */
+    private function executionEntityType(string $execution): string
+    {
+        if (!isset(self::EXECUTIONS[$execution])) {
+            throw new InvalidArgumentException('execution 无效');
+        }
+
+        return "{$this->moduleType}_{$execution}";
     }
 
     private function entityValues(Request $request, string $entity): array

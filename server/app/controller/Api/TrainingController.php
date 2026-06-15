@@ -81,6 +81,105 @@ class TrainingController
         return $this->handle(fn (): array => $this->service()->timeline($request));
     }
 
+    /**
+     * 查询实训签到
+     */
+    #[OperationLog('查询实训签到')]
+    public function signIns(Request $request): Response
+    {
+        return $this->handle(fn (): array => $this->service()->signIns($request));
+    }
+
+    /**
+     * 保存实训签到
+     */
+    #[OperationLog('保存实训签到')]
+    public function saveSignIn(Request $request): Response
+    {
+        return $this->handle(fn (): array => $this->service()->saveSignIn($request));
+    }
+
+    /**
+     * 查询实训日志
+     */
+    #[OperationLog('查询实训日志')]
+    public function journals(Request $request): Response
+    {
+        return $this->handle(fn (): array => $this->service()->journals($request));
+    }
+
+    /**
+     * 保存实训日志
+     */
+    #[OperationLog('保存实训日志')]
+    public function saveJournal(Request $request): Response
+    {
+        return $this->handle(fn (): array => $this->service()->saveJournal($request));
+    }
+
+    /**
+     * 审核实训日志
+     */
+    #[OperationLog('审核实训日志')]
+    public function reviewJournal(Request $request): Response
+    {
+        return $this->handle(fn (): array => $this->service()->reviewJournal($request));
+    }
+
+    /**
+     * 查询实训报告
+     */
+    #[OperationLog('查询实训报告')]
+    public function reports(Request $request): Response
+    {
+        return $this->handle(fn (): array => $this->service()->reports($request));
+    }
+
+    /**
+     * 保存实训报告
+     */
+    #[OperationLog('保存实训报告')]
+    public function saveReport(Request $request): Response
+    {
+        return $this->handle(fn (): array => $this->service()->saveReport($request));
+    }
+
+    /**
+     * 审核实训报告
+     */
+    #[OperationLog('审核实训报告')]
+    public function reviewReport(Request $request): Response
+    {
+        return $this->handle(fn (): array => $this->service()->reviewReport($request));
+    }
+
+    /**
+     * 发起实训执行记录通过后修改
+     */
+    #[OperationLog('发起实训执行记录通过后修改')]
+    public function requestExecutionModification(Request $request): Response
+    {
+        return $this->handle(fn (): array => $this->service()->requestExecutionModification($request));
+    }
+
+    /**
+     * 保存实训成绩
+     */
+    #[OperationLog('保存实训成绩')]
+    public function saveScore(Request $request): Response
+    {
+        return $this->handle(fn (): array => $this->service()->saveScore($request));
+    }
+
+    /**
+     * 查看实训执行记录
+     */
+    #[OperationLog('查看实训执行记录')]
+    public function executionTimeline(Request $request): Response
+    {
+        return $this->handle(fn (): array => $this->service()->executionTimeline($request));
+    }
+
     private function handle(callable $callback): Response
     {
         try {

@@ -17,6 +17,11 @@ class PracticeRecord extends TableRecord
     ];
 
     private const JSON_FIELDS = ['content_json', 'ratio_json', 'score_items'];
+    private const EXECUTION_TABLES = [
+        'sign_in' => 'sign_in',
+        'journal' => 'journal',
+        'report' => 'report',
+    ];
 
     public static function overviewRows(array $scope, string $moduleType, string $today): array
     {
@@ -98,6 +103,9 @@ class PracticeRecord extends TableRecord
             'schedules' => self::rows(self::applyPracticeScope(self::moduleQuery('practice_schedule', $moduleType)->where('practice_schedule.status', 'enabled'), $scope, 'practice_schedule')
                 ->orderByDesc('practice_schedule.id')
                 ->get(['id', 'uuid', 'title', 'course_name', 'plan_id', 'grade_id', 'dep_id', 'profession_id', 'class_id', 'teacher_id', 'schedule_date', 'start_time', 'end_time', 'status'])),
+            'projects' => self::rows(self::applyPracticeScope(self::moduleQuery('practice_project', $moduleType)->whereIn('practice_project.status', ['enabled', 'completed']), $scope, 'practice_project', false, 'project')
+                ->orderByDesc('practice_project.id')
+                ->get(['id', 'uuid', 'title', 'course_name', 'plan_id', 'schedule_id', 'grade_id', 'dep_id', 'profession_id', 'class_id', 'teacher_id', 'start_date', 'end_date', 'student_count', 'status'])),
         ];
     }
 
@@ -401,6 +409,131 @@ class PracticeRecord extends TableRecord
             ->where('status', 'active')
             ->whereNull('deleted_at')
             ->count();
+    }
+
+    public static function projectExecutionRow(array $scope, string $moduleType, int $projectId): ?array
+    {
+        if ($projectId <= 0) {
+            return null;
+        }
+
+        $query = self::moduleQuery('practice_project', $moduleType)
+            ->where('practice_project.id', $projectId)
+            ->whereIn('practice_project.status', ['enabled', 'completed']);
+        self::applyPracticeScope($query, $scope, 'practice_project', false, 'project');
+        $row = $query->first([
+            'practice_project.id',
+            'practice_project.plan_id',
+            'practice_project.schedule_id',
+            'practice_project.grade_id',
+            'practice_project.dep_id',
+            'practice_project.profession_id',
+            'practice_project.class_id',
+            'practice_project.teacher_id',
+            'practice_project.course_name',
+            'practice_project.title',
+            'practice_project.status',
+        ]);
+
+        return $row ? $row->getAttributes() : null;
+    }
+
+    public static function projectStudentRow(string $moduleType, int $projectId, int $studentId): ?array
+    {
+        if ($projectId <= 0 || $studentId <= 0) {
+            return null;
+        }
+
+        $row = self::queryTable('practice_project_student')
+            ->where('module_type', $moduleType)
+            ->where('project_id', $projectId)
+            ->where('student_id', $studentId)
+            ->where('status', 'active')
+            ->whereNull('deleted_at')
+            ->first(['student_id', 'teacher_id', 'plan_id', 'schedule_id', 'grade_id', 'dep_id', 'profession_id', 'class_id']);
+
+        return $row ? $row->getAttributes() : null;
+    }
+
+    public static function executionPage(array $scope, string $moduleType, string $execution, array $filters): array
+    {
+        $table = self::executionTable($execution);
+        $query = self::executionQuery($moduleType, $execution);
+        self::applyExecutionScope($query, $scope, $moduleType, $table);
+        self::applyExecutionFilters($query, $table, $execution, $filters);
+
+        return self::paginate($query->orderByDesc("{$table}.id"), $filters, self::executionColumns($execution, $table));
+    }
+
+    public static function insertExecution(string $execution, array $values): int
+    {
+        return (int) self::queryTable(self::executionTable($execution))->insertGetId($values);
+    }
+
+    public static function updateExecution(string $execution, int $id, array $values): int
+    {
+        return self::queryTable(self::executionTable($execution))->where('id', $id)->update($values);
+    }
+
+    public static function activeExecutionRow(array $scope, string $moduleType, string $execution, int $id): ?object
+    {
+        if ($id <= 0) {
+            return null;
+        }
+
+        $table = self::executionTable($execution);
+        $query = self::queryTable($table)
+            ->where("{$table}.id", $id)
+            ->where("{$table}.entity_type", $moduleType)
+            ->whereNull("{$table}.deleted_at");
+        self::applyExecutionScope($query, $scope, $moduleType, $table);
+
+        return $query->first(["{$table}.*"]);
+    }
+
+    public static function lockExecutionRow(array $scope, string $moduleType, string $execution, int $id): ?object
+    {
+        if ($id <= 0) {
+            return null;
+        }
+
+        $table = self::executionTable($execution);
+        $query = self::queryTable($table)
+            ->where("{$table}.id", $id)
+            ->where("{$table}.entity_type", $moduleType)
+            ->whereNull("{$table}.deleted_at");
+        self::applyExecutionScope($query, $scope, $moduleType, $table);
+
+        return $query->lockForUpdate()->first(["{$table}.*"]);
+    }
+
+    public static function executionVisible(array $scope, string $moduleType, string $execution, int $id): bool
+    {
+        return self::activeExecutionRow($scope, $moduleType, $execution, $id) !== null;
+    }
+
+    public static function upsertPracticeScore(string $moduleType, array $values): int
+    {
+        $studentId = (int) ($values['student_id'] ?? 0);
+        $projectId = (int) ($values['project_id'] ?? 0);
+        if ($studentId <= 0 || $projectId <= 0) {
+            return 0;
+        }
+
+        $existingId = (int) (self::queryTable('practice_score')
+            ->where('module_type', $moduleType)
+            ->where('student_id', $studentId)
+            ->where('project_id', $projectId)
+            ->whereNull('deleted_at')
+            ->value('id') ?: 0);
+
+        if ($existingId > 0) {
+            unset($values['uuid'], $values['created_at']);
+            self::queryTable('practice_score')->where('id', $existingId)->update($values);
+            return $existingId;
+        }
+
+        return (int) self::queryTable('practice_score')->insertGetId($values);
     }
 
     public static function scheduleConflictExists(string $moduleType, array $values, ?int $excludeId = null): bool
@@ -811,6 +944,15 @@ class PracticeRecord extends TableRecord
         return self::ENTITY_TABLES[$entity];
     }
 
+    private static function executionTable(string $execution): string
+    {
+        if (!isset(self::EXECUTION_TABLES[$execution])) {
+            throw new \InvalidArgumentException('execution 无效');
+        }
+
+        return self::EXECUTION_TABLES[$execution];
+    }
+
     private static function moduleQuery(string $table, string $moduleType): mixed
     {
         return self::queryTable($table)
@@ -847,6 +989,28 @@ class PracticeRecord extends TableRecord
         if ($entity === 'score') {
             $query->leftJoin('students', 'practice_score.student_id', '=', 'students.student_id');
         }
+
+        return $query;
+    }
+
+    private static function executionQuery(string $moduleType, string $execution): mixed
+    {
+        $table = self::executionTable($execution);
+        $query = self::queryTable($table)
+            ->leftJoin('practice_project', function ($join) use ($moduleType, $table): void {
+                $join->on("{$table}.entity_id", '=', 'practice_project.id')
+                    ->where('practice_project.module_type', $moduleType)
+                    ->whereNull('practice_project.deleted_at');
+            })
+            ->leftJoin('practice_plan', 'practice_project.plan_id', '=', 'practice_plan.id')
+            ->leftJoin('students', "{$table}.student_id", '=', 'students.student_id')
+            ->leftJoin('grade_list', 'students.grade_id', '=', 'grade_list.grade_id')
+            ->leftJoin('department', 'students.dep_id', '=', 'department.dep_id')
+            ->leftJoin('profession', 'students.profession_id', '=', 'profession.profession_id')
+            ->leftJoin('class', 'students.class_id', '=', 'class.class_id')
+            ->leftJoin('teacher_list', "{$table}.teacher_id", '=', 'teacher_list.teacher_id')
+            ->where("{$table}.entity_type", $moduleType)
+            ->whereNull("{$table}.deleted_at");
 
         return $query;
     }
@@ -889,6 +1053,33 @@ class PracticeRecord extends TableRecord
         return $columns;
     }
 
+    private static function executionColumns(string $execution, string $table): array
+    {
+        $columns = [
+            "{$table}.*",
+            'practice_project.title as project_title',
+            'practice_project.course_name as project_course_name',
+            'practice_project.plan_id',
+            'practice_project.schedule_id',
+            'practice_plan.title as plan_title',
+            'students.name as student_name',
+            'students.student_num',
+            'students.grade_id',
+            'students.dep_id',
+            'students.profession_id',
+            'students.class_id',
+            'grade_list.grade_name',
+            'department.dep_name',
+            'profession.profession_name',
+            'class.class_name',
+            'teacher_list.teacher_name',
+        ];
+
+        $columns[] = "{$table}.entity_id as project_id";
+
+        return $columns;
+    }
+
     private static function applyEntityFilters(mixed $query, string $table, string $entity, array $filters): void
     {
         foreach (self::filterKeys($entity) as $key) {
@@ -920,6 +1111,40 @@ class PracticeRecord extends TableRecord
             'score' => ["{$table}.title", 'students.name', 'students.student_num', 'teacher_list.teacher_name', 'practice_plan.title'],
             default => ["{$table}.title", "{$table}.course_name", "{$table}.content", 'department.dep_name', 'profession.profession_name', 'teacher_list.teacher_name', 'practice_plan.title'],
         });
+    }
+
+    private static function applyExecutionFilters(mixed $query, string $table, string $execution, array $filters): void
+    {
+        $projectColumn = "{$table}.entity_id";
+        foreach (['status', 'teacher_id', 'student_id'] as $key) {
+            $value = self::optionalInt($filters[$key] ?? null) ?? trim((string) ($filters[$key] ?? ''));
+            if ($value !== '') {
+                $query->where("{$table}.{$key}", $value);
+            }
+        }
+        $projectId = self::optionalInt($filters['project_id'] ?? ($filters['entity_id'] ?? null));
+        if ($projectId) {
+            $query->where($projectColumn, $projectId);
+        }
+        foreach (['grade_id', 'dep_id', 'profession_id', 'class_id', 'plan_id'] as $key) {
+            $value = self::optionalInt($filters[$key] ?? null);
+            if (!$value) {
+                continue;
+            }
+            $column = $key === 'plan_id' ? 'practice_project.plan_id' : "students.{$key}";
+            $query->where($column, $value);
+        }
+        $date = trim((string) ($filters['date'] ?? ''));
+        if ($date !== '') {
+            $query->where("{$table}.date", $date);
+        }
+
+        $keywordColumns = match ($execution) {
+            'sign_in' => ['students.name', 'students.student_num', 'practice_project.title', "{$table}.location", "{$table}.remark"],
+            'journal', 'report' => ['students.name', 'students.student_num', 'practice_project.title', "{$table}.title", "{$table}.content"],
+            default => ['students.name', 'students.student_num', 'practice_project.title'],
+        };
+        self::keyword($query, $filters, $keywordColumns);
     }
 
     private static function filterKeys(string $entity): array
@@ -985,6 +1210,37 @@ class PracticeRecord extends TableRecord
                 ->where('practice_project_student.status', 'active')
                 ->whereNull('practice_project_student.deleted_at');
         });
+    }
+
+    private static function applyExecutionScope(mixed $query, array $scope, string $moduleType, string $alias): mixed
+    {
+        $roleType = (string) ($scope['role_type'] ?? '');
+        if (in_array($roleType, ['super_admin', 'school_admin'], true)) {
+            return $query;
+        }
+        if ($roleType === 'college_admin') {
+            return self::whereInOrDeny($query, 'students.dep_id', $scope['dep_ids'] ?? []);
+        }
+        if ($roleType === 'profession_admin') {
+            return self::whereInOrDeny($query, 'students.profession_id', $scope['profession_ids'] ?? []);
+        }
+        if ($roleType === 'teacher') {
+            return self::whereInOrDeny($query, "{$alias}.teacher_id", [(int) ($scope['teacher_id'] ?? 0)]);
+        }
+        if ($roleType === 'student') {
+            self::whereInOrDeny($query, "{$alias}.student_id", [(int) ($scope['student_id'] ?? 0)]);
+            return $query->whereExists(function ($builder) use ($alias, $moduleType): void {
+                $builder->selectRaw('1')
+                    ->from('practice_project_student')
+                    ->where('practice_project_student.module_type', $moduleType)
+                    ->whereColumn('practice_project_student.project_id', "{$alias}.entity_id")
+                    ->whereColumn('practice_project_student.student_id', "{$alias}.student_id")
+                    ->where('practice_project_student.status', 'active')
+                    ->whereNull('practice_project_student.deleted_at');
+            });
+        }
+
+        return $query->whereRaw('1 = 0');
     }
 
     private static function applyStudentAcademicScope(mixed $query, string $alias, ?array $student): void

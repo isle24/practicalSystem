@@ -666,3 +666,40 @@ export function fetchPracticeTimeline(module, params = {}) {
   const query = new URLSearchParams(params).toString();
   return request(`/${module}/timeline${query ? `?${query}` : ''}`);
 }
+
+export function fetchPracticeExecutionList(module, execution, params = {}) {
+  const path = {
+    sign_in: 'sign-ins',
+    journal: 'journals',
+    report: 'reports',
+  }[execution] || 'journals';
+  const query = new URLSearchParams(params).toString();
+  return request(`/${module}/${path}${query ? `?${query}` : ''}`);
+}
+
+export function savePracticeExecution(module, execution, payload) {
+  const path = {
+    sign_in: 'save-sign-in',
+    journal: 'save-journal',
+    report: 'save-report',
+  }[execution] || 'save-journal';
+  return practicePost(module, path, payload);
+}
+
+export function reviewPracticeExecution(module, execution, payload) {
+  const path = execution === 'report' ? 'review-report' : 'review-journal';
+  return practicePost(module, path, payload);
+}
+
+export function requestPracticeExecutionModification(module, payload) {
+  return practicePost(module, 'request-execution-modification', payload);
+}
+
+export function savePracticeProjectScore(module, payload) {
+  return practicePost(module, 'save-score', payload);
+}
+
+export function fetchPracticeExecutionTimeline(module, params = {}) {
+  const query = new URLSearchParams(params).toString();
+  return request(`/${module}/execution-timeline${query ? `?${query}` : ''}`);
+}
