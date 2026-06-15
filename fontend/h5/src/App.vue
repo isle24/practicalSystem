@@ -1925,6 +1925,11 @@ const reviewStatusOptions = [
   { value: 'accept', label: '已通过' },
   { value: 'modify', label: '需修改' },
 ];
+const practiceEnabledStatusOptions = [
+  { value: 'enabled', label: '启用' },
+  { value: 'completed', label: '已完成' },
+  { value: 'disabled', label: '停用' },
+];
 const delayStatusOptions = [
   { value: 'wait', label: '待审核' },
   { value: 'accept', label: '已通过' },
@@ -2256,13 +2261,14 @@ const internshipWorkbenchCells = computed(() => {
 
 const practiceFlowSteps = [
   '教学计划来源于教务拉取或教师填报',
-  '计划、大纲、教案、反思按流程审核',
-  '课表明确校内外地点、时间和学生范围',
+  '课表明确老师、班级、时间和地点',
+  '课表发布为项目并绑定学生范围',
   '成绩比例配置后录入成绩并统计',
 ];
 const practicePanelDefinitions = [
   { key: 'plans', entity: 'plan', title: '教学计划', shortTitle: '计划', icon: FileText, review: true, emptyText: '暂无教学计划' },
   { key: 'schedules', entity: 'schedule', title: '课表安排', shortTitle: '课表', icon: CalendarCheck, review: false, emptyText: '暂无课表安排' },
+  { key: 'projects', entity: 'project', title: '项目发布', shortTitle: '项目', icon: ClipboardList, review: false, emptyText: '暂无项目' },
   { key: 'syllabus', entity: 'syllabus', title: '大纲编写', shortTitle: '大纲', icon: BookOpen, review: true, emptyText: '暂无大纲' },
   { key: 'lessonPlans', entity: 'lessonPlan', title: '教案编写', shortTitle: '教案', icon: FileText, review: true, emptyText: '暂无教案' },
   { key: 'gradeRules', entity: 'gradeRule', title: '成绩比例', shortTitle: '比例', icon: GraduationCap, review: false, emptyText: '暂无成绩比例' },
@@ -2314,7 +2320,7 @@ function emptyPagedList() {
 }
 
 function createPracticeState() {
-  const panels = ['plans', 'schedules', 'syllabus', 'lessonPlans', 'gradeRules', 'scores', 'reflections'];
+  const panels = ['plans', 'schedules', 'projects', 'syllabus', 'lessonPlans', 'gradeRules', 'scores', 'reflections'];
   return {
     loading: false,
     message: '',
@@ -2322,6 +2328,7 @@ function createPracticeState() {
     overview: {
       plans_waiting: 0,
       schedules: 0,
+      projects: 0,
       syllabus_waiting: 0,
       lesson_plans_waiting: 0,
       scores_submitted: 0,
@@ -2337,6 +2344,7 @@ function createPracticeState() {
       students: [],
       rooms: [],
       plans: [],
+      schedules: [],
       review_rules: {},
     },
     filters: Object.fromEntries(panels.map(panel => [panel, emptyPracticeFilters()])),
@@ -2962,7 +2970,7 @@ function practiceModuleName(module) {
 
 function practicePanels(module) {
   if (isStudentRole.value) {
-    return practicePanelDefinitions.filter(item => ['schedules', 'scores'].includes(item.key));
+    return practicePanelDefinitions.filter(item => ['projects', 'schedules', 'scores'].includes(item.key));
   }
   if (isTeacherRole.value) {
     return practicePanelDefinitions.filter(item => item.key !== 'gradeRules');
@@ -2981,6 +2989,7 @@ function practiceSummaries(module) {
   return [
     { name: '待审计划', value: overview.plans_waiting || 0 },
     { name: '课表', value: overview.schedules || 0 },
+    { name: '项目', value: overview.projects || 0 },
     { name: '今日课表', value: overview.today_schedules || 0 },
   ];
 }
@@ -3002,6 +3011,8 @@ function practiceFilters(module) {
   }
   if (currentPracticePanel(module).review) {
     common.push({ key: 'status', label: '状态', placeholder: '全部状态', options: reviewStatusOptions });
+  } else if (['projects', 'schedules'].includes(currentPracticePanel(module).key)) {
+    common.push({ key: 'status', label: '状态', placeholder: '全部状态', options: practiceEnabledStatusOptions });
   }
   return common;
 }
@@ -3124,6 +3135,9 @@ function practiceRowTitle(module, row) {
   if (panel === 'scores') {
     return row.student_name || row.student_num || row.title || `成绩 ${row.id}`;
   }
+  if (panel === 'projects') {
+    return row.title || row.course_name || `项目 ${row.id}`;
+  }
   if (panel === 'schedules') {
     return row.title || row.course_name || `课表 ${row.id}`;
   }
@@ -3134,6 +3148,9 @@ function practiceRowValue(module, row) {
   const panel = currentPracticePanel(module).key;
   if (panel === 'schedules') {
     return row.schedule_date || statusText(row.status);
+  }
+  if (panel === 'projects') {
+    return joinFact([row.start_date, row.end_date]) || statusText(row.status);
   }
   if (panel === 'scores') {
     return row.score_value !== null && row.score_value !== undefined ? `${row.score_value} 分` : statusText(row.status);
@@ -3154,6 +3171,12 @@ function practiceRowFacts(module, row) {
       namedFact('时间', joinFact([row.schedule_date, row.start_time, row.end_time])),
       namedFact('地点', row.room_name || row.base_name || row.location),
       namedFact('学生数', row.student_count),
+    ],
+    projects: [
+      namedFact('计划', row.plan_title),
+      namedFact('课表', row.schedule_title),
+      namedFact('日期', joinFact([row.start_date, row.end_date])),
+      namedFact('绑定学生', row.bound_student_count ?? row.student_count),
     ],
     scores: [
       namedFact('学号', row.student_num),

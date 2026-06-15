@@ -1315,6 +1315,12 @@
                             <el-option v-for="plan in practicePlanOptions(win.module.id, win.panel)" :key="plan.id" :label="plan.title || plan.course_name" :value="plan.id" />
                           </el-select>
                         </label>
+                        <label v-if="win.panel === 'projects'">
+                          <span>关联课表</span>
+                          <el-select v-model="practiceModuleState(win.module.id).form.schedule_id" clearable filterable @change="handlePracticeScheduleChange(win.module.id)">
+                            <el-option v-for="schedule in practiceScheduleOptions(win.module.id)" :key="schedule.id" :label="practiceScheduleLabel(schedule)" :value="schedule.id" />
+                          </el-select>
+                        </label>
                         <label v-if="win.panel === 'plans'">
                           <span>来源</span>
                           <el-select v-model="practiceModuleState(win.module.id).form.source_type">
@@ -1346,6 +1352,9 @@
                         <label v-if="win.panel === 'schedules'"><span>结束时间</span><input v-model="practiceModuleState(win.module.id).form.end_time" type="time"></label>
                         <label v-if="win.panel === 'schedules'"><span>地点</span><input v-model="practiceModuleState(win.module.id).form.location"></label>
                         <label v-if="win.panel === 'schedules'"><span>学生数</span><input v-model="practiceModuleState(win.module.id).form.student_count" type="number" disabled placeholder="保存时按班级自动计算"></label>
+                        <label v-if="win.panel === 'projects'"><span>开始日期</span><input v-model="practiceModuleState(win.module.id).form.start_date" type="date"></label>
+                        <label v-if="win.panel === 'projects'"><span>结束日期</span><input v-model="practiceModuleState(win.module.id).form.end_date" type="date"></label>
+                        <label v-if="win.panel === 'projects'"><span>学生范围</span><input v-model="practiceModuleState(win.module.id).form.student_count" type="number" disabled placeholder="保存时按课表班级自动生成"></label>
                         <label v-if="win.panel === 'rooms'"><span>名称</span><input v-model="practiceModuleState(win.module.id).form.name"></label>
                         <label v-if="win.panel === 'rooms'"><span>编号</span><input v-model="practiceModuleState(win.module.id).form.code"></label>
                         <label v-if="win.panel === 'rooms'"><span>容量</span><input v-model="practiceModuleState(win.module.id).form.capacity" type="number"></label>
@@ -7371,7 +7380,7 @@ function emptyOperationDialog() {
 }
 
 function createPracticeModuleState() {
-  const panels = ['plans', 'schedules', 'syllabus', 'lessonPlans', 'gradeRules', 'scores', 'reflections', 'rooms'];
+  const panels = ['plans', 'schedules', 'projects', 'syllabus', 'lessonPlans', 'gradeRules', 'scores', 'reflections', 'rooms'];
   return {
     loading: false,
     message: '',
@@ -7388,6 +7397,7 @@ function emptyPracticeOverview() {
   return {
     plans_waiting: 0,
     schedules: 0,
+    projects: 0,
     syllabus_waiting: 0,
     lesson_plans_waiting: 0,
     scores_submitted: 0,
@@ -7407,6 +7417,7 @@ function emptyPracticeOptions() {
     bases: [],
     rooms: [],
     plans: [],
+    schedules: [],
     review_rules: {},
   };
 }
@@ -7438,6 +7449,7 @@ function emptyPracticeForm(row = {}) {
     class_id: row.class_id || null,
     teacher_id: row.teacher_id || null,
     plan_id: row.plan_id || null,
+    schedule_id: row.schedule_id || null,
     source_type: row.source_type || 'manual',
     place_type: row.place_type || 'inside',
     room_id: row.room_id || null,
@@ -7445,6 +7457,9 @@ function emptyPracticeForm(row = {}) {
     schedule_date: row.schedule_date || '',
     start_time: row.start_time || '',
     end_time: row.end_time || '',
+    start_date: row.start_date || '',
+    end_date: row.end_date || '',
+    published_at: row.published_at || '',
     location: row.location || '',
     student_count: row.student_count || '',
     name: row.name || '',
@@ -7472,6 +7487,7 @@ function practiceSidebarItems() {
     { key: 'overview', name: '总览' },
     { key: 'plans', name: '教学计划' },
     { key: 'schedules', name: '课表安排' },
+    { key: 'projects', name: '项目发布' },
     { key: 'syllabus', name: '大纲编写' },
     { key: 'lessonPlans', name: '教案编写' },
     { key: 'gradeRules', name: '成绩比例' },
@@ -7480,7 +7496,7 @@ function practiceSidebarItems() {
     { key: 'rooms', name: '场地管理' },
   ];
   if (isStudentRole.value) {
-    return items.filter(item => ['overview', 'schedules', 'scores'].includes(item.key));
+    return items.filter(item => ['overview', 'schedules', 'projects', 'scores'].includes(item.key));
   }
   if (isTeacherRole.value) {
     return items.filter(item => item.key !== 'rooms');
@@ -7492,6 +7508,7 @@ function practicePanelEntity(panel) {
   return {
     plans: 'plan',
     schedules: 'schedule',
+    projects: 'project',
     syllabus: 'syllabus',
     lessonPlans: 'lessonPlan',
     gradeRules: 'gradeRule',
@@ -7515,7 +7532,7 @@ function practicePanelLabel(panel) {
 }
 
 function practiceNeedsPlan(panel) {
-  return ['schedules', 'syllabus', 'lessonPlans', 'gradeRules', 'scores', 'reflections'].includes(panel);
+  return ['schedules', 'projects', 'syllabus', 'lessonPlans', 'gradeRules', 'scores', 'reflections'].includes(panel);
 }
 
 function practiceTextPanel(panel) {
@@ -7527,6 +7544,7 @@ function practiceOverviewCards(module) {
   return [
     { name: '待审计划', value: overview.plans_waiting || 0, theme: 'primary', icon: FileText, panel: 'plans' },
     { name: '课表安排', value: overview.schedules || 0, theme: 'green', icon: CalendarCheck, panel: 'schedules' },
+    { name: '项目发布', value: overview.projects || 0, theme: 'primary', icon: Workflow, panel: 'projects' },
     { name: '待审大纲', value: overview.syllabus_waiting || 0, theme: 'teal', icon: BookOpen, panel: 'syllabus' },
     { name: '待审教案', value: overview.lesson_plans_waiting || 0, theme: 'amber', icon: FileText, panel: 'lessonPlans' },
     { name: '成绩记录', value: overview.scores_submitted || 0, theme: 'primary', icon: GraduationCap, panel: 'scores' },
@@ -7549,6 +7567,13 @@ function practiceEditStatusOptions(panel) {
       { value: 'draft', label: '草稿' },
     ];
   }
+  if (panel === 'projects') {
+    return [
+      { value: 'enabled', label: '启用' },
+      { value: 'completed', label: '已完成' },
+      { value: 'disabled', label: '停用' },
+    ];
+  }
   return [
     { value: 'enabled', label: '启用' },
     { value: 'disabled', label: '停用' },
@@ -7569,6 +7594,8 @@ function practiceListConfig(module, panel) {
   const commonFilters = ['grade_id', 'dep_id', 'profession_id', 'status', 'keyword'];
   const filters = practiceFilters(module, panel, panel === 'schedules'
     ? ['grade_id', 'dep_id', 'profession_id', 'plan_id', 'place_type', 'status', 'keyword']
+    : panel === 'projects'
+      ? ['grade_id', 'dep_id', 'profession_id', 'class_id', 'plan_id', 'schedule_id', 'status', 'keyword']
     : panel === 'rooms'
       ? ['dep_id', 'status', 'keyword']
       : panel === 'scores'
@@ -7592,6 +7619,16 @@ function practiceListConfig(module, panel) {
       { key: 'time', label: '时间', width: 120, formatter: row => `${row.start_time || '-'}-${row.end_time || '-'}` },
       { key: 'place', label: '地点', minWidth: 180, formatter: row => row.room_name || row.base_name || row.location || '-' },
       { prop: 'student_count', label: '学生数', width: 90 },
+      { prop: 'status', label: '状态', width: 90, tag: true, tagType: row => statusTagType(row.status), formatter: row => statusText(row.status) },
+    ],
+    projects: [
+      { prop: 'title', label: '项目名称', minWidth: 180 },
+      { prop: 'plan_title', label: '教学计划', minWidth: 160 },
+      { prop: 'schedule_title', label: '关联课表', minWidth: 160 },
+      { prop: 'class_name', label: '班级', minWidth: 120 },
+      { prop: 'teacher_name', label: '负责人', width: 120 },
+      { key: 'date_range', label: '执行日期', width: 160, formatter: row => [row.start_date, row.end_date].filter(Boolean).join(' 至 ') || '-' },
+      { key: 'bound_student_count', label: '学生范围', width: 100, formatter: row => row.bound_student_count ?? row.student_count ?? 0 },
       { prop: 'status', label: '状态', width: 90, tag: true, tagType: row => statusTagType(row.status), formatter: row => statusText(row.status) },
     ],
     syllabus: practiceDocumentColumns('大纲'),
@@ -7659,6 +7696,7 @@ function practiceFilterDefinitions(module, panel, keys) {
     profession_id: { key: 'profession_id', label: '专业', type: 'select', options: optionItems(filterAcademicItems(options.professions, values, ['grade_id', 'dep_id']), 'profession_id', 'profession_name') },
     class_id: { key: 'class_id', label: '班级', type: 'select', options: optionItems(filterAcademicItems(options.classes, values, ['grade_id', 'dep_id', 'profession_id']), 'class_id', 'class_name') },
     plan_id: { key: 'plan_id', label: '教学计划', type: 'select', options: optionItems(filterAcademicItems(options.plans, values, ['grade_id', 'dep_id', 'profession_id', 'class_id']), 'id', 'title') },
+    schedule_id: { key: 'schedule_id', label: '课表', type: 'select', options: optionItems(filterAcademicItems(options.schedules, values, ['grade_id', 'dep_id', 'profession_id', 'class_id', 'plan_id']), 'id', 'title') },
     room_id: { key: 'room_id', label: '场地', type: 'select', options: optionItems(options.rooms, 'id', 'name') },
     place_type: { key: 'place_type', label: '地点类型', type: 'select', options: practicePlaceTypeOptions() },
     source_type: { key: 'source_type', label: '来源', type: 'select', options: practiceSourceTypeOptions() },
@@ -7740,6 +7778,24 @@ function handlePracticePlaceTypeChange(module) {
   form.room_id = null;
 }
 
+function handlePracticeScheduleChange(module) {
+  const state = practiceModuleState(module);
+  const schedule = state.options.schedules.find(item => Number(item.id) === Number(state.form.schedule_id || 0));
+  if (!schedule) {
+    return;
+  }
+  ['plan_id', 'grade_id', 'dep_id', 'profession_id', 'class_id', 'teacher_id', 'course_name'].forEach((field) => {
+    if (hasFilterValue(schedule[field])) {
+      state.form[field] = schedule[field];
+    }
+  });
+  if (schedule.schedule_date) {
+    state.form.start_date = state.form.start_date || schedule.schedule_date;
+    state.form.end_date = state.form.end_date || schedule.schedule_date;
+  }
+  state.form.student_count = schedule.student_count || state.form.student_count || '';
+}
+
 function practiceClassOptions(module) {
   const state = practiceModuleState(module);
   return filterAcademicItems(state.options.classes, state.form, ['grade_id', 'dep_id', 'profession_id']);
@@ -7759,6 +7815,19 @@ function practiceBaseOptions(module) {
   const state = practiceModuleState(module);
   const depId = state.form.dep_id;
   return (state.options.bases || []).filter(item => !hasFilterValue(depId) || !hasFilterValue(item.dep_id) || sameFilterValue(item.dep_id, depId));
+}
+
+function practiceScheduleOptions(module) {
+  const state = practiceModuleState(module);
+  return filterAcademicItems(state.options.schedules, state.form, ['grade_id', 'dep_id', 'profession_id', 'class_id', 'plan_id']);
+}
+
+function practiceScheduleLabel(schedule) {
+  return [
+    schedule.title || schedule.course_name || `课表 ${schedule.id}`,
+    schedule.schedule_date,
+    [schedule.start_time, schedule.end_time].filter(Boolean).join('-'),
+  ].filter(Boolean).join(' / ');
 }
 
 function normalizePracticeClass(module) {
@@ -7796,6 +7865,26 @@ function validatePracticeForm(module, panel, form) {
     }
   }
   if (panel !== 'schedules') {
+    if (panel === 'projects') {
+      if (!title) {
+        return '请填写项目名称';
+      }
+      if (!form.plan_id) {
+        return '请选择教学计划';
+      }
+      if (!form.schedule_id) {
+        return '请选择已发布课表';
+      }
+      if (!form.teacher_id) {
+        return '请选择项目负责人';
+      }
+      if (!form.class_id) {
+        return '请选择项目班级';
+      }
+      if (form.start_date && form.end_date && String(form.end_date) < String(form.start_date)) {
+        return '项目结束日期不能早于开始日期';
+      }
+    }
     return '';
   }
   if (!form.plan_id) {

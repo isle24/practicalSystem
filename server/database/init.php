@@ -170,6 +170,23 @@ function ensureIndex(PDO $pdo, string $table, string $index, string $ddl): void
     }
 }
 
+function ensureIndexColumns(PDO $pdo, string $table, string $index, array $columns, string $ddl): void
+{
+    $stmt = $pdo->prepare(
+        'SELECT COLUMN_NAME FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND INDEX_NAME = ? ORDER BY SEQ_IN_INDEX'
+    );
+    $stmt->execute([$table, $index]);
+    $current = $stmt->fetchAll(PDO::FETCH_COLUMN);
+    if ($current === $columns) {
+        return;
+    }
+
+    if ($current) {
+        $pdo->exec("ALTER TABLE `{$table}` DROP INDEX `{$index}`");
+    }
+    $pdo->exec($ddl);
+}
+
 function seedMaster(PDO $pdo, array $config): void
 {
     $pdo->prepare(
@@ -673,6 +690,8 @@ function schoolBusinessStatements(): array
         simpleTable('base_expense', ['`base_id` BIGINT UNSIGNED DEFAULT NULL', '`dep_id` BIGINT UNSIGNED DEFAULT NULL', '`amount` DECIMAL(12,2) DEFAULT NULL']),
         simpleTable('practice_plan', practiceCommonColumns(['`source_type` VARCHAR(40) DEFAULT \'manual\'', '`submitter_id` BIGINT UNSIGNED DEFAULT NULL'])),
         simpleTable('practice_schedule', practiceCommonColumns(['`room_id` BIGINT UNSIGNED DEFAULT NULL', '`base_id` BIGINT UNSIGNED DEFAULT NULL', '`place_type` VARCHAR(40) DEFAULT \'inside\'', '`schedule_date` DATE DEFAULT NULL', '`start_time` VARCHAR(20) DEFAULT NULL', '`end_time` VARCHAR(20) DEFAULT NULL', '`location` VARCHAR(255) DEFAULT NULL', '`student_count` INT DEFAULT 0', '`roster_printed_at` DATETIME DEFAULT NULL'])),
+        simpleTable('practice_project', practiceCommonColumns(['`schedule_id` BIGINT UNSIGNED DEFAULT NULL', '`start_date` DATE DEFAULT NULL', '`end_date` DATE DEFAULT NULL', '`student_count` INT DEFAULT 0', '`published_at` DATETIME DEFAULT NULL', '`submitter_id` BIGINT UNSIGNED DEFAULT NULL'])),
+        simpleTable('practice_project_student', ['`module_type` ENUM(\'training\',\'lab\') DEFAULT \'training\'', '`project_id` BIGINT UNSIGNED NOT NULL', '`student_id` BIGINT UNSIGNED NOT NULL', '`teacher_id` BIGINT UNSIGNED DEFAULT NULL', '`plan_id` BIGINT UNSIGNED DEFAULT NULL', '`schedule_id` BIGINT UNSIGNED DEFAULT NULL', '`grade_id` BIGINT UNSIGNED DEFAULT NULL', '`dep_id` BIGINT UNSIGNED DEFAULT NULL', '`profession_id` BIGINT UNSIGNED DEFAULT NULL', '`class_id` BIGINT UNSIGNED DEFAULT NULL', '`active_flag` TINYINT GENERATED ALWAYS AS (CASE WHEN `status` = \'active\' AND `deleted_at` IS NULL THEN 1 ELSE NULL END) STORED', 'UNIQUE KEY `uk_project_student` (`project_id`, `student_id`, `active_flag`)', 'KEY `idx_student` (`student_id`)', 'KEY `idx_project` (`project_id`)']),
         simpleTable('practice_syllabus', practiceCommonColumns(['`submitter_id` BIGINT UNSIGNED DEFAULT NULL'])),
         simpleTable('practice_lesson_plan', practiceCommonColumns(['`submitter_id` BIGINT UNSIGNED DEFAULT NULL'])),
         simpleTable('practice_grade_rule', practiceCommonColumns(['`ratio_json` JSON DEFAULT NULL'])),
@@ -1224,7 +1243,7 @@ function ensureInternshipSchema(PDO $pdo): void
 
 function ensurePracticeSchema(PDO $pdo): void
 {
-    $practiceTables = ['practice_plan', 'practice_schedule', 'practice_syllabus', 'practice_lesson_plan', 'practice_grade_rule', 'practice_score', 'practice_reflection'];
+    $practiceTables = ['practice_plan', 'practice_schedule', 'practice_project', 'practice_syllabus', 'practice_lesson_plan', 'practice_grade_rule', 'practice_score', 'practice_reflection'];
     foreach ($practiceTables as $table) {
         $columns = [
             'module_type' => "ALTER TABLE `{$table}` ADD COLUMN `module_type` ENUM('training','lab') DEFAULT 'training' AFTER `code`",
@@ -1262,6 +1281,14 @@ function ensurePracticeSchema(PDO $pdo): void
             'location' => "ALTER TABLE `practice_schedule` ADD COLUMN `location` VARCHAR(255) DEFAULT NULL AFTER `end_time`",
             'student_count' => "ALTER TABLE `practice_schedule` ADD COLUMN `student_count` INT DEFAULT 0 AFTER `location`",
             'roster_printed_at' => "ALTER TABLE `practice_schedule` ADD COLUMN `roster_printed_at` DATETIME DEFAULT NULL AFTER `student_count`",
+        ],
+        'practice_project' => [
+            'schedule_id' => "ALTER TABLE `practice_project` ADD COLUMN `schedule_id` BIGINT UNSIGNED DEFAULT NULL AFTER `remark`",
+            'start_date' => "ALTER TABLE `practice_project` ADD COLUMN `start_date` DATE DEFAULT NULL AFTER `schedule_id`",
+            'end_date' => "ALTER TABLE `practice_project` ADD COLUMN `end_date` DATE DEFAULT NULL AFTER `start_date`",
+            'student_count' => "ALTER TABLE `practice_project` ADD COLUMN `student_count` INT DEFAULT 0 AFTER `end_date`",
+            'published_at' => "ALTER TABLE `practice_project` ADD COLUMN `published_at` DATETIME DEFAULT NULL AFTER `student_count`",
+            'submitter_id' => "ALTER TABLE `practice_project` ADD COLUMN `submitter_id` BIGINT UNSIGNED DEFAULT NULL AFTER `published_at`",
         ],
         'practice_syllabus' => [
             'submitter_id' => "ALTER TABLE `practice_syllabus` ADD COLUMN `submitter_id` BIGINT UNSIGNED DEFAULT NULL AFTER `remark`",
@@ -1303,10 +1330,30 @@ function ensurePracticeSchema(PDO $pdo): void
     }
 
     ensureIndex($pdo, 'practice_schedule', 'idx_practice_schedule_date', "ALTER TABLE `practice_schedule` ADD KEY `idx_practice_schedule_date` (`module_type`, `schedule_date`, `status`)");
+    ensureIndex($pdo, 'practice_project', 'idx_practice_project_schedule', "ALTER TABLE `practice_project` ADD KEY `idx_practice_project_schedule` (`module_type`, `schedule_id`, `status`)");
     ensureIndex($pdo, 'practice_score', 'idx_practice_score_student', "ALTER TABLE `practice_score` ADD KEY `idx_practice_score_student` (`module_type`, `student_id`, `status`)");
     ensureIndex($pdo, 'practice_room', 'idx_practice_room_module', "ALTER TABLE `practice_room` ADD KEY `idx_practice_room_module` (`module_type`, `dep_id`, `status`)");
     ensureIndex($pdo, 'practice_recording', 'idx_practice_recording_entity', "ALTER TABLE `practice_recording` ADD KEY `idx_practice_recording_entity` (`module_type`, `entity_type`, `entity_id`)");
     ensureIndex($pdo, 'practice_recording', 'idx_practice_recording_parent', "ALTER TABLE `practice_recording` ADD KEY `idx_practice_recording_parent` (`parent_id`)");
+
+    $projectStudentColumns = [
+        'module_type' => "ALTER TABLE `practice_project_student` ADD COLUMN `module_type` ENUM('training','lab') DEFAULT 'training' AFTER `code`",
+        'project_id' => "ALTER TABLE `practice_project_student` ADD COLUMN `project_id` BIGINT UNSIGNED NOT NULL AFTER `module_type`",
+        'student_id' => "ALTER TABLE `practice_project_student` ADD COLUMN `student_id` BIGINT UNSIGNED NOT NULL AFTER `project_id`",
+        'teacher_id' => "ALTER TABLE `practice_project_student` ADD COLUMN `teacher_id` BIGINT UNSIGNED DEFAULT NULL AFTER `student_id`",
+        'plan_id' => "ALTER TABLE `practice_project_student` ADD COLUMN `plan_id` BIGINT UNSIGNED DEFAULT NULL AFTER `teacher_id`",
+        'schedule_id' => "ALTER TABLE `practice_project_student` ADD COLUMN `schedule_id` BIGINT UNSIGNED DEFAULT NULL AFTER `plan_id`",
+        'grade_id' => "ALTER TABLE `practice_project_student` ADD COLUMN `grade_id` BIGINT UNSIGNED DEFAULT NULL AFTER `schedule_id`",
+        'dep_id' => "ALTER TABLE `practice_project_student` ADD COLUMN `dep_id` BIGINT UNSIGNED DEFAULT NULL AFTER `grade_id`",
+        'profession_id' => "ALTER TABLE `practice_project_student` ADD COLUMN `profession_id` BIGINT UNSIGNED DEFAULT NULL AFTER `dep_id`",
+        'class_id' => "ALTER TABLE `practice_project_student` ADD COLUMN `class_id` BIGINT UNSIGNED DEFAULT NULL AFTER `profession_id`",
+        'active_flag' => "ALTER TABLE `practice_project_student` ADD COLUMN `active_flag` TINYINT GENERATED ALWAYS AS (CASE WHEN `status` = 'active' AND `deleted_at` IS NULL THEN 1 ELSE NULL END) STORED AFTER `class_id`",
+    ];
+    foreach ($projectStudentColumns as $column => $ddl) {
+        ensureColumn($pdo, 'practice_project_student', $column, $ddl);
+    }
+    ensureIndexColumns($pdo, 'practice_project_student', 'uk_project_student', ['project_id', 'student_id', 'active_flag'], "ALTER TABLE `practice_project_student` ADD UNIQUE KEY `uk_project_student` (`project_id`, `student_id`, `active_flag`)");
+    ensureIndex($pdo, 'practice_project_student', 'idx_project_student', "ALTER TABLE `practice_project_student` ADD KEY `idx_project_student` (`module_type`, `student_id`, `status`)");
 
     $baseFlowColumns = [
         'base_application' => [
@@ -1999,6 +2046,9 @@ function seedMenus(PDO $pdo): void
         [22, 2, '课表安排', null, null, 'both', 'menu', 22, 'CalendarCheck'],
         [221, 22, '列表', 'training:schedule:list', '/training/schedules', 'both', 'list', 221, 'List'],
         [2211, 221, '维护', 'training:manage', null, 'both', 'button', 2211, null],
+        [222, 2, '项目发布', null, null, 'both', 'menu', 222, 'ClipboardList'],
+        [2221, 222, '列表', 'training:project:list', '/training/projects', 'both', 'list', 2221, 'List'],
+        [22211, 2221, '维护', 'training:manage', null, 'pc', 'button', 2221, null],
         [23, 2, '大纲编写', null, null, 'both', 'menu', 23, 'BookOpen'],
         [231, 23, '列表', 'training:syllabus:list', '/training/syllabus', 'both', 'list', 231, 'List'],
         [2311, 231, '维护', 'training:manage', null, 'both', 'button', 2311, null],
@@ -2025,6 +2075,9 @@ function seedMenus(PDO $pdo): void
         [32, 3, '课表安排', null, null, 'both', 'menu', 32, 'CalendarCheck'],
         [321, 32, '列表', 'lab:schedule:list', '/lab/schedules', 'both', 'list', 321, 'List'],
         [3211, 321, '维护', 'lab:manage', null, 'both', 'button', 3211, null],
+        [322, 3, '项目发布', null, null, 'both', 'menu', 322, 'ClipboardList'],
+        [3221, 322, '列表', 'lab:project:list', '/lab/projects', 'both', 'list', 3221, 'List'],
+        [32211, 3221, '维护', 'lab:manage', null, 'pc', 'button', 3221, null],
         [33, 3, '大纲编写', null, null, 'both', 'menu', 33, 'BookOpen'],
         [331, 33, '列表', 'lab:syllabus:list', '/lab/syllabus', 'both', 'list', 331, 'List'],
         [3311, 331, '维护', 'lab:manage', null, 'both', 'button', 3311, null],
@@ -2173,8 +2226,10 @@ function seedMenus(PDO $pdo): void
         14, 141, 105, 15, 151, 106, 1512, 16, 161, 107, 1612, 17, 171, 108,
         18, 181, 109, 19, 191, 110, 195, 1951, 19511, 19512,
     ];
-    $trainingMenus = [2, 21, 211, 201, 202, 22, 221, 2211, 23, 231, 2311, 2312, 24, 241, 2411, 2412, 25, 251, 2511, 26, 261, 2611, 2612, 27, 271, 2711];
-    $labMenus = [3, 31, 311, 301, 302, 32, 321, 3211, 33, 331, 3311, 3312, 34, 341, 3411, 3412, 35, 351, 3511, 36, 361, 3611, 3612, 37, 371, 3711];
+    $trainingMenus = [2, 21, 211, 201, 202, 22, 221, 2211, 222, 2221, 22211, 23, 231, 2311, 2312, 24, 241, 2411, 2412, 25, 251, 2511, 26, 261, 2611, 2612, 27, 271, 2711];
+    $labMenus = [3, 31, 311, 301, 302, 32, 321, 3211, 322, 3221, 32211, 33, 331, 3311, 3312, 34, 341, 3411, 3412, 35, 351, 3511, 36, 361, 3611, 3612, 37, 371, 3711];
+    $trainingReadonlyMenus = [2, 21, 211, 22, 221, 222, 2221, 25, 251];
+    $labReadonlyMenus = [3, 31, 311, 32, 321, 322, 3221, 35, 351];
     $statMenus = [4, 41, 411, 402, 42, 421, 43, 431, 44, 441, 45, 451, 46, 461, 47, 471];
     $commonViewMenus = [9, 91, 911, 10, 100, 1000, 10001, 20, 200, 2000, 20001, 20002];
     $allMenuIds = array_map(static fn (array $menu): int => (int) $menu[0], $menus);
@@ -2183,8 +2238,8 @@ function seedMenus(PDO $pdo): void
         2 => $allMenuIds,
         3 => array_merge($internshipAdminMenus, $trainingMenus, $labMenus, $statMenus, $commonViewMenus),
         4 => array_merge($internshipAdminMenus, $trainingMenus, $labMenus, $statMenus, $commonViewMenus),
-        5 => array_merge([1, 11, 111, 12, 121, 104, 1213, 13, 131, 14, 141, 105, 15, 151, 106, 1512, 16, 161, 107, 1612, 17, 171, 108, 195, 1951, 19512, 2, 21, 211, 201, 3, 31, 311, 301], $commonViewMenus),
-        6 => array_merge([1, 11, 111, 12, 121, 103, 14, 141, 105, 15, 151, 106, 16, 161, 107, 195, 1951, 19511], $commonViewMenus),
+        5 => array_merge([1, 11, 111, 12, 121, 104, 1213, 13, 131, 14, 141, 105, 15, 151, 106, 1512, 16, 161, 107, 1612, 17, 171, 108, 195, 1951, 19512, 201, 202, 2311, 2312, 2411, 2412, 2511, 2611, 2612, 301, 302, 3311, 3312, 3411, 3412, 3511, 3611, 3612], $trainingReadonlyMenus, $labReadonlyMenus, $commonViewMenus),
+        6 => array_merge([1, 11, 111, 12, 121, 103, 14, 141, 105, 15, 151, 106, 16, 161, 107, 195, 1951, 19511], $trainingReadonlyMenus, $labReadonlyMenus, $commonViewMenus),
         7 => array_merge([1, 17, 171, 108], $commonViewMenus),
     ];
 

@@ -28,6 +28,7 @@ class PracticeService
     private const ENTITIES = [
         'plan' => ['permission' => 'manage', 'title' => '教学计划', 'review' => true],
         'schedule' => ['permission' => 'manage', 'title' => '课表安排', 'review' => false],
+        'project' => ['permission' => 'manage', 'title' => '项目发布', 'review' => false],
         'syllabus' => ['permission' => 'manage', 'title' => '大纲', 'review' => true],
         'lessonPlan' => ['permission' => 'manage', 'title' => '教案', 'review' => true],
         'gradeRule' => ['permission' => 'manage', 'title' => '成绩比例', 'review' => false],
@@ -100,6 +101,9 @@ class PracticeService
         if ($entity === 'schedule') {
             $values = $this->scheduleValues($request, $values, $existingId);
         }
+        if ($entity === 'project') {
+            $values = $this->projectValues($request, $values);
+        }
 
         if ($existingId) {
             $row = PracticeRecord::activeRowByEntity($this->moduleType, $entity, $existingId);
@@ -110,6 +114,9 @@ class PracticeService
         }
 
         $id = $this->saveEntity($entity, $request, $values);
+        if ($entity === 'project') {
+            $this->syncProjectStudents($id, $values);
+        }
         if (($values['status'] ?? '') === 'wait' && $this->entityRequiresReview($entity)) {
             $this->recordWorkflow($entity, $id, 'submit', $fromStatus, 'wait', $this->workflowContent($entity, $values), 'wait');
         }
@@ -239,6 +246,16 @@ class PracticeService
                 'roster_printed_at' => $this->dateTimeInput($request, 'roster_printed_at'),
                 'status' => $this->enum($request, 'status', ['draft', 'enabled', 'disabled'], 'enabled'),
             ]),
+            'project' => array_merge($common, [
+                'schedule_id' => $this->optionalInt($request, 'schedule_id'),
+                'start_date' => $this->dateInput($request, 'start_date'),
+                'end_date' => $this->dateInput($request, 'end_date'),
+                'student_count' => $this->optionalInt($request, 'student_count') ?? 0,
+                'published_at' => $this->dateTimeInput($request, 'published_at'),
+                'submitter_id' => CurrentContext::accountId(),
+                'title' => $this->requiredTitle($request, self::ENTITIES[$entity]['title']),
+                'status' => $this->enum($request, 'status', ['draft', 'enabled', 'disabled', 'completed'], 'enabled'),
+            ]),
             'syllabus', 'lessonPlan', 'reflection' => array_merge($common, [
                 'title' => $this->requiredTitle($request, self::ENTITIES[$entity]['title']),
                 'submitter_id' => CurrentContext::accountId(),
@@ -347,6 +364,73 @@ class PracticeService
         }
 
         return $values;
+    }
+
+    /**
+     * 生成项目发布数据。
+     */
+    private function projectValues(Request $request, array $values): array
+    {
+        $scheduleId = (int) ($values['schedule_id'] ?? 0);
+        if ($scheduleId <= 0) {
+            throw new InvalidArgumentException('请选择已发布课表');
+        }
+
+        $schedule = PracticeRecord::scheduleRowForProject($this->scopeContext(), $this->moduleType, $scheduleId);
+        if (!$schedule) {
+            throw new RuntimeException('课表不存在或无权限', 40301);
+        }
+
+        foreach (['plan_id', 'grade_id', 'dep_id', 'profession_id', 'class_id', 'teacher_id', 'course_name'] as $field) {
+            if (($values[$field] ?? null) === null || $values[$field] === '') {
+                $values[$field] = $schedule[$field] ?? null;
+            }
+        }
+        if (empty($values['start_date']) && !empty($schedule['schedule_date'])) {
+            $values['start_date'] = $schedule['schedule_date'];
+        }
+        if (empty($values['end_date']) && !empty($schedule['schedule_date'])) {
+            $values['end_date'] = $schedule['schedule_date'];
+        }
+        if (empty($values['teacher_id'])) {
+            throw new InvalidArgumentException('请选择项目负责人');
+        }
+        if (empty($values['class_id'])) {
+            throw new InvalidArgumentException('课表缺少班级，无法发布项目');
+        }
+        if (!empty($values['start_date']) && !empty($values['end_date']) && strcmp((string) $values['end_date'], (string) $values['start_date']) < 0) {
+            throw new InvalidArgumentException('项目结束日期不能早于开始日期');
+        }
+
+        $studentCount = PracticeRecord::enabledStudentCountByClass((int) $values['class_id']);
+        if ($studentCount <= 0) {
+            throw new InvalidArgumentException('所选课表班级暂无可参与学生');
+        }
+        $values['student_count'] = $studentCount;
+        if (($values['status'] ?? '') === 'enabled' && empty($values['published_at'])) {
+            $values['published_at'] = $this->now();
+        }
+
+        return $values;
+    }
+
+    /**
+     * 同步项目学生范围。
+     */
+    private function syncProjectStudents(int $projectId, array $values): void
+    {
+        $students = PracticeRecord::enabledStudentsByClass((int) ($values['class_id'] ?? 0));
+        $students = array_map(function (array $student): array {
+            $student['uuid'] = $this->uuid();
+            return $student;
+        }, $students);
+        $count = PracticeRecord::syncProjectStudents($this->moduleType, $projectId, $values, $students, $this->uuid(), $this->now());
+        if ($count !== (int) ($values['student_count'] ?? 0)) {
+            PracticeRecord::updateEntityById('project', $projectId, [
+                'student_count' => $count,
+                'updated_at' => $this->now(),
+            ]);
+        }
     }
 
     private function recordWorkflow(string $entity, int $entityId, string $action, ?string $from, string $to, ?string $content, ?string $reviewStatus): int
@@ -502,7 +586,7 @@ class PracticeService
     {
         $keys = [
             'page', 'page_size', 'per_page', 'keyword', 'status', 'plan_id', 'teacher_id',
-            'room_id', 'base_id', 'place_type', 'source_type', 'date',
+            'schedule_id', 'room_id', 'base_id', 'place_type', 'source_type', 'date',
             'grade_id', 'dep_id', 'profession_id', 'class_id',
         ];
         $filters = [];
