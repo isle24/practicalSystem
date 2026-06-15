@@ -1297,6 +1297,12 @@
                             <el-option v-for="profession in practiceProfessionOptions(win.module.id)" :key="profession.profession_id" :label="profession.profession_name" :value="profession.profession_id" />
                           </el-select>
                         </label>
+                        <label v-if="win.panel === 'schedules'">
+                          <span>班级</span>
+                          <el-select v-model="practiceModuleState(win.module.id).form.class_id" clearable filterable>
+                            <el-option v-for="clazz in practiceClassOptions(win.module.id)" :key="clazz.class_id" :label="clazz.class_name" :value="clazz.class_id" />
+                          </el-select>
+                        </label>
                         <label>
                           <span>任课教师</span>
                           <el-select v-model="practiceModuleState(win.module.id).form.teacher_id" clearable filterable>
@@ -1305,8 +1311,8 @@
                         </label>
                         <label v-if="practiceNeedsPlan(win.panel)">
                           <span>关联计划</span>
-                          <el-select v-model="practiceModuleState(win.module.id).form.plan_id" clearable filterable>
-                            <el-option v-for="plan in practiceModuleState(win.module.id).options.plans" :key="plan.id" :label="plan.title || plan.course_name" :value="plan.id" />
+                          <el-select v-model="practiceModuleState(win.module.id).form.plan_id" clearable filterable @change="handlePracticePlanChange(win.module.id)">
+                            <el-option v-for="plan in practicePlanOptions(win.module.id, win.panel)" :key="plan.id" :label="plan.title || plan.course_name" :value="plan.id" />
                           </el-select>
                         </label>
                         <label v-if="win.panel === 'plans'">
@@ -1318,22 +1324,28 @@
                         </label>
                         <label v-if="win.panel === 'schedules'">
                           <span>地点类型</span>
-                          <el-select v-model="practiceModuleState(win.module.id).form.place_type">
+                          <el-select v-model="practiceModuleState(win.module.id).form.place_type" @change="handlePracticePlaceTypeChange(win.module.id)">
                             <el-option label="校内" value="inside" />
                             <el-option label="校外" value="outside" />
                           </el-select>
                         </label>
-                        <label v-if="win.panel === 'schedules'">
+                        <label v-if="win.panel === 'schedules' && practiceModuleState(win.module.id).form.place_type === 'inside'">
                           <span>场地</span>
                           <el-select v-model="practiceModuleState(win.module.id).form.room_id" clearable filterable>
                             <el-option v-for="room in practiceModuleState(win.module.id).options.rooms" :key="room.id" :label="room.name" :value="room.id" />
+                          </el-select>
+                        </label>
+                        <label v-if="win.panel === 'schedules' && practiceModuleState(win.module.id).form.place_type === 'outside'">
+                          <span>校外基地</span>
+                          <el-select v-model="practiceModuleState(win.module.id).form.base_id" clearable filterable>
+                            <el-option v-for="base in practiceBaseOptions(win.module.id)" :key="base.id" :label="base.name" :value="base.id" />
                           </el-select>
                         </label>
                         <label v-if="win.panel === 'schedules'"><span>日期</span><input v-model="practiceModuleState(win.module.id).form.schedule_date" type="date"></label>
                         <label v-if="win.panel === 'schedules'"><span>开始时间</span><input v-model="practiceModuleState(win.module.id).form.start_time" type="time"></label>
                         <label v-if="win.panel === 'schedules'"><span>结束时间</span><input v-model="practiceModuleState(win.module.id).form.end_time" type="time"></label>
                         <label v-if="win.panel === 'schedules'"><span>地点</span><input v-model="practiceModuleState(win.module.id).form.location"></label>
-                        <label v-if="win.panel === 'schedules'"><span>学生数</span><input v-model="practiceModuleState(win.module.id).form.student_count" type="number"></label>
+                        <label v-if="win.panel === 'schedules'"><span>学生数</span><input v-model="practiceModuleState(win.module.id).form.student_count" type="number" disabled placeholder="保存时按班级自动计算"></label>
                         <label v-if="win.panel === 'rooms'"><span>名称</span><input v-model="practiceModuleState(win.module.id).form.name"></label>
                         <label v-if="win.panel === 'rooms'"><span>编号</span><input v-model="practiceModuleState(win.module.id).form.code"></label>
                         <label v-if="win.panel === 'rooms'"><span>容量</span><input v-model="practiceModuleState(win.module.id).form.capacity" type="number"></label>
@@ -7392,6 +7404,7 @@ function emptyPracticeOptions() {
     classes: [],
     teachers: [],
     students: [],
+    bases: [],
     rooms: [],
     plans: [],
     review_rules: {},
@@ -7687,10 +7700,11 @@ function normalizePracticeCascade(module) {
   const state = practiceModuleState(module);
   const options = practiceProfessionOptions(module);
   const current = Number(state.form.profession_id || 0);
-  if (current && options.some(item => Number(item.profession_id) === current)) {
-    return;
+  if (current && !options.some(item => Number(item.profession_id) === current)) {
+    state.form.profession_id = null;
   }
-  state.form.profession_id = null;
+  normalizePracticeClass(module);
+  normalizePracticePlan(module);
 }
 
 function handlePracticeProfessionChange(module) {
@@ -7701,6 +7715,114 @@ function handlePracticeProfessionChange(module) {
   }
   state.form.grade_id = profession.grade_id || state.form.grade_id;
   state.form.dep_id = profession.dep_id || state.form.dep_id;
+  normalizePracticeClass(module);
+}
+
+function handlePracticePlanChange(module) {
+  const state = practiceModuleState(module);
+  const plan = state.options.plans.find(item => Number(item.id) === Number(state.form.plan_id || 0));
+  if (!plan) {
+    return;
+  }
+  ['grade_id', 'dep_id', 'profession_id', 'class_id', 'teacher_id', 'course_name'].forEach((field) => {
+    if (hasFilterValue(plan[field])) {
+      state.form[field] = plan[field];
+    }
+  });
+}
+
+function handlePracticePlaceTypeChange(module) {
+  const form = practiceModuleState(module).form;
+  if (form.place_type === 'inside') {
+    form.base_id = null;
+    return;
+  }
+  form.room_id = null;
+}
+
+function practiceClassOptions(module) {
+  const state = practiceModuleState(module);
+  return filterAcademicItems(state.options.classes, state.form, ['grade_id', 'dep_id', 'profession_id']);
+}
+
+function practicePlanOptions(module, panel) {
+  const state = practiceModuleState(module);
+  const planKeys = panel === 'schedules' ? ['grade_id', 'dep_id', 'profession_id'] : ['grade_id', 'dep_id', 'profession_id', 'class_id'];
+  const plans = filterAcademicItems(state.options.plans, state.form, planKeys);
+  if (panel === 'schedules') {
+    return plans.filter(item => ['accept', 'enabled'].includes(String(item.status || '')));
+  }
+  return plans;
+}
+
+function practiceBaseOptions(module) {
+  const state = practiceModuleState(module);
+  const depId = state.form.dep_id;
+  return (state.options.bases || []).filter(item => !hasFilterValue(depId) || !hasFilterValue(item.dep_id) || sameFilterValue(item.dep_id, depId));
+}
+
+function normalizePracticeClass(module) {
+  const state = practiceModuleState(module);
+  const current = Number(state.form.class_id || 0);
+  if (!current || practiceClassOptions(module).some(item => Number(item.class_id) === current)) {
+    return;
+  }
+  state.form.class_id = null;
+}
+
+function normalizePracticePlan(module) {
+  const state = practiceModuleState(module);
+  const current = Number(state.form.plan_id || 0);
+  if (!current || practicePlanOptions(module, 'schedules').some(item => Number(item.id) === current)) {
+    return;
+  }
+  state.form.plan_id = null;
+}
+
+function validatePracticeForm(module, panel, form) {
+  const title = String(form.title || form.course_name || '').trim();
+  if (panel === 'plans') {
+    if (!title) {
+      return '请填写教学计划标题或课程名称';
+    }
+    if (!form.grade_id) {
+      return '请选择届次';
+    }
+    if (!form.dep_id) {
+      return '请选择学院';
+    }
+    if (!form.profession_id) {
+      return '请选择专业';
+    }
+  }
+  if (panel !== 'schedules') {
+    return '';
+  }
+  if (!form.plan_id) {
+    return '请选择已审核通过的教学计划';
+  }
+  if (!practicePlanOptions(module, panel).some(item => Number(item.id) === Number(form.plan_id))) {
+    return '请选择已审核通过且匹配当前条件的教学计划';
+  }
+  if (!form.teacher_id) {
+    return '请选择任课教师';
+  }
+  if (!form.class_id) {
+    return '请选择课表班级';
+  }
+  if (!form.schedule_date || !form.start_time || !form.end_time) {
+    return '请填写完整课表日期和时间';
+  }
+  if (String(form.end_time) <= String(form.start_time)) {
+    return '课表结束时间必须晚于开始时间';
+  }
+  if ((form.place_type || 'inside') === 'inside' && !form.room_id) {
+    return '请选择可用实验实训室';
+  }
+  if ((form.place_type || 'inside') === 'outside' && !form.base_id && !String(form.location || '').trim()) {
+    return '校外安排需选择基地或填写地点';
+  }
+  return '';
 }
 
 function practiceQueryParams(module, panel, page = 1) {
@@ -7822,6 +7944,11 @@ async function confirmPracticeDialog(module) {
 async function savePractice(module) {
   const state = practiceModuleState(module);
   const panel = practiceSidebarItems().find(item => practicePanelEntity(item.key) === state.dialog.entity)?.key || 'plans';
+  const error = validatePracticeForm(module, panel, state.form);
+  if (error) {
+    state.message = error;
+    return;
+  }
   const payload = {
     ...state.form,
     entity: state.dialog.entity,

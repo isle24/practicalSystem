@@ -97,6 +97,9 @@ class PracticeService
         $existingId = $this->inputEntityId($request, $entity);
         $fromStatus = $existingId ? PracticeRecord::statusById($entity, $existingId) : 'draft';
         $values = $this->entityValues($request, $entity);
+        if ($entity === 'schedule') {
+            $values = $this->scheduleValues($request, $values, $existingId);
+        }
 
         if ($existingId) {
             $row = PracticeRecord::activeRowByEntity($this->moduleType, $entity, $existingId);
@@ -282,6 +285,68 @@ class PracticeService
             'uuid' => $this->uuid(),
             'created_at' => $this->now(),
         ]));
+    }
+
+    /**
+     * 生成课表保存数据。
+     */
+    private function scheduleValues(Request $request, array $values, ?int $existingId): array
+    {
+        $planId = (int) ($values['plan_id'] ?? 0);
+        if ($planId <= 0) {
+            throw new InvalidArgumentException('请选择已审核通过的教学计划');
+        }
+
+        $plan = PracticeRecord::planRowForSchedule($this->scopeContext(), $this->moduleType, $planId);
+        if (!$plan) {
+            throw new RuntimeException('教学计划不存在或无权限', 40301);
+        }
+        if (!in_array((string) ($plan['status'] ?? ''), ['accept', 'enabled'], true)) {
+            throw new InvalidArgumentException('教学计划审核通过后才可安排课表');
+        }
+
+        foreach (['grade_id', 'dep_id', 'profession_id', 'course_name'] as $field) {
+            if (($values[$field] ?? null) === null || $values[$field] === '') {
+                $values[$field] = $plan[$field] ?? null;
+            }
+        }
+
+        if (empty($values['teacher_id'])) {
+            throw new InvalidArgumentException('请选择任课教师');
+        }
+        if (empty($values['class_id'])) {
+            throw new InvalidArgumentException('请选择课表班级');
+        }
+        if (empty($values['schedule_date']) || empty($values['start_time']) || empty($values['end_time'])) {
+            throw new InvalidArgumentException('请填写完整课表日期和时间');
+        }
+        if (strcmp((string) $values['end_time'], (string) $values['start_time']) <= 0) {
+            throw new InvalidArgumentException('课表结束时间必须晚于开始时间');
+        }
+
+        $studentCount = PracticeRecord::enabledStudentCountByClass((int) $values['class_id']);
+        if ($studentCount <= 0) {
+            throw new InvalidArgumentException('所选班级暂无可参与学生');
+        }
+        $values['student_count'] = $studentCount;
+
+        if (($values['place_type'] ?? 'inside') === 'inside') {
+            $room = PracticeRecord::roomRowForSchedule($this->scopeContext(), $this->moduleType, (int) ($values['room_id'] ?? 0));
+            if (!$room) {
+                throw new InvalidArgumentException('请选择可用实验实训室');
+            }
+            if ((int) ($room['capacity'] ?? 0) > 0 && (int) $room['capacity'] < $studentCount) {
+                throw new InvalidArgumentException('实验实训室容量不足');
+            }
+        } elseif (empty($values['base_id']) && trim((string) ($values['location'] ?? '')) === '') {
+            throw new InvalidArgumentException('校外安排需选择基地或填写地点');
+        }
+
+        if (PracticeRecord::scheduleConflictExists($this->moduleType, $values, $existingId)) {
+            throw new InvalidArgumentException('课表时间与已有安排冲突');
+        }
+
+        return $values;
     }
 
     private function recordWorkflow(string $entity, int $entityId, string $action, ?string $from, string $to, ?string $content, ?string $reviewStatus): int
