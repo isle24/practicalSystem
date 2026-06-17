@@ -4594,7 +4594,7 @@ function internshipSidebarItemVisible(item) {
   if (!isStudentRole.value) {
     return true;
   }
-  return ['overview', 'arrangements', 'applications', 'pairs', 'signIns', 'journals', 'reports', 'delays', 'scores', 'courseScores', 'documents'].includes(item.key);
+  return ['overview', 'arrangements', 'applications', 'signIns', 'journals', 'reports', 'delays', 'scores', 'courseScores', 'documents'].includes(item.key);
 }
 
 function isInternshipReadOnlyListPanel(panel) {
@@ -4644,7 +4644,7 @@ function canSaveManualCourseScore(row) {
 }
 
 function isStudentOwnPanel(panel) {
-  return isStudentRole.value && ['arrangements', 'applications', 'pairs', 'signIns', 'journals', 'reports', 'delays', 'scores', 'courseScores'].includes(panel);
+  return isStudentRole.value && ['arrangements', 'applications', 'signIns', 'journals', 'reports', 'delays', 'scores', 'courseScores'].includes(panel);
 }
 
 function studentPanelList(panel) {
@@ -4735,6 +4735,9 @@ function studentPanelFields(panel) {
     arrangements: [
       // 暂时隐藏学期字段，后续需要时恢复。
       // { key: 'semester', label: '学期' },
+      { key: 'teacher_name', label: '任务老师' },
+      { key: 'task_no', label: '任务编号' },
+      { key: 'batch_no', label: '批次' },
       { key: 'type', label: '类型', formatter: row => arrangementTypeText(row.type) },
       { key: 'organize_mode', label: '组织方式', formatter: row => organizeModeText(row.organize_mode) },
       { key: 'date', label: '时间', formatter: row => `${row.start_date || '-'} 至 ${row.end_date || '-'}` },

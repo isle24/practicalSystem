@@ -2286,7 +2286,7 @@ const internshipSummaries = computed(() => [
 ]);
 const studentFlowSteps = [
   '查看管理员分配的实习任务',
-  '按任务查看负责老师',
+  '在任务中确认负责老师和阶段时间',
   '签到、日志、报告按阶段提交',
   '退回或需修改时重新提交',
   '完成归档和成绩确认',
@@ -2325,7 +2325,7 @@ const internshipWorkbenchCells = computed(() => {
   if (isStudentRole.value) {
     return [
       { title: '我的任务', label: '已绑定的实习任务', value: internship.options.arrangements.length || '-' },
-      { title: '任务老师', label: '任务级老师绑定', value: internship.lists.pairs.pagination.total || 0 },
+      { title: '已评分任务', label: '按任务记录成绩', value: internship.lists.scores.pagination.total || 0 },
       { title: '特殊申请', label: '分散、自主等场景', value: internship.lists.applications.pagination.total || 0 },
     ];
   }
@@ -3453,7 +3453,7 @@ async function loadInternshipPanelData() {
   if (internship.panel === 'workbench') {
     await Promise.all([
       loadInternshipList('applications'),
-      loadInternshipList('pairs'),
+      loadInternshipList('scores'),
     ]);
     return;
   }
