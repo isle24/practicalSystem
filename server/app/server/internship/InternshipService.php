@@ -868,6 +868,7 @@ class InternshipService
         $this->assertCurrentArrangementVisible($arrangementId);
         $this->assertTaskBindingVisible($studentId, $arrangementId);
         if ($status === 'wait') {
+            $this->assertStudentDeadlineOpen($studentId, 'journal_deadline', '实习日志');
             $this->assertStudentStartPrerequisites($studentId, $arrangementId, $this->dateInput($request, 'date') ?: date('Y-m-d'));
         }
         if ($existingId) {
@@ -925,6 +926,7 @@ class InternshipService
         $this->assertCurrentArrangementVisible($arrangementId);
         $this->assertTaskBindingVisible($studentId, $arrangementId);
         if ($status === 'wait') {
+            $this->assertStudentDeadlineOpen($studentId, 'report_deadline', '实习报告');
             $this->assertStudentStartPrerequisites($studentId, $arrangementId, date('Y-m-d'));
         }
         if ($existingId) {
@@ -2654,6 +2656,27 @@ class InternshipService
         ];
         $names = array_map(static fn (string $key): string => $labels[$key] ?? $key, $missing);
         throw new InvalidArgumentException('校外实习开始前需完成：' . implode('、', $names), 42207);
+    }
+
+    private function assertStudentDeadlineOpen(int $studentId, string $configKey, string $label): void
+    {
+        $deadline = $this->studentDeadline($studentId, $configKey);
+        if ($deadline === null || $deadline >= date('Y-m-d')) {
+            return;
+        }
+
+        throw new InvalidArgumentException($label . '已超过截止日期 ' . $deadline . '，请先申请延期', 42208);
+    }
+
+    private function studentDeadline(int $studentId, string $configKey): ?string
+    {
+        $studentUserId = InternshipRecord::studentUserId($studentId);
+        $value = (string) ((new ConfigService())->get('internship.' . $configKey, 0, (int) ($studentUserId ?: 0)) ?? '');
+        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $value)) {
+            return null;
+        }
+
+        return $value;
     }
 
     private function assertApplicationVisible(int $applicationId): void
