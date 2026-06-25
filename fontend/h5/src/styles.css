@@ -724,9 +724,14 @@ input {
   font-weight: 500;
 }
 
+.mobile-card header small.danger {
+  color: #c63434;
+}
+
 .student-guide-card {
   border: 1px solid var(--line);
   border-radius: 8px;
+  margin-top: 12px;
   padding: 12px;
   background: #fff;
   box-shadow: var(--shadow);
@@ -795,6 +800,10 @@ input {
   background: #f4f8ff;
 }
 
+.student-submit-cards button.expired {
+  border-color: rgba(198, 52, 52, .32);
+}
+
 .student-submit-cards svg {
   color: var(--primary);
 }
@@ -813,6 +822,11 @@ input {
   color: var(--muted);
   font-size: 12px;
   font-style: normal;
+}
+
+.student-submit-cards button.expired em {
+  color: #c63434;
+  font-weight: 700;
 }
 
 .mobile-list-tools {
@@ -910,6 +924,34 @@ input {
   min-height: 78px;
   padding-top: 9px;
   resize: vertical;
+}
+
+.stage-deadline-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border: 1px solid rgba(48, 102, 190, .16);
+  border-radius: 8px;
+  padding: 9px 10px;
+  color: var(--muted);
+  background: #f7faff;
+  font-size: 12px;
+}
+
+.stage-deadline-panel.expired {
+  border-color: rgba(198, 52, 52, .2);
+  color: #8f2f2f;
+  background: #fff7f7;
+}
+
+.stage-deadline-panel button {
+  flex: 0 0 auto;
+  border: 1px solid rgba(198, 52, 52, .28);
+  border-radius: 7px;
+  padding: 6px 9px;
+  color: #c63434;
+  background: #fff;
 }
 
 .gps-sign-card {

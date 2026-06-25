@@ -446,7 +446,7 @@
             <button
               v-for="item in studentSubmitCards"
               :key="item.key"
-              :class="{ active: internship.submitSection === item.key }"
+              :class="{ active: internship.submitSection === item.key, expired: item.expired }"
               @click="openStudentSubmitSection(item.key)"
             >
               <component :is="item.icon" :size="20" />
@@ -527,7 +527,7 @@
             <header>
               <FileClock :size="20" />
               <strong>实习日志</strong>
-              <small>{{ stageDeadlineText('journal_deadline') }}</small>
+              <small :class="{ danger: isStageExpired('journal_deadline') }">{{ stageDeadlineText('journal_deadline') }}</small>
             </header>
             <label>
               <span>实习任务</span>
@@ -537,6 +537,12 @@
                 </option>
               </select>
             </label>
+            <div class="stage-deadline-panel" :class="{ expired: isStageExpired('journal_deadline') }">
+              <span>{{ stageDeadlineDetailText('journal_deadline') }}</span>
+              <button v-if="isStageExpired('journal_deadline')" type="button" @click="openDelayForStage('journal_deadline')">
+                申请延期
+              </button>
+            </div>
             <label>
               <span>标题</span>
               <input v-model="internship.forms.journal.title">
@@ -545,7 +551,7 @@
               <span>内容</span>
               <textarea v-model="internship.forms.journal.content" rows="4" />
             </label>
-            <van-button block type="primary" :loading="internship.loading" @click="submitJournal">
+            <van-button block type="primary" :loading="internship.loading" :disabled="isStageExpired('journal_deadline')" @click="submitJournal">
               {{ internship.forms.journal.id ? '重新提交日志' : '提交日志' }}
             </van-button>
           </section>
@@ -554,7 +560,7 @@
             <header>
               <FileText :size="20" />
               <strong>实习报告</strong>
-              <small>{{ stageDeadlineText('report_deadline') }}</small>
+              <small :class="{ danger: isStageExpired('report_deadline') }">{{ stageDeadlineText('report_deadline') }}</small>
             </header>
             <label>
               <span>实习任务</span>
@@ -564,6 +570,12 @@
                 </option>
               </select>
             </label>
+            <div class="stage-deadline-panel" :class="{ expired: isStageExpired('report_deadline') }">
+              <span>{{ stageDeadlineDetailText('report_deadline') }}</span>
+              <button v-if="isStageExpired('report_deadline')" type="button" @click="openDelayForStage('report_deadline')">
+                申请延期
+              </button>
+            </div>
             <label>
               <span>标题</span>
               <input v-model="internship.forms.report.title">
@@ -572,7 +584,7 @@
               <span>内容</span>
               <textarea v-model="internship.forms.report.content" rows="4" />
             </label>
-            <van-button block type="primary" :loading="internship.loading" @click="submitReport">
+            <van-button block type="primary" :loading="internship.loading" :disabled="isStageExpired('report_deadline')" @click="submitReport">
               {{ internship.forms.report.id ? '重新提交报告' : '提交报告' }}
             </van-button>
           </section>
@@ -2305,6 +2317,7 @@ const studentSubmitCards = computed(() => [
     desc: '填写过程记录，需修改可重新提交',
     icon: FileClock,
     meta: stageDeadlineText('journal_deadline'),
+    expired: isStageExpired('journal_deadline'),
   },
   {
     key: 'report',
@@ -2312,6 +2325,7 @@ const studentSubmitCards = computed(() => [
     desc: '提交阶段或总结报告',
     icon: FileText,
     meta: stageDeadlineText('report_deadline'),
+    expired: isStageExpired('report_deadline'),
   },
   {
     key: 'delay',
@@ -3607,6 +3621,12 @@ async function submitJournal() {
     showToast(internship.message);
     return;
   }
+  if (isStageExpired('journal_deadline')) {
+    internship.message = '实习日志已截止，请先申请延期';
+    showToast(internship.message);
+    openDelayForStage('journal_deadline');
+    return;
+  }
   internship.loading = true;
   internship.message = '';
   try {
@@ -3635,6 +3655,12 @@ async function submitReport() {
   if (!arrangementId) {
     internship.message = '请选择实习任务';
     showToast(internship.message);
+    return;
+  }
+  if (isStageExpired('report_deadline')) {
+    internship.message = '实习报告已截止，请先申请延期';
+    showToast(internship.message);
+    openDelayForStage('report_deadline');
     return;
   }
   internship.loading = true;
@@ -4759,10 +4785,40 @@ function currentArrangement() {
 }
 
 function stageDeadlineText(key) {
-  const configured = internship.options.deadline_configs?.[key] || '';
-  const arrangementEnd = currentArrangement()?.end_date || '';
+  const value = stageDeadlineDate(key);
+  if (!value) {
+    return '截止时间未配置';
+  }
+  return isStageExpired(key) ? `已截止 ${value}` : `截止 ${value}`;
+}
+
+function stageDeadlineDetailText(key) {
+  const label = delayConfigText(key);
+  const value = stageDeadlineDate(key);
+  if (!value) {
+    return `${label}暂未配置截止时间`;
+  }
+  return isStageExpired(key) ? `${label}已于 ${value} 截止` : `${label}截止时间 ${value}`;
+}
+
+function stageDeadlineDate(key) {
+  const configured = String(internship.options.deadline_configs?.[key] || '').slice(0, 10);
+  const arrangementEnd = String(currentArrangement()?.end_date || '').slice(0, 10);
   const value = configured || arrangementEnd;
-  return value ? `截止 ${value}` : '截止时间未配置';
+  return /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : '';
+}
+
+function isStageExpired(key) {
+  const value = stageDeadlineDate(key);
+  return Boolean(value && value < formatDateKey(new Date()));
+}
+
+function openDelayForStage(key) {
+  const arrangementId = currentArrangement()?.id || internship.forms.sign.arrangement_id || internship.forms.delay.arrangement_id || null;
+  internship.submitSection = 'delay';
+  internship.forms.delay.config_key = key;
+  internship.forms.delay.arrangement_id = arrangementId;
+  internship.forms.sign.arrangement_id = arrangementId || internship.forms.sign.arrangement_id;
 }
 
 function coordinateText(value) {
