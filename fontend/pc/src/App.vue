@@ -65,7 +65,7 @@
           <input
             v-model="keyword"
             type="search"
-            placeholder="搜索模块、学生、企业或文档"
+            placeholder="搜索模块、学生、基地或文档"
             @keyup.enter="submitGlobalSearch"
           >
         </label>
@@ -1921,7 +1921,7 @@
                   <div v-if="archiveStateForWindow(win).dialogVisible" class="operation-mask" @click.self="closeArchiveDialog(archiveTypeForWindow(win))">
                     <section class="operation-dialog menu-dialog">
                       <header>
-                        <strong>{{ archiveStateForWindow(win).editing.id ? '编辑档案' : '新增档案' }}</strong>
+                        <strong>{{ archiveStateForWindow(win).editing.id ? `编辑${archiveDefinitionForWindow(win).name}` : `新增${archiveDefinitionForWindow(win).name}` }}</strong>
                         <button type="button" @click="closeArchiveDialog(archiveTypeForWindow(win))">关闭</button>
                       </header>
                       <div class="operation-form menu-dialog-form">
@@ -4082,10 +4082,10 @@ const archiveDefinitions = [
   },
   {
     type: 'company',
-    name: '企业',
+    name: '基地',
     idField: 'company_id',
     fields: [
-      { key: 'company_name', label: '企业名称', required: true },
+      { key: 'company_name', label: '基地名称', required: true },
       { key: 'credit_code', label: '信用代码' },
       { key: 'contact_name', label: '联系人' },
       { key: 'contact_mobile', label: '联系电话' },
@@ -4331,7 +4331,7 @@ const moduleSearchKeywords = {
   departmentManage: '学院 院系 部门',
   professionManage: '专业',
   classManage: '班级',
-  companyManage: '企业 单位 基地',
+  companyManage: '基地 合作单位 单位 企业',
   config: '设置 配置 菜单 权限 角色 企业微信 操作说明 学校',
   profile: '个人设置 头像 壁纸 背景 消息接收 密码 资料',
   message: '消息 通知 待办 审核结果 站内信',
@@ -6094,7 +6094,7 @@ function fallbackGuideContent(win) {
       { title: '实习业务', lines: ['学生端以管理员分配的本人实习任务为主，按任务提交签到、日志、报告和材料。', '教师端默认按任务查看绑定学生，审核类操作会进入确认弹窗并记录流程。', '管理员端通过计划、任务、班级绑定、记录查看和归档材料完成过程监管。'] },
     ],
     config: [
-      { title: '系统配置', lines: ['菜单管理用于维护主菜单、业务菜单、列表和按钮节点。', '角色权限按菜单树授权，按钮节点用于控制页面内操作。', '组织范围用于配置学院、专业、班级、企业等数据边界。'] },
+      { title: '系统配置', lines: ['菜单管理用于维护主菜单、业务菜单、列表和按钮节点。', '角色权限按菜单树授权，按钮节点用于控制页面内操作。', '组织范围用于配置学院、专业、班级、基地等数据边界。'] },
     ],
     log: [
       { title: '日志审计', lines: ['默认读取当前学校下所有操作日志。', '可按关键词、动作、IP 和日期范围查询。'] },
@@ -7704,7 +7704,7 @@ function archiveKeywordPlaceholder(type) {
     grade: '届次名称',
     profession: '专业名称、简称、代码',
     class: '班级名称、简称、班号',
-    company: '企业名称、信用代码、联系人',
+    company: '基地名称、信用代码、联系人',
   }[type] || '关键词';
 }
 
@@ -7838,7 +7838,7 @@ async function saveArchiveConfig(type) {
 
 async function deleteArchiveConfig(type) {
   const state = archiveStateByType(type);
-  if (!state.selected || !window.confirm('确认删除当前档案？')) {
+  if (!state.selected || !window.confirm(`确认删除当前${archiveDefinition(type).name}？`)) {
     return;
   }
 
