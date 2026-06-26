@@ -2404,7 +2404,7 @@
                           <el-input
                             v-model="messageState.sendDialog.form.content"
                             type="textarea"
-                            :rows="6"
+                            :rows="4"
                             maxlength="1000"
                             show-word-limit
                           />
