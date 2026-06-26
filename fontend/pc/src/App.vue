@@ -3265,7 +3265,7 @@
     </div>
 
     <div v-if="desktopLauncherState.visible" class="desktop-launcher-mask" tabindex="-1" @click.self="closeDesktopLauncher" @keyup.esc="closeDesktopLauncher">
-      <section class="desktop-launcher-panel">
+      <section class="desktop-launcher-panel" @click.self="closeDesktopLauncher">
         <button type="button" class="desktop-launcher-close" title="关闭" @click="closeDesktopLauncher">
           <X :size="22" />
         </button>
@@ -3274,7 +3274,7 @@
           <input v-model="desktopLauncherState.keyword" type="search" placeholder="搜索应用模块">
         </label>
         <small v-if="desktopLauncherState.message" class="desktop-launcher-message">{{ desktopLauncherState.message }}</small>
-        <div class="desktop-launcher-grid">
+        <div class="desktop-launcher-grid" @click.self="closeDesktopLauncher">
           <article v-for="module in launcherFilteredModules" :key="module.id" class="launcher-app">
             <button type="button" class="launcher-module-main" :title="module.scope" @click="openLauncherModule(module)">
               <span class="app-glyph" :class="module.color">

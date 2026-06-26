@@ -377,7 +377,7 @@ a {
 .desktop-launcher-mask {
   position: fixed;
   inset: 0;
-  z-index: 520;
+  z-index: 5000;
   display: grid;
   background: rgba(3, 10, 16, .62);
   backdrop-filter: blur(16px) saturate(120%);
@@ -504,14 +504,19 @@ a {
   border-radius: 50%;
   display: grid;
   place-items: center;
+  padding: 0;
   color: #fff;
   background: rgba(34, 197, 94, .88);
   box-shadow: 0 6px 14px rgba(0, 0, 0, .28);
+  line-height: 0;
+  overflow: hidden;
 }
 
 .launcher-module-add svg {
   width: 13px;
   height: 13px;
+  display: block;
+  stroke-width: 3;
 }
 
 .launcher-module-add.added {
@@ -3757,6 +3762,13 @@ a {
 .favorite-editor {
   display: grid;
   gap: 18px;
+  padding: 18px;
+  overflow: auto;
+}
+
+.favorite-editor .operation-form {
+  padding: 0;
+  overflow: visible;
 }
 
 .favorite-preview-card {
