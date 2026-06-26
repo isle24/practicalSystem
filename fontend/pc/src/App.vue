@@ -4697,7 +4697,6 @@ const internshipListConfigs = computed(() => ({
       { prop: 'dep_name', label: '学院', minWidth: 150 },
       { prop: 'profession_name', label: '专业', minWidth: 150 },
       { prop: 'credit', label: '学分', width: 80 },
-      { prop: 'student_count', label: '人数', width: 80 },
       { prop: 'task_count', label: '任务数', width: 80 },
       { prop: 'task_coverage_text', label: '任务覆盖', width: 100 },
       { prop: 'task_score_progress_text', label: '任务评分', width: 100 },

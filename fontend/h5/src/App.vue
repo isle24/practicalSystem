@@ -2826,7 +2826,6 @@ function mobileListFacts(key, row) {
       // namedFact('学期', row.semester),
       namedFact('学院', row.dep_name),
       namedFact('专业', row.profession_name),
-      namedFact('计划人数', row.student_count),
       namedFact('任务数', row.task_count),
       namedFact('任务覆盖', row.task_coverage_text),
       namedFact('任务评分', row.task_score_progress_text),
