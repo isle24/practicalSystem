@@ -2580,12 +2580,13 @@
                       <small>{{ adminState.menu.items.length }} 项</small>
                     </header>
                     <el-tree
+                      :key="adminState.menu.treeKey"
                       ref="menuTreeRef"
                       class="permission-tree menu-edit-tree"
                       :data="adminState.menus"
                       :props="treeProps"
                       node-key="id"
-                      default-expand-all
+                      :default-expanded-keys="adminState.menu.expandedKeys"
                       highlight-current
                       :current-node-key="adminState.menu.selected?.id"
                       :expand-on-click-node="false"
@@ -3690,6 +3691,8 @@ const adminState = reactive({
     selected: null,
     keyword: '',
     expanded: true,
+    expandedKeys: [],
+    treeKey: 0,
     dialogVisible: false,
     dialogMode: 'create',
     loading: false,
@@ -5686,12 +5689,19 @@ function moduleDisplayName(module) {
     return module.name;
   }
   if (module.id === 'companyManage') {
-    return module.name;
+    return companyModuleDisplayName(item, module.name);
   }
   if (configChildModuleIds.has(module.id)) {
     return item.parent_name || item.name || module.name;
   }
   return item.root_name || item.name || module.name;
+}
+
+function companyModuleDisplayName(item, fallback) {
+  const ignoredNames = new Set(['系统配置', '系统设置', '配置管理']);
+  return [item.parent_name, item.root_name, item.name]
+    .find(name => name && !ignoredNames.has(name))
+    || fallback;
 }
 
 function moduleMatchesMenu(module, menu) {
@@ -6579,6 +6589,15 @@ function isModuleFocused(moduleId) {
   return focused?.module.id === moduleId && !focused.minimized;
 }
 
+function syncOpenWindowModules() {
+  openWindows.forEach((win) => {
+    const module = visibleModules.value.find(item => item.id === win.module.id);
+    if (module) {
+      win.module = module;
+    }
+  });
+}
+
 function activateWindowPanel(win, panel) {
   if (!win) {
     return;
@@ -6888,10 +6907,7 @@ function emptyMenu() {
 function applyMenusData(data) {
   adminState.menus = normalizeMenuTree(data.menus || []);
   adminState.menu.items = data.items || [];
-  nextTick(() => {
-    filterMenuTree();
-    setMenuTreeExpanded(adminState.menu.expanded);
-  });
+  setMenuTreeExpanded(adminState.menu.expanded);
 }
 
 function normalizeMenuTree(items, depth = 1) {
@@ -6956,12 +6972,15 @@ function filterMenuNode(value, data) {
 
 function setMenuTreeExpanded(expanded) {
   adminState.menu.expanded = expanded;
-  nextTick(() => {
-    const nodes = menuTreeRef.value?.store?.nodesMap || {};
-    Object.values(nodes).forEach((node) => {
-      node.expanded = expanded;
-    });
-  });
+  adminState.menu.expandedKeys = expanded ? menuTreeNodeIds(adminState.menus) : [];
+  adminState.menu.treeKey += 1;
+}
+
+function menuTreeNodeIds(nodes) {
+  return (nodes || []).flatMap(node => [
+    node.id,
+    ...menuTreeNodeIds(node.children || []),
+  ]).filter(Boolean);
 }
 
 function selectMenu(row) {
@@ -7506,8 +7525,7 @@ async function loadAdminFoundation() {
     ]);
 
     adminState.roles = rolesData.roles || [];
-    adminState.menus = normalizeMenuTree(menusData.menus || []);
-    adminState.menu.items = menusData.items || [];
+    applyMenusData(menusData);
     adminState.options.accounts = optionsData.accounts || [];
     adminState.options.departments = optionsData.departments || [];
     adminState.options.grades = optionsData.grades || [];
@@ -11468,6 +11486,8 @@ function resetAdminState() {
   adminState.menu.editing = emptyMenu();
   adminState.menu.keyword = '';
   adminState.menu.expanded = true;
+  adminState.menu.expandedKeys = [];
+  adminState.menu.treeKey = 0;
   adminState.menu.message = '';
   adminState.roleMenus.role_id = null;
   adminState.roleMenus.menu_ids = [];
@@ -11971,6 +11991,7 @@ watch(() => permissionState.context.account_id, (accountId) => {
 
 watch(visibleModules, () => {
   if (isLoggedIn.value) {
+    syncOpenWindowModules();
     ensureDefaultWindow();
     handleHashNavigation();
   }
