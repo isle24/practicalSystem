@@ -3262,8 +3262,8 @@
       </section>
     </div>
 
-    <div v-if="desktopLauncherState.visible" class="desktop-launcher-mask" tabindex="-1" @click.self="closeDesktopLauncher" @keyup.esc="closeDesktopLauncher">
-      <section class="desktop-launcher-panel" @click.self="closeDesktopLauncher">
+    <div v-if="desktopLauncherState.visible" class="desktop-launcher-mask" tabindex="-1" @keyup.esc="closeDesktopLauncher">
+      <section class="desktop-launcher-panel" @click="handleDesktopLauncherClick">
         <button type="button" class="desktop-launcher-close" title="关闭" @click="closeDesktopLauncher">
           <X :size="22" />
         </button>
@@ -3272,7 +3272,7 @@
           <input v-model="desktopLauncherState.keyword" type="search" placeholder="搜索应用模块">
         </label>
         <small v-if="desktopLauncherState.message" class="desktop-launcher-message">{{ desktopLauncherState.message }}</small>
-        <div class="desktop-launcher-grid" @click.self="closeDesktopLauncher">
+        <div class="desktop-launcher-grid">
           <article v-for="module in launcherFilteredModules" :key="module.id" class="launcher-app">
             <button type="button" class="launcher-module-main" :title="module.scope" @click="openLauncherModule(module)">
               <span class="app-glyph" :class="module.color">
@@ -5748,6 +5748,18 @@ function openDesktopLauncher() {
 
 function closeDesktopLauncher() {
   desktopLauncherState.visible = false;
+}
+
+function handleDesktopLauncherClick(event) {
+  const target = event?.target instanceof Element ? event.target : null;
+  if (!target) {
+    closeDesktopLauncher();
+    return;
+  }
+  if (target.closest('.launcher-app, .desktop-launcher-search, .desktop-launcher-close')) {
+    return;
+  }
+  closeDesktopLauncher();
 }
 
 function openLauncherModule(module) {
