@@ -11,6 +11,17 @@ export function login(payload) {
   });
 }
 
+export function fetchRegisterOptions() {
+  return request('/auth/register-options');
+}
+
+export function registerAccount(payload) {
+  return request('/auth/register', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
 export function logout() {
   return request('/auth/logout', {
     method: 'POST',

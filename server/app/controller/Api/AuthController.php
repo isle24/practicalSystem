@@ -4,6 +4,7 @@ namespace app\controller\Api;
 
 use app\attribute\OperationLog;
 use app\controller\Api\Concerns\Responds;
+use app\server\auth\AccountRegistrationService;
 use app\server\auth\AuthService;
 use app\server\CurrentContext;
 use app\server\rbac\RbacService;
@@ -64,6 +65,39 @@ class AuthController
         return $this->ok()
             ->cookie($cookies['access'], '', 0, '/', '', false, true, 'Lax')
             ->cookie($cookies['refresh'], '', 0, '/', '', false, true, 'Lax');
+    }
+
+    /**
+     * 获取临时注册配置
+     */
+    #[OperationLog('获取临时注册配置')]
+    public function registerOptions(Request $request): Response
+    {
+        try {
+            return $this->ok((new AccountRegistrationService())->publicOptions());
+        } catch (Throwable $exception) {
+            return $this->fail(40001, $exception->getMessage(), 400);
+        }
+    }
+
+    /**
+     * 临时注册账号
+     */
+    #[OperationLog('临时注册账号')]
+    public function register(Request $request): Response
+    {
+        try {
+            $payload = $this->registrationPayload($request);
+            $service = new AccountRegistrationService();
+            $service->publicRegister($payload);
+            $auth = new AuthService();
+            $password = (string) ($payload['password'] ?? '');
+            $result = $auth->login((string) ($payload['login_name'] ?? ''), $password !== '' ? $password : 'admin123456', (string) ($payload['client'] ?? 'WEB'));
+
+            return $this->sessionResponse($auth, $result);
+        } catch (Throwable $exception) {
+            return $this->fail(40001, $exception->getMessage(), 400);
+        }
     }
 
     /**
@@ -165,6 +199,21 @@ class AuthController
     {
         $value = $request->input($key);
         return is_numeric($value) ? (int) $value : null;
+    }
+
+    private function registrationPayload(Request $request): array
+    {
+        $keys = [
+            'name', 'login_name', 'password', 'mobile', 'email', 'role_type',
+            'student_num', 'teacher_num', 'grade_id', 'dep_id', 'profession_id',
+            'class_id', 'class_num', 'client',
+        ];
+        $payload = [];
+        foreach ($keys as $key) {
+            $payload[$key] = $request->input($key);
+        }
+
+        return $payload;
     }
 
     private function sessionResponse(AuthService $service, array $result): Response

@@ -12,7 +12,7 @@ use app\model\channel\SysOrganization;
 use app\model\channel\TableRecord as ChannelTable;
 use app\model\channel\User;
 use app\model\channel\UserWechat;
-use app\model\channel\UserRole;
+use app\server\auth\AccountRegistrationService;
 use app\server\auth\AuthService;
 use app\server\CurrentContext;
 use app\server\rbac\RbacService;
@@ -321,48 +321,7 @@ class AdminController
                 return $this->fail(40001, '不能停用当前登录账号', 400);
             }
 
-            $name = $this->requiredString($request, 'name', 80);
-            $password = $this->nullableString($request, 'password', 120);
-            if (!$accountId && !$password) {
-                $password = 'admin123456';
-            }
-            if ($password !== null && strlen($password) < 6) {
-                return $this->fail(40001, '密码至少 6 位', 400);
-            }
-
-            $now = date('Y-m-d H:i:s');
-            Account::connection()->transaction(function () use ($accountId, $loginName, $name, $now, $password, $request, $roleId, $status): void {
-                $userValues = [
-                    'name' => $name,
-                    'mobile' => $this->nullableString($request, 'mobile', 40),
-                    'email' => $this->nullableString($request, 'email', 120),
-                    'status' => $status,
-                    'updated_at' => $now,
-                ];
-                $accountValues = [
-                    'login_name' => $loginName,
-                    'status' => $status,
-                    'updated_at' => $now,
-                ];
-                if ($password !== null) {
-                    $accountValues['password'] = password_hash($password, PASSWORD_BCRYPT);
-                }
-
-                if ($accountId) {
-                    $account = Account::activeById($accountId, ['id', 'user_id']);
-                    if (!$account) {
-                        throw new \InvalidArgumentException('账号不存在');
-                    }
-                    User::updateAdminUser((int) $account->user_id, $userValues);
-                    Account::updateAdminAccount($accountId, $accountValues);
-                    UserRole::setPrimaryRole($accountId, $roleId, $now);
-                    return;
-                }
-
-                $user = User::createAdminUser(array_merge($userValues, ['created_at' => $now]));
-                $account = Account::createAdminAccount((int) $user->id, array_merge($accountValues, ['created_at' => $now]));
-                UserRole::setPrimaryRole((int) $account->id, $roleId, $now);
-            });
+            (new AccountRegistrationService())->adminSave($this->accountPayload($request), $accountId);
 
             return $this->ok([], '已保存');
         } catch (Throwable $exception) {
@@ -573,6 +532,21 @@ class AdminController
     {
         $value = $this->stringInput($request, $key, $maxLength);
         return $value === '' ? null : $value;
+    }
+
+    private function accountPayload(Request $request): array
+    {
+        $keys = [
+            'name', 'login_name', 'password', 'mobile', 'email', 'role_id', 'status',
+            'student_num', 'teacher_num', 'grade_id', 'dep_id', 'profession_id',
+            'class_id', 'class_num',
+        ];
+        $payload = [];
+        foreach ($keys as $key) {
+            $payload[$key] = $request->input($key);
+        }
+
+        return $payload;
     }
 
     private function stringInput(Request $request, string $key, int $maxLength): string

@@ -1,6 +1,6 @@
 <template>
   <main v-if="!isLoggedIn" class="login-shell" :style="loginPageStyle">
-    <form class="login-panel" @submit.prevent="submitLogin">
+    <section class="login-panel">
       <header>
         <UserRound :size="26" />
         <div>
@@ -16,12 +16,41 @@
         <span>密码</span>
         <input v-model="loginForm.password" autocomplete="current-password" placeholder="admin123456" type="password">
       </label>
-      <button type="submit" :disabled="loginState.loading">
+      <button type="button" :disabled="loginState.loading" @click="submitLogin">
         <LogIn :size="17" />
         登录
       </button>
+      <div v-if="registerState.enabled" class="login-register">
+        <button type="button" class="login-secondary-button" @click="toggleRegisterForm">
+          {{ registerState.open ? '收起注册' : '注册测试账号' }}
+        </button>
+        <div v-if="registerState.open" class="login-register-form">
+          <label>
+            <span>注册角色</span>
+            <select v-model="registerForm.role_type">
+              <option
+                v-for="role in registerRoleOptions"
+                :key="role.role_type"
+                :value="role.role_type"
+              >
+                {{ role.name || roleTypeNames[role.role_type] || role.role_type }}
+              </option>
+            </select>
+          </label>
+          <label><span>姓名</span><input v-model="registerForm.name" autocomplete="name"></label>
+          <label><span>登录账号</span><input v-model="registerForm.login_name" autocomplete="username"></label>
+          <label><span>密码</span><input v-model="registerForm.password" autocomplete="new-password" type="password"></label>
+          <label><span>手机</span><input v-model="registerForm.mobile" autocomplete="tel"></label>
+          <label v-if="registerForm.role_type === 'student'"><span>学号</span><input v-model="registerForm.student_num"></label>
+          <label v-if="registerForm.role_type === 'teacher'"><span>工号</span><input v-model="registerForm.teacher_num"></label>
+          <button type="button" :disabled="registerState.loading" @click="submitRegister">
+            创建并登录
+          </button>
+        </div>
+      </div>
       <small v-if="loginState.message">{{ loginState.message }}</small>
-    </form>
+      <small v-if="registerState.message">{{ registerState.message }}</small>
+    </section>
   </main>
 
   <main v-else class="desktop-shell" :style="desktopStyle" @click.left="closeDesktopContextMenu" @contextmenu.prevent="openDesktopContextMenu">
@@ -1627,7 +1656,7 @@
                         <label><span>登录账号</span><input v-model="userAdminState.editing.login_name"></label>
                         <label>
                           <span>角色</span>
-                          <el-select v-model="userAdminState.editing.role_id" filterable>
+                          <el-select v-model="userAdminState.editing.role_id" filterable @change="handleUserRoleChange">
                             <el-option
                               v-for="role in manageableUserRoles()"
                               :key="role.id"
@@ -1638,6 +1667,53 @@
                         </label>
                         <label><span>手机</span><input v-model="userAdminState.editing.mobile"></label>
                         <label><span>邮箱</span><input v-model="userAdminState.editing.email"></label>
+                        <label v-if="userEditingRoleType === 'student'"><span>学号</span><input v-model="userAdminState.editing.student_num"></label>
+                        <label v-if="userEditingRoleType === 'teacher'"><span>工号</span><input v-model="userAdminState.editing.teacher_num"></label>
+                        <label v-if="userEditingRoleType === 'student'">
+                          <span>届次</span>
+                          <el-select v-model="userAdminState.editing.grade_id" clearable filterable @change="handleUserAcademicChange('grade_id')">
+                            <el-option
+                              v-for="grade in adminState.options.grades"
+                              :key="grade.grade_id"
+                              :label="grade.grade_name"
+                              :value="grade.grade_id"
+                            />
+                          </el-select>
+                        </label>
+                        <label v-if="['student', 'teacher'].includes(userEditingRoleType)">
+                          <span>所属学院</span>
+                          <el-select v-model="userAdminState.editing.dep_id" clearable filterable @change="handleUserAcademicChange('dep_id')">
+                            <el-option
+                              v-for="department in userEditDepartmentOptions()"
+                              :key="department.dep_id"
+                              :label="department.dep_name"
+                              :value="department.dep_id"
+                            />
+                          </el-select>
+                        </label>
+                        <label v-if="['student', 'teacher'].includes(userEditingRoleType)">
+                          <span>所属专业</span>
+                          <el-select v-model="userAdminState.editing.profession_id" clearable filterable @change="handleUserAcademicChange('profession_id')">
+                            <el-option
+                              v-for="profession in userEditProfessionOptions()"
+                              :key="profession.profession_id"
+                              :label="profession.profession_name"
+                              :value="profession.profession_id"
+                            />
+                          </el-select>
+                        </label>
+                        <label v-if="userEditingRoleType === 'student'">
+                          <span>所在班级</span>
+                          <el-select v-model="userAdminState.editing.class_id" clearable filterable @change="handleUserAcademicChange('class_id')">
+                            <el-option
+                              v-for="classItem in userEditClassOptions()"
+                              :key="classItem.class_id"
+                              :label="classItem.class_name"
+                              :value="classItem.class_id"
+                            />
+                          </el-select>
+                        </label>
+                        <label v-if="userEditingRoleType === 'student'"><span>班号</span><input v-model="userAdminState.editing.class_num"></label>
                         <label>
                           <span>状态</span>
                           <el-select v-model="userAdminState.editing.status">
@@ -3173,6 +3249,8 @@ import {
   logout as logoutApi,
   markMessagesRead,
   passkeyLogin,
+  fetchRegisterOptions,
+  registerAccount,
   reviewInternshipApplication,
   reviewInternshipArrangementChange,
   reviewInternshipDelay,
@@ -3228,6 +3306,23 @@ const loginForm = reactive({
 const loginState = reactive({
   loading: false,
   message: '',
+});
+const registerForm = reactive({
+  role_type: 'student',
+  name: '',
+  login_name: '',
+  password: 'admin123456',
+  mobile: '',
+  email: '',
+  student_num: '',
+  teacher_num: '',
+});
+const registerState = reactive({
+  enabled: false,
+  open: false,
+  loading: false,
+  message: '',
+  roles: [],
 });
 const switchAccountState = reactive({
   loading: false,
@@ -4120,6 +4215,13 @@ const schoolDataText = computed(() => {
 });
 const roleText = computed(() => permissionState.context.role_name || roleTypeNames[permissionState.context.role_type] || permissionState.context.role_type || permissionState.context.role_id || '-');
 const loginSchoolName = computed(() => loginPageState.school_name || '成都锦城学院');
+const registerRoleOptions = computed(() => registerState.roles.length
+  ? registerState.roles
+  : [
+      { role_type: 'student', name: '学生' },
+      { role_type: 'teacher', name: '教师' },
+    ]);
+const userEditingRoleType = computed(() => userSelectedRoleType());
 const canManageLoginBackground = computed(() => ['super_admin', 'school_admin'].includes(permissionState.context.role_type));
 const defaultLoginBackground = 'linear-gradient(135deg, rgba(31, 115, 210, .22), rgba(15, 143, 126, .14)), #eaf1f7';
 const loginPageStyle = computed(() => ({
@@ -5799,6 +5901,58 @@ function focusLogin() {
   loginNameInput.value?.focus();
 }
 
+function applyRegisterOptions(data = {}) {
+  const roles = (data.roles || []).filter(role => ['student', 'teacher'].includes(role.role_type));
+  registerState.enabled = data.enabled === true;
+  registerState.roles = roles;
+  if (roles.length && !roles.some(role => role.role_type === registerForm.role_type)) {
+    registerForm.role_type = roles[0].role_type;
+  }
+  if (!registerState.enabled) {
+    registerState.open = false;
+  }
+}
+
+async function loadRegisterOptions() {
+  registerState.message = '';
+  try {
+    applyRegisterOptions(await fetchRegisterOptions());
+  } catch (error) {
+    registerState.enabled = false;
+    registerState.open = false;
+  }
+}
+
+function toggleRegisterForm() {
+  registerState.open = !registerState.open;
+  registerState.message = '';
+}
+
+async function submitRegister() {
+  if (!registerState.enabled || registerState.loading) {
+    return;
+  }
+  if (!registerForm.name.trim() || !registerForm.login_name.trim() || !registerForm.password.trim()) {
+    registerState.message = '姓名、账号和密码不能为空';
+    return;
+  }
+
+  registerState.loading = true;
+  registerState.message = '';
+  try {
+    await registerAccount({
+      ...registerForm,
+      client: 'WEB',
+    });
+    registerState.open = false;
+    await refreshAuthenticatedSession(true);
+  } catch (error) {
+    registerState.message = error.message;
+  } finally {
+    registerState.loading = false;
+  }
+}
+
 async function submitLogin() {
   loginState.loading = true;
   loginState.message = '';
@@ -5945,6 +6099,7 @@ async function submitLogout() {
     focusedWindowId.value = null;
     await load();
     await loadLoginPageSettings();
+    await loadRegisterOptions();
   } catch (error) {
     loginState.message = error.message;
   } finally {
@@ -6077,8 +6232,16 @@ function emptyUserForm(row = {}) {
     name: row.name || '',
     login_name: row.login_name || '',
     role_id: row.role_id || null,
+    role_type: row.role_type || '',
     mobile: row.mobile || '',
     email: row.email || '',
+    student_num: row.student_num || '',
+    teacher_num: row.teacher_num || '',
+    grade_id: row.grade_id || null,
+    dep_id: row.dep_id || null,
+    profession_id: row.profession_id || null,
+    class_id: row.class_id || null,
+    class_num: row.class_num || '',
     status: row.status || 'enabled',
     password: '',
   };
@@ -6095,6 +6258,57 @@ function emptyUserDetail() {
 
 function manageableUserRoles() {
   return adminState.roles.filter(role => permissionState.context.role_type === 'super_admin' || role.role_type !== 'super_admin');
+}
+
+function userSelectedRoleType() {
+  const role = adminState.roles.find(item => Number(item.id) === Number(userAdminState.editing.role_id || 0));
+  return role?.role_type || userAdminState.editing.role_type || '';
+}
+
+function handleUserRoleChange() {
+  userAdminState.editing.role_type = userSelectedRoleType();
+  if (userAdminState.editing.role_type !== 'student') {
+    userAdminState.editing.student_num = '';
+    userAdminState.editing.grade_id = null;
+    userAdminState.editing.class_id = null;
+    userAdminState.editing.class_num = '';
+  }
+  if (userAdminState.editing.role_type !== 'teacher') {
+    userAdminState.editing.teacher_num = '';
+  }
+  if (!['student', 'teacher'].includes(userAdminState.editing.role_type)) {
+    userAdminState.editing.dep_id = null;
+    userAdminState.editing.profession_id = null;
+  }
+}
+
+function userAcademicOptions() {
+  return {
+    departments: adminState.options.departments,
+    professions: adminState.options.professions,
+    classes: adminState.options.classes,
+  };
+}
+
+function userEditDepartmentOptions() {
+  return filterAcademicDepartments(userAcademicOptions(), userAdminState.editing);
+}
+
+function userEditProfessionOptions() {
+  const keys = userEditingRoleType.value === 'student' ? ['grade_id', 'dep_id'] : ['dep_id'];
+  return filterAcademicItems(adminState.options.professions, userAdminState.editing, keys);
+}
+
+function userEditClassOptions() {
+  return filterAcademicItems(adminState.options.classes, userAdminState.editing, ['grade_id', 'dep_id', 'profession_id']);
+}
+
+function handleUserAcademicChange(field) {
+  normalizeFilterCascade(userAdminState.editing, userAcademicOptions(), field);
+  const selectedClass = adminState.options.classes.find(item => sameFilterValue(item.class_id, userAdminState.editing.class_id));
+  if (selectedClass) {
+    userAdminState.editing.class_num = selectedClass.class_num || userAdminState.editing.class_num || '';
+  }
 }
 
 function canMaintainUser(row) {
@@ -6124,6 +6338,7 @@ function openUserDialog(row = null) {
   if (!userAdminState.editing.role_id && roles.length) {
     userAdminState.editing.role_id = roles[0].id;
   }
+  handleUserRoleChange();
   userAdminState.message = '';
   userAdminState.dialogVisible = true;
 }
@@ -10977,6 +11192,7 @@ onMounted(async () => {
   renderClock();
   setInterval(renderClock, 30000);
   await loadLoginPageSettings();
+  await loadRegisterOptions();
   await consumeUrlPasskey();
   await load();
   await loadProfile();

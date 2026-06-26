@@ -63,7 +63,36 @@
           <LogIn :size="17" />
           登录
         </button>
+        <section v-if="registerState.enabled" class="mobile-register">
+          <button type="button" class="mobile-secondary-button" @click="toggleRegisterForm">
+            {{ registerState.open ? '收起注册' : '注册测试账号' }}
+          </button>
+          <div v-if="registerState.open" class="mobile-register-form">
+            <label>
+              <span>注册角色</span>
+              <select v-model="registerForm.role_type">
+                <option
+                  v-for="role in registerRoleOptions"
+                  :key="role.role_type"
+                  :value="role.role_type"
+                >
+                  {{ role.name || roleNameMap[role.role_type] || role.role_type }}
+                </option>
+              </select>
+            </label>
+            <label><span>姓名</span><input v-model="registerForm.name" autocomplete="name"></label>
+            <label><span>登录账号</span><input v-model="registerForm.login_name" autocomplete="username"></label>
+            <label><span>密码</span><input v-model="registerForm.password" autocomplete="new-password" type="password"></label>
+            <label><span>手机</span><input v-model="registerForm.mobile" autocomplete="tel"></label>
+            <label v-if="registerForm.role_type === 'student'"><span>学号</span><input v-model="registerForm.student_num"></label>
+            <label v-if="registerForm.role_type === 'teacher'"><span>工号</span><input v-model="registerForm.teacher_num"></label>
+            <button type="button" :disabled="registerState.loading" @click="submitRegister">
+              创建并登录
+            </button>
+          </div>
+        </section>
         <small v-if="loginState.message">{{ loginState.message }}</small>
+        <small v-if="registerState.message">{{ registerState.message }}</small>
       </section>
 
       <template v-else-if="activeTab === 'home'">
@@ -1483,6 +1512,7 @@ import {
   fetchInternshipTimeline,
   fetchMessages,
   fetchMessageSummary,
+  fetchRegisterOptions,
   fetchSwitchableAccounts,
   fetchPracticeList,
   fetchPracticeOptions,
@@ -1515,6 +1545,7 @@ import {
   passkeyLogin,
   login as loginApi,
   logout as logoutApi,
+  registerAccount,
   switchAccount,
 } from './api/system';
 
@@ -1527,6 +1558,23 @@ const loginForm = reactive({
 const loginState = reactive({
   loading: false,
   message: '',
+});
+const registerForm = reactive({
+  role_type: 'student',
+  name: '',
+  login_name: '',
+  password: 'admin123456',
+  mobile: '',
+  email: '',
+  student_num: '',
+  teacher_num: '',
+});
+const registerState = reactive({
+  enabled: false,
+  open: false,
+  loading: false,
+  message: '',
+  roles: [],
 });
 const switchAccountState = reactive({
   loading: false,
@@ -1923,6 +1971,12 @@ const scopeNameMap = {
 };
 const roleDisplayText = computed(() => state.context.role_name || roleNameMap[roleType.value] || state.context.role_id || '未登录');
 const roleText = computed(() => roleDisplayText.value);
+const registerRoleOptions = computed(() => registerState.roles.length
+  ? registerState.roles
+  : [
+      { role_type: 'student', name: '学生' },
+      { role_type: 'teacher', name: '教师' },
+    ]);
 const userText = computed(() => state.context.user_name || state.context.name || state.context.login_name || '未登录');
 const accountText = computed(() => state.context.login_name || '-');
 const schoolText = computed(() => state.context.school_name || '成都锦城学院');
@@ -5658,6 +5712,60 @@ async function consumeUrlPasskey() {
   }
 }
 
+function applyRegisterOptions(data = {}) {
+  const roles = (data.roles || []).filter(role => ['student', 'teacher'].includes(role.role_type));
+  registerState.enabled = data.enabled === true;
+  registerState.roles = roles;
+  if (roles.length && !roles.some(role => role.role_type === registerForm.role_type)) {
+    registerForm.role_type = roles[0].role_type;
+  }
+  if (!registerState.enabled) {
+    registerState.open = false;
+  }
+}
+
+async function loadRegisterOptions() {
+  registerState.message = '';
+  try {
+    applyRegisterOptions(await fetchRegisterOptions());
+  } catch (error) {
+    registerState.enabled = false;
+    registerState.open = false;
+  }
+}
+
+function toggleRegisterForm() {
+  registerState.open = !registerState.open;
+  registerState.message = '';
+}
+
+async function submitRegister() {
+  if (!registerState.enabled || registerState.loading) {
+    return;
+  }
+  if (!registerForm.name.trim() || !registerForm.login_name.trim() || !registerForm.password.trim()) {
+    registerState.message = '姓名、账号和密码不能为空';
+    return;
+  }
+
+  registerState.loading = true;
+  registerState.message = '';
+  try {
+    await registerAccount({
+      ...registerForm,
+      client: 'H5',
+    });
+    registerState.open = false;
+    await refreshMobileSession(true);
+    showToast('注册成功');
+  } catch (error) {
+    registerState.message = error.message;
+    showToast(error.message);
+  } finally {
+    registerState.loading = false;
+  }
+}
+
 async function submitLogin() {
   loginState.loading = true;
   loginState.message = '';
@@ -5683,6 +5791,7 @@ async function submitLogout() {
     resetMobileNavigationToHome();
     resetMobileLocalState();
     await load();
+    await loadRegisterOptions();
   } catch (error) {
     loginState.message = error.message;
   } finally {
@@ -5741,6 +5850,7 @@ watch(() => mobileNavigationKey(), (current, previous) => {
 
 onMounted(async () => {
   window.addEventListener('practical-auth-expired', handleAuthExpired);
+  await loadRegisterOptions();
   await consumeUrlPasskey();
   await refreshMobileSession();
 });

@@ -2843,16 +2843,19 @@ a {
   font-size: 13px;
 }
 
-.login-panel input {
+.login-panel input,
+.login-panel select {
   height: 36px;
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 0 10px;
   color: var(--text);
   outline: none;
+  background: #fff;
 }
 
-.login-panel input:focus {
+.login-panel input:focus,
+.login-panel select:focus {
   border-color: #8dbdea;
 }
 
@@ -2875,6 +2878,24 @@ a {
 .login-panel small {
   min-height: 18px;
   color: var(--danger);
+}
+
+.login-register {
+  display: grid;
+  gap: 10px;
+}
+
+.login-panel .login-secondary-button {
+  border: 1px solid var(--line);
+  color: var(--primary);
+  background: #fff;
+}
+
+.login-register-form {
+  display: grid;
+  gap: 10px;
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
 }
 
 .message-center-panel {

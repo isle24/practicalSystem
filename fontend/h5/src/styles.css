@@ -27,7 +27,8 @@ body {
 }
 
 button,
-input {
+input,
+select {
   font: inherit;
 }
 
@@ -140,7 +141,8 @@ input {
   font-size: 13px;
 }
 
-.mobile-login input {
+.mobile-login input,
+.mobile-login select {
   width: 100%;
   height: 38px;
   border: 1px solid var(--line);
@@ -148,9 +150,11 @@ input {
   padding: 0 10px;
   color: var(--text);
   outline: none;
+  background: #fff;
 }
 
-.mobile-login input:focus {
+.mobile-login input:focus,
+.mobile-login select:focus {
   border-color: #8dbdea;
 }
 
@@ -173,6 +177,24 @@ input {
 .mobile-login small {
   min-height: 18px;
   color: #c74350;
+}
+
+.mobile-register {
+  display: grid;
+  gap: 10px;
+}
+
+.mobile-secondary-button {
+  border: 1px solid var(--line) !important;
+  color: var(--primary) !important;
+  background: #fff !important;
+}
+
+.mobile-register-form {
+  display: grid;
+  gap: 10px;
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
 }
 
 .context-strip {

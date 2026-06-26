@@ -72,7 +72,7 @@ class Account extends BaseModel
                 'role.name as role_name',
                 'role.role_type',
             ])
-            ->map(static fn ($row): array => [
+            ->map(static fn ($row): array => array_merge([
                 'id' => (int) $row->id,
                 'uuid' => $row->uuid,
                 'user_id' => (int) $row->user_id,
@@ -87,7 +87,7 @@ class Account extends BaseModel
                 'role_id' => $row->role_id === null ? null : (int) $row->role_id,
                 'role_name' => $row->role_name,
                 'role_type' => $row->role_type,
-            ])
+            ], self::organizationProfile((int) $row->user_id, (string) $row->role_type)))
             ->all();
 
         return [
@@ -445,6 +445,57 @@ class Account extends BaseModel
         return $query->exists();
     }
 
+    public static function registerRoleOptions(array $roleTypes = []): array
+    {
+        $query = TableRecord::queryTable('role')
+            ->where('status', 'enabled')
+            ->whereNull('deleted_at');
+
+        if ($roleTypes) {
+            $query->whereIn('role_type', $roleTypes);
+        }
+
+        return $query
+            ->orderBy('sort')
+            ->get(['id', 'code', 'name', 'role_type'])
+            ->map(static fn ($row): array => [
+                'id' => (int) $row->id,
+                'code' => $row->code,
+                'name' => $row->name,
+                'role_type' => $row->role_type,
+            ])
+            ->all();
+    }
+
+    public static function registerRoleByType(string $roleType): ?array
+    {
+        $row = TableRecord::queryTable('role')
+            ->where('role_type', $roleType)
+            ->where('status', 'enabled')
+            ->whereNull('deleted_at')
+            ->orderBy('sort')
+            ->first(['id', 'code', 'name', 'role_type']);
+
+        return $row ? [
+            'id' => (int) $row->id,
+            'code' => $row->code,
+            'name' => $row->name,
+            'role_type' => $row->role_type,
+        ] : null;
+    }
+
+    public static function saveRoleProfile(string $roleType, int $userId, string $name, string $status, array $values, string $now): void
+    {
+        if ($roleType === 'student') {
+            self::saveStudentProfile($userId, $name, $status, $values, $now);
+            return;
+        }
+
+        if ($roleType === 'teacher') {
+            self::saveTeacherProfile($userId, $name, $status, $values, $now);
+        }
+    }
+
     public static function primaryRoleTypeById(int $id): ?string
     {
         return self::query()
@@ -484,7 +535,7 @@ class Account extends BaseModel
 
     private static function adminAccountRow(object $row): array
     {
-        return [
+        return array_merge([
             'id' => (int) $row->id,
             'uuid' => $row->uuid,
             'user_id' => (int) $row->user_id,
@@ -501,7 +552,7 @@ class Account extends BaseModel
             'role_id' => $row->role_id === null ? null : (int) $row->role_id,
             'role_name' => $row->role_name,
             'role_type' => $row->role_type,
-        ];
+        ], self::organizationProfile((int) $row->user_id, (string) $row->role_type));
     }
 
     private static function accountListQuery(): mixed
@@ -546,34 +597,59 @@ class Account extends BaseModel
         if ($roleType === 'student') {
             $student = TableRecord::queryTable('students')
                 ->where('user_id', $userId)
-                ->where('status', 'enabled')
                 ->whereNull('deleted_at')
                 ->orderByDesc('student_id')
-                ->first(['dep_id', 'profession_id', 'class_id']);
+                ->first(['student_id', 'student_num', 'grade_id', 'dep_id', 'profession_id', 'class_id', 'class_num']);
 
             return $student ? [
+                'student_id' => (int) $student->student_id,
+                'student_num' => $student->student_num,
+                'teacher_id' => null,
+                'teacher_num' => null,
+                'grade_id' => $student->grade_id === null ? null : (int) $student->grade_id,
                 'dep_id' => $student->dep_id === null ? null : (int) $student->dep_id,
                 'profession_id' => $student->profession_id === null ? null : (int) $student->profession_id,
                 'class_id' => $student->class_id === null ? null : (int) $student->class_id,
-            ] : ['dep_id' => null, 'profession_id' => null, 'class_id' => null];
+                'class_num' => $student->class_num,
+            ] : self::emptyOrganizationProfile();
         }
 
         if ($roleType === 'teacher') {
             $teacher = TableRecord::queryTable('teacher_list')
                 ->where('user_id', $userId)
-                ->where('status', 'enabled')
                 ->whereNull('deleted_at')
                 ->orderByDesc('teacher_id')
-                ->first(['dep_id', 'profession_id']);
+                ->first(['teacher_id', 'teacher_num', 'dep_id', 'profession_id']);
 
             return $teacher ? [
+                'student_id' => null,
+                'student_num' => null,
+                'teacher_id' => (int) $teacher->teacher_id,
+                'teacher_num' => $teacher->teacher_num,
+                'grade_id' => null,
                 'dep_id' => $teacher->dep_id === null ? null : (int) $teacher->dep_id,
                 'profession_id' => $teacher->profession_id === null ? null : (int) $teacher->profession_id,
                 'class_id' => null,
-            ] : ['dep_id' => null, 'profession_id' => null, 'class_id' => null];
+                'class_num' => null,
+            ] : self::emptyOrganizationProfile();
         }
 
-        return ['dep_id' => null, 'profession_id' => null, 'class_id' => null];
+        return self::emptyOrganizationProfile();
+    }
+
+    private static function emptyOrganizationProfile(): array
+    {
+        return [
+            'student_id' => null,
+            'student_num' => null,
+            'teacher_id' => null,
+            'teacher_num' => null,
+            'grade_id' => null,
+            'dep_id' => null,
+            'profession_id' => null,
+            'class_id' => null,
+            'class_num' => null,
+        ];
     }
 
     private static function applyAdminVisibilityScope(mixed $query, array $scope): void
@@ -640,6 +716,69 @@ class Account extends BaseModel
                     });
             });
         });
+    }
+
+    private static function saveStudentProfile(int $userId, string $name, string $status, array $values, string $now): void
+    {
+        $payload = [
+            'name' => $name,
+            'student_num' => $values['student_num'] ?? null,
+            'grade_id' => $values['grade_id'] ?? null,
+            'dep_id' => $values['dep_id'] ?? null,
+            'profession_id' => $values['profession_id'] ?? null,
+            'class_id' => $values['class_id'] ?? null,
+            'class_num' => $values['class_num'] ?? null,
+            'status' => $status,
+            'updated_at' => $now,
+            'deleted_at' => null,
+        ];
+
+        $row = TableRecord::queryTable('students')
+            ->where('user_id', $userId)
+            ->first(['student_id']);
+
+        if ($row) {
+            TableRecord::queryTable('students')
+                ->where('student_id', (int) $row->student_id)
+                ->update($payload);
+            return;
+        }
+
+        TableRecord::queryTable('students')->insert(array_merge($payload, [
+            'student_uuid' => self::uuid(),
+            'user_id' => $userId,
+            'created_at' => $now,
+        ]));
+    }
+
+    private static function saveTeacherProfile(int $userId, string $name, string $status, array $values, string $now): void
+    {
+        $payload = [
+            'teacher_name' => $name,
+            'teacher_num' => $values['teacher_num'] ?? null,
+            'dep_id' => $values['dep_id'] ?? null,
+            'profession_id' => $values['profession_id'] ?? null,
+            'status' => $status,
+            'updated_at' => $now,
+            'deleted_at' => null,
+        ];
+
+        $row = TableRecord::queryTable('teacher_list')
+            ->where('user_id', $userId)
+            ->first(['teacher_id']);
+
+        if ($row) {
+            TableRecord::queryTable('teacher_list')
+                ->where('teacher_id', (int) $row->teacher_id)
+                ->update($payload);
+            return;
+        }
+
+        TableRecord::queryTable('teacher_list')->insert(array_merge($payload, [
+            'teacher_uuid' => self::uuid(),
+            'user_id' => $userId,
+            'created_at' => $now,
+        ]));
     }
 
     private static function intIds(array $values): array
