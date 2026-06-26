@@ -65,7 +65,7 @@
           <input
             v-model="keyword"
             type="search"
-            placeholder="搜索模块、学生、基地或文档"
+            placeholder="搜索模块、基地或消息"
             @keyup.enter="submitGlobalSearch"
           >
         </label>
@@ -4338,17 +4338,33 @@ const moduleSearchKeywords = {
 };
 const defaultDesktopModuleIds = ['internship', 'training', 'lab', 'config'];
 const defaultDesktopModuleIdSet = new Set(defaultDesktopModuleIds);
+const launcherModuleIds = ['internship', 'training', 'lab', 'companyManage', 'config'];
+const launcherModuleIdSet = new Set(launcherModuleIds);
+const configSidebarDefinitions = [
+  { key: 'userManage', name: '用户管理', permission: 'config:user' },
+  { key: 'gradeManage', name: '届次管理', permission: 'config:grade' },
+  { key: 'departmentManage', name: '学院管理', permission: 'config:department' },
+  { key: 'professionManage', name: '专业管理', permission: 'config:profession' },
+  { key: 'classManage', name: '班级管理', permission: 'config:class' },
+  { key: 'menuManage', name: '菜单管理', permission: 'config:view', schoolConfig: true },
+  { key: 'roleMenus', name: '角色权限', permission: 'config:view', schoolConfig: true },
+  { key: 'organizationScope', name: '组织范围', permission: 'config:view', schoolConfig: true },
+  { key: 'operationGuides', name: '操作说明', permission: 'config:view', schoolConfig: true },
+  { key: 'wechatProxy', name: '企业微信应用', permission: 'config:view', schoolConfig: true },
+  { key: 'dataManage', name: '数据管理', permission: 'config:view', schoolConfig: true },
+];
 
 const isLoggedIn = computed(() => Boolean(permissionState.context.account_id));
 const currentRoleType = computed(() => permissionState.context.role_type || '');
 const isStudentRole = computed(() => currentRoleType.value === 'student');
 const isTeacherRole = computed(() => currentRoleType.value === 'teacher');
 const isAdminRole = computed(() => ['super_admin', 'school_admin', 'college_admin', 'profession_admin'].includes(currentRoleType.value));
-const configChildModuleIds = new Set(['userManage', 'gradeManage', 'departmentManage', 'professionManage', 'classManage', 'companyManage']);
+const configChildModuleIds = new Set(['userManage', 'gradeManage', 'departmentManage', 'professionManage', 'classManage']);
 const visibleModules = computed(() => modules.map(decorateModule).filter(canShowModule));
+const mainEntryModules = computed(() => visibleModules.value.filter(module => launcherModuleIdSet.has(module.id)));
 const globalSearchKeyword = computed(() => keyword.value.trim().toLowerCase());
 const searchCandidateModules = computed(() => {
-  const items = [...visibleModules.value];
+  const items = [...mainEntryModules.value];
   if (isLoggedIn.value) {
     items.push(messageModule);
   }
@@ -4369,7 +4385,7 @@ const visibleDesktopModules = computed(() => {
   const favoriteModules = favoriteDesktopShortcuts.value;
   return [...desktopModules, ...favoriteModules];
 });
-const launcherModules = computed(() => visibleModules.value.filter(module => module.id !== 'profile'));
+const launcherModules = computed(() => mainEntryModules.value);
 const launcherFilteredModules = computed(() => {
   const value = desktopLauncherState.keyword.trim().toLowerCase();
   if (!value) {
@@ -4381,7 +4397,7 @@ const customDesktopShortcutItems = computed(() => desktopLauncherState.items.fil
 const customDesktopModuleKeys = computed(() => customDesktopShortcutItems.value
   .filter(item => item.type === 'module')
   .map(item => String(item.key || item.item_key || ''))
-  .filter(key => key && !defaultDesktopModuleIdSet.has(key) && visibleModules.value.some(module => module.id === key)));
+  .filter(key => key && !defaultDesktopModuleIdSet.has(key) && launcherModuleIdSet.has(key) && visibleModules.value.some(module => module.id === key)));
 const desktopModuleShortcutKeys = computed(() => {
   const defaults = defaultDesktopModuleIds.filter(key => visibleModules.value.some(module => module.id === key));
   return Array.from(new Set([...defaults, ...customDesktopModuleKeys.value]));
@@ -4559,13 +4575,16 @@ function canShowModule(module) {
   if (module.id === 'favorite') {
     return isLoggedIn.value;
   }
+  if (module.id === 'config') {
+    return configSidebarItemsForCurrentRole().length > 0;
+  }
   if (module.id === 'userManage') {
     return canViewUserAdmin.value && hasPermission(module.viewPermission);
   }
   if (!hasPermission(module.viewPermission)) {
     return false;
   }
-  if (module.adminOnly || module.id === 'config') {
+  if (module.adminOnly) {
     return ['super_admin', 'school_admin'].includes(currentRoleType.value);
   }
   if (['training', 'lab'].includes(module.id)) {
@@ -4575,6 +4594,21 @@ function canShowModule(module) {
     return ['student', 'teacher', 'super_admin', 'school_admin', 'college_admin', 'profession_admin'].includes(currentRoleType.value);
   }
   return true;
+}
+
+function isSchoolConfigRole() {
+  return ['super_admin', 'school_admin'].includes(currentRoleType.value);
+}
+
+function canAccessConfigSidebarItem(item) {
+  if (item.schoolConfig && !isSchoolConfigRole()) {
+    return false;
+  }
+  return !item.permission || hasPermission(item.permission);
+}
+
+function configSidebarItemsForCurrentRole() {
+  return configSidebarDefinitions.filter(canAccessConfigSidebarItem);
 }
 
 const internshipOverviewCards = computed(() => [
@@ -5250,14 +5284,7 @@ function sidebarItems(win) {
     return practiceSidebarItems();
   }
   if (win.module.id === 'config') {
-    return [
-      { key: 'menuManage', name: '菜单管理' },
-      { key: 'roleMenus', name: '角色权限' },
-      { key: 'organizationScope', name: '组织范围' },
-      { key: 'operationGuides', name: '操作说明' },
-      { key: 'wechatProxy', name: '企业微信应用' },
-      { key: 'dataManage', name: '数据管理' },
-    ];
+    return configSidebarItemsForCurrentRole();
   }
   if (win.module.id === 'stat') {
     return statReports;
@@ -5661,6 +5688,9 @@ function moduleDisplayName(module) {
   if (!item) {
     return module.name;
   }
+  if (module.id === 'companyManage') {
+    return module.name;
+  }
   if (configChildModuleIds.has(module.id)) {
     return item.parent_name || item.name || module.name;
   }
@@ -5800,7 +5830,8 @@ function defaultWindowModule() {
   return defaultDesktopModuleIds
     .map(id => visibleModules.value.find(module => module.id === id))
     .find(Boolean)
-    || visibleModules.value.find(module => !['profile', 'favorite'].includes(module.id))
+    || mainEntryModules.value.find(module => module.id !== 'config')
+    || mainEntryModules.value[0]
     || null;
 }
 
@@ -6308,6 +6339,21 @@ function windowHref(win) {
   return `#window=${encodeURIComponent(win.id)}`;
 }
 
+function normalizeConfigPanel(panel) {
+  const visibleItems = configSidebarItemsForCurrentRole();
+  if (!visibleItems.length || visibleItems.some(item => item.key === panel)) {
+    return panel;
+  }
+  return visibleItems[0].key;
+}
+
+function defaultPanelForModule(module) {
+  if (module.id === 'config') {
+    return normalizeConfigPanel(module.defaultPanel || 'menuManage');
+  }
+  return module.defaultPanel || 'overview';
+}
+
 function openModuleWindow(module, options = {}) {
   const existing = options.reuse ? openWindows.find(win => win.module.id === module.id) : null;
   if (existing) {
@@ -6318,7 +6364,7 @@ function openModuleWindow(module, options = {}) {
       loadStats(statState.pagination.page || 1);
     }
     if (module.id === 'config' || module.id === 'userManage' || archiveManageModules[module.id]) {
-      activateWindowPanel(existing, existing.panel);
+      activateWindowPanel(existing, module.id === 'config' ? normalizeConfigPanel(existing.panel) : existing.panel);
     }
     if (module.id === 'message') {
       loadMessages(messageState.pagination.page || 1);
@@ -6337,7 +6383,7 @@ function openModuleWindow(module, options = {}) {
   const win = {
     id: `${module.id}-${Date.now()}`,
     module,
-    panel: module.defaultPanel || 'overview',
+    panel: defaultPanelForModule(module),
     minimized: false,
     left: frame.left,
     top: frame.top,
@@ -6544,6 +6590,9 @@ function setWindowPanel(windowId, panel) {
 function activateWindowPanel(win, panel) {
   if (!win) {
     return;
+  }
+  if (win.module.id === 'config') {
+    panel = normalizeConfigPanel(panel);
   }
   win.panel = panel;
   focusWindow(win.id);
