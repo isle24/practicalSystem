@@ -7,6 +7,8 @@ use Illuminate\Database\Query\Expression;
 
 class TableRecord extends BaseModel
 {
+    private const DEFAULT_DESKTOP_MODULE_KEYS = ['internship', 'training', 'lab', 'config'];
+
     protected $guarded = [];
     public $timestamps = false;
 
@@ -644,7 +646,7 @@ class TableRecord extends BaseModel
 
     public static function desktopShortcuts(int $accountId): array
     {
-        return self::queryTable('user_desktop_shortcut')
+        $items = self::queryTable('user_desktop_shortcut')
             ->leftJoin('favorite_link', function ($join): void {
                 $join->on('user_desktop_shortcut.ref_id', '=', 'favorite_link.id')
                     ->where('user_desktop_shortcut.item_type', 'favorite')
@@ -678,6 +680,8 @@ class TableRecord extends BaseModel
                 ],
             ])
             ->all();
+
+        return self::mergeDefaultDesktopShortcuts($items);
     }
 
     public static function replaceDesktopShortcuts(int $accountId, array $items, string $now): void
@@ -868,6 +872,12 @@ class TableRecord extends BaseModel
     {
         $normalized = [];
         $seen = [];
+        foreach (self::defaultDesktopShortcutItems() as $item) {
+            $unique = "module:{$item['key']}";
+            $seen[$unique] = true;
+            $normalized[] = $item;
+        }
+
         foreach ($items as $item) {
             if (!is_array($item)) {
                 continue;
@@ -895,6 +905,56 @@ class TableRecord extends BaseModel
         }
 
         return $normalized;
+    }
+
+    private static function mergeDefaultDesktopShortcuts(array $items): array
+    {
+        $merged = [];
+        $seen = [];
+        $rowsByDefaultKey = [];
+
+        foreach ($items as $item) {
+            if (($item['type'] ?? '') === 'module' && in_array((string) ($item['key'] ?? ''), self::DEFAULT_DESKTOP_MODULE_KEYS, true)) {
+                $rowsByDefaultKey[(string) $item['key']] = $item;
+                continue;
+            }
+        }
+
+        foreach (self::DEFAULT_DESKTOP_MODULE_KEYS as $index => $key) {
+            $item = $rowsByDefaultKey[$key] ?? [
+                'id' => 0,
+                'type' => 'module',
+                'key' => $key,
+                'ref_id' => null,
+                'sort' => $index + 1,
+                'favorite' => null,
+            ];
+            $item['locked'] = true;
+            $merged[] = $item;
+            $seen["module:{$key}"] = true;
+        }
+
+        foreach ($items as $item) {
+            $type = (string) ($item['type'] ?? '');
+            $unique = $type === 'favorite'
+                ? "favorite:" . (int) ($item['ref_id'] ?? 0)
+                : "module:" . (string) ($item['key'] ?? '');
+            if (isset($seen[$unique])) {
+                continue;
+            }
+            $seen[$unique] = true;
+            $merged[] = $item;
+        }
+
+        return $merged;
+    }
+
+    private static function defaultDesktopShortcutItems(): array
+    {
+        return array_map(
+            static fn (string $key): array => ['type' => 'module', 'key' => $key, 'ref_id' => null],
+            self::DEFAULT_DESKTOP_MODULE_KEYS
+        );
     }
 
     private static function favoriteExists(int $accountId, int $id): bool

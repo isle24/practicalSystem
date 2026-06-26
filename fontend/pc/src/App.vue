@@ -2092,40 +2092,41 @@
                     show-icon
                     :title="favoriteState.message"
                   />
-                  <el-table :data="favoriteState.items" height="100%" stripe v-loading="favoriteState.loading">
-                    <el-table-column label="收藏" min-width="260">
-                      <template #default="{ row }">
-                        <div class="favorite-cell">
-                          <span class="favorite-icon">
-                            <img v-if="row.icon_url" :src="backendUrl(row.icon_url)" :alt="row.title">
-                            <Globe2 v-else :size="18" />
-                          </span>
-                          <span>
-                            <strong>{{ row.title }}</strong>
-                            <small>{{ row.url }}</small>
-                          </span>
-                        </div>
-                      </template>
-                    </el-table-column>
-                    <el-table-column prop="sort" label="排序" width="86" />
-                    <el-table-column prop="created_at" label="创建时间" width="168" />
-                    <el-table-column label="操作" width="260" fixed="right">
-                      <template #default="{ row }">
-                        <el-button link type="primary" :icon="ExternalLink" @click="openFavoriteLink(row)">
-                          打开
-                        </el-button>
-                        <el-button link type="primary" @click="openFavoriteDialog(row)">
-                          编辑
-                        </el-button>
-                        <el-button link :type="isFavoriteDesktop(row.id) ? 'success' : 'primary'" @click="toggleFavoriteDesktop(row)">
-                          {{ isFavoriteDesktop(row.id) ? '已在桌面' : '加入桌面' }}
-                        </el-button>
-                        <el-button link type="danger" @click="deleteFavoriteItem(row)">
-                          删除
-                        </el-button>
-                      </template>
-                    </el-table-column>
-                  </el-table>
+                  <div class="favorite-grid-wrap" v-loading="favoriteState.loading">
+                    <article
+                      v-for="(row, index) in favoriteState.items"
+                      :key="row.id"
+                      class="favorite-card"
+                      :class="favoriteCardClass(row, index)"
+                    >
+                      <button type="button" class="favorite-card-main" @click="openFavoriteLink(row)">
+                        <span class="favorite-card-icon">
+                          <img v-if="row.icon_url" :src="backendUrl(row.icon_url)" :alt="row.title">
+                          <strong v-else>{{ favoriteInitial(row) }}</strong>
+                        </span>
+                        <span>
+                          <strong>{{ row.title || '未命名收藏' }}</strong>
+                          <small>{{ favoriteHost(row) }}</small>
+                        </span>
+                      </button>
+                      <el-dropdown trigger="click" @command="command => handleFavoriteCommand(row, command)">
+                        <button type="button" class="favorite-card-more" title="更多操作" @click.stop>
+                          <MoreHorizontal :size="22" />
+                        </button>
+                        <template #dropdown>
+                          <el-dropdown-menu>
+                            <el-dropdown-item command="open">打开</el-dropdown-item>
+                            <el-dropdown-item command="edit">编辑</el-dropdown-item>
+                            <el-dropdown-item command="desktop">{{ isFavoriteDesktop(row.id) ? '从桌面移除' : '加入桌面' }}</el-dropdown-item>
+                            <el-dropdown-item command="delete" divided>删除</el-dropdown-item>
+                          </el-dropdown-menu>
+                        </template>
+                      </el-dropdown>
+                    </article>
+                    <div v-if="!favoriteState.loading && !favoriteState.items.length" class="empty-grid-state">
+                      暂无收藏
+                    </div>
+                  </div>
                   <div class="file-pagination">
                     <span>共 {{ favoriteState.pagination.total }} 个收藏</span>
                     <el-pagination
@@ -2144,24 +2145,41 @@
                         <strong>{{ favoriteState.editing.id ? '编辑收藏' : '新增收藏' }}</strong>
                         <button type="button" @click="closeFavoriteDialog">关闭</button>
                       </header>
-                      <div class="operation-form favorite-form">
-                        <label class="favorite-icon-field">
-                          <span>图标</span>
-                          <button type="button" class="favorite-icon-upload" :disabled="favoriteState.iconUploading" @click="chooseFavoriteIcon">
+                      <div class="favorite-editor">
+                        <div class="favorite-preview-card" :class="favoriteCardClass(favoriteState.editing, 0)">
+                          <span class="favorite-card-icon">
                             <img v-if="favoriteState.editing.icon_url" :src="backendUrl(favoriteState.editing.icon_url)" alt="收藏图标">
-                            <Globe2 v-else :size="24" />
-                          </button>
-                          <input
-                            ref="favoriteIconInputRef"
-                            class="hidden-file"
-                            type="file"
-                            accept="image/jpeg,image/png,image/webp,image/gif,image/x-icon"
-                            @change="handleFavoriteIconSelected"
-                          >
-                        </label>
-                        <label><span>标题</span><input v-model="favoriteState.editing.title" maxlength="180"></label>
-                        <label><span>网址</span><input v-model="favoriteState.editing.url" maxlength="500" placeholder="https://example.com"></label>
-                        <label><span>排序</span><input v-model="favoriteState.editing.sort" type="number"></label>
+                            <strong v-else>{{ favoriteInitial(favoriteState.editing) }}</strong>
+                          </span>
+                          <strong>{{ favoriteState.editing.title || '收藏标题' }}</strong>
+                          <MoreHorizontal :size="22" />
+                        </div>
+                        <div class="operation-form favorite-form">
+                          <label><span>标题</span><input v-model="favoriteState.editing.title" maxlength="180" placeholder="请输入收藏标题"></label>
+                          <label><span>网址</span><input v-model="favoriteState.editing.url" maxlength="500" placeholder="https://example.com"></label>
+                          <label><span>排序</span><input v-model="favoriteState.editing.sort" type="number"></label>
+                          <div class="favorite-desktop-check">
+                            <span>桌面</span>
+                            <label class="inline-check">
+                              <input v-model="favoriteState.editing.add_to_desktop" type="checkbox">
+                              <span>发送快捷方式到桌面</span>
+                            </label>
+                          </div>
+                          <label class="favorite-icon-field">
+                            <span>图标</span>
+                            <button type="button" class="favorite-icon-upload" :disabled="favoriteState.iconUploading" @click="chooseFavoriteIcon">
+                              <img v-if="favoriteState.editing.icon_url" :src="backendUrl(favoriteState.editing.icon_url)" alt="收藏图标">
+                              <Globe2 v-else :size="24" />
+                            </button>
+                            <input
+                              ref="favoriteIconInputRef"
+                              class="hidden-file"
+                              type="file"
+                              accept="image/jpeg,image/png,image/webp,image/gif,image/x-icon"
+                              @change="handleFavoriteIconSelected"
+                            >
+                          </label>
+                        </div>
                       </div>
                       <footer>
                         <el-button @click="closeFavoriteDialog">取消</el-button>
@@ -3246,26 +3264,23 @@
       </section>
     </div>
 
-    <div v-if="desktopLauncherState.visible" class="desktop-launcher-mask" @click.self="closeDesktopLauncher">
+    <div v-if="desktopLauncherState.visible" class="desktop-launcher-mask" tabindex="-1" @click.self="closeDesktopLauncher" @keyup.esc="closeDesktopLauncher">
       <section class="desktop-launcher-panel">
-        <header>
-          <div>
-            <strong>应用模块</strong>
-            <span>添加到桌面的模块会显示为快捷方式</span>
-          </div>
-          <button type="button" @click="closeDesktopLauncher">关闭</button>
-        </header>
+        <button type="button" class="desktop-launcher-close" title="关闭" @click="closeDesktopLauncher">
+          <X :size="22" />
+        </button>
+        <label class="desktop-launcher-search">
+          <Search :size="22" />
+          <input v-model="desktopLauncherState.keyword" type="search" placeholder="搜索应用模块">
+        </label>
         <small v-if="desktopLauncherState.message" class="desktop-launcher-message">{{ desktopLauncherState.message }}</small>
         <div class="desktop-launcher-grid">
-          <article v-for="module in launcherModules" :key="module.id">
-            <button type="button" class="launcher-module-main" @click="openLauncherModule(module)">
+          <article v-for="module in launcherFilteredModules" :key="module.id" class="launcher-app">
+            <button type="button" class="launcher-module-main" :title="module.scope" @click="openLauncherModule(module)">
               <span class="app-glyph" :class="module.color">
                 <component :is="module.icon" :size="24" />
               </span>
-              <span>
-                <strong>{{ module.name }}</strong>
-                <small>{{ module.scope }}</small>
-              </span>
+              <strong>{{ module.name }}</strong>
             </button>
             <button
               type="button"
@@ -3273,7 +3288,7 @@
               :class="{ added: isDesktopShortcut(module.id), locked: isDefaultDesktopShortcut(module.id) }"
               :disabled="isDefaultDesktopShortcut(module.id) || desktopLauncherState.loading"
               :title="launcherShortcutTitle(module.id)"
-              @click="toggleDesktopShortcut(module.id)"
+              @click.stop="toggleDesktopShortcut(module.id)"
             >
               <CheckCircle2 v-if="isDesktopShortcut(module.id)" :size="18" />
               <Plus v-else :size="18" />
@@ -3343,7 +3358,6 @@ import {
   CheckCircle2,
   ClipboardList,
   Edit3,
-  ExternalLink,
   FileClock,
   FileText,
   FlaskConical,
@@ -3358,6 +3372,7 @@ import {
   LogOut,
   MapPin,
   MessageCircle,
+  MoreHorizontal,
   Plus,
   RefreshCw,
   Save,
@@ -3371,6 +3386,7 @@ import {
   UsersRound,
   UserRound,
   Workflow,
+  X,
 } from '@lucide/vue';
 import DesktopWindow from './components/DesktopWindow.vue';
 import DataListPanel from './components/DataListPanel.vue';
@@ -3533,6 +3549,7 @@ const switchAccountState = reactive({
 });
 const desktopLauncherState = reactive({
   visible: false,
+  keyword: '',
   items: [],
   loading: false,
   message: '',
@@ -4350,15 +4367,16 @@ const visibleDesktopModules = computed(() => {
   const shortcutIds = new Set(desktopModuleShortcutKeys.value);
   const desktopModules = visibleModules.value.filter(module => shortcutIds.has(module.id));
   const favoriteModules = favoriteDesktopShortcuts.value;
-  const allDesktopModules = [...desktopModules, ...favoriteModules];
-  if (!globalSearchKeyword.value) {
-    return allDesktopModules;
-  }
-  const matchedIds = new Set(globalSearchResults.value.map(item => item.id));
-  const keywordValue = globalSearchKeyword.value;
-  return allDesktopModules.filter(module => matchedIds.has(module.id) || moduleSearchText(module).includes(keywordValue));
+  return [...desktopModules, ...favoriteModules];
 });
 const launcherModules = computed(() => visibleModules.value.filter(module => module.id !== 'profile'));
+const launcherFilteredModules = computed(() => {
+  const value = desktopLauncherState.keyword.trim().toLowerCase();
+  if (!value) {
+    return launcherModules.value;
+  }
+  return launcherModules.value.filter(module => moduleSearchText(module).includes(value));
+});
 const customDesktopShortcutItems = computed(() => desktopLauncherState.items.filter(item => item?.type === 'module' || item?.type === 'favorite'));
 const customDesktopModuleKeys = computed(() => customDesktopShortcutItems.value
   .filter(item => item.type === 'module')
@@ -5758,6 +5776,7 @@ async function persistDesktopShortcuts(items) {
   try {
     const data = await saveDesktopShortcuts({ items });
     desktopLauncherState.items = normalizeShortcutItems(data.items || []);
+    await nextTick();
   } catch (error) {
     desktopLauncherState.items = previous;
     desktopLauncherState.message = error.message;
@@ -5855,6 +5874,7 @@ function emptyFavoriteForm(row = {}) {
     icon_url: row.icon_url || '',
     icon_file_id: row.icon_file_id || null,
     sort: row.sort || 0,
+    add_to_desktop: false,
   };
 }
 
@@ -5888,6 +5908,7 @@ async function loadFavorites(page = favoriteState.pagination.page || 1) {
 
 function openFavoriteDialog(row = null) {
   favoriteState.editing = emptyFavoriteForm(row || {});
+  favoriteState.editing.add_to_desktop = row?.id ? isFavoriteDesktop(row.id) : true;
   favoriteState.message = '';
   favoriteState.dialogVisible = true;
 }
@@ -5903,16 +5924,21 @@ async function saveFavoriteItem() {
 
   favoriteState.loading = true;
   favoriteState.message = '';
+  const form = { ...favoriteState.editing };
   try {
     const data = await saveFavorite({
-      ...favoriteState.editing,
-      sort: Number(favoriteState.editing.sort || 0),
+      ...form,
+      sort: Number(form.sort || 0),
     });
     favoriteState.items = data.items || [];
     favoriteState.pagination = {
       ...favoriteState.pagination,
       ...(data.pagination || {}),
     };
+    const savedRow = resolveSavedFavoriteRow(data.items || [], form);
+    if (savedRow?.id) {
+      await setFavoriteDesktopShortcut(savedRow, Boolean(form.add_to_desktop));
+    }
     favoriteState.dialogVisible = false;
     favoriteState.message = '已保存';
   } catch (error) {
@@ -5951,6 +5977,24 @@ function openFavoriteLink(row) {
   }
 }
 
+function handleFavoriteCommand(row, command) {
+  if (command === 'open') {
+    openFavoriteLink(row);
+    return;
+  }
+  if (command === 'edit') {
+    openFavoriteDialog(row);
+    return;
+  }
+  if (command === 'desktop') {
+    toggleFavoriteDesktop(row);
+    return;
+  }
+  if (command === 'delete') {
+    deleteFavoriteItem(row);
+  }
+}
+
 function isFavoriteDesktop(id) {
   return customDesktopShortcutItems.value.some(item => item.type === 'favorite' && Number(item.ref_id) === Number(id));
 }
@@ -5960,14 +6004,59 @@ async function toggleFavoriteDesktop(row) {
     return;
   }
 
+  await setFavoriteDesktopShortcut(row, !isFavoriteDesktop(row.id));
+}
+
+async function setFavoriteDesktopShortcut(row, enabled) {
+  if (!row?.id) {
+    return;
+  }
   const items = desktopShortcutPayloadItems.value.slice();
   const index = items.findIndex(item => item.type === 'favorite' && Number(item.ref_id) === Number(row.id));
-  if (index >= 0) {
+  if (!enabled && index >= 0) {
     items.splice(index, 1);
-  } else {
+  } else if (enabled && index < 0) {
     items.push({ type: 'favorite', ref_id: Number(row.id) });
+  } else {
+    return;
   }
   await persistDesktopShortcuts(items);
+}
+
+function resolveSavedFavoriteRow(items, form) {
+  if (!Array.isArray(items)) {
+    return null;
+  }
+  if (form.id) {
+    const byId = items.find(item => Number(item.id) === Number(form.id));
+    if (byId) {
+      return byId;
+    }
+  }
+  return items.find(item => String(item.url || '') === String(form.url || '') && String(item.title || '') === String(form.title || '')) || null;
+}
+
+function favoriteInitial(row) {
+  const value = String(row?.title || row?.url || '收').trim();
+  return value.charAt(0).toUpperCase() || '收';
+}
+
+function favoriteHost(row) {
+  const value = String(row?.url || '').trim();
+  if (!value) {
+    return '未填写地址';
+  }
+  try {
+    return new URL(value).host || value;
+  } catch {
+    return value.replace(/^https?:\/\//i, '').split('/')[0] || value;
+  }
+}
+
+function favoriteCardClass(row, index = 0) {
+  const themes = ['mint', 'green', 'tan', 'blue', 'cyan', 'purple', 'gold', 'rose'];
+  const source = Number(row?.id || 0) || index + 1;
+  return `favorite-card-${themes[Math.abs(source) % themes.length]}`;
 }
 
 function chooseFavoriteIcon() {
