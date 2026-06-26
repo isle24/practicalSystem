@@ -1251,7 +1251,7 @@ class InternshipService
             'profession_id' => $professionId,
             'semester' => $this->nullableString($request, 'semester', 80),
             'credit' => $this->decimalInput($request, 'credit'),
-            'student_count' => $this->optionalInt($request, 'student_count') ?? 0,
+            'student_count' => 0,
             'score_rule' => $this->enum($request, 'score_rule', ['average', 'sum', 'weighted', 'manual'], 'average'),
             'plan_content' => $this->jsonValue($request->input('plan_content', [])),
             'submitter_id' => CurrentContext::accountId(),
@@ -2702,8 +2702,12 @@ class InternshipService
 
         $roleType = CurrentContext::roleType();
         $allowedRoles = $config['role_types'] ?? [];
-        if ($roleType !== 'super_admin' && !in_array($roleType, $allowedRoles, true)) {
+        if (!in_array($roleType, ['super_admin', 'school_admin'], true) && !in_array($roleType, $allowedRoles, true)) {
             throw new RuntimeException('当前角色不能处理该审核节点', 40300);
+        }
+
+        if (in_array($roleType, ['super_admin', 'school_admin'], true)) {
+            return;
         }
 
         $accountId = CurrentContext::accountId();

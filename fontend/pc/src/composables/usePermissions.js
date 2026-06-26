@@ -64,13 +64,15 @@ export function usePermissions() {
 
 function flattenMenus(menus) {
   const items = [];
-  const walk = (nodes) => {
+  const walk = (nodes, ancestors = []) => {
     nodes.forEach((node) => {
-      if (node.type === 'menu' || !node.children?.length) {
-        items.push(node);
-      }
+      items.push({
+        ...node,
+        root_name: ancestors[0]?.name || node.name,
+        parent_name: ancestors.at(-1)?.name || '',
+      });
       if (node.children?.length) {
-        walk(node.children);
+        walk(node.children, [...ancestors, node]);
       }
     });
   };

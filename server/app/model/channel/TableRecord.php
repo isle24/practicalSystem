@@ -2,6 +2,7 @@
 
 namespace app\model\channel;
 
+use app\server\CurrentContext;
 use Illuminate\Database\Query\Expression;
 
 class TableRecord extends BaseModel
@@ -639,5 +640,357 @@ class TableRecord extends BaseModel
             'channel' => $channel,
             'created_at' => $now,
         ]));
+    }
+
+    public static function desktopShortcuts(int $accountId): array
+    {
+        return self::queryTable('user_desktop_shortcut')
+            ->leftJoin('favorite_link', function ($join): void {
+                $join->on('user_desktop_shortcut.ref_id', '=', 'favorite_link.id')
+                    ->where('user_desktop_shortcut.item_type', 'favorite')
+                    ->whereNull('favorite_link.deleted_at');
+            })
+            ->where('user_desktop_shortcut.account_id', $accountId)
+            ->whereNull('user_desktop_shortcut.deleted_at')
+            ->orderBy('user_desktop_shortcut.sort')
+            ->orderBy('user_desktop_shortcut.id')
+            ->get([
+                'user_desktop_shortcut.id',
+                'user_desktop_shortcut.item_type',
+                'user_desktop_shortcut.item_key',
+                'user_desktop_shortcut.ref_id',
+                'user_desktop_shortcut.sort',
+                'favorite_link.title as favorite_title',
+                'favorite_link.url as favorite_url',
+                'favorite_link.icon_url as favorite_icon_url',
+            ])
+            ->map(static fn ($row): array => [
+                'id' => (int) $row->id,
+                'type' => (string) $row->item_type,
+                'key' => $row->item_key,
+                'ref_id' => $row->ref_id === null ? null : (int) $row->ref_id,
+                'sort' => (int) $row->sort,
+                'favorite' => $row->ref_id === null ? null : [
+                    'id' => (int) $row->ref_id,
+                    'title' => $row->favorite_title,
+                    'url' => $row->favorite_url,
+                    'icon_url' => $row->favorite_icon_url,
+                ],
+            ])
+            ->all();
+    }
+
+    public static function replaceDesktopShortcuts(int $accountId, array $items, string $now): void
+    {
+        self::queryTable('user_desktop_shortcut')
+            ->where('account_id', $accountId)
+            ->whereNull('deleted_at')
+            ->update([
+                'deleted_at' => $now,
+                'updated_at' => $now,
+            ]);
+
+        foreach (self::normalizeDesktopShortcutItems($accountId, $items) as $index => $item) {
+            self::queryTable('user_desktop_shortcut')->insert([
+                'uuid' => self::uuid(),
+                'account_id' => $accountId,
+                'item_type' => $item['type'],
+                'item_key' => $item['key'],
+                'ref_id' => $item['ref_id'],
+                'sort' => $index + 1,
+                'status' => 'enabled',
+                'created_at' => $now,
+                'updated_at' => $now,
+                'deleted_at' => null,
+            ]);
+        }
+    }
+
+    public static function favoritePage(int $accountId, array $filters): array
+    {
+        $page = max(1, (int) ($filters['page'] ?? 1));
+        $pageSize = min(100, max(10, (int) ($filters['page_size'] ?? 20)));
+        $query = self::queryTable('favorite_link')
+            ->where('account_id', $accountId)
+            ->whereNull('deleted_at');
+
+        $keyword = trim((string) ($filters['keyword'] ?? ''));
+        if ($keyword !== '') {
+            $like = '%' . str_replace(['%', '_'], ['\\%', '\\_'], $keyword) . '%';
+            $query->where(function ($builder) use ($like): void {
+                $builder->where('title', 'like', $like)
+                    ->orWhere('url', 'like', $like);
+            });
+        }
+
+        $total = (int) (clone $query)->count();
+        $items = $query
+            ->orderBy('sort')
+            ->orderByDesc('id')
+            ->forPage($page, $pageSize)
+            ->get(['id', 'title', 'url', 'icon_url', 'icon_file_id', 'sort', 'status', 'created_at', 'updated_at'])
+            ->map(static fn ($row): array => [
+                'id' => (int) $row->id,
+                'title' => $row->title,
+                'url' => $row->url,
+                'icon_url' => $row->icon_url,
+                'icon_file_id' => $row->icon_file_id === null ? null : (int) $row->icon_file_id,
+                'sort' => (int) $row->sort,
+                'status' => $row->status,
+                'created_at' => $row->created_at,
+                'updated_at' => $row->updated_at,
+            ])
+            ->all();
+
+        return [
+            'items' => $items,
+            'pagination' => [
+                'page' => $page,
+                'page_size' => $pageSize,
+                'total' => $total,
+            ],
+        ];
+    }
+
+    public static function saveFavorite(int $accountId, int $userId, array $values, string $now): int
+    {
+        $id = (int) ($values['id'] ?? 0);
+        $payload = [
+            'account_id' => $accountId,
+            'user_id' => $userId,
+            'title' => $values['title'] ?? '',
+            'url' => $values['url'] ?? '',
+            'icon_url' => $values['icon_url'] ?? null,
+            'icon_file_id' => $values['icon_file_id'] ?? null,
+            'sort' => (int) ($values['sort'] ?? 0),
+            'status' => $values['status'] ?? 'enabled',
+            'updated_at' => $now,
+            'deleted_at' => null,
+        ];
+
+        if ($id > 0) {
+            self::queryTable('favorite_link')
+                ->where('id', $id)
+                ->where('account_id', $accountId)
+                ->whereNull('deleted_at')
+                ->update($payload);
+            return $id;
+        }
+
+        return (int) self::queryTable('favorite_link')->insertGetId(array_merge($payload, [
+            'uuid' => self::uuid(),
+            'created_at' => $now,
+        ]));
+    }
+
+    public static function deleteFavorite(int $accountId, int $id, string $now): int
+    {
+        self::queryTable('user_desktop_shortcut')
+            ->where('account_id', $accountId)
+            ->where('item_type', 'favorite')
+            ->where('ref_id', $id)
+            ->whereNull('deleted_at')
+            ->update([
+                'deleted_at' => $now,
+                'updated_at' => $now,
+            ]);
+
+        return self::queryTable('favorite_link')
+            ->where('id', $id)
+            ->where('account_id', $accountId)
+            ->whereNull('deleted_at')
+            ->update([
+                'deleted_at' => $now,
+                'updated_at' => $now,
+                'status' => 'disabled',
+            ]);
+    }
+
+    public static function clearTestData(string $now): array
+    {
+        $result = [];
+        $result['operation_logs'] = self::clearOperationLogRows($now);
+
+        foreach (self::testDataTables() as $table) {
+            $result[$table] = self::queryTable($table)->delete();
+        }
+
+        foreach (['user_device', 'user_notify_setting', 'user_desktop_config', 'user_desktop_shortcut', 'favorite_link', 'message_target', 'message_channel_log'] as $table) {
+            $result[$table] = self::queryTable($table)
+                ->where(function ($query): void {
+                    $query->whereNull('account_id')
+                        ->orWhere('account_id', '<>', 1);
+                })
+                ->delete();
+        }
+        $result['file_relation'] = self::queryTable('file_relation')->delete();
+        $result['file'] = self::queryTable('file')
+            ->where(function ($query): void {
+                $query->whereNull('uploader_id')
+                    ->orWhere('uploader_id', '<>', 1);
+            })
+            ->delete();
+        $result['message'] = self::queryTable('message')->delete();
+
+        foreach (['students', 'teacher_list', 'grade_teacher_guide'] as $table) {
+            $result[$table] = self::queryTable($table)->delete();
+        }
+
+        $result['sys_organization'] = self::queryTable('sys_organization')
+            ->where(function ($query): void {
+                $query->whereNull('account_id')
+                    ->orWhere('account_id', '<>', 1);
+            })
+            ->delete();
+        $result['user_role'] = self::queryTable('user_role')
+            ->where('account_id', '<>', 1)
+            ->delete();
+        $result['account'] = self::queryTable('account')
+            ->where('id', '<>', 1)
+            ->delete();
+        $result['user_wechat'] = self::queryTable('user_wechat')
+            ->where(function ($query): void {
+                $query->whereNull('user_id')
+                    ->orWhere('user_id', '<>', 1);
+            })
+            ->delete();
+        $result['users'] = self::queryTable('users')
+            ->where('id', '<>', 1)
+            ->delete();
+
+        return [
+            'cleared_at' => $now,
+            'affected' => $result,
+        ];
+    }
+
+    private static function normalizeDesktopShortcutItems(int $accountId, array $items): array
+    {
+        $normalized = [];
+        $seen = [];
+        foreach ($items as $item) {
+            if (!is_array($item)) {
+                continue;
+            }
+            $type = (string) ($item['type'] ?? $item['item_type'] ?? 'module');
+            $key = trim((string) ($item['key'] ?? $item['item_key'] ?? ''));
+            $refId = isset($item['ref_id']) && is_numeric($item['ref_id']) ? (int) $item['ref_id'] : null;
+            if ($type === 'module' && $key !== '') {
+                $unique = "module:{$key}";
+                if (isset($seen[$unique])) {
+                    continue;
+                }
+                $seen[$unique] = true;
+                $normalized[] = ['type' => 'module', 'key' => $key, 'ref_id' => null];
+                continue;
+            }
+            if ($type === 'favorite' && $refId && self::favoriteExists($accountId, $refId)) {
+                $unique = "favorite:{$refId}";
+                if (isset($seen[$unique])) {
+                    continue;
+                }
+                $seen[$unique] = true;
+                $normalized[] = ['type' => 'favorite', 'key' => null, 'ref_id' => $refId];
+            }
+        }
+
+        return $normalized;
+    }
+
+    private static function favoriteExists(int $accountId, int $id): bool
+    {
+        return self::queryTable('favorite_link')
+            ->where('id', $id)
+            ->where('account_id', $accountId)
+            ->whereNull('deleted_at')
+            ->exists();
+    }
+
+    private static function clearOperationLogRows(string $now): int
+    {
+        $database = CurrentContext::schoolDatabase();
+        if (!$database) {
+            return 0;
+        }
+
+        $affected = 0;
+        foreach (self::operationLogTables($database) as $table) {
+            $affected += self::queryTable($table)->delete();
+        }
+
+        return $affected;
+    }
+
+    private static function testDataTables(): array
+    {
+        return [
+            'arrangement_recording',
+            'arrangement_change_recording',
+            'arrangement_change',
+            'internship_task_class',
+            'application_recording',
+            'application',
+            'student_join_teacher',
+            'join_recording',
+            'pair',
+            'sign_in_recording',
+            'sign_in',
+            'sign_in_qrcode',
+            'journal_recording',
+            'journal',
+            'report_recording',
+            'report',
+            'review_opinion',
+            'apply_report_delay_recording',
+            'apply_report_delay',
+            'score_recording',
+            'score',
+            'course_score',
+            'internship_plan_approval',
+            'plan_recording',
+            'internship_plan',
+            'insurance_recording',
+            'insurance',
+            'safety_letter_recording',
+            'safety_letter_sign',
+            'syllabus_guide_recording',
+            'syllabus_guide',
+            'implementation_sheet_recording',
+            'implementation_sheet',
+            'teacher_work_report_recording',
+            'teacher_work_report',
+            'inspection_recording',
+            'inspection_record',
+            'base_application',
+            'base_usage',
+            'base_result',
+            'base_expense',
+            'practice_project_student',
+            'practice_recording',
+            'practice_score',
+            'practice_reflection',
+            'practice_grade_rule',
+            'practice_lesson_plan',
+            'practice_syllabus',
+            'practice_project',
+            'practice_schedule',
+            'practice_plan',
+            'training_project',
+            'training_project_class',
+            'training_room',
+            'training_booking',
+            'training_material',
+            'training_report',
+            'training_score',
+            'lab_room',
+            'lab_course',
+            'lab_course_class',
+            'lab_project',
+            'lab_project_member',
+            'lab_booking',
+            'lab_material',
+            'lab_report',
+            'lab_score',
+        ];
     }
 }

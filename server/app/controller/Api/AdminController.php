@@ -399,6 +399,27 @@ class AdminController
     }
 
     /**
+     * 清除测试数据
+     */
+    #[OperationLog('清除测试数据')]
+    public function clearTestData(Request $request): Response
+    {
+        if (CurrentContext::roleType() !== 'super_admin') {
+            return $this->fail(40300, '仅超级管理员可清除测试数据', 403);
+        }
+
+        try {
+            if ($this->requiredString($request, 'confirmation', 80) !== 'CLEAR_TEST_DATA') {
+                return $this->fail(40001, '确认文本不正确', 400);
+            }
+
+            return $this->ok(ChannelTable::clearTestData(date('Y-m-d H:i:s')), '已清除测试数据');
+        } catch (Throwable $exception) {
+            return $this->fail(40001, $exception->getMessage(), 400);
+        }
+    }
+
+    /**
      * 查询用户管理选项
      */
     #[OperationLog('查询用户管理选项')]

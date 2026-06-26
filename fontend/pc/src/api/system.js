@@ -278,6 +278,13 @@ export function resetAdminAccountPassword(payload) {
   });
 }
 
+export function clearTestData(payload) {
+  return request('/admin/clear-test-data', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
 export function generateAdminLoginPasskey(payload) {
   return request('/admin/login-passkey', {
     method: 'POST',
@@ -332,6 +339,45 @@ export function uploadProfileAsset(type, file) {
   body.append('type', type);
   body.append('file', file);
   return request('/profile/upload-asset', {
+    method: 'POST',
+    body,
+  });
+}
+
+export function fetchDesktopShortcuts() {
+  return request('/desktop/shortcuts');
+}
+
+export function saveDesktopShortcuts(payload) {
+  return request('/desktop/save-shortcuts', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function fetchFavorites(params = {}) {
+  const query = new URLSearchParams(params).toString();
+  return request(`/favorite/list${query ? `?${query}` : ''}`);
+}
+
+export function saveFavorite(payload) {
+  return request('/favorite/save', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function deleteFavorite(id) {
+  return request('/favorite/delete', {
+    method: 'POST',
+    body: JSON.stringify({ id }),
+  });
+}
+
+export function uploadFavoriteIcon(file) {
+  const body = new FormData();
+  body.append('file', file);
+  return request('/favorite/upload-icon', {
     method: 'POST',
     body,
   });

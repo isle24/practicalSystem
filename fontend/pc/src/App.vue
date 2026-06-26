@@ -135,7 +135,8 @@
           @click.prevent="openModule(module)"
         >
           <span class="app-glyph" :class="module.color">
-            <component :is="module.icon" :size="25" />
+            <img v-if="module.iconUrl" :src="backendUrl(module.iconUrl)" :alt="module.name">
+            <component v-else :is="module.icon" :size="25" />
           </span>
           <span>{{ module.name }}</span>
         </a>
@@ -514,7 +515,6 @@
                           </el-select>
                         </label>
                         <label><span>学分</span><input v-model="internshipState.planForm.credit" type="number" min="0" step="0.5"></label>
-                        <label><span>学生人数</span><input v-model="internshipState.planForm.student_count" type="number" min="0" step="1"></label>
                         <label>
                           <span>成绩规则</span>
                           <el-select v-model="internshipState.planForm.score_rule">
@@ -2067,6 +2067,112 @@
                   <ExportTaskCenter />
                 </div>
 
+                <div v-else-if="win.module.id === 'favorite'" class="favorite-panel">
+                  <div class="admin-toolbar favorite-toolbar">
+                    <el-input
+                      v-model="favoriteState.filters.keyword"
+                      clearable
+                      placeholder="搜索标题或网址"
+                      @keyup.enter="loadFavorites(1)"
+                    />
+                    <el-button :icon="Search" :loading="favoriteState.loading" @click="loadFavorites(1)">
+                      查询
+                    </el-button>
+                    <el-button :icon="RefreshCw" :loading="favoriteState.loading" @click="loadFavorites(favoriteState.pagination.page)">
+                      刷新
+                    </el-button>
+                    <el-button type="primary" :icon="Plus" @click="openFavoriteDialog()">
+                      新增收藏
+                    </el-button>
+                  </div>
+                  <el-alert
+                    v-if="favoriteState.message"
+                    type="warning"
+                    :closable="false"
+                    show-icon
+                    :title="favoriteState.message"
+                  />
+                  <el-table :data="favoriteState.items" height="100%" stripe v-loading="favoriteState.loading">
+                    <el-table-column label="收藏" min-width="260">
+                      <template #default="{ row }">
+                        <div class="favorite-cell">
+                          <span class="favorite-icon">
+                            <img v-if="row.icon_url" :src="backendUrl(row.icon_url)" :alt="row.title">
+                            <Globe2 v-else :size="18" />
+                          </span>
+                          <span>
+                            <strong>{{ row.title }}</strong>
+                            <small>{{ row.url }}</small>
+                          </span>
+                        </div>
+                      </template>
+                    </el-table-column>
+                    <el-table-column prop="sort" label="排序" width="86" />
+                    <el-table-column prop="created_at" label="创建时间" width="168" />
+                    <el-table-column label="操作" width="260" fixed="right">
+                      <template #default="{ row }">
+                        <el-button link type="primary" :icon="ExternalLink" @click="openFavoriteLink(row)">
+                          打开
+                        </el-button>
+                        <el-button link type="primary" @click="openFavoriteDialog(row)">
+                          编辑
+                        </el-button>
+                        <el-button link :type="isFavoriteDesktop(row.id) ? 'success' : 'primary'" @click="toggleFavoriteDesktop(row)">
+                          {{ isFavoriteDesktop(row.id) ? '已在桌面' : '加入桌面' }}
+                        </el-button>
+                        <el-button link type="danger" @click="deleteFavoriteItem(row)">
+                          删除
+                        </el-button>
+                      </template>
+                    </el-table-column>
+                  </el-table>
+                  <div class="file-pagination">
+                    <span>共 {{ favoriteState.pagination.total }} 个收藏</span>
+                    <el-pagination
+                      size="small"
+                      layout="prev, pager, next"
+                      :current-page="favoriteState.pagination.page"
+                      :page-size="favoriteState.pagination.page_size"
+                      :total="favoriteState.pagination.total"
+                      @current-change="loadFavorites"
+                    />
+                  </div>
+
+                  <div v-if="favoriteState.dialogVisible" class="operation-mask" @click.self="closeFavoriteDialog">
+                    <section class="operation-dialog favorite-dialog">
+                      <header>
+                        <strong>{{ favoriteState.editing.id ? '编辑收藏' : '新增收藏' }}</strong>
+                        <button type="button" @click="closeFavoriteDialog">关闭</button>
+                      </header>
+                      <div class="operation-form favorite-form">
+                        <label class="favorite-icon-field">
+                          <span>图标</span>
+                          <button type="button" class="favorite-icon-upload" :disabled="favoriteState.iconUploading" @click="chooseFavoriteIcon">
+                            <img v-if="favoriteState.editing.icon_url" :src="backendUrl(favoriteState.editing.icon_url)" alt="收藏图标">
+                            <Globe2 v-else :size="24" />
+                          </button>
+                          <input
+                            ref="favoriteIconInputRef"
+                            class="hidden-file"
+                            type="file"
+                            accept="image/jpeg,image/png,image/webp,image/gif,image/x-icon"
+                            @change="handleFavoriteIconSelected"
+                          >
+                        </label>
+                        <label><span>标题</span><input v-model="favoriteState.editing.title" maxlength="180"></label>
+                        <label><span>网址</span><input v-model="favoriteState.editing.url" maxlength="500" placeholder="https://example.com"></label>
+                        <label><span>排序</span><input v-model="favoriteState.editing.sort" type="number"></label>
+                      </div>
+                      <footer>
+                        <el-button @click="closeFavoriteDialog">取消</el-button>
+                        <el-button type="primary" :icon="Save" :loading="favoriteState.loading" @click="saveFavoriteItem">
+                          保存
+                        </el-button>
+                      </footer>
+                    </section>
+                  </div>
+                </div>
+
                 <div v-else-if="win.module.id === 'message'" class="message-center-panel">
                   <div class="message-toolbar">
                     <el-select v-model="messageState.filters.type" @change="loadMessages(1)">
@@ -2439,6 +2545,19 @@
                     <el-button :icon="RefreshCw" :loading="adminState.loading" @click="loadAdminFoundation">
                       刷新
                     </el-button>
+                    <el-input
+                      v-model="adminState.menu.keyword"
+                      class="menu-search-input"
+                      clearable
+                      placeholder="搜索菜单名称、权限码、路径"
+                      @input="filterMenuTree"
+                    />
+                    <el-button @click="setMenuTreeExpanded(true)">
+                      一键展开
+                    </el-button>
+                    <el-button @click="setMenuTreeExpanded(false)">
+                      一键收缩
+                    </el-button>
                   </div>
                   <section class="menu-tree-panel menu-tree-full">
                     <header>
@@ -2446,6 +2565,7 @@
                       <small>{{ adminState.menu.items.length }} 项</small>
                     </header>
                     <el-tree
+                      ref="menuTreeRef"
                       class="permission-tree menu-edit-tree"
                       :data="adminState.menus"
                       :props="treeProps"
@@ -2454,6 +2574,7 @@
                       highlight-current
                       :current-node-key="adminState.menu.selected?.id"
                       :expand-on-click-node="false"
+                      :filter-node-method="filterMenuNode"
                       @node-click="selectMenu"
                     >
                       <template #default="{ data }">
@@ -2705,6 +2826,37 @@
                     </el-table-column>
                   </el-table>
                   <small v-if="adminState.scope.message">{{ adminState.scope.message }}</small>
+                </div>
+
+                <div v-else-if="win.module.id === 'config' && win.panel === 'dataManage'" class="admin-panel data-manage-panel">
+                  <section class="maintenance-card danger">
+                    <header>
+                      <div>
+                        <strong>清除测试数据</strong>
+                        <span>清空除超级管理员外的账号、用户业务数据、消息、文件记录和操作日志，保留角色、菜单、基础档案、流程配置和系统配置。</span>
+                      </div>
+                      <el-tag type="danger">危险操作</el-tag>
+                    </header>
+                    <p>该功能用于测试库重新验收。执行前会要求输入确认文本，执行后无法从页面撤销。</p>
+                    <footer>
+                      <el-button
+                        type="danger"
+                        :icon="Trash2"
+                        :disabled="permissionState.context.role_type !== 'super_admin'"
+                        :loading="dataManageState.clearLoading"
+                        @click="clearCurrentTestData"
+                      >
+                        一键清除测试数据
+                      </el-button>
+                    </footer>
+                  </section>
+                  <el-alert
+                    v-if="dataManageState.message"
+                    type="warning"
+                    :closable="false"
+                    show-icon
+                    :title="dataManageState.message"
+                  />
                 </div>
 
                 <div v-else-if="win.module.id === 'log'" class="admin-panel log-panel">
@@ -3094,8 +3246,45 @@
       </section>
     </div>
 
+    <div v-if="desktopLauncherState.visible" class="desktop-launcher-mask" @click.self="closeDesktopLauncher">
+      <section class="desktop-launcher-panel">
+        <header>
+          <div>
+            <strong>应用模块</strong>
+            <span>添加到桌面的模块会显示为快捷方式</span>
+          </div>
+          <button type="button" @click="closeDesktopLauncher">关闭</button>
+        </header>
+        <small v-if="desktopLauncherState.message" class="desktop-launcher-message">{{ desktopLauncherState.message }}</small>
+        <div class="desktop-launcher-grid">
+          <article v-for="module in launcherModules" :key="module.id">
+            <button type="button" class="launcher-module-main" @click="openLauncherModule(module)">
+              <span class="app-glyph" :class="module.color">
+                <component :is="module.icon" :size="24" />
+              </span>
+              <span>
+                <strong>{{ module.name }}</strong>
+                <small>{{ module.scope }}</small>
+              </span>
+            </button>
+            <button
+              type="button"
+              class="launcher-module-add"
+              :class="{ added: isDesktopShortcut(module.id), locked: isDefaultDesktopShortcut(module.id) }"
+              :disabled="isDefaultDesktopShortcut(module.id) || desktopLauncherState.loading"
+              :title="launcherShortcutTitle(module.id)"
+              @click="toggleDesktopShortcut(module.id)"
+            >
+              <CheckCircle2 v-if="isDesktopShortcut(module.id)" :size="18" />
+              <Plus v-else :size="18" />
+            </button>
+          </article>
+        </div>
+      </section>
+    </div>
+
     <footer class="taskbar">
-      <button class="taskbar-icon-button" title="开始" aria-label="开始">
+      <button class="taskbar-icon-button" title="开始" aria-label="开始" @click="openDesktopLauncher">
         <LayoutGrid :size="18" />
       </button>
       <div class="taskbar-apps">
@@ -3154,10 +3343,12 @@ import {
   CheckCircle2,
   ClipboardList,
   Edit3,
+  ExternalLink,
   FileClock,
   FileText,
   FlaskConical,
   FolderOpen,
+  Globe2,
   GraduationCap,
   HardDrive,
   ImagePlus,
@@ -3173,6 +3364,7 @@ import {
   Search,
   Settings,
   SlidersHorizontal,
+  Star,
   Table2,
   Trash2,
   Upload,
@@ -3190,13 +3382,17 @@ import { usePermissions } from './composables/usePermissions';
 import { backendUrl } from './api/client';
 import {
   changeAdminAccountStatus,
+  clearTestData,
   deleteArchiveItem,
+  deleteFavorite,
   fetchAdminAccountDetail,
   fetchAdminAccounts,
   fetchAdminMenus,
   fetchAdminOptions,
   fetchAdminRoles,
   fetchArchiveList,
+  fetchDesktopShortcuts,
+  fetchFavorites,
   fetchFileList,
   fetchSwitchableAccounts,
   fetchInternshipArchiveMaterials,
@@ -3274,6 +3470,8 @@ import {
   savePracticeExecution,
   savePracticeItem,
   savePracticeProjectScore,
+  saveDesktopShortcuts,
+  saveFavorite,
   saveMenu as saveMenuApi,
   sendMessage,
   saveOrganizationScopes,
@@ -3282,6 +3480,7 @@ import {
   saveRoleMenus,
   saveWechatConfig,
   switchAccount,
+  uploadFavoriteIcon,
   uploadLoginBackground,
   uploadProfileAsset,
 } from './api/system';
@@ -3291,9 +3490,11 @@ const keyword = ref('');
 const clock = ref('');
 const loginNameInput = ref(null);
 const wallpaperSectionRef = ref(null);
+const menuTreeRef = ref(null);
 const archiveImportInputRef = ref(null);
 const archiveImportType = ref('');
 const arrangementImportInputRef = ref(null);
+const favoriteIconInputRef = ref(null);
 const focusedWindowId = ref(null);
 const zIndexSeed = ref(20);
 const wallpaperCacheKey = 'practical_pc_wallpaper';
@@ -3328,6 +3529,12 @@ const switchAccountState = reactive({
   loading: false,
   open: false,
   items: [],
+  message: '',
+});
+const desktopLauncherState = reactive({
+  visible: false,
+  items: [],
+  loading: false,
   message: '',
 });
 const loginPageState = reactive({
@@ -3467,6 +3674,8 @@ const adminState = reactive({
     items: [],
     editing: emptyMenu(),
     selected: null,
+    keyword: '',
+    expanded: true,
     dialogVisible: false,
     dialogMode: 'create',
     loading: false,
@@ -3619,6 +3828,16 @@ const modules = [
     defaultPanel: 'taskList',
   },
   {
+    id: 'favorite',
+    name: '收藏夹',
+    icon: Star,
+    color: 'blue',
+    scope: '常用网址 / 桌面快捷方式',
+    viewPermission: '',
+    managePermission: '',
+    defaultPanel: 'favoriteList',
+  },
+  {
     id: 'userManage',
     name: '用户管理',
     icon: UsersRound,
@@ -3675,10 +3894,10 @@ const modules = [
   },
   {
     id: 'companyManage',
-    name: '企业管理',
+    name: '基地管理',
     icon: Building2,
     color: 'amber',
-    scope: '企业基础档案',
+    scope: '基地相关单位档案',
     viewPermission: 'config:company',
     managePermission: 'config:manage',
     defaultPanel: 'companyManage',
@@ -3968,6 +4187,28 @@ const fileState = reactive({
   message: '',
 });
 
+const favoriteState = reactive({
+  items: [],
+  filters: {
+    keyword: '',
+  },
+  pagination: {
+    page: 1,
+    page_size: 20,
+    total: 0,
+  },
+  loading: false,
+  iconUploading: false,
+  message: '',
+  dialogVisible: false,
+  editing: emptyFavoriteForm(),
+});
+
+const dataManageState = reactive({
+  clearLoading: false,
+  message: '',
+});
+
 const internshipSidebarItems = [
   { key: 'overview', name: '总览', icon: ChartColumn },
   { key: 'baseFlows', name: '基地建设', icon: Building2, permission: 'internship:manage' },
@@ -4067,6 +4308,7 @@ const moduleSearchKeywords = {
   doc: '文档 制度 流程 帮助 操作说明',
   templateLib: '模板 表格 材料 下载 模板库',
   exportTask: '导出 下载 队列 任务',
+  favorite: '收藏 收藏夹 网址 常用 网站 快捷方式 桌面',
   userManage: '用户 账号 角色 学生 老师 管理员 绑定 日志',
   gradeManage: '届次 当前届次 年级',
   departmentManage: '学院 院系 部门',
@@ -4077,13 +4319,16 @@ const moduleSearchKeywords = {
   profile: '个人设置 头像 壁纸 背景 消息接收 密码 资料',
   message: '消息 通知 待办 审核结果 站内信',
 };
+const defaultDesktopModuleIds = ['internship', 'training', 'lab', 'config'];
+const defaultDesktopModuleIdSet = new Set(defaultDesktopModuleIds);
 
 const isLoggedIn = computed(() => Boolean(permissionState.context.account_id));
 const currentRoleType = computed(() => permissionState.context.role_type || '');
 const isStudentRole = computed(() => currentRoleType.value === 'student');
 const isTeacherRole = computed(() => currentRoleType.value === 'teacher');
 const isAdminRole = computed(() => ['super_admin', 'school_admin', 'college_admin', 'profession_admin'].includes(currentRoleType.value));
-const visibleModules = computed(() => modules.filter(canShowModule));
+const configChildModuleIds = new Set(['userManage', 'gradeManage', 'departmentManage', 'professionManage', 'classManage', 'companyManage']);
+const visibleModules = computed(() => modules.map(decorateModule).filter(canShowModule));
 const globalSearchKeyword = computed(() => keyword.value.trim().toLowerCase());
 const searchCandidateModules = computed(() => {
   const items = [...visibleModules.value];
@@ -4102,12 +4347,46 @@ const globalSearchResults = computed(() => {
     .slice(0, 8);
 });
 const visibleDesktopModules = computed(() => {
+  const shortcutIds = new Set(desktopModuleShortcutKeys.value);
+  const desktopModules = visibleModules.value.filter(module => shortcutIds.has(module.id));
+  const favoriteModules = favoriteDesktopShortcuts.value;
+  const allDesktopModules = [...desktopModules, ...favoriteModules];
   if (!globalSearchKeyword.value) {
-    return visibleModules.value;
+    return allDesktopModules;
   }
   const matchedIds = new Set(globalSearchResults.value.map(item => item.id));
-  return visibleModules.value.filter(module => matchedIds.has(module.id));
+  const keywordValue = globalSearchKeyword.value;
+  return allDesktopModules.filter(module => matchedIds.has(module.id) || moduleSearchText(module).includes(keywordValue));
 });
+const launcherModules = computed(() => visibleModules.value.filter(module => module.id !== 'profile'));
+const customDesktopShortcutItems = computed(() => desktopLauncherState.items.filter(item => item?.type === 'module' || item?.type === 'favorite'));
+const customDesktopModuleKeys = computed(() => customDesktopShortcutItems.value
+  .filter(item => item.type === 'module')
+  .map(item => String(item.key || item.item_key || ''))
+  .filter(key => key && !defaultDesktopModuleIdSet.has(key) && visibleModules.value.some(module => module.id === key)));
+const desktopModuleShortcutKeys = computed(() => {
+  const defaults = defaultDesktopModuleIds.filter(key => visibleModules.value.some(module => module.id === key));
+  return Array.from(new Set([...defaults, ...customDesktopModuleKeys.value]));
+});
+const favoriteDesktopShortcuts = computed(() => customDesktopShortcutItems.value
+  .filter(item => item.type === 'favorite' && item.favorite?.url)
+  .map(item => ({
+    id: `favorite-link-${item.ref_id}`,
+    favoriteId: Number(item.ref_id),
+    name: item.favorite.title || '收藏网址',
+    icon: Globe2,
+    iconUrl: item.favorite.icon_url || '',
+    color: 'blue',
+    scope: item.favorite.url,
+    url: item.favorite.url,
+    type: 'favoriteLink',
+  })));
+const desktopShortcutPayloadItems = computed(() => [
+  ...customDesktopModuleKeys.value.map(key => ({ type: 'module', key })),
+  ...customDesktopShortcutItems.value
+    .filter(item => item.type === 'favorite' && Number(item.ref_id || 0) > 0)
+    .map(item => ({ type: 'favorite', ref_id: Number(item.ref_id) })),
+]);
 const showGlobalSearchResults = computed(() => globalSearchKeyword.value && globalSearchResults.value.length > 0);
 const visibleWindows = computed(() => openWindows.filter(win => !win.minimized));
 const canManageConfig = computed(() => hasPermission('config:manage') && ['super_admin', 'school_admin'].includes(permissionState.context.role_type));
@@ -4133,7 +4412,7 @@ const statCardIcons = [UserRound, ClipboardList, CheckCircle2, UsersRound, Gradu
 const scoreSheetAttendanceIndexes = Array.from({ length: 16 }, (_, index) => index + 1);
 const scoreSheetProjectIndexes = Array.from({ length: 12 }, (_, index) => index + 1);
 const guideModuleOptions = computed(() => modules.map(item => ({
-  label: item.name,
+  label: moduleDisplayName(item),
   value: item.id,
 })));
 const statCards = computed(() => {
@@ -4257,6 +4536,9 @@ const internshipTimelineCycles = computed(() => normalizeTimelineCycles(
 
 function canShowModule(module) {
   if (module.id === 'profile') {
+    return isLoggedIn.value;
+  }
+  if (module.id === 'favorite') {
     return isLoggedIn.value;
   }
   if (module.id === 'userManage') {
@@ -4935,7 +5217,7 @@ function studentPanelFields(panel) {
 }
 
 function sidebarItems(win) {
-  if (['message', 'doc', 'templateLib', 'exportTask'].includes(win.module.id)) {
+  if (['message', 'doc', 'templateLib', 'exportTask', 'favorite'].includes(win.module.id)) {
     return [];
   }
   if (win.module.id === 'userManage' || archiveManageModules[win.module.id]) {
@@ -4957,6 +5239,7 @@ function sidebarItems(win) {
       { key: 'organizationScope', name: '组织范围' },
       { key: 'operationGuides', name: '操作说明' },
       { key: 'wechatProxy', name: '企业微信应用' },
+      { key: 'dataManage', name: '数据管理' },
     ];
   }
   if (win.module.id === 'stat') {
@@ -5325,6 +5608,15 @@ function formatDateKey(date) {
   ].join('-');
 }
 
+function dateRangeText(startDate, endDate) {
+  const start = startDate || '-';
+  const end = endDate || '-';
+  if (start === '-' && end === '-') {
+    return '-';
+  }
+  return `${start} 至 ${end}`;
+}
+
 function renderClock() {
   const now = new Date();
   clock.value = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
@@ -5338,6 +5630,38 @@ function moduleSearchText(module) {
     module.defaultPanel,
     moduleSearchKeywords[module.id],
   ].filter(Boolean).join(' ').toLowerCase();
+}
+
+function decorateModule(module) {
+  return {
+    ...module,
+    name: moduleDisplayName(module),
+  };
+}
+
+function moduleDisplayName(module) {
+  const item = permissionState.menus.find(menu => moduleMatchesMenu(module, menu));
+  if (!item) {
+    return module.name;
+  }
+  if (configChildModuleIds.has(module.id)) {
+    return item.parent_name || item.name || module.name;
+  }
+  return item.root_name || item.name || module.name;
+}
+
+function moduleMatchesMenu(module, menu) {
+  if (!module?.viewPermission || !menu) {
+    return false;
+  }
+  if (menu.code === module.viewPermission) {
+    return true;
+  }
+  const path = String(menu.path || '');
+  if (!path) {
+    return false;
+  }
+  return path.split(/[/?#]/).filter(Boolean).includes(module.id);
 }
 
 function submitGlobalSearch() {
@@ -5357,7 +5681,101 @@ function openGlobalSearchModule(module) {
 }
 
 function openModule(module) {
+  if (module?.type === 'favoriteLink' && module.url) {
+    window.open(module.url, '_blank', 'noopener,noreferrer');
+    return;
+  }
   openModuleWindow(module, { reuse: true });
+}
+
+function openDesktopLauncher() {
+  desktopLauncherState.visible = true;
+}
+
+function closeDesktopLauncher() {
+  desktopLauncherState.visible = false;
+}
+
+function openLauncherModule(module) {
+  openModule(module);
+  closeDesktopLauncher();
+}
+
+function isDesktopShortcut(moduleId) {
+  return desktopModuleShortcutKeys.value.includes(moduleId);
+}
+
+function isDefaultDesktopShortcut(moduleId) {
+  return defaultDesktopModuleIdSet.has(moduleId);
+}
+
+function launcherShortcutTitle(moduleId) {
+  if (isDefaultDesktopShortcut(moduleId)) {
+    return '默认固定模块，不能移除';
+  }
+  return isDesktopShortcut(moduleId) ? '已添加到桌面' : '添加到桌面';
+}
+
+async function toggleDesktopShortcut(moduleId) {
+  if (isDefaultDesktopShortcut(moduleId) || desktopLauncherState.loading) {
+    return;
+  }
+
+  const items = desktopShortcutPayloadItems.value.slice();
+  const index = items.findIndex(item => item.type === 'module' && item.key === moduleId);
+  if (index >= 0) {
+    items.splice(index, 1);
+  } else {
+    items.push({ type: 'module', key: moduleId });
+  }
+  await persistDesktopShortcuts(items);
+}
+
+async function loadDesktopShortcuts() {
+  if (!isLoggedIn.value) {
+    desktopLauncherState.items = [];
+    desktopLauncherState.message = '';
+    return;
+  }
+
+  desktopLauncherState.loading = true;
+  desktopLauncherState.message = '';
+  try {
+    const data = await fetchDesktopShortcuts();
+    desktopLauncherState.items = normalizeShortcutItems(data.items || []);
+  } catch (error) {
+    desktopLauncherState.items = [];
+    desktopLauncherState.message = error.message;
+  } finally {
+    desktopLauncherState.loading = false;
+  }
+}
+
+async function persistDesktopShortcuts(items) {
+  desktopLauncherState.loading = true;
+  desktopLauncherState.message = '';
+  const previous = desktopLauncherState.items.slice();
+  desktopLauncherState.items = normalizeShortcutItems(items);
+  try {
+    const data = await saveDesktopShortcuts({ items });
+    desktopLauncherState.items = normalizeShortcutItems(data.items || []);
+  } catch (error) {
+    desktopLauncherState.items = previous;
+    desktopLauncherState.message = error.message;
+  } finally {
+    desktopLauncherState.loading = false;
+  }
+}
+
+function normalizeShortcutItems(items) {
+  return (Array.isArray(items) ? items : [])
+    .map(item => ({
+      type: item.type || item.item_type || 'module',
+      key: item.key || item.item_key || '',
+      ref_id: item.ref_id === null || item.ref_id === undefined ? null : Number(item.ref_id),
+      favorite: item.favorite || null,
+    }))
+    .filter(item => (item.type === 'module' && item.key) || (item.type === 'favorite' && item.ref_id));
 }
 
 function ensureDefaultWindow() {
@@ -5409,6 +5827,152 @@ async function openGuide(win) {
 
 function closeGuide() {
   guideState.visible = false;
+}
+
+function emptyFavoriteForm(row = {}) {
+  return {
+    id: row.id || null,
+    title: row.title || '',
+    url: row.url || '',
+    icon_url: row.icon_url || '',
+    icon_file_id: row.icon_file_id || null,
+    sort: row.sort || 0,
+  };
+}
+
+async function loadFavorites(page = favoriteState.pagination.page || 1) {
+  if (!isLoggedIn.value) {
+    favoriteState.items = [];
+    favoriteState.pagination.total = 0;
+    return;
+  }
+
+  favoriteState.loading = true;
+  favoriteState.message = '';
+  try {
+    const data = await fetchFavorites({
+      ...favoriteState.filters,
+      page,
+      page_size: favoriteState.pagination.page_size,
+    });
+    favoriteState.items = data.items || [];
+    favoriteState.pagination = {
+      ...favoriteState.pagination,
+      ...(data.pagination || {}),
+      page,
+    };
+  } catch (error) {
+    favoriteState.message = error.message;
+  } finally {
+    favoriteState.loading = false;
+  }
+}
+
+function openFavoriteDialog(row = null) {
+  favoriteState.editing = emptyFavoriteForm(row || {});
+  favoriteState.message = '';
+  favoriteState.dialogVisible = true;
+}
+
+function closeFavoriteDialog() {
+  favoriteState.dialogVisible = false;
+}
+
+async function saveFavoriteItem() {
+  if (favoriteState.loading) {
+    return;
+  }
+
+  favoriteState.loading = true;
+  favoriteState.message = '';
+  try {
+    const data = await saveFavorite({
+      ...favoriteState.editing,
+      sort: Number(favoriteState.editing.sort || 0),
+    });
+    favoriteState.items = data.items || [];
+    favoriteState.pagination = {
+      ...favoriteState.pagination,
+      ...(data.pagination || {}),
+    };
+    favoriteState.dialogVisible = false;
+    favoriteState.message = '已保存';
+  } catch (error) {
+    favoriteState.message = error.message;
+  } finally {
+    favoriteState.loading = false;
+  }
+}
+
+async function deleteFavoriteItem(row) {
+  if (!row?.id || !window.confirm(`确认删除收藏「${row.title || row.url}」？`)) {
+    return;
+  }
+
+  favoriteState.loading = true;
+  favoriteState.message = '';
+  try {
+    const data = await deleteFavorite(row.id);
+    favoriteState.items = data.items || [];
+    favoriteState.pagination = {
+      ...favoriteState.pagination,
+      ...(data.pagination || {}),
+    };
+    await loadDesktopShortcuts();
+    favoriteState.message = '已删除';
+  } catch (error) {
+    favoriteState.message = error.message;
+  } finally {
+    favoriteState.loading = false;
+  }
+}
+
+function openFavoriteLink(row) {
+  if (row?.url) {
+    window.open(row.url, '_blank', 'noopener,noreferrer');
+  }
+}
+
+function isFavoriteDesktop(id) {
+  return customDesktopShortcutItems.value.some(item => item.type === 'favorite' && Number(item.ref_id) === Number(id));
+}
+
+async function toggleFavoriteDesktop(row) {
+  if (!row?.id || desktopLauncherState.loading) {
+    return;
+  }
+
+  const items = desktopShortcutPayloadItems.value.slice();
+  const index = items.findIndex(item => item.type === 'favorite' && Number(item.ref_id) === Number(row.id));
+  if (index >= 0) {
+    items.splice(index, 1);
+  } else {
+    items.push({ type: 'favorite', ref_id: Number(row.id) });
+  }
+  await persistDesktopShortcuts(items);
+}
+
+function chooseFavoriteIcon() {
+  favoriteIconInputRef.value?.click();
+}
+
+async function handleFavoriteIconSelected(event) {
+  const file = event.target?.files?.[0];
+  if (!file) {
+    return;
+  }
+  favoriteState.iconUploading = true;
+  favoriteState.message = '';
+  try {
+    const data = await uploadFavoriteIcon(file);
+    favoriteState.editing.icon_url = data.url || '';
+    favoriteState.editing.icon_file_id = data.file_id || null;
+  } catch (error) {
+    favoriteState.message = error.message;
+  } finally {
+    favoriteState.iconUploading = false;
+    event.target.value = '';
+  }
 }
 
 function fallbackGuideContent(win) {
@@ -5652,6 +6216,9 @@ function openModuleWindow(module, options = {}) {
     if (module.id === 'message') {
       loadMessages(messageState.pagination.page || 1);
     }
+    if (module.id === 'favorite') {
+      loadFavorites(favoriteState.pagination.page || 1);
+    }
     if (isPracticeModule(module.id)) {
       loadPracticePanel(module.id, existing.panel);
     }
@@ -5688,6 +6255,9 @@ function openModuleWindow(module, options = {}) {
   }
   if (module.id === 'message') {
     loadMessages(1);
+  }
+  if (module.id === 'favorite') {
+    loadFavorites(1);
   }
 }
 
@@ -5882,6 +6452,9 @@ function activateWindowPanel(win, panel) {
   if (win.module.id === 'file' && panel === 'fileManage') {
     loadFiles();
   }
+  if (win.module.id === 'favorite') {
+    loadFavorites();
+  }
   if (win.module.id === 'config' && panel === 'operationGuides') {
     loadGuideAdminItems();
   }
@@ -5982,6 +6555,7 @@ async function refreshAuthenticatedSession(resetWorkspace = false) {
 
   await load();
   await loadProfile();
+  await loadDesktopShortcuts();
   await loadProxy();
   await loadMessageSummary();
   await loadSwitchableAccounts();
@@ -6095,6 +6669,9 @@ async function submitLogout() {
     resetMessageState();
     switchAccountState.items = [];
     switchAccountState.message = '';
+    desktopLauncherState.items = [];
+    desktopLauncherState.message = '';
+    resetFavoriteState();
     openWindows.splice(0);
     focusedWindowId.value = null;
     await load();
@@ -6163,6 +6740,10 @@ function emptyMenu() {
 function applyMenusData(data) {
   adminState.menus = normalizeMenuTree(data.menus || []);
   adminState.menu.items = data.items || [];
+  nextTick(() => {
+    filterMenuTree();
+    setMenuTreeExpanded(adminState.menu.expanded);
+  });
 }
 
 function normalizeMenuTree(items, depth = 1) {
@@ -6204,6 +6785,35 @@ function menuNodeTypeText(type) {
     button: '按钮',
   };
   return names[type] || type || '-';
+}
+
+function filterMenuTree() {
+  menuTreeRef.value?.filter(adminState.menu.keyword || '');
+}
+
+function filterMenuNode(value, data) {
+  const keywordValue = String(value || '').trim().toLowerCase();
+  if (!keywordValue) {
+    return true;
+  }
+  return [
+    data.name,
+    data.code,
+    data.path,
+    data.url,
+    menuNodeTypeText(data.type),
+    data.platform,
+  ].filter(Boolean).some(item => String(item).toLowerCase().includes(keywordValue));
+}
+
+function setMenuTreeExpanded(expanded) {
+  adminState.menu.expanded = expanded;
+  nextTick(() => {
+    const nodes = menuTreeRef.value?.store?.nodesMap || {};
+    Object.values(nodes).forEach((node) => {
+      node.expanded = expanded;
+    });
+  });
 }
 
 function selectMenu(row) {
@@ -6436,6 +7046,34 @@ async function resetUserPassword() {
     userAdminState.message = error.message;
   } finally {
     userAdminState.loading = false;
+  }
+}
+
+async function clearCurrentTestData() {
+  if (permissionState.context.role_type !== 'super_admin' || dataManageState.clearLoading) {
+    return;
+  }
+  const confirmation = window.prompt('该操作会清除测试数据。请输入 CLEAR_TEST_DATA 确认：');
+  if (confirmation !== 'CLEAR_TEST_DATA') {
+    dataManageState.message = '已取消或确认文本不正确';
+    return;
+  }
+
+  dataManageState.clearLoading = true;
+  dataManageState.message = '';
+  try {
+    const data = await clearTestData({ confirmation });
+    const affectedTotal = Object.values(data.affected || {}).reduce((sum, value) => sum + Number(value || 0), 0);
+    dataManageState.message = `已清除测试数据，影响 ${affectedTotal} 行`;
+    await Promise.all([
+      loadAdminFoundation(),
+      loadDesktopShortcuts(),
+      loadFavorites(1),
+    ]);
+  } catch (error) {
+    dataManageState.message = error.message;
+  } finally {
+    dataManageState.clearLoading = false;
   }
 }
 
@@ -7573,7 +8211,6 @@ function emptyPlanForm() {
     dep_id: null,
     profession_id: null,
     credit: '',
-    student_count: '',
     score_rule: 'average',
     content: '',
     status: 'wait',
@@ -10389,7 +11026,6 @@ async function savePlan() {
       profession_id: internshipState.planForm.profession_id,
       semester: '',
       credit: internshipState.planForm.credit || null,
-      student_count: internshipState.planForm.student_count || 0,
       score_rule: internshipState.planForm.score_rule,
       plan_content: {
         content: internshipState.planForm.content,
@@ -10682,6 +11318,8 @@ function resetAdminState() {
   adminState.menus = [];
   adminState.menu.items = [];
   adminState.menu.editing = emptyMenu();
+  adminState.menu.keyword = '';
+  adminState.menu.expanded = true;
   adminState.menu.message = '';
   adminState.roleMenus.role_id = null;
   adminState.roleMenus.menu_ids = [];
@@ -10740,7 +11378,22 @@ function resetAdminState() {
   fileState.message = '';
   fileState.pagination.page = 1;
   fileState.pagination.total = 0;
+  resetFavoriteState();
+  dataManageState.clearLoading = false;
+  dataManageState.message = '';
   resetInternshipState();
+}
+
+function resetFavoriteState() {
+  favoriteState.items = [];
+  favoriteState.filters.keyword = '';
+  favoriteState.pagination.page = 1;
+  favoriteState.pagination.total = 0;
+  favoriteState.loading = false;
+  favoriteState.iconUploading = false;
+  favoriteState.message = '';
+  favoriteState.dialogVisible = false;
+  favoriteState.editing = emptyFavoriteForm();
 }
 
 function resetInternshipState() {
@@ -11138,6 +11791,9 @@ watch(openWindows, (windows) => {
   if (windows.some(win => win.panel === 'fileManage')) {
     loadFiles(fileState.pagination.page);
   }
+  if (windows.some(win => win.module.id === 'favorite')) {
+    loadFavorites(favoriteState.pagination.page);
+  }
   if (windows.some(win => win.module.id === 'log')) {
     loadLogs(logState.pagination.page);
   }
@@ -11156,9 +11812,12 @@ watch(() => permissionState.context.account_id, (accountId) => {
     loadInternshipFoundation();
     loadMessageSummary();
     loadSwitchableAccounts();
+    loadDesktopShortcuts();
   } else {
     resetMessageState();
     switchAccountState.items = [];
+    desktopLauncherState.items = [];
+    favoriteState.items = [];
   }
 });
 
@@ -11181,6 +11840,9 @@ function handleAuthExpired(event) {
   focusedWindowId.value = null;
   switchAccountState.items = [];
   switchAccountState.message = '';
+  desktopLauncherState.items = [];
+  desktopLauncherState.message = '';
+  resetFavoriteState();
   resetMessageState();
   resetInternshipState();
   window.location.hash = '';
@@ -11196,6 +11858,7 @@ onMounted(async () => {
   await consumeUrlPasskey();
   await load();
   await loadProfile();
+  await loadDesktopShortcuts();
   await loadProxy();
   await loadMessageSummary();
   await loadSwitchableAccounts();
