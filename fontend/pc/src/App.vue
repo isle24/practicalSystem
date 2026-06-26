@@ -4542,7 +4542,7 @@ function canShowModule(module) {
     return isLoggedIn.value;
   }
   if (module.id === 'userManage') {
-    return canViewUserAdmin.value;
+    return canViewUserAdmin.value && hasPermission(module.viewPermission);
   }
   if (!hasPermission(module.viewPermission)) {
     return false;
@@ -5778,9 +5778,28 @@ function normalizeShortcutItems(items) {
     .filter(item => (item.type === 'module' && item.key) || (item.type === 'favorite' && item.ref_id));
 }
 
+function defaultWindowModule() {
+  return defaultDesktopModuleIds
+    .map(id => visibleModules.value.find(module => module.id === id))
+    .find(Boolean)
+    || visibleModules.value.find(module => !['profile', 'favorite'].includes(module.id))
+    || null;
+}
+
+function isPrimaryWorkWindow(win) {
+  return win?.module?.id && !['profile', 'favorite', 'message'].includes(win.module.id);
+}
+
 function ensureDefaultWindow() {
-  const defaultModule = visibleModules.value.find(item => item.id !== 'profile');
+  const defaultModule = defaultWindowModule();
+  if (!defaultModule) {
+    return;
+  }
   if (!openWindows.length && defaultModule) {
+    openModule(defaultModule);
+    return;
+  }
+  if (!openWindows.some(isPrimaryWorkWindow) && isPrimaryWorkWindow({ module: defaultModule })) {
     openModule(defaultModule);
   }
 }
