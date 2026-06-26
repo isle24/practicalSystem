@@ -520,7 +520,7 @@
               <div class="gps-coordinate-grid">
                 <span>经度 {{ coordinateText(internship.forms.sign.longitude) }}</span>
                 <span>纬度 {{ coordinateText(internship.forms.sign.latitude) }}</span>
-                <span>精度 {{ accuracyText }}</span>
+                <span>精度 {{ signAccuracyText }}</span>
               </div>
               <small v-if="internship.forms.sign.gps_error" class="gps-error">{{ internship.forms.sign.gps_error }}</small>
             </div>
@@ -1354,18 +1354,30 @@
           </select>
         </label>
         <template v-if="practiceExecutionDialog.execution === 'sign_in'">
-          <label>
-            <span>位置</span>
-            <input v-model="practiceExecutionDialog.form.location" placeholder="GPS 定位或现场位置">
-          </label>
-          <label>
-            <span>经度</span>
-            <input v-model="practiceExecutionDialog.form.longitude" type="number">
-          </label>
-          <label>
-            <span>纬度</span>
-            <input v-model="practiceExecutionDialog.form.latitude" type="number">
-          </label>
+          <div class="gps-sign-card">
+            <div class="gps-sign-head">
+              <span>
+                <strong>{{ practiceGpsTitle }}</strong>
+                <small>{{ practiceExecutionDialog.form.location || practiceGpsHint }}</small>
+              </span>
+              <button type="button" :disabled="practiceExecutionDialog.form.locating" @click="locatePracticePosition">
+                {{ practiceExecutionDialog.form.locating ? '定位中' : '重新定位' }}
+              </button>
+            </div>
+            <div class="gps-map-preview">
+              <img v-if="practiceMapUrl" :src="practiceMapUrl" alt="签到定位地图">
+              <div v-else>
+                <MapPin :size="24" />
+                <span>获取 GPS 后显示地图</span>
+              </div>
+            </div>
+            <div class="gps-coordinate-grid">
+              <span>经度 {{ coordinateText(practiceExecutionDialog.form.longitude) }}</span>
+              <span>纬度 {{ coordinateText(practiceExecutionDialog.form.latitude) }}</span>
+              <span>精度 {{ practiceAccuracyText }}</span>
+            </div>
+            <small v-if="practiceExecutionDialog.form.gps_error" class="gps-error">{{ practiceExecutionDialog.form.gps_error }}</small>
+          </div>
         </template>
         <template v-else>
           <label>
@@ -1387,7 +1399,7 @@
         </label>
         <div class="sheet-actions">
           <button type="button" @click="closePracticeExecutionDialog">取消</button>
-          <button type="button" :disabled="practiceModule(practiceExecutionDialog.module).loading" @click="submitPracticeExecution">
+          <button type="button" :disabled="practiceModule(practiceExecutionDialog.module).loading || (practiceExecutionDialog.execution === 'sign_in' && !practiceGpsReady)" @click="submitPracticeExecution">
             提交
           </button>
         </div>
@@ -1833,6 +1845,10 @@ const practiceExecutionDialog = reactive({
     location: '',
     longitude: '',
     latitude: '',
+    accuracy: null,
+    located_at: '',
+    locating: false,
+    gps_error: '',
     remark: '',
   },
 });
@@ -1924,18 +1940,27 @@ const canReviewInternshipPlan = computed(() => hasPermission('internship:plan') 
 const signGpsReady = computed(() => hasCoordinateValue(internship.forms.sign.longitude) && hasCoordinateValue(internship.forms.sign.latitude));
 const signGpsTitle = computed(() => (signGpsReady.value ? '已获取 GPS 定位' : '等待 GPS 定位'));
 const signGpsHint = computed(() => (signGpsReady.value ? '坐标来自当前设备定位' : '签到前请先授权并获取当前位置'));
-const signMapUrl = computed(() => {
-  if (!signGpsReady.value) {
+const signMapUrl = computed(() => coordinateMapUrl(internship.forms.sign.longitude, internship.forms.sign.latitude, signGpsReady.value));
+const practiceGpsReady = computed(() => hasCoordinateValue(practiceExecutionDialog.form.longitude) && hasCoordinateValue(practiceExecutionDialog.form.latitude));
+const practiceGpsTitle = computed(() => (practiceGpsReady.value ? '已获取 GPS 定位' : '等待 GPS 定位'));
+const practiceGpsHint = computed(() => (practiceGpsReady.value ? '坐标来自当前设备定位' : '签到前请先授权并获取当前位置'));
+const practiceMapUrl = computed(() => coordinateMapUrl(practiceExecutionDialog.form.longitude, practiceExecutionDialog.form.latitude, practiceGpsReady.value));
+const signAccuracyText = computed(() => accuracyDisplayText(internship.forms.sign.accuracy));
+const practiceAccuracyText = computed(() => accuracyDisplayText(practiceExecutionDialog.form.accuracy));
+
+function coordinateMapUrl(longitudeValue, latitudeValue, ready) {
+  if (!ready) {
     return '';
   }
-  const longitude = Number(internship.forms.sign.longitude).toFixed(6);
-  const latitude = Number(internship.forms.sign.latitude).toFixed(6);
+  const longitude = Number(longitudeValue).toFixed(6);
+  const latitude = Number(latitudeValue).toFixed(6);
   return `https://staticmap.openstreetmap.de/staticmap.php?center=${latitude},${longitude}&zoom=16&size=640x300&markers=${latitude},${longitude},red-pushpin`;
-});
-const accuracyText = computed(() => {
-  const accuracy = Number(internship.forms.sign.accuracy || 0);
+}
+
+function accuracyDisplayText(value) {
+  const accuracy = Number(value || 0);
   return accuracy > 0 ? `${Math.round(accuracy)} 米` : '-';
-});
+}
 const roleNameMap = {
   super_admin: '系统管理员',
   school_admin: '学校管理员',
@@ -3919,8 +3944,15 @@ function openPracticeExecutionDialog(module, panelKey, row = null, context = {})
     location: row?.location || '',
     longitude: row?.longitude || '',
     latitude: row?.latitude || '',
+    accuracy: row?.accuracy || null,
+    located_at: '',
+    locating: false,
+    gps_error: '',
     remark: row?.remark || '',
   };
+  if (practiceExecutionDialog.execution === 'sign_in' && !practiceGpsReady.value) {
+    locatePracticePosition();
+  }
 }
 
 function closePracticeExecutionDialog() {
@@ -3938,6 +3970,11 @@ async function submitPracticeExecution() {
   }
   if (execution !== 'sign_in' && !String(practiceExecutionDialog.form.content || '').trim()) {
     state.message = '请填写内容';
+    showToast(state.message);
+    return;
+  }
+  if (execution === 'sign_in' && !practiceGpsReady.value) {
+    state.message = '请先获取 GPS 定位后再签到';
     showToast(state.message);
     return;
   }
@@ -4888,12 +4925,20 @@ function hasCoordinateValue(value) {
 }
 
 function resetSignPosition() {
-  internship.forms.sign.location = '';
-  internship.forms.sign.longitude = null;
-  internship.forms.sign.latitude = null;
-  internship.forms.sign.accuracy = null;
-  internship.forms.sign.located_at = '';
-  internship.forms.sign.gps_error = '';
+  resetGpsForm(internship.forms.sign);
+}
+
+function resetPracticePosition() {
+  resetGpsForm(practiceExecutionDialog.form);
+}
+
+function resetGpsForm(form) {
+  form.location = '';
+  form.longitude = null;
+  form.latitude = null;
+  form.accuracy = null;
+  form.located_at = '';
+  form.gps_error = '';
 }
 
 function geolocationErrorText(error) {
@@ -4913,14 +4958,22 @@ function geolocationErrorText(error) {
 }
 
 async function locateSignPosition() {
+  await locateGpsPosition(internship.forms.sign, resetSignPosition);
+}
+
+async function locatePracticePosition() {
+  await locateGpsPosition(practiceExecutionDialog.form, resetPracticePosition);
+}
+
+async function locateGpsPosition(form, resetPosition) {
   if (!navigator.geolocation) {
-    internship.forms.sign.gps_error = '当前浏览器不支持 GPS 定位';
-    showToast(internship.forms.sign.gps_error);
+    form.gps_error = '当前浏览器不支持 GPS 定位';
+    showToast(form.gps_error);
     return;
   }
 
-  internship.forms.sign.locating = true;
-  internship.forms.sign.gps_error = '';
+  form.locating = true;
+  form.gps_error = '';
   try {
     const position = await new Promise((resolve, reject) => {
       navigator.geolocation.getCurrentPosition(resolve, reject, {
@@ -4930,17 +4983,17 @@ async function locateSignPosition() {
       });
     });
     const { latitude, longitude, accuracy } = position.coords;
-    internship.forms.sign.latitude = Number(latitude.toFixed(6));
-    internship.forms.sign.longitude = Number(longitude.toFixed(6));
-    internship.forms.sign.accuracy = accuracy ? Math.round(accuracy) : null;
-    internship.forms.sign.located_at = new Date().toISOString();
-    internship.forms.sign.location = `GPS ${coordinateText(internship.forms.sign.latitude)}, ${coordinateText(internship.forms.sign.longitude)}`;
+    form.latitude = Number(latitude.toFixed(6));
+    form.longitude = Number(longitude.toFixed(6));
+    form.accuracy = accuracy ? Math.round(accuracy) : null;
+    form.located_at = new Date().toISOString();
+    form.location = `GPS ${coordinateText(form.latitude)}, ${coordinateText(form.longitude)}`;
   } catch (error) {
-    resetSignPosition();
-    internship.forms.sign.gps_error = geolocationErrorText(error);
-    showToast(internship.forms.sign.gps_error);
+    resetPosition();
+    form.gps_error = geolocationErrorText(error);
+    showToast(form.gps_error);
   } finally {
-    internship.forms.sign.locating = false;
+    form.locating = false;
   }
 }
 
