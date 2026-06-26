@@ -155,7 +155,6 @@
         @focus="focusWindow(win.id)"
         @minimize="minimizeWindow(win.id)"
         @close="closeWindow(win.id)"
-        @panel="setWindowPanel(win.id, $event)"
       >
         <div v-if="win.module.id === 'profile'" class="profile-app">
           <section class="profile-content">
@@ -336,9 +335,7 @@
                 :data-window-panel="item.key"
                 class="side-item"
                 :class="{ active: win.panel === item.key }"
-                @pointerdown="activateWindowPanel(win, item.key)"
-                @mousedown="activateWindowPanel(win, item.key)"
-                @click="activateWindowPanel(win, item.key)"
+                @click.prevent.stop="activateWindowPanel(win, item.key)"
               >
                 <span />
                 {{ item.name }}
@@ -6580,11 +6577,6 @@ function clearNavigationHash() {
 function isModuleFocused(moduleId) {
   const focused = openWindows.find(win => win.id === focusedWindowId.value);
   return focused?.module.id === moduleId && !focused.minimized;
-}
-
-function setWindowPanel(windowId, panel) {
-  const win = openWindows.find(item => item.id === windowId);
-  activateWindowPanel(win, panel);
 }
 
 function activateWindowPanel(win, panel) {

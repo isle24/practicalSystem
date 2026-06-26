@@ -5,9 +5,6 @@
     :class="{ dragging: interaction?.type === 'drag', resizing: interaction?.type === 'resize' }"
     :style="windowStyle"
     @mousedown.self="emit('focus')"
-    @pointerdown.capture="handlePanelEvent"
-    @mousedown.capture="handlePanelEvent"
-    @click.capture="handlePanelEvent"
   >
     <header class="window-title" @mousedown="startDrag">
       <div class="window-name">
@@ -49,7 +46,7 @@ const props = defineProps({
   initialHeight: { type: Number, default: 680 },
 });
 
-const emit = defineEmits(['close', 'focus', 'minimize', 'panel']);
+const emit = defineEmits(['close', 'focus', 'minimize']);
 const handles = ['n', 'e', 's', 'w', 'ne', 'nw', 'se', 'sw'];
 const windowRef = ref(null);
 const frame = reactive({
@@ -204,16 +201,6 @@ function toggleMaximize() {
     height: props.initialHeight,
   });
   maximized.value = false;
-}
-
-function handlePanelEvent(event) {
-  const element = event.target instanceof Element ? event.target : null;
-  const target = element?.closest('[data-window-panel]');
-  if (!target) {
-    return;
-  }
-
-  emit('panel', target.dataset.windowPanel);
 }
 
 function fitToWorkspace() {
