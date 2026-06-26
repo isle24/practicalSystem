@@ -6952,7 +6952,7 @@ function menuNodeTypeText(type) {
 }
 
 function filterMenuTree() {
-  menuTreeRef.value?.filter(adminState.menu.keyword || '');
+  activeMenuTree()?.filter(adminState.menu.keyword || '');
 }
 
 function filterMenuNode(value, data) {
@@ -6981,6 +6981,11 @@ function menuTreeNodeIds(nodes) {
     node.id,
     ...menuTreeNodeIds(node.children || []),
   ]).filter(Boolean);
+}
+
+function activeMenuTree() {
+  const tree = menuTreeRef.value;
+  return Array.isArray(tree) ? tree.at(-1) : tree;
 }
 
 function selectMenu(row) {
