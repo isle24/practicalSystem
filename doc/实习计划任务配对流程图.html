@@ -1,0 +1,380 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>实习计划任务配对流程图</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: #eef3f8;
+      color: #172033;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
+    }
+    .page {
+      width: min(1680px, 100%);
+      margin: 0 auto;
+      padding: 28px;
+    }
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      gap: 18px;
+      margin-bottom: 18px;
+      border-bottom: 1px solid #cfd8e3;
+      padding-bottom: 14px;
+    }
+    h1 {
+      margin: 0;
+      font-size: 30px;
+      letter-spacing: 0;
+    }
+    .caption {
+      max-width: 760px;
+      color: #526173;
+      font-size: 14px;
+      line-height: 1.55;
+      text-align: right;
+    }
+    .scroll {
+      overflow-x: auto;
+      padding-bottom: 12px;
+    }
+    .map {
+      min-width: 1580px;
+      padding: 24px;
+      border: 1px solid #d6dee9;
+      border-radius: 8px;
+      background:
+        linear-gradient(#eef3f8 39px, transparent 40px),
+        linear-gradient(90deg, #eef3f8 39px, transparent 40px),
+        #f9fbfd;
+      background-size: 40px 40px;
+      box-shadow: 0 18px 45px rgba(23, 32, 51, .08);
+    }
+    .topline,
+    .bottomline {
+      display: grid;
+      grid-template-columns: 300px 60px 300px 60px 300px;
+      align-items: center;
+      justify-content: center;
+      gap: 0;
+    }
+    .task-flow {
+      display: grid;
+      grid-template-columns: 240px 52px 220px 52px 240px 52px 220px 52px 240px;
+      align-items: center;
+      gap: 0;
+      margin: 16px 0;
+      padding: 14px;
+      border: 1px solid #d6dee9;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, .86);
+    }
+    .branch-title {
+      margin: 24px 0 10px;
+      text-align: center;
+      color: #334155;
+      font-size: 15px;
+      font-weight: 800;
+    }
+    .arrow {
+      color: #718096;
+      font-size: 26px;
+      font-weight: 900;
+      text-align: center;
+    }
+    .down {
+      width: 2px;
+      height: 28px;
+      margin: 8px auto 4px;
+      background: #94a3b8;
+      position: relative;
+    }
+    .down::after {
+      content: "";
+      position: absolute;
+      left: -5px;
+      bottom: -1px;
+      width: 12px;
+      height: 12px;
+      border-right: 3px solid #94a3b8;
+      border-bottom: 3px solid #94a3b8;
+      transform: rotate(45deg);
+    }
+    .node {
+      min-height: 118px;
+      padding: 14px 15px;
+      border: 2px solid #d6dee9;
+      border-radius: 8px;
+      background: #fff;
+      box-shadow: 0 12px 28px rgba(23, 32, 51, .08);
+    }
+    .node strong {
+      display: block;
+      margin-bottom: 6px;
+      color: #102033;
+      font-size: 16px;
+      line-height: 1.35;
+    }
+    .node small {
+      display: block;
+      color: #5c6b7a;
+      font-size: 12px;
+      line-height: 1.45;
+    }
+    .plan { border-color: #2563eb; background: #eff6ff; }
+    .split { border-color: #0f766e; background: #ecfdf5; }
+    .check { border-color: #475569; background: #f8fafc; }
+    .task { border-color: #0f766e; background: #f0fdfa; }
+    .class { border-color: #2563eb; background: #eff6ff; }
+    .student { border-color: #7c3aed; background: #f5f3ff; }
+    .pair { border-color: #b45309; background: #fffbeb; }
+    .result { border-color: #be123c; background: #fff1f2; }
+    .archive { border-color: #475569; background: #f8fafc; }
+    .chip-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+      margin-top: 8px;
+    }
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      padding: 3px 7px;
+      border-radius: 999px;
+      background: #eef2ff;
+      color: #3730a3;
+      font-size: 12px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+    .badge {
+      display: inline-flex;
+      margin-bottom: 8px;
+      padding: 4px 9px;
+      border-radius: 999px;
+      background: #172033;
+      color: #fff;
+      font-size: 12px;
+      font-weight: 800;
+    }
+    .task-a .badge { background: #0f766e; }
+    .task-b .badge { background: #2563eb; }
+    .task-c .badge { background: #7c3aed; }
+    .summary {
+      min-width: 1580px;
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 14px;
+    }
+    .rule {
+      padding: 13px 14px;
+      border: 1px solid #d6dee9;
+      border-radius: 8px;
+      background: #fff;
+      box-shadow: 0 12px 28px rgba(23, 32, 51, .05);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    .rule strong {
+      display: block;
+      margin-bottom: 4px;
+      color: #102033;
+      font-size: 14px;
+    }
+    .section-title {
+      margin: 24px 0 12px;
+      font-size: 20px;
+      letter-spacing: 0;
+    }
+    @media print {
+      body { background: #fff; }
+      .page { padding: 10px; }
+      .scroll { overflow: visible; }
+      .map,
+      .summary { min-width: auto; }
+      .node,
+      .rule,
+      .map { box-shadow: none; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header>
+      <h1>成都锦城学院实习计划任务配对流程图</h1>
+      <div class="caption">上面是主干，下面是任务分支。每条任务分支都独立走完“任务 → 班级 → 多学生 → 多条 pair → 材料成绩”，避免把同一老师的不同任务混在一起。</div>
+    </header>
+
+    <div class="scroll">
+      <section class="map" aria-label="实习计划任务配对流程图">
+        <div class="topline">
+          <div class="node plan">
+            <strong>1. 实习课程计划</strong>
+            <small>从教务系统抽取或手动补录。按届次、学院、专业、课程、学分、计划人数生成。</small>
+          </div>
+          <div class="arrow">→</div>
+          <div class="node split">
+            <strong>2. 拆分实习任务</strong>
+            <small>一个计划可拆分多个任务。每个任务必须有唯一负责老师、时间、地点和批次。</small>
+          </div>
+          <div class="arrow">→</div>
+          <div class="node check">
+            <strong>3. 任务规则校验</strong>
+            <small>同一老师可承担多个任务，但任务时间不能冲突；任务编号在计划下唯一。</small>
+          </div>
+        </div>
+
+        <div class="down"></div>
+        <div class="branch-title">任务分支：每个任务都是独立业务边界</div>
+
+        <div class="task-flow task-a">
+          <div class="node task">
+            <span class="badge">任务 A</span>
+            <strong>张老师 / 第一批</strong>
+            <small>时间段 A，地点 A。该任务只由张老师负责。</small>
+          </div>
+          <div class="arrow">→</div>
+          <div class="node class">
+            <strong>绑定班级</strong>
+            <small>1 班 + 2 班写入 internship_task_class。</small>
+            <div class="chip-row">
+              <span class="chip">1 班</span>
+              <span class="chip">2 班</span>
+            </div>
+          </div>
+          <div class="arrow">→</div>
+          <div class="node student">
+            <strong>展开多名学生</strong>
+            <small>系统按班级名单展开，得到 38 名学生。</small>
+            <div class="chip-row">
+              <span class="chip">学生 01</span>
+              <span class="chip">学生 02</span>
+              <span class="chip">...</span>
+              <span class="chip">学生 38</span>
+            </div>
+          </div>
+          <div class="arrow">→</div>
+          <div class="node pair">
+            <strong>生成 38 条 pair</strong>
+            <small>每条记录都有 student_id、teacher_id、arrangement_id。</small>
+          </div>
+          <div class="arrow">→</div>
+          <div class="node result">
+            <strong>材料与成绩独立</strong>
+            <small>任务 A 的签到、日志、报告、审核、成绩只挂任务 A。</small>
+          </div>
+        </div>
+
+        <div class="task-flow task-b">
+          <div class="node task">
+            <span class="badge">任务 B</span>
+            <strong>张老师 / 第二批</strong>
+            <small>时间段 B，地点 B。同一老师的另一个任务。</small>
+          </div>
+          <div class="arrow">→</div>
+          <div class="node class">
+            <strong>绑定班级</strong>
+            <small>3 班写入 internship_task_class。</small>
+            <div class="chip-row">
+              <span class="chip">3 班</span>
+            </div>
+          </div>
+          <div class="arrow">→</div>
+          <div class="node student">
+            <strong>展开多名学生</strong>
+            <small>系统按班级名单展开，得到 24 名学生。</small>
+            <div class="chip-row">
+              <span class="chip">学生 39</span>
+              <span class="chip">学生 40</span>
+              <span class="chip">...</span>
+              <span class="chip">学生 62</span>
+            </div>
+          </div>
+          <div class="arrow">→</div>
+          <div class="node pair">
+            <strong>生成 24 条 pair</strong>
+            <small>任务 B 的 pair 与任务 A 完全分开。</small>
+          </div>
+          <div class="arrow">→</div>
+          <div class="node result">
+            <strong>材料与成绩独立</strong>
+            <small>老师端也必须按任务筛选，不能把 A/B 学生合并。</small>
+          </div>
+        </div>
+
+        <div class="task-flow task-c">
+          <div class="node task">
+            <span class="badge">任务 C</span>
+            <strong>李老师 / 第一批</strong>
+            <small>时间段 C，地点 C。不同老师也遵循同一规则。</small>
+          </div>
+          <div class="arrow">→</div>
+          <div class="node class">
+            <strong>绑定班级</strong>
+            <small>4 班 + 5 班写入 internship_task_class。</small>
+            <div class="chip-row">
+              <span class="chip">4 班</span>
+              <span class="chip">5 班</span>
+            </div>
+          </div>
+          <div class="arrow">→</div>
+          <div class="node student">
+            <strong>展开多名学生</strong>
+            <small>系统按班级名单展开，得到 42 名学生。</small>
+            <div class="chip-row">
+              <span class="chip">学生 63</span>
+              <span class="chip">学生 64</span>
+              <span class="chip">...</span>
+              <span class="chip">学生 104</span>
+            </div>
+          </div>
+          <div class="arrow">→</div>
+          <div class="node pair">
+            <strong>生成 42 条 pair</strong>
+            <small>同一学生在同一任务下只能有一条 active pair。</small>
+          </div>
+          <div class="arrow">→</div>
+          <div class="node result">
+            <strong>材料与成绩独立</strong>
+            <small>课程汇总时再按计划 score_rule 汇总各任务成绩。</small>
+          </div>
+        </div>
+
+        <div class="down"></div>
+        <div class="bottomline">
+          <div class="node archive">
+            <strong>课程成绩汇总</strong>
+            <small>如果学生参与多个任务，成绩按任务分别记录，再按计划规则计算最终成绩。</small>
+          </div>
+          <div class="arrow">→</div>
+          <div class="node archive">
+            <strong>材料归档</strong>
+            <small>按届次、课程、任务、学生归档，支持抽检和完整率统计。</small>
+          </div>
+          <div class="arrow">→</div>
+          <div class="node archive">
+            <strong>历史追溯</strong>
+            <small>任务变更保留旧任务、旧 pair、旧审核记录，再重新确认绑定。</small>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <h2 class="section-title">关键约束</h2>
+    <div class="scroll">
+      <section class="summary" aria-label="关键业务规则">
+        <div class="rule"><strong>任务是边界</strong>签到、日志、报告、审核、成绩都必须绑定具体 arrangement_id。</div>
+        <div class="rule"><strong>一任务一老师</strong>每个任务只能有一个负责老师，不能一个任务多个老师。</div>
+        <div class="rule"><strong>一任务多学生</strong>任务可绑定多个班级，展开后每名学生生成一条 pair。</div>
+        <div class="rule"><strong>同老师多任务</strong>同一老师可有多个任务，但时间段必须错开，学生集合必须分开。</div>
+        <div class="rule"><strong>变更留痕</strong>任务、班级、学生范围变更时保留旧历史，不覆盖已执行数据。</div>
+      </section>
+    </div>
+  </main>
+</body>
+</html>

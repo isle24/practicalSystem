@@ -20,3 +20,4 @@ server/public/files/
 .idea/
 .vscode/
 *.log
+test/*

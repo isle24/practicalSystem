@@ -3281,6 +3281,7 @@
               <strong>{{ module.name }}</strong>
             </button>
             <button
+              v-if="module.type !== 'favoriteLink'"
               type="button"
               class="launcher-module-add"
               :class="{ added: isDesktopShortcut(module.id), locked: isDefaultDesktopShortcut(module.id) }"
@@ -4338,7 +4339,7 @@ const moduleSearchKeywords = {
 };
 const defaultDesktopModuleIds = ['internship', 'training', 'lab', 'config'];
 const defaultDesktopModuleIdSet = new Set(defaultDesktopModuleIds);
-const launcherModuleIds = ['internship', 'training', 'lab', 'companyManage', 'config'];
+const launcherModuleIds = modules.map(module => module.id);
 const launcherModuleIdSet = new Set(launcherModuleIds);
 const configSidebarDefinitions = [
   { key: 'userManage', name: '用户管理', permission: 'config:user' },
@@ -4364,7 +4365,7 @@ const visibleModules = computed(() => modules.map(decorateModule).filter(canShow
 const mainEntryModules = computed(() => visibleModules.value.filter(module => launcherModuleIdSet.has(module.id)));
 const globalSearchKeyword = computed(() => keyword.value.trim().toLowerCase());
 const searchCandidateModules = computed(() => {
-  const items = [...mainEntryModules.value];
+  const items = [...visibleModules.value, ...favoriteDesktopShortcuts.value];
   if (isLoggedIn.value) {
     items.push(messageModule);
   }
@@ -4385,7 +4386,32 @@ const visibleDesktopModules = computed(() => {
   const favoriteModules = favoriteDesktopShortcuts.value;
   return [...desktopModules, ...favoriteModules];
 });
-const launcherModules = computed(() => mainEntryModules.value);
+const favoriteLauncherShortcuts = computed(() => {
+  const rows = new Map();
+  favoriteDesktopShortcuts.value.forEach((item) => {
+    if (item.favoriteId) {
+      rows.set(Number(item.favoriteId), item);
+    }
+  });
+  (favoriteState.items || []).forEach((item) => {
+    if (!item?.id || !item.url || rows.has(Number(item.id))) {
+      return;
+    }
+    rows.set(Number(item.id), {
+      id: `favorite-link-${item.id}`,
+      favoriteId: Number(item.id),
+      name: item.title || '收藏网址',
+      icon: Globe2,
+      iconUrl: item.icon_url || '',
+      color: 'blue',
+      scope: item.url,
+      url: item.url,
+      type: 'favoriteLink',
+    });
+  });
+  return Array.from(rows.values());
+});
+const launcherModules = computed(() => [...visibleModules.value, ...favoriteLauncherShortcuts.value]);
 const launcherFilteredModules = computed(() => {
   const value = desktopLauncherState.keyword.trim().toLowerCase();
   if (!value) {
@@ -4397,7 +4423,7 @@ const customDesktopShortcutItems = computed(() => desktopLauncherState.items.fil
 const customDesktopModuleKeys = computed(() => customDesktopShortcutItems.value
   .filter(item => item.type === 'module')
   .map(item => String(item.key || item.item_key || ''))
-  .filter(key => key && !defaultDesktopModuleIdSet.has(key) && launcherModuleIdSet.has(key) && visibleModules.value.some(module => module.id === key)));
+  .filter(key => key && !defaultDesktopModuleIdSet.has(key) && visibleModules.value.some(module => module.id === key)));
 const desktopModuleShortcutKeys = computed(() => {
   const defaults = defaultDesktopModuleIds.filter(key => visibleModules.value.some(module => module.id === key));
   return Array.from(new Set([...defaults, ...customDesktopModuleKeys.value]));
@@ -5744,6 +5770,9 @@ function openModule(module) {
 
 function openDesktopLauncher() {
   desktopLauncherState.visible = true;
+  if (!favoriteState.items.length && !favoriteState.loading) {
+    loadFavorites(1);
+  }
 }
 
 function closeDesktopLauncher() {
@@ -6982,10 +7011,17 @@ function filterMenuNode(value, data) {
   ].filter(Boolean).some(item => String(item).toLowerCase().includes(keywordValue));
 }
 
-function setMenuTreeExpanded(expanded) {
+async function setMenuTreeExpanded(expanded) {
   adminState.menu.expanded = expanded;
+  adminState.menu.keyword = '';
   adminState.menu.expandedKeys = expanded ? menuTreeNodeIds(adminState.menus) : [];
   adminState.menu.treeKey += 1;
+  await nextTick();
+  const tree = activeMenuTree();
+  if (tree?.$el) {
+    tree.$el.scrollTop = 0;
+  }
+  tree?.filter('');
 }
 
 function menuTreeNodeIds(nodes) {
@@ -8169,8 +8205,11 @@ async function loadStats(page = 1) {
   statState.message = '';
   try {
     await loadInternshipFoundation();
+    applyAcademicDefaults(statState.filters, organizationScopeDefaults(statAcademicOptions()));
+    normalizeStatCascade();
     if (isPracticeScoreSheetReport()) {
       await loadPracticeFoundation(statState.filters.module_type || 'training');
+      applyAcademicDefaults(statState.filters, organizationScopeDefaults(statAcademicOptions()));
       normalizeStatCascade();
     }
     const data = await fetchInternshipStats(statQueryParams(page));
@@ -8223,6 +8262,8 @@ function resetStatFilters() {
     academic_year: '',
     keyword: '',
   });
+  applyAcademicDefaults(statState.filters, organizationScopeDefaults(statAcademicOptions()));
+  normalizeStatCascade();
   loadStats(1);
 }
 
@@ -9127,7 +9168,12 @@ function setPracticeFilter(module, panel, event) {
 }
 
 function resetPracticeFilters(module, panel) {
-  practiceModuleState(module).filters[panel] = emptyPracticeFilters();
+  const state = practiceModuleState(module);
+  state.filters[panel] = {
+    ...emptyPracticeFilters(),
+    ...organizationScopeDefaults(state.options),
+  };
+  normalizeFilterCascade(state.filters[panel], state.options);
   loadPracticePanel(module, panel, 1);
 }
 
@@ -9148,6 +9194,11 @@ async function loadPracticeFoundation(module) {
     ...emptyPracticeOptions(),
     ...(options || {}),
   };
+  const defaults = organizationScopeDefaults(state.options);
+  Object.keys(state.filters).forEach((panel) => {
+    applyAcademicDefaults(state.filters[panel], defaults);
+    normalizeFilterCascade(state.filters[panel], state.options);
+  });
 }
 
 async function loadPracticePanel(module, panel = 'overview', page = 1) {
@@ -9187,8 +9238,11 @@ function openPracticeDialog(module, panel, row = null) {
     if (isPracticeExecutionPanel(panel) || panel === 'scores') {
       state.form.project_id = state.options.projects[0]?.id || null;
     } else {
-      state.form.grade_id = state.options.grades[0]?.grade_id || null;
-      state.form.dep_id = state.options.departments[0]?.dep_id || null;
+      const defaults = organizationScopeDefaults(state.options);
+      state.form.grade_id = defaults.grade_id || currentGradeId(state.options) || null;
+      state.form.dep_id = defaults.dep_id || state.options.departments[0]?.dep_id || null;
+      state.form.profession_id = defaults.profession_id || null;
+      state.form.class_id = defaults.class_id || null;
       state.form.plan_id = practiceNeedsPlan(panel) ? state.options.plans[0]?.id || null : null;
     }
   }
@@ -9644,7 +9698,16 @@ function filterAcademicDepartments(options = {}, values = {}) {
   if (!depIds.size) {
     return departments;
   }
-  return departments.filter(item => depIds.has(String(item.dep_id)));
+
+  const filtered = departments.filter(item => depIds.has(String(item.dep_id)));
+  if (hasFilterValue(values.dep_id)) {
+    const selected = departments.find(item => sameFilterValue(item.dep_id, values.dep_id));
+    if (selected && !filtered.some(item => sameFilterValue(item.dep_id, selected.dep_id))) {
+      return [selected, ...filtered];
+    }
+  }
+
+  return filtered;
 }
 
 function findSelectedPlan(values = {}, options = {}) {
@@ -9704,7 +9767,7 @@ function normalizeFilterCascade(values = {}, options = {}, changedKey = '') {
     values.dep_id = selectedProfession.dep_id || values.dep_id || '';
   }
 
-  const departments = filterAcademicDepartments(options, values);
+  const departments = options.departments || [];
   if (hasFilterValue(values.dep_id) && departments.length && !departments.some(item => sameFilterValue(item.dep_id, values.dep_id))) {
     values.dep_id = '';
     values.profession_id = '';
@@ -9775,6 +9838,7 @@ async function handleStatFilterChange(key) {
   if (key === 'module_type') {
     statState.filters.plan_id = '';
     await loadPracticeFoundation(statState.filters.module_type || 'training');
+    applyAcademicDefaults(statState.filters, organizationScopeDefaults(statAcademicOptions()));
   }
 
   normalizeStatCascade(key);
@@ -10187,20 +10251,10 @@ async function handleInternshipHashAction(listKey, action, id) {
 
 function defaultScopedFilters() {
   const filters = emptyInternshipFilters();
-  const roleType = permissionState.context.role_type;
-  const scopes = permissionState.context.organization_scopes || [];
-  const firstScope = scopes.find(item => item.dep_id || item.profession_id) || {};
-
-  if (roleType === 'college_admin') {
-    filters.dep_id = firstScope.dep_id ? Number(firstScope.dep_id) : internshipState.options.departments[0]?.dep_id || '';
-  }
-  if (roleType === 'profession_admin') {
-    filters.profession_id = firstScope.profession_id ? Number(firstScope.profession_id) : internshipState.options.professions[0]?.profession_id || '';
-    const profession = internshipState.options.professions.find(item => Number(item.profession_id) === Number(filters.profession_id || 0)) || {};
-    filters.dep_id = firstScope.dep_id ? Number(firstScope.dep_id) : profession.dep_id || '';
-    filters.grade_id = profession.grade_id || '';
-  }
+  const defaults = organizationScopeDefaults(internshipState.options);
+  applyAcademicDefaults(filters, defaults);
   normalizeFilterCascade(filters, internshipState.options);
+  applyAcademicDefaults(filters, defaults);
   return filters;
 }
 
@@ -10218,6 +10272,114 @@ function applyDefaultScopedFilters() {
     });
     normalizeFilterCascade(current, internshipState.options);
     internshipState.filters[key] = current;
+  });
+}
+
+function currentGradeId(options = internshipState.options) {
+  const currentGrade = (options.grades || []).find(item => sameFilterValue(item.is_current, 'true') || sameFilterValue(item.is_current, 1));
+  return currentGrade?.grade_id || options.grades?.[0]?.grade_id || '';
+}
+
+function organizationScopeDefaults(options = internshipState.options) {
+  const defaults = {
+    grade_id: currentGradeId(options),
+    dep_id: '',
+    profession_id: '',
+    class_id: '',
+  };
+  const roleType = permissionState.context.role_type || '';
+  const classIds = organizationScopeIds('class_id');
+  const professionIds = organizationScopeIds('profession_id');
+  const depIds = organizationScopeIds('dep_id');
+  const firstScope = (permissionState.context.organization_scopes || [])
+    .find(item => item?.class_id || item?.profession_id || item?.dep_id) || {};
+  const selectedClass = firstScopedOption(options.classes, 'class_id', classIds);
+
+  if (selectedClass || firstScope.class_id) {
+    defaults.class_id = selectedClass?.class_id || firstScope.class_id || '';
+    defaults.profession_id = selectedClass?.profession_id || firstScope.profession_id || defaults.profession_id;
+    defaults.dep_id = selectedClass?.dep_id || firstScope.dep_id || defaults.dep_id;
+    defaults.grade_id = defaults.grade_id || selectedClass?.grade_id || '';
+  }
+
+  const selectedProfession = firstScopedOption(
+    options.professions,
+    'profession_id',
+    [defaults.profession_id, ...professionIds].filter(Boolean),
+  );
+  if (selectedProfession || firstScope.profession_id) {
+    defaults.profession_id = selectedProfession?.profession_id || firstScope.profession_id || '';
+    defaults.dep_id = selectedProfession?.dep_id || firstScope.dep_id || defaults.dep_id;
+    defaults.grade_id = defaults.grade_id || selectedProfession?.grade_id || '';
+  }
+
+  const selectedDepartment = firstScopedOption(
+    options.departments,
+    'dep_id',
+    [defaults.dep_id, ...depIds, firstScope.dep_id].filter(Boolean),
+  );
+  if (selectedDepartment || firstScope.dep_id) {
+    defaults.dep_id = selectedDepartment?.dep_id || firstScope.dep_id || defaults.dep_id;
+  }
+
+  if (roleType === 'college_admin' && !defaults.dep_id) {
+    defaults.dep_id = firstNonEmpty(depIds) || (options.departments?.length === 1 ? options.departments[0]?.dep_id : '') || '';
+  }
+
+  if (roleType === 'profession_admin') {
+    const selectedProfession = defaults.profession_id
+      ? (options.professions || []).find(item => sameFilterValue(item.profession_id, defaults.profession_id))
+      : null;
+    const resolvedProfession = selectedProfession || (firstScope.profession_id
+      ? (options.professions || []).find(item => sameFilterValue(item.profession_id, firstScope.profession_id))
+      : null) || firstScopedOption(options.professions, 'profession_id', professionIds)
+      || (options.professions?.length === 1 ? options.professions[0] : null);
+    if (resolvedProfession) {
+      defaults.profession_id = resolvedProfession.profession_id || defaults.profession_id;
+      defaults.dep_id = resolvedProfession.dep_id || defaults.dep_id;
+      defaults.grade_id = defaults.grade_id || resolvedProfession.grade_id || '';
+    }
+  }
+
+  return defaults;
+}
+
+function organizationScopeIds(field) {
+  const ids = [];
+  (permissionState.context.organization_scopes || []).forEach((scope) => {
+    if (hasFilterValue(scope?.[field])) {
+      ids.push(scope[field]);
+    }
+  });
+
+  const scopeFilter = permissionState.context.data_scope?.filter || permissionState.dataScope?.filter || {};
+  const value = scopeFilter[field];
+  (Array.isArray(value) ? value : [value]).forEach((item) => {
+    if (hasFilterValue(item)) {
+      ids.push(item);
+    }
+  });
+
+  return Array.from(new Set(ids.map(item => String(item))));
+}
+
+function firstScopedOption(items = [], key, ids = []) {
+  const values = (ids || []).filter(hasFilterValue).map(item => String(item));
+  if (!values.length) {
+    return null;
+  }
+  return (items || []).find(item => values.includes(String(item?.[key] ?? ''))) || null;
+}
+
+function firstNonEmpty(items = []) {
+  return (items || []).find(hasFilterValue) || '';
+}
+
+function applyAcademicDefaults(target, defaults) {
+  Object.entries(defaults).forEach(([key, value]) => {
+    if (value !== '' && (target[key] === '' || target[key] === null || target[key] === undefined)) {
+      target[key] = value;
+    }
   });
 }
 
@@ -10394,7 +10556,7 @@ function openPlanDialog() {
   const defaultProfession = internshipState.options.professions.find(item => Number(item.profession_id) === Number(defaults.profession_id || 0)) || null;
   internshipState.planForm = {
     ...emptyPlanForm(),
-    grade_id: defaultProfession?.grade_id || defaults.grade_id || internshipState.options.grades[0]?.grade_id || null,
+    grade_id: defaultProfession?.grade_id || defaults.grade_id || currentGradeId(internshipState.options) || null,
     dep_id: defaultProfession?.dep_id || defaults.dep_id || internshipState.options.departments[0]?.dep_id || null,
     profession_id: defaultProfession?.profession_id || defaults.profession_id || null,
   };

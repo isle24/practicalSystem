@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>实验实训流程思维导图</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: #eef3f8;
+      color: #172033;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
+    }
+    .page {
+      width: min(1600px, 100%);
+      margin: 0 auto;
+      padding: 28px;
+    }
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      gap: 18px;
+      margin-bottom: 18px;
+      border-bottom: 1px solid #cfd8e3;
+      padding-bottom: 14px;
+    }
+    h1 {
+      margin: 0;
+      font-size: 30px;
+      letter-spacing: 0;
+    }
+    .caption {
+      max-width: 640px;
+      color: #526173;
+      font-size: 14px;
+      line-height: 1.55;
+      text-align: right;
+    }
+    .scroll {
+      overflow-x: auto;
+      padding-bottom: 12px;
+    }
+    .board {
+      min-width: 1360px;
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 14px;
+    }
+    .stage {
+      min-height: 320px;
+      padding: 16px;
+      border: 1px solid #d6dee9;
+      border-radius: 8px;
+      background: #fff;
+      box-shadow: 0 14px 34px rgba(23, 32, 51, .06);
+    }
+    .plan { border-top: 4px solid #2563eb; }
+    .schedule { border-top: 4px solid #0f766e; }
+    .doc { border-top: 4px solid #b45309; }
+    .exec { border-top: 4px solid #7c3aed; }
+    .archive { border-top: 4px solid #be123c; }
+    .tag {
+      display: inline-flex;
+      margin-bottom: 10px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      color: #fff;
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .plan .tag { background: #2563eb; }
+    .schedule .tag { background: #0f766e; }
+    .doc .tag { background: #b45309; }
+    .exec .tag { background: #7c3aed; }
+    .archive .tag { background: #be123c; }
+    h2 {
+      margin: 0 0 12px;
+      font-size: 18px;
+      line-height: 1.35;
+    }
+    .item {
+      margin: 10px 0;
+      padding: 10px 12px;
+      border: 1px solid #d9e2ee;
+      border-radius: 8px;
+      background: #f8fbfe;
+      font-size: 13px;
+      line-height: 1.45;
+    }
+    .item strong {
+      display: block;
+      margin-bottom: 4px;
+      color: #132238;
+      font-size: 14px;
+    }
+    .item small {
+      display: block;
+      color: #5c6b7a;
+    }
+    .root-box {
+      grid-column: 1 / -1;
+      margin-bottom: 2px;
+      padding: 18px 20px;
+      border: 1px solid #d6dee9;
+      border-radius: 8px;
+      background: linear-gradient(135deg, #0f766e 0%, #2563eb 100%);
+      color: #fff;
+      box-shadow: 0 14px 34px rgba(23, 32, 51, .06);
+    }
+    .root-box strong {
+      display: block;
+      font-size: 20px;
+      line-height: 1.35;
+    }
+    .root-box small {
+      display: block;
+      margin-top: 6px;
+      color: rgba(255, 255, 255, .88);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    .mini-rule {
+      min-width: 1360px;
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 14px;
+    }
+    .rule-card {
+      padding: 13px 14px;
+      border: 1px solid #d6dee9;
+      border-radius: 8px;
+      background: #fff;
+      box-shadow: 0 12px 28px rgba(23, 32, 51, .05);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    .rule-card strong {
+      display: block;
+      margin-bottom: 4px;
+      font-size: 14px;
+      color: #102033;
+    }
+    @media print {
+      body { background: #fff; }
+      .page { padding: 10px; }
+      .scroll { overflow: visible; }
+      .board,
+      .mini-rule { min-width: auto; }
+      .stage,
+      .rule-card,
+      .root-box { box-shadow: none; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header>
+      <h1>成都锦城学院实验实训流程思维导图</h1>
+      <div class="caption">只保留流程主干，不展开业务细枝末节。阅读顺序建议按“计划生成 → 课表安排 → 大纲教案 → 执行管理 → 成绩归档”。</div>
+    </header>
+
+    <div class="scroll">
+      <section class="board" aria-label="实验实训流程思维导图">
+        <div class="root-box">
+          <strong>实验实训教学流程</strong>
+          <small>统一按照课程计划、课表安排、教学文档、执行管理和成绩归档五个主干推进。</small>
+        </div>
+
+        <div class="stage plan">
+          <span class="tag">1 教学计划</span>
+          <h2>生成实验实训课程计划</h2>
+          <div class="item"><strong>来源</strong><small>教务系统抽取或教师补录。</small></div>
+          <div class="item"><strong>范围</strong><small>按届次、学院、专业、课程生成。</small></div>
+          <div class="item"><strong>结果</strong><small>计划审核后进入排课和任务安排。</small></div>
+        </div>
+
+        <div class="stage schedule">
+          <span class="tag">2 课表安排</span>
+          <h2>安排实验室或实训场地</h2>
+          <div class="item"><strong>场地</strong><small>校内实验室或校外实训基地。</small></div>
+          <div class="item"><strong>控制</strong><small>时间、地点、容量和冲突校验。</small></div>
+          <div class="item"><strong>结果</strong><small>形成可执行的课表安排。</small></div>
+        </div>
+
+        <div class="stage doc">
+          <span class="tag">3 大纲教案</span>
+          <h2>准备教学文档</h2>
+          <div class="item"><strong>大纲</strong><small>按课程编写、审核、归档。</small></div>
+          <div class="item"><strong>教案</strong><small>按实验项目或实训任务编写。</small></div>
+          <div class="item"><strong>结果</strong><small>文档通过后可供学生查看和下载。</small></div>
+        </div>
+
+        <div class="stage exec">
+          <span class="tag">4 执行管理</span>
+          <h2>开展签到、材料和评阅</h2>
+          <div class="item"><strong>过程</strong><small>签到、材料提交、报告提交、老师评阅。</small></div>
+          <div class="item"><strong>边界</strong><small>所有记录按实验或实训项目隔离。</small></div>
+          <div class="item"><strong>结果</strong><small>形成过程留痕和审核记录。</small></div>
+        </div>
+
+        <div class="stage archive">
+          <span class="tag">5 成绩归档</span>
+          <h2>成绩统计与归档</h2>
+          <div class="item"><strong>成绩</strong><small>录入、提交、统计、确认。</small></div>
+          <div class="item"><strong>归档</strong><small>按课程、项目、学生整理资料。</small></div>
+          <div class="item"><strong>结果</strong><small>支持历史查询和统计报表。</small></div>
+        </div>
+      </section>
+    </div>
+
+    <h2 class="section-title">流程主干说明</h2>
+    <div class="scroll">
+      <section class="mini-rule" aria-label="流程主干说明">
+        <div class="rule-card"><strong>计划先行</strong>先形成计划，再决定后续课表和执行范围。</div>
+        <div class="rule-card"><strong>文档先备</strong>大纲和教案必须在执行前完成审核。</div>
+        <div class="rule-card"><strong>过程留痕</strong>签到、提交、评阅都要留存记录。</div>
+        <div class="rule-card"><strong>结果归档</strong>成绩和材料按项目统一归档。</div>
+      </section>
+    </div>
+  </main>
+</body>
+</html>
