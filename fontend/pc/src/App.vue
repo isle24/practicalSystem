@@ -2797,7 +2797,7 @@
                   <small v-if="adminState.scope.message">{{ adminState.scope.message }}</small>
                 </div>
 
-                <div v-else-if="win.module.id === 'config' && win.panel === 'dataManage'" class="admin-panel data-manage-panel">
+                <div v-else-if="win.module.id === 'dataManage' || (win.module.id === 'config' && win.panel === 'dataManage')" class="admin-panel data-manage-panel">
                   <section class="maintenance-card danger">
                     <header>
                       <div>
@@ -3902,6 +3902,17 @@ const modules = [
     adminOnly: true,
   },
   {
+    id: 'dataManage',
+    name: '数据管理',
+    icon: HardDrive,
+    color: 'red',
+    scope: '测试数据清理',
+    viewPermission: 'config:view',
+    managePermission: 'config:manage',
+    defaultPanel: 'dataManage',
+    adminOnly: true,
+  },
+  {
     id: 'config',
     name: '系统配置',
     icon: Settings,
@@ -4313,6 +4324,7 @@ const moduleSearchKeywords = {
   professionManage: '专业',
   classManage: '班级',
   companyManage: '基地 合作单位 单位 企业',
+  dataManage: '数据 管理 清理 测试数据 初始化',
   config: '设置 配置 菜单 权限 角色 企业微信 操作说明 学校',
   profile: '个人设置 头像 壁纸 背景 消息接收 密码 资料',
   message: '消息 通知 待办 审核结果 站内信',
@@ -4332,7 +4344,6 @@ const configSidebarDefinitions = [
   { key: 'organizationScope', name: '组织范围', permission: 'config:view', schoolConfig: true },
   { key: 'operationGuides', name: '操作说明', permission: 'config:view', schoolConfig: true },
   { key: 'wechatProxy', name: '企业微信应用', permission: 'config:view', schoolConfig: true },
-  { key: 'dataManage', name: '数据管理', permission: 'config:view', schoolConfig: true },
 ];
 
 const isLoggedIn = computed(() => Boolean(permissionState.context.account_id));
@@ -5295,7 +5306,7 @@ function sidebarItems(win) {
   if (['message', 'doc', 'templateLib', 'exportTask', 'favorite'].includes(win.module.id)) {
     return [];
   }
-  if (win.module.id === 'userManage' || archiveManageModules[win.module.id]) {
+  if (win.module.id === 'userManage' || archiveManageModules[win.module.id] || win.module.id === 'dataManage') {
     return [];
   }
   if (win.module.id === 'file') {
@@ -5708,6 +5719,9 @@ function decorateModule(module) {
 }
 
 function moduleDisplayName(module) {
+  if (module.id === 'dataManage') {
+    return module.name;
+  }
   const item = permissionState.menus.find(menu => moduleMatchesMenu(module, menu));
   if (!item) {
     return module.name;
@@ -6391,7 +6405,7 @@ function openModuleWindow(module, options = {}) {
       statState.report = statReports.some(item => item.key === existing.panel) ? existing.panel : 'overview';
       loadStats(statState.pagination.page || 1);
     }
-    if (module.id === 'config' || module.id === 'userManage' || archiveManageModules[module.id]) {
+    if (module.id === 'config' || module.id === 'userManage' || archiveManageModules[module.id] || module.id === 'dataManage') {
       activateWindowPanel(existing, module.id === 'config' ? normalizeConfigPanel(existing.panel) : existing.panel);
     }
     if (module.id === 'message') {
@@ -6431,7 +6445,7 @@ function openModuleWindow(module, options = {}) {
     statState.report = win.panel;
     loadStats(1);
   }
-  if (module.id === 'config' || module.id === 'userManage' || archiveManageModules[module.id]) {
+  if (module.id === 'config' || module.id === 'userManage' || archiveManageModules[module.id] || module.id === 'dataManage') {
     activateWindowPanel(win, win.panel);
   }
   if (module.id === 'message') {
@@ -6636,6 +6650,9 @@ function activateWindowPanel(win, panel) {
   if (isArchiveManageWindow(win)) {
     loadAdminFoundation();
     loadArchiveItems(archiveTypeForWindow(win));
+  }
+  if (win.module.id === 'dataManage') {
+    loadAdminFoundation();
   }
   if (win.module.id === 'file' && panel === 'fileManage') {
     loadFiles();
