@@ -1,11 +1,10 @@
 import { computed, reactive } from 'vue';
-import { fetchContext, fetchDataScope, fetchMenus, fetchSchool } from '../api/system';
+import { fetchContext, fetchDataScope, fetchMenus } from '../api/system';
 
 const state = reactive({
   loading: false,
   error: '',
   context: {},
-  school: {},
   menus: [],
   permissions: [],
   dataScope: null,
@@ -26,9 +25,8 @@ export function usePermissions() {
     state.error = '';
 
     try {
-      const [context, school] = await Promise.all([fetchContext(), fetchSchool()]);
+      const context = await fetchContext();
       state.context = context;
-      state.school = school;
 
       if (!context.role_id) {
         state.error = context.auth_error || '';

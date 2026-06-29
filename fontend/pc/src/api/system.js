@@ -46,10 +46,6 @@ export function passkeyLogin(payload) {
   });
 }
 
-export function fetchSchool() {
-  return request('/school/current');
-}
-
 export function fetchMenus(params = {}) {
   const query = new URLSearchParams(params).toString();
   return request(`/permission/menus${query ? `?${query}` : ''}`);
