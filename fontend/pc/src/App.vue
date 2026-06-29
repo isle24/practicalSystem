@@ -2184,10 +2184,6 @@
                         <small>{{ win.module.scope }}</small>
                       </span>
                     </header>
-                    <div class="menu-module-meta">
-                      <span>权限码：{{ win.module.menu?.code || '-' }}</span>
-                      <span>路径：{{ win.module.menu?.path || '-' }}</span>
-                    </div>
                     <div class="menu-module-grid">
                       <button
                         v-for="item in menuModuleChildren(win.module.menuId)"
@@ -2197,7 +2193,7 @@
                       >
                         <component :is="resolveMenuIcon(item.icon)" :size="18" />
                         <span>{{ item.name }}</span>
-                        <small>{{ item.path || item.code || menuNodeTypeText(item.type) }}</small>
+                        <small>{{ menuNodeTypeText(item.type) }}</small>
                       </button>
                     </div>
                     <div v-if="!menuModuleChildren(win.module.menuId).length" class="empty-grid-state">

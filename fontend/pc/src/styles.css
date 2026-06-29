@@ -3874,16 +3874,8 @@ a {
   font-size: 20px;
 }
 
-.menu-module-card > header small,
-.menu-module-meta {
+.menu-module-card > header small {
   color: var(--muted);
-}
-
-.menu-module-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  font-size: 12px;
 }
 
 .menu-module-grid {
