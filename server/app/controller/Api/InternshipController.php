@@ -186,6 +186,24 @@ class InternshipController
     }
 
     /**
+     * 读取实习审核草稿
+     */
+    #[OperationLog('读取实习审核草稿')]
+    public function reviewDraft(Request $request): Response
+    {
+        return $this->handle(fn (): array => $this->service()->reviewDraft($request));
+    }
+
+    /**
+     * 保存实习审核草稿
+     */
+    #[OperationLog('保存实习审核草稿')]
+    public function saveReviewDraft(Request $request): Response
+    {
+        return $this->handle(fn (): array => $this->service()->saveReviewDraft($request));
+    }
+
+    /**
      * 查看实习流程记录
      */
     #[OperationLog('查看实习流程记录')]

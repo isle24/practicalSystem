@@ -4,6 +4,7 @@ namespace app\server\practice;
 
 use app\model\channel\PracticeRecord;
 use app\server\CurrentContext;
+use app\server\WorkflowLock;
 use InvalidArgumentException;
 use RuntimeException;
 use support\Request;
@@ -118,24 +119,33 @@ class PracticeService
         if ($entity === 'project') {
             $values = $this->projectValues($request, $values);
         }
+        if ($this->entityRequiresReview($entity) && $existingId && !in_array($fromStatus, ['draft', 'modify'], true)) {
+            throw new InvalidArgumentException('数据已变更，请刷新后重试', 409);
+        }
 
-        if ($existingId) {
-            $row = PracticeRecord::activeRowByEntity($this->moduleType, $entity, $existingId);
-            if (!$row) {
-                throw new RuntimeException('数据不存在');
+        $save = function () use ($entity, $existingId, $request, $values, $fromStatus): array {
+            if ($existingId) {
+                $row = PracticeRecord::activeRowByEntity($this->moduleType, $entity, $existingId);
+                if (!$row) {
+                    throw new RuntimeException('数据不存在');
+                }
+                $this->assertEntityVisible($entity, $existingId);
             }
-            $this->assertEntityVisible($entity, $existingId);
-        }
 
-        $id = $this->saveEntity($entity, $request, $values);
-        if ($entity === 'project') {
-            $this->syncProjectStudents($id, $values);
-        }
-        if (($values['status'] ?? '') === 'wait' && $this->entityRequiresReview($entity)) {
-            $this->recordWorkflow($entity, $id, 'submit', $fromStatus, 'wait', $this->workflowContent($entity, $values), 'wait');
-        }
+            $id = $this->saveEntity($entity, $request, $values);
+            if ($entity === 'project') {
+                $this->syncProjectStudents($id, $values);
+            }
+            if (($values['status'] ?? '') === 'wait' && $this->entityRequiresReview($entity)) {
+                $this->recordWorkflow($entity, $id, 'submit', $fromStatus, 'wait', $this->workflowContent($entity, $values), 'wait');
+            }
 
-        return ['id' => $id, 'uuid' => PracticeRecord::uuidById($entity, $id)];
+            return ['id' => $id, 'uuid' => PracticeRecord::uuidById($entity, $id)];
+        };
+
+        return $existingId
+            ? $this->workflowLock('practice', $this->entityType($entity), $existingId, $save)
+            : $save();
     }
 
     public function review(Request $request): array
@@ -150,14 +160,15 @@ class PracticeService
         $status = $this->enum($request, 'status', ['accept', 'modify'], 'accept');
         $opinion = $this->reviewOpinionInput($request, $entity, $status);
 
-        return PracticeRecord::connection()->transaction(function () use ($entity, $id, $status, $opinion): array {
+        return $this->workflowLock('practice', $this->entityType($entity), $id, function () use ($entity, $id, $status, $opinion): array {
+            return PracticeRecord::connection()->transaction(function () use ($entity, $id, $status, $opinion): array {
             $row = PracticeRecord::lockActiveRowByEntity($this->moduleType, $entity, $id);
             if (!$row) {
                 throw new RuntimeException('数据不存在');
             }
             $this->assertEntityVisible($entity, $id);
             if ((string) $row->status !== 'wait') {
-                throw new InvalidArgumentException('仅待审核数据可处理', 42204);
+                throw new InvalidArgumentException('数据已变更，请刷新后重试', 409);
             }
 
             PracticeRecord::updateEntityById($entity, $id, [
@@ -165,8 +176,53 @@ class PracticeService
                 'updated_at' => $this->now(),
             ]);
             $this->recordWorkflow($entity, $id, 'review', (string) $row->status, $status, $opinion ?: '审核处理', $status);
+            PracticeRecord::clearReviewOpinionDraft($this->entityType($entity), $id, $this->accountId(), $this->now());
 
             return ['id' => $id, 'status' => $status];
+            });
+        });
+    }
+
+    public function reviewDraft(Request $request): array
+    {
+        $this->requirePermission('approve');
+        $target = $this->reviewDraftTarget($request);
+        $draft = PracticeRecord::reviewOpinionDraftRow($target['entity_type'], $target['id'], $this->accountId());
+
+        return [
+            'entity_type' => $target['entity_type'],
+            'id' => $target['id'],
+            'draft' => $draft,
+        ];
+    }
+
+    public function saveReviewDraft(Request $request): array
+    {
+        $this->requirePermission('approve');
+        $target = $this->reviewDraftTarget($request);
+        $status = $this->enum($request, 'status', ['accept', 'modify'], 'accept');
+        $opinion = $this->reviewDraftOpinionInput($request, $target['rule_entity'], $status);
+        $score = $this->decimalInput($request, 'score');
+        $now = $this->now();
+
+        return $this->workflowLock('practice', $target['entity_type'], $target['id'], function () use ($target, $status, $opinion, $score, $now): array {
+            $id = PracticeRecord::saveReviewOpinionDraft([
+                'entity_type' => $target['entity_type'],
+                'entity_id' => $target['id'],
+                'reviewer_id' => $this->accountId(),
+                'teacher_id' => $this->currentTeacherId(false),
+                'review_status' => $status,
+                'opinion' => $opinion,
+                'score' => $score,
+                'updated_at' => $now,
+            ]);
+
+            return [
+                'id' => $id,
+                'entity_type' => $target['entity_type'],
+                'entity_id' => $target['id'],
+                'status' => $status,
+            ];
         });
     }
 
@@ -181,14 +237,15 @@ class PracticeService
         $id = $this->requiredEntityId($request, $entity);
         $opinion = $this->reviewOpinionInput($request, $entity, 'modify', '修改理由');
 
-        return PracticeRecord::connection()->transaction(function () use ($entity, $id, $opinion): array {
+        return $this->workflowLock('practice', $this->entityType($entity), $id, function () use ($entity, $id, $opinion): array {
+            return PracticeRecord::connection()->transaction(function () use ($entity, $id, $opinion): array {
             $row = PracticeRecord::lockActiveRowByEntity($this->moduleType, $entity, $id);
             if (!$row) {
                 throw new RuntimeException('数据不存在');
             }
             $this->assertEntityVisible($entity, $id);
             if ((string) $row->status !== 'accept') {
-                throw new InvalidArgumentException('仅已通过数据可改回修改', 42203);
+                throw new InvalidArgumentException('数据已变更，请刷新后重试', 409);
             }
 
             PracticeRecord::updateEntityById($entity, $id, [
@@ -198,6 +255,7 @@ class PracticeService
             $this->recordWorkflow($entity, $id, 'modify_after_accept', 'accept', 'modify', $opinion ?: '通过后要求修改', 'modify');
 
             return ['id' => $id, 'status' => 'modify'];
+            });
         });
     }
 
@@ -305,13 +363,14 @@ class PracticeService
         $id = $this->requiredInt($request, 'id');
         $opinion = $this->reviewOpinionInput($request, $execution, 'modify', '修改理由');
 
-        return PracticeRecord::connection()->transaction(function () use ($execution, $id, $opinion): array {
+        return $this->workflowLock('practice', $this->executionEntityType($execution), $id, function () use ($execution, $id, $opinion): array {
+            return PracticeRecord::connection()->transaction(function () use ($execution, $id, $opinion): array {
             $row = PracticeRecord::lockExecutionRow($this->scopeContext(), $this->moduleType, $execution, $id);
             if (!$row) {
                 throw new RuntimeException('数据不存在或无权限', 40301);
             }
             if ((string) $row->status !== 'accept') {
-                throw new InvalidArgumentException('仅已通过数据可改回修改', 42203);
+                throw new InvalidArgumentException('数据已变更，请刷新后重试', 409);
             }
 
             PracticeRecord::updateExecution($execution, $id, [
@@ -321,6 +380,7 @@ class PracticeService
             $this->recordExecutionWorkflow($execution, $id, 'modify_after_accept', 'accept', 'modify', $opinion ?: '通过后要求修改', 'modify');
 
             return ['id' => $id, 'status' => 'modify'];
+            });
         });
     }
 
@@ -419,7 +479,8 @@ class PracticeService
         $status = $this->enum($request, 'status', ['draft', 'wait'], 'wait');
         $values = $this->executionValues($request, $execution, $project, $projectStudent, $studentId, $status);
 
-        return PracticeRecord::connection()->transaction(function () use ($execution, $id, $values, $status): array {
+        $save = function () use ($execution, $id, $values, $status): array {
+            return PracticeRecord::connection()->transaction(function () use ($execution, $id, $values, $status): array {
             $fromStatus = 'draft';
             if ($id) {
                 $row = PracticeRecord::lockExecutionRow($this->scopeContext(), $this->moduleType, $execution, $id);
@@ -427,7 +488,7 @@ class PracticeService
                     throw new RuntimeException('数据不存在或无权限', 40301);
                 }
                 if (!in_array((string) $row->status, ['draft', 'modify'], true)) {
-                    throw new InvalidArgumentException('仅草稿或需修改状态可重新提交', 42204);
+                    throw new InvalidArgumentException('数据已变更，请刷新后重试', 409);
                 }
                 $fromStatus = (string) $row->status;
                 PracticeRecord::updateExecution($execution, $id, $values);
@@ -443,7 +504,12 @@ class PracticeService
             }
 
             return ['id' => $id, 'status' => $status];
-        });
+            });
+        };
+
+        return $id
+            ? $this->workflowLock('practice', $this->executionEntityType($execution), $id, $save)
+            : $save();
     }
 
     /**
@@ -459,13 +525,14 @@ class PracticeService
         $status = $this->enum($request, 'status', ['accept', 'modify'], 'accept');
         $opinion = $this->reviewOpinionInput($request, $execution, $status);
 
-        return PracticeRecord::connection()->transaction(function () use ($execution, $id, $status, $opinion): array {
+        return $this->workflowLock('practice', $this->executionEntityType($execution), $id, function () use ($execution, $id, $status, $opinion): array {
+            return PracticeRecord::connection()->transaction(function () use ($execution, $id, $status, $opinion): array {
             $row = PracticeRecord::lockExecutionRow($this->scopeContext(), $this->moduleType, $execution, $id);
             if (!$row) {
                 throw new RuntimeException('数据不存在或无权限', 40301);
             }
             if ((string) $row->status !== 'wait') {
-                throw new InvalidArgumentException('仅待审核数据可处理', 42204);
+                throw new InvalidArgumentException('数据已变更，请刷新后重试', 409);
             }
 
             PracticeRecord::updateExecution($execution, $id, [
@@ -473,9 +540,68 @@ class PracticeService
                 'updated_at' => $this->now(),
             ]);
             $this->recordExecutionWorkflow($execution, $id, 'review', 'wait', $status, $opinion ?: '审核处理', $status);
+            PracticeRecord::clearReviewOpinionDraft($this->executionEntityType($execution), $id, $this->accountId(), $this->now());
 
             return ['id' => $id, 'status' => $status];
+            });
         });
+    }
+
+    private function reviewDraftTarget(Request $request): array
+    {
+        $execution = trim((string) $request->input('execution', ''));
+        if ($execution !== '') {
+            if (!(self::EXECUTIONS[$execution]['review'] ?? false)) {
+                throw new InvalidArgumentException('该执行记录不需要审核');
+            }
+            $id = $this->requiredInt($request, 'id');
+            $row = PracticeRecord::activeExecutionRow($this->scopeContext(), $this->moduleType, $execution, $id);
+            if (!$row) {
+                throw new RuntimeException('数据不存在或无权限', 40301);
+            }
+            if ((string) $row->status !== 'wait') {
+                throw new InvalidArgumentException('数据已变更，请刷新后重试', 409);
+            }
+
+            return [
+                'id' => $id,
+                'rule_entity' => $execution,
+                'entity_type' => $this->executionEntityType($execution),
+            ];
+        }
+
+        $entity = $this->entityInput($request);
+        if (!$this->entityRequiresReview($entity)) {
+            throw new InvalidArgumentException('该业务不需要审核');
+        }
+        $id = $this->requiredEntityId($request, $entity);
+        $row = PracticeRecord::activeRowByEntity($this->moduleType, $entity, $id);
+        if (!$row) {
+            throw new RuntimeException('数据不存在');
+        }
+        $this->assertEntityVisible($entity, $id);
+        if ((string) $row->status !== 'wait') {
+            throw new InvalidArgumentException('数据已变更，请刷新后重试', 409);
+        }
+
+        return [
+            'id' => $id,
+            'rule_entity' => $entity,
+            'entity_type' => $this->entityType($entity),
+        ];
+    }
+
+    private function reviewDraftOpinionInput(Request $request, string $entity, string $status): ?string
+    {
+        $value = trim((string) $request->input('opinion', ''));
+        $rule = self::REVIEW_RULES[$entity][$status] ?? ['min' => 0, 'max' => null];
+        $max = $rule['max'] ?? null;
+        $length = function_exists('mb_strlen') ? mb_strlen($value) : strlen($value);
+        if ($max !== null && $length > (int) $max) {
+            throw new InvalidArgumentException('审核意见最多 ' . (int) $max . ' 字', 42202);
+        }
+
+        return $value === '' ? null : $value;
     }
 
     /**
@@ -1159,6 +1285,11 @@ class PracticeService
         }
 
         return $value === '' ? null : $value;
+    }
+
+    private function workflowLock(string $module, string $entity, int $id, callable $callback): mixed
+    {
+        return (new WorkflowLock())->run(WorkflowLock::key($module, $entity, $id), $callback);
     }
 
     private function requiredInt(Request $request, string $key): int

@@ -62,6 +62,24 @@ class TrainingController
     }
 
     /**
+     * 读取实训审核草稿
+     */
+    #[OperationLog('读取实训审核草稿')]
+    public function reviewDraft(Request $request): Response
+    {
+        return $this->handle(fn (): array => $this->service()->reviewDraft($request));
+    }
+
+    /**
+     * 保存实训审核草稿
+     */
+    #[OperationLog('保存实训审核草稿')]
+    public function saveReviewDraft(Request $request): Response
+    {
+        return $this->handle(fn (): array => $this->service()->saveReviewDraft($request));
+    }
+
+    /**
      * 发起实训通过后修改
      */
     #[OperationLog('发起实训通过后修改')]

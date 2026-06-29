@@ -440,9 +440,14 @@
               <span>申请说明</span>
               <textarea v-model="internship.forms.application.remark" rows="4" />
             </label>
-            <van-button block type="primary" :loading="internship.loading" @click="submitApplication">
-              提交申请
-            </van-button>
+            <div class="workflow-button-row">
+              <van-button block plain type="primary" :loading="internship.loading" @click="submitApplication('draft')">
+                保存草稿
+              </van-button>
+              <van-button block type="primary" :loading="internship.loading" @click="submitApplication('wait')">
+                提交审核
+              </van-button>
+            </div>
           </section>
           <section class="mobile-card">
             <header>
@@ -582,9 +587,14 @@
               <span>内容</span>
               <textarea v-model="internship.forms.journal.content" rows="4" />
             </label>
-            <van-button block type="primary" :loading="internship.loading" :disabled="isStageExpired('journal_deadline')" @click="submitJournal">
-              {{ internship.forms.journal.id ? '重新提交日志' : '提交日志' }}
-            </van-button>
+            <div class="workflow-button-row">
+              <van-button block plain type="primary" :loading="internship.loading" @click="submitJournal('draft')">
+                保存草稿
+              </van-button>
+              <van-button block type="primary" :loading="internship.loading" :disabled="isStageExpired('journal_deadline')" @click="submitJournal('wait')">
+                {{ internship.forms.journal.id ? '重新提交审核' : '提交审核' }}
+              </van-button>
+            </div>
           </section>
 
           <section v-if="internship.submitSection === 'report'" class="mobile-card form-card">
@@ -615,9 +625,14 @@
               <span>内容</span>
               <textarea v-model="internship.forms.report.content" rows="4" />
             </label>
-            <van-button block type="primary" :loading="internship.loading" :disabled="isStageExpired('report_deadline')" @click="submitReport">
-              {{ internship.forms.report.id ? '重新提交报告' : '提交报告' }}
-            </van-button>
+            <div class="workflow-button-row">
+              <van-button block plain type="primary" :loading="internship.loading" @click="submitReport('draft')">
+                保存草稿
+              </van-button>
+              <van-button block type="primary" :loading="internship.loading" :disabled="isStageExpired('report_deadline')" @click="submitReport('wait')">
+                {{ internship.forms.report.id ? '重新提交审核' : '提交审核' }}
+              </van-button>
+            </div>
           </section>
 
           <section v-if="internship.submitSection === 'delay'" class="mobile-card form-card">
@@ -650,9 +665,14 @@
               <span>申请原因</span>
               <textarea v-model="internship.forms.delay.reason" rows="4" />
             </label>
-            <van-button block type="primary" :loading="internship.loading" @click="submitDelay">
-              提交延期申请
-            </van-button>
+            <div class="workflow-button-row">
+              <van-button block plain type="primary" :loading="internship.loading" @click="submitDelay('draft')">
+                保存草稿
+              </van-button>
+              <van-button block type="primary" :loading="internship.loading" @click="submitDelay('wait')">
+                提交审核
+              </van-button>
+            </div>
           </section>
 
           <section v-if="internship.submitSection === 'journal'" class="mobile-card">
@@ -1277,6 +1297,17 @@
             <strong>{{ item.value }}</strong>
           </div>
         </section>
+        <section v-if="internship.reviewDialog.mode === 'review'" class="review-status-switch">
+          <button
+            v-for="option in internshipReviewStatusOptions(internship.reviewDialog.entity)"
+            :key="option.value"
+            type="button"
+            :class="{ active: internship.reviewDialog.status === option.value }"
+            @click="setInternshipReviewStatus(option.value)"
+          >
+            {{ option.label }}
+          </button>
+        </section>
         <label>
           <span>{{ reviewDialogReasonLabel }}</span>
           <textarea
@@ -1289,10 +1320,13 @@
             {{ textLength(internship.reviewDialog.reason) }} / {{ reviewRuleMaxText(internship.reviewDialog.entity, internship.reviewDialog.status) }}
           </small>
         </label>
-        <div class="sheet-actions">
+        <div class="sheet-actions" :class="{ triple: internship.reviewDialog.mode === 'review' }">
           <button type="button" @click="closeReviewDialog">取消</button>
-          <button type="button" :disabled="internship.loading" @click="confirmReviewDialog">
-            {{ reviewDialogConfirmText }}
+          <button v-if="internship.reviewDialog.mode === 'review'" type="button" :disabled="internship.loading" @click="saveInternshipDialogReviewDraft">
+            保存草稿
+          </button>
+          <button type="button" class="primary-action" :disabled="internship.loading" @click="confirmReviewDialog">
+            提交审核
           </button>
         </div>
       </section>
@@ -1315,6 +1349,17 @@
             <strong>{{ item.value }}</strong>
           </div>
         </section>
+        <section v-if="practiceReviewDialog.mode === 'review'" class="review-status-switch">
+          <button
+            v-for="option in practiceReviewStatusOptions(practiceReviewDialog.module, practiceReviewDialog.entity)"
+            :key="option.value"
+            type="button"
+            :class="{ active: practiceReviewDialog.status === option.value }"
+            @click="setPracticeReviewStatus(option.value)"
+          >
+            {{ option.label }}
+          </button>
+        </section>
         <label>
           <span>{{ practiceReviewReasonLabel }}</span>
           <textarea
@@ -1327,10 +1372,13 @@
             {{ textLength(practiceReviewDialog.reason) }} / {{ practiceRuleMaxText(practiceReviewDialog.module, practiceReviewDialog.entity, practiceReviewDialog.status) }}
           </small>
         </label>
-        <div class="sheet-actions">
+        <div class="sheet-actions" :class="{ triple: practiceReviewDialog.mode === 'review' }">
           <button type="button" @click="closePracticeReviewDialog">取消</button>
-          <button type="button" :disabled="practiceModule(practiceReviewDialog.module).loading" @click="confirmPracticeReview">
-            {{ practiceReviewConfirmText }}
+          <button v-if="practiceReviewDialog.mode === 'review'" type="button" :disabled="practiceModule(practiceReviewDialog.module).loading" @click="savePracticeReviewDraftFromDialog">
+            保存草稿
+          </button>
+          <button type="button" class="primary-action" :disabled="practiceModule(practiceReviewDialog.module).loading" @click="confirmPracticeReview">
+            提交审核
           </button>
         </div>
       </section>
@@ -1399,10 +1447,13 @@
           <span>备注</span>
           <textarea v-model="practiceExecutionDialog.form.remark" rows="3" />
         </label>
-        <div class="sheet-actions">
+        <div class="sheet-actions" :class="{ triple: practiceExecutionDialog.execution !== 'sign_in' }">
           <button type="button" @click="closePracticeExecutionDialog">取消</button>
-          <button type="button" :disabled="practiceModule(practiceExecutionDialog.module).loading || (practiceExecutionDialog.execution === 'sign_in' && !practiceGpsReady)" @click="submitPracticeExecution">
-            提交
+          <button v-if="practiceExecutionDialog.execution !== 'sign_in'" type="button" :disabled="practiceModule(practiceExecutionDialog.module).loading" @click="submitPracticeExecution('draft')">
+            保存草稿
+          </button>
+          <button type="button" class="primary-action" :disabled="practiceModule(practiceExecutionDialog.module).loading || (practiceExecutionDialog.execution === 'sign_in' && !practiceGpsReady)" @click="submitPracticeExecution(practiceExecutionDialog.execution === 'sign_in' ? 'signed' : 'wait')">
+            {{ practiceExecutionDialog.execution === 'sign_in' ? '提交签到' : '提交审核' }}
           </button>
         </div>
       </section>
@@ -1515,6 +1566,7 @@ import {
   fetchInternshipPairs,
   fetchInternshipPlans,
   fetchInternshipReports,
+  fetchInternshipReviewDraft,
   fetchInternshipSafetyLetters,
   fetchInternshipCourseScores,
   fetchInternshipScores,
@@ -1533,6 +1585,7 @@ import {
   fetchPracticeOverview,
   fetchPracticeExecutionList,
   fetchPracticeExecutionTimeline,
+  fetchPracticeReviewDraft,
   fetchPracticeTimeline,
   fetchTemplateCategories,
   fetchTemplateList,
@@ -1552,10 +1605,12 @@ import {
   saveInternshipDelay,
   saveInternshipJournal,
   saveInternshipReport,
+  saveInternshipReviewDraft,
   saveInternshipScore,
   saveInternshipSignIn,
   savePracticeExecution,
   savePracticeProjectScore,
+  savePracticeReviewDraft,
   passkeyLogin,
   login as loginApi,
   logout as logoutApi,
@@ -1700,6 +1755,13 @@ const defaultInternshipReviewRules = {
     refuse: { min: 5, max: 500 },
     modify: { min: 5, max: 500 },
   },
+};
+
+const reviewStatusLabels = {
+  accept: '通过',
+  modify: '退回修改',
+  refuse: '退回',
+  skipped: '跳过',
 };
 
 const internship = reactive({
@@ -3249,6 +3311,7 @@ async function reloadInternshipList(key) {
     await loadInternshipList(key, 1);
   } catch (error) {
     internship.message = error.message;
+    showToast(error.message);
   } finally {
     internship.loading = false;
   }
@@ -3265,6 +3328,7 @@ async function loadMoreInternshipList(key) {
     await loadInternshipList(key, (pagination.page || 1) + 1, true);
   } catch (error) {
     internship.message = error.message;
+    showToast(error.message);
   } finally {
     internship.loading = false;
   }
@@ -3671,6 +3735,7 @@ async function loadInternship() {
     await loadInternshipPanelData();
   } catch (error) {
     internship.message = error.message;
+    showToast(error.message);
   } finally {
     internship.loading = false;
   }
@@ -3748,6 +3813,7 @@ async function reloadScorePairs() {
     }
   } catch (error) {
     internship.message = error.message;
+    showToast(error.message);
   } finally {
     internship.loading = false;
   }
@@ -3768,13 +3834,16 @@ async function switchMobileList(type, key) {
   await reloadInternshipList(key);
 }
 
-async function submitApplication() {
+async function submitApplication(status = 'wait') {
+  if (internship.loading) {
+    return;
+  }
   if (!internship.forms.application.arrangement_id) {
     internship.message = '请选择实习任务';
     showToast(internship.message);
     return;
   }
-  if (!String(internship.forms.application.remark || '').trim()) {
+  if (status === 'wait' && !String(internship.forms.application.remark || '').trim()) {
     internship.message = '请填写申请说明';
     showToast(internship.message);
     return;
@@ -3786,20 +3855,27 @@ async function submitApplication() {
     await saveInternshipApplication({
       arrangement_id: internship.forms.application.arrangement_id,
       type: internship.forms.application.type || 'distributed',
-      status: 'wait',
+      status,
       remark: internship.forms.application.remark,
     });
-    internship.forms.application.remark = '';
-    internship.message = '申请已提交';
+    if (status === 'wait') {
+      internship.forms.application.remark = '';
+    }
+    internship.message = status === 'wait' ? '申请已提交审核' : '申请草稿已保存';
     await loadInternship();
+    showToast(internship.message);
   } catch (error) {
     internship.message = error.message;
+    showToast(error.message);
   } finally {
     internship.loading = false;
   }
 }
 
 async function submitSignIn() {
+  if (internship.loading) {
+    return;
+  }
   if (!signGpsReady.value) {
     internship.message = '请先获取 GPS 定位后再签到';
     showToast(internship.message);
@@ -3820,21 +3896,26 @@ async function submitSignIn() {
     resetSignPosition();
     internship.message = '签到已提交';
     await loadInternship();
+    showToast(internship.message);
   } catch (error) {
     internship.message = error.message;
+    showToast(error.message);
   } finally {
     internship.loading = false;
   }
 }
 
-async function submitJournal() {
+async function submitJournal(status = 'wait') {
+  if (internship.loading) {
+    return;
+  }
   const arrangementId = internship.forms.journal.arrangement_id || internship.forms.sign.arrangement_id;
   if (!arrangementId) {
     internship.message = '请选择实习任务';
     showToast(internship.message);
     return;
   }
-  if (isStageExpired('journal_deadline')) {
+  if (status === 'wait' && isStageExpired('journal_deadline')) {
     internship.message = '实习日志已截止，请先申请延期';
     showToast(internship.message);
     openDelayForStage('journal_deadline');
@@ -3848,29 +3929,36 @@ async function submitJournal() {
       arrangement_id: arrangementId,
       title: internship.forms.journal.title,
       content: internship.forms.journal.content,
-      status: 'wait',
+      status,
     });
-    internship.forms.journal.id = null;
-    internship.forms.journal.arrangement_id = arrangementId;
-    internship.forms.journal.title = '';
-    internship.forms.journal.content = '';
-    internship.message = '日志已提交';
+    if (status === 'wait') {
+      internship.forms.journal.id = null;
+      internship.forms.journal.arrangement_id = arrangementId;
+      internship.forms.journal.title = '';
+      internship.forms.journal.content = '';
+    }
+    internship.message = status === 'wait' ? '日志已提交审核' : '日志草稿已保存';
     await loadInternship();
+    showToast(internship.message);
   } catch (error) {
     internship.message = error.message;
+    showToast(error.message);
   } finally {
     internship.loading = false;
   }
 }
 
-async function submitReport() {
+async function submitReport(status = 'wait') {
+  if (internship.loading) {
+    return;
+  }
   const arrangementId = internship.forms.report.arrangement_id || internship.forms.sign.arrangement_id;
   if (!arrangementId) {
     internship.message = '请选择实习任务';
     showToast(internship.message);
     return;
   }
-  if (isStageExpired('report_deadline')) {
+  if (status === 'wait' && isStageExpired('report_deadline')) {
     internship.message = '实习报告已截止，请先申请延期';
     showToast(internship.message);
     openDelayForStage('report_deadline');
@@ -3885,22 +3973,29 @@ async function submitReport() {
       template_id: internship.options.report_templates[0]?.id || null,
       title: internship.forms.report.title,
       content: internship.forms.report.content,
-      status: 'wait',
+      status,
     });
-    internship.forms.report.id = null;
-    internship.forms.report.arrangement_id = arrangementId;
-    internship.forms.report.title = '';
-    internship.forms.report.content = '';
-    internship.message = '报告已提交';
+    if (status === 'wait') {
+      internship.forms.report.id = null;
+      internship.forms.report.arrangement_id = arrangementId;
+      internship.forms.report.title = '';
+      internship.forms.report.content = '';
+    }
+    internship.message = status === 'wait' ? '报告已提交审核' : '报告草稿已保存';
     await loadInternship();
+    showToast(internship.message);
   } catch (error) {
     internship.message = error.message;
+    showToast(error.message);
   } finally {
     internship.loading = false;
   }
 }
 
-async function submitDelay() {
+async function submitDelay(status = 'wait') {
+  if (internship.loading) {
+    return;
+  }
   if (!internship.forms.delay.arrangement_id) {
     internship.message = '请选择实习任务';
     showToast(internship.message);
@@ -3927,14 +4022,19 @@ async function submitDelay() {
       config_key: internship.forms.delay.config_key,
       requested_date: internship.forms.delay.requested_date,
       reason: internship.forms.delay.reason,
+      status,
     });
-    internship.forms.delay.id = null;
-    internship.forms.delay.requested_date = '';
-    internship.forms.delay.reason = '';
-    internship.message = '延期申请已提交';
+    if (status === 'wait') {
+      internship.forms.delay.id = null;
+      internship.forms.delay.requested_date = '';
+      internship.forms.delay.reason = '';
+    }
+    internship.message = status === 'wait' ? '延期申请已提交审核' : '延期申请草稿已保存';
     await loadInternship();
+    showToast(internship.message);
   } catch (error) {
     internship.message = error.message;
+    showToast(error.message);
   } finally {
     internship.loading = false;
   }
@@ -3992,6 +4092,7 @@ function openReviewDialog(entity, row, status) {
   internship.reviewDialog.reason = status === 'accept' ? defaultReviewOpinion(entity, status) : '';
   trimReviewDialogMax();
   internship.reviewDialog.visible = true;
+  loadInternshipDialogReviewDraft();
 }
 
 function openReopenDialog(entity, row) {
@@ -4012,6 +4113,75 @@ function openReopenDialog(entity, row) {
 function closeReviewDialog() {
   internship.reviewDialog.visible = false;
   internship.reviewDialog.row = null;
+}
+
+function internshipReviewStatusOptions(entity) {
+  if (entity === 'arrangement_change') {
+    return ['accept', 'modify', 'refuse'].map(value => ({ value, label: reviewStatusLabels[value] }));
+  }
+  if (entity === 'delay') {
+    return ['accept', 'refuse'].map(value => ({ value, label: reviewStatusLabels[value] }));
+  }
+  return ['accept', 'modify'].map(value => ({ value, label: reviewStatusLabels[value] }));
+}
+
+function setInternshipReviewStatus(status) {
+  if (internship.reviewDialog.status === status) {
+    return;
+  }
+  internship.reviewDialog.status = status;
+  if (!internship.reviewDialog.reason || internship.reviewDialog.reason === defaultReviewOpinion(internship.reviewDialog.entity, 'accept')) {
+    internship.reviewDialog.reason = status === 'accept' ? defaultReviewOpinion(internship.reviewDialog.entity, status) : '';
+  }
+  trimReviewDialogMax();
+}
+
+async function loadInternshipDialogReviewDraft() {
+  const { entity, row, mode } = internship.reviewDialog;
+  if (mode !== 'review' || !row?.id || internship.loading) {
+    return;
+  }
+  internship.loading = true;
+  try {
+    const data = await fetchInternshipReviewDraft({ entity, id: row.id });
+    const draft = data?.draft || null;
+    if (draft?.review_status && internshipReviewStatusOptions(entity).some(item => item.value === draft.review_status)) {
+      internship.reviewDialog.status = draft.review_status;
+    }
+    if (draft?.opinion) {
+      internship.reviewDialog.reason = draft.opinion;
+      trimReviewDialogMax();
+    }
+  } catch (error) {
+    internship.message = error.message;
+    showToast(error.message);
+  } finally {
+    internship.loading = false;
+  }
+}
+
+async function saveInternshipDialogReviewDraft() {
+  const { entity, status, row, mode } = internship.reviewDialog;
+  if (internship.loading || mode !== 'review' || !row?.id) {
+    return;
+  }
+  trimReviewDialogMax();
+  internship.loading = true;
+  internship.message = '';
+  try {
+    await saveInternshipReviewDraft({
+      entity,
+      id: row.id,
+      status,
+      opinion: internship.reviewDialog.reason,
+    });
+    showToast('审核草稿已保存');
+  } catch (error) {
+    internship.message = error.message;
+    showToast(error.message);
+  } finally {
+    internship.loading = false;
+  }
 }
 
 async function openTimelineDialog(entity, row) {
@@ -4094,9 +4264,12 @@ function closePracticeExecutionDialog() {
   practiceExecutionDialog.row = null;
 }
 
-async function submitPracticeExecution() {
+async function submitPracticeExecution(status = 'wait') {
   const state = practiceModule(practiceExecutionDialog.module);
   const execution = practiceExecutionDialog.execution;
+  if (state.loading) {
+    return;
+  }
   if (!practiceExecutionDialog.form.project_id) {
     state.message = '请选择项目';
     showToast(state.message);
@@ -4125,14 +4298,17 @@ async function submitPracticeExecution() {
       longitude: practiceExecutionDialog.form.longitude,
       latitude: practiceExecutionDialog.form.latitude,
       remark: practiceExecutionDialog.form.remark,
-      status: execution === 'sign_in' ? 'signed' : 'wait',
+      status: execution === 'sign_in' ? 'signed' : status,
     });
-    closePracticeExecutionDialog();
+    if (execution === 'sign_in' || status === 'wait') {
+      closePracticeExecutionDialog();
+    }
     state.panel = practiceExecutionDialog.panel;
     await loadPractice(practiceExecutionDialog.module);
-    showToast('已提交');
+    showToast(execution === 'sign_in' ? '签到已提交' : (status === 'wait' ? '已提交审核' : '草稿已保存'));
   } catch (error) {
     state.message = error.message;
+    showToast(error.message);
   } finally {
     state.loading = false;
   }
@@ -4152,6 +4328,7 @@ function openPracticeReview(module, panel, row, status, mode = 'review') {
   practiceReviewDialog.row = row;
   practiceReviewDialog.reason = status === 'accept' ? '同意' : '';
   trimPracticeReviewMax();
+  loadPracticeDialogReviewDraft();
 }
 
 function closePracticeReviewDialog() {
@@ -4159,8 +4336,86 @@ function closePracticeReviewDialog() {
   practiceReviewDialog.row = null;
 }
 
+function practiceReviewStatusOptions() {
+  return ['accept', 'modify'].map(value => ({ value, label: reviewStatusLabels[value] }));
+}
+
+function setPracticeReviewStatus(status) {
+  if (practiceReviewDialog.status === status) {
+    return;
+  }
+  practiceReviewDialog.status = status;
+  if (!practiceReviewDialog.reason || practiceReviewDialog.reason === '同意') {
+    practiceReviewDialog.reason = status === 'accept' ? '同意' : '';
+  }
+  trimPracticeReviewMax();
+}
+
+function practiceReviewDraftPayload() {
+  const panel = practicePanelDefinitions.find(item => item.key === practiceReviewDialog.panel);
+  if (panel?.execution) {
+    return {
+      execution: panel.execution,
+      id: practiceReviewDialog.row?.id,
+    };
+  }
+  return {
+    entity: practiceReviewDialog.entity,
+    id: practiceReviewDialog.row?.id,
+  };
+}
+
+async function loadPracticeDialogReviewDraft() {
+  const state = practiceModule(practiceReviewDialog.module);
+  if (practiceReviewDialog.mode !== 'review' || !practiceReviewDialog.row?.id || state.loading) {
+    return;
+  }
+  state.loading = true;
+  try {
+    const data = await fetchPracticeReviewDraft(practiceReviewDialog.module, practiceReviewDraftPayload());
+    const draft = data?.draft || null;
+    if (draft?.review_status && practiceReviewStatusOptions().some(item => item.value === draft.review_status)) {
+      practiceReviewDialog.status = draft.review_status;
+    }
+    if (draft?.opinion) {
+      practiceReviewDialog.reason = draft.opinion;
+      trimPracticeReviewMax();
+    }
+  } catch (error) {
+    state.message = error.message;
+  } finally {
+    state.loading = false;
+  }
+}
+
+async function savePracticeReviewDraftFromDialog() {
+  const state = practiceModule(practiceReviewDialog.module);
+  if (state.loading || practiceReviewDialog.mode !== 'review' || !practiceReviewDialog.row?.id) {
+    return;
+  }
+  trimPracticeReviewMax();
+  state.loading = true;
+  state.message = '';
+  try {
+    await savePracticeReviewDraft(practiceReviewDialog.module, {
+      ...practiceReviewDraftPayload(),
+      status: practiceReviewDialog.status,
+      opinion: practiceReviewDialog.reason,
+    });
+    showToast('审核草稿已保存');
+  } catch (error) {
+    state.message = error.message;
+    showToast(error.message);
+  } finally {
+    state.loading = false;
+  }
+}
+
 async function confirmPracticeReview() {
   const state = practiceModule(practiceReviewDialog.module);
+  if (state.loading) {
+    return;
+  }
   const error = validatePracticeReason(
     practiceReviewDialog.module,
     practiceReviewDialog.entity,
@@ -4211,12 +4466,16 @@ async function confirmPracticeReview() {
     await loadPractice(practiceReviewDialog.module);
   } catch (error) {
     state.message = error.message;
+    showToast(error.message);
   } finally {
     state.loading = false;
   }
 }
 
 async function confirmReviewDialog() {
+  if (internship.loading) {
+    return;
+  }
   const { entity, status, row, mode } = internship.reviewDialog;
   if (!row?.id) {
     closeReviewDialog();
@@ -4277,6 +4536,7 @@ async function reviewApplication(row, status, opinion) {
     await loadInternship();
   } catch (error) {
     internship.message = error.message;
+    showToast(error.message);
   } finally {
     internship.loading = false;
   }
@@ -4295,6 +4555,7 @@ async function reviewArrangementChange(row, status, opinion) {
     await loadInternship();
   } catch (error) {
     internship.message = error.message;
+    showToast(error.message);
   } finally {
     internship.loading = false;
   }
@@ -4318,6 +4579,7 @@ async function reviewWork(type, row, status, opinion) {
     await loadInternship();
   } catch (error) {
     internship.message = error.message;
+    showToast(error.message);
   } finally {
     internship.loading = false;
   }
@@ -4337,6 +4599,7 @@ async function reviewPlan(row, status, opinion) {
     await loadInternship();
   } catch (error) {
     internship.message = error.message;
+    showToast(error.message);
   } finally {
     internship.loading = false;
   }
@@ -4355,6 +4618,7 @@ async function reviewDelay(row, status, opinion) {
     await loadInternship();
   } catch (error) {
     internship.message = error.message;
+    showToast(error.message);
   } finally {
     internship.loading = false;
   }
@@ -4373,6 +4637,7 @@ async function requestModification(entity, row, opinion) {
     await loadInternship();
   } catch (error) {
     internship.message = error.message;
+    showToast(error.message);
   } finally {
     internship.loading = false;
   }
@@ -5954,6 +6219,9 @@ async function submitRegister() {
 }
 
 async function submitLogin() {
+  if (loginState.loading) {
+    return;
+  }
   loginState.loading = true;
   loginState.message = '';
   try {
@@ -5971,6 +6239,9 @@ async function submitLogin() {
 }
 
 async function submitLogout() {
+  if (loginState.loading) {
+    return;
+  }
   loginState.loading = true;
   loginState.message = '';
   try {

@@ -519,13 +519,6 @@
                           <span>计划内容</span>
                           <textarea v-model="internshipState.planForm.content" rows="8" />
                         </label>
-                        <label>
-                          <span>状态</span>
-                          <el-select v-model="internshipState.planForm.status">
-                            <el-option label="保存草稿" value="draft" />
-                            <el-option label="提交审核" value="wait" />
-                          </el-select>
-                        </label>
                       </div>
 
                       <div v-else-if="internshipState.dialog.type === 'score'" class="operation-form">
@@ -702,6 +695,10 @@
 
                       <div v-else-if="['review', 'reopen'].includes(internshipState.dialog.type)" class="operation-form single">
                         <p>{{ internshipState.dialog.description }}</p>
+                        <label v-if="internshipState.dialog.type === 'review'">
+                          <span>审核结论</span>
+                          <el-segmented v-model="internshipState.dialog.status" :options="reviewStatusOptions(internshipState.dialog.entity)" />
+                        </label>
                         <label>
                           <span>{{ internshipState.dialog.type === 'reopen' ? '修改理由' : (isRejectReviewStatus(internshipState.dialog.status) ? '退回原因' : '审核意见') }}</span>
                           <textarea
@@ -761,7 +758,15 @@
 
                       <footer>
                         <el-button @click="closeInternshipDialog">取消</el-button>
-                        <el-button v-if="internshipState.dialog.type !== 'timeline'" type="primary" :loading="internshipState.loading" @click="confirmInternshipDialog">
+                        <template v-if="internshipState.dialog.type === 'plan'">
+                          <el-button :disabled="internshipState.loading" :loading="internshipState.loading" @click="submitInternshipPlan('draft')">保存草稿</el-button>
+                          <el-button type="primary" :disabled="internshipState.loading" :loading="internshipState.loading" @click="submitInternshipPlan('wait')">提交审核</el-button>
+                        </template>
+                        <template v-else-if="internshipState.dialog.type === 'review'">
+                          <el-button :disabled="internshipState.loading" :loading="internshipState.loading" @click="saveInternshipDialogReviewDraft">保存草稿</el-button>
+                          <el-button type="primary" :disabled="internshipState.loading" :loading="internshipState.loading" @click="confirmInternshipDialog">提交审核</el-button>
+                        </template>
+                        <el-button v-else-if="internshipState.dialog.type !== 'timeline'" type="primary" :disabled="internshipState.loading" :loading="internshipState.loading" @click="confirmInternshipDialog">
                           确认
                         </el-button>
                       </footer>
@@ -1442,7 +1447,7 @@
                           <span>内容</span>
                           <textarea v-model="practiceModuleState(win.module.id).form.content" rows="8" />
                         </label>
-                        <label>
+                        <label v-if="!practiceDialogUsesWorkflowButtons(win.module.id)">
                           <span>状态</span>
                           <el-select v-model="practiceModuleState(win.module.id).form.status">
                             <el-option v-for="option in practiceEditStatusOptions(win.panel)" :key="option.value" :label="option.label" :value="option.value" />
@@ -1452,6 +1457,10 @@
 
                       <div v-else-if="['review', 'reopen'].includes(practiceModuleState(win.module.id).dialog.type)" class="operation-form single">
                         <p>{{ practiceModuleState(win.module.id).dialog.description }}</p>
+                        <label v-if="practiceModuleState(win.module.id).dialog.type === 'review'">
+                          <span>审核结论</span>
+                          <el-segmented v-model="practiceModuleState(win.module.id).dialog.status" :options="practiceReviewStatusOptions()" />
+                        </label>
                         <label>
                           <span>{{ practiceModuleState(win.module.id).dialog.type === 'reopen' ? '修改理由' : (practiceModuleState(win.module.id).dialog.status === 'modify' ? '退回原因' : '审核意见') }}</span>
                           <textarea
@@ -1510,7 +1519,15 @@
 
                       <footer>
                         <el-button @click="closePracticeDialog(win.module.id)">取消</el-button>
-                        <el-button v-if="practiceModuleState(win.module.id).dialog.type !== 'timeline'" type="primary" :loading="practiceModuleState(win.module.id).loading" @click="confirmPracticeDialog(win.module.id)">
+                        <template v-if="practiceDialogUsesWorkflowButtons(win.module.id)">
+                          <el-button :disabled="practiceModuleState(win.module.id).loading" :loading="practiceModuleState(win.module.id).loading" @click="submitPracticeWorkflowDialog(win.module.id, 'draft')">保存草稿</el-button>
+                          <el-button type="primary" :disabled="practiceModuleState(win.module.id).loading" :loading="practiceModuleState(win.module.id).loading" @click="submitPracticeWorkflowDialog(win.module.id, 'wait')">提交审核</el-button>
+                        </template>
+                        <template v-else-if="practiceModuleState(win.module.id).dialog.type === 'review'">
+                          <el-button :disabled="practiceModuleState(win.module.id).loading" :loading="practiceModuleState(win.module.id).loading" @click="savePracticeDialogReviewDraft(win.module.id)">保存草稿</el-button>
+                          <el-button type="primary" :disabled="practiceModuleState(win.module.id).loading" :loading="practiceModuleState(win.module.id).loading" @click="confirmPracticeDialog(win.module.id)">提交审核</el-button>
+                        </template>
+                        <el-button v-else-if="practiceModuleState(win.module.id).dialog.type !== 'timeline'" type="primary" :disabled="practiceModuleState(win.module.id).loading" :loading="practiceModuleState(win.module.id).loading" @click="confirmPracticeDialog(win.module.id)">
                           确认
                         </el-button>
                       </footer>
@@ -3361,6 +3378,7 @@ import {
   fetchInternshipPairs,
   fetchInternshipPlans,
   fetchInternshipReports,
+  fetchInternshipReviewDraft,
   fetchInternshipSafetyLetters,
   fetchInternshipScores,
   fetchInternshipSignIns,
@@ -3383,6 +3401,7 @@ import {
   fetchPracticeOverview,
   fetchPracticeExecutionList,
   fetchPracticeExecutionTimeline,
+  fetchPracticeReviewDraft,
   fetchPracticeTimeline,
   fetchProfileSettings,
   fetchRolePermissions,
@@ -3417,9 +3436,11 @@ import {
   saveInternshipBaseFlow,
   saveInternshipCourseScore,
   saveInternshipPlan,
+  saveInternshipReviewDraft,
   saveInternshipScore,
   savePracticeExecution,
   savePracticeItem,
+  savePracticeReviewDraft,
   savePracticeProjectScore,
   saveDesktopShortcuts,
   saveFavorite,
@@ -6678,6 +6699,9 @@ async function submitRegister() {
 }
 
 async function submitLogin() {
+  if (loginState.loading) {
+    return;
+  }
   loginState.loading = true;
   loginState.message = '';
   try {
@@ -6811,6 +6835,9 @@ async function consumeUrlPasskey() {
 }
 
 async function submitLogout() {
+  if (loginState.loading) {
+    return;
+  }
   loginState.loading = true;
   loginState.message = '';
   try {
@@ -8425,6 +8452,7 @@ function emptyArrangementForm() {
 
 function emptyPlanForm() {
   return {
+    id: null,
     source_type: 'edu_system',
     course_code: '',
     course_name: '',
@@ -8688,6 +8716,33 @@ function practiceReviewEntity(panel) {
     lessonPlans: 'lessonPlan',
     reflections: 'reflection',
   }[panel] || '';
+}
+
+function practiceReviewStatusOptions() {
+  return [
+    { label: '通过', value: 'accept' },
+    { label: '修改', value: 'modify' },
+  ];
+}
+
+function reviewStatusOptions(entity) {
+  if (entity === 'delay') {
+    return [
+      { label: '通过', value: 'accept' },
+      { label: '退回', value: 'refuse' },
+    ];
+  }
+  if (entity === 'arrangement_change') {
+    return [
+      { label: '通过', value: 'accept' },
+      { label: '修改', value: 'modify' },
+      { label: '拒绝', value: 'refuse' },
+    ];
+  }
+  return [
+    { label: '通过', value: 'accept' },
+    { label: '修改', value: 'modify' },
+  ];
 }
 
 function isPracticeExecutionPanel(panel) {
@@ -9260,6 +9315,9 @@ function closePracticeDialog(module) {
 
 async function confirmPracticeDialog(module) {
   const state = practiceModuleState(module);
+  if (state.loading) {
+    return;
+  }
   if (state.dialog.type === 'execution') {
     await savePracticeExecutionDialog(module);
     return;
@@ -9291,6 +9349,30 @@ async function confirmPracticeDialog(module) {
   }
 }
 
+function practiceDialogUsesWorkflowButtons(module) {
+  const state = practiceModuleState(module);
+  if (state.dialog.type === 'execution') {
+    return Boolean(practiceReviewEntity(state.dialog.panel));
+  }
+  if (state.dialog.type !== 'edit') {
+    return false;
+  }
+  return Boolean(practiceReviewEntity(state.dialog.panel));
+}
+
+async function submitPracticeWorkflowDialog(module, status) {
+  const state = practiceModuleState(module);
+  if (state.loading) {
+    return;
+  }
+  if (state.dialog.type === 'execution') {
+    await savePracticeExecutionDialog(module, status);
+    return;
+  }
+  state.form.status = status;
+  await savePractice(module, status);
+}
+
 function practiceExecutionQueryParams(module, panel, page = 1) {
   const state = practiceModuleState(module);
   const filters = state.filters[panel] || {};
@@ -9306,8 +9388,11 @@ function practiceExecutionQueryParams(module, panel, page = 1) {
   return params;
 }
 
-async function savePracticeExecutionDialog(module) {
+async function savePracticeExecutionDialog(module, workflowStatus = 'wait') {
   const state = practiceModuleState(module);
+  if (state.loading) {
+    return;
+  }
   const panel = state.dialog.row ? state.dialog.panel || currentPracticeDialogPanel(module) : currentPracticeDialogPanel(module);
   const execution = practiceExecutionType(panel);
   if (!state.form.project_id) {
@@ -9332,7 +9417,7 @@ async function savePracticeExecutionDialog(module) {
       longitude: state.form.longitude,
       latitude: state.form.latitude,
       remark: state.form.remark,
-      status: execution === 'sign_in' ? 'signed' : 'wait',
+      status: execution === 'sign_in' ? 'signed' : workflowStatus,
     });
     closePracticeDialog(module);
     await loadPracticePanel(module, panel, state.lists[panel]?.pagination.page || 1);
@@ -9378,8 +9463,11 @@ function currentPracticeDialogPanel(module) {
   return Object.keys(state.lists).find(panel => practicePanelEntity(panel) === state.dialog.entity) || 'plans';
 }
 
-async function savePractice(module) {
+async function savePractice(module, workflowStatus = null) {
   const state = practiceModuleState(module);
+  if (state.loading) {
+    return;
+  }
   const panel = practiceSidebarItems().find(item => practicePanelEntity(item.key) === state.dialog.entity)?.key || 'plans';
   const error = validatePracticeForm(module, panel, state.form);
   if (error) {
@@ -9389,6 +9477,7 @@ async function savePractice(module) {
   const payload = {
     ...state.form,
     entity: state.dialog.entity,
+    status: workflowStatus || state.form.status,
     ratio_json: ratioTextToJson(state.form.ratio_text),
   };
   state.loading = true;
@@ -9424,7 +9513,7 @@ function canReopenPracticeRow(module, panel, row) {
   return Boolean(row && row.status === 'accept' && practiceReviewEntity(panel) && canApprovePractice(module));
 }
 
-function openPracticeReviewDialog(module, panel, row, status) {
+async function openPracticeReviewDialog(module, panel, row, status) {
   if (!canReviewPracticeRow(module, panel, row)) {
     practiceModuleState(module).message = '仅待审核数据可处理';
     return;
@@ -9442,6 +9531,7 @@ function openPracticeReviewDialog(module, panel, row, status) {
     row,
     reason: status === 'accept' ? '同意' : '',
   };
+  await loadPracticeDialogReviewDraft(module);
 }
 
 function openPracticeReopenDialog(module, panel, row) {
@@ -9481,6 +9571,51 @@ async function openPracticeTimelineDialog(module, panel, row) {
       : await fetchPracticeTimeline(module, { entity: practiceReviewEntity(panel), id: row.id });
     state.dialog.cycles = data.cycles || [];
     state.dialog.timeline = data.items || data.records || [];
+  } catch (error) {
+    state.message = error.message;
+  } finally {
+    state.loading = false;
+  }
+}
+
+async function loadPracticeDialogReviewDraft(module) {
+  const state = practiceModuleState(module);
+  const { entity, panel, row } = state.dialog;
+  if (!entity || !row?.id) {
+    return;
+  }
+  const params = isPracticeExecutionPanel(panel)
+    ? { execution: practiceExecutionType(panel), id: row.id }
+    : { entity, id: row.id };
+  try {
+    const data = await fetchPracticeReviewDraft(module, params);
+    const draft = data.draft || null;
+    if (draft) {
+      state.dialog.status = draft.review_status || state.dialog.status;
+      state.dialog.reason = draft.opinion || '';
+    }
+  } catch (error) {
+    state.message = error.message;
+  }
+}
+
+async function savePracticeDialogReviewDraft(module) {
+  const state = practiceModuleState(module);
+  if (state.loading) {
+    return;
+  }
+  const { entity, panel, row, status, reason } = state.dialog;
+  if (!entity || !row?.id) {
+    return;
+  }
+  const payload = isPracticeExecutionPanel(panel)
+    ? { execution: practiceExecutionType(panel), id: row.id, status, opinion: reason }
+    : { entity, id: row.id, status, opinion: reason };
+  state.loading = true;
+  state.message = '';
+  try {
+    await savePracticeReviewDraft(module, payload);
+    state.message = '审核草稿已保存';
   } catch (error) {
     state.message = error.message;
   } finally {
@@ -10621,7 +10756,7 @@ function openBaseFlowDialog(row = null) {
   };
 }
 
-function openReviewDialog(entity, row, status) {
+async function openReviewDialog(entity, row, status) {
   if (!canReviewRow(row, entity)) {
     internshipState.message = '仅待审核数据可处理';
     return;
@@ -10639,6 +10774,7 @@ function openReviewDialog(entity, row, status) {
     row,
     reason: status === 'accept' ? '同意' : '',
   };
+  await loadInternshipDialogReviewDraft();
 }
 
 function openReopenDialog(entity, row) {
@@ -10682,6 +10818,48 @@ async function openTimelineDialog(entity, row) {
   }
 }
 
+async function loadInternshipDialogReviewDraft() {
+  const { entity, row } = internshipState.dialog;
+  if (!entity || !row?.id) {
+    return;
+  }
+  try {
+    const data = await fetchInternshipReviewDraft({ entity, id: row.id });
+    const draft = data.draft || null;
+    if (draft) {
+      internshipState.dialog.status = draft.review_status || internshipState.dialog.status;
+      internshipState.dialog.reason = draft.opinion || '';
+    }
+  } catch (error) {
+    internshipState.message = error.message;
+  }
+}
+
+async function saveInternshipDialogReviewDraft() {
+  if (internshipState.loading) {
+    return;
+  }
+  const { entity, status, row, reason } = internshipState.dialog;
+  if (!entity || !row?.id) {
+    return;
+  }
+  internshipState.loading = true;
+  internshipState.message = '';
+  try {
+    await saveInternshipReviewDraft({
+      entity,
+      id: row.id,
+      status,
+      opinion: reason,
+    });
+    internshipState.message = '审核草稿已保存';
+  } catch (error) {
+    internshipState.message = error.message;
+  } finally {
+    internshipState.loading = false;
+  }
+}
+
 function closeInternshipDialog() {
   internshipState.dialog = emptyOperationDialog();
   internshipState.arrangementDetail = emptyArrangementDetail();
@@ -10689,6 +10867,9 @@ function closeInternshipDialog() {
 }
 
 async function confirmInternshipDialog() {
+  if (internshipState.loading) {
+    return;
+  }
   if (internshipState.dialog.type === 'arrangement') {
     await saveArrangement();
     return;
@@ -10741,6 +10922,14 @@ async function confirmInternshipDialog() {
     }
     await requestModification();
   }
+}
+
+async function submitInternshipPlan(status) {
+  if (internshipState.loading) {
+    return;
+  }
+  internshipState.planForm.status = status;
+  await savePlan();
 }
 
 function reviewRule(entity, status) {
@@ -11254,6 +11443,9 @@ async function saveArrangement() {
 }
 
 async function reviewArrangementChange(row, status, opinion = '') {
+  if (internshipState.loading) {
+    return;
+  }
   internshipState.loading = true;
   internshipState.message = '';
   try {
@@ -11316,6 +11508,9 @@ async function handleArrangementImportFile(event) {
 }
 
 async function reviewApplication(row, status, opinion = '') {
+  if (internshipState.loading) {
+    return;
+  }
   internshipState.loading = true;
   internshipState.message = '';
   try {
@@ -11337,6 +11532,9 @@ async function reviewApplication(row, status, opinion = '') {
 }
 
 async function savePlan() {
+  if (internshipState.loading) {
+    return;
+  }
   if (!canManageInternshipPlan.value) {
     return;
   }
@@ -11361,6 +11559,7 @@ async function savePlan() {
   internshipState.message = '';
   try {
     await saveInternshipPlan({
+      id: internshipState.planForm.id || undefined,
       source_type: internshipState.planForm.source_type,
       course_code: internshipState.planForm.course_code,
       course_name: internshipState.planForm.course_name,
@@ -11389,6 +11588,9 @@ async function savePlan() {
 }
 
 async function reviewPlan(row, status, opinion = '') {
+  if (internshipState.loading) {
+    return;
+  }
   internshipState.loading = true;
   internshipState.message = '';
   try {
@@ -11408,6 +11610,9 @@ async function reviewPlan(row, status, opinion = '') {
 }
 
 async function reviewDelay(row, status, opinion = '') {
+  if (internshipState.loading) {
+    return;
+  }
   internshipState.loading = true;
   internshipState.message = '';
   try {
@@ -11426,6 +11631,9 @@ async function reviewDelay(row, status, opinion = '') {
 }
 
 async function reviewStudentWork(type, row, status, opinion = '') {
+  if (internshipState.loading) {
+    return;
+  }
   internshipState.loading = true;
   internshipState.message = '';
   try {
@@ -11450,6 +11658,9 @@ async function reviewStudentWork(type, row, status, opinion = '') {
 }
 
 async function requestModification() {
+  if (internshipState.loading) {
+    return;
+  }
   internshipState.loading = true;
   internshipState.message = '';
   try {

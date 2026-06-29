@@ -671,6 +671,7 @@ function schoolBusinessStatements(): array
         simpleTable('report_recording', recordingColumns()),
         simpleTable('report_template', ['`template_json` JSON DEFAULT NULL']),
         simpleTable('review_opinion', entityColumns(['`reviewer_id` BIGINT UNSIGNED DEFAULT NULL', '`opinion` TEXT DEFAULT NULL'])),
+        simpleTable('review_opinion_draft', entityColumns(['`reviewer_id` BIGINT UNSIGNED DEFAULT NULL', '`teacher_id` BIGINT UNSIGNED DEFAULT NULL', '`review_status` VARCHAR(40) DEFAULT NULL', '`opinion` TEXT DEFAULT NULL', '`score` DECIMAL(5,2) DEFAULT NULL', 'UNIQUE KEY `uk_review_draft` (`entity_type`, `entity_id`, `reviewer_id`)', 'KEY `idx_reviewer` (`reviewer_id`)'])),
         simpleTable('recording_archive_2026', recordingColumns()),
         simpleTable('apply_report_delay', entityColumns(['`student_id` BIGINT UNSIGNED DEFAULT NULL', '`config_key` VARCHAR(120) DEFAULT NULL', '`requested_date` DATE DEFAULT NULL', '`reason` TEXT DEFAULT NULL'])),
         simpleTable('apply_report_delay_recording', recordingColumns()),
@@ -1242,6 +1243,8 @@ function ensureInternshipSchema(PDO $pdo): void
     ensureIndex($pdo, 'report', 'idx_report_student_arrangement', "ALTER TABLE `report` ADD KEY `idx_report_student_arrangement` (`student_id`, `arrangement_id`, `status`)");
     ensureIndex($pdo, 'report', 'idx_report_student_entity', "ALTER TABLE `report` ADD KEY `idx_report_student_entity` (`student_id`, `entity_type`, `entity_id`, `status`)");
     ensureIndex($pdo, 'review_opinion', 'idx_review_entity', "ALTER TABLE `review_opinion` ADD KEY `idx_review_entity` (`entity_type`, `entity_id`, `status`, `created_at`)");
+    ensureIndex($pdo, 'review_opinion_draft', 'uk_review_draft', "ALTER TABLE `review_opinion_draft` ADD UNIQUE KEY `uk_review_draft` (`entity_type`, `entity_id`, `reviewer_id`)");
+    ensureIndex($pdo, 'review_opinion_draft', 'idx_review_draft_entity', "ALTER TABLE `review_opinion_draft` ADD KEY `idx_review_draft_entity` (`entity_type`, `entity_id`, `status`, `updated_at`)");
     ensureIndex($pdo, 'apply_report_delay', 'idx_delay_student_entity', "ALTER TABLE `apply_report_delay` ADD KEY `idx_delay_student_entity` (`student_id`, `entity_type`, `entity_id`, `status`)");
     ensureIndex($pdo, 'score', 'idx_score_student_arrangement', "ALTER TABLE `score` ADD KEY `idx_score_student_arrangement` (`student_id`, `arrangement_id`)");
     ensureIndex($pdo, 'course_score', 'uk_course_score', "ALTER TABLE `course_score` ADD UNIQUE KEY `uk_course_score` (`plan_id`, `student_id`)");

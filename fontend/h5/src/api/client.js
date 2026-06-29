@@ -6,16 +6,56 @@ export async function request(path, options = {}) {
 }
 
 async function sendRequest(path, options = {}, canRefresh = true) {
-  const isFormData = options.body instanceof FormData;
-  const response = await fetch(`${apiBase}${path}`, {
-    credentials: 'include',
-    headers: {
-      Accept: 'application/json',
-      ...(!isFormData ? { 'Content-Type': 'application/json' } : {}),
-      ...(options.headers || {}),
-    },
-    ...options,
-  });
+  const {
+    timeoutMs: rawTimeoutMs,
+    signal: externalSignal,
+    headers = {},
+    ...fetchOptions
+  } = options;
+  const isFormData = fetchOptions.body instanceof FormData;
+  const timeoutMs = Number(rawTimeoutMs ?? (isFormData ? 120000 : 30000));
+  let didTimeout = false;
+  let timeoutId = null;
+  let abortController = null;
+  let abortExternal = null;
+
+  if (timeoutMs > 0 && typeof AbortController !== 'undefined') {
+    abortController = new AbortController();
+    timeoutId = window.setTimeout(() => {
+      didTimeout = true;
+      abortController.abort();
+    }, timeoutMs);
+    if (externalSignal) {
+      abortExternal = () => abortController.abort();
+      externalSignal.addEventListener('abort', abortExternal, { once: true });
+    }
+  }
+
+  let response;
+  try {
+    response = await fetch(`${apiBase}${path}`, {
+      credentials: 'include',
+      headers: {
+        Accept: 'application/json',
+        ...(!isFormData ? { 'Content-Type': 'application/json' } : {}),
+        ...headers,
+      },
+      ...fetchOptions,
+      signal: abortController?.signal || externalSignal,
+    });
+  } catch (error) {
+    if (error?.name === 'AbortError') {
+      throw new Error(didTimeout ? '请求超时，请稍后重试' : '请求已取消');
+    }
+    throw error;
+  } finally {
+    if (timeoutId) {
+      window.clearTimeout(timeoutId);
+    }
+    if (externalSignal && abortExternal) {
+      externalSignal.removeEventListener('abort', abortExternal);
+    }
+  }
 
   const payload = await response.json().catch(() => ({
     code: response.status,

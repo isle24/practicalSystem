@@ -865,6 +865,12 @@ select {
   font-weight: 700;
 }
 
+.workflow-button-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
 .mobile-list-tools {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1227,6 +1233,27 @@ select {
   overflow-wrap: anywhere;
 }
 
+.review-status-switch {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: 8px;
+}
+
+.review-status-switch button {
+  height: 36px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--muted);
+  background: #f8fafc;
+}
+
+.review-status-switch button.active {
+  border-color: var(--primary);
+  color: var(--primary);
+  background: #eff6ff;
+}
+
 .review-sheet label {
   display: grid;
   gap: 7px;
@@ -1258,6 +1285,10 @@ select {
   grid-template-columns: 1fr;
 }
 
+.sheet-actions.triple {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .sheet-actions button {
   height: 40px;
   border: 1px solid var(--line);
@@ -1267,6 +1298,12 @@ select {
 }
 
 .sheet-actions button:last-child {
+  border-color: var(--primary);
+  color: #fff;
+  background: var(--primary);
+}
+
+.sheet-actions button.primary-action {
   border-color: var(--primary);
   color: #fff;
   background: var(--primary);

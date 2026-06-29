@@ -192,6 +192,105 @@ class TableRecord extends BaseModel
         $ensured[$table] = true;
     }
 
+    public static function ensureReviewOpinionDraftTable(): void
+    {
+        static $ensured = [];
+        $connection = self::connection();
+        $key = method_exists($connection, 'getDatabaseName') ? (string) $connection->getDatabaseName() : spl_object_hash($connection);
+        if (isset($ensured[$key])) {
+            return;
+        }
+
+        $connection->statement("CREATE TABLE IF NOT EXISTS `review_opinion_draft` (
+            `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            `uuid` CHAR(36) DEFAULT NULL,
+            `name` VARCHAR(180) DEFAULT NULL,
+            `code` VARCHAR(120) DEFAULT NULL,
+            `status` VARCHAR(40) DEFAULT 'enabled',
+            `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+            `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            `deleted_at` DATETIME DEFAULT NULL,
+            `entity_type` VARCHAR(40) DEFAULT NULL,
+            `entity_id` BIGINT UNSIGNED DEFAULT NULL,
+            `reviewer_id` BIGINT UNSIGNED DEFAULT NULL,
+            `teacher_id` BIGINT UNSIGNED DEFAULT NULL,
+            `review_status` VARCHAR(40) DEFAULT NULL,
+            `opinion` TEXT DEFAULT NULL,
+            `score` DECIMAL(5,2) DEFAULT NULL,
+            PRIMARY KEY (`id`),
+            UNIQUE KEY `uk_uuid` (`uuid`),
+            UNIQUE KEY `uk_review_draft` (`entity_type`, `entity_id`, `reviewer_id`),
+            KEY `idx_status` (`status`),
+            KEY `idx_entity` (`entity_type`, `entity_id`),
+            KEY `idx_reviewer` (`reviewer_id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        $ensured[$key] = true;
+    }
+
+    public static function reviewOpinionDraftRow(string $entityType, int $entityId, int $reviewerId): ?array
+    {
+        self::ensureReviewOpinionDraftTable();
+
+        $row = self::queryTable('review_opinion_draft')
+            ->where('entity_type', $entityType)
+            ->where('entity_id', $entityId)
+            ->where('reviewer_id', $reviewerId)
+            ->where('status', 'enabled')
+            ->whereNull('deleted_at')
+            ->first(['id', 'uuid', 'entity_type', 'entity_id', 'reviewer_id', 'teacher_id', 'review_status', 'opinion', 'score', 'updated_at']);
+
+        return $row ? $row->getAttributes() : null;
+    }
+
+    public static function saveReviewOpinionDraft(array $values): int
+    {
+        self::ensureReviewOpinionDraftTable();
+
+        $entityType = (string) ($values['entity_type'] ?? '');
+        $entityId = (int) ($values['entity_id'] ?? 0);
+        $reviewerId = (int) ($values['reviewer_id'] ?? 0);
+        $now = (string) ($values['updated_at'] ?? date('Y-m-d H:i:s'));
+        $existingId = (int) (self::queryTable('review_opinion_draft')
+            ->where('entity_type', $entityType)
+            ->where('entity_id', $entityId)
+            ->where('reviewer_id', $reviewerId)
+            ->value('id') ?: 0);
+
+        if ($existingId > 0) {
+            unset($values['uuid'], $values['created_at']);
+            $values['status'] = 'enabled';
+            $values['deleted_at'] = null;
+            $values['updated_at'] = $now;
+            self::queryTable('review_opinion_draft')->where('id', $existingId)->update($values);
+            return $existingId;
+        }
+
+        return (int) self::queryTable('review_opinion_draft')->insertGetId(array_merge([
+            'uuid' => self::uuid(),
+            'status' => 'enabled',
+            'created_at' => $now,
+            'updated_at' => $now,
+            'deleted_at' => null,
+        ], $values));
+    }
+
+    public static function clearReviewOpinionDraft(string $entityType, int $entityId, int $reviewerId, string $now): int
+    {
+        self::ensureReviewOpinionDraftTable();
+
+        return self::queryTable('review_opinion_draft')
+            ->where('entity_type', $entityType)
+            ->where('entity_id', $entityId)
+            ->where('reviewer_id', $reviewerId)
+            ->whereNull('deleted_at')
+            ->update([
+                'status' => 'disabled',
+                'deleted_at' => $now,
+                'updated_at' => $now,
+            ]);
+    }
+
     private static function applyOperationLogFilters(mixed $query, string $table, array $filters): mixed
     {
         $keyword = trim((string) ($filters['keyword'] ?? ''));

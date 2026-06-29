@@ -5,6 +5,7 @@ namespace app\server\internship;
 use app\model\channel\InternshipRecord;
 use app\model\channel\PracticeRecord;
 use app\server\CurrentContext;
+use app\server\WorkflowLock;
 use app\server\config\ConfigService;
 use app\server\message\MessageService;
 use InvalidArgumentException;
@@ -364,7 +365,7 @@ class InternshipService
             throw new RuntimeException('任务变更单不存在或无权限', 40301);
         }
         if ((string) $change->status !== 'wait') {
-            throw new InvalidArgumentException('仅待审核任务变更可处理', 42204);
+            throw new InvalidArgumentException('数据已变更，请刷新后重试', 409);
         }
         $arrangementId = (int) $change->arrangement_id;
         $original = InternshipRecord::activeRowById('arrangement', $arrangementId);
@@ -393,7 +394,7 @@ class InternshipService
                 throw new RuntimeException('任务变更单不存在或无权限', 40301);
             }
             if ((string) $change->status !== 'wait') {
-                throw new InvalidArgumentException('仅待审核任务变更可处理', 42204);
+                throw new InvalidArgumentException('数据已变更，请刷新后重试', 409);
             }
 
             $now = $this->now();
@@ -425,6 +426,7 @@ class InternshipService
                 $opinion ?: ($status === 'accept' ? '同意任务变更' : '任务变更退回'),
                 $status
             );
+            InternshipRecord::clearReviewOpinionDraft('arrangement_change', $changeId, $this->accountId(), $now);
             if ($status !== 'accept') {
                 $this->recordWorkflow(
                     'arrangement_recording',
@@ -526,6 +528,9 @@ class InternshipService
                 throw new RuntimeException('该实习安排不可重复申请', 42201);
             }
         }
+        if ($existingId && !in_array($fromStatus, ['draft', 'modify'], true)) {
+            throw new InvalidArgumentException('数据已变更，请刷新后重试', 409);
+        }
 
         $values = [
             'student_id' => $studentId,
@@ -539,39 +544,50 @@ class InternshipService
             'deleted_at' => null,
         ];
 
-        $id = $this->saveRow('application', $request, $values, [
-            'student_id' => $studentId,
-            'arrangement_id' => $arrangementId,
-        ])['id'];
-        $this->syncJoinTeachers($id, $studentId, $arrangementId, InternshipRecord::activePairTeacherIds($studentId, $arrangementId));
-        if ($status === 'wait') {
-            $this->recordWorkflow('application_recording', 'application', $id, 'submit', $fromStatus, 'wait', $values['remark'] ?: '提交特殊申请', 'wait');
-        }
+        $save = function () use ($request, $values, $studentId, $arrangementId, $status, $fromStatus): array {
+            $id = $this->saveRow('application', $request, $values, [
+                'student_id' => $studentId,
+                'arrangement_id' => $arrangementId,
+            ])['id'];
+            $this->syncJoinTeachers($id, $studentId, $arrangementId, InternshipRecord::activePairTeacherIds($studentId, $arrangementId));
+            if ($status === 'wait') {
+                $this->recordWorkflow('application_recording', 'application', $id, 'submit', $fromStatus, 'wait', $values['remark'] ?: '提交特殊申请', 'wait');
+            }
 
-        return ['id' => $id, 'item' => $this->application($id)];
+            return ['id' => $id, 'item' => $this->application($id)];
+        };
+
+        return $existingId
+            ? $this->workflowLock('internship', 'application', $existingId, $save)
+            : $save();
     }
 
     public function submitApplication(Request $request): array
     {
         $this->requirePermission('internship:apply');
         $id = $this->requiredRowId($request, 'application');
-        $row = $this->row('application', $id);
-        $this->assertStudentVisible((int) $row->student_id);
-        $this->assertTaskBindingVisible((int) $row->student_id, (int) $row->arrangement_id);
-        if ((string) $row->status === 'accept') {
-            throw new RuntimeException('该实习安排不可重复申请', 42201);
-        }
+        return $this->workflowLock('internship', 'application', $id, function () use ($id): array {
+            $row = InternshipRecord::lockActiveRowById('application', $id);
+            if (!$row) {
+                throw new RuntimeException('特殊申请不存在');
+            }
+            $this->assertStudentVisible((int) $row->student_id);
+            $this->assertTaskBindingVisible((int) $row->student_id, (int) $row->arrangement_id);
+            if (!in_array((string) $row->status, ['draft', 'modify'], true)) {
+                throw new InvalidArgumentException('数据已变更，请刷新后重试', 409);
+            }
 
-        InternshipRecord::updateById('application', $id, [
-            'status' => 'wait',
-            'teacher_status' => 'pending',
-            'admin_status' => 'pending',
-            'updated_at' => $this->now(),
-        ]);
-        $this->syncJoinTeachers($id, (int) $row->student_id, (int) $row->arrangement_id, InternshipRecord::activePairTeacherIds((int) $row->student_id, (int) $row->arrangement_id));
-        $this->recordWorkflow('application_recording', 'application', $id, 'submit', (string) $row->status, 'wait', (string) ($row->remark ?: '提交特殊申请'), 'wait');
+            InternshipRecord::updateById('application', $id, [
+                'status' => 'wait',
+                'teacher_status' => 'pending',
+                'admin_status' => 'pending',
+                'updated_at' => $this->now(),
+            ]);
+            $this->syncJoinTeachers($id, (int) $row->student_id, (int) $row->arrangement_id, InternshipRecord::activePairTeacherIds((int) $row->student_id, (int) $row->arrangement_id));
+            $this->recordWorkflow('application_recording', 'application', $id, 'submit', (string) $row->status, 'wait', (string) ($row->remark ?: '提交特殊申请'), 'wait');
 
-        return ['id' => $id, 'item' => $this->application($id)];
+            return ['id' => $id, 'item' => $this->application($id)];
+        });
     }
 
     public function reviewApplication(Request $request): array
@@ -582,7 +598,8 @@ class InternshipService
         $opinion = $this->reviewOpinionInput($request, 'application', $status);
         $this->ensureRecordingTable('application_recording');
 
-        return $this->connection()->transaction(function () use ($id, $status, $opinion): array {
+        return $this->workflowLock('internship', 'application', $id, function () use ($id, $status, $opinion): array {
+            return $this->connection()->transaction(function () use ($id, $status, $opinion): array {
             $row = InternshipRecord::lockActiveRowById('application', $id);
             if (!$row) {
                 throw new RuntimeException('特殊申请不存在');
@@ -590,14 +607,14 @@ class InternshipService
             $this->assertApplicationVisible((int) $row->id);
             $this->assertTaskBindingVisible((int) $row->student_id, (int) $row->arrangement_id);
             if ((string) $row->status !== 'wait') {
-                throw new InvalidArgumentException('仅待审核特殊申请可处理', 42204);
+                throw new InvalidArgumentException('数据已变更，请刷新后重试', 409);
             }
 
             $updates = ['updated_at' => $this->now()];
             $action = 'review';
             if ($this->isTeacher()) {
                 if (!in_array((string) $row->teacher_status, ['pending', 'wait'], true)) {
-                    throw new InvalidArgumentException('当前教师审核节点已处理', 42204);
+                    throw new InvalidArgumentException('数据已变更，请刷新后重试', 409);
                 }
                 $updates['teacher_status'] = $status;
                 $action = 'teacher_review';
@@ -605,7 +622,7 @@ class InternshipService
             } else {
                 $this->requireAdminRole();
                 if (!in_array((string) $row->admin_status, ['pending', 'wait'], true)) {
-                    throw new InvalidArgumentException('当前管理审核节点已处理', 42204);
+                    throw new InvalidArgumentException('数据已变更，请刷新后重试', 409);
                 }
                 $updates['admin_status'] = $status === 'skipped' ? 'accept' : $status;
                 $action = 'admin_review';
@@ -619,8 +636,10 @@ class InternshipService
             $fresh = InternshipRecord::rowById('application', $id);
             $finalStatus = $this->refreshApplicationFinalStatus($fresh);
             $this->recordWorkflow('application_recording', 'application', $id, $action, (string) $row->status, $finalStatus, $opinion ?: '审核处理', $status);
+            InternshipRecord::clearReviewOpinionDraft('application', $id, $this->accountId(), $this->now());
 
             return ['id' => $id, 'item' => $this->application($id)];
+            });
         });
     }
 
@@ -658,14 +677,15 @@ class InternshipService
         $opinion = $this->reviewOpinionInput($request, $entity, 'modify', '修改理由');
         $this->ensureRecordingTable($config['recording']);
 
-        return $this->connection()->transaction(function () use ($entity, $config, $id, $opinion): array {
+        return $this->workflowLock('internship', $entity, $id, function () use ($entity, $config, $id, $opinion): array {
+            return $this->connection()->transaction(function () use ($entity, $config, $id, $opinion): array {
             $row = InternshipRecord::lockActiveRowById($config['table'], $id);
             if (!$row) {
                 throw new RuntimeException('数据不存在');
             }
             $this->assertReviewEntityWritable($entity, $row);
             if ((string) $row->status !== 'accept') {
-                throw new InvalidArgumentException('仅已通过数据可改回修改', 42203);
+                throw new InvalidArgumentException('数据已变更，请刷新后重试', 409);
             }
 
             $updates = [
@@ -688,6 +708,51 @@ class InternshipService
             $this->recordWorkflow($config['recording'], $entity, $id, 'modify_after_accept', 'accept', 'modify', $opinion ?: '通过后要求修改', 'modify');
 
             return ['id' => $id, 'status' => 'modify'];
+            });
+        });
+    }
+
+    public function reviewDraft(Request $request): array
+    {
+        $this->requirePermission('internship:approve');
+        $target = $this->reviewDraftTarget($request);
+        $draft = InternshipRecord::reviewOpinionDraftRow($target['entity_type'], $target['id'], $this->accountId());
+
+        return [
+            'entity_type' => $target['entity_type'],
+            'id' => $target['id'],
+            'draft' => $draft,
+        ];
+    }
+
+    public function saveReviewDraft(Request $request): array
+    {
+        $this->requirePermission('internship:approve');
+        $target = $this->reviewDraftTarget($request);
+        $status = $this->enum($request, 'status', $this->reviewStatuses($target['entity']), 'accept');
+        $opinion = $this->reviewDraftOpinionInput($request, $target['entity'], $status);
+        $score = $this->decimalInput($request, 'score');
+        $teacherId = $this->isTeacher() ? $this->currentTeacherId(false) : $this->optionalInt($request, 'teacher_id');
+        $now = $this->now();
+
+        return $this->workflowLock('internship', $target['entity_type'], $target['id'], function () use ($target, $status, $opinion, $score, $teacherId, $now): array {
+            $id = InternshipRecord::saveReviewOpinionDraft([
+                'entity_type' => $target['entity_type'],
+                'entity_id' => $target['id'],
+                'reviewer_id' => $this->accountId(),
+                'teacher_id' => $teacherId,
+                'review_status' => $status,
+                'opinion' => $opinion,
+                'score' => $score,
+                'updated_at' => $now,
+            ]);
+
+            return [
+                'id' => $id,
+                'entity_type' => $target['entity_type'],
+                'entity_id' => $target['id'],
+                'status' => $status,
+            ];
         });
     }
 
@@ -890,12 +955,20 @@ class InternshipService
             'deleted_at' => null,
         ];
 
-        $result = $this->saveRow('journal', $request, $values);
-        if ($status === 'wait') {
-            $this->recordWorkflow('journal_recording', 'journal', (int) $result['id'], 'submit', $fromStatus, 'wait', $values['content'], 'wait');
-        }
+        $save = function () use ($request, $values, $existingId, $status): array {
+            $currentStatus = $existingId ? InternshipRecord::statusById('journal', $existingId) : 'draft';
+            $this->assertStudentWorkCanSubmit($existingId, $currentStatus, '实习日志');
+            $result = $this->saveRow('journal', $request, $values);
+            if ($status === 'wait') {
+                $this->recordWorkflow('journal_recording', 'journal', (int) $result['id'], 'submit', $currentStatus, 'wait', $values['content'], 'wait');
+            }
 
-        return $result;
+            return $result;
+        };
+
+        return $existingId
+            ? $this->workflowLock('internship', 'journal', $existingId, $save)
+            : $save();
     }
 
     public function reviewJournal(Request $request): array
@@ -948,12 +1021,20 @@ class InternshipService
             'deleted_at' => null,
         ];
 
-        $result = $this->saveRow('report', $request, $values);
-        if ($status === 'wait') {
-            $this->recordWorkflow('report_recording', 'report', (int) $result['id'], 'submit', $fromStatus, 'wait', $values['content'], 'wait');
-        }
+        $save = function () use ($request, $values, $existingId, $status): array {
+            $currentStatus = $existingId ? InternshipRecord::statusById('report', $existingId) : 'draft';
+            $this->assertStudentWorkCanSubmit($existingId, $currentStatus, '实习报告');
+            $result = $this->saveRow('report', $request, $values);
+            if ($status === 'wait') {
+                $this->recordWorkflow('report_recording', 'report', (int) $result['id'], 'submit', $currentStatus, 'wait', $values['content'], 'wait');
+            }
 
-        return $result;
+            return $result;
+        };
+
+        return $existingId
+            ? $this->workflowLock('internship', 'report', $existingId, $save)
+            : $save();
     }
 
     public function reviewReport(Request $request): array
@@ -981,6 +1062,7 @@ class InternshipService
         $existingId = $this->inputRowId($request, 'apply_report_delay');
         $fromStatus = $existingId ? InternshipRecord::statusById('apply_report_delay', $existingId) : 'draft';
         $this->assertStudentWorkCanSubmit($existingId, $fromStatus, '延期申请');
+        $status = $this->enum($request, 'status', ['draft', 'wait'], 'wait');
 
         $this->assertStudentVisible($studentId);
         if ($entityType === 'internship') {
@@ -1003,15 +1085,23 @@ class InternshipService
             'entity_id' => $entityId,
             'requested_date' => $this->requiredDate($request, 'requested_date'),
             'reason' => $this->requiredString($request, 'reason', 2000),
-            'status' => 'wait',
+            'status' => $status,
             'updated_at' => $this->now(),
             'deleted_at' => null,
         ];
 
-        $result = $this->saveRow('apply_report_delay', $request, $values);
-        $this->recordWorkflow('apply_report_delay_recording', 'delay', (int) $result['id'], 'submit', $fromStatus, 'wait', $values['reason'], 'wait');
+        $save = function () use ($request, $values, $status, $fromStatus): array {
+            $result = $this->saveRow('apply_report_delay', $request, $values);
+            if ($status === 'wait') {
+                $this->recordWorkflow('apply_report_delay_recording', 'delay', (int) $result['id'], 'submit', $fromStatus, 'wait', $values['reason'], 'wait');
+            }
 
-        return $result;
+            return $result;
+        };
+
+        return $existingId
+            ? $this->workflowLock('internship', 'delay', $existingId, $save)
+            : $save();
     }
 
     public function reviewDelay(Request $request): array
@@ -1022,7 +1112,8 @@ class InternshipService
         $opinion = $this->reviewOpinionInput($request, 'delay', $status);
         $this->ensureRecordingTable('apply_report_delay_recording');
 
-        $result = $this->connection()->transaction(function () use ($id, $status, $opinion): array {
+        $result = $this->workflowLock('internship', 'delay', $id, function () use ($id, $status, $opinion): array {
+            return $this->connection()->transaction(function () use ($id, $status, $opinion): array {
             $row = InternshipRecord::lockActiveRowById('apply_report_delay', $id);
             if (!$row) {
                 throw new RuntimeException('延期申请不存在');
@@ -1030,7 +1121,7 @@ class InternshipService
             $this->assertStudentVisible((int) $row->student_id);
             $this->assertTaskBindingVisible((int) $row->student_id, (int) $row->entity_id);
             if ((string) $row->status !== 'wait') {
-                throw new InvalidArgumentException('仅待审核延期申请可处理', 42204);
+                throw new InvalidArgumentException('数据已变更，请刷新后重试', 409);
             }
 
             InternshipRecord::updateById('apply_report_delay', $id, [
@@ -1040,8 +1131,10 @@ class InternshipService
 
             $action = $this->isTeacher() ? 'teacher_review' : 'admin_review';
             $this->recordWorkflow('apply_report_delay_recording', 'delay', $id, $action, (string) $row->status, $status, $opinion ?: '延期申请审核', $status);
+            InternshipRecord::clearReviewOpinionDraft('delay', $id, $this->accountId(), $this->now());
 
             return ['id' => $id, 'status' => $status, 'delay' => $row];
+            });
         });
 
         if ($status === 'accept') {
@@ -1231,6 +1324,9 @@ class InternshipService
         $this->requireAdminRole();
         $existingId = $this->inputRowId($request, 'internship_plan');
         $fromStatus = $existingId ? InternshipRecord::statusById('internship_plan', $existingId) : 'draft';
+        if ($existingId && !in_array($fromStatus, ['draft', 'modify'], true)) {
+            throw new InvalidArgumentException('数据已变更，请刷新后重试', 409);
+        }
         $gradeId = $this->requiredInt($request, 'grade_id');
         $depId = $this->requiredInt($request, 'dep_id');
         $professionId = $this->requiredInt($request, 'profession_id');
@@ -1260,12 +1356,22 @@ class InternshipService
             'deleted_at' => null,
         ];
 
-        $result = $this->saveRow('internship_plan', $request, $values);
-        if ($values['status'] === 'wait') {
-            $this->recordWorkflow('plan_recording', 'plan', (int) $result['id'], 'submit', $fromStatus, 'wait', $this->planWorkflowContent($values['plan_content']), 'wait');
-        }
+        $save = function () use ($request, $values, $existingId): array {
+            $currentStatus = $existingId ? InternshipRecord::statusById('internship_plan', $existingId) : 'draft';
+            if ($existingId && !in_array($currentStatus, ['draft', 'modify'], true)) {
+                throw new InvalidArgumentException('数据已变更，请刷新后重试', 409);
+            }
+            $result = $this->saveRow('internship_plan', $request, $values);
+            if ($values['status'] === 'wait') {
+                $this->recordWorkflow('plan_recording', 'plan', (int) $result['id'], 'submit', $currentStatus, 'wait', $this->planWorkflowContent($values['plan_content']), 'wait');
+            }
 
-        return $result;
+            return $result;
+        };
+
+        return $existingId
+            ? $this->workflowLock('internship', 'plan', $existingId, $save)
+            : $save();
     }
 
     public function reviewPlan(Request $request): array
@@ -1278,7 +1384,8 @@ class InternshipService
         $opinion = $this->reviewOpinionInput($request, 'plan', $status);
         $this->ensureRecordingTable('plan_recording');
 
-        $result = $this->connection()->transaction(function () use ($planId, $status, $opinion, $request): array {
+        $result = $this->workflowLock('internship', 'plan', $planId, function () use ($planId, $status, $opinion, $request): array {
+            return $this->connection()->transaction(function () use ($planId, $status, $opinion, $request): array {
             $now = $this->now();
             $row = InternshipRecord::lockActiveRowById('internship_plan', $planId);
             if (!$row) {
@@ -1286,7 +1393,7 @@ class InternshipService
             }
             $this->assertPlanVisible($planId);
             if ((string) $row->status !== 'wait') {
-                throw new InvalidArgumentException('仅待审核实习计划可处理', 42204);
+                throw new InvalidArgumentException('数据已变更，请刷新后重试', 409);
             }
             $from = (string) $row->status;
             $progress = InternshipRecord::planApprovalProgress($planId, self::PLAN_APPROVAL_LEVELS);
@@ -1315,6 +1422,7 @@ class InternshipService
                 'updated_at' => $now,
             ], $planStatus, $now);
             $this->recordWorkflow('plan_recording', 'plan', $planId, 'review', $from, $planStatus, $content, $status);
+            InternshipRecord::clearReviewOpinionDraft('plan', $planId, $this->accountId(), $now);
 
             return [
                 'id' => $approvalId,
@@ -1326,6 +1434,7 @@ class InternshipService
                 'next_level_name' => $planStatus === 'wait' ? (self::PLAN_APPROVAL_LEVELS[$level + 1]['name'] ?? null) : null,
                 'notify_plan' => $row,
             ];
+            });
         });
 
         $this->notifyPlanReviewed($result['notify_plan'], $planId, $result['status'], $result['level_name'], $opinion);
@@ -1573,7 +1682,8 @@ class InternshipService
         $now = $this->now();
         $this->ensureRecordingTable($recordingTable);
 
-        return $this->connection()->transaction(function () use ($table, $recordingTable, $id, $status, $opinion, $score, $teacherId, $now): array {
+        return $this->workflowLock('internship', $table, $id, function () use ($table, $recordingTable, $id, $status, $opinion, $score, $teacherId, $now): array {
+            return $this->connection()->transaction(function () use ($table, $recordingTable, $id, $status, $opinion, $score, $teacherId, $now): array {
             $row = InternshipRecord::lockActiveRowById($table, $id);
             if (!$row) {
                 throw new RuntimeException('数据不存在');
@@ -1581,7 +1691,7 @@ class InternshipService
             $this->assertStudentVisible((int) $row->student_id);
             $this->assertTaskBindingVisible((int) $row->student_id, $this->reviewWorkArrangementId($table, $row));
             if ((string) $row->status !== 'wait') {
-                throw new InvalidArgumentException('仅待审核数据可评阅', 42204);
+                throw new InvalidArgumentException('数据已变更，请刷新后重试', 409);
             }
             $from = (string) $row->status;
             $updates = [
@@ -1595,8 +1705,10 @@ class InternshipService
 
             InternshipRecord::updateById($table, $id, $updates);
             $this->recordWorkflow($recordingTable, $table, $id, 'review', $from, $status, $opinion ?: '评阅处理', $status, $score, $teacherId);
+            InternshipRecord::clearReviewOpinionDraft($table, $id, $this->accountId(), $now);
 
             return ['id' => $id, 'status' => $status];
+            });
         });
     }
 
@@ -1606,7 +1718,7 @@ class InternshipService
             return;
         }
         if (!in_array($fromStatus, ['draft', 'modify'], true)) {
-            throw new InvalidArgumentException($label . '当前状态不可直接重新提交，请先走通过后修改或等待审核处理', 42204);
+            throw new InvalidArgumentException('数据已变更，请刷新后重试', 409);
         }
     }
 
@@ -2864,6 +2976,46 @@ class InternshipService
         return $entity;
     }
 
+    private function reviewDraftTarget(Request $request): array
+    {
+        $entity = $this->reviewEntity($request);
+        $config = self::REVIEW_ENTITY_CONFIG[$entity];
+        $id = $this->requiredRowId($request, $config['table']);
+        $row = InternshipRecord::activeRowById($config['table'], $id);
+        if (!$row) {
+            throw new RuntimeException('数据不存在');
+        }
+        $this->assertReviewEntityWritable($entity, $row);
+        if ((string) ($row->status ?? '') !== 'wait') {
+            throw new InvalidArgumentException('数据已变更，请刷新后重试', 409);
+        }
+
+        return [
+            'entity' => $entity,
+            'entity_type' => $entity,
+            'id' => $id,
+        ];
+    }
+
+    private function reviewStatuses(string $entity): array
+    {
+        $statuses = array_keys(self::REVIEW_OPINION_RULES[$entity] ?? []);
+        return $statuses ?: ['accept', 'modify'];
+    }
+
+    private function reviewDraftOpinionInput(Request $request, string $entity, string $status): ?string
+    {
+        $value = trim((string) $request->input('opinion', ''));
+        $rule = self::REVIEW_OPINION_RULES[$entity][$status] ?? ['min' => 0, 'max' => null];
+        $max = $rule['max'] ?? null;
+        $length = function_exists('mb_strlen') ? mb_strlen($value) : strlen($value);
+        if ($max !== null && $length > (int) $max) {
+            throw new InvalidArgumentException('审核意见最多 ' . (int) $max . ' 字', 42202);
+        }
+
+        return $value === '' ? null : $value;
+    }
+
     private function baseFlowType(Request $request): string
     {
         $type = (string) $request->input('type', '');
@@ -3695,6 +3847,11 @@ class InternshipService
     private function connection(): mixed
     {
         return InternshipRecord::connection();
+    }
+
+    private function workflowLock(string $module, string $entity, int $id, callable $callback): mixed
+    {
+        return (new WorkflowLock())->run(WorkflowLock::key($module, $entity, $id), $callback);
     }
 
     private function ensureRecordingTable(string $table): void

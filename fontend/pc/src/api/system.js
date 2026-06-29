@@ -562,6 +562,14 @@ export function reviewInternshipApplication(payload) {
   return internshipPost('review-application', payload);
 }
 
+export function fetchInternshipReviewDraft(params = {}) {
+  return internshipList('review-draft', params);
+}
+
+export function saveInternshipReviewDraft(payload) {
+  return internshipPost('save-review-draft', payload);
+}
+
 export function fetchInternshipTimeline(params = {}) {
   return internshipList('timeline', params);
 }
@@ -732,6 +740,15 @@ export function savePracticeItem(module, payload) {
 
 export function reviewPracticeItem(module, payload) {
   return practicePost(module, 'review', payload);
+}
+
+export function fetchPracticeReviewDraft(module, params = {}) {
+  const query = new URLSearchParams(params).toString();
+  return request(`/${module}/review-draft${query ? `?${query}` : ''}`);
+}
+
+export function savePracticeReviewDraft(module, payload) {
+  return practicePost(module, 'save-review-draft', payload);
 }
 
 export function requestPracticeModification(module, payload) {
