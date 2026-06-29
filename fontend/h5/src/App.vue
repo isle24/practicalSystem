@@ -2557,7 +2557,6 @@ function emptyPracticeFilters() {
 
 function emptyInternshipFilters() {
   return {
-    semester: '',
     grade_id: '',
     dep_id: '',
     profession_id: '',

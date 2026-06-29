@@ -3331,6 +3331,7 @@ import MenuEditDialog from './components/MenuEditDialog.vue';
 import OperationDialog from './components/OperationDialog.vue';
 import StudentOwnPanel from './components/StudentOwnPanel.vue';
 import TemplateLibrary from './components/TemplateLibrary.vue';
+import { DEFAULT_DESKTOP_MODULE_IDS, useDesktopLauncher } from './composables/useDesktopLauncher';
 import { usePermissions } from './composables/usePermissions';
 import { buildLaunchableMenuModules, mergeLaunchableModules as mergeMenuModules } from './utils/menuModules';
 import { backendUrl } from './api/client';
@@ -3435,8 +3436,8 @@ import {
   saveWechatConfig,
   switchAccount,
   uploadFavoriteIcon,
-  uploadFile,
   uploadLoginBackground,
+  uploadMenuIcon,
   uploadProfileAsset,
 } from './api/system';
 
@@ -3525,13 +3526,13 @@ const switchAccountState = reactive({
   items: [],
   message: '',
 });
-const desktopLauncherState = reactive({
-  visible: false,
-  keyword: '',
-  items: [],
-  loading: false,
-  message: '',
+const desktopLauncher = useDesktopLauncher({
+  allModules: computed(() => allLaunchableModules.value),
+  favoriteItems: computed(() => favoriteState.items),
+  defaultModuleIds: DEFAULT_DESKTOP_MODULE_IDS,
+  searchText: moduleSearchText,
 });
+const desktopLauncherState = desktopLauncher.state;
 const loginPageState = reactive({
   loading: false,
   message: '',
@@ -4329,8 +4330,7 @@ const moduleSearchKeywords = {
   profile: '个人设置 头像 壁纸 背景 消息接收 密码 资料',
   message: '消息 通知 待办 审核结果 站内信',
 };
-const defaultDesktopModuleIds = ['internship', 'training', 'lab', 'config'];
-const defaultDesktopModuleIdSet = new Set(defaultDesktopModuleIds);
+const defaultDesktopModuleIds = DEFAULT_DESKTOP_MODULE_IDS;
 const launcherModuleIds = modules.map(module => module.id);
 const launcherModuleIdSet = new Set(launcherModuleIds);
 const configSidebarDefinitions = [
@@ -4373,73 +4373,11 @@ const globalSearchResults = computed(() => {
     .filter(module => moduleSearchText(module).includes(value))
     .slice(0, 8);
 });
-const visibleDesktopModules = computed(() => {
-  const shortcutIds = new Set(desktopModuleShortcutKeys.value);
-  const desktopModules = allLaunchableModules.value.filter(module => shortcutIds.has(module.id));
-  const favoriteModules = favoriteDesktopShortcuts.value;
-  return [...desktopModules, ...favoriteModules];
-});
-const favoriteLauncherShortcuts = computed(() => {
-  const rows = new Map();
-  favoriteDesktopShortcuts.value.forEach((item) => {
-    if (item.favoriteId) {
-      rows.set(Number(item.favoriteId), item);
-    }
-  });
-  (favoriteState.items || []).forEach((item) => {
-    if (!item?.id || !item.url || rows.has(Number(item.id))) {
-      return;
-    }
-    rows.set(Number(item.id), {
-      id: `favorite-link-${item.id}`,
-      favoriteId: Number(item.id),
-      name: item.title || '收藏网址',
-      icon: Globe2,
-      iconUrl: item.icon_url || '',
-      color: 'blue',
-      scope: item.url,
-      url: item.url,
-      type: 'favoriteLink',
-    });
-  });
-  return Array.from(rows.values());
-});
-const launcherModules = computed(() => [...allLaunchableModules.value, ...favoriteLauncherShortcuts.value]);
-const launcherFilteredModules = computed(() => {
-  const value = desktopLauncherState.keyword.trim().toLowerCase();
-  if (!value) {
-    return launcherModules.value;
-  }
-  return launcherModules.value.filter(module => moduleSearchText(module).includes(value));
-});
-const customDesktopShortcutItems = computed(() => desktopLauncherState.items.filter(item => item?.type === 'module' || item?.type === 'favorite'));
-const customDesktopModuleKeys = computed(() => customDesktopShortcutItems.value
-  .filter(item => item.type === 'module')
-  .map(item => String(item.key || item.item_key || ''))
-  .filter(key => key && !defaultDesktopModuleIdSet.has(key) && allLaunchableModules.value.some(module => module.id === key)));
-const desktopModuleShortcutKeys = computed(() => {
-  const defaults = defaultDesktopModuleIds.filter(key => allLaunchableModules.value.some(module => module.id === key));
-  return Array.from(new Set([...defaults, ...customDesktopModuleKeys.value]));
-});
-const favoriteDesktopShortcuts = computed(() => customDesktopShortcutItems.value
-  .filter(item => item.type === 'favorite' && item.favorite?.url)
-  .map(item => ({
-    id: `favorite-link-${item.ref_id}`,
-    favoriteId: Number(item.ref_id),
-    name: item.favorite.title || '收藏网址',
-    icon: Globe2,
-    iconUrl: item.favorite.icon_url || '',
-    color: 'blue',
-    scope: item.favorite.url,
-    url: item.favorite.url,
-    type: 'favoriteLink',
-  })));
-const desktopShortcutPayloadItems = computed(() => [
-  ...customDesktopModuleKeys.value.map(key => ({ type: 'module', key })),
-  ...customDesktopShortcutItems.value
-    .filter(item => item.type === 'favorite' && Number(item.ref_id || 0) > 0)
-    .map(item => ({ type: 'favorite', ref_id: Number(item.ref_id) })),
-]);
+const visibleDesktopModules = desktopLauncher.visibleDesktopModules;
+const launcherFilteredModules = desktopLauncher.filteredModules;
+const customDesktopShortcutItems = desktopLauncher.customShortcutItems;
+const desktopShortcutPayloadItems = desktopLauncher.payloadItems;
+const favoriteDesktopShortcuts = desktopLauncher.favoriteDesktopShortcuts;
 const showGlobalSearchResults = computed(() => globalSearchKeyword.value && globalSearchResults.value.length > 0);
 const visibleWindows = computed(() => openWindows.filter(win => !win.minimized));
 const canManageConfig = computed(() => hasPermission('config:manage') && ['super_admin', 'school_admin'].includes(permissionState.context.role_type));
@@ -4485,7 +4423,6 @@ const courseScoreSheetMetaItems = computed(() => {
   const meta = statState.sheet_meta || {};
   return [
     { key: 'academic_year', label: '学年', value: meta.academic_year || statState.filters.academic_year },
-    { key: 'semester', label: '学期', value: meta.semester },
     { key: 'course_number', label: '选课课号', value: meta.course_number },
     { key: 'course_name', label: '名称', value: meta.course_name },
     { key: 'teacher_name', label: '教师姓名', value: meta.teacher_name },
@@ -5797,18 +5734,15 @@ function openLauncherModule(module) {
 }
 
 function isDesktopShortcut(moduleId) {
-  return desktopModuleShortcutKeys.value.includes(moduleId);
+  return desktopLauncher.isShortcut(moduleId);
 }
 
 function isDefaultDesktopShortcut(moduleId) {
-  return defaultDesktopModuleIdSet.has(moduleId);
+  return desktopLauncher.isDefaultShortcut(moduleId);
 }
 
 function launcherShortcutTitle(moduleId) {
-  if (isDefaultDesktopShortcut(moduleId)) {
-    return '默认固定模块，不能移除';
-  }
-  return isDesktopShortcut(moduleId) ? '已添加到桌面' : '添加到桌面';
+  return desktopLauncher.shortcutTitle(moduleId);
 }
 
 async function toggleDesktopShortcut(moduleId) {
@@ -5828,8 +5762,7 @@ async function toggleDesktopShortcut(moduleId) {
 
 async function loadDesktopShortcuts() {
   if (!isLoggedIn.value) {
-    desktopLauncherState.items = [];
-    desktopLauncherState.message = '';
+    desktopLauncher.reset();
     return;
   }
 
@@ -5837,9 +5770,9 @@ async function loadDesktopShortcuts() {
   desktopLauncherState.message = '';
   try {
     const data = await fetchDesktopShortcuts();
-    desktopLauncherState.items = normalizeShortcutItems(data.items || []);
+    desktopLauncher.setItems(data.items || []);
   } catch (error) {
-    desktopLauncherState.items = [];
+    desktopLauncher.setItems([]);
     desktopLauncherState.message = error.message;
   } finally {
     desktopLauncherState.loading = false;
@@ -5850,10 +5783,10 @@ async function persistDesktopShortcuts(items) {
   desktopLauncherState.loading = true;
   desktopLauncherState.message = '';
   const previous = desktopLauncherState.items.slice();
-  desktopLauncherState.items = normalizeShortcutItems(items);
+  desktopLauncher.setItems(items);
   try {
     const data = await saveDesktopShortcuts({ items });
-    desktopLauncherState.items = normalizeShortcutItems(data.items || []);
+    desktopLauncher.setItems(data.items || []);
     await nextTick();
   } catch (error) {
     desktopLauncherState.items = previous;
@@ -5861,17 +5794,6 @@ async function persistDesktopShortcuts(items) {
   } finally {
     desktopLauncherState.loading = false;
   }
-}
-
-function normalizeShortcutItems(items) {
-  return (Array.isArray(items) ? items : [])
-    .map(item => ({
-      type: item.type || item.item_type || 'module',
-      key: item.key || item.item_key || '',
-      ref_id: item.ref_id === null || item.ref_id === undefined ? null : Number(item.ref_id),
-      favorite: item.favorite || null,
-    }))
-    .filter(item => (item.type === 'module' && item.key) || (item.type === 'favorite' && item.ref_id));
 }
 
 function defaultWindowModule() {
@@ -7547,10 +7469,7 @@ async function handleMenuIconSelected(file) {
   adminState.menu.iconUploading = true;
   adminState.menu.message = '';
   try {
-    const data = await uploadFile(file, {
-      category: 'menu_icon',
-      is_temporary: 'false',
-    });
+    const data = await uploadMenuIcon(file);
     adminState.menu.editing.icon_url = data.url || '';
     adminState.menu.editing.icon_file_id = data.file_id || null;
   } catch (error) {

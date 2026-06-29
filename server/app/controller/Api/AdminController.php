@@ -15,6 +15,7 @@ use app\model\channel\UserWechat;
 use app\server\auth\AccountRegistrationService;
 use app\server\auth\AuthService;
 use app\server\CurrentContext;
+use app\server\file\FileService;
 use app\server\rbac\RbacService;
 use support\Request;
 use support\Response;
@@ -148,6 +149,34 @@ class AdminController
             }
 
             return $this->menus($request);
+        } catch (Throwable $exception) {
+            return $this->fail(40001, $exception->getMessage(), 400);
+        }
+    }
+
+    /**
+     * 上传菜单图标
+     */
+    #[OperationLog('上传菜单图标')]
+    public function uploadMenuIcon(Request $request): Response
+    {
+        if (!$this->isAdmin()) {
+            return $this->fail(40300, '无操作权限', 403);
+        }
+
+        try {
+            $result = (new FileService())->upload($request, [
+                'category' => 'menu_icon',
+                'is_temporary' => false,
+                'require_md5' => false,
+                'max_size' => 2 * 1024 * 1024,
+                'allowed_extensions' => ['jpg', 'jpeg', 'png', 'webp', 'gif', 'ico'],
+            ]);
+
+            return $this->ok([
+                'file_id' => $result['file_id'],
+                'url' => $result['url'],
+            ], '已上传');
         } catch (Throwable $exception) {
             return $this->fail(40001, $exception->getMessage(), 400);
         }

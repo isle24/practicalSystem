@@ -303,6 +303,15 @@ export function saveMenu(payload) {
   });
 }
 
+export function uploadMenuIcon(file) {
+  const body = new FormData();
+  body.append('file', file);
+  return request('/admin/upload-menu-icon', {
+    method: 'POST',
+    body,
+  });
+}
+
 export function deleteMenu(id) {
   return request('/admin/delete-menu', {
     method: 'POST',
