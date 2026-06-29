@@ -113,7 +113,6 @@ class ConfigController
         }
 
         return [
-            'school_code' => CurrentContext::schoolCode() ?: '2184',
             'school_name' => CurrentContext::get('school_name') ?: '成都锦城学院',
             'login_background_url' => $backgroundUrl,
         ];

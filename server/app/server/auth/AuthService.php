@@ -229,6 +229,18 @@ class AuthService
         return $this->contextForAccount($accountId, (string) ($extend['client'] ?? JwtToken::TOKEN_CLIENT_WEB));
     }
 
+    public function publicContext(array $context): array
+    {
+        unset(
+            $context['school_database_id'],
+            $context['school_database'],
+            $context['school_connection'],
+            $context['school_code']
+        );
+
+        return $context;
+    }
+
     public function contextForAccount(int $accountId, string $client = JwtToken::TOKEN_CLIENT_WEB): array
     {
         $account = Account::enabledById($accountId);
@@ -305,7 +317,7 @@ class AuthService
                 'name' => $context['role_name'],
                 'role_type' => $context['role_type'],
             ],
-            'context' => $context,
+            'context' => $this->publicContext($context),
         ];
     }
 

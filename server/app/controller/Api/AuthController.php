@@ -167,7 +167,7 @@ class AuthController
             }
         }
 
-        return $this->ok(CurrentContext::all());
+        return $this->ok((new AuthService())->publicContext(CurrentContext::all()));
     }
 
     /**
