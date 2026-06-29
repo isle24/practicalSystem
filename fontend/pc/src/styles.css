@@ -311,7 +311,7 @@ a {
   gap: 8px 14px;
 }
 
-.desktop-icon {
+.shortcut-tile-desktop {
   display: grid;
   grid-template-rows: 54px auto;
   justify-items: center;
@@ -324,10 +324,18 @@ a {
   background: rgba(255, 255, 255, .32);
 }
 
-.desktop-icon:hover,
-.desktop-icon.active {
+.shortcut-tile-desktop:hover,
+.shortcut-tile-desktop.active {
   background: rgba(255, 255, 255, .78);
   outline: 1px solid rgba(31, 115, 210, .18);
+}
+
+.shortcut-tile-main {
+  min-width: 0;
+  border: 0;
+  color: inherit;
+  text-align: inherit;
+  background: transparent;
 }
 
 .app-glyph {
@@ -354,10 +362,27 @@ a {
 .app-glyph.gray { background: linear-gradient(135deg, #53606f, #7b8795); }
 .app-glyph.green { background: linear-gradient(135deg, #2e7d4f, #57a46f); }
 
-.desktop-icon span:last-child {
+.shortcut-tile-desktop .shortcut-tile-main {
+  display: grid;
+  grid-template-rows: 54px auto;
+  justify-items: center;
+  align-items: center;
+  gap: 7px;
+}
+
+.shortcut-tile-desktop .shortcut-tile-label strong {
+  max-width: 76px;
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.shortcut-tile-desktop .shortcut-tile-label {
   max-width: 76px;
   font-size: 13px;
   line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .desktop-window {
@@ -465,7 +490,7 @@ a {
   overflow: auto;
 }
 
-.launcher-app {
+.shortcut-tile-launcher {
   position: relative;
   min-width: 0;
   min-height: 104px;
@@ -473,7 +498,7 @@ a {
   place-items: start center;
 }
 
-.launcher-module-main {
+.shortcut-tile-launcher .shortcut-tile-main {
   min-width: 0;
   border: 0;
   display: grid;
@@ -485,15 +510,16 @@ a {
   background: transparent;
 }
 
-.launcher-module-main .app-glyph {
+.shortcut-tile-launcher .app-glyph {
   width: 62px;
   height: 62px;
   box-shadow: 0 14px 30px rgba(0, 0, 0, .26);
 }
 
-.launcher-module-main strong {
+.shortcut-tile-launcher .shortcut-tile-label strong {
   min-width: 0;
   max-width: 112px;
+  display: block;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -501,7 +527,7 @@ a {
   text-shadow: 0 2px 8px rgba(0, 0, 0, .42);
 }
 
-.launcher-module-add {
+.shortcut-tile-action {
   position: absolute;
   top: 6px;
   right: 6px;
@@ -519,19 +545,19 @@ a {
   overflow: hidden;
 }
 
-.launcher-module-add svg {
+.shortcut-tile-action svg {
   width: 14px;
   height: 14px;
   display: block;
   stroke-width: 3;
 }
 
-.launcher-module-add.added {
+.shortcut-tile-action.added {
   background: rgba(100, 116, 139, .76);
 }
 
-.launcher-module-add.locked,
-.launcher-module-add:disabled {
+.shortcut-tile-action.locked,
+.shortcut-tile-action:disabled {
   cursor: default;
   opacity: .88;
 }

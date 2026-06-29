@@ -21,37 +21,28 @@
       </label>
       <small v-if="message" class="desktop-launcher-message">{{ message }}</small>
       <div class="desktop-launcher-grid">
-        <article v-for="module in modules" :key="module.id" class="launcher-app">
-          <button
-            type="button"
-            class="launcher-module-main"
-            :title="module.scope"
-            @click="emit('open', module)"
-          >
-            <AppIcon class="app-glyph" :icon="module.icon" :icon-url="module.iconUrl" :label="module.name" :color="module.color" :size="24" :backend-url="backendUrl" />
-            <strong>{{ module.name }}</strong>
-          </button>
-          <button
-            v-if="module.type !== 'favoriteLink'"
-            type="button"
-            class="launcher-module-add"
-            :class="{ added: isDesktopShortcut(module.id), locked: isDefaultDesktopShortcut(module.id) }"
-            :disabled="isDefaultDesktopShortcut(module.id) || loading"
-            :title="shortcutTitle(module.id)"
-            @click.stop="emit('toggle', module.id)"
-          >
-            <CheckCircle2 v-if="isDesktopShortcut(module.id)" :size="18" />
-            <Plus v-else :size="18" />
-          </button>
-        </article>
+        <ShortcutTile
+          v-for="module in modules"
+          :key="module.id"
+          :item="module"
+          mode="launcher"
+          :show-action="module.type !== 'favoriteLink'"
+          :added="isDesktopShortcut(module.id)"
+          :locked="isDefaultDesktopShortcut(module.id)"
+          :disabled="isDefaultDesktopShortcut(module.id) || loading"
+          :action-title="shortcutTitle(module.id)"
+          :backend-url="backendUrl"
+          @open="emit('open', module)"
+          @action="emit('toggle', module.id)"
+        />
       </div>
     </section>
   </div>
 </template>
 
 <script setup>
-import { CheckCircle2, Plus, Search, X } from '@lucide/vue';
-import AppIcon from './AppIcon.vue';
+import { Search, X } from '@lucide/vue';
+import ShortcutTile from './ShortcutTile.vue';
 
 defineProps({
   visible: { type: Boolean, default: false },
@@ -73,7 +64,7 @@ function handlePanelClick(event) {
     emit('close');
     return;
   }
-  if (target.closest('.launcher-app, .desktop-launcher-search, .desktop-launcher-close')) {
+  if (target.closest('.shortcut-tile, .desktop-launcher-search, .desktop-launcher-close')) {
     return;
   }
   emit('close');

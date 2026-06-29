@@ -124,17 +124,16 @@
 
     <section class="workspace">
       <nav class="desktop-icons" aria-label="应用模块">
-        <a
+        <ShortcutTile
           v-for="module in visibleDesktopModules"
           :key="module.id"
+          :item="module"
+          mode="desktop"
           :href="moduleHref(module)"
-          class="desktop-icon"
-          :class="{ active: isModuleFocused(module.id) }"
-          @click.prevent="openModule(module)"
-        >
-          <AppIcon class="app-glyph" :icon="module.icon" :icon-url="module.iconUrl" :label="module.name" :color="module.color" :size="25" :backend-url="backendUrl" />
-          <span>{{ module.name }}</span>
-        </a>
+          :active="isModuleFocused(module.id)"
+          :backend-url="backendUrl"
+          @open="openModule(module)"
+        />
       </nav>
 
       <DesktopWindow
@@ -3325,6 +3324,7 @@ import ExportTaskCenter from './components/ExportTaskCenter.vue';
 import IconUpload from './components/IconUpload.vue';
 import MenuEditDialog from './components/MenuEditDialog.vue';
 import OperationDialog from './components/OperationDialog.vue';
+import ShortcutTile from './components/ShortcutTile.vue';
 import StudentOwnPanel from './components/StudentOwnPanel.vue';
 import TemplateLibrary from './components/TemplateLibrary.vue';
 import { DEFAULT_DESKTOP_MODULE_IDS, useDesktopLauncher } from './composables/useDesktopLauncher';
@@ -5792,12 +5792,18 @@ async function persistDesktopShortcuts(items) {
     const data = await saveDesktopShortcuts({ items });
     desktopLauncher.setItems(data.items || []);
     await nextTick();
+    syncShortcutWorkspace();
   } catch (error) {
     desktopLauncherState.items = previous;
     desktopLauncherState.message = error.message;
   } finally {
     desktopLauncherState.loading = false;
   }
+}
+
+function syncShortcutWorkspace() {
+  syncOpenWindowModules();
+  ensureDefaultWindow();
 }
 
 function defaultWindowModule() {
@@ -7509,7 +7515,7 @@ async function saveMenuConfig() {
     closeMenuDialog();
     await load();
     await loadDesktopShortcuts();
-    syncOpenWindowModules();
+    syncShortcutWorkspace();
   } catch (error) {
     adminState.menu.message = error.message;
   } finally {
