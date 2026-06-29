@@ -4,8 +4,10 @@
       <div class="mobile-history-actions">
         <button aria-label="后退" title="后退" :disabled="!canGoMobileBack" @click="goMobileBack">
           <ChevronLeft :size="18" />
+          <span>后退</span>
         </button>
         <button aria-label="前进" title="前进" :disabled="!canGoMobileForward" @click="goMobileForward">
+          <span>前进</span>
           <ChevronRight :size="18" />
         </button>
       </div>

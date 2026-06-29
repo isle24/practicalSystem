@@ -64,6 +64,20 @@ select {
   gap: 6px;
 }
 
+.mobile-top .mobile-history-actions button {
+  width: auto;
+  min-width: 58px;
+  padding: 0 8px;
+  grid-auto-flow: column;
+  gap: 2px;
+  white-space: nowrap;
+}
+
+.mobile-top .mobile-history-actions span {
+  font-size: 12px;
+  opacity: .95;
+}
+
 .mobile-top span {
   font-size: 12px;
   opacity: .86;
