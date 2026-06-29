@@ -3823,6 +3823,10 @@ a {
   align-content: start;
 }
 
+.menu-module-hint {
+  grid-column: 1 / -1;
+}
+
 .menu-module-panel {
   padding: 18px;
 }

@@ -2621,7 +2621,10 @@ function selectFilterItems(items, valueKey, labelKey) {
 }
 
 function mobileDepartmentOptions(key) {
-  const filters = internship.filters[key] || {};
+  return mobileDepartmentOptionsByValues(internship.filters[key] || {});
+}
+
+function mobileDepartmentOptionsByValues(filters = {}) {
   const gradeId = Number(filters.grade_id || 0);
   const grade = internship.options.grades.find(item => Number(item.grade_id) === gradeId);
   if (grade?.dep_id) {
@@ -2631,7 +2634,10 @@ function mobileDepartmentOptions(key) {
 }
 
 function mobileProfessionOptions(key) {
-  const filters = internship.filters[key] || {};
+  return mobileProfessionOptionsByValues(internship.filters[key] || {});
+}
+
+function mobileProfessionOptionsByValues(filters = {}) {
   const gradeId = Number(filters.grade_id || 0);
   const depId = Number(filters.dep_id || 0);
   return internship.options.professions.filter((item) => {
@@ -2642,7 +2648,10 @@ function mobileProfessionOptions(key) {
 }
 
 function mobileClassOptions(key) {
-  const filters = internship.filters[key] || {};
+  return mobileClassOptionsByValues(internship.filters[key] || {});
+}
+
+function mobileClassOptionsByValues(filters = {}) {
   const gradeId = Number(filters.grade_id || 0);
   const depId = Number(filters.dep_id || 0);
   const professionId = Number(filters.profession_id || 0);
@@ -3063,6 +3072,129 @@ function setPagedList(key, data, append = false) {
   };
 }
 
+function hasFilterValue(value) {
+  return value !== '' && value !== null && value !== undefined;
+}
+
+function sameFilterValue(left, right) {
+  return String(left ?? '') === String(right ?? '');
+}
+
+function currentInternshipGradeId() {
+  const currentGrade = (internship.options.grades || [])
+    .find(item => sameFilterValue(item.is_current, 'true') || sameFilterValue(item.is_current, 1));
+  return currentGrade?.grade_id || internship.options.grades?.[0]?.grade_id || '';
+}
+
+function scopeIds(field) {
+  const ids = [];
+  (state.context.organization_scopes || []).forEach((scope) => {
+    if (hasFilterValue(scope?.[field])) {
+      ids.push(scope[field]);
+    }
+  });
+
+  const filter = scopeFilter.value || {};
+  const value = filter[field];
+  (Array.isArray(value) ? value : [value]).forEach((item) => {
+    if (hasFilterValue(item)) {
+      ids.push(item);
+    }
+  });
+
+  return Array.from(new Set(ids.map(item => String(item))));
+}
+
+function firstScopedOption(items = [], key, ids = []) {
+  const values = (ids || []).filter(hasFilterValue).map(item => String(item));
+  if (!values.length) {
+    return null;
+  }
+  return (items || []).find(item => values.includes(String(item?.[key] ?? ''))) || null;
+}
+
+function internshipScopeDefaults() {
+  const defaults = {
+    grade_id: currentInternshipGradeId(),
+    dep_id: '',
+    profession_id: '',
+    class_id: '',
+  };
+  const depIds = scopeIds('dep_id');
+  const professionIds = scopeIds('profession_id');
+  const classIds = scopeIds('class_id');
+  const scopedClass = firstScopedOption(internship.options.classes, 'class_id', classIds);
+  const scopedProfession = firstScopedOption(internship.options.professions, 'profession_id', professionIds);
+  const scopedDepartment = firstScopedOption(internship.options.departments, 'dep_id', depIds);
+
+  if (scopedClass) {
+    defaults.class_id = scopedClass.class_id || '';
+    defaults.profession_id = scopedClass.profession_id || defaults.profession_id;
+    defaults.dep_id = scopedClass.dep_id || defaults.dep_id;
+    defaults.grade_id = defaults.grade_id || scopedClass.grade_id || '';
+  }
+  if (scopedProfession) {
+    defaults.profession_id = scopedProfession.profession_id || defaults.profession_id;
+    defaults.dep_id = scopedProfession.dep_id || defaults.dep_id;
+    defaults.grade_id = defaults.grade_id || scopedProfession.grade_id || '';
+  }
+  if (scopedDepartment) {
+    defaults.dep_id = scopedDepartment.dep_id || defaults.dep_id;
+  }
+
+  if (roleType.value === 'college_admin' && !defaults.dep_id) {
+    defaults.dep_id = depIds[0] || (internship.options.departments?.length === 1 ? internship.options.departments[0]?.dep_id : '') || '';
+  }
+  if (roleType.value === 'profession_admin' && !defaults.profession_id) {
+    const fallback = firstScopedOption(internship.options.professions, 'profession_id', professionIds)
+      || (internship.options.professions?.length === 1 ? internship.options.professions[0] : null);
+    if (fallback) {
+      defaults.profession_id = fallback.profession_id || '';
+      defaults.dep_id = fallback.dep_id || defaults.dep_id;
+      defaults.grade_id = defaults.grade_id || fallback.grade_id || '';
+    }
+  }
+
+  return defaults;
+}
+
+function applyInternshipFilterDefaults(target) {
+  const defaults = internshipScopeDefaults();
+  Object.entries(defaults).forEach(([key, value]) => {
+    if (hasFilterValue(value) && !hasFilterValue(target[key])) {
+      target[key] = value;
+    }
+  });
+  normalizeMobileListFiltersByValues(target);
+}
+
+function applyDefaultInternshipFilters() {
+  Object.keys(internship.filters).forEach((key) => {
+    const current = {
+      ...emptyInternshipFilters(),
+      ...internship.filters[key],
+    };
+    applyInternshipFilterDefaults(current);
+    internship.filters[key] = current;
+  });
+}
+
+function normalizeMobileListFiltersByValues(filters) {
+  if (!filters) {
+    return;
+  }
+  if (filters.profession_id && !mobileProfessionOptionsByValues(filters).some(item => sameFilterValue(item.profession_id, filters.profession_id))) {
+    filters.profession_id = '';
+  }
+  if (filters.dep_id && !mobileDepartmentOptionsByValues(filters).some(item => sameFilterValue(item.dep_id, filters.dep_id))) {
+    filters.dep_id = '';
+    filters.profession_id = '';
+  }
+  if (filters.class_id && !mobileClassOptionsByValues(filters).some(item => sameFilterValue(item.class_id, filters.class_id))) {
+    filters.class_id = '';
+  }
+}
+
 function internshipQueryParams(key, page = 1) {
   const filters = internship.filters[key] || {};
   const params = {
@@ -3106,6 +3238,7 @@ async function loadInternshipList(key, page = 1, append = false) {
   if (!fetcher) {
     return;
   }
+  applyInternshipFilterDefaults(internship.filters[key] || {});
   const data = await fetcher(internshipQueryParams(key, page));
   setPagedList(key, data, append);
 }
@@ -3533,6 +3666,7 @@ async function loadInternship() {
       ...emptyInternshipOptions(),
       ...(options || {}),
     };
+    applyDefaultInternshipFilters();
     applyDefaultInternshipSelection();
     normalizeInternshipListViews();
     await loadInternshipPanelData();

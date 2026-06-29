@@ -2627,107 +2627,20 @@
                   </section>
                   <small v-if="adminState.menu.message">{{ adminState.menu.message }}</small>
 
-                  <OperationDialog
+                  <MenuEditDialog
                     :visible="adminState.menu.dialogVisible"
-                    :title="adminState.menu.dialogMode === 'edit' ? '编辑菜单' : '新增菜单'"
-                    dialog-class="menu-dialog"
+                    :mode="adminState.menu.dialogMode"
+                    :form="adminState.menu.editing"
+                    :parent-options="parentMenuTreeOptions"
+                    :tree-props="treeProps"
+                    :resolve-icon="resolveMenuIcon"
+                    :icon-uploading="adminState.menu.iconUploading"
+                    :loading="adminState.menu.loading"
+                    :backend-url="backendUrl"
                     @close="closeMenuDialog"
-                  >
-                      <div class="operation-form menu-dialog-form">
-                        <label>
-                          <span>名称</span>
-                          <input v-model="adminState.menu.editing.name">
-                        </label>
-                        <label>
-                          <span>权限码</span>
-                          <input v-model="adminState.menu.editing.code" placeholder="如 internship:apply">
-                        </label>
-                        <label>
-                          <span>路径</span>
-                          <input v-model="adminState.menu.editing.path" placeholder="页面菜单填写路由，按钮可为空">
-                        </label>
-                        <label>
-                          <span>图标</span>
-                          <input v-model="adminState.menu.editing.icon" placeholder="lucide 图标名">
-                        </label>
-                        <label class="menu-icon-field">
-                          <span>上传图标</span>
-                          <IconUpload
-                            button-class="favorite-icon-upload"
-                            :icon="resolveMenuIcon(adminState.menu.editing.icon)"
-                            :icon-url="adminState.menu.editing.icon_url"
-                            label="菜单图标"
-                            :uploading="adminState.menu.iconUploading"
-                            :backend-url="backendUrl"
-                            @select="handleMenuIconSelected"
-                          />
-                        </label>
-                        <label>
-                          <span>作为模块</span>
-                          <el-select v-model="adminState.menu.editing.is_module">
-                            <el-option label="否" value="false" />
-                            <el-option label="是" value="true" />
-                          </el-select>
-                        </label>
-                        <label>
-                          <span>模块标识</span>
-                          <input v-model="adminState.menu.editing.module_key" placeholder="内置模块或自定义模块 key">
-                        </label>
-                        <label>
-                          <span>父级</span>
-                          <el-tree-select
-                            v-model="adminState.menu.editing.parent_id"
-                            :data="parentMenuTreeOptions"
-                            :props="treeProps"
-                            check-strictly
-                            default-expand-all
-                            filterable
-                            node-key="id"
-                          />
-                        </label>
-                        <label>
-                          <span>平台</span>
-                          <el-select v-model="adminState.menu.editing.platform">
-                            <el-option label="PC" value="pc" />
-                            <el-option label="H5" value="h5" />
-                            <el-option label="双端" value="both" />
-                          </el-select>
-                        </label>
-                        <label>
-                          <span>类型</span>
-                          <el-radio-group v-model="adminState.menu.editing.type" class="menu-type-radios">
-                            <el-radio-button label="directory">目录</el-radio-button>
-                            <el-radio-button label="menu">菜单</el-radio-button>
-                            <el-radio-button label="list">列表</el-radio-button>
-                            <el-radio-button label="button">按钮</el-radio-button>
-                          </el-radio-group>
-                        </label>
-                        <label>
-                          <span>排序</span>
-                          <input v-model="adminState.menu.editing.sort" type="number">
-                        </label>
-                        <label>
-                          <span>可见</span>
-                          <el-select v-model="adminState.menu.editing.visible">
-                            <el-option label="是" value="true" />
-                            <el-option label="否" value="false" />
-                          </el-select>
-                        </label>
-                        <label>
-                          <span>状态</span>
-                          <el-select v-model="adminState.menu.editing.status">
-                            <el-option label="启用" value="enabled" />
-                            <el-option label="禁用" value="disabled" />
-                          </el-select>
-                        </label>
-                      </div>
-                      <template #footer>
-                        <el-button @click="closeMenuDialog">取消</el-button>
-                        <el-button type="primary" :loading="adminState.menu.loading" @click="saveMenuConfig">
-                          保存
-                        </el-button>
-                      </template>
-                  </OperationDialog>
+                    @save="saveMenuConfig"
+                    @select-icon="handleMenuIconSelected"
+                  />
                 </div>
 
                 <div v-else-if="win.module.id === 'config' && win.panel === 'roleMenus'" class="admin-panel">
@@ -3414,10 +3327,12 @@ import DataListPanel from './components/DataListPanel.vue';
 import DocCenter from './components/DocCenter.vue';
 import ExportTaskCenter from './components/ExportTaskCenter.vue';
 import IconUpload from './components/IconUpload.vue';
+import MenuEditDialog from './components/MenuEditDialog.vue';
 import OperationDialog from './components/OperationDialog.vue';
 import StudentOwnPanel from './components/StudentOwnPanel.vue';
 import TemplateLibrary from './components/TemplateLibrary.vue';
 import { usePermissions } from './composables/usePermissions';
+import { buildLaunchableMenuModules, mergeLaunchableModules as mergeMenuModules } from './utils/menuModules';
 import { backendUrl } from './api/client';
 import {
   changeAdminAccountStatus,
@@ -4427,8 +4342,8 @@ const isTeacherRole = computed(() => currentRoleType.value === 'teacher');
 const isAdminRole = computed(() => ['super_admin', 'school_admin', 'college_admin', 'profession_admin'].includes(currentRoleType.value));
 const configChildModuleIds = new Set(['userManage', 'gradeManage', 'departmentManage', 'professionManage', 'classManage']);
 const visibleModules = computed(() => modules.map(decorateModule).filter(canShowModule));
-const menuModuleItems = computed(() => buildMenuModules(permissionState.menus));
-const allLaunchableModules = computed(() => mergeLaunchableModules(visibleModules.value, menuModuleItems.value));
+const menuModuleItems = computed(() => buildLaunchableMenuModules(permissionState.menus, modules, resolveMenuIcon));
+const allLaunchableModules = computed(() => mergeMenuModules(visibleModules.value, menuModuleItems.value));
 const mainEntryModules = computed(() => allLaunchableModules.value.filter(module => launcherModuleIdSet.has(module.id) || module.source === 'menu'));
 const globalSearchKeyword = computed(() => keyword.value.trim().toLowerCase());
 const searchCandidateModules = computed(() => {
@@ -4669,46 +4584,6 @@ function resolveMenuIcon(iconName) {
     return iconName;
   }
   return iconRegistry[iconName.trim()] || LayoutGrid;
-}
-
-function buildMenuModules(menus = []) {
-  return (menus || [])
-    .filter(menu => menu?.is_module === 'true' && menu.visible !== 'false' && ['pc', 'both'].includes(menu.platform || 'both'))
-    .map((menu) => {
-      const builtIn = modules.find(item => item.id === (menu.module_key || menu.path || menu.code));
-      const moduleId = String(menu.module_key || builtIn?.id || `menu-${menu.id}`);
-      const isBuiltIn = Boolean(builtIn);
-      return {
-        ...(builtIn || {}),
-        id: moduleId,
-        name: menu.name || builtIn?.name || '菜单模块',
-        icon: resolveMenuIcon(menu.icon || builtIn?.icon),
-        iconUrl: menu.icon_url || builtIn?.iconUrl || '',
-        color: builtIn?.color || 'blue',
-        scope: menu.path || menu.code || builtIn?.scope || '菜单模块',
-        viewPermission: menu.code || builtIn?.viewPermission || '',
-        managePermission: builtIn?.managePermission || '',
-        defaultPanel: builtIn?.defaultPanel || 'menuModule',
-        source: isBuiltIn ? builtIn.source : 'menu',
-        menu,
-        menuId: menu.id,
-      };
-    });
-}
-
-function mergeLaunchableModules(baseModules, menuModules) {
-  const rows = new Map();
-  baseModules.forEach(module => rows.set(module.id, module));
-  menuModules.forEach((module) => {
-    const current = rows.get(module.id) || {};
-    rows.set(module.id, {
-      ...current,
-      ...module,
-      icon: module.icon || current.icon || LayoutGrid,
-      iconUrl: module.iconUrl || current.iconUrl || '',
-    });
-  });
-  return Array.from(rows.values());
 }
 
 function canShowModule(module) {
@@ -7672,11 +7547,12 @@ async function saveMenuConfig() {
   adminState.menu.loading = true;
   adminState.menu.message = '';
   try {
+    const isModule = adminState.menu.editing.is_module === 'true';
     const payload = {
       ...adminState.menu.editing,
       sort: Number(adminState.menu.editing.sort || 0),
-      is_module: adminState.menu.editing.is_module || 'false',
-      module_key: adminState.menu.editing.module_key || '',
+      is_module: isModule ? 'true' : 'false',
+      module_key: isModule ? String(adminState.menu.editing.module_key || '').trim() : '',
       icon_url: adminState.menu.editing.icon_url || '',
       icon_file_id: adminState.menu.editing.icon_file_id || null,
     };
@@ -7692,6 +7568,8 @@ async function saveMenuConfig() {
     }
     closeMenuDialog();
     await load();
+    await loadDesktopShortcuts();
+    syncOpenWindowModules();
   } catch (error) {
     adminState.menu.message = error.message;
   } finally {
