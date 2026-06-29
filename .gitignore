@@ -15,6 +15,7 @@ fontend/**/dist/
 # runtime/cache/logs/uploads
 server/runtime/
 server/public/files/
+tmp/
 
 # editor/system
 .idea/

@@ -4347,7 +4347,8 @@ const currentRoleType = computed(() => permissionState.context.role_type || '');
 const isStudentRole = computed(() => currentRoleType.value === 'student');
 const isTeacherRole = computed(() => currentRoleType.value === 'teacher');
 const isAdminRole = computed(() => ['super_admin', 'school_admin', 'college_admin', 'profession_admin'].includes(currentRoleType.value));
-const configChildModuleIds = new Set(['userManage', 'gradeManage', 'departmentManage', 'professionManage', 'classManage']);
+const configChildModuleIds = new Set(['userManage', 'gradeManage', 'departmentManage', 'professionManage', 'classManage', 'companyManage']);
+const schoolConfigModuleIds = new Set(['gradeManage', 'departmentManage', 'professionManage', 'classManage', 'companyManage', 'dataManage']);
 const visibleModules = computed(() => modules.map(decorateModule).filter(canShowModule));
 const menuModuleItems = computed(() => buildLaunchableMenuModules(permissionState.menus, modules, resolveMenuIcon));
 const allLaunchableModules = computed(() => mergeMenuModules(visibleModules.value, menuModuleItems.value));
@@ -4544,7 +4545,10 @@ function canShowModule(module) {
     return configSidebarItemsForCurrentRole().length > 0;
   }
   if (module.id === 'userManage') {
-    return canViewUserAdmin.value && hasPermission(module.viewPermission);
+    return canViewUserAdmin.value;
+  }
+  if (schoolConfigModuleIds.has(module.id)) {
+    return canShowSchoolConfigModule(module);
   }
   if (!hasPermission(module.viewPermission)) {
     return false;
@@ -4559,6 +4563,16 @@ function canShowModule(module) {
     return ['student', 'teacher', 'super_admin', 'school_admin', 'college_admin', 'profession_admin'].includes(currentRoleType.value);
   }
   return true;
+}
+
+function canShowSchoolConfigModule(module) {
+  if (!isSchoolConfigRole()) {
+    return false;
+  }
+  if (module.id === 'dataManage') {
+    return hasPermission('config:view') || hasPermission('config:manage');
+  }
+  return !module.viewPermission || hasPermission(module.viewPermission);
 }
 
 function isSchoolConfigRole() {
