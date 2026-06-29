@@ -1542,8 +1542,9 @@ class InternshipService
             $this->assertStudentVisible($studentId);
             $this->assertTaskBindingVisible($studentId, $arrangementId);
         }
+        $semester = $this->nullableString($request, 'semester', 80) ?? InternshipRecord::arrangementSemester($arrangementId);
         $values = [
-            'semester' => $this->requiredString($request, 'semester', 80),
+            'semester' => $semester,
             'arrangement_id' => $arrangementId,
             'student_id' => $studentId,
             'inspector_id' => CurrentContext::accountId(),

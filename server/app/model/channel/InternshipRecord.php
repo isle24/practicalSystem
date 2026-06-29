@@ -1224,6 +1224,18 @@ class InternshipRecord extends TableRecord
             ]);
     }
 
+    public static function arrangementSemester(int $arrangementId): string
+    {
+        if ($arrangementId <= 0) {
+            return '';
+        }
+
+        return (string) (self::queryTable('arrangement')
+            ->where('id', $arrangementId)
+            ->whereNull('deleted_at')
+            ->value('semester') ?? '');
+    }
+
     public static function gradeRowByName(string $gradeName): ?array
     {
         $row = self::queryTable('grade_list')
