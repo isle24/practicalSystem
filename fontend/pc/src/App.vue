@@ -3302,38 +3302,20 @@
       </section>
     </div>
 
-    <div v-if="desktopLauncherState.visible" class="desktop-launcher-mask" tabindex="-1" @keyup.esc="closeDesktopLauncher">
-      <section class="desktop-launcher-panel" @click="handleDesktopLauncherClick">
-        <button type="button" class="desktop-launcher-close" title="关闭" @click="closeDesktopLauncher">
-          <X :size="22" />
-        </button>
-        <label class="desktop-launcher-search">
-          <Search :size="22" />
-          <input v-model="desktopLauncherState.keyword" type="search" placeholder="搜索应用模块">
-        </label>
-        <small v-if="desktopLauncherState.message" class="desktop-launcher-message">{{ desktopLauncherState.message }}</small>
-        <div class="desktop-launcher-grid">
-          <article v-for="module in launcherFilteredModules" :key="module.id" class="launcher-app">
-            <button type="button" class="launcher-module-main" :title="module.scope" @click="openLauncherModule(module)">
-              <AppIcon class="app-glyph" :icon="module.icon" :icon-url="module.iconUrl" :label="module.name" :color="module.color" :size="24" :backend-url="backendUrl" />
-              <strong>{{ module.name }}</strong>
-            </button>
-            <button
-              v-if="module.type !== 'favoriteLink'"
-              type="button"
-              class="launcher-module-add"
-              :class="{ added: isDesktopShortcut(module.id), locked: isDefaultDesktopShortcut(module.id) }"
-              :disabled="isDefaultDesktopShortcut(module.id) || desktopLauncherState.loading"
-              :title="launcherShortcutTitle(module.id)"
-              @click.stop="toggleDesktopShortcut(module.id)"
-            >
-              <CheckCircle2 v-if="isDesktopShortcut(module.id)" :size="18" />
-              <Plus v-else :size="18" />
-            </button>
-          </article>
-        </div>
-      </section>
-    </div>
+    <DesktopLauncher
+      v-model:keyword="desktopLauncherState.keyword"
+      :visible="desktopLauncherState.visible"
+      :modules="launcherFilteredModules"
+      :loading="desktopLauncherState.loading"
+      :message="desktopLauncherState.message"
+      :backend-url="backendUrl"
+      :is-desktop-shortcut="isDesktopShortcut"
+      :is-default-desktop-shortcut="isDefaultDesktopShortcut"
+      :shortcut-title="launcherShortcutTitle"
+      @close="closeDesktopLauncher"
+      @open="openLauncherModule"
+      @toggle="toggleDesktopShortcut"
+    />
 
     <footer class="taskbar">
       <button class="taskbar-icon-button" title="开始" aria-label="开始" @click="openDesktopLauncher">
@@ -3424,9 +3406,9 @@ import {
   UsersRound,
   UserRound,
   Workflow,
-  X,
 } from '@lucide/vue';
 import DesktopWindow from './components/DesktopWindow.vue';
+import DesktopLauncher from './components/DesktopLauncher.vue';
 import AppIcon from './components/AppIcon.vue';
 import DataListPanel from './components/DataListPanel.vue';
 import DocCenter from './components/DocCenter.vue';
@@ -5918,18 +5900,6 @@ function openDesktopLauncher() {
 
 function closeDesktopLauncher() {
   desktopLauncherState.visible = false;
-}
-
-function handleDesktopLauncherClick(event) {
-  const target = event?.target instanceof Element ? event.target : null;
-  if (!target) {
-    closeDesktopLauncher();
-    return;
-  }
-  if (target.closest('.launcher-app, .desktop-launcher-search, .desktop-launcher-close')) {
-    return;
-  }
-  closeDesktopLauncher();
 }
 
 function openLauncherModule(module) {
