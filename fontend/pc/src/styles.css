@@ -931,6 +931,26 @@ a {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.icon-config-field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 96px;
+  gap: 14px;
+  align-items: start;
+}
+
+.icon-config-field > label {
+  min-width: 0;
+}
+
+.icon-config-upload {
+  align-content: start;
+}
+
+.icon-config-upload .favorite-icon-upload {
+  width: 68px;
+  height: 68px;
+}
+
 .menu-type-radios {
   width: 100%;
 }

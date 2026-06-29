@@ -19,21 +19,19 @@
         <input v-model="form.path" placeholder="页面菜单填写路由，按钮可为空">
       </label>
       <label>
-        <span>图标</span>
-        <input v-model="form.icon" placeholder="lucide 图标名">
+        <span>外链地址</span>
+        <input v-model="form.url" placeholder="需要打开文件或网址时填写">
       </label>
-      <label class="menu-icon-field">
-        <span>上传图标</span>
-        <IconUpload
-          button-class="favorite-icon-upload"
-          :icon="resolveIcon(form.icon)"
-          :icon-url="form.icon_url"
-          label="菜单图标"
-          :uploading="iconUploading"
-          :backend-url="backendUrl"
-          @select="file => emit('select-icon', file)"
-        />
-      </label>
+      <IconConfigField
+        v-model:icon="form.icon"
+        class="span-2"
+        :icon-url="form.icon_url"
+        upload-label="菜单图标"
+        :resolve-icon="resolveIcon"
+        :uploading="iconUploading"
+        :backend-url="backendUrl"
+        @select="file => emit('select-icon', file)"
+      />
       <label>
         <span>作为模块</span>
         <el-select v-model="form.is_module">
@@ -106,7 +104,7 @@
 </template>
 
 <script setup>
-import IconUpload from './IconUpload.vue';
+import IconConfigField from './IconConfigField.vue';
 import OperationDialog from './OperationDialog.vue';
 
 defineProps({

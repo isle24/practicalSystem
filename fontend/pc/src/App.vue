@@ -5714,6 +5714,14 @@ function openModule(module) {
     window.open(module.url, '_blank', 'noopener,noreferrer');
     return;
   }
+  if (module?.source === 'menu' && module.menu?.url) {
+    window.open(backendUrl(module.menu.url), '_blank', 'noopener,noreferrer');
+    return;
+  }
+  if (module?.source === 'menu' && /^https?:\/\//i.test(String(module.menu?.path || ''))) {
+    window.open(module.menu.path, '_blank', 'noopener,noreferrer');
+    return;
+  }
   openModuleWindow(module, { reuse: true });
 }
 

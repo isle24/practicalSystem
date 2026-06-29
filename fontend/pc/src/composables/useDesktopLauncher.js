@@ -16,12 +16,15 @@ export function useDesktopLauncher(options) {
   const defaultModuleIdSet = new Set(defaultModuleIds);
 
   const customShortcutItems = computed(() => state.items.filter(item => item?.type === 'module' || item?.type === 'favorite'));
+  const launchableModuleIds = computed(() => new Set(options.allModules.value
+    .filter(module => module?.type !== 'favoriteLink')
+    .map(module => module.id)));
   const customModuleKeys = computed(() => customShortcutItems.value
     .filter(item => item.type === 'module')
     .map(item => String(item.key || item.item_key || ''))
-    .filter(key => key && !defaultModuleIdSet.has(key) && options.allModules.value.some(module => module.id === key)));
+    .filter(key => key && !defaultModuleIdSet.has(key) && launchableModuleIds.value.has(key)));
   const moduleShortcutKeys = computed(() => {
-    const defaults = defaultModuleIds.filter(key => options.allModules.value.some(module => module.id === key));
+    const defaults = defaultModuleIds.filter(key => launchableModuleIds.value.has(key));
     return Array.from(new Set([...defaults, ...customModuleKeys.value]));
   });
   const favoriteDesktopShortcuts = computed(() => customShortcutItems.value
@@ -123,6 +126,7 @@ export function useDesktopLauncher(options) {
   return {
     state,
     customShortcutItems,
+    launchableModuleIds,
     moduleShortcutKeys,
     favoriteDesktopShortcuts,
     visibleDesktopModules,
