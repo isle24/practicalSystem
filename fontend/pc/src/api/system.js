@@ -383,6 +383,20 @@ export function uploadFavoriteIcon(file) {
   });
 }
 
+export function uploadFile(file, options = {}) {
+  const body = new FormData();
+  Object.entries({ require_md5: 'false', ...options }).forEach(([key, value]) => {
+    if (value !== undefined && value !== null) {
+      body.append(key, value);
+    }
+  });
+  body.append('file', file);
+  return request('/file/upload', {
+    method: 'POST',
+    body,
+  });
+}
+
 export function fetchFileList(params = {}) {
   const query = new URLSearchParams(params).toString();
   return request(`/file/list${query ? `?${query}` : ''}`);

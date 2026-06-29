@@ -76,9 +76,7 @@
             type="button"
             @mousedown.prevent="openGlobalSearchModule(module)"
           >
-            <span class="search-result-glyph" :class="module.color">
-              <component :is="module.icon" :size="15" />
-            </span>
+            <AppIcon class="search-result-glyph" :icon="module.icon" :icon-url="module.iconUrl" :label="module.name" :color="module.color" :size="15" :backend-url="backendUrl" />
             <span>
               <strong>{{ module.name }}</strong>
               <small>{{ module.scope }}</small>
@@ -134,10 +132,7 @@
           :class="{ active: isModuleFocused(module.id) }"
           @click.prevent="openModule(module)"
         >
-          <span class="app-glyph" :class="module.color">
-            <img v-if="module.iconUrl" :src="backendUrl(module.iconUrl)" :alt="module.name">
-            <component v-else :is="module.icon" :size="25" />
-          </span>
+          <AppIcon class="app-glyph" :icon="module.icon" :icon-url="module.iconUrl" :label="module.name" :color="module.color" :size="25" :backend-url="backendUrl" />
           <span>{{ module.name }}</span>
         </a>
       </nav>
@@ -2097,10 +2092,7 @@
                       :class="favoriteCardClass(row, index)"
                     >
                       <button type="button" class="favorite-card-main" @click="openFavoriteLink(row)">
-                        <span class="favorite-card-icon">
-                          <img v-if="row.icon_url" :src="backendUrl(row.icon_url)" :alt="row.title">
-                          <strong v-else>{{ favoriteInitial(row) }}</strong>
-                        </span>
+                        <AppIcon class="favorite-card-icon" :icon="Globe2" :icon-url="row.icon_url" :label="row.title" color="" :size="24" :backend-url="backendUrl" />
                         <span>
                           <strong>{{ row.title || '未命名收藏' }}</strong>
                           <small>{{ favoriteHost(row) }}</small>
@@ -2144,10 +2136,7 @@
                       </header>
                       <div class="favorite-editor">
                         <div class="favorite-preview-card" :class="favoriteCardClass(favoriteState.editing, 0)">
-                          <span class="favorite-card-icon">
-                            <img v-if="favoriteState.editing.icon_url" :src="backendUrl(favoriteState.editing.icon_url)" alt="收藏图标">
-                            <strong v-else>{{ favoriteInitial(favoriteState.editing) }}</strong>
-                          </span>
+                          <AppIcon class="favorite-card-icon" :icon="Globe2" :icon-url="favoriteState.editing.icon_url" label="收藏图标" color="" :size="24" :backend-url="backendUrl" />
                           <strong>{{ favoriteState.editing.title || '收藏标题' }}</strong>
                           <MoreHorizontal :size="22" />
                         </div>
@@ -2164,17 +2153,15 @@
                           </div>
                           <label class="favorite-icon-field">
                             <span>图标</span>
-                            <button type="button" class="favorite-icon-upload" :disabled="favoriteState.iconUploading" @click="chooseFavoriteIcon">
-                              <img v-if="favoriteState.editing.icon_url" :src="backendUrl(favoriteState.editing.icon_url)" alt="收藏图标">
-                              <Globe2 v-else :size="24" />
-                            </button>
-                            <input
-                              ref="favoriteIconInputRef"
-                              class="hidden-file"
-                              type="file"
-                              accept="image/jpeg,image/png,image/webp,image/gif,image/x-icon"
-                              @change="handleFavoriteIconSelected"
-                            >
+                            <IconUpload
+                              button-class="favorite-icon-upload"
+                              :icon="Globe2"
+                              :icon-url="favoriteState.editing.icon_url"
+                              label="收藏图标"
+                              :uploading="favoriteState.iconUploading"
+                              :backend-url="backendUrl"
+                              @select="handleFavoriteIconSelected"
+                            />
                           </label>
                         </div>
                       </div>
@@ -2186,6 +2173,37 @@
                       </footer>
                     </section>
                   </div>
+                </div>
+
+                <div v-else-if="win.module.source === 'menu'" class="module-content-panel menu-module-panel">
+                  <section class="menu-module-card">
+                    <header>
+                      <AppIcon class="app-glyph" :icon="win.module.icon" :icon-url="win.module.iconUrl" :label="win.module.name" :color="win.module.color" :size="26" :backend-url="backendUrl" />
+                      <span>
+                        <strong>{{ win.module.name }}</strong>
+                        <small>{{ win.module.scope }}</small>
+                      </span>
+                    </header>
+                    <div class="menu-module-meta">
+                      <span>权限码：{{ win.module.menu?.code || '-' }}</span>
+                      <span>路径：{{ win.module.menu?.path || '-' }}</span>
+                    </div>
+                    <div class="menu-module-grid">
+                      <button
+                        v-for="item in menuModuleChildren(win.module.menuId)"
+                        :key="item.id"
+                        type="button"
+                        @click="openMenuModuleChild(item)"
+                      >
+                        <component :is="resolveMenuIcon(item.icon)" :size="18" />
+                        <span>{{ item.name }}</span>
+                        <small>{{ item.path || item.code || menuNodeTypeText(item.type) }}</small>
+                      </button>
+                    </div>
+                    <div v-if="!menuModuleChildren(win.module.menuId).length" class="empty-grid-state">
+                      暂无子菜单
+                    </div>
+                  </section>
                 </div>
 
                 <div v-else-if="win.module.id === 'message'" class="message-center-panel">
@@ -2601,7 +2619,7 @@
                           </span>
                           <span class="menu-node-meta">
                             <em>{{ menuNodeKind(data) }}</em>
-                            <small>{{ menuNodeTypeText(data.type) }} / {{ data.platform }} / {{ data.path || '-' }}</small>
+                            <small>{{ menuNodeTypeText(data.type) }} / {{ data.platform }} / {{ data.path || '-' }}{{ data.is_module === 'true' ? ' / 模块' : '' }}</small>
                           </span>
                         </span>
                       </template>
@@ -2609,12 +2627,12 @@
                   </section>
                   <small v-if="adminState.menu.message">{{ adminState.menu.message }}</small>
 
-                  <div v-if="adminState.menu.dialogVisible" class="operation-mask" @click.self="closeMenuDialog">
-                    <section class="operation-dialog menu-dialog">
-                      <header>
-                        <strong>{{ adminState.menu.dialogMode === 'edit' ? '编辑菜单' : '新增菜单' }}</strong>
-                        <button type="button" @click="closeMenuDialog">关闭</button>
-                      </header>
+                  <OperationDialog
+                    :visible="adminState.menu.dialogVisible"
+                    :title="adminState.menu.dialogMode === 'edit' ? '编辑菜单' : '新增菜单'"
+                    dialog-class="menu-dialog"
+                    @close="closeMenuDialog"
+                  >
                       <div class="operation-form menu-dialog-form">
                         <label>
                           <span>名称</span>
@@ -2631,6 +2649,29 @@
                         <label>
                           <span>图标</span>
                           <input v-model="adminState.menu.editing.icon" placeholder="lucide 图标名">
+                        </label>
+                        <label class="menu-icon-field">
+                          <span>上传图标</span>
+                          <IconUpload
+                            button-class="favorite-icon-upload"
+                            :icon="resolveMenuIcon(adminState.menu.editing.icon)"
+                            :icon-url="adminState.menu.editing.icon_url"
+                            label="菜单图标"
+                            :uploading="adminState.menu.iconUploading"
+                            :backend-url="backendUrl"
+                            @select="handleMenuIconSelected"
+                          />
+                        </label>
+                        <label>
+                          <span>作为模块</span>
+                          <el-select v-model="adminState.menu.editing.is_module">
+                            <el-option label="否" value="false" />
+                            <el-option label="是" value="true" />
+                          </el-select>
+                        </label>
+                        <label>
+                          <span>模块标识</span>
+                          <input v-model="adminState.menu.editing.module_key" placeholder="内置模块或自定义模块 key">
                         </label>
                         <label>
                           <span>父级</span>
@@ -2680,14 +2721,13 @@
                           </el-select>
                         </label>
                       </div>
-                      <footer>
+                      <template #footer>
                         <el-button @click="closeMenuDialog">取消</el-button>
                         <el-button type="primary" :loading="adminState.menu.loading" @click="saveMenuConfig">
                           保存
                         </el-button>
-                      </footer>
-                    </section>
-                  </div>
+                      </template>
+                  </OperationDialog>
                 </div>
 
                 <div v-else-if="win.module.id === 'config' && win.panel === 'roleMenus'" class="admin-panel">
@@ -3275,9 +3315,7 @@
         <div class="desktop-launcher-grid">
           <article v-for="module in launcherFilteredModules" :key="module.id" class="launcher-app">
             <button type="button" class="launcher-module-main" :title="module.scope" @click="openLauncherModule(module)">
-              <span class="app-glyph" :class="module.color">
-                <component :is="module.icon" :size="24" />
-              </span>
+              <AppIcon class="app-glyph" :icon="module.icon" :icon-url="module.iconUrl" :label="module.name" :color="module.color" :size="24" :backend-url="backendUrl" />
               <strong>{{ module.name }}</strong>
             </button>
             <button
@@ -3311,9 +3349,7 @@
           :class="{ active: focusedWindowId === win.id && !win.minimized }"
           @click="toggleTaskWindow(win.id)"
         >
-          <span class="taskbar-glyph" :class="win.module.color">
-            <component :is="win.module.icon" :size="17" />
-          </span>
+          <AppIcon class="taskbar-glyph" :icon="win.module.icon" :icon-url="win.module.iconUrl" :label="win.module.name" :color="win.module.color" :size="17" :backend-url="backendUrl" />
         </a>
         <button
           class="taskbar-icon-button message-taskbar-button"
@@ -3365,6 +3401,7 @@ import {
   GraduationCap,
   HardDrive,
   ImagePlus,
+  List,
   LayoutGrid,
   ListTree,
   LogIn,
@@ -3372,11 +3409,13 @@ import {
   MapPin,
   MessageCircle,
   MoreHorizontal,
+  Network,
   Plus,
   RefreshCw,
   Save,
   Search,
   Settings,
+  ShieldCheck,
   SlidersHorizontal,
   Star,
   Table2,
@@ -3388,9 +3427,12 @@ import {
   X,
 } from '@lucide/vue';
 import DesktopWindow from './components/DesktopWindow.vue';
+import AppIcon from './components/AppIcon.vue';
 import DataListPanel from './components/DataListPanel.vue';
 import DocCenter from './components/DocCenter.vue';
 import ExportTaskCenter from './components/ExportTaskCenter.vue';
+import IconUpload from './components/IconUpload.vue';
+import OperationDialog from './components/OperationDialog.vue';
 import StudentOwnPanel from './components/StudentOwnPanel.vue';
 import TemplateLibrary from './components/TemplateLibrary.vue';
 import { usePermissions } from './composables/usePermissions';
@@ -3496,6 +3538,7 @@ import {
   saveWechatConfig,
   switchAccount,
   uploadFavoriteIcon,
+  uploadFile,
   uploadLoginBackground,
   uploadProfileAsset,
 } from './api/system';
@@ -3509,12 +3552,51 @@ const menuTreeRef = ref(null);
 const archiveImportInputRef = ref(null);
 const archiveImportType = ref('');
 const arrangementImportInputRef = ref(null);
-const favoriteIconInputRef = ref(null);
 const focusedWindowId = ref(null);
 const zIndexSeed = ref(20);
 const wallpaperCacheKey = 'practical_pc_wallpaper';
 const loginBackgroundMaxSize = 8 * 1024 * 1024;
 const imageAssetTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+const iconRegistry = {
+  Bell,
+  BookOpen,
+  BriefcaseBusiness,
+  Building2,
+  CalendarCheck,
+  ChartColumn,
+  CheckCircle2,
+  ClipboardList,
+  Edit3,
+  FileClock,
+  FileText,
+  FlaskConical,
+  FolderOpen,
+  Globe2,
+  GraduationCap,
+  HardDrive,
+  ImagePlus,
+  List,
+  LayoutGrid,
+  ListTree,
+  MapPin,
+  MessageCircle,
+  MoreHorizontal,
+  Network,
+  Plus,
+  RefreshCw,
+  Save,
+  Search,
+  Settings,
+  ShieldCheck,
+  SlidersHorizontal,
+  Star,
+  Table2,
+  Trash2,
+  Upload,
+  UsersRound,
+  UserRound,
+  Workflow,
+};
 const loginForm = reactive({
   login_name: 'admin',
   password: 'admin123456',
@@ -3697,6 +3779,7 @@ const adminState = reactive({
     dialogVisible: false,
     dialogMode: 'create',
     loading: false,
+    iconUploading: false,
     message: '',
   },
   roleMenus: {
@@ -4362,10 +4445,12 @@ const isTeacherRole = computed(() => currentRoleType.value === 'teacher');
 const isAdminRole = computed(() => ['super_admin', 'school_admin', 'college_admin', 'profession_admin'].includes(currentRoleType.value));
 const configChildModuleIds = new Set(['userManage', 'gradeManage', 'departmentManage', 'professionManage', 'classManage']);
 const visibleModules = computed(() => modules.map(decorateModule).filter(canShowModule));
-const mainEntryModules = computed(() => visibleModules.value.filter(module => launcherModuleIdSet.has(module.id)));
+const menuModuleItems = computed(() => buildMenuModules(permissionState.menus));
+const allLaunchableModules = computed(() => mergeLaunchableModules(visibleModules.value, menuModuleItems.value));
+const mainEntryModules = computed(() => allLaunchableModules.value.filter(module => launcherModuleIdSet.has(module.id) || module.source === 'menu'));
 const globalSearchKeyword = computed(() => keyword.value.trim().toLowerCase());
 const searchCandidateModules = computed(() => {
-  const items = [...visibleModules.value, ...favoriteDesktopShortcuts.value];
+  const items = [...allLaunchableModules.value, ...favoriteDesktopShortcuts.value];
   if (isLoggedIn.value) {
     items.push(messageModule);
   }
@@ -4382,7 +4467,7 @@ const globalSearchResults = computed(() => {
 });
 const visibleDesktopModules = computed(() => {
   const shortcutIds = new Set(desktopModuleShortcutKeys.value);
-  const desktopModules = visibleModules.value.filter(module => shortcutIds.has(module.id));
+  const desktopModules = allLaunchableModules.value.filter(module => shortcutIds.has(module.id));
   const favoriteModules = favoriteDesktopShortcuts.value;
   return [...desktopModules, ...favoriteModules];
 });
@@ -4411,7 +4496,7 @@ const favoriteLauncherShortcuts = computed(() => {
   });
   return Array.from(rows.values());
 });
-const launcherModules = computed(() => [...visibleModules.value, ...favoriteLauncherShortcuts.value]);
+const launcherModules = computed(() => [...allLaunchableModules.value, ...favoriteLauncherShortcuts.value]);
 const launcherFilteredModules = computed(() => {
   const value = desktopLauncherState.keyword.trim().toLowerCase();
   if (!value) {
@@ -4423,9 +4508,9 @@ const customDesktopShortcutItems = computed(() => desktopLauncherState.items.fil
 const customDesktopModuleKeys = computed(() => customDesktopShortcutItems.value
   .filter(item => item.type === 'module')
   .map(item => String(item.key || item.item_key || ''))
-  .filter(key => key && !defaultDesktopModuleIdSet.has(key) && visibleModules.value.some(module => module.id === key)));
+  .filter(key => key && !defaultDesktopModuleIdSet.has(key) && allLaunchableModules.value.some(module => module.id === key)));
 const desktopModuleShortcutKeys = computed(() => {
-  const defaults = defaultDesktopModuleIds.filter(key => visibleModules.value.some(module => module.id === key));
+  const defaults = defaultDesktopModuleIds.filter(key => allLaunchableModules.value.some(module => module.id === key));
   return Array.from(new Set([...defaults, ...customDesktopModuleKeys.value]));
 });
 const favoriteDesktopShortcuts = computed(() => customDesktopShortcutItems.value
@@ -4594,7 +4679,60 @@ const internshipTimelineCycles = computed(() => normalizeTimelineCycles(
   internshipState.dialog.timeline || [],
 ));
 
+function resolveMenuIcon(iconName) {
+  if (!iconName) {
+    return LayoutGrid;
+  }
+  if (typeof iconName !== 'string') {
+    return iconName;
+  }
+  return iconRegistry[iconName.trim()] || LayoutGrid;
+}
+
+function buildMenuModules(menus = []) {
+  return (menus || [])
+    .filter(menu => menu?.is_module === 'true' && menu.visible !== 'false' && ['pc', 'both'].includes(menu.platform || 'both'))
+    .map((menu) => {
+      const builtIn = modules.find(item => item.id === (menu.module_key || menu.path || menu.code));
+      const moduleId = String(menu.module_key || builtIn?.id || `menu-${menu.id}`);
+      const isBuiltIn = Boolean(builtIn);
+      return {
+        ...(builtIn || {}),
+        id: moduleId,
+        name: menu.name || builtIn?.name || '菜单模块',
+        icon: resolveMenuIcon(menu.icon || builtIn?.icon),
+        iconUrl: menu.icon_url || builtIn?.iconUrl || '',
+        color: builtIn?.color || 'blue',
+        scope: menu.path || menu.code || builtIn?.scope || '菜单模块',
+        viewPermission: menu.code || builtIn?.viewPermission || '',
+        managePermission: builtIn?.managePermission || '',
+        defaultPanel: builtIn?.defaultPanel || 'menuModule',
+        source: isBuiltIn ? builtIn.source : 'menu',
+        menu,
+        menuId: menu.id,
+      };
+    });
+}
+
+function mergeLaunchableModules(baseModules, menuModules) {
+  const rows = new Map();
+  baseModules.forEach(module => rows.set(module.id, module));
+  menuModules.forEach((module) => {
+    const current = rows.get(module.id) || {};
+    rows.set(module.id, {
+      ...current,
+      ...module,
+      icon: module.icon || current.icon || LayoutGrid,
+      iconUrl: module.iconUrl || current.iconUrl || '',
+    });
+  });
+  return Array.from(rows.values());
+}
+
 function canShowModule(module) {
+  if (module.source === 'menu') {
+    return isLoggedIn.value && module.menu?.visible !== 'false';
+  }
   if (module.id === 'profile') {
     return isLoggedIn.value;
   }
@@ -5294,6 +5432,9 @@ function studentPanelFields(panel) {
 }
 
 function sidebarItems(win) {
+  if (win.module.source === 'menu') {
+    return [];
+  }
   if (['message', 'doc', 'templateLib', 'exportTask', 'favorite'].includes(win.module.id)) {
     return [];
   }
@@ -5876,7 +6017,7 @@ function normalizeShortcutItems(items) {
 
 function defaultWindowModule() {
   return defaultDesktopModuleIds
-    .map(id => visibleModules.value.find(module => module.id === id))
+    .map(id => allLaunchableModules.value.find(module => module.id === id))
     .find(Boolean)
     || mainEntryModules.value.find(module => module.id !== 'config')
     || mainEntryModules.value[0]
@@ -6138,12 +6279,7 @@ function favoriteCardClass(row, index = 0) {
   return `favorite-card-${themes[Math.abs(source) % themes.length]}`;
 }
 
-function chooseFavoriteIcon() {
-  favoriteIconInputRef.value?.click();
-}
-
-async function handleFavoriteIconSelected(event) {
-  const file = event.target?.files?.[0];
+async function handleFavoriteIconSelected(file) {
   if (!file) {
     return;
   }
@@ -6157,7 +6293,6 @@ async function handleFavoriteIconSelected(event) {
     favoriteState.message = error.message;
   } finally {
     favoriteState.iconUploading = false;
-    event.target.value = '';
   }
 }
 
@@ -6576,8 +6711,8 @@ async function handleHashNavigation() {
 
   if (hash.startsWith('module=')) {
     const moduleId = decodeURIComponent(hash.slice(7));
-      const module = visibleModules.value.find(item => item.id === moduleId);
-      if (module) {
+    const module = allLaunchableModules.value.find(item => item.id === moduleId);
+    if (module) {
       openModule(module);
       clearNavigationHash();
     }
@@ -6603,7 +6738,7 @@ async function handleHashNavigation() {
       const panel = decodeURIComponent(value.slice(separator + 1));
       let win = openWindows.find(item => item.module.id === moduleId);
       if (!win) {
-        const module = visibleModules.value.find(item => item.id === moduleId);
+        const module = allLaunchableModules.value.find(item => item.id === moduleId);
         if (module) {
           openModuleWindow(module, { reuse: true });
           win = openWindows.at(-1);
@@ -6632,7 +6767,7 @@ function isModuleFocused(moduleId) {
 
 function syncOpenWindowModules() {
   openWindows.forEach((win) => {
-    const module = visibleModules.value.find(item => item.id === win.module.id);
+    const module = allLaunchableModules.value.find(item => item.id === win.module.id);
     if (module) {
       win.module = module;
     }
@@ -6940,6 +7075,10 @@ function emptyMenu() {
     type: 'menu',
     sort: 0,
     icon: '',
+    is_module: 'false',
+    module_key: '',
+    icon_url: '',
+    icon_file_id: null,
     visible: 'true',
     status: 'enabled',
   };
@@ -7029,6 +7168,29 @@ function menuTreeNodeIds(nodes) {
     node.id,
     ...menuTreeNodeIds(node.children || []),
   ]).filter(Boolean);
+}
+
+function menuModuleChildren(menuId) {
+  if (!menuId) {
+    return [];
+  }
+  return (permissionState.menus || [])
+    .filter(item => Number(item.parent_id || 0) === Number(menuId) && item.visible !== 'false')
+    .filter(item => ['directory', 'menu', 'list'].includes(item.type || 'menu'));
+}
+
+function openMenuModuleChild(item) {
+  if (item?.url) {
+    window.open(backendUrl(item.url), '_blank', 'noopener,noreferrer');
+    return;
+  }
+  if (item?.path && /^https?:\/\//i.test(item.path)) {
+    window.open(item.path, '_blank', 'noopener,noreferrer');
+    return;
+  }
+  if (item?.path) {
+    window.location.hash = item.path.startsWith('#') ? item.path : `#${item.path.replace(/^\/+/, '')}`;
+  }
 }
 
 function activeMenuTree() {
@@ -7506,10 +7668,34 @@ function editMenu(row) {
     type: row.type || 'menu',
     sort: Number(row.sort || 0),
     icon: row.icon || '',
+    is_module: row.is_module || 'false',
+    module_key: row.module_key || '',
+    icon_url: row.icon_url || '',
+    icon_file_id: row.icon_file_id || null,
     visible: row.visible || 'true',
     status: row.status || 'enabled',
   };
   adminState.menu.message = '';
+}
+
+async function handleMenuIconSelected(file) {
+  if (!file) {
+    return;
+  }
+  adminState.menu.iconUploading = true;
+  adminState.menu.message = '';
+  try {
+    const data = await uploadFile(file, {
+      category: 'menu_icon',
+      is_temporary: 'false',
+    });
+    adminState.menu.editing.icon_url = data.url || '';
+    adminState.menu.editing.icon_file_id = data.file_id || null;
+  } catch (error) {
+    adminState.menu.message = error.message;
+  } finally {
+    adminState.menu.iconUploading = false;
+  }
 }
 
 async function saveMenuConfig() {
@@ -7519,6 +7705,10 @@ async function saveMenuConfig() {
     const payload = {
       ...adminState.menu.editing,
       sort: Number(adminState.menu.editing.sort || 0),
+      is_module: adminState.menu.editing.is_module || 'false',
+      module_key: adminState.menu.editing.module_key || '',
+      icon_url: adminState.menu.editing.icon_url || '',
+      icon_file_id: adminState.menu.editing.icon_file_id || null,
     };
     const data = await saveMenuApi(payload);
     applyMenusData(data);
@@ -12168,7 +12358,7 @@ watch(() => permissionState.context.account_id, (accountId) => {
   }
 });
 
-watch(visibleModules, () => {
+watch(allLaunchableModules, () => {
   if (isLoggedIn.value) {
     syncOpenWindowModules();
     ensureDefaultWindow();

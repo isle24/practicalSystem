@@ -266,6 +266,10 @@ function createSchoolSchema(PDO $pdo): void
 function ensureMenuSchema(PDO $pdo): void
 {
     $pdo->exec("ALTER TABLE `menu` MODIFY COLUMN `type` ENUM('directory','menu','list','button') DEFAULT 'menu'");
+    ensureColumn($pdo, 'menu', 'is_module', "ALTER TABLE `menu` ADD COLUMN `is_module` ENUM('false','true') DEFAULT 'false' AFTER `icon`");
+    ensureColumn($pdo, 'menu', 'module_key', "ALTER TABLE `menu` ADD COLUMN `module_key` VARCHAR(80) DEFAULT NULL AFTER `is_module`");
+    ensureColumn($pdo, 'menu', 'icon_url', "ALTER TABLE `menu` ADD COLUMN `icon_url` VARCHAR(500) DEFAULT NULL AFTER `module_key`");
+    ensureColumn($pdo, 'menu', 'icon_file_id', "ALTER TABLE `menu` ADD COLUMN `icon_file_id` BIGINT UNSIGNED DEFAULT NULL AFTER `icon_url`");
     $indexes = menuIndexMap($pdo);
     if (isset($indexes['uk_menu_code']) && (int) $indexes['uk_menu_code']['non_unique'] === 0) {
         $pdo->exec('ALTER TABLE `menu` DROP INDEX `uk_menu_code`');
@@ -553,6 +557,10 @@ function schoolCoreStatements(): array
             `type` ENUM('directory','menu','list','button') DEFAULT 'menu',
             `sort` INT DEFAULT 0,
             `icon` VARCHAR(80) DEFAULT NULL,
+            `is_module` ENUM('false','true') DEFAULT 'false',
+            `module_key` VARCHAR(80) DEFAULT NULL,
+            `icon_url` VARCHAR(500) DEFAULT NULL,
+            `icon_file_id` BIGINT UNSIGNED DEFAULT NULL,
             `visible` ENUM('false','true') DEFAULT 'true',
             `status` ENUM('enabled','disabled') DEFAULT 'enabled',
             `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -2234,6 +2242,27 @@ function seedMenus(PDO $pdo): void
 
     foreach ($menus as $menu) {
         $stmt->execute($menu);
+    }
+
+    $moduleMenus = [
+        1 => 'internship',
+        2 => 'training',
+        3 => 'lab',
+        4 => 'stat',
+        5 => 'log',
+        6 => 'config',
+        8 => 'file',
+        9 => 'doc',
+        10 => 'templateLib',
+        20 => 'exportTask',
+    ];
+    $moduleStmt = $pdo->prepare(
+        "UPDATE `menu`
+         SET `is_module` = 'true', `module_key` = ?, `deleted_at` = NULL
+         WHERE `id` = ?"
+    );
+    foreach ($moduleMenus as $menuId => $moduleKey) {
+        $moduleStmt->execute([$moduleKey, $menuId]);
     }
 
     $disabledMenuIds = [102, 401];

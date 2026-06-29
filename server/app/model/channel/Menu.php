@@ -20,7 +20,7 @@ class Menu extends BaseModel
 
         return $query
             ->orderBy('sort')
-            ->get(['id', 'parent_id', 'name', 'code', 'path', 'url', 'platform', 'type', 'sort', 'icon', 'visible', 'status'])
+            ->get(['id', 'parent_id', 'name', 'code', 'path', 'url', 'platform', 'type', 'sort', 'icon', 'is_module', 'module_key', 'icon_url', 'icon_file_id', 'visible', 'status'])
             ->map(static fn ($menu): array => $menu->toArray())
             ->all();
     }
@@ -64,6 +64,10 @@ class Menu extends BaseModel
                 'menu.type',
                 'menu.sort',
                 'menu.icon',
+                'menu.is_module',
+                'menu.module_key',
+                'menu.icon_url',
+                'menu.icon_file_id',
             ])
             ->map(static fn ($menu): array => $menu->toArray())
             ->all();
