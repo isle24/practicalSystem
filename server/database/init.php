@@ -293,7 +293,7 @@ function menuIndexMap(PDO $pdo): array
 function ensureArchiveSchema(PDO $pdo): void
 {
     ensureColumn($pdo, 'department', 'dep_short_name', "ALTER TABLE `department` ADD COLUMN `dep_short_name` VARCHAR(80) DEFAULT NULL AFTER `dep_name`");
-    ensureColumn($pdo, 'grade_list', 'is_current', "ALTER TABLE `grade_list` ADD COLUMN `is_current` ENUM('false','true') DEFAULT 'false' AFTER `dep_id`");
+    ensureColumn($pdo, 'grade_list', 'is_current', "ALTER TABLE `grade_list` ADD COLUMN `is_current` ENUM('false','true') DEFAULT 'false' AFTER `grade_name`");
     ensureColumn($pdo, 'profession', 'profession_short_name', "ALTER TABLE `profession` ADD COLUMN `profession_short_name` VARCHAR(80) DEFAULT NULL AFTER `profession_name`");
     ensureColumn($pdo, 'class', 'class_short_name', "ALTER TABLE `class` ADD COLUMN `class_short_name` VARCHAR(80) DEFAULT NULL AFTER `class_name`");
 }
@@ -321,7 +321,6 @@ function schoolCoreStatements(): array
             `grade_id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
             `grade_uuid` CHAR(36) DEFAULT NULL,
             `grade_name` VARCHAR(80) NOT NULL,
-            `dep_id` BIGINT UNSIGNED DEFAULT NULL,
             `is_current` ENUM('false','true') DEFAULT 'false',
             `sort` INT DEFAULT 0,
             `flag` ENUM('on','off') DEFAULT 'on',
@@ -329,8 +328,7 @@ function schoolCoreStatements(): array
             `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             `deleted_at` DATETIME DEFAULT NULL,
             PRIMARY KEY (`grade_id`),
-            UNIQUE KEY `uk_grade_uuid` (`grade_uuid`),
-            KEY `idx_dep_id` (`dep_id`)
+            UNIQUE KEY `uk_grade_uuid` (`grade_uuid`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
         "CREATE TABLE IF NOT EXISTS `profession` (
             `profession_id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -1968,13 +1966,12 @@ function seedArchives(PDO $pdo): void
     }
 
     $grades = [
-        [1, '00000000-0000-0000-0000-000000020001', '2026级', 1, 'true', 10],
-        [2, '00000000-0000-0000-0000-000000020002', '2026级', 2, 'false', 20],
+        [1, '00000000-0000-0000-0000-000000020001', '2026级', 'true', 10],
     ];
     $gradeStmt = $pdo->prepare(
-        "INSERT INTO `grade_list` (`grade_id`, `grade_uuid`, `grade_name`, `dep_id`, `is_current`, `sort`, `flag`)
-         VALUES (?, ?, ?, ?, ?, ?, 'on')
-         ON DUPLICATE KEY UPDATE `grade_name` = VALUES(`grade_name`), `dep_id` = VALUES(`dep_id`), `is_current` = VALUES(`is_current`), `sort` = VALUES(`sort`), `flag` = 'on'"
+        "INSERT INTO `grade_list` (`grade_id`, `grade_uuid`, `grade_name`, `is_current`, `sort`, `flag`)
+         VALUES (?, ?, ?, ?, ?, 'on')
+         ON DUPLICATE KEY UPDATE `grade_name` = VALUES(`grade_name`), `is_current` = VALUES(`is_current`), `sort` = VALUES(`sort`), `flag` = 'on'"
     );
     foreach ($grades as $grade) {
         $gradeStmt->execute($grade);
@@ -1983,7 +1980,7 @@ function seedArchives(PDO $pdo): void
     $professions = [
         [1, '00000000-0000-0000-0000-000000030001', '软件技术', '软件', 'P001', 1, 1, 10],
         [2, '00000000-0000-0000-0000-000000030002', '大数据技术', '大数据', 'P002', 1, 1, 20],
-        [3, '00000000-0000-0000-0000-000000030003', '电子商务', '电商', 'P003', 2, 2, 30],
+        [3, '00000000-0000-0000-0000-000000030003', '电子商务', '电商', 'P003', 2, 1, 30],
     ];
     $professionStmt = $pdo->prepare(
         "INSERT INTO `profession` (`profession_id`, `profession_uuid`, `profession_name`, `profession_short_name`, `profession_code`, `dep_id`, `grade_id`, `sort`, `flag`)
@@ -2004,7 +2001,7 @@ function seedArchives(PDO $pdo): void
     $classes = [
         [1, '00000000-0000-0000-0000-000000040001', '软件技术2601', '软技2601', 'RJ2601', 1, 1, 1, 10],
         [2, '00000000-0000-0000-0000-000000040002', '大数据2601', '大数据2601', 'DS2601', 1, 2, 1, 20],
-        [3, '00000000-0000-0000-0000-000000040003', '电子商务2601', '电商2601', 'EC2601', 2, 3, 2, 30],
+        [3, '00000000-0000-0000-0000-000000040003', '电子商务2601', '电商2601', 'EC2601', 2, 3, 1, 30],
     ];
     $classStmt = $pdo->prepare(
         "INSERT INTO `class` (`class_id`, `class_uuid`, `class_name`, `class_short_name`, `class_num`, `dep_id`, `profession_id`, `grade_id`, `sort`, `flag`)
