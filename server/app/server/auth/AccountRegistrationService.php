@@ -65,7 +65,10 @@ class AccountRegistrationService
 
         $name = $this->requiredText($payload, 'name', '姓名', 80);
         $password = $this->text($payload, 'password', 120);
-        if (!$accountId && $password === '') {
+        if ($allowedRoleTypes && !$accountId && $password === '') {
+            throw new InvalidArgumentException('密码不能为空');
+        }
+        if (!$allowedRoleTypes && !$accountId && $password === '') {
             $password = 'admin123456';
         }
         if ($password !== '' && strlen($password) < 6) {

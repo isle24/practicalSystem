@@ -249,6 +249,34 @@ class PracticeRecord extends TableRecord
         return $studentId ? (int) $studentId : null;
     }
 
+    public static function teacherUserId(int $teacherId): ?int
+    {
+        if ($teacherId <= 0) {
+            return null;
+        }
+
+        $userId = self::queryTable('teacher_list')
+            ->where('teacher_id', $teacherId)
+            ->whereNull('deleted_at')
+            ->value('user_id');
+
+        return $userId ? (int) $userId : null;
+    }
+
+    public static function studentUserId(int $studentId): ?int
+    {
+        if ($studentId <= 0) {
+            return null;
+        }
+
+        $userId = self::queryTable('students')
+            ->where('student_id', $studentId)
+            ->whereNull('deleted_at')
+            ->value('user_id');
+
+        return $userId ? (int) $userId : null;
+    }
+
     public static function studentProfile(int $studentId): ?array
     {
         $row = self::queryTable('students')

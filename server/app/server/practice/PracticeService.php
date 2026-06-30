@@ -2,12 +2,15 @@
 
 namespace app\server\practice;
 
+use app\model\channel\Account;
 use app\model\channel\PracticeRecord;
 use app\server\CurrentContext;
 use app\server\WorkflowLock;
+use app\server\message\MessageService;
 use InvalidArgumentException;
 use RuntimeException;
 use support\Request;
+use Throwable;
 
 class PracticeService
 {
@@ -138,6 +141,7 @@ class PracticeService
             }
             if (($values['status'] ?? '') === 'wait' && $this->entityRequiresReview($entity)) {
                 $this->recordWorkflow($entity, $id, 'submit', $fromStatus, 'wait', $this->workflowContent($entity, $values), 'wait');
+                $this->notifyWorkflowSubmitted($entity, $id, $values);
             }
 
             return ['id' => $id, 'uuid' => PracticeRecord::uuidById($entity, $id)];
@@ -177,6 +181,7 @@ class PracticeService
             ]);
             $this->recordWorkflow($entity, $id, 'review', (string) $row->status, $status, $opinion ?: '审核处理', $status);
             PracticeRecord::clearReviewOpinionDraft($this->entityType($entity), $id, $this->accountId(), $this->now());
+            $this->notifyWorkflowReviewed($entity, $id, $row, $status, $opinion ?: '审核处理');
 
             return ['id' => $id, 'status' => $status];
             });
@@ -253,6 +258,7 @@ class PracticeService
                 'updated_at' => $this->now(),
             ]);
             $this->recordWorkflow($entity, $id, 'modify_after_accept', 'accept', 'modify', $opinion ?: '通过后要求修改', 'modify');
+            $this->notifyWorkflowReopened($entity, $id, $row, $opinion ?: '通过后要求修改');
 
             return ['id' => $id, 'status' => 'modify'];
             });
@@ -378,6 +384,7 @@ class PracticeService
                 'updated_at' => $this->now(),
             ]);
             $this->recordExecutionWorkflow($execution, $id, 'modify_after_accept', 'accept', 'modify', $opinion ?: '通过后要求修改', 'modify');
+            $this->notifyExecutionReopened($execution, $id, $row, $opinion ?: '通过后要求修改');
 
             return ['id' => $id, 'status' => 'modify'];
             });
@@ -501,6 +508,7 @@ class PracticeService
 
             if ($status === 'wait') {
                 $this->recordExecutionWorkflow($execution, $id, 'submit', $fromStatus, 'wait', $this->executionContent($execution, $values), 'wait');
+                $this->notifyExecutionSubmitted($execution, $id, $values);
             }
 
             return ['id' => $id, 'status' => $status];
@@ -541,6 +549,7 @@ class PracticeService
             ]);
             $this->recordExecutionWorkflow($execution, $id, 'review', 'wait', $status, $opinion ?: '审核处理', $status);
             PracticeRecord::clearReviewOpinionDraft($this->executionEntityType($execution), $id, $this->accountId(), $this->now());
+            $this->notifyExecutionReviewed($execution, $id, $row, $status, $opinion ?: '审核处理');
 
             return ['id' => $id, 'status' => $status];
             });
@@ -1170,6 +1179,156 @@ class PracticeService
         }
 
         return $accountId;
+    }
+
+    private function notifyWorkflowSubmitted(string $entity, int $entityId, array $values): void
+    {
+        $this->notifyTemplateAccounts($this->teacherAccountIds((int) ($values['teacher_id'] ?? 0)), 'workflow_submit_todo', [
+            'module_name' => $this->businessName($entity),
+            'submitter_name' => $this->currentAccountName(),
+            'entity_title' => (string) (($values['title'] ?? '') ?: $this->businessName($entity) . '#' . $entityId),
+            'module_key' => $this->moduleType,
+            'panel_key' => $this->entityPanelKey($entity),
+        ], $this->entityType($entity), $entityId);
+    }
+
+    private function notifyWorkflowReviewed(string $entity, int $entityId, object $row, string $status, string $opinion): void
+    {
+        $this->notifyTemplateAccounts($this->submitterAccountIds($row), 'workflow_review_result', [
+            'module_name' => $this->businessName($entity),
+            'status_text' => $this->statusText($status),
+            'opinion_text' => $opinion,
+            'module_key' => $this->moduleType,
+            'panel_key' => $this->entityPanelKey($entity),
+        ], $this->entityType($entity), $entityId);
+    }
+
+    private function notifyWorkflowReopened(string $entity, int $entityId, object $row, string $opinion): void
+    {
+        $this->notifyTemplateAccounts($this->submitterAccountIds($row), 'workflow_reopen_todo', [
+            'module_name' => $this->businessName($entity),
+            'reviewer_name' => $this->currentAccountName(),
+            'entity_title' => (string) (($row->title ?? '') ?: $this->businessName($entity) . '#' . $entityId),
+            'opinion_text' => $opinion,
+            'module_key' => $this->moduleType,
+            'panel_key' => $this->entityPanelKey($entity),
+        ], $this->entityType($entity), $entityId);
+    }
+
+    private function notifyExecutionSubmitted(string $execution, int $entityId, array $values): void
+    {
+        $this->notifyTemplateAccounts($this->teacherAccountIds((int) ($values['teacher_id'] ?? 0)), 'workflow_submit_todo', [
+            'module_name' => $this->businessName($execution),
+            'submitter_name' => $this->currentAccountName(),
+            'entity_title' => (string) (($values['title'] ?? '') ?: $this->businessName($execution) . '#' . $entityId),
+            'module_key' => $this->moduleType,
+            'panel_key' => $this->executionPanelKey($execution),
+        ], $this->executionEntityType($execution), $entityId);
+    }
+
+    private function notifyExecutionReviewed(string $execution, int $entityId, object $row, string $status, string $opinion): void
+    {
+        $this->notifyTemplateAccounts($this->studentAccountIds((int) ($row->student_id ?? 0)), 'workflow_review_result', [
+            'module_name' => $this->businessName($execution),
+            'status_text' => $this->statusText($status),
+            'opinion_text' => $opinion,
+            'module_key' => $this->moduleType,
+            'panel_key' => $this->executionPanelKey($execution),
+        ], $this->executionEntityType($execution), $entityId);
+    }
+
+    private function notifyExecutionReopened(string $execution, int $entityId, object $row, string $opinion): void
+    {
+        $this->notifyTemplateAccounts($this->studentAccountIds((int) ($row->student_id ?? 0)), 'workflow_reopen_todo', [
+            'module_name' => $this->businessName($execution),
+            'reviewer_name' => $this->currentAccountName(),
+            'entity_title' => (string) (($row->title ?? '') ?: $this->businessName($execution) . '#' . $entityId),
+            'opinion_text' => $opinion,
+            'module_key' => $this->moduleType,
+            'panel_key' => $this->executionPanelKey($execution),
+        ], $this->executionEntityType($execution), $entityId);
+    }
+
+    private function notifyTemplateAccounts(array $accountIds, string $templateCode, array $variables, string $entityType, int $entityId): void
+    {
+        $accountIds = array_values(array_unique(array_filter(array_map('intval', $accountIds), static fn (int $id): bool => $id > 0)));
+        if (!$accountIds) {
+            return;
+        }
+
+        try {
+            (new MessageService())->send([
+                'send_scope' => 'custom',
+                'account_ids' => $accountIds,
+                'template_code' => $templateCode,
+                'variables' => $variables,
+                'entity_type' => $entityType,
+                'entity_id' => $entityId,
+            ], CurrentContext::accountId() ?: 0, $this->currentAccountName());
+        } catch (Throwable) {
+        }
+    }
+
+    private function teacherAccountIds(int $teacherId): array
+    {
+        return Account::enabledIdsByUserIds([PracticeRecord::teacherUserId($teacherId)]);
+    }
+
+    private function studentAccountIds(int $studentId): array
+    {
+        return Account::enabledIdsByUserIds([PracticeRecord::studentUserId($studentId)]);
+    }
+
+    private function submitterAccountIds(object $row): array
+    {
+        $submitterId = (int) ($row->submitter_id ?? 0);
+        if ($submitterId > 0) {
+            return [$submitterId];
+        }
+        if ((int) ($row->student_id ?? 0) > 0) {
+            return $this->studentAccountIds((int) $row->student_id);
+        }
+
+        return [];
+    }
+
+    private function businessName(string $key): string
+    {
+        return self::ENTITIES[$key]['title'] ?? self::EXECUTIONS[$key]['title'] ?? $key;
+    }
+
+    private function entityPanelKey(string $entity): string
+    {
+        return [
+            'plan' => 'plans',
+            'syllabus' => 'syllabus',
+            'lessonPlan' => 'lessonPlans',
+            'reflection' => 'reflections',
+        ][$entity] ?? 'overview';
+    }
+
+    private function executionPanelKey(string $execution): string
+    {
+        return [
+            'journal' => 'journals',
+            'report' => 'reports',
+            'sign_in' => 'signIns',
+        ][$execution] ?? 'overview';
+    }
+
+    private function statusText(string $status): string
+    {
+        return [
+            'accept' => '通过',
+            'modify' => '退回修改',
+            'refuse' => '未通过',
+            'wait' => '待审核',
+        ][$status] ?? $status;
+    }
+
+    private function currentAccountName(): string
+    {
+        return (string) (CurrentContext::get('user_name') ?: CurrentContext::get('login_name') ?: self::MODULES[$this->moduleType]['name']);
     }
 
     private function entityInput(Request $request): string

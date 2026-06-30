@@ -4,6 +4,7 @@ namespace app\model\channel;
 
 use Illuminate\Database\Query\Expression;
 use InvalidArgumentException;
+use PDO;
 
 class MessageRecord extends TableRecord
 {
@@ -257,11 +258,124 @@ class MessageRecord extends TableRecord
         $connection = self::connection();
         $key = method_exists($connection, 'getDatabaseName') ? (string) $connection->getDatabaseName() : spl_object_hash($connection);
         if (isset(self::$schemaReady[$key])) {
+            self::seedDefaultTemplates();
             return;
         }
 
         self::createSchema();
+        self::seedDefaultTemplates();
         self::$schemaReady[$key] = true;
+    }
+
+    public static function seedDefaultTemplates(): void
+    {
+        self::ensureDefaultTemplates(self::connection());
+    }
+
+    public static function ensureDefaultTemplates(mixed $connection): void
+    {
+        static $seeded = [];
+
+        $key = method_exists($connection, 'getDatabaseName') ? (string) $connection->getDatabaseName() : spl_object_hash($connection);
+        if (isset($seeded[$key])) {
+            return;
+        }
+
+        if ($connection instanceof PDO) {
+            self::ensureDefaultTemplatesWithPdo($connection);
+            $seeded[$key] = true;
+            return;
+        }
+
+        $now = date('Y-m-d H:i:s');
+        foreach (self::defaultTemplates() as $template) {
+            $existing = $connection->table('message_template')->where('code', $template['code'])->first(['id', 'deleted_at']);
+            if ($existing) {
+                $updates = ['is_system' => 1];
+                if (!empty($existing->deleted_at)) {
+                    $updates['status'] = 'enabled';
+                    $updates['deleted_at'] = null;
+                    $updates['updated_at'] = $now;
+                }
+                $connection->table('message_template')->where('id', (int) $existing->id)->update($updates);
+                continue;
+            }
+
+            $connection->table('message_template')->insertOrIgnore(self::defaultTemplateRow($template, $now));
+        }
+
+        $seeded[$key] = true;
+    }
+
+    private static function ensureDefaultTemplatesWithPdo(PDO $pdo): void
+    {
+        $stmt = $pdo->prepare(
+            "INSERT IGNORE INTO `message_template` (
+                `uuid`, `name`, `code`, `title_tpl`, `content_tpl`, `type`, `level`,
+                `description`, `variables`, `link_url_tpl`, `channels`, `is_system`, `sort`, `status`,
+                `created_at`, `updated_at`, `deleted_at`
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, 'enabled', ?, ?, NULL)"
+        );
+        $restoreStmt = $pdo->prepare(
+            "UPDATE `message_template`
+             SET `is_system` = 1,
+                 `status` = IF(`deleted_at` IS NULL, `status`, 'enabled'),
+                 `deleted_at` = NULL,
+                 `updated_at` = ?
+             WHERE `id` = ?"
+        );
+        $now = date('Y-m-d H:i:s');
+
+        foreach (self::defaultTemplates() as $template) {
+            $existingStmt = $pdo->prepare("SELECT `id` FROM `message_template` WHERE `code` = ? LIMIT 1");
+            $existingStmt->execute([$template['code']]);
+            $existingId = $existingStmt->fetchColumn();
+            if ($existingId) {
+                $restoreStmt->execute([$now, (int) $existingId]);
+                continue;
+            }
+
+            $stmt->execute([
+                $template['uuid'],
+                $template['name'],
+                $template['code'],
+                $template['title_tpl'],
+                $template['content_tpl'],
+                $template['type'],
+                $template['level'],
+                $template['description'],
+                self::jsonValue($template['variables']),
+                $template['link_url_tpl'],
+                self::jsonValue(['internal']),
+                $template['sort'],
+                $now,
+                $now,
+            ]);
+        }
+    }
+
+    private static function defaultTemplateRow(array $template, string $now): array
+    {
+        return [
+            'uuid' => $template['uuid'],
+            'name' => $template['name'],
+            'code' => $template['code'],
+            'title_tpl' => $template['title_tpl'],
+            'content_tpl' => $template['content_tpl'],
+            'type' => $template['type'],
+            'level' => $template['level'],
+            'description' => $template['description'],
+            'variables' => self::jsonValue($template['variables']),
+            'link_url_tpl' => $template['link_url_tpl'],
+            'channels' => self::jsonValue(['internal']),
+            'is_system' => 1,
+            'sort' => $template['sort'],
+            'status' => 'enabled',
+            'created_at' => $now,
+            'updated_at' => $now,
+            'deleted_at' => null,
+        ];
     }
 
     private static function inboxQuery(int $accountId): mixed
@@ -566,6 +680,145 @@ class MessageRecord extends TableRecord
     private static function nullableInt(mixed $value): ?int
     {
         return is_numeric($value) ? (int) $value : null;
+    }
+
+    public static function defaultTemplates(): array
+    {
+        return [
+            [
+                'uuid' => '00000000-0000-0000-0000-000000240001',
+                'name' => '流程提交待办',
+                'code' => 'workflow_submit_todo',
+                'title_tpl' => '待审核：{module_name}',
+                'content_tpl' => '{submitter_name}提交了{module_name}，业务对象：{entity_title}。请及时处理。',
+                'type' => 'todo',
+                'level' => 'important',
+                'description' => '学生或教师提交业务后，发送给审核人形成待办。',
+                'variables' => [
+                    'module_name' => '业务名称，如实习日志、实习报告',
+                    'submitter_name' => '提交人姓名',
+                    'entity_title' => '业务标题或学生姓名',
+                ],
+                'link_url_tpl' => '#panel={module_key}:{panel_key}',
+                'sort' => 10,
+            ],
+            [
+                'uuid' => '00000000-0000-0000-0000-000000240002',
+                'name' => '审核结果通知',
+                'code' => 'workflow_review_result',
+                'title_tpl' => '{module_name}审核结果：{status_text}',
+                'content_tpl' => '{module_name}已处理，结果：{status_text}。{opinion_text}',
+                'type' => 'result',
+                'level' => 'important',
+                'description' => '审核通过、退回、拒绝后发送给提交人。',
+                'variables' => [
+                    'module_name' => '业务名称',
+                    'status_text' => '通过、退回修改、拒绝',
+                    'opinion_text' => '审核意见文本',
+                ],
+                'link_url_tpl' => '#panel={module_key}:{panel_key}',
+                'sort' => 20,
+            ],
+            [
+                'uuid' => '00000000-0000-0000-0000-000000240003',
+                'name' => '通过后修改待办',
+                'code' => 'workflow_reopen_todo',
+                'title_tpl' => '{module_name}需要重新修改',
+                'content_tpl' => '{reviewer_name}要求你重新修改{module_name}，业务对象：{entity_title}。{opinion_text}',
+                'type' => 'todo',
+                'level' => 'urgent',
+                'description' => '审核通过后发起修改时发送给提交人。',
+                'variables' => [
+                    'module_name' => '业务名称',
+                    'reviewer_name' => '审核人姓名',
+                    'entity_title' => '业务标题或学生姓名',
+                    'opinion_text' => '修改理由',
+                ],
+                'link_url_tpl' => '#panel={module_key}:{panel_key}',
+                'sort' => 30,
+            ],
+            [
+                'uuid' => '00000000-0000-0000-0000-000000240004',
+                'name' => '实习任务发布',
+                'code' => 'internship_task_publish',
+                'title_tpl' => '实习任务已发布：{task_title}',
+                'content_tpl' => '你的实习任务「{task_title}」已发布。时间：{date_text}；地点：{location}。',
+                'type' => 'todo',
+                'level' => 'important',
+                'description' => '实习任务发布或变更生效后通知老师和学生。',
+                'variables' => [
+                    'task_title' => '实习任务标题',
+                    'date_text' => '任务起止时间',
+                    'location' => '任务地点',
+                ],
+                'link_url_tpl' => '#panel=internship:arrangements',
+                'sort' => 40,
+            ],
+            [
+                'uuid' => '00000000-0000-0000-0000-000000240005',
+                'name' => '系统通知',
+                'code' => 'system_notice',
+                'title_tpl' => '{notice_title}',
+                'content_tpl' => '{notice_content}',
+                'type' => 'system',
+                'level' => 'normal',
+                'description' => '后台主动发送的通用系统通知。',
+                'variables' => [
+                    'notice_title' => '通知标题',
+                    'notice_content' => '通知内容',
+                ],
+                'link_url_tpl' => '',
+                'sort' => 50,
+            ],
+            [
+                'uuid' => '00000000-0000-0000-0000-000000240006',
+                'name' => '通用待办通知',
+                'code' => 'todo_notice',
+                'title_tpl' => '{notice_title}',
+                'content_tpl' => '{notice_content}',
+                'type' => 'todo',
+                'level' => 'important',
+                'description' => '业务已形成标题和内容时使用的通用待办模板。',
+                'variables' => [
+                    'notice_title' => '待办标题',
+                    'notice_content' => '待办内容',
+                ],
+                'link_url_tpl' => '{link_url}',
+                'sort' => 60,
+            ],
+            [
+                'uuid' => '00000000-0000-0000-0000-000000240007',
+                'name' => '通用结果通知',
+                'code' => 'result_notice',
+                'title_tpl' => '{notice_title}',
+                'content_tpl' => '{notice_content}',
+                'type' => 'result',
+                'level' => 'important',
+                'description' => '业务已形成标题和内容时使用的通用结果模板。',
+                'variables' => [
+                    'notice_title' => '通知标题',
+                    'notice_content' => '通知内容',
+                ],
+                'link_url_tpl' => '{link_url}',
+                'sort' => 70,
+            ],
+            [
+                'uuid' => '00000000-0000-0000-0000-000000240008',
+                'name' => '导出任务结果',
+                'code' => 'export_task_result',
+                'title_tpl' => '{export_title}',
+                'content_tpl' => '{export_content}',
+                'type' => 'result',
+                'level' => 'normal',
+                'description' => '导出任务完成或失败后通知发起人。',
+                'variables' => [
+                    'export_title' => '导出消息标题',
+                    'export_content' => '导出消息内容',
+                ],
+                'link_url_tpl' => '#panel=exportTask:list',
+                'sort' => 80,
+            ],
+        ];
     }
 
     private static function templateQuery(array $filters): mixed

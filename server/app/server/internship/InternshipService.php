@@ -2,6 +2,7 @@
 
 namespace app\server\internship;
 
+use app\model\channel\Account;
 use app\model\channel\InternshipRecord;
 use app\model\channel\PracticeRecord;
 use app\server\CurrentContext;
@@ -552,6 +553,7 @@ class InternshipService
             $this->syncJoinTeachers($id, $studentId, $arrangementId, InternshipRecord::activePairTeacherIds($studentId, $arrangementId));
             if ($status === 'wait') {
                 $this->recordWorkflow('application_recording', 'application', $id, 'submit', $fromStatus, 'wait', $values['remark'] ?: '提交特殊申请', 'wait');
+                $this->notifyWorkflowSubmitted('application', $id, (int) CurrentContext::accountId(), InternshipRecord::activePairTeacherIds($studentId, $arrangementId), '特殊申请', $values['remark'] ?: '提交特殊申请');
             }
 
             return ['id' => $id, 'item' => $this->application($id)];
@@ -585,6 +587,7 @@ class InternshipService
             ]);
             $this->syncJoinTeachers($id, (int) $row->student_id, (int) $row->arrangement_id, InternshipRecord::activePairTeacherIds((int) $row->student_id, (int) $row->arrangement_id));
             $this->recordWorkflow('application_recording', 'application', $id, 'submit', (string) $row->status, 'wait', (string) ($row->remark ?: '提交特殊申请'), 'wait');
+            $this->notifyWorkflowSubmitted('application', $id, (int) CurrentContext::accountId(), InternshipRecord::activePairTeacherIds((int) $row->student_id, (int) $row->arrangement_id), '特殊申请', (string) ($row->remark ?: '提交特殊申请'));
 
             return ['id' => $id, 'item' => $this->application($id)];
         });
@@ -637,6 +640,7 @@ class InternshipService
             $finalStatus = $this->refreshApplicationFinalStatus($fresh);
             $this->recordWorkflow('application_recording', 'application', $id, $action, (string) $row->status, $finalStatus, $opinion ?: '审核处理', $status);
             InternshipRecord::clearReviewOpinionDraft('application', $id, $this->accountId(), $this->now());
+            $this->notifyWorkflowReviewed('application', $id, InternshipRecord::studentAccountId((int) $row->student_id), '特殊申请', $finalStatus, $opinion ?: '审核处理');
 
             return ['id' => $id, 'item' => $this->application($id)];
             });
@@ -706,6 +710,7 @@ class InternshipService
 
             InternshipRecord::updateById($config['table'], $id, $updates);
             $this->recordWorkflow($config['recording'], $entity, $id, 'modify_after_accept', 'accept', 'modify', $opinion ?: '通过后要求修改', 'modify');
+            $this->notifyWorkflowReopened($entity, $id, $this->reviewEntitySubmitterAccountId($entity, $row), $this->entityDisplayName($entity), $opinion ?: '通过后要求修改');
 
             return ['id' => $id, 'status' => 'modify'];
             });
@@ -961,6 +966,7 @@ class InternshipService
             $result = $this->saveRow('journal', $request, $values);
             if ($status === 'wait') {
                 $this->recordWorkflow('journal_recording', 'journal', (int) $result['id'], 'submit', $currentStatus, 'wait', $values['content'], 'wait');
+                $this->notifyWorkflowSubmitted('journal', (int) $result['id'], (int) CurrentContext::accountId(), InternshipRecord::activePairTeacherIds($values['student_id'], $values['entity_id']), '实习日志', $values['title']);
             }
 
             return $result;
@@ -1027,6 +1033,7 @@ class InternshipService
             $result = $this->saveRow('report', $request, $values);
             if ($status === 'wait') {
                 $this->recordWorkflow('report_recording', 'report', (int) $result['id'], 'submit', $currentStatus, 'wait', $values['content'], 'wait');
+                $this->notifyWorkflowSubmitted('report', (int) $result['id'], (int) CurrentContext::accountId(), InternshipRecord::activePairTeacherIds($values['student_id'], $values['arrangement_id']), '实习报告', $values['title']);
             }
 
             return $result;
@@ -1094,6 +1101,7 @@ class InternshipService
             $result = $this->saveRow('apply_report_delay', $request, $values);
             if ($status === 'wait') {
                 $this->recordWorkflow('apply_report_delay_recording', 'delay', (int) $result['id'], 'submit', $fromStatus, 'wait', $values['reason'], 'wait');
+                $this->notifyWorkflowSubmitted('delay', (int) $result['id'], (int) CurrentContext::accountId(), InternshipRecord::activePairTeacherIds($values['student_id'], $values['entity_id']), '延期申请', $values['reason']);
             }
 
             return $result;
@@ -1132,6 +1140,7 @@ class InternshipService
             $action = $this->isTeacher() ? 'teacher_review' : 'admin_review';
             $this->recordWorkflow('apply_report_delay_recording', 'delay', $id, $action, (string) $row->status, $status, $opinion ?: '延期申请审核', $status);
             InternshipRecord::clearReviewOpinionDraft('delay', $id, $this->accountId(), $this->now());
+            $this->notifyWorkflowReviewed('delay', $id, InternshipRecord::studentAccountId((int) $row->student_id), '延期申请', $status, $opinion ?: '延期申请审核');
 
             return ['id' => $id, 'status' => $status, 'delay' => $row];
             });
@@ -1364,6 +1373,7 @@ class InternshipService
             $result = $this->saveRow('internship_plan', $request, $values);
             if ($values['status'] === 'wait') {
                 $this->recordWorkflow('plan_recording', 'plan', (int) $result['id'], 'submit', $currentStatus, 'wait', $this->planWorkflowContent($values['plan_content']), 'wait');
+                $this->notifyWorkflowSubmitted('plan', (int) $result['id'], (int) CurrentContext::accountId(), [], '实习计划', $values['course_name']);
             }
 
             return $result;
@@ -1437,7 +1447,11 @@ class InternshipService
             });
         });
 
-        $this->notifyPlanReviewed($result['notify_plan'], $planId, $result['status'], $result['level_name'], $opinion);
+        if (($result['status'] ?? '') === 'wait' && !empty($result['next_approval_level'])) {
+            $this->notifyPlanNextApproval($result['notify_plan'], $planId, (int) $result['next_approval_level'], $opinion);
+        } else {
+            $this->notifyPlanReviewed($result['notify_plan'], $planId, $result['status'], $result['level_name'], $opinion);
+        }
         unset($result['notify_plan']);
 
         return $result;
@@ -1706,6 +1720,7 @@ class InternshipService
             InternshipRecord::updateById($table, $id, $updates);
             $this->recordWorkflow($recordingTable, $table, $id, 'review', $from, $status, $opinion ?: '评阅处理', $status, $score, $teacherId);
             InternshipRecord::clearReviewOpinionDraft($table, $id, $this->accountId(), $now);
+            $this->notifyWorkflowReviewed($table, $id, InternshipRecord::studentAccountId((int) $row->student_id), $this->entityDisplayName($table), $status, $opinion ?: '评阅处理');
 
             return ['id' => $id, 'status' => $status];
             });
@@ -2612,6 +2627,143 @@ class InternshipService
             ], 0, '实习系统');
         } catch (Throwable) {
         }
+    }
+
+    private function notifyWorkflowSubmitted(string $entity, int $entityId, int $submitterAccountId, array $teacherIds, string $moduleName, string $entityTitle): void
+    {
+        $accountIds = [];
+        foreach ($teacherIds as $teacherId) {
+            $accountIds[] = InternshipRecord::teacherAccountId((int) $teacherId);
+        }
+        if ($entity === 'plan') {
+            $accountIds = array_merge($accountIds, Account::messageTargetIds(['role_type' => 'school_admin']));
+            $accountIds = array_merge($accountIds, Account::messageTargetIds(['role_type' => 'college_admin']));
+        }
+
+        $this->notifyTemplateAccounts($accountIds, 'workflow_submit_todo', [
+            'module_name' => $moduleName,
+            'submitter_name' => $this->currentAccountName(),
+            'entity_title' => $entityTitle !== '' ? $entityTitle : $moduleName,
+            'module_key' => 'internship',
+            'panel_key' => $this->entityPanelKey($entity),
+        ], $entity, $entityId, $submitterAccountId);
+    }
+
+    private function notifyPlanNextApproval(object $row, int $planId, int $nextLevel, ?string $opinion): void
+    {
+        $level = self::PLAN_APPROVAL_LEVELS[$nextLevel] ?? null;
+        if (!$level) {
+            return;
+        }
+
+        $accountIds = [];
+        foreach ($level['role_types'] ?? [] as $roleType) {
+            $accountIds = array_merge($accountIds, Account::messageTargetIds(['role_type' => $roleType]));
+        }
+
+        $course = trim((string) ($row->course_name ?? ''));
+        $levelName = (string) ($level['name'] ?? '下一审核节点');
+        $title = $course !== '' ? $course . ' - ' . $levelName : '实习计划#' . $planId . ' - ' . $levelName;
+        $this->notifyTemplateAccounts($accountIds, 'workflow_submit_todo', [
+            'module_name' => '实习计划',
+            'submitter_name' => $this->currentAccountName(),
+            'entity_title' => $title . ($opinion ? '；上一节点意见：' . $opinion : ''),
+            'module_key' => 'internship',
+            'panel_key' => 'plans',
+        ], 'plan', $planId, CurrentContext::accountId() ?: 0);
+    }
+
+    private function notifyWorkflowReviewed(string $entity, int $entityId, ?int $receiverAccountId, string $moduleName, string $status, string $opinion): void
+    {
+        $this->notifyTemplateAccounts([$receiverAccountId], 'workflow_review_result', [
+            'module_name' => $moduleName,
+            'status_text' => $this->statusText($status),
+            'opinion_text' => $opinion,
+            'module_key' => 'internship',
+            'panel_key' => $this->entityPanelKey($entity),
+        ], $entity, $entityId, CurrentContext::accountId() ?: 0);
+    }
+
+    private function notifyWorkflowReopened(string $entity, int $entityId, ?int $receiverAccountId, string $moduleName, string $opinion): void
+    {
+        $this->notifyTemplateAccounts([$receiverAccountId], 'workflow_reopen_todo', [
+            'module_name' => $moduleName,
+            'reviewer_name' => $this->currentAccountName(),
+            'entity_title' => $moduleName . '#' . $entityId,
+            'opinion_text' => $opinion,
+            'module_key' => 'internship',
+            'panel_key' => $this->entityPanelKey($entity),
+        ], $entity, $entityId, CurrentContext::accountId() ?: 0);
+    }
+
+    private function notifyTemplateAccounts(array $accountIds, string $templateCode, array $variables, string $entityType, int $entityId, int $senderId): void
+    {
+        $accountIds = array_values(array_unique(array_filter(array_map('intval', $accountIds), static fn (int $id): bool => $id > 0)));
+        if (!$accountIds) {
+            return;
+        }
+
+        try {
+            (new MessageService())->send([
+                'send_scope' => 'custom',
+                'account_ids' => $accountIds,
+                'template_code' => $templateCode,
+                'variables' => $variables,
+                'entity_type' => $entityType,
+                'entity_id' => $entityId,
+            ], $senderId, $this->currentAccountName());
+        } catch (Throwable) {
+        }
+    }
+
+    private function reviewEntitySubmitterAccountId(string $entity, object $row): ?int
+    {
+        if (isset($row->student_id)) {
+            return InternshipRecord::studentAccountId((int) $row->student_id);
+        }
+        if (isset($row->submitter_id)) {
+            return (int) $row->submitter_id ?: null;
+        }
+
+        return null;
+    }
+
+    private function entityDisplayName(string $entity): string
+    {
+        return [
+            'application' => '特殊申请',
+            'journal' => '实习日志',
+            'report' => '实习报告',
+            'delay' => '延期申请',
+            'plan' => '实习计划',
+        ][$entity] ?? $entity;
+    }
+
+    private function entityPanelKey(string $entity): string
+    {
+        return [
+            'application' => 'applications',
+            'journal' => 'journals',
+            'report' => 'reports',
+            'delay' => 'delays',
+            'plan' => 'plans',
+        ][$entity] ?? 'overview';
+    }
+
+    private function statusText(string $status): string
+    {
+        return [
+            'accept' => '通过',
+            'modify' => '退回修改',
+            'refuse' => '未通过',
+            'wait' => '待审核',
+            'skipped' => '跳过',
+        ][$status] ?? $status;
+    }
+
+    private function currentAccountName(): string
+    {
+        return (string) (CurrentContext::get('user_name') ?: CurrentContext::get('login_name') ?: '系统');
     }
 
     private function scopeContext(): array

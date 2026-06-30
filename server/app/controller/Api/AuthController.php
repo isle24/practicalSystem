@@ -92,7 +92,7 @@ class AuthController
             $service->publicRegister($payload);
             $auth = new AuthService();
             $password = (string) ($payload['password'] ?? '');
-            $result = $auth->login((string) ($payload['login_name'] ?? ''), $password !== '' ? $password : 'admin123456', (string) ($payload['client'] ?? 'WEB'));
+            $result = $auth->login((string) ($payload['login_name'] ?? ''), $password, (string) ($payload['client'] ?? 'WEB'));
 
             return $this->sessionResponse($auth, $result);
         } catch (Throwable $exception) {

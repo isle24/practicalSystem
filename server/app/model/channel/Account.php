@@ -277,6 +277,24 @@ class Account extends BaseModel
             ->all();
     }
 
+    public static function enabledIdsByUserIds(array $userIds): array
+    {
+        $ids = array_values(array_unique(array_filter(array_map('intval', $userIds))));
+        if (!$ids) {
+            return [];
+        }
+
+        return self::query()
+            ->whereIn('user_id', $ids)
+            ->where('status', 'enabled')
+            ->whereNull('deleted_at')
+            ->pluck('id')
+            ->map(static fn ($id): int => (int) $id)
+            ->unique()
+            ->values()
+            ->all();
+    }
+
     public static function switchableAccounts(int $accountId): array
     {
         $identity = self::identityByAccountId($accountId);
