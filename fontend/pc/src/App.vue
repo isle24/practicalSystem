@@ -10,11 +10,11 @@
       </header>
       <label>
         <span>账号</span>
-        <input ref="loginNameInput" v-model="loginForm.login_name" autocomplete="username" placeholder="admin">
+        <input ref="loginNameInput" v-model="loginForm.login_name" autocomplete="username" placeholder="请输入账号">
       </label>
       <label>
         <span>密码</span>
-        <input v-model="loginForm.password" autocomplete="current-password" placeholder="admin123456" type="password">
+        <input v-model="loginForm.password" autocomplete="current-password" placeholder="请输入密码" type="password">
       </label>
       <button type="button" :disabled="loginState.loading" @click="submitLogin">
         <LogIn :size="17" />
@@ -3655,8 +3655,8 @@ const iconRegistry = {
   Workflow,
 };
 const loginForm = reactive({
-  login_name: 'admin',
-  password: 'admin123456',
+  login_name: '',
+  password: '',
 });
 const loginState = reactive({
   loading: false,
@@ -3666,7 +3666,7 @@ const registerForm = reactive({
   role_type: 'student',
   name: '',
   login_name: '',
-  password: 'admin123456',
+  password: '',
   mobile: '',
   email: '',
   student_num: '',
