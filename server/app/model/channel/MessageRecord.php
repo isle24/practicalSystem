@@ -158,15 +158,88 @@ class MessageRecord extends TableRecord
             ->where('code', $code)
             ->where('status', 'enabled')
             ->whereNull('deleted_at')
-            ->first(['id', 'code', 'title_tpl', 'content_tpl', 'channels']);
+            ->first(self::templateColumns());
 
-        return $row ? [
-            'id' => (int) $row->id,
-            'code' => $row->code,
-            'title_tpl' => $row->title_tpl,
-            'content_tpl' => $row->content_tpl,
-            'channels' => self::decodeJson($row->channels),
-        ] : null;
+        return $row ? self::templateRow($row) : null;
+    }
+
+    public static function templatePage(array $filters): array
+    {
+        self::ensureSchema();
+
+        $page = max(1, (int) ($filters['page'] ?? 1));
+        $pageSize = min(100, max(10, (int) ($filters['page_size'] ?? 20)));
+        $query = self::templateQuery($filters);
+        $total = (int) (clone $query)->count();
+        $rows = $query
+            ->orderByDesc('is_system')
+            ->orderBy('sort')
+            ->orderByDesc('id')
+            ->forPage($page, $pageSize)
+            ->get(self::templateColumns())
+            ->map(static fn ($row): array => self::templateRow($row))
+            ->all();
+
+        return [
+            'items' => $rows,
+            'pagination' => [
+                'page' => $page,
+                'page_size' => $pageSize,
+                'total' => $total,
+            ],
+        ];
+    }
+
+    public static function saveTemplate(array $values, string $now): int
+    {
+        self::ensureSchema();
+
+        $id = (int) ($values['id'] ?? 0);
+        $existing = $id > 0
+            ? self::queryTable('message_template')->where('id', $id)->whereNull('deleted_at')->first(['is_system'])
+            : null;
+        $data = [
+            'name' => mb_substr((string) ($values['name'] ?? ''), 0, 180),
+            'code' => mb_substr((string) ($values['code'] ?? ''), 0, 120),
+            'title_tpl' => mb_substr((string) ($values['title_tpl'] ?? ''), 0, 255),
+            'content_tpl' => (string) ($values['content_tpl'] ?? ''),
+            'type' => self::normalizeType((string) ($values['type'] ?? 'system')),
+            'level' => self::normalizeLevel((string) ($values['level'] ?? 'normal')),
+            'description' => self::nullableString($values['description'] ?? null, 500),
+            'variables' => self::jsonValue($values['variables'] ?? []),
+            'link_url_tpl' => self::nullableString($values['link_url_tpl'] ?? null, 500),
+            'channels' => self::jsonValue($values['channels'] ?? ['internal']),
+            'is_system' => $existing ? (int) ($existing->is_system ?? 0) : 0,
+            'sort' => (int) ($values['sort'] ?? 100),
+            'status' => (string) ($values['status'] ?? 'enabled'),
+            'updated_at' => $now,
+            'deleted_at' => null,
+        ];
+
+        if ($id > 0) {
+            self::queryTable('message_template')->where('id', $id)->update($data);
+            return $id;
+        }
+
+        return (int) self::queryTable('message_template')->insertGetId(array_merge($data, [
+            'uuid' => self::uuidValue(),
+            'created_at' => $now,
+        ]));
+    }
+
+    public static function deleteTemplate(int $id, string $now): int
+    {
+        self::ensureSchema();
+
+        return (int) self::queryTable('message_template')
+            ->where('id', $id)
+            ->where('is_system', 0)
+            ->whereNull('deleted_at')
+            ->update([
+                'status' => 'disabled',
+                'deleted_at' => $now,
+                'updated_at' => $now,
+            ]);
     }
 
     public static function normalizeType(string $type): string
@@ -358,11 +431,19 @@ class MessageRecord extends TableRecord
             `deleted_at` DATETIME DEFAULT NULL,
             `title_tpl` VARCHAR(255) DEFAULT NULL,
             `content_tpl` TEXT DEFAULT NULL,
+            `type` VARCHAR(40) DEFAULT 'system',
+            `level` VARCHAR(40) DEFAULT 'normal',
+            `description` VARCHAR(500) DEFAULT NULL,
+            `variables` JSON DEFAULT NULL,
+            `link_url_tpl` VARCHAR(500) DEFAULT NULL,
             `channels` JSON DEFAULT NULL,
+            `is_system` TINYINT(1) DEFAULT 0,
+            `sort` INT DEFAULT 100,
             PRIMARY KEY (`id`),
             UNIQUE KEY `uk_uuid` (`uuid`),
             UNIQUE KEY `uk_code` (`code`),
-            KEY `idx_status` (`status`)
+            KEY `idx_status` (`status`),
+            KEY `idx_type_status` (`type`, `status`, `sort`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
         $connection->statement("CREATE TABLE IF NOT EXISTS `message_channel_log` (
@@ -415,6 +496,13 @@ class MessageRecord extends TableRecord
                 'title_tpl' => "ALTER TABLE `message_template` ADD COLUMN `title_tpl` VARCHAR(255) DEFAULT NULL AFTER `code`",
                 'content_tpl' => "ALTER TABLE `message_template` ADD COLUMN `content_tpl` TEXT DEFAULT NULL AFTER `title_tpl`",
                 'channels' => "ALTER TABLE `message_template` ADD COLUMN `channels` JSON DEFAULT NULL AFTER `content_tpl`",
+                'type' => "ALTER TABLE `message_template` ADD COLUMN `type` VARCHAR(40) DEFAULT 'system' AFTER `content_tpl`",
+                'level' => "ALTER TABLE `message_template` ADD COLUMN `level` VARCHAR(40) DEFAULT 'normal' AFTER `type`",
+                'description' => "ALTER TABLE `message_template` ADD COLUMN `description` VARCHAR(500) DEFAULT NULL AFTER `level`",
+                'variables' => "ALTER TABLE `message_template` ADD COLUMN `variables` JSON DEFAULT NULL AFTER `description`",
+                'link_url_tpl' => "ALTER TABLE `message_template` ADD COLUMN `link_url_tpl` VARCHAR(500) DEFAULT NULL AFTER `variables`",
+                'is_system' => "ALTER TABLE `message_template` ADD COLUMN `is_system` TINYINT(1) DEFAULT 0 AFTER `channels`",
+                'sort' => "ALTER TABLE `message_template` ADD COLUMN `sort` INT DEFAULT 100 AFTER `is_system`",
             ],
             'message_channel_log' => [
                 'message_id' => "ALTER TABLE `message_channel_log` ADD COLUMN `message_id` BIGINT UNSIGNED DEFAULT NULL AFTER `code`",
@@ -442,6 +530,7 @@ class MessageRecord extends TableRecord
             ['message_target', 'idx_message_id', "ALTER TABLE `message_target` ADD KEY `idx_message_id` (`message_id`)"],
             ['message_target', 'idx_deleted_at', "ALTER TABLE `message_target` ADD KEY `idx_deleted_at` (`deleted_at`)"],
             ['message_template', 'uk_code', "ALTER TABLE `message_template` ADD UNIQUE KEY `uk_code` (`code`)"],
+            ['message_template', 'idx_type_status', "ALTER TABLE `message_template` ADD KEY `idx_type_status` (`type`, `status`, `sort`)"],
             ['message_channel_log', 'idx_message_account', "ALTER TABLE `message_channel_log` ADD KEY `idx_message_account` (`message_id`, `account_id`)"],
             ['message_channel_log', 'idx_channel_status', "ALTER TABLE `message_channel_log` ADD KEY `idx_channel_status` (`channel`, `status`)"],
             ['message_channel_log', 'idx_deleted_at', "ALTER TABLE `message_channel_log` ADD KEY `idx_deleted_at` (`deleted_at`)"],
@@ -477,6 +566,77 @@ class MessageRecord extends TableRecord
     private static function nullableInt(mixed $value): ?int
     {
         return is_numeric($value) ? (int) $value : null;
+    }
+
+    private static function templateQuery(array $filters): mixed
+    {
+        $query = self::queryTable('message_template')->whereNull('deleted_at');
+        $type = trim((string) ($filters['type'] ?? ''));
+        if ($type !== '' && $type !== 'all') {
+            $query->where('type', self::normalizeType($type));
+        }
+
+        $status = trim((string) ($filters['status'] ?? 'all'));
+        if ($status !== '' && $status !== 'all') {
+            $query->where('status', $status === 'disabled' ? 'disabled' : 'enabled');
+        }
+
+        $keyword = trim((string) ($filters['keyword'] ?? ''));
+        if ($keyword !== '') {
+            $like = '%' . str_replace(['%', '_'], ['\\%', '\\_'], $keyword) . '%';
+            $query->where(function ($builder) use ($like): void {
+                $builder->where('name', 'like', $like)
+                    ->orWhere('code', 'like', $like)
+                    ->orWhere('title_tpl', 'like', $like)
+                    ->orWhere('content_tpl', 'like', $like);
+            });
+        }
+
+        return $query;
+    }
+
+    private static function templateColumns(): array
+    {
+        return [
+            'id',
+            'name',
+            'code',
+            'title_tpl',
+            'content_tpl',
+            'type',
+            'level',
+            'description',
+            'variables',
+            'link_url_tpl',
+            'channels',
+            'is_system',
+            'sort',
+            'status',
+            'created_at',
+            'updated_at',
+        ];
+    }
+
+    private static function templateRow(object $row): array
+    {
+        return [
+            'id' => (int) $row->id,
+            'name' => $row->name,
+            'code' => $row->code,
+            'title_tpl' => $row->title_tpl,
+            'content_tpl' => $row->content_tpl,
+            'type' => self::normalizeType((string) ($row->type ?? 'system')),
+            'level' => self::normalizeLevel((string) ($row->level ?? 'normal')),
+            'description' => $row->description,
+            'variables' => self::decodeJson($row->variables),
+            'link_url_tpl' => $row->link_url_tpl,
+            'channels' => self::decodeJson($row->channels),
+            'is_system' => (int) ($row->is_system ?? 0) === 1,
+            'sort' => (int) ($row->sort ?? 100),
+            'status' => $row->status,
+            'created_at' => $row->created_at,
+            'updated_at' => $row->updated_at,
+        ];
     }
 
     private static function nullableString(mixed $value, int $limit): ?string

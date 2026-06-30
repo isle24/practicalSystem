@@ -862,11 +862,19 @@ function messageTableStatements(): array
             `deleted_at` DATETIME DEFAULT NULL,
             `title_tpl` VARCHAR(255) DEFAULT NULL,
             `content_tpl` TEXT DEFAULT NULL,
+            `type` VARCHAR(40) DEFAULT 'system',
+            `level` VARCHAR(40) DEFAULT 'normal',
+            `description` VARCHAR(500) DEFAULT NULL,
+            `variables` JSON DEFAULT NULL,
+            `link_url_tpl` VARCHAR(500) DEFAULT NULL,
             `channels` JSON DEFAULT NULL,
+            `is_system` TINYINT(1) DEFAULT 0,
+            `sort` INT DEFAULT 100,
             PRIMARY KEY (`id`),
             UNIQUE KEY `uk_uuid` (`uuid`),
             UNIQUE KEY `uk_code` (`code`),
-            KEY `idx_status` (`status`)
+            KEY `idx_status` (`status`),
+            KEY `idx_type_status` (`type`, `status`, `sort`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
         "CREATE TABLE IF NOT EXISTS `message_channel_log` (
             `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -1462,6 +1470,13 @@ function ensureMessageSchema(PDO $pdo): void
             'title_tpl' => "ALTER TABLE `message_template` ADD COLUMN `title_tpl` VARCHAR(255) DEFAULT NULL AFTER `code`",
             'content_tpl' => "ALTER TABLE `message_template` ADD COLUMN `content_tpl` TEXT DEFAULT NULL AFTER `title_tpl`",
             'channels' => "ALTER TABLE `message_template` ADD COLUMN `channels` JSON DEFAULT NULL AFTER `content_tpl`",
+            'type' => "ALTER TABLE `message_template` ADD COLUMN `type` VARCHAR(40) DEFAULT 'system' AFTER `content_tpl`",
+            'level' => "ALTER TABLE `message_template` ADD COLUMN `level` VARCHAR(40) DEFAULT 'normal' AFTER `type`",
+            'description' => "ALTER TABLE `message_template` ADD COLUMN `description` VARCHAR(500) DEFAULT NULL AFTER `level`",
+            'variables' => "ALTER TABLE `message_template` ADD COLUMN `variables` JSON DEFAULT NULL AFTER `description`",
+            'link_url_tpl' => "ALTER TABLE `message_template` ADD COLUMN `link_url_tpl` VARCHAR(500) DEFAULT NULL AFTER `variables`",
+            'is_system' => "ALTER TABLE `message_template` ADD COLUMN `is_system` TINYINT(1) DEFAULT 0 AFTER `channels`",
+            'sort' => "ALTER TABLE `message_template` ADD COLUMN `sort` INT DEFAULT 100 AFTER `is_system`",
         ],
         'message_channel_log' => [
             'message_id' => "ALTER TABLE `message_channel_log` ADD COLUMN `message_id` BIGINT UNSIGNED DEFAULT NULL AFTER `code`",
@@ -1485,6 +1500,7 @@ function ensureMessageSchema(PDO $pdo): void
     ensureIndex($pdo, 'message_target', 'idx_message_id', "ALTER TABLE `message_target` ADD KEY `idx_message_id` (`message_id`)");
     ensureIndex($pdo, 'message_target', 'idx_deleted_at', "ALTER TABLE `message_target` ADD KEY `idx_deleted_at` (`deleted_at`)");
     ensureIndex($pdo, 'message_template', 'uk_code', "ALTER TABLE `message_template` ADD UNIQUE KEY `uk_code` (`code`)");
+    ensureIndex($pdo, 'message_template', 'idx_type_status', "ALTER TABLE `message_template` ADD KEY `idx_type_status` (`type`, `status`, `sort`)");
     ensureIndex($pdo, 'message_channel_log', 'idx_message_account', "ALTER TABLE `message_channel_log` ADD KEY `idx_message_account` (`message_id`, `account_id`)");
     ensureIndex($pdo, 'message_channel_log', 'idx_channel_status', "ALTER TABLE `message_channel_log` ADD KEY `idx_channel_status` (`channel`, `status`)");
     ensureIndex($pdo, 'message_channel_log', 'idx_deleted_at', "ALTER TABLE `message_channel_log` ADD KEY `idx_deleted_at` (`deleted_at`)");
@@ -1660,8 +1676,188 @@ function seedSchool(PDO $pdo, string $wechatProxyUrl): void
     seedMenus($pdo);
     seedOperationGuides($pdo);
     seedCommonSupportData($pdo);
+    seedMessageTemplates($pdo);
     seedConfig($pdo, $wechatProxyUrl);
     seedInternshipDemo($pdo);
+}
+
+function seedMessageTemplates(PDO $pdo): void
+{
+    $stmt = $pdo->prepare(
+        "INSERT INTO `message_template` (
+            `uuid`, `name`, `code`, `title_tpl`, `content_tpl`, `type`, `level`,
+            `description`, `variables`, `link_url_tpl`, `channels`, `is_system`, `sort`, `status`
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, 'enabled')
+        ON DUPLICATE KEY UPDATE
+            `name` = VALUES(`name`),
+            `title_tpl` = VALUES(`title_tpl`),
+            `content_tpl` = VALUES(`content_tpl`),
+            `type` = VALUES(`type`),
+            `level` = VALUES(`level`),
+            `description` = VALUES(`description`),
+            `variables` = VALUES(`variables`),
+            `link_url_tpl` = VALUES(`link_url_tpl`),
+            `channels` = VALUES(`channels`),
+            `is_system` = 1,
+            `sort` = VALUES(`sort`),
+            `status` = 'enabled',
+            `deleted_at` = NULL"
+    );
+
+    $templates = [
+        [
+            '00000000-0000-0000-0000-000000240001',
+            '流程提交待办',
+            'workflow_submit_todo',
+            '待审核：{module_name}',
+            '{submitter_name}提交了{module_name}，业务对象：{entity_title}。请及时处理。',
+            'todo',
+            'important',
+            '学生或教师提交业务后，发送给审核人形成待办。',
+            [
+                'module_name' => '业务名称，如实习日志、实习报告',
+                'submitter_name' => '提交人姓名',
+                'entity_title' => '业务标题或学生姓名',
+            ],
+            '#panel={module_key}:{panel_key}',
+            10,
+        ],
+        [
+            '00000000-0000-0000-0000-000000240002',
+            '审核结果通知',
+            'workflow_review_result',
+            '{module_name}审核结果：{status_text}',
+            '{module_name}已处理，结果：{status_text}。{opinion_text}',
+            'result',
+            'important',
+            '审核通过、退回、拒绝后发送给提交人。',
+            [
+                'module_name' => '业务名称',
+                'status_text' => '通过、退回修改、拒绝',
+                'opinion_text' => '审核意见文本',
+            ],
+            '#panel={module_key}:{panel_key}',
+            20,
+        ],
+        [
+            '00000000-0000-0000-0000-000000240003',
+            '通过后修改待办',
+            'workflow_reopen_todo',
+            '{module_name}需要重新修改',
+            '{reviewer_name}要求你重新修改{module_name}，业务对象：{entity_title}。{opinion_text}',
+            'todo',
+            'urgent',
+            '审核通过后发起修改时发送给提交人。',
+            [
+                'module_name' => '业务名称',
+                'reviewer_name' => '审核人姓名',
+                'entity_title' => '业务标题或学生姓名',
+                'opinion_text' => '修改理由',
+            ],
+            '#panel={module_key}:{panel_key}',
+            30,
+        ],
+        [
+            '00000000-0000-0000-0000-000000240004',
+            '实习任务发布',
+            'internship_task_publish',
+            '实习任务已发布：{task_title}',
+            '你的实习任务「{task_title}」已发布。时间：{date_text}；地点：{location}。',
+            'todo',
+            'important',
+            '实习任务发布或变更生效后通知老师和学生。',
+            [
+                'task_title' => '实习任务标题',
+                'date_text' => '任务起止时间',
+                'location' => '任务地点',
+            ],
+            '#panel=internship:arrangements',
+            40,
+        ],
+        [
+            '00000000-0000-0000-0000-000000240005',
+            '系统通知',
+            'system_notice',
+            '{notice_title}',
+            '{notice_content}',
+            'system',
+            'normal',
+            '后台主动发送的通用系统通知。',
+            [
+                'notice_title' => '通知标题',
+                'notice_content' => '通知内容',
+            ],
+            '',
+            50,
+        ],
+        [
+            '00000000-0000-0000-0000-000000240006',
+            '通用待办通知',
+            'todo_notice',
+            '{notice_title}',
+            '{notice_content}',
+            'todo',
+            'important',
+            '业务已形成标题和内容时使用的通用待办模板。',
+            [
+                'notice_title' => '待办标题',
+                'notice_content' => '待办内容',
+            ],
+            '{link_url}',
+            60,
+        ],
+        [
+            '00000000-0000-0000-0000-000000240007',
+            '通用结果通知',
+            'result_notice',
+            '{notice_title}',
+            '{notice_content}',
+            'result',
+            'important',
+            '业务已形成标题和内容时使用的通用结果模板。',
+            [
+                'notice_title' => '通知标题',
+                'notice_content' => '通知内容',
+            ],
+            '{link_url}',
+            70,
+        ],
+        [
+            '00000000-0000-0000-0000-000000240008',
+            '导出任务结果',
+            'export_task_result',
+            '{export_title}',
+            '{export_content}',
+            'result',
+            'normal',
+            '导出任务完成或失败后通知发起人。',
+            [
+                'export_title' => '导出消息标题',
+                'export_content' => '导出消息内容',
+            ],
+            '#panel=exportTask:list',
+            80,
+        ],
+    ];
+
+    foreach ($templates as $template) {
+        [$uuid, $name, $code, $title, $content, $type, $level, $description, $variables, $linkUrl, $sort] = $template;
+        $stmt->execute([
+            $uuid,
+            $name,
+            $code,
+            $title,
+            $content,
+            $type,
+            $level,
+            $description,
+            json_encode($variables, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+            $linkUrl,
+            json_encode(['internal'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+            $sort,
+        ]);
+    }
 }
 
 function seedRoles(PDO $pdo): void

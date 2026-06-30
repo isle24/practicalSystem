@@ -102,13 +102,13 @@ class ExportTaskService
         try {
             (new MessageService())->send([
                 'account_ids' => [$accountId],
-                'title' => $title,
-                'content' => $content,
-                'type' => 'result',
-                'level' => 'normal',
+                'template_code' => 'export_task_result',
+                'variables' => [
+                    'export_title' => $title,
+                    'export_content' => $content,
+                ],
                 'entity_type' => 'export_task',
                 'entity_id' => $taskId,
-                'link_url' => '#panel=exportTask:list',
             ], 0, '系统');
         } catch (\Throwable) {
         }

@@ -2258,6 +2258,14 @@
                       发送消息
                     </el-button>
                     <el-button
+                      v-if="canManageMessageTemplates"
+                      :icon="FileText"
+                      :loading="messageState.templateLoading"
+                      @click="openMessageTemplateManager"
+                    >
+                      模板管理
+                    </el-button>
+                    <el-button
                       type="primary"
                       plain
                       :disabled="messageUnreadCount <= 0"
@@ -2352,6 +2360,35 @@
                       <div class="message-send-body">
                         <div class="message-send-grid">
                           <label class="message-send-field">
+                            <span>发送方式</span>
+                            <el-select v-model="messageState.sendDialog.form.send_mode" @change="handleMessageSendModeChange">
+                              <el-option label="直接填写" value="manual" />
+                              <el-option label="使用模板" value="template" />
+                            </el-select>
+                          </label>
+                          <label v-if="messageState.sendDialog.form.send_mode === 'template'" class="message-send-field">
+                            <span>消息模板</span>
+                            <el-select v-model="messageState.sendDialog.form.template_code" filterable placeholder="请选择模板" @change="handleMessageTemplateChange">
+                              <el-option
+                                v-for="item in enabledMessageTemplates"
+                                :key="item.code"
+                                :label="`${item.name} / ${item.code}`"
+                                :value="item.code"
+                              />
+                            </el-select>
+                          </label>
+                          <label v-else class="message-send-field">
+                            <span>消息级别</span>
+                            <el-select v-model="messageState.sendDialog.form.level">
+                              <el-option
+                                v-for="item in messageLevelOptions"
+                                :key="item.value"
+                                :label="item.label"
+                                :value="item.value"
+                              />
+                            </el-select>
+                          </label>
+                          <label class="message-send-field">
                             <span>发送范围</span>
                             <el-select v-model="messageState.sendDialog.form.send_scope" @change="handleMessageSendScopeChange">
                               <el-option label="指定人员" value="custom" />
@@ -2416,7 +2453,7 @@
                             </el-select>
                           </label>
                         </div>
-                        <div class="message-send-grid message-send-grid-compact">
+                        <div v-if="messageState.sendDialog.form.send_mode === 'manual'" class="message-send-grid message-send-grid-compact">
                           <label class="message-send-field">
                             <span>消息类型</span>
                             <el-select v-model="messageState.sendDialog.form.type">
@@ -2440,11 +2477,25 @@
                             </el-select>
                           </label>
                         </div>
-                        <label class="message-send-field wide">
+                        <label v-if="messageState.sendDialog.form.send_mode === 'template'" class="message-send-field wide message-template-vars">
+                          <span>模板变量 JSON</span>
+                          <el-input
+                            v-model="messageState.sendDialog.form.variables_text"
+                            type="textarea"
+                            :rows="6"
+                            placeholder="{ &quot;module_name&quot;: &quot;实习日志&quot;, &quot;status_text&quot;: &quot;通过&quot; }"
+                          />
+                        </label>
+                        <section v-if="messageState.sendDialog.form.send_mode === 'template' && currentMessageTemplate()" class="message-template-preview">
+                          <strong>{{ currentMessageTemplate().title_tpl }}</strong>
+                          <p>{{ currentMessageTemplate().content_tpl }}</p>
+                          <small>变量：{{ messageTemplateVariableText(currentMessageTemplate()) }}</small>
+                        </section>
+                        <label v-if="messageState.sendDialog.form.send_mode === 'manual'" class="message-send-field wide message-send-title">
                           <span>标题</span>
                           <el-input v-model="messageState.sendDialog.form.title" maxlength="180" show-word-limit />
                         </label>
-                        <label class="message-send-field wide">
+                        <label v-if="messageState.sendDialog.form.send_mode === 'manual'" class="message-send-field wide message-send-content">
                           <span>内容</span>
                           <el-input
                             v-model="messageState.sendDialog.form.content"
@@ -2454,7 +2505,7 @@
                             show-word-limit
                           />
                         </label>
-                        <label class="message-send-field wide">
+                        <label class="message-send-field wide message-send-link">
                           <span>关联地址</span>
                           <el-input v-model="messageState.sendDialog.form.link_url" placeholder="#panel=internship:applications 或 https://..." />
                         </label>
@@ -2469,6 +2520,94 @@
                         >
                           发送
                         </el-button>
+                      </footer>
+                    </section>
+                  </div>
+
+                  <div v-if="messageState.templateManager.visible" class="operation-mask" @click.self="closeMessageTemplateManager">
+                    <section class="operation-dialog message-template-dialog">
+                      <header>
+                        <strong>消息模板管理</strong>
+                        <button type="button" @click="closeMessageTemplateManager">关闭</button>
+                      </header>
+                      <div class="message-template-toolbar">
+                        <el-select v-model="messageState.templateFilters.type" @change="loadMessageTemplates(1)">
+                          <el-option
+                            v-for="item in messageTypeOptions"
+                            :key="item.value"
+                            :label="item.label"
+                            :value="item.value"
+                          />
+                        </el-select>
+                        <el-select v-model="messageState.templateFilters.status" @change="loadMessageTemplates(1)">
+                          <el-option label="全部状态" value="all" />
+                          <el-option label="启用" value="enabled" />
+                          <el-option label="停用" value="disabled" />
+                        </el-select>
+                        <el-input v-model="messageState.templateFilters.keyword" clearable placeholder="搜索名称、编码、内容" @keyup.enter="loadMessageTemplates(1)" />
+                        <el-button :icon="Search" :loading="messageState.templateLoading" @click="loadMessageTemplates(1)">查询</el-button>
+                        <el-button type="primary" :icon="Plus" @click="openMessageTemplateEdit()">新增</el-button>
+                      </div>
+                      <div class="message-template-table">
+                        <el-table :data="messageState.templates" height="100%" stripe v-loading="messageState.templateLoading">
+                          <el-table-column prop="name" label="模板名称" min-width="150" />
+                          <el-table-column prop="code" label="模板编码" min-width="180" />
+                          <el-table-column label="类型" width="100">
+                            <template #default="{ row }">{{ messageTypeText(row.type) }}</template>
+                          </el-table-column>
+                          <el-table-column label="级别" width="90">
+                            <template #default="{ row }">{{ messageLevelText(row.level) }}</template>
+                          </el-table-column>
+                          <el-table-column prop="title_tpl" label="标题模板" min-width="210" show-overflow-tooltip />
+                          <el-table-column label="状态" width="90">
+                            <template #default="{ row }">
+                              <el-tag :type="row.status === 'enabled' ? 'success' : 'info'" size="small">{{ row.status === 'enabled' ? '启用' : '停用' }}</el-tag>
+                            </template>
+                          </el-table-column>
+                          <el-table-column label="操作" width="140" fixed="right">
+                            <template #default="{ row }">
+                              <el-button link type="primary" @click="openMessageTemplateEdit(row)">编辑</el-button>
+                              <el-button link type="danger" :disabled="row.is_system" @click="removeMessageTemplate(row)">删除</el-button>
+                            </template>
+                          </el-table-column>
+                        </el-table>
+                      </div>
+                      <footer>
+                        <span>共 {{ messageState.templatePagination.total }} 个模板</span>
+                        <el-pagination
+                          size="small"
+                          layout="prev, pager, next"
+                          :current-page="messageState.templatePagination.page"
+                          :page-size="messageState.templatePagination.page_size"
+                          :total="messageState.templatePagination.total"
+                          @current-change="loadMessageTemplates"
+                        />
+                      </footer>
+                    </section>
+                  </div>
+
+                  <div v-if="messageState.templateEdit.visible" class="operation-mask" @click.self="closeMessageTemplateEdit">
+                    <section class="operation-dialog message-template-edit-dialog">
+                      <header>
+                        <strong>{{ messageState.templateEdit.form.id ? '编辑消息模板' : '新增消息模板' }}</strong>
+                        <button type="button" @click="closeMessageTemplateEdit">关闭</button>
+                      </header>
+                      <div class="message-template-edit-body">
+                        <label><span>模板名称</span><el-input v-model="messageState.templateEdit.form.name" maxlength="180" /></label>
+                        <label><span>模板编码</span><el-input v-model="messageState.templateEdit.form.code" :disabled="messageState.templateEdit.form.is_system" maxlength="120" /></label>
+                        <label><span>消息类型</span><el-select v-model="messageState.templateEdit.form.type"><el-option v-for="item in messageTypeOptions.filter(option => option.value !== 'all')" :key="item.value" :label="item.label" :value="item.value" /></el-select></label>
+                        <label><span>消息级别</span><el-select v-model="messageState.templateEdit.form.level"><el-option v-for="item in messageLevelOptions" :key="item.value" :label="item.label" :value="item.value" /></el-select></label>
+                        <label><span>状态</span><el-switch v-model="messageState.templateEdit.form.status" active-value="enabled" inactive-value="disabled" active-text="启用" inactive-text="停用" /></label>
+                        <label><span>排序</span><el-input v-model.number="messageState.templateEdit.form.sort" type="number" /></label>
+                        <label class="wide"><span>标题模板</span><el-input v-model="messageState.templateEdit.form.title_tpl" maxlength="255" show-word-limit /></label>
+                        <label class="wide"><span>内容模板</span><el-input v-model="messageState.templateEdit.form.content_tpl" type="textarea" :rows="4" /></label>
+                        <label class="wide"><span>跳转地址模板</span><el-input v-model="messageState.templateEdit.form.link_url_tpl" placeholder="#panel={module_key}:{panel_key}" /></label>
+                        <label class="wide"><span>变量说明 JSON</span><el-input v-model="messageState.templateEdit.form.variables_text" type="textarea" :rows="5" /></label>
+                        <label class="wide"><span>说明</span><el-input v-model="messageState.templateEdit.form.description" type="textarea" :rows="2" maxlength="500" show-word-limit /></label>
+                      </div>
+                      <footer>
+                        <el-button @click="closeMessageTemplateEdit">取消</el-button>
+                        <el-button type="primary" :loading="messageState.templateEdit.saving" @click="submitMessageTemplate">保存</el-button>
                       </footer>
                     </section>
                   </div>
@@ -3391,6 +3530,7 @@ import {
   fetchLoginPageSettings,
   fetchMessages,
   fetchMessageTargets,
+  fetchMessageTemplates,
   fetchMessageSummary,
   fetchOrganizationScopes,
   fetchOperationGuide,
@@ -3445,6 +3585,7 @@ import {
   saveDesktopShortcuts,
   saveFavorite,
   saveMenu as saveMenuApi,
+  saveMessageTemplate,
   sendMessage,
   saveOrganizationScopes,
   saveOperationGuide,
@@ -3456,6 +3597,7 @@ import {
   uploadLoginBackground,
   uploadMenuIcon,
   uploadProfileAsset,
+  deleteMessageTemplate,
 } from './api/system';
 
 const { state: permissionState, hasPermission, load } = usePermissions();
@@ -3592,6 +3734,7 @@ const logState = reactive({
 const messageState = reactive({
   loading: false,
   targetLoading: false,
+  templateLoading: false,
   message: '',
   filters: {
     type: 'all',
@@ -3600,6 +3743,25 @@ const messageState = reactive({
   },
   items: [],
   targetOptions: [],
+  templates: [],
+  templateFilters: {
+    type: 'all',
+    status: 'all',
+    keyword: '',
+  },
+  templatePagination: {
+    page: 1,
+    page_size: 20,
+    total: 0,
+  },
+  templateManager: {
+    visible: false,
+  },
+  templateEdit: {
+    visible: false,
+    saving: false,
+    form: emptyMessageTemplateForm(),
+  },
   summary: {
     unread: 0,
     by_type: {},
@@ -4026,6 +4188,9 @@ const messageTargetRoleOptions = [
 
 function emptyMessageSendForm() {
   return {
+    send_mode: 'manual',
+    template_code: '',
+    variables_text: '{}',
     send_scope: 'custom',
     role_type: '',
     account_ids: [],
@@ -4034,6 +4199,24 @@ function emptyMessageSendForm() {
     title: '',
     content: '',
     link_url: '',
+  };
+}
+
+function emptyMessageTemplateForm(row = {}) {
+  return {
+    id: row.id || null,
+    name: row.name || '',
+    code: row.code || '',
+    title_tpl: row.title_tpl || '',
+    content_tpl: row.content_tpl || '',
+    type: row.type || 'system',
+    level: row.level || 'normal',
+    description: row.description || '',
+    variables_text: JSON.stringify(row.variables || {}, null, 2),
+    link_url_tpl: row.link_url_tpl || '',
+    status: row.status || 'enabled',
+    sort: row.sort ?? 100,
+    is_system: Boolean(row.is_system),
   };
 }
 
@@ -4401,6 +4584,7 @@ const visibleWindows = computed(() => openWindows.filter(win => !win.minimized))
 const canManageConfig = computed(() => hasPermission('config:manage') && ['super_admin', 'school_admin'].includes(permissionState.context.role_type));
 const canViewUserAdmin = computed(() => ['super_admin', 'school_admin', 'college_admin', 'profession_admin'].includes(permissionState.context.role_type));
 const canSendMessages = computed(() => ['super_admin', 'school_admin'].includes(currentRoleType.value));
+const canManageMessageTemplates = computed(() => currentRoleType.value === 'super_admin');
 const canManageInternship = computed(() => hasPermission('internship:manage'));
 const canSaveInternshipScore = computed(() => hasPermission('internship:score') || canManageInternship.value);
 const canManageInternshipPlan = computed(() => hasPermission('internship:plan') && isAdminRole.value);
@@ -4451,6 +4635,7 @@ const courseScoreSheetMetaItems = computed(() => {
 });
 const messageGroups = computed(() => groupMessagesByDay(messageState.items));
 const messageUnreadCount = computed(() => Number(messageState.summary.unread || 0));
+const enabledMessageTemplates = computed(() => messageState.templates.filter(item => item.status === 'enabled'));
 const messageSendScopeHint = computed(() => {
   const form = messageState.sendDialog.form;
   if (form.send_scope === 'all') {
@@ -5492,9 +5677,60 @@ async function openMessageSendDialog() {
   messageState.message = '';
   messageState.sendDialog.visible = true;
   messageState.sendDialog.form = emptyMessageSendForm();
+  if (!messageState.templates.length) {
+    await loadMessageTemplates(1);
+  }
   if (!messageState.targetOptions.length) {
     await loadMessageTargets();
   }
+}
+
+function handleMessageSendModeChange() {
+  const form = messageState.sendDialog.form;
+  if (form.send_mode === 'template' && !form.template_code && enabledMessageTemplates.value.length) {
+    form.template_code = enabledMessageTemplates.value[0].code;
+    handleMessageTemplateChange();
+  }
+}
+
+function handleMessageTemplateChange() {
+  const template = currentMessageTemplate();
+  if (!template) {
+    return;
+  }
+  formApplyMessageTemplate(messageState.sendDialog.form, template);
+}
+
+function formApplyMessageTemplate(form, template) {
+  form.type = template.type || form.type;
+  form.level = template.level || form.level;
+  form.link_url = '';
+  if (!form.variables_text || form.variables_text === '{}') {
+    form.variables_text = JSON.stringify(messageTemplateVariableDefaults(template), null, 2);
+  }
+}
+
+function currentMessageTemplate() {
+  const code = messageState.sendDialog.form.template_code;
+  return messageState.templates.find(item => item.code === code) || null;
+}
+
+function messageTemplateVariableText(template) {
+  const variables = template?.variables || {};
+  if (!variables || !Object.keys(variables).length) {
+    return '无';
+  }
+  return Object.entries(variables)
+    .map(([key, value]) => `${key}：${value}`)
+    .join('；');
+}
+
+function messageTemplateVariableDefaults(template) {
+  const variables = template?.variables || {};
+  return Object.keys(variables).reduce((defaults, key) => {
+    defaults[key] = '';
+    return defaults;
+  }, {});
 }
 
 function handleMessageSendScopeChange() {
@@ -5542,10 +5778,18 @@ async function submitMessageSend() {
   }
 
   const form = messageState.sendDialog.form;
+  let variables = {};
+  try {
+    variables = form.send_mode === 'template' ? parseJsonObject(form.variables_text, '模板变量 JSON') : {};
+  } catch (error) {
+    return;
+  }
   const payload = {
     send_scope: form.send_scope,
     role_type: form.send_scope === 'role' ? String(form.role_type || '').trim() : '',
     account_ids: (form.account_ids || []).map(Number).filter(Boolean),
+    template_code: form.send_mode === 'template' ? String(form.template_code || '').trim() : '',
+    variables,
     type: form.type,
     level: form.level,
     title: String(form.title || '').trim(),
@@ -5561,11 +5805,15 @@ async function submitMessageSend() {
     messageState.message = '请选择接收角色';
     return;
   }
-  if (!payload.title) {
+  if (form.send_mode === 'template' && !payload.template_code) {
+    messageState.message = '请选择消息模板';
+    return;
+  }
+  if (form.send_mode === 'manual' && !payload.title) {
     messageState.message = '请填写消息标题';
     return;
   }
-  if (!payload.content) {
+  if (form.send_mode === 'manual' && !payload.content) {
     messageState.message = '请填写消息内容';
     return;
   }
@@ -5587,6 +5835,153 @@ async function submitMessageSend() {
     messageState.message = error.message;
   } finally {
     messageState.sendDialog.sending = false;
+  }
+}
+
+async function openMessageTemplateManager() {
+  if (!canManageMessageTemplates.value) {
+    messageState.message = '仅超级管理员可以维护消息模板';
+    return;
+  }
+  messageState.templateManager.visible = true;
+  await loadMessageTemplates(messageState.templatePagination.page || 1);
+}
+
+function closeMessageTemplateManager() {
+  if (messageState.templateLoading || messageState.templateEdit.saving) {
+    return;
+  }
+  messageState.templateManager.visible = false;
+}
+
+async function loadMessageTemplates(page = messageState.templatePagination.page || 1) {
+  if (!canSendMessages.value || messageState.templateLoading) {
+    return;
+  }
+  messageState.templateLoading = true;
+  messageState.message = '';
+  try {
+    const data = await fetchMessageTemplates({
+      page,
+      page_size: messageState.templatePagination.page_size,
+      type: messageState.templateFilters.type,
+      status: messageState.templateFilters.status,
+      keyword: messageState.templateFilters.keyword,
+    });
+    messageState.templates = data.items || [];
+    messageState.templatePagination = {
+      ...messageState.templatePagination,
+      ...(data.pagination || {}),
+    };
+  } catch (error) {
+    messageState.message = error.message;
+  } finally {
+    messageState.templateLoading = false;
+  }
+}
+
+function openMessageTemplateEdit(row = null) {
+  if (!canManageMessageTemplates.value) {
+    messageState.message = '仅超级管理员可以维护消息模板';
+    return;
+  }
+  messageState.templateEdit.form = emptyMessageTemplateForm(row || {});
+  messageState.templateEdit.visible = true;
+}
+
+function closeMessageTemplateEdit() {
+  if (messageState.templateEdit.saving) {
+    return;
+  }
+  messageState.templateEdit.visible = false;
+}
+
+async function submitMessageTemplate() {
+  if (messageState.templateEdit.saving) {
+    return;
+  }
+  const form = messageState.templateEdit.form;
+  let variables = {};
+  try {
+    variables = parseJsonObject(form.variables_text, '变量说明 JSON');
+  } catch (error) {
+    return;
+  }
+  if (!String(form.name || '').trim()) {
+    messageState.message = '请填写模板名称';
+    return;
+  }
+  if (!String(form.code || '').trim()) {
+    messageState.message = '请填写模板编码';
+    return;
+  }
+  if (!String(form.title_tpl || '').trim()) {
+    messageState.message = '请填写标题模板';
+    return;
+  }
+  if (!String(form.content_tpl || '').trim()) {
+    messageState.message = '请填写内容模板';
+    return;
+  }
+
+  messageState.templateEdit.saving = true;
+  messageState.message = '';
+  try {
+    await saveMessageTemplate({
+      id: form.id || undefined,
+      name: form.name,
+      code: form.code,
+      title_tpl: form.title_tpl,
+      content_tpl: form.content_tpl,
+      type: form.type,
+      level: form.level,
+      description: form.description,
+      variables,
+      link_url_tpl: form.link_url_tpl,
+      status: form.status,
+      sort: Number(form.sort || 100),
+      is_system: form.is_system,
+    });
+    messageState.templateEdit.visible = false;
+    await loadMessageTemplates(messageState.templatePagination.page || 1);
+  } catch (error) {
+    messageState.message = error.message;
+  } finally {
+    messageState.templateEdit.saving = false;
+  }
+}
+
+async function removeMessageTemplate(row) {
+  if (!row?.id || row.is_system || !window.confirm(`确认删除模板「${row.name || row.code}」？`)) {
+    return;
+  }
+  messageState.templateLoading = true;
+  messageState.message = '';
+  try {
+    await deleteMessageTemplate(row.id);
+    messageState.templateLoading = false;
+    await loadMessageTemplates(messageState.templatePagination.page || 1);
+  } catch (error) {
+    messageState.message = error.message;
+  } finally {
+    messageState.templateLoading = false;
+  }
+}
+
+function parseJsonObject(value, label) {
+  const text = String(value || '').trim();
+  if (!text) {
+    return {};
+  }
+  try {
+    const data = JSON.parse(text);
+    if (!data || Array.isArray(data) || typeof data !== 'object') {
+      throw new Error();
+    }
+    return data;
+  } catch (error) {
+    messageState.message = `${label}格式不正确`;
+    throw new Error(messageState.message);
   }
 }
 

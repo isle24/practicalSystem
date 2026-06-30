@@ -97,6 +97,25 @@ export function fetchMessageTargets(params = {}) {
   return request(`/message/targets${query ? `?${query}` : ''}`);
 }
 
+export function fetchMessageTemplates(params = {}) {
+  const query = new URLSearchParams(params).toString();
+  return request(`/message/templates${query ? `?${query}` : ''}`);
+}
+
+export function saveMessageTemplate(payload) {
+  return request('/message/save-template', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function deleteMessageTemplate(id) {
+  return request('/message/delete-template', {
+    method: 'POST',
+    body: JSON.stringify({ id }),
+  });
+}
+
 export function sendMessage(payload) {
   return request('/message/send', {
     method: 'POST',

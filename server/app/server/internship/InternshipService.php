@@ -2591,16 +2591,24 @@ class InternshipService
             return;
         }
 
+        $templateCode = $type === 'todo' ? 'todo_notice' : 'result_notice';
         try {
             (new MessageService())->send([
                 'send_scope' => 'custom',
                 'account_ids' => $accountIds,
-                'title' => $title,
-                'content' => $content,
-                'type' => $type,
-                'level' => 'important',
+                'template_code' => $templateCode,
+                'variables' => [
+                    'notice_title' => $title,
+                    'notice_content' => $content,
+                    'link_url' => '#panel=internship:arrangements',
+                ],
                 'entity_type' => $entityType,
                 'entity_id' => $entityId,
+                'metadata' => [
+                    'source_type' => $type,
+                    'source_title' => $title,
+                    'source_content' => $content,
+                ],
             ], 0, '实习系统');
         } catch (Throwable) {
         }
