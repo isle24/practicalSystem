@@ -1956,8 +1956,16 @@
                         :key="field.key"
                       >
                         <span>{{ field.label }}</span>
+                        <el-switch
+                          v-if="archiveFieldUsesSwitch(field)"
+                          v-model="archiveStateForWindow(win).editing[field.key]"
+                          :active-value="archiveSwitchActiveValue(field)"
+                          :inactive-value="archiveSwitchInactiveValue(field)"
+                          :active-text="archiveSwitchActiveText(field)"
+                          :inactive-text="archiveSwitchInactiveText(field)"
+                        />
                         <el-select
-                          v-if="field.options"
+                          v-else-if="field.options"
                           v-model="archiveStateForWindow(win).editing[field.key]"
                           clearable
                           filterable
@@ -8587,6 +8595,26 @@ function archiveFieldOptions(field) {
     return adminState.options.professions.map(item => ({ label: item.profession_name, value: String(item.profession_id) }));
   }
   return [];
+}
+
+function archiveFieldUsesSwitch(field) {
+  return ['flag', 'boolean'].includes(field.options);
+}
+
+function archiveSwitchActiveValue(field) {
+  return field.options === 'boolean' ? 'true' : 'on';
+}
+
+function archiveSwitchInactiveValue(field) {
+  return field.options === 'boolean' ? 'false' : 'off';
+}
+
+function archiveSwitchActiveText(field) {
+  return field.options === 'boolean' ? '是' : '启用';
+}
+
+function archiveSwitchInactiveText(field) {
+  return field.options === 'boolean' ? '否' : '停用';
 }
 
 function archiveEditFieldOptions(field, type) {
