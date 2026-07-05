@@ -361,7 +361,7 @@
 </template>
 
 <script setup>
-import { onMounted, reactive, ref } from 'vue';
+import { onMounted, reactive, ref, watch } from 'vue';
 import { FileText, Plus, RefreshCw, Save, Search, Upload } from '@lucide/vue';
 import {
   deleteTemplateItem,
@@ -436,6 +436,24 @@ const categoryDialog = reactive({
 });
 
 onMounted(reload);
+
+watch(
+  () => props.canViewMessageTemplates,
+  async (canView) => {
+    if (canView) {
+      if (activeTab.value !== 'message') {
+        activeTab.value = 'message';
+      }
+      await loadMessageTemplates(1);
+      return;
+    }
+
+    if (activeTab.value === 'message') {
+      activeTab.value = 'file';
+      await reload();
+    }
+  }
+);
 
 async function reload() {
   if (activeTab.value === 'message') {

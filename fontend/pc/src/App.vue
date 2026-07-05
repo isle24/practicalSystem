@@ -2088,7 +2088,7 @@
                 <div v-else-if="win.module.id === 'templateLib'" class="module-content-panel">
                   <TemplateLibrary
                     :can-manage="hasPermission('template:manage')"
-                    :can-view-message-templates="canSendMessages"
+                    :can-view-message-templates="canViewMessageTemplates"
                     :can-manage-message-templates="canManageMessageTemplates"
                   />
                 </div>
@@ -4647,6 +4647,7 @@ const canManageConfig = computed(() => hasPermission('config:manage') && ['super
 const canViewUserAdmin = computed(() => ['super_admin', 'school_admin', 'college_admin', 'profession_admin'].includes(permissionState.context.role_type));
 const canSendMessages = computed(() => ['super_admin', 'school_admin'].includes(currentRoleType.value));
 const canManageMessageTemplates = computed(() => currentRoleType.value === 'super_admin');
+const canViewMessageTemplates = computed(() => canManageMessageTemplates.value || hasPermission('template:view') || hasPermission('template:manage'));
 const canManageInternship = computed(() => hasPermission('internship:manage'));
 const canSaveInternshipScore = computed(() => hasPermission('internship:score') || canManageInternship.value);
 const canManageInternshipPlan = computed(() => hasPermission('internship:plan') && isAdminRole.value);

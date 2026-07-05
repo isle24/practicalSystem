@@ -95,7 +95,7 @@ class MessageController
     #[OperationLog('查询消息模板')]
     public function templates(Request $request): Response
     {
-        if (!in_array(CurrentContext::roleType(), self::ADMIN_ROLES, true)) {
+        if (!$this->canViewTemplates()) {
             return $this->fail(40300, '无操作权限', 403);
         }
 
@@ -195,6 +195,15 @@ class MessageController
     {
         $value = $request->input($key, false);
         return $value === true || $value === 'true' || $value === 1 || $value === '1';
+    }
+
+    private function canViewTemplates(): bool
+    {
+        $permissions = CurrentContext::permissionCodes();
+
+        return in_array(CurrentContext::roleType(), self::ADMIN_ROLES, true)
+            || in_array('template:view', $permissions, true)
+            || in_array('template:manage', $permissions, true);
     }
 
     private function statusCode(Throwable $exception): int
