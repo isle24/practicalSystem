@@ -4,6 +4,7 @@ namespace app\server\auth;
 
 use app\model\channel\Account;
 use app\model\channel\AuthPasskey;
+use app\model\channel\MessageRecord;
 use app\model\channel\User;
 use app\server\CurrentContext;
 use app\server\rbac\DataScopeService;
@@ -288,8 +289,20 @@ class AuthService
         $context['data_scope'] = $dataScope;
 
         CurrentContext::set($context);
+        $this->ensureDefaultMessageTemplates();
 
         return $context;
+    }
+
+    /**
+     * 同步默认流程消息模板
+     */
+    private function ensureDefaultMessageTemplates(): void
+    {
+        try {
+            MessageRecord::ensureSchema();
+        } catch (\Throwable) {
+        }
     }
 
     private function issueSessionForAccount(int $accountId, string $client): array
