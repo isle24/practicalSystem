@@ -161,12 +161,22 @@ class MessageRecord extends TableRecord
             ->whereNull('deleted_at')
             ->first(self::templateColumns());
 
+        if (!$row) {
+            self::seedDefaultTemplates(true);
+            $row = self::queryTable('message_template')
+                ->where('code', $code)
+                ->where('status', 'enabled')
+                ->whereNull('deleted_at')
+                ->first(self::templateColumns());
+        }
+
         return $row ? self::templateRow($row) : null;
     }
 
     public static function templatePage(array $filters): array
     {
         self::ensureSchema();
+        self::seedDefaultTemplates(true);
 
         $page = max(1, (int) ($filters['page'] ?? 1));
         $pageSize = min(100, max(10, (int) ($filters['page_size'] ?? 20)));
@@ -267,17 +277,17 @@ class MessageRecord extends TableRecord
         self::$schemaReady[$key] = true;
     }
 
-    public static function seedDefaultTemplates(): void
+    public static function seedDefaultTemplates(bool $force = false): void
     {
-        self::ensureDefaultTemplates(self::connection());
+        self::ensureDefaultTemplates(self::connection(), $force);
     }
 
-    public static function ensureDefaultTemplates(mixed $connection): void
+    public static function ensureDefaultTemplates(mixed $connection, bool $force = false): void
     {
         static $seeded = [];
 
         $key = method_exists($connection, 'getDatabaseName') ? (string) $connection->getDatabaseName() : spl_object_hash($connection);
-        if (isset($seeded[$key])) {
+        if (!$force && isset($seeded[$key])) {
             return;
         }
 
@@ -818,6 +828,94 @@ class MessageRecord extends TableRecord
                 'link_url_tpl' => '#panel=exportTask:list',
                 'sort' => 80,
             ],
+            ...self::workflowTemplates(),
+        ];
+    }
+
+    private static function workflowTemplates(): array
+    {
+        $definitions = [
+            ['seq' => 101, 'prefix' => 'internship_plan', 'name' => '实习计划', 'panel' => '#panel=internship:plans'],
+            ['seq' => 104, 'prefix' => 'internship_arrangement_change', 'name' => '实习任务变更', 'panel' => '#panel=internship:arrangementChanges'],
+            ['seq' => 107, 'prefix' => 'internship_application', 'name' => '特殊申请', 'panel' => '#panel=internship:applications'],
+            ['seq' => 110, 'prefix' => 'internship_journal', 'name' => '实习日志', 'panel' => '#panel=internship:journals'],
+            ['seq' => 113, 'prefix' => 'internship_report', 'name' => '实习报告', 'panel' => '#panel=internship:reports'],
+            ['seq' => 116, 'prefix' => 'internship_delay', 'name' => '延期申请', 'panel' => '#panel=internship:delays'],
+            ['seq' => 201, 'prefix' => 'training_plan', 'name' => '实训教学计划', 'panel' => '#panel=training:plans'],
+            ['seq' => 204, 'prefix' => 'training_syllabus', 'name' => '实训大纲', 'panel' => '#panel=training:syllabus'],
+            ['seq' => 207, 'prefix' => 'training_lesson_plan', 'name' => '实训教案', 'panel' => '#panel=training:lessonPlans'],
+            ['seq' => 210, 'prefix' => 'training_reflection', 'name' => '实训反思报告', 'panel' => '#panel=training:reflections'],
+            ['seq' => 213, 'prefix' => 'training_journal', 'name' => '实训日志', 'panel' => '#panel=training:journals'],
+            ['seq' => 216, 'prefix' => 'training_report', 'name' => '实训报告', 'panel' => '#panel=training:reports'],
+            ['seq' => 301, 'prefix' => 'lab_plan', 'name' => '实验教学计划', 'panel' => '#panel=lab:plans'],
+            ['seq' => 304, 'prefix' => 'lab_syllabus', 'name' => '实验大纲', 'panel' => '#panel=lab:syllabus'],
+            ['seq' => 307, 'prefix' => 'lab_lesson_plan', 'name' => '实验教案', 'panel' => '#panel=lab:lessonPlans'],
+            ['seq' => 310, 'prefix' => 'lab_reflection', 'name' => '实验反思报告', 'panel' => '#panel=lab:reflections'],
+            ['seq' => 313, 'prefix' => 'lab_journal', 'name' => '实验日志', 'panel' => '#panel=lab:journals'],
+            ['seq' => 316, 'prefix' => 'lab_report', 'name' => '实验报告', 'panel' => '#panel=lab:reports'],
+        ];
+
+        $templates = [
+            self::resultTemplate(190, '实习成绩核定结果', 'internship_score_result', '实习成绩已核定：{entity_title}', '你的实习成绩已核定，{score_text}。{opinion_text}', '#panel=internship:scores', 190),
+        ];
+        foreach ($definitions as $definition) {
+            $templates[] = self::submitTemplate($definition['seq'], $definition['name'], $definition['prefix'], $definition['panel']);
+            $templates[] = self::reviewTemplate($definition['seq'] + 1, $definition['name'], $definition['prefix'], $definition['panel']);
+            $templates[] = self::reopenTemplate($definition['seq'] + 2, $definition['name'], $definition['prefix'], $definition['panel']);
+        }
+
+        return $templates;
+    }
+
+    private static function submitTemplate(int $sequence, string $name, string $prefix, string $link): array
+    {
+        return self::systemTemplate($sequence, "{$name}提交待办", "{$prefix}_submit_todo", "待审核：{$name}", "{submitter_name}提交了{$name}「{entity_title}」，请及时审核。", 'todo', 'important', "{$name}提交后发送给审核人的待办模板。", [
+            'submitter_name' => '提交人姓名',
+            'entity_title' => '业务标题',
+        ], $link, $sequence);
+    }
+
+    private static function reviewTemplate(int $sequence, string $name, string $prefix, string $link): array
+    {
+        return self::systemTemplate($sequence, "{$name}审核结果", "{$prefix}_review_result", "{$name}审核结果：{status_text}", "你的{$name}「{entity_title}」审核结果为{status_text}。{opinion_text}", 'result', 'important', "{$name}审核处理后发送给提交人的结果模板。", [
+            'entity_title' => '业务标题',
+            'status_text' => '通过、退回修改、未通过',
+            'opinion_text' => '审核意见',
+        ], $link, $sequence);
+    }
+
+    private static function reopenTemplate(int $sequence, string $name, string $prefix, string $link): array
+    {
+        return self::systemTemplate($sequence, "{$name}通过后修改待办", "{$prefix}_reopen_todo", "{$name}需要重新修改", "{reviewer_name}要求你重新修改{$name}「{entity_title}」。{opinion_text}", 'todo', 'urgent', "{$name}通过后发起修改时发送给提交人的待办模板。", [
+            'reviewer_name' => '审核人姓名',
+            'entity_title' => '业务标题',
+            'opinion_text' => '修改理由',
+        ], $link, $sequence);
+    }
+
+    private static function resultTemplate(int $sequence, string $name, string $code, string $title, string $content, string $link, int $sort): array
+    {
+        return self::systemTemplate($sequence, $name, $code, $title, $content, 'result', 'important', "{$name}发送给学生的结果模板。", [
+            'entity_title' => '业务标题',
+            'score_text' => '成绩说明',
+            'opinion_text' => '补充说明',
+        ], $link, $sort);
+    }
+
+    private static function systemTemplate(int $sequence, string $name, string $code, string $title, string $content, string $type, string $level, string $description, array $variables, string $link, int $sort): array
+    {
+        return [
+            'uuid' => sprintf('00000000-0000-0000-0000-%012d', 240000 + $sequence),
+            'name' => $name,
+            'code' => $code,
+            'title_tpl' => $title,
+            'content_tpl' => $content,
+            'type' => $type,
+            'level' => $level,
+            'description' => $description,
+            'variables' => $variables,
+            'link_url_tpl' => $link,
+            'sort' => $sort,
         ];
     }
 

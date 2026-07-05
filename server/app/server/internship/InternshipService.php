@@ -1197,14 +1197,11 @@ class InternshipService
             $this->uuid(),
             $this->now()
         );
-        $this->notifyInternshipAccounts(
-            [InternshipRecord::courseScoreStudentAccountId($planId, $studentId)],
-            '实习课程成绩已核定',
-            '你的实习课程成绩已核定，总评：' . $scoreValue . '。',
-            'result',
-            'course_score',
-            (int) $result['id']
-        );
+        $this->notifyTemplateAccounts([InternshipRecord::courseScoreStudentAccountId($planId, $studentId)], 'internship_score_result', [
+            'entity_title' => '实习课程成绩',
+            'score_text' => '总评：' . $scoreValue,
+            'opinion_text' => '请进入实习成绩查看。',
+        ], 'course_score', (int) $result['id'], CurrentContext::accountId() ?: 0);
 
         return $result;
     }
@@ -1306,14 +1303,11 @@ class InternshipService
             $values['teacher_id']
         );
         $this->refreshArrangementScoreWorkflow($arrangementId);
-        $this->notifyInternshipAccounts(
-            [$this->studentAccountId($studentId)],
-            '实习任务成绩已核定',
-            '你的实习任务成绩已核定，任务 ID：' . $arrangementId . '，总评：' . ($final ?? '未填写') . '。',
-            'result',
-            'score',
-            (int) $result['id']
-        );
+        $this->notifyTemplateAccounts([$this->studentAccountId($studentId)], 'internship_score_result', [
+            'entity_title' => '实习任务#' . $arrangementId,
+            'score_text' => '总评：' . ($final ?? '未填写'),
+            'opinion_text' => (string) ($values['comment'] ?? '请进入实习成绩查看。'),
+        ], 'score', (int) $result['id'], CurrentContext::accountId() ?: 0);
 
         return $result;
     }
@@ -2118,7 +2112,7 @@ class InternshipService
         $this->ensureRecordingTable('arrangement_change_recording');
         $this->ensureRecordingTable('arrangement_recording');
 
-        return $this->connection()->transaction(function () use ($arrangementId, $changeId, $item, $now, $payload, $reason, $status): array {
+        $result = $this->connection()->transaction(function () use ($arrangementId, $changeId, $item, $now, $payload, $reason, $status): array {
             if ($status === 'wait') {
                 $pendingId = InternshipRecord::pendingArrangementChangeId($arrangementId);
                 if ($pendingId > 0 && $pendingId !== (int) $changeId) {
@@ -2190,6 +2184,11 @@ class InternshipService
 
             return ['id' => (int) $result['id'], 'status' => $status];
         });
+        if ($status === 'wait') {
+            $this->notifyArrangementChangeSubmitted($arrangementId, (int) $result['id'], $item, $reason);
+        }
+
+        return $result;
     }
 
     private function arrangementValuesChanged(array $before, array $values, bool $studentRowsChanged): bool
@@ -2534,14 +2533,31 @@ class InternshipService
             $opinion ? '意见：' . $opinion : null,
         ]);
 
-        $this->notifyInternshipAccounts(
+        $this->notifyTemplateAccounts(
             [(int) ($change->submitter_id ?? 0)],
-            $title,
-            implode('；', $parts),
-            $status === 'modify' ? 'todo' : 'result',
+            'internship_arrangement_change_review_result',
+            [
+                'entity_title' => $taskTitle !== '' ? $taskTitle : '实习任务变更#' . (int) ($change->id ?? 0),
+                'status_text' => $this->statusText($status),
+                'opinion_text' => implode('；', $parts) ?: $title,
+            ],
             'arrangement_change',
-            (int) ($change->id ?? 0)
+            (int) ($change->id ?? 0),
+            CurrentContext::accountId() ?: 0
         );
+    }
+
+    private function notifyArrangementChangeSubmitted(int $arrangementId, int $changeId, array $item, string $reason): void
+    {
+        $accountIds = array_merge(
+            Account::messageTargetIds(['role_type' => 'school_admin']),
+            Account::messageTargetIds(['role_type' => 'college_admin'])
+        );
+        $title = trim((string) ($item['title'] ?? $item['name'] ?? '')) ?: '实习任务#' . $arrangementId;
+        $this->notifyTemplateAccounts($accountIds, 'internship_arrangement_change_submit_todo', [
+            'submitter_name' => $this->currentAccountName(),
+            'entity_title' => $title . ($reason !== '' ? '；原因：' . $reason : ''),
+        ], 'arrangement_change', $changeId, CurrentContext::accountId() ?: 0);
     }
 
     private function notifyPlanReviewed(object $row, int $planId, string $planStatus, string $levelName, ?string $opinion): void
@@ -2560,14 +2576,11 @@ class InternshipService
             $opinion ? '意见：' . $opinion : null,
         ]);
 
-        $this->notifyInternshipAccounts(
-            [(int) ($row->submitter_id ?? 0)],
-            $title,
-            implode('；', $parts),
-            $planStatus === 'accept' ? 'result' : 'todo',
-            'plan',
-            $planId
-        );
+        $this->notifyTemplateAccounts([(int) ($row->submitter_id ?? 0)], 'internship_plan_review_result', [
+            'entity_title' => $course !== '' ? $course : '实习计划#' . $planId,
+            'status_text' => $this->statusText($planStatus),
+            'opinion_text' => implode('；', $parts) ?: $title,
+        ], 'plan', $planId, CurrentContext::accountId() ?: 0);
     }
 
     private function notifyArrangementPublished(int $arrangementId, array $item, bool $changed): void
@@ -2583,50 +2596,11 @@ class InternshipService
         $endDate = trim((string) ($item['end_date'] ?? ''));
         $dateText = $startDate !== '' && $endDate !== '' ? $startDate . ' 至 ' . $endDate : ($startDate ?: $endDate);
         $location = trim((string) ($item['location'] ?? ''));
-        $parts = array_filter([
-            $taskTitle !== '' ? '任务：' . $taskTitle : '任务 ID：' . $arrangementId,
-            $dateText !== '' ? '时间：' . $dateText : null,
-            $location !== '' ? '地点：' . $location : null,
-        ]);
-
-        $this->notifyInternshipAccounts(
-            $accountIds,
-            $title,
-            implode('；', $parts),
-            $changed ? 'audit' : 'todo',
-            'arrangement',
-            $arrangementId
-        );
-    }
-
-    private function notifyInternshipAccounts(array $accountIds, string $title, string $content, string $type, string $entityType, int $entityId): void
-    {
-        $accountIds = array_values(array_unique(array_filter(array_map('intval', $accountIds), static fn (int $id): bool => $id > 0)));
-        if (!$accountIds) {
-            return;
-        }
-
-        $templateCode = $type === 'todo' ? 'todo_notice' : 'result_notice';
-        try {
-            (new MessageService())->send([
-                'send_scope' => 'custom',
-                'account_ids' => $accountIds,
-                'template_code' => $templateCode,
-                'variables' => [
-                    'notice_title' => $title,
-                    'notice_content' => $content,
-                    'link_url' => '#panel=internship:arrangements',
-                ],
-                'entity_type' => $entityType,
-                'entity_id' => $entityId,
-                'metadata' => [
-                    'source_type' => $type,
-                    'source_title' => $title,
-                    'source_content' => $content,
-                ],
-            ], 0, '实习系统');
-        } catch (Throwable) {
-        }
+        $this->notifyTemplateAccounts($accountIds, 'internship_task_publish', [
+            'task_title' => $taskTitle !== '' ? $taskTitle : '实习任务#' . $arrangementId,
+            'date_text' => $dateText !== '' ? $dateText : '待确认',
+            'location' => $location !== '' ? $location : '待确认',
+        ], 'arrangement', $arrangementId, 0);
     }
 
     private function notifyWorkflowSubmitted(string $entity, int $entityId, int $submitterAccountId, array $teacherIds, string $moduleName, string $entityTitle): void
@@ -2640,7 +2614,7 @@ class InternshipService
             $accountIds = array_merge($accountIds, Account::messageTargetIds(['role_type' => 'college_admin']));
         }
 
-        $this->notifyTemplateAccounts($accountIds, 'workflow_submit_todo', [
+        $this->notifyTemplateAccounts($accountIds, $this->workflowTemplateCode($entity, 'submit'), [
             'module_name' => $moduleName,
             'submitter_name' => $this->currentAccountName(),
             'entity_title' => $entityTitle !== '' ? $entityTitle : $moduleName,
@@ -2664,7 +2638,7 @@ class InternshipService
         $course = trim((string) ($row->course_name ?? ''));
         $levelName = (string) ($level['name'] ?? '下一审核节点');
         $title = $course !== '' ? $course . ' - ' . $levelName : '实习计划#' . $planId . ' - ' . $levelName;
-        $this->notifyTemplateAccounts($accountIds, 'workflow_submit_todo', [
+        $this->notifyTemplateAccounts($accountIds, 'internship_plan_submit_todo', [
             'module_name' => '实习计划',
             'submitter_name' => $this->currentAccountName(),
             'entity_title' => $title . ($opinion ? '；上一节点意见：' . $opinion : ''),
@@ -2675,10 +2649,11 @@ class InternshipService
 
     private function notifyWorkflowReviewed(string $entity, int $entityId, ?int $receiverAccountId, string $moduleName, string $status, string $opinion): void
     {
-        $this->notifyTemplateAccounts([$receiverAccountId], 'workflow_review_result', [
+        $this->notifyTemplateAccounts([$receiverAccountId], $this->workflowTemplateCode($entity, 'review'), [
             'module_name' => $moduleName,
             'status_text' => $this->statusText($status),
             'opinion_text' => $opinion,
+            'entity_title' => $moduleName . '#' . $entityId,
             'module_key' => 'internship',
             'panel_key' => $this->entityPanelKey($entity),
         ], $entity, $entityId, CurrentContext::accountId() ?: 0);
@@ -2686,7 +2661,7 @@ class InternshipService
 
     private function notifyWorkflowReopened(string $entity, int $entityId, ?int $receiverAccountId, string $moduleName, string $opinion): void
     {
-        $this->notifyTemplateAccounts([$receiverAccountId], 'workflow_reopen_todo', [
+        $this->notifyTemplateAccounts([$receiverAccountId], $this->workflowTemplateCode($entity, 'reopen'), [
             'module_name' => $moduleName,
             'reviewer_name' => $this->currentAccountName(),
             'entity_title' => $moduleName . '#' . $entityId,
@@ -2714,6 +2689,30 @@ class InternshipService
             ], $senderId, $this->currentAccountName());
         } catch (Throwable) {
         }
+    }
+
+    private function workflowTemplateCode(string $entity, string $action): string
+    {
+        $map = [
+            'application' => 'internship_application',
+            'journal' => 'internship_journal',
+            'report' => 'internship_report',
+            'delay' => 'internship_delay',
+            'plan' => 'internship_plan',
+        ];
+        $suffix = [
+            'submit' => 'submit_todo',
+            'review' => 'review_result',
+            'reopen' => 'reopen_todo',
+        ][$action] ?? '';
+
+        return isset($map[$entity], $suffix) && $suffix !== ''
+            ? $map[$entity] . '_' . $suffix
+            : match ($action) {
+                'review' => 'workflow_review_result',
+                'reopen' => 'workflow_reopen_todo',
+                default => 'workflow_submit_todo',
+            };
     }
 
     private function reviewEntitySubmitterAccountId(string $entity, object $row): ?int

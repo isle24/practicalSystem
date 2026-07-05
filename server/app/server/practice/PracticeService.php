@@ -1183,7 +1183,7 @@ class PracticeService
 
     private function notifyWorkflowSubmitted(string $entity, int $entityId, array $values): void
     {
-        $this->notifyTemplateAccounts($this->teacherAccountIds((int) ($values['teacher_id'] ?? 0)), 'workflow_submit_todo', [
+        $this->notifyTemplateAccounts($this->teacherAccountIds((int) ($values['teacher_id'] ?? 0)), $this->workflowTemplateCode($entity, 'submit'), [
             'module_name' => $this->businessName($entity),
             'submitter_name' => $this->currentAccountName(),
             'entity_title' => (string) (($values['title'] ?? '') ?: $this->businessName($entity) . '#' . $entityId),
@@ -1194,10 +1194,11 @@ class PracticeService
 
     private function notifyWorkflowReviewed(string $entity, int $entityId, object $row, string $status, string $opinion): void
     {
-        $this->notifyTemplateAccounts($this->submitterAccountIds($row), 'workflow_review_result', [
+        $this->notifyTemplateAccounts($this->submitterAccountIds($row), $this->workflowTemplateCode($entity, 'review'), [
             'module_name' => $this->businessName($entity),
             'status_text' => $this->statusText($status),
             'opinion_text' => $opinion,
+            'entity_title' => (string) (($row->title ?? '') ?: $this->businessName($entity) . '#' . $entityId),
             'module_key' => $this->moduleType,
             'panel_key' => $this->entityPanelKey($entity),
         ], $this->entityType($entity), $entityId);
@@ -1205,7 +1206,7 @@ class PracticeService
 
     private function notifyWorkflowReopened(string $entity, int $entityId, object $row, string $opinion): void
     {
-        $this->notifyTemplateAccounts($this->submitterAccountIds($row), 'workflow_reopen_todo', [
+        $this->notifyTemplateAccounts($this->submitterAccountIds($row), $this->workflowTemplateCode($entity, 'reopen'), [
             'module_name' => $this->businessName($entity),
             'reviewer_name' => $this->currentAccountName(),
             'entity_title' => (string) (($row->title ?? '') ?: $this->businessName($entity) . '#' . $entityId),
@@ -1217,7 +1218,7 @@ class PracticeService
 
     private function notifyExecutionSubmitted(string $execution, int $entityId, array $values): void
     {
-        $this->notifyTemplateAccounts($this->teacherAccountIds((int) ($values['teacher_id'] ?? 0)), 'workflow_submit_todo', [
+        $this->notifyTemplateAccounts($this->teacherAccountIds((int) ($values['teacher_id'] ?? 0)), $this->workflowTemplateCode($execution, 'submit'), [
             'module_name' => $this->businessName($execution),
             'submitter_name' => $this->currentAccountName(),
             'entity_title' => (string) (($values['title'] ?? '') ?: $this->businessName($execution) . '#' . $entityId),
@@ -1228,10 +1229,11 @@ class PracticeService
 
     private function notifyExecutionReviewed(string $execution, int $entityId, object $row, string $status, string $opinion): void
     {
-        $this->notifyTemplateAccounts($this->studentAccountIds((int) ($row->student_id ?? 0)), 'workflow_review_result', [
+        $this->notifyTemplateAccounts($this->studentAccountIds((int) ($row->student_id ?? 0)), $this->workflowTemplateCode($execution, 'review'), [
             'module_name' => $this->businessName($execution),
             'status_text' => $this->statusText($status),
             'opinion_text' => $opinion,
+            'entity_title' => (string) (($row->title ?? '') ?: $this->businessName($execution) . '#' . $entityId),
             'module_key' => $this->moduleType,
             'panel_key' => $this->executionPanelKey($execution),
         ], $this->executionEntityType($execution), $entityId);
@@ -1239,7 +1241,7 @@ class PracticeService
 
     private function notifyExecutionReopened(string $execution, int $entityId, object $row, string $opinion): void
     {
-        $this->notifyTemplateAccounts($this->studentAccountIds((int) ($row->student_id ?? 0)), 'workflow_reopen_todo', [
+        $this->notifyTemplateAccounts($this->studentAccountIds((int) ($row->student_id ?? 0)), $this->workflowTemplateCode($execution, 'reopen'), [
             'module_name' => $this->businessName($execution),
             'reviewer_name' => $this->currentAccountName(),
             'entity_title' => (string) (($row->title ?? '') ?: $this->businessName($execution) . '#' . $entityId),
@@ -1267,6 +1269,31 @@ class PracticeService
             ], CurrentContext::accountId() ?: 0, $this->currentAccountName());
         } catch (Throwable) {
         }
+    }
+
+    private function workflowTemplateCode(string $key, string $action): string
+    {
+        $business = [
+            'plan' => 'plan',
+            'syllabus' => 'syllabus',
+            'lessonPlan' => 'lesson_plan',
+            'reflection' => 'reflection',
+            'journal' => 'journal',
+            'report' => 'report',
+        ][$key] ?? '';
+        $suffix = [
+            'submit' => 'submit_todo',
+            'review' => 'review_result',
+            'reopen' => 'reopen_todo',
+        ][$action] ?? '';
+
+        return $business !== '' && $suffix !== ''
+            ? "{$this->moduleType}_{$business}_{$suffix}"
+            : match ($action) {
+                'review' => 'workflow_review_result',
+                'reopen' => 'workflow_reopen_todo',
+                default => 'workflow_submit_todo',
+            };
     }
 
     private function teacherAccountIds(int $teacherId): array
