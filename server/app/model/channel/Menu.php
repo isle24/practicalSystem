@@ -8,8 +8,31 @@ class Menu extends BaseModel
     protected $primaryKey = 'id';
     protected $guarded = [];
 
+    private const DEFAULT_MODULES = [
+        1 => 'internship',
+        2 => 'training',
+        3 => 'lab',
+        4 => 'stat',
+        5 => 'log',
+        6 => 'config',
+        606 => 'userManage',
+        607 => 'gradeManage',
+        605 => 'departmentManage',
+        608 => 'professionManage',
+        609 => 'classManage',
+        610 => 'companyManage',
+        8 => 'file',
+        9 => 'doc',
+        10 => 'templateLib',
+        20 => 'exportTask',
+    ];
+
+    private static array $defaultModulesReady = [];
+
     public static function enabledItems(bool $visibleOnly = false): array
     {
+        self::ensureDefaultModules();
+
         $query = self::query()
             ->where('status', 'enabled')
             ->whereNull('deleted_at');
@@ -43,6 +66,8 @@ class Menu extends BaseModel
 
     public static function visibleItemsByRole(int $roleId, string $platform): array
     {
+        self::ensureDefaultModules();
+
         return self::query()
             ->join('role_menu', 'menu.id', '=', 'role_menu.menu_id')
             ->where('role_menu.role_id', $roleId)
@@ -123,5 +148,26 @@ class Menu extends BaseModel
         return self::query()
             ->where('id', $id)
             ->update(['status' => 'disabled', 'deleted_at' => $now, 'updated_at' => $now]);
+    }
+
+    public static function ensureDefaultModules(): void
+    {
+        $connection = (new static())->getConnection();
+        $key = method_exists($connection, 'getDatabaseName') ? (string) $connection->getDatabaseName() : spl_object_hash($connection);
+        if (isset(self::$defaultModulesReady[$key])) {
+            return;
+        }
+
+        foreach (self::DEFAULT_MODULES as $id => $moduleKey) {
+            self::query()
+                ->where('id', $id)
+                ->whereNull('deleted_at')
+                ->update([
+                    'is_module' => 'true',
+                    'module_key' => $moduleKey,
+                ]);
+        }
+
+        self::$defaultModulesReady[$key] = true;
     }
 }
