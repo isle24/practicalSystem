@@ -2981,7 +2981,7 @@
                         </el-select>
                       </template>
                     </el-table-column>
-                    <el-table-column label="企业" min-width="180">
+                    <el-table-column label="基地" min-width="180">
                       <template #default="{ row }">
                         <el-select v-model="row.company_id" clearable filterable placeholder="不限">
                           <el-option
@@ -3183,7 +3183,7 @@
                       </label>
                       <label :class="{ 'filter-active': hasFilterValue(statState.filters.keyword) }">
                         <span>关键词</span>
-                        <input v-model="statState.filters.keyword" placeholder="学生、学号、企业、教师">
+                        <input v-model="statState.filters.keyword" placeholder="学生、学号、基地、教师">
                       </label>
                       <div class="stat-filter-actions">
                         <el-button :icon="Search" :loading="statState.loading" @click="loadStats(1)">
