@@ -2536,7 +2536,7 @@ function seedConfig(PDO $pdo, string $wechatProxyUrl): void
 
     $items = [
         [1, 'login_background_url', '', 'PC 登录页学校背景图', 10],
-        [1, 'public_register_enabled', true, '临时公开注册入口开关，交付前关闭', 20],
+        [1, 'public_register_enabled', false, '临时公开注册入口开关，交付前关闭', 20],
         [2, 'sign_in_radius', 500, '学生 GPS 签到时允许的最大距离，单位米', 10],
         [2, 'pair_mode', 'admin_assign', '实习任务绑定模式', 20],
         [2, 'max_student_count', 20, '任务老师默认负责学生数上限', 30],
