@@ -44,6 +44,12 @@ class InternshipService
         'result' => 'base_result',
         'expense' => 'base_expense',
     ];
+    private const BASE_FLOW_ENTITIES = [
+        'base_application' => 'application',
+        'base_usage' => 'usage',
+        'base_result' => 'result',
+        'base_expense' => 'expense',
+    ];
     private const REVIEW_OPINION_RULES = [
         'arrangement_change' => [
             'accept' => ['min' => 0, 'max' => 300],
@@ -76,6 +82,22 @@ class InternshipService
             'refuse' => ['min' => 5, 'max' => 500],
             'modify' => ['min' => 5, 'max' => 500],
         ],
+        'base_application' => [
+            'accept' => ['min' => 0, 'max' => 300],
+            'modify' => ['min' => 5, 'max' => 500],
+        ],
+        'base_usage' => [
+            'accept' => ['min' => 0, 'max' => 300],
+            'modify' => ['min' => 5, 'max' => 500],
+        ],
+        'base_result' => [
+            'accept' => ['min' => 0, 'max' => 300],
+            'modify' => ['min' => 5, 'max' => 500],
+        ],
+        'base_expense' => [
+            'accept' => ['min' => 0, 'max' => 300],
+            'modify' => ['min' => 5, 'max' => 500],
+        ],
     ];
     private const REVIEW_ENTITY_CONFIG = [
         'application' => ['table' => 'application', 'recording' => 'application_recording'],
@@ -93,8 +115,12 @@ class InternshipService
         'implementation_sheet' => ['table' => 'implementation_sheet', 'recording' => 'implementation_sheet_recording'],
         'teacher_work_report' => ['table' => 'teacher_work_report', 'recording' => 'teacher_work_report_recording'],
         'inspection' => ['table' => 'inspection_record', 'recording' => 'inspection_recording'],
+        'base_application' => ['table' => 'base_application', 'recording' => 'base_application_recording'],
+        'base_usage' => ['table' => 'base_usage', 'recording' => 'base_usage_recording'],
+        'base_result' => ['table' => 'base_result', 'recording' => 'base_result_recording'],
+        'base_expense' => ['table' => 'base_expense', 'recording' => 'base_expense_recording'],
     ];
-    private const REQUEST_MODIFICATION_ENTITIES = ['application', 'journal', 'report', 'plan', 'delay'];
+    private const REQUEST_MODIFICATION_ENTITIES = ['application', 'journal', 'report', 'plan', 'delay', 'base_application', 'base_usage', 'base_result', 'base_expense'];
     private const DELAY_CONFIG_KEYS = ['report_deadline', 'journal_deadline'];
     private const EXCEL_EXTENSIONS = ['xls', 'xlsx'];
     private const EXCEL_MAX_SIZE = 10485760;
@@ -204,6 +230,13 @@ class InternshipService
         $this->requireAdminRole();
         $type = $this->baseFlowType($request);
         $table = self::BASE_FLOW_TABLES[$type];
+        $existingId = $this->inputRowId($request, $table);
+        if ($existingId > 0) {
+            $fromStatus = InternshipRecord::statusById($table, $existingId);
+            if (!in_array($fromStatus, ['draft', 'modify'], true)) {
+                throw new InvalidArgumentException('数据已变更，请刷新后重试', 409);
+            }
+        }
         $baseId = $this->requiredInt($request, 'base_id');
         $base = $this->row('base', $baseId);
         $depId = $this->optionalInt($request, 'dep_id') ?? (int) ($base->dep_id ?? 0) ?: null;
@@ -217,7 +250,7 @@ class InternshipService
             'title' => $this->requiredString($request, 'title', 180),
             'content' => $this->nullableString($request, 'content', 10000),
             'submitter_id' => CurrentContext::accountId(),
-            'status' => $this->enum($request, 'status', ['draft', 'wait', 'accept', 'modify', 'enabled', 'disabled'], 'enabled'),
+            'status' => $this->enum($request, 'status', ['draft', 'wait'], 'draft'),
             'updated_at' => $this->now(),
             'deleted_at' => null,
         ];
@@ -234,7 +267,46 @@ class InternshipService
             $values['amount'] = $this->decimalInput($request, 'amount');
         }
 
-        return $this->saveRow($table, $request, $values);
+        $entity = array_search($type, self::BASE_FLOW_ENTITIES, true) ?: 'base_application';
+        return $this->saveWorkflowRow($table, $entity, $entity . '_recording', $request, $values, $this->workflowContent('保存' . $this->entityDisplayName($entity), $values, [
+            'title' => '标题',
+            'content' => '内容',
+            'status' => '状态',
+        ]));
+    }
+
+    public function reviewBaseFlow(Request $request): array
+    {
+        $this->requirePermission('internship:approve');
+        $entity = $this->baseFlowReviewEntity($request);
+        $config = self::REVIEW_ENTITY_CONFIG[$entity];
+        $id = $this->requiredRowId($request, $config['table']);
+        $status = $this->enum($request, 'status', ['accept', 'modify'], 'accept');
+        $opinion = $this->reviewOpinionInput($request, $entity, $status);
+        $this->ensureRecordingTable($config['recording']);
+
+        return $this->workflowLock('internship', $entity, $id, function () use ($entity, $config, $id, $status, $opinion): array {
+            return $this->connection()->transaction(function () use ($entity, $config, $id, $status, $opinion): array {
+                $row = InternshipRecord::lockActiveRowById($config['table'], $id);
+                if (!$row) {
+                    throw new RuntimeException('数据不存在');
+                }
+                $this->assertReviewEntityWritable($entity, $row);
+                if ((string) $row->status !== 'wait') {
+                    throw new InvalidArgumentException('数据已变更，请刷新后重试', 409);
+                }
+
+                InternshipRecord::updateById($config['table'], $id, [
+                    'status' => $status,
+                    'updated_at' => $this->now(),
+                ]);
+                $this->recordWorkflow($config['recording'], $entity, $id, 'review', 'wait', $status, $opinion ?: '审核处理', $status);
+                InternshipRecord::clearReviewOpinionDraft($entity, $id, $this->accountId(), $this->now());
+                $this->notifyWorkflowReviewed($entity, $id, $this->reviewEntitySubmitterAccountId($entity, $row), $this->entityDisplayName($entity), $status, $opinion ?: '审核处理');
+
+                return ['id' => $id, 'status' => $status];
+            });
+        });
     }
 
     public function mentors(Request $request): array
@@ -3272,8 +3344,31 @@ class InternshipService
         return self::BASE_FLOW_TABLES[$this->baseFlowType($request)];
     }
 
+    private function baseFlowReviewEntity(Request $request): string
+    {
+        $entity = (string) $request->input('entity', '');
+        if (isset(self::BASE_FLOW_ENTITIES[$entity])) {
+            return $entity;
+        }
+
+        $type = $this->baseFlowType($request);
+        $entity = array_search($type, self::BASE_FLOW_ENTITIES, true);
+        if (!$entity) {
+            throw new InvalidArgumentException('entity 无效');
+        }
+
+        return (string) $entity;
+    }
+
     private function assertReviewEntityVisible(string $entity, object $row): void
     {
+        if (isset(self::BASE_FLOW_ENTITIES[$entity])) {
+            $table = self::REVIEW_ENTITY_CONFIG[$entity]['table'] ?? '';
+            if (!$table || !InternshipRecord::baseFlowVisible($table, $this->scopeContext(), (int) $row->id)) {
+                throw new RuntimeException('无数据访问权限', 40301);
+            }
+            return;
+        }
         if ($entity === 'application') {
             $this->assertApplicationVisible((int) $row->id);
             return;

@@ -530,6 +530,10 @@ export function saveInternshipBaseFlow(payload) {
   return internshipPost('save-base-flow', payload);
 }
 
+export function reviewInternshipBaseFlow(payload) {
+  return internshipPost('review-base-flow', payload);
+}
+
 export function fetchInternshipMentors(params = {}) {
   return internshipList('mentors', params);
 }

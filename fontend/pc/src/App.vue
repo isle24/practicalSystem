@@ -604,17 +604,6 @@
                           <span>内容</span>
                           <textarea v-model="internshipState.baseFlowForm.content" rows="7" />
                         </label>
-                        <label>
-                          <span>状态</span>
-                          <el-select v-model="internshipState.baseFlowForm.status">
-                            <el-option label="草稿" value="draft" />
-                            <el-option label="待审核" value="wait" />
-                            <el-option label="已通过" value="accept" />
-                            <el-option label="需修改" value="modify" />
-                            <el-option label="启用" value="enabled" />
-                            <el-option label="停用" value="disabled" />
-                          </el-select>
-                        </label>
                       </div>
 
                       <div v-else-if="internshipState.dialog.type === 'arrangementDetail'" class="operation-form single">
@@ -762,6 +751,10 @@
                           <el-button :disabled="internshipState.loading" :loading="internshipState.loading" @click="submitInternshipPlan('draft')">保存草稿</el-button>
                           <el-button type="primary" :disabled="internshipState.loading" :loading="internshipState.loading" @click="submitInternshipPlan('wait')">提交审核</el-button>
                         </template>
+                        <template v-else-if="internshipState.dialog.type === 'baseFlow'">
+                          <el-button :disabled="internshipState.loading" :loading="internshipState.loading" @click="submitBaseFlow('draft')">保存草稿</el-button>
+                          <el-button type="primary" :disabled="internshipState.loading" :loading="internshipState.loading" @click="submitBaseFlow('wait')">提交审核</el-button>
+                        </template>
                         <template v-else-if="internshipState.dialog.type === 'review'">
                           <el-button :disabled="internshipState.loading" :loading="internshipState.loading" @click="saveInternshipDialogReviewDraft">保存草稿</el-button>
                           <el-button type="primary" :disabled="internshipState.loading" :loading="internshipState.loading" @click="confirmInternshipDialog">提交审核</el-button>
@@ -883,8 +876,20 @@
                       @search="loadInternshipPanel('baseFlows', 1)"
                     >
                       <template #actions="{ row }">
-                        <el-button v-if="canManageInternship" link type="primary" @click="openBaseFlowDialog(row)">
+                        <el-button v-if="canManageInternship && ['draft', 'modify'].includes(row.status)" link type="primary" @click="openBaseFlowDialog(row)">
                           编辑
+                        </el-button>
+                        <el-button v-if="canReviewRow(row, baseFlowEntity(row))" link type="primary" @click="openReviewDialog(baseFlowEntity(row), row, 'accept')">
+                          通过
+                        </el-button>
+                        <el-button v-if="canReviewRow(row, baseFlowEntity(row))" link type="warning" @click="openReviewDialog(baseFlowEntity(row), row, 'modify')">
+                          退回
+                        </el-button>
+                        <el-button v-if="canRequestModification(row, baseFlowEntity(row))" link type="danger" @click="openReopenDialog(baseFlowEntity(row), row)">
+                          通过后修改
+                        </el-button>
+                        <el-button size="small" type="primary" plain @click="openTimelineDialog(baseFlowEntity(row), row)">
+                          记录
                         </el-button>
                       </template>
                     </DataListPanel>
@@ -3563,6 +3568,7 @@ import {
   passkeyLogin,
   fetchRegisterOptions,
   registerAccount,
+  reviewInternshipBaseFlow,
   reviewInternshipApplication,
   reviewInternshipArrangementChange,
   reviewInternshipDelay,
@@ -3759,7 +3765,7 @@ const messageState = reactive({
   },
   templatePagination: {
     page: 1,
-    page_size: 20,
+    page_size: 100,
     total: 0,
   },
   templateManager: {
@@ -4374,6 +4380,22 @@ const defaultInternshipReviewRules = {
   delay: {
     accept: { min: 0, max: 300 },
     refuse: { min: 5, max: 500 },
+    modify: { min: 5, max: 500 },
+  },
+  base_application: {
+    accept: { min: 0, max: 300 },
+    modify: { min: 5, max: 500 },
+  },
+  base_usage: {
+    accept: { min: 0, max: 300 },
+    modify: { min: 5, max: 500 },
+  },
+  base_result: {
+    accept: { min: 0, max: 300 },
+    modify: { min: 5, max: 500 },
+  },
+  base_expense: {
+    accept: { min: 0, max: 300 },
     modify: { min: 5, max: 500 },
   },
 };
@@ -5685,7 +5707,8 @@ async function openMessageSendDialog() {
   messageState.message = '';
   messageState.sendDialog.visible = true;
   messageState.sendDialog.form = emptyMessageSendForm();
-  if (!messageState.templates.length) {
+  if (!enabledMessageTemplates.value.length) {
+    Object.assign(messageState.templateFilters, { type: 'all', status: 'enabled', keyword: '' });
     await loadMessageTemplates(1);
   }
   if (!messageState.targetOptions.length) {
@@ -5852,8 +5875,10 @@ async function openMessageTemplateManager() {
     return;
   }
   messageState.templateManager.visible = true;
+  Object.assign(messageState.templateFilters, { type: 'all', status: 'all', keyword: '' });
+  messageState.templatePagination.page = 1;
   await syncDefaultMessageTemplates(false);
-  await loadMessageTemplates(messageState.templatePagination.page || 1);
+  await loadMessageTemplates(1);
 }
 
 function closeMessageTemplateManager() {
@@ -5870,13 +5895,29 @@ async function loadMessageTemplates(page = messageState.templatePagination.page 
   messageState.templateLoading = true;
   messageState.message = '';
   try {
-    const data = await fetchMessageTemplates({
+    let data = await fetchMessageTemplates({
       page,
       page_size: messageState.templatePagination.page_size,
       type: messageState.templateFilters.type,
       status: messageState.templateFilters.status,
       keyword: messageState.templateFilters.keyword,
     });
+    const shouldAutoSync = page === 1
+      && canManageMessageTemplates.value
+      && (data.items || []).length === 0
+      && messageState.templateFilters.type === 'all'
+      && messageState.templateFilters.status === 'all'
+      && !String(messageState.templateFilters.keyword || '').trim();
+    if (shouldAutoSync) {
+      await syncDefaultMessageTemplates(false);
+      data = await fetchMessageTemplates({
+        page,
+        page_size: messageState.templatePagination.page_size,
+        type: messageState.templateFilters.type,
+        status: messageState.templateFilters.status,
+        keyword: messageState.templateFilters.keyword,
+      });
+    }
     messageState.templates = data.items || [];
     messageState.templatePagination = {
       ...messageState.templatePagination,
@@ -8952,7 +8993,7 @@ function emptyBaseFlowForm(row = {}) {
     usage_type: row.usage_type || '',
     result_type: row.result_type || '',
     amount: row.amount || '',
-    status: row.status || 'enabled',
+    status: row.status || 'draft',
   };
 }
 
@@ -10763,6 +10804,29 @@ function baseFlowTypeText(value) {
   return baseFlowTypes.find(item => item.value === value)?.label || value || '基地流程';
 }
 
+function baseFlowEntity(row = {}) {
+  return {
+    application: 'base_application',
+    usage: 'base_usage',
+    result: 'base_result',
+    expense: 'base_expense',
+  }[row.flow_type || row.type || internshipState.filters.baseFlows.type] || 'base_application';
+}
+
+function isBaseFlowEntity(entity) {
+  return ['base_application', 'base_usage', 'base_result', 'base_expense'].includes(entity);
+}
+
+function internshipReviewPanel(entity) {
+  if (entity === 'application') {
+    return 'applications';
+  }
+  if (isBaseFlowEntity(entity)) {
+    return 'baseFlows';
+  }
+  return `${entity}s`;
+}
+
 function baseFlowDetailText(row) {
   if (row.base_type) {
     return row.base_type === 'fixed' ? '固定基地' : '实习点';
@@ -11218,7 +11282,7 @@ function openReopenDialog(entity, row) {
     ...emptyOperationDialog(),
     type: 'reopen',
     title: `通过后修改${reviewEntityName(entity)}`,
-    description: `此操作会新增审核记录，并将「${row.title || row.arrangement_title || row.student_name || row.id}」改为待学生重新提交的修改状态。`,
+    description: `此操作会新增审核记录，并将「${row.title || row.arrangement_title || row.student_name || row.id}」改为待提交人重新修改的状态。`,
     entity,
     status: 'modify',
     row,
@@ -11344,6 +11408,10 @@ async function confirmInternshipDialog() {
       await reviewDelay(internshipState.dialog.row, internshipState.dialog.status, internshipState.dialog.reason);
       return;
     }
+    if (isBaseFlowEntity(internshipState.dialog.entity)) {
+      await reviewBaseFlow(internshipState.dialog.row, internshipState.dialog.status, internshipState.dialog.reason);
+      return;
+    }
     await reviewStudentWork(internshipState.dialog.entity, internshipState.dialog.row, internshipState.dialog.status, internshipState.dialog.reason);
   }
   if (internshipState.dialog.type === 'reopen') {
@@ -11411,6 +11479,10 @@ function reviewEntityName(entity) {
     implementation_sheet: '实施表',
     teacher_work_report: '教师工作报告',
     inspection: '巡查记录',
+    base_application: '基地申报',
+    base_usage: '基地使用',
+    base_result: '基地成果',
+    base_expense: '基地费用',
   };
   return names[entity] || '审核事项';
 }
@@ -11627,7 +11699,7 @@ function canRequestModification(row, entity) {
   if (!row || row.status !== 'accept') {
     return false;
   }
-  if (!['application', 'journal', 'report', 'plan', 'delay'].includes(entity)) {
+  if (!['application', 'journal', 'report', 'plan', 'delay', 'base_application', 'base_usage', 'base_result', 'base_expense'].includes(entity)) {
     return false;
   }
   if (entity === 'plan') {
@@ -11770,6 +11842,14 @@ async function loadInternshipPanel(panel = 'overview', page = 1) {
   }
 }
 
+async function submitBaseFlow(status) {
+  if (internshipState.loading) {
+    return;
+  }
+  internshipState.baseFlowForm.status = status;
+  await saveBaseFlow();
+}
+
 async function saveBaseFlow() {
   if (!canManageInternship.value) {
     return;
@@ -11783,6 +11863,7 @@ async function saveBaseFlow() {
   try {
     await saveInternshipBaseFlow({
       ...internshipState.baseFlowForm,
+      status: ['draft', 'wait'].includes(internshipState.baseFlowForm.status) ? internshipState.baseFlowForm.status : 'draft',
       amount: numericOrNull(internshipState.baseFlowForm.amount),
     });
     internshipState.filters.baseFlows.type = internshipState.baseFlowForm.type;
@@ -12062,6 +12143,30 @@ async function reviewDelay(row, status, opinion = '') {
   }
 }
 
+async function reviewBaseFlow(row, status, opinion = '') {
+  if (internshipState.loading) {
+    return;
+  }
+  const entity = baseFlowEntity(row);
+  internshipState.loading = true;
+  internshipState.message = '';
+  try {
+    await reviewInternshipBaseFlow({
+      entity,
+      type: row.flow_type || internshipState.filters.baseFlows.type || 'application',
+      id: row.id,
+      status,
+      opinion: opinion || (status === 'accept' ? '同意' : '请修改后重新提交'),
+    });
+    closeInternshipDialog();
+    await loadInternshipPanel('baseFlows');
+  } catch (error) {
+    internshipState.message = error.message;
+  } finally {
+    internshipState.loading = false;
+  }
+}
+
 async function reviewStudentWork(type, row, status, opinion = '') {
   if (internshipState.loading) {
     return;
@@ -12103,8 +12208,7 @@ async function requestModification() {
       opinion: internshipState.dialog.reason,
     });
     closeInternshipDialog();
-    const panel = entity === 'application' ? 'applications' : `${entity}s`;
-    await loadInternshipPanel(panel);
+    await loadInternshipPanel(internshipReviewPanel(entity));
   } catch (error) {
     internshipState.message = error.message;
   } finally {

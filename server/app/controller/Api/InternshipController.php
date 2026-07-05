@@ -69,6 +69,15 @@ class InternshipController
     }
 
     /**
+     * 审核基地流程记录
+     */
+    #[OperationLog('审核基地流程记录')]
+    public function reviewBaseFlow(Request $request): Response
+    {
+        return $this->handle(fn (): array => $this->service()->reviewBaseFlow($request));
+    }
+
+    /**
      * 查询企业导师
      */
     #[OperationLog('查询企业导师')]
@@ -591,6 +600,10 @@ class InternshipController
             'implementation_sheet' => '实施计划表',
             'teacher_work_report' => '教师工作报告',
             'inspection' => '实习巡查记录',
+            'base_application' => '基地申报',
+            'base_usage' => '基地使用',
+            'base_result' => '基地成果',
+            'base_expense' => '基地费用',
             default => '实习流程',
         };
     }
