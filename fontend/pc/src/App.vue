@@ -7279,6 +7279,7 @@ async function refreshAuthenticatedSession(resetWorkspace = false) {
     resetProfileState();
     resetMessageState();
     resetInternshipState();
+    resetFavoriteState();
     openWindows.splice(0);
     focusedWindowId.value = null;
   }
@@ -7286,6 +7287,7 @@ async function refreshAuthenticatedSession(resetWorkspace = false) {
   await load();
   await loadProfile();
   await loadDesktopShortcuts();
+  await loadFavorites(1);
   await loadProxy();
   await loadMessageSummary();
   await loadSwitchableAccounts();
@@ -13031,11 +13033,12 @@ watch(() => permissionState.context.account_id, (accountId) => {
     loadMessageSummary();
     loadSwitchableAccounts();
     loadDesktopShortcuts();
+    loadFavorites(1);
   } else {
     resetMessageState();
     switchAccountState.items = [];
     desktopLauncherState.items = [];
-    favoriteState.items = [];
+    resetFavoriteState();
   }
 });
 
@@ -13078,6 +13081,7 @@ onMounted(async () => {
   await load();
   await loadProfile();
   await loadDesktopShortcuts();
+  await loadFavorites(1);
   await loadProxy();
   await loadMessageSummary();
   await loadSwitchableAccounts();
