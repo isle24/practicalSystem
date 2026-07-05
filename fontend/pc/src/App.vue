@@ -12724,7 +12724,7 @@ function safeCssUrl(value) {
 }
 
 async function loadProxy() {
-  if (!isLoggedIn.value) {
+  if (!isLoggedIn.value || !hasPermission('wechat:proxy')) {
     return;
   }
 
