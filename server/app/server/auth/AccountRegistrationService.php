@@ -65,11 +65,13 @@ class AccountRegistrationService
 
         $name = $this->requiredText($payload, 'name', '姓名', 80);
         $password = $this->text($payload, 'password', 120);
+        $initialPassword = null;
         if ($allowedRoleTypes && !$accountId && $password === '') {
             throw new InvalidArgumentException('密码不能为空');
         }
         if (!$allowedRoleTypes && !$accountId && $password === '') {
-            $password = 'admin123456';
+            $password = $this->randomInitialPassword();
+            $initialPassword = $password;
         }
         if ($password !== '' && strlen($password) < 6) {
             throw new InvalidArgumentException('密码至少 6 位');
@@ -80,7 +82,7 @@ class AccountRegistrationService
             : 'enabled';
         $now = date('Y-m-d H:i:s');
 
-        return Account::connection()->transaction(function () use ($accountId, $loginName, $name, $now, $password, $payload, $roleId, $roleType, $status): array {
+        return Account::connection()->transaction(function () use ($accountId, $initialPassword, $loginName, $name, $now, $password, $payload, $roleId, $roleType, $status): array {
             $userValues = [
                 'name' => $name,
                 'mobile' => $this->nullableText($payload, 'mobile', 40),
@@ -118,13 +120,23 @@ class AccountRegistrationService
                 Account::saveRoleProfile($roleType, $userId, $name, $status, $this->profileValues($payload, $roleType), $now);
             }
 
-            return [
+            $result = [
                 'id' => $accountId,
                 'user_id' => $userId,
                 'role_id' => $roleId,
                 'role_type' => $roleType,
             ];
+            if ($initialPassword !== null) {
+                $result['initial_password'] = $initialPassword;
+            }
+
+            return $result;
         });
+    }
+
+    private function randomInitialPassword(): string
+    {
+        return 'Ps' . bin2hex(random_bytes(5)) . random_int(10, 99);
     }
 
     private function publicEnabled(): bool

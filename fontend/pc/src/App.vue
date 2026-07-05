@@ -7577,12 +7577,17 @@ async function saveUserConfig() {
   userAdminState.loading = true;
   userAdminState.message = '';
   try {
-    await saveAdminAccount({
+    const data = await saveAdminAccount({
       ...userAdminState.editing,
       id: userAdminState.editing.id || null,
       role_id: Number(userAdminState.editing.role_id || 0),
     });
-    userAdminState.message = '已保存';
+    if (data?.initial_password) {
+      await copyText(data.initial_password);
+      userAdminState.message = `已保存，初始密码已复制：${data.initial_password}`;
+    } else {
+      userAdminState.message = '已保存';
+    }
     userAdminState.dialogVisible = false;
     userAdminState.loading = false;
     await Promise.all([

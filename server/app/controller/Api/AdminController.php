@@ -354,9 +354,9 @@ class AdminController
                 return $this->fail(40001, '不能停用当前登录账号', 400);
             }
 
-            (new AccountRegistrationService())->adminSave($this->accountPayload($request), $accountId);
+            $result = (new AccountRegistrationService())->adminSave($this->accountPayload($request), $accountId);
 
-            return $this->ok([], '已保存');
+            return $this->ok($result, '已保存');
         } catch (Throwable $exception) {
             return $this->fail(40001, $exception->getMessage(), 400);
         }
