@@ -958,12 +958,6 @@ class InternshipService
         if ($this->isStudent() && $signType === 'gps' && ($longitude === null || $latitude === null)) {
             throw new InvalidArgumentException('GPS 定位坐标不能为空', 42201);
         }
-        if ($existingId) {
-            $row = $this->row('sign_in', $existingId);
-            if ((int) $row->student_id !== $studentId || (int) $row->entity_id !== $arrangementId) {
-                throw new RuntimeException('无数据访问权限', 40301);
-            }
-        }
 
         $values = [
             'student_id' => $studentId,
@@ -981,10 +975,34 @@ class InternshipService
             'deleted_at' => null,
         ];
 
-        $result = $this->saveRow('sign_in', $request, $values);
-        $this->recordWorkflow('sign_in_recording', 'sign_in', (int) $result['id'], 'submit', $fromStatus, 'accept', $this->signInWorkflowContent($values), 'accept');
+        return $this->signInLock($studentId, $arrangementId, $signDate, function () use ($arrangementId, $existingId, $fromStatus, $request, $signDate, $studentId, $values): array {
+            $duplicatedId = InternshipRecord::activeIdByFields('sign_in', [
+                'student_id' => $studentId,
+                'entity_type' => 'internship',
+                'entity_id' => $arrangementId,
+                'date' => $signDate,
+            ]);
+            if ($existingId) {
+                $row = $this->row('sign_in', $existingId);
+                if ((int) $row->student_id !== $studentId || (int) $row->entity_id !== $arrangementId) {
+                    throw new RuntimeException('无数据访问权限', 40301);
+                }
+                if ($duplicatedId > 0 && $duplicatedId !== $existingId) {
+                    throw new InvalidArgumentException('当天已签到，请勿重复提交', 409);
+                }
+            } elseif ($duplicatedId > 0) {
+                return [
+                    'id' => $duplicatedId,
+                    'uuid' => InternshipRecord::uuidById('sign_in', $duplicatedId),
+                    'duplicated' => true,
+                ];
+            }
 
-        return $result;
+            $result = $this->saveRow('sign_in', $request, $values);
+            $this->recordWorkflow('sign_in_recording', 'sign_in', (int) $result['id'], 'submit', $fromStatus, 'accept', $this->signInWorkflowContent($values), 'accept');
+
+            return $result;
+        });
     }
 
     public function journals(Request $request): array
@@ -4200,6 +4218,24 @@ class InternshipService
     private function workflowLock(string $module, string $entity, int $id, callable $callback): mixed
     {
         return (new WorkflowLock())->run(WorkflowLock::key($module, $entity, $id), $callback);
+    }
+
+    /**
+     * 锁定学生单日签到
+     */
+    private function signInLock(int $studentId, int $arrangementId, string $date, callable $callback): mixed
+    {
+        $key = implode(':', [
+            'workflow_lock',
+            CurrentContext::schoolDatabaseId() ?: 'school',
+            'internship',
+            'sign_in',
+            $studentId,
+            $arrangementId,
+            preg_replace('/\D+/', '', $date) ?: date('Ymd'),
+        ]);
+
+        return (new WorkflowLock())->run($key, $callback);
     }
 
     private function ensureRecordingTable(string $table): void
