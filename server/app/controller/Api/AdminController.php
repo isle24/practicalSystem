@@ -415,7 +415,10 @@ class AdminController
         try {
             $accountId = $this->requiredInt($request, 'id');
             $this->assertAccountRoleWritable($accountId, '');
-            $password = $this->nullableString($request, 'password', 120) ?? 'admin123456';
+            $password = $this->nullableString($request, 'password', 120);
+            if ($password === null) {
+                return $this->fail(40001, '请输入新密码', 400);
+            }
             if (strlen($password) < 6) {
                 return $this->fail(40001, '密码至少 6 位', 400);
             }
