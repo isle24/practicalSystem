@@ -915,6 +915,10 @@ class TableRecord extends BaseModel
         $result['operation_logs'] = self::clearOperationLogRows($now);
 
         foreach (self::testDataTables() as $table) {
+            if (!self::tableExists($table)) {
+                $result[$table] = 0;
+                continue;
+            }
             $result[$table] = self::queryTable($table)->delete();
         }
 
@@ -1080,6 +1084,19 @@ class TableRecord extends BaseModel
         return $affected;
     }
 
+    private static function tableExists(string $table): bool
+    {
+        $database = CurrentContext::schoolDatabase();
+        if ($database === '') {
+            return false;
+        }
+
+        return (int) self::queryTable('information_schema.tables')
+            ->where('TABLE_SCHEMA', $database)
+            ->where('TABLE_NAME', $table)
+            ->count() > 0;
+    }
+
     private static function testDataTables(): array
     {
         return [
@@ -1100,6 +1117,7 @@ class TableRecord extends BaseModel
             'report_recording',
             'report',
             'review_opinion',
+            'review_opinion_draft',
             'apply_report_delay_recording',
             'apply_report_delay',
             'score_recording',
@@ -1120,9 +1138,13 @@ class TableRecord extends BaseModel
             'teacher_work_report',
             'inspection_recording',
             'inspection_record',
+            'base_application_recording',
             'base_application',
+            'base_usage_recording',
             'base_usage',
+            'base_result_recording',
             'base_result',
+            'base_expense_recording',
             'base_expense',
             'practice_project_student',
             'practice_recording',
