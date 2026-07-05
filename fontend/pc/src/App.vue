@@ -1465,12 +1465,6 @@
                             inactive-text="停用"
                           />
                         </label>
-                        <label v-else-if="!practiceDialogUsesWorkflowButtons(win.module.id)">
-                          <span>状态</span>
-                          <el-select v-model="practiceModuleState(win.module.id).form.status">
-                            <el-option v-for="option in practiceEditStatusOptions(win.panel)" :key="option.value" :label="option.label" :value="option.value" />
-                          </el-select>
-                        </label>
                       </div>
 
                       <div v-else-if="['review', 'reopen'].includes(practiceModuleState(win.module.id).dialog.type)" class="operation-form single">
@@ -9397,35 +9391,8 @@ function practiceOverviewCards(module) {
   ];
 }
 
-function practiceEditStatusOptions(panel) {
-  if (practiceReviewEntity(panel)) {
-    return [
-      { value: 'draft', label: '草稿' },
-      { value: 'wait', label: '提交审核' },
-    ];
-  }
-  if (panel === 'scores') {
-    return [
-      { value: 'accept', label: '已确认' },
-      { value: 'wait', label: '提交审核' },
-      { value: 'draft', label: '草稿' },
-    ];
-  }
-  if (panel === 'projects') {
-    return [
-      { value: 'enabled', label: '启用' },
-      { value: 'completed', label: '已完成' },
-      { value: 'disabled', label: '停用' },
-    ];
-  }
-  return [
-    { value: 'enabled', label: '启用' },
-    { value: 'disabled', label: '停用' },
-  ];
-}
-
 function practiceStatusUsesSwitch(panel) {
-  return ['schedules', 'gradeRules', 'rooms'].includes(panel);
+  return ['schedules', 'projects', 'gradeRules', 'rooms'].includes(panel);
 }
 
 function practiceDefaultStatus(panel) {
