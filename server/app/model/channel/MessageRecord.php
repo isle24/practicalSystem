@@ -337,6 +337,8 @@ class MessageRecord extends TableRecord
 
     private static function ensureDefaultTemplatesWithPdo(PDO $pdo): void
     {
+        self::ensureDefaultTemplatePdoSchema($pdo);
+
         $stmt = $pdo->prepare(
             "INSERT IGNORE INTO `message_template` (
                 `uuid`, `name`, `code`, `title_tpl`, `content_tpl`, `type`, `level`,
@@ -380,6 +382,72 @@ class MessageRecord extends TableRecord
                 $now,
                 $now,
             ]);
+        }
+    }
+
+    private static function ensureDefaultTemplatePdoSchema(PDO $pdo): void
+    {
+        $pdo->exec("CREATE TABLE IF NOT EXISTS `message_template` (
+            `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            `uuid` CHAR(36) DEFAULT NULL,
+            `name` VARCHAR(180) DEFAULT NULL,
+            `code` VARCHAR(120) DEFAULT NULL,
+            `status` VARCHAR(40) DEFAULT 'enabled',
+            `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+            `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            `deleted_at` DATETIME DEFAULT NULL,
+            `title_tpl` VARCHAR(255) DEFAULT NULL,
+            `content_tpl` TEXT DEFAULT NULL,
+            `type` VARCHAR(40) DEFAULT 'system',
+            `level` VARCHAR(40) DEFAULT 'normal',
+            `description` VARCHAR(500) DEFAULT NULL,
+            `variables` JSON DEFAULT NULL,
+            `link_url_tpl` VARCHAR(500) DEFAULT NULL,
+            `channels` JSON DEFAULT NULL,
+            `is_system` TINYINT(1) DEFAULT 0,
+            `sort` INT DEFAULT 100,
+            PRIMARY KEY (`id`),
+            UNIQUE KEY `uk_uuid` (`uuid`),
+            UNIQUE KEY `uk_code` (`code`),
+            KEY `idx_status` (`status`),
+            KEY `idx_type_status` (`type`, `status`, `sort`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        $columns = [
+            'title_tpl' => "ALTER TABLE `message_template` ADD COLUMN `title_tpl` VARCHAR(255) DEFAULT NULL AFTER `code`",
+            'content_tpl' => "ALTER TABLE `message_template` ADD COLUMN `content_tpl` TEXT DEFAULT NULL AFTER `title_tpl`",
+            'type' => "ALTER TABLE `message_template` ADD COLUMN `type` VARCHAR(40) DEFAULT 'system' AFTER `content_tpl`",
+            'level' => "ALTER TABLE `message_template` ADD COLUMN `level` VARCHAR(40) DEFAULT 'normal' AFTER `type`",
+            'description' => "ALTER TABLE `message_template` ADD COLUMN `description` VARCHAR(500) DEFAULT NULL AFTER `level`",
+            'variables' => "ALTER TABLE `message_template` ADD COLUMN `variables` JSON DEFAULT NULL AFTER `description`",
+            'link_url_tpl' => "ALTER TABLE `message_template` ADD COLUMN `link_url_tpl` VARCHAR(500) DEFAULT NULL AFTER `variables`",
+            'channels' => "ALTER TABLE `message_template` ADD COLUMN `channels` JSON DEFAULT NULL AFTER `link_url_tpl`",
+            'is_system' => "ALTER TABLE `message_template` ADD COLUMN `is_system` TINYINT(1) DEFAULT 0 AFTER `channels`",
+            'sort' => "ALTER TABLE `message_template` ADD COLUMN `sort` INT DEFAULT 100 AFTER `is_system`",
+        ];
+        foreach ($columns as $column => $ddl) {
+            self::ensurePdoColumnExists($pdo, 'message_template', $column, $ddl);
+        }
+
+        self::ensurePdoIndexExists($pdo, 'message_template', 'uk_code', "ALTER TABLE `message_template` ADD UNIQUE KEY `uk_code` (`code`)");
+        self::ensurePdoIndexExists($pdo, 'message_template', 'idx_type_status', "ALTER TABLE `message_template` ADD KEY `idx_type_status` (`type`, `status`, `sort`)");
+    }
+
+    private static function ensurePdoColumnExists(PDO $pdo, string $table, string $column, string $ddl): void
+    {
+        $stmt = $pdo->prepare('SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?');
+        $stmt->execute([$table, $column]);
+        if ((int) $stmt->fetchColumn() === 0) {
+            $pdo->exec($ddl);
+        }
+    }
+
+    private static function ensurePdoIndexExists(PDO $pdo, string $table, string $index, string $ddl): void
+    {
+        $stmt = $pdo->prepare('SELECT COUNT(*) FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND INDEX_NAME = ?');
+        $stmt->execute([$table, $index]);
+        if ((int) $stmt->fetchColumn() === 0) {
+            $pdo->exec($ddl);
         }
     }
 
@@ -859,6 +927,16 @@ class MessageRecord extends TableRecord
             ['seq' => 110, 'prefix' => 'internship_journal', 'name' => '实习日志', 'panel' => '#panel=internship:journals'],
             ['seq' => 113, 'prefix' => 'internship_report', 'name' => '实习报告', 'panel' => '#panel=internship:reports'],
             ['seq' => 116, 'prefix' => 'internship_delay', 'name' => '延期申请', 'panel' => '#panel=internship:delays'],
+            ['seq' => 119, 'prefix' => 'internship_insurance', 'name' => '保险记录', 'panel' => '#panel=internship:insurances'],
+            ['seq' => 122, 'prefix' => 'internship_safety_letter', 'name' => '安全承诺', 'panel' => '#panel=internship:safetyLetters'],
+            ['seq' => 125, 'prefix' => 'internship_syllabus_guide', 'name' => '实习大纲指导书', 'panel' => '#panel=internship:syllabusGuides'],
+            ['seq' => 128, 'prefix' => 'internship_implementation_sheet', 'name' => '教学实习实施表', 'panel' => '#panel=internship:implementationSheets'],
+            ['seq' => 131, 'prefix' => 'internship_teacher_work_report', 'name' => '指导教师工作报告', 'panel' => '#panel=internship:teacherWorkReports'],
+            ['seq' => 134, 'prefix' => 'internship_inspection', 'name' => '实习巡查记录', 'panel' => '#panel=internship:inspections'],
+            ['seq' => 137, 'prefix' => 'internship_base_application', 'name' => '基地申报', 'panel' => '#panel=internship:baseFlows'],
+            ['seq' => 140, 'prefix' => 'internship_base_usage', 'name' => '基地使用', 'panel' => '#panel=internship:baseFlows'],
+            ['seq' => 143, 'prefix' => 'internship_base_result', 'name' => '基地成果', 'panel' => '#panel=internship:baseFlows'],
+            ['seq' => 146, 'prefix' => 'internship_base_expense', 'name' => '基地费用', 'panel' => '#panel=internship:baseFlows'],
             ['seq' => 201, 'prefix' => 'training_plan', 'name' => '实训教学计划', 'panel' => '#panel=training:plans'],
             ['seq' => 204, 'prefix' => 'training_syllabus', 'name' => '实训大纲', 'panel' => '#panel=training:syllabus'],
             ['seq' => 207, 'prefix' => 'training_lesson_plan', 'name' => '实训教案', 'panel' => '#panel=training:lessonPlans'],

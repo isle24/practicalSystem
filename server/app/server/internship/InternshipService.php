@@ -2514,6 +2514,7 @@ class InternshipService
         $result = $this->saveRow($table, $request, $values, $unique);
         $toStatus = (string) ($values['status'] ?? 'enabled');
         $this->recordWorkflow($recordingTable, $entity, (int) $result['id'], $existingId ? 'change' : 'submit', $fromStatus, $toStatus, $content, $toStatus);
+        $this->notifyWorkflowSubmittedOnWait($entity, (int) $result['id'], $values, (string) $fromStatus, $toStatus);
 
         return $result;
     }
@@ -2601,6 +2602,57 @@ class InternshipService
             'date_text' => $dateText !== '' ? $dateText : '待确认',
             'location' => $location !== '' ? $location : '待确认',
         ], 'arrangement', $arrangementId, 0);
+    }
+
+    private function notifyWorkflowSubmittedOnWait(string $entity, int $entityId, array $values, string $fromStatus, string $toStatus): void
+    {
+        if ($toStatus !== 'wait' || $fromStatus === 'wait') {
+            return;
+        }
+
+        $accountIds = $this->workflowSubmitReceiverAccountIds($entity, $values);
+        $moduleName = $this->entityDisplayName($entity);
+        $this->notifyTemplateAccounts($accountIds, $this->workflowTemplateCode($entity, 'submit'), [
+            'module_name' => $moduleName,
+            'submitter_name' => $this->currentAccountName(),
+            'entity_title' => $this->workflowEntityTitle($entity, $entityId, $values),
+            'module_key' => 'internship',
+            'panel_key' => $this->entityPanelKey($entity),
+        ], $entity, $entityId, CurrentContext::accountId() ?: 0);
+    }
+
+    private function workflowSubmitReceiverAccountIds(string $entity, array $values): array
+    {
+        $accountIds = [];
+        $studentId = (int) ($values['student_id'] ?? 0);
+        $arrangementId = (int) ($values['arrangement_id'] ?? $values['entity_id'] ?? 0);
+        if ($studentId > 0 && $arrangementId > 0) {
+            foreach (InternshipRecord::activePairTeacherIds($studentId, $arrangementId) as $teacherId) {
+                $accountIds[] = InternshipRecord::teacherAccountId((int) $teacherId);
+            }
+        }
+
+        if (!$accountIds || in_array($entity, ['plan', 'syllabus_guide', 'implementation_sheet', 'teacher_work_report', 'inspection'], true)) {
+            $accountIds = array_merge(
+                $accountIds,
+                Account::messageTargetIds(['role_type' => 'school_admin']),
+                Account::messageTargetIds(['role_type' => 'college_admin'])
+            );
+        }
+
+        return array_values(array_unique(array_filter(array_map('intval', $accountIds), static fn (int $id): bool => $id > 0)));
+    }
+
+    private function workflowEntityTitle(string $entity, int $entityId, array $values): string
+    {
+        foreach (['title', 'course_name', 'reason', 'summary', 'remark'] as $key) {
+            $value = trim((string) ($values[$key] ?? ''));
+            if ($value !== '') {
+                return mb_substr($value, 0, 120);
+            }
+        }
+
+        return $this->entityDisplayName($entity) . '#' . $entityId;
     }
 
     private function notifyWorkflowSubmitted(string $entity, int $entityId, int $submitterAccountId, array $teacherIds, string $moduleName, string $entityTitle): void
@@ -2699,6 +2751,16 @@ class InternshipService
             'report' => 'internship_report',
             'delay' => 'internship_delay',
             'plan' => 'internship_plan',
+            'insurance' => 'internship_insurance',
+            'safety_letter' => 'internship_safety_letter',
+            'syllabus_guide' => 'internship_syllabus_guide',
+            'implementation_sheet' => 'internship_implementation_sheet',
+            'teacher_work_report' => 'internship_teacher_work_report',
+            'inspection' => 'internship_inspection',
+            'base_application' => 'internship_base_application',
+            'base_usage' => 'internship_base_usage',
+            'base_result' => 'internship_base_result',
+            'base_expense' => 'internship_base_expense',
         ];
         $suffix = [
             'submit' => 'submit_todo',
@@ -2735,6 +2797,16 @@ class InternshipService
             'report' => '实习报告',
             'delay' => '延期申请',
             'plan' => '实习计划',
+            'insurance' => '保险记录',
+            'safety_letter' => '安全承诺',
+            'syllabus_guide' => '实习大纲指导书',
+            'implementation_sheet' => '教学实习实施表',
+            'teacher_work_report' => '指导教师工作报告',
+            'inspection' => '实习巡查记录',
+            'base_application' => '基地申报',
+            'base_usage' => '基地使用',
+            'base_result' => '基地成果',
+            'base_expense' => '基地费用',
         ][$entity] ?? $entity;
     }
 
@@ -2746,6 +2818,16 @@ class InternshipService
             'report' => 'reports',
             'delay' => 'delays',
             'plan' => 'plans',
+            'insurance' => 'insurances',
+            'safety_letter' => 'safetyLetters',
+            'syllabus_guide' => 'syllabusGuides',
+            'implementation_sheet' => 'implementationSheets',
+            'teacher_work_report' => 'teacherWorkReports',
+            'inspection' => 'inspections',
+            'base_application' => 'baseFlows',
+            'base_usage' => 'baseFlows',
+            'base_result' => 'baseFlows',
+            'base_expense' => 'baseFlows',
         ][$entity] ?? 'overview';
     }
 
