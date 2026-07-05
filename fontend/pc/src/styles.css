@@ -3729,6 +3729,18 @@ a {
   grid-template-rows: auto auto auto minmax(0, 1fr) auto;
 }
 
+.template-library-hint {
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  border: 1px solid #dbeafe;
+  border-radius: 8px;
+  color: #1d4ed8;
+  background: #eff6ff;
+  font-size: 13px;
+}
+
 .template-library-tabs {
   min-height: 36px;
   display: inline-flex;
@@ -3784,6 +3796,33 @@ a {
   gap: 8px;
   align-items: center;
   min-width: 0;
+}
+
+.template-empty-state {
+  min-height: 180px;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 10px;
+  padding: 28px 18px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.template-empty-state strong {
+  color: var(--text);
+  font-size: 15px;
+}
+
+.template-empty-state span {
+  max-width: 520px;
+  line-height: 1.7;
+}
+
+.template-empty-state > div {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .favorite-panel {

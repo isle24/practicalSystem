@@ -2575,6 +2575,20 @@
                       </div>
                       <div class="message-template-table">
                         <el-table :data="messageState.templates" height="100%" stripe v-loading="messageState.templateLoading">
+                          <template #empty>
+                            <div class="template-empty-state">
+                              <strong>暂无流程消息模板</strong>
+                              <span>流程提交、审核结果和通过后修改会使用模板生成待办和消息。</span>
+                              <el-button
+                                type="primary"
+                                :icon="RefreshCw"
+                                :loading="messageState.templateSyncing"
+                                @click="syncDefaultMessageTemplates"
+                              >
+                                同步默认流程模板
+                              </el-button>
+                            </div>
+                          </template>
                           <el-table-column prop="name" label="模板名称" min-width="150" />
                           <el-table-column prop="code" label="模板编码" min-width="180" />
                           <el-table-column label="类型" width="100">

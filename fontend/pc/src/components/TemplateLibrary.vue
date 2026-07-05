@@ -13,6 +13,14 @@
         材料模板
       </button>
     </div>
+    <div class="template-library-hint">
+      <span v-if="activeTab === 'message'">
+        流程审核的待办、审核结果和通过后修改消息从这里读取模板，超级管理员维护后全校流程自动使用。
+      </span>
+      <span v-else>
+        材料模板用于上传 Word、PDF 等文件；流程审核消息模板请切换到“流程消息模板”维护。
+      </span>
+    </div>
 
     <div v-if="activeTab === 'file'" class="support-toolbar">
       <el-select v-model="filters.category_id" clearable filterable placeholder="全部分类" @change="loadTemplates(1)">
@@ -40,6 +48,18 @@
 
     <section v-if="activeTab === 'file'" class="support-table">
       <el-table :data="templates" height="100%" stripe v-loading="loading">
+        <template #empty>
+          <div class="template-empty-state">
+            <strong>暂无材料模板文件</strong>
+            <span>材料模板需要上传文件后显示；流程审核的待办和消息请在“流程消息模板”中维护。</span>
+            <div>
+              <el-button v-if="canViewMessageTemplates" type="primary" @click="setActiveTab('message')">
+                查看流程消息模板
+              </el-button>
+              <el-button v-if="canManage" @click="openTemplateDialog()">上传材料模板</el-button>
+            </div>
+          </div>
+        </template>
         <el-table-column label="模板" min-width="260">
           <template #default="{ row }">
             <div class="template-cell">
@@ -114,6 +134,20 @@
       </div>
 
       <el-table :data="messageTemplates" height="100%" stripe v-loading="messageLoading">
+        <template #empty>
+          <div class="template-empty-state">
+            <strong>暂无流程消息模板</strong>
+            <span>流程提交、审核结果和通过后修改会使用消息模板生成待办和消息。</span>
+            <el-button
+              v-if="canManageMessageTemplates"
+              type="primary"
+              :loading="messageSyncing"
+              @click="syncDefaultMessageTemplates"
+            >
+              同步默认流程模板
+            </el-button>
+          </div>
+        </template>
         <el-table-column prop="name" label="模板名称" min-width="170" />
         <el-table-column prop="code" label="模板编码" min-width="210" show-overflow-tooltip />
         <el-table-column label="类型" width="100">
