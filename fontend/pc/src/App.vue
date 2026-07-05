@@ -1731,7 +1731,7 @@
                         </label>
                         <label>
                           <span>{{ userAdminState.editing.id ? '新密码' : '初始密码' }}</span>
-                          <input v-model="userAdminState.editing.password" type="password" :placeholder="userAdminState.editing.id ? '留空表示不修改' : '默认 admin123456'">
+                          <input v-model="userAdminState.editing.password" type="password" :placeholder="userAdminState.editing.id ? '留空表示不修改' : '留空使用系统初始密码'">
                         </label>
                       </div>
                       <footer>
@@ -1750,7 +1750,7 @@
                       </header>
                       <div class="operation-form menu-dialog-form">
                         <label><span>用户</span><input :value="userAdminState.passwordForm.name" disabled></label>
-                        <label><span>新密码</span><input v-model="userAdminState.passwordForm.password" type="password"></label>
+                        <label><span>新密码</span><input v-model="userAdminState.passwordForm.password" type="password" placeholder="请输入新密码" maxlength="120"></label>
                       </div>
                       <footer>
                         <el-button @click="closeResetPasswordDialog">取消</el-button>
@@ -3895,7 +3895,7 @@ const userAdminState = reactive({
   passwordForm: {
     id: null,
     name: '',
-    password: 'admin123456',
+    password: '',
   },
   detailDialogVisible: false,
   detailMode: 'logs',
@@ -7630,7 +7630,7 @@ function openResetPasswordDialog(row) {
   userAdminState.passwordForm = {
     id: row.id,
     name: `${row.name || '-'} / ${row.login_name || '-'}`,
-    password: 'admin123456',
+    password: '',
   };
   userAdminState.message = '';
   userAdminState.passwordDialogVisible = true;
@@ -7642,6 +7642,10 @@ function closeResetPasswordDialog() {
 
 async function resetUserPassword() {
   if (!userAdminState.passwordForm.id || userAdminState.loading) {
+    return;
+  }
+  if (!String(userAdminState.passwordForm.password || '').trim()) {
+    userAdminState.message = '请输入新密码';
     return;
   }
 
@@ -12296,7 +12300,7 @@ function resetAdminState() {
   userAdminState.passwordForm = {
     id: null,
     name: '',
-    password: 'admin123456',
+    password: '',
   };
   userAdminState.detailDialogVisible = false;
   userAdminState.detailMode = 'logs';
