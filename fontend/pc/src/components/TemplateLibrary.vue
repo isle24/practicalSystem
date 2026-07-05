@@ -97,10 +97,13 @@
           </label>
           <label>
             <span>状态</span>
-            <el-select v-model="templateDialog.form.flag">
-              <el-option label="启用" value="on" />
-              <el-option label="停用" value="off" />
-            </el-select>
+            <el-switch
+              v-model="templateDialog.form.flag"
+              active-value="on"
+              inactive-value="off"
+              active-text="启用"
+              inactive-text="停用"
+            />
           </label>
           <label class="span-2">
             <span>说明</span>
@@ -144,10 +147,13 @@
           </label>
           <label>
             <span>状态</span>
-            <el-select v-model="categoryDialog.form.flag">
-              <el-option label="启用" value="on" />
-              <el-option label="停用" value="off" />
-            </el-select>
+            <el-switch
+              v-model="categoryDialog.form.flag"
+              active-value="on"
+              inactive-value="off"
+              active-text="启用"
+              inactive-text="停用"
+            />
           </label>
           <label class="span-2">
             <span>说明</span>

@@ -78,17 +78,23 @@
       </label>
       <label>
         <span>可见</span>
-        <el-select v-model="form.visible">
-          <el-option label="是" value="true" />
-          <el-option label="否" value="false" />
-        </el-select>
+        <el-switch
+          v-model="form.visible"
+          active-value="true"
+          inactive-value="false"
+          active-text="是"
+          inactive-text="否"
+        />
       </label>
       <label>
         <span>状态</span>
-        <el-select v-model="form.status">
-          <el-option label="启用" value="enabled" />
-          <el-option label="禁用" value="disabled" />
-        </el-select>
+        <el-switch
+          v-model="form.status"
+          active-value="enabled"
+          inactive-value="disabled"
+          active-text="启用"
+          inactive-text="禁用"
+        />
       </label>
       <small class="menu-module-hint">
         勾选作为模块后，该菜单会出现在启动台，可由用户添加到桌面；未上传图标时使用默认图标。

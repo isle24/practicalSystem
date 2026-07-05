@@ -1724,10 +1724,13 @@
                         <label v-if="userEditingRoleType === 'student'"><span>班号</span><input v-model="userAdminState.editing.class_num"></label>
                         <label>
                           <span>状态</span>
-                          <el-select v-model="userAdminState.editing.status">
-                            <el-option label="启用" value="enabled" />
-                            <el-option label="停用" value="disabled" />
-                          </el-select>
+                          <el-switch
+                            v-model="userAdminState.editing.status"
+                            active-value="enabled"
+                            inactive-value="disabled"
+                            active-text="启用"
+                            inactive-text="停用"
+                          />
                         </label>
                         <label>
                           <span>{{ userAdminState.editing.id ? '新密码' : '初始密码' }}</span>
