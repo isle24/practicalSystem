@@ -109,6 +109,12 @@ export function saveMessageTemplate(payload) {
   });
 }
 
+export function syncMessageTemplates() {
+  return request('/message/sync-templates', {
+    method: 'POST',
+  });
+}
+
 export function deleteMessageTemplate(id) {
   return request('/message/delete-template', {
     method: 'POST',

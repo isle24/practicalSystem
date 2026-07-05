@@ -45,6 +45,11 @@ class MessageService
         return MessageRecord::templatePage($filters);
     }
 
+    public function syncDefaultTemplates(): array
+    {
+        return MessageRecord::syncDefaultTemplates();
+    }
+
     public function saveTemplate(array $payload): array
     {
         $code = $this->templateCode($payload['code'] ?? '');

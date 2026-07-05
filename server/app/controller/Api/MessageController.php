@@ -131,6 +131,23 @@ class MessageController
     }
 
     /**
+     * 同步默认消息模板
+     */
+    #[OperationLog('同步默认消息模板')]
+    public function syncTemplates(Request $request): Response
+    {
+        if (!in_array(CurrentContext::roleType(), self::TEMPLATE_ROLES, true)) {
+            return $this->fail(40300, '无操作权限', 403);
+        }
+
+        try {
+            return $this->ok((new MessageService())->syncDefaultTemplates(), '默认模板已同步');
+        } catch (Throwable $exception) {
+            return $this->fail($this->statusCode($exception), $exception->getMessage(), $this->httpStatus($exception));
+        }
+    }
+
+    /**
      * 删除消息模板
      */
     #[OperationLog('删除消息模板')]

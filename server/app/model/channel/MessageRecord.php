@@ -282,6 +282,24 @@ class MessageRecord extends TableRecord
         self::ensureDefaultTemplates(self::connection(), $force);
     }
 
+    public static function syncDefaultTemplates(): array
+    {
+        self::ensureSchema();
+        self::seedDefaultTemplates(true);
+
+        $total = (int) self::queryTable('message_template')->whereNull('deleted_at')->count();
+        $systemTotal = (int) self::queryTable('message_template')
+            ->where('is_system', 1)
+            ->whereNull('deleted_at')
+            ->count();
+
+        return [
+            'total' => $total,
+            'system_total' => $systemTotal,
+            'default_total' => count(self::defaultTemplates()),
+        ];
+    }
+
     public static function ensureDefaultTemplates(mixed $connection, bool $force = false): void
     {
         static $seeded = [];

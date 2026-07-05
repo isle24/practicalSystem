@@ -2546,6 +2546,9 @@
                         </el-select>
                         <el-input v-model="messageState.templateFilters.keyword" clearable placeholder="搜索名称、编码、内容" @keyup.enter="loadMessageTemplates(1)" />
                         <el-button :icon="Search" :loading="messageState.templateLoading" @click="loadMessageTemplates(1)">查询</el-button>
+                        <el-button :icon="RefreshCw" :loading="messageState.templateSyncing" @click="syncDefaultMessageTemplates">
+                          同步默认流程模板
+                        </el-button>
                         <el-button type="primary" :icon="Plus" @click="openMessageTemplateEdit()">新增</el-button>
                       </div>
                       <div class="message-template-table">
@@ -3587,6 +3590,7 @@ import {
   saveMenu as saveMenuApi,
   saveMessageTemplate,
   sendMessage,
+  syncMessageTemplates,
   saveOrganizationScopes,
   saveOperationGuide,
   saveProfileSettings,
@@ -3735,6 +3739,7 @@ const messageState = reactive({
   loading: false,
   targetLoading: false,
   templateLoading: false,
+  templateSyncing: false,
   message: '',
   filters: {
     type: 'all',
@@ -5844,6 +5849,7 @@ async function openMessageTemplateManager() {
     return;
   }
   messageState.templateManager.visible = true;
+  await syncDefaultMessageTemplates(false);
   await loadMessageTemplates(messageState.templatePagination.page || 1);
 }
 
@@ -5877,6 +5883,25 @@ async function loadMessageTemplates(page = messageState.templatePagination.page 
     messageState.message = error.message;
   } finally {
     messageState.templateLoading = false;
+  }
+}
+
+async function syncDefaultMessageTemplates(showMessage = true) {
+  if (!canManageMessageTemplates.value || messageState.templateSyncing) {
+    return;
+  }
+  messageState.templateSyncing = true;
+  messageState.message = '';
+  try {
+    const data = await syncMessageTemplates();
+    if (showMessage) {
+      await loadMessageTemplates(1);
+      messageState.message = `已同步默认流程模板，当前系统模板 ${data.system_total || 0} 个`;
+    }
+  } catch (error) {
+    messageState.message = error.message;
+  } finally {
+    messageState.templateSyncing = false;
   }
 }
 
