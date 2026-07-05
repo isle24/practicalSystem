@@ -4053,7 +4053,7 @@ const modules = [
     name: '模板库',
     icon: FileText,
     color: 'teal',
-    scope: '材料模板 / 下载',
+    scope: '流程消息模板 / 材料模板',
     viewPermission: 'template:view',
     managePermission: 'template:manage',
     defaultPanel: 'templateList',
@@ -5958,7 +5958,7 @@ async function loadMessageTemplates(page = messageState.templatePagination.page 
       && canManageMessageTemplates.value
       && (data.items || []).length === 0
       && messageState.templateFilters.type === 'all'
-      && messageState.templateFilters.status === 'all'
+      && ['all', 'enabled'].includes(messageState.templateFilters.status)
       && !String(messageState.templateFilters.keyword || '').trim();
     if (shouldAutoSync) {
       await syncDefaultMessageTemplates(false);

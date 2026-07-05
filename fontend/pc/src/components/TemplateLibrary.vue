@@ -534,7 +534,7 @@ async function loadMessageTemplates(page = 1) {
       && props.canManageMessageTemplates
       && (data.items || []).length === 0
       && messageFilters.type === 'all'
-      && messageFilters.status === 'all'
+      && ['all', 'enabled'].includes(messageFilters.status)
       && !String(messageFilters.keyword || '').trim();
     if (shouldAutoSync) {
       await syncMessageTemplates();
