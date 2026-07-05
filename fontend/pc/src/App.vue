@@ -3306,9 +3306,13 @@
                       <label><span>回调 Token</span><input v-model="wechatProxy.token"></label>
                       <label><span>EncodingAESKey</span><input v-model="wechatProxy.encoding_aes_key"></label>
                       <label><span>代理地址</span><input v-model="wechatProxy.proxy_url" placeholder="http://127.0.0.1:9000/wechat-proxy"></label>
-                      <label class="check-row">
-                        <input v-model="wechatProxy.proxy_enabled" type="checkbox">
-                        <span>启用企业微信代理</span>
+                      <label>
+                        <span>启用代理</span>
+                        <el-switch
+                          v-model="wechatProxy.proxy_enabled"
+                          active-text="启用"
+                          inactive-text="停用"
+                        />
                       </label>
                     </section>
                     <section class="wechat-menu-editor">
