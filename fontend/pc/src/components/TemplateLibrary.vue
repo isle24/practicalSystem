@@ -15,7 +15,7 @@
     </div>
     <div class="template-library-hint">
       <span v-if="activeTab === 'message'">
-        流程审核的待办、审核结果和通过后修改消息从这里读取模板；默认模板会写入学校业务库，超级管理员按需调整。
+        流程提交、审核结果、通过后修改都会按这里的模板发送待办和消息；默认模板自动写入学校业务库，超级管理员只需要按需调整内容。
       </span>
       <span v-else>
         材料模板用于上传 Word、PDF 等文件；流程审核待办和消息请切换到“流程待办/消息模板”维护。
@@ -137,7 +137,7 @@
         <template #empty>
           <div class="template-empty-state">
             <strong>暂无流程待办/消息模板</strong>
-            <span>流程提交、审核结果和通过后修改都会按模板写入消息和待办；可先同步默认模板再调整。</span>
+            <span>{{ canManageMessageTemplates ? '未读取到默认流程模板，可同步后再调整。' : '未读取到默认流程模板，请联系超级管理员同步。' }}</span>
             <el-button
               v-if="canManageMessageTemplates"
               type="primary"

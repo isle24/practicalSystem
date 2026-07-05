@@ -974,6 +974,9 @@
                       @search="loadInternshipPanel('plans', 1)"
                     >
                       <template #actions="{ row }">
+                        <el-button v-if="canEditInternshipPlan(row)" link type="primary" @click="openPlanDialog(row)">
+                          {{ row.status === 'modify' ? '重新提交' : '编辑' }}
+                        </el-button>
                         <el-button v-if="canReviewRow(row, 'plan')" link type="primary" @click="openReviewDialog('plan', row, 'accept')">
                           通过
                         </el-button>
@@ -2591,7 +2594,7 @@
                           <template #empty>
                             <div class="template-empty-state">
                               <strong>暂无流程待办/消息模板</strong>
-                              <span>流程提交、审核结果和通过后修改都会按模板写入消息和待办。</span>
+                              <span>{{ canManageMessageTemplates ? '默认模板会写入学校业务库，可同步后调整。' : '未读取到默认模板，请联系超级管理员同步。' }}</span>
                               <el-button
                                 v-if="canManageMessageTemplates"
                                 type="primary"
@@ -4663,8 +4666,8 @@ const visibleWindows = computed(() => openWindows.filter(win => !win.minimized))
 const canManageConfig = computed(() => hasPermission('config:manage') && ['super_admin', 'school_admin'].includes(permissionState.context.role_type));
 const canViewUserAdmin = computed(() => ['super_admin', 'school_admin', 'college_admin', 'profession_admin'].includes(permissionState.context.role_type));
 const canSendMessages = computed(() => ['super_admin', 'school_admin'].includes(currentRoleType.value));
-const canManageMessageTemplates = computed(() => currentRoleType.value === 'super_admin' && hasPermission('template:manage'));
-const canViewMessageTemplates = computed(() => canManageMessageTemplates.value || hasPermission('template:view') || hasPermission('template:manage'));
+const canManageMessageTemplates = computed(() => currentRoleType.value === 'super_admin');
+const canViewMessageTemplates = computed(() => ['super_admin', 'school_admin'].includes(currentRoleType.value) || hasPermission('template:view') || hasPermission('template:manage'));
 const canManageInternship = computed(() => hasPermission('internship:manage'));
 const canSaveInternshipScore = computed(() => hasPermission('internship:score') || canManageInternship.value);
 const canManageInternshipPlan = computed(() => hasPermission('internship:plan') && isAdminRole.value);
@@ -11267,20 +11270,40 @@ async function openArrangementDetail(row) {
   }
 }
 
-function openPlanDialog() {
-  const defaults = defaultScopedFilters();
-  const defaultProfession = internshipState.options.professions.find(item => Number(item.profession_id) === Number(defaults.profession_id || 0)) || null;
-  internshipState.planForm = {
-    ...emptyPlanForm(),
-    grade_id: defaultProfession?.grade_id || defaults.grade_id || currentGradeId(internshipState.options) || null,
-    dep_id: defaultProfession?.dep_id || defaults.dep_id || internshipState.options.departments[0]?.dep_id || null,
-    profession_id: defaultProfession?.profession_id || defaults.profession_id || null,
-  };
+function openPlanDialog(row = null) {
+  if (row) {
+    const content = typeof row.plan_content === 'object' && row.plan_content !== null ? row.plan_content : {};
+    internshipState.planForm = {
+      ...emptyPlanForm(),
+      id: row.id || null,
+      source_type: row.source_type || 'edu_system',
+      course_code: row.course_code || '',
+      course_name: row.course_name || '',
+      grade_id: row.grade_id || null,
+      semester: row.semester || '',
+      dep_id: row.dep_id || null,
+      profession_id: row.profession_id || null,
+      credit: row.credit ?? '',
+      score_rule: row.score_rule || 'average',
+      content: content.content || content.summary || '',
+      status: row.status || 'draft',
+    };
+  } else {
+    const defaults = defaultScopedFilters();
+    const defaultProfession = internshipState.options.professions.find(item => Number(item.profession_id) === Number(defaults.profession_id || 0)) || null;
+    internshipState.planForm = {
+      ...emptyPlanForm(),
+      grade_id: defaultProfession?.grade_id || defaults.grade_id || currentGradeId(internshipState.options) || null,
+      dep_id: defaultProfession?.dep_id || defaults.dep_id || internshipState.options.departments[0]?.dep_id || null,
+      profession_id: defaultProfession?.profession_id || defaults.profession_id || null,
+    };
+  }
   normalizePlanCascade();
   internshipState.dialog = {
     ...emptyOperationDialog(),
     type: 'plan',
-    title: '新增实习计划',
+    title: row ? '编辑实习计划' : '新增实习计划',
+    row,
   };
 }
 
@@ -11772,6 +11795,10 @@ function canReviewRow(row, entity) {
     return false;
   }
   return canApproveInternship.value;
+}
+
+function canEditInternshipPlan(row) {
+  return canManageInternshipPlan.value && ['draft', 'modify'].includes(String(row?.status || ''));
 }
 
 function canReviewPlanLevel(row) {
