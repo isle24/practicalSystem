@@ -2549,7 +2549,7 @@
                   <div v-if="messageState.templateManager.visible" class="operation-mask" @click.self="closeMessageTemplateManager">
                     <section class="operation-dialog message-template-dialog">
                       <header>
-                        <strong>消息模板管理</strong>
+                        <strong>流程待办/消息模板管理</strong>
                         <button type="button" @click="closeMessageTemplateManager">关闭</button>
                       </header>
                       <div class="message-template-toolbar">
@@ -2577,8 +2577,8 @@
                         <el-table :data="messageState.templates" height="100%" stripe v-loading="messageState.templateLoading">
                           <template #empty>
                             <div class="template-empty-state">
-                              <strong>暂无流程消息模板</strong>
-                              <span>流程提交、审核结果和通过后修改会使用模板生成待办和消息。</span>
+                              <strong>暂无流程待办/消息模板</strong>
+                              <span>流程提交、审核结果和通过后修改都会按模板写入消息和待办。</span>
                               <el-button
                                 type="primary"
                                 :icon="RefreshCw"

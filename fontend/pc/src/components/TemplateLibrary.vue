@@ -7,7 +7,7 @@
         :class="{ active: activeTab === 'message' }"
         @click="setActiveTab('message')"
       >
-        流程消息模板
+        流程待办/消息模板
       </button>
       <button type="button" :class="{ active: activeTab === 'file' }" @click="setActiveTab('file')">
         材料模板
@@ -15,10 +15,10 @@
     </div>
     <div class="template-library-hint">
       <span v-if="activeTab === 'message'">
-        流程审核的待办、审核结果和通过后修改消息从这里读取模板，超级管理员维护后全校流程自动使用。
+        流程审核的待办、审核结果和通过后修改消息从这里读取模板；默认模板会写入数据库，超级管理员只需要按需调整。
       </span>
       <span v-else>
-        材料模板用于上传 Word、PDF 等文件；流程审核消息模板请切换到“流程消息模板”维护。
+        材料模板用于上传 Word、PDF 等文件；流程审核待办和消息请切换到“流程待办/消息模板”维护。
       </span>
     </div>
 
@@ -51,10 +51,10 @@
         <template #empty>
           <div class="template-empty-state">
             <strong>暂无材料模板文件</strong>
-            <span>材料模板需要上传文件后显示；流程审核的待办和消息请在“流程消息模板”中维护。</span>
+            <span>这里仅显示 Word、PDF 等材料文件；流程审核的待办和消息模板在“流程待办/消息模板”中维护。</span>
             <div>
               <el-button v-if="canViewMessageTemplates" type="primary" @click="setActiveTab('message')">
-                查看流程消息模板
+                查看流程待办/消息模板
               </el-button>
               <el-button v-if="canManage" @click="openTemplateDialog()">上传材料模板</el-button>
             </div>
@@ -136,8 +136,8 @@
       <el-table :data="messageTemplates" height="100%" stripe v-loading="messageLoading">
         <template #empty>
           <div class="template-empty-state">
-            <strong>暂无流程消息模板</strong>
-            <span>流程提交、审核结果和通过后修改会使用消息模板生成待办和消息。</span>
+            <strong>暂无流程待办/消息模板</strong>
+            <span>流程提交、审核结果和通过后修改都会按模板写入消息和待办；可先同步默认模板再调整。</span>
             <el-button
               v-if="canManageMessageTemplates"
               type="primary"
@@ -497,13 +497,29 @@ async function loadMessageTemplates(page = 1) {
   messageLoading.value = true;
   message.value = '';
   try {
-    const data = await fetchMessageTemplates({
+    let data = await fetchMessageTemplates({
       page,
       page_size: messagePagination.page_size,
       type: messageFilters.type,
       status: messageFilters.status,
       keyword: messageFilters.keyword,
     });
+    const shouldAutoSync = page === 1
+      && props.canManageMessageTemplates
+      && (data.items || []).length === 0
+      && messageFilters.type === 'all'
+      && messageFilters.status === 'all'
+      && !String(messageFilters.keyword || '').trim();
+    if (shouldAutoSync) {
+      await syncMessageTemplates();
+      data = await fetchMessageTemplates({
+        page,
+        page_size: messagePagination.page_size,
+        type: messageFilters.type,
+        status: messageFilters.status,
+        keyword: messageFilters.keyword,
+      });
+    }
     messageTemplates.value = data.items || [];
     Object.assign(messagePagination, data.pagination || {});
   } catch (error) {
