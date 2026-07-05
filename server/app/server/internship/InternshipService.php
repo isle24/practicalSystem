@@ -2582,13 +2582,24 @@ class InternshipService
         if (!$existingId && $unique) {
             $existingId = InternshipRecord::activeIdByFields($table, $unique);
         }
-        $fromStatus = $existingId ? InternshipRecord::statusById($table, $existingId) : 'draft';
-        $result = $this->saveRow($table, $request, $values, $unique);
-        $toStatus = (string) ($values['status'] ?? 'enabled');
-        $this->recordWorkflow($recordingTable, $entity, (int) $result['id'], $existingId ? 'change' : 'submit', $fromStatus, $toStatus, $content, $toStatus);
-        $this->notifyWorkflowSubmittedOnWait($entity, (int) $result['id'], $values, (string) $fromStatus, $toStatus);
 
-        return $result;
+        $save = function () use ($content, $entity, $existingId, $recordingTable, $request, $table, $unique, $values): array {
+            $fromStatus = $existingId ? InternshipRecord::statusById($table, $existingId) : 'draft';
+            if ($existingId && in_array((string) $fromStatus, ['wait', 'accept'], true)) {
+                throw new InvalidArgumentException('数据已变更，请刷新后重试', 409);
+            }
+
+            $result = $this->saveRow($table, $request, $values, $unique);
+            $toStatus = (string) ($values['status'] ?? 'enabled');
+            $this->recordWorkflow($recordingTable, $entity, (int) $result['id'], $existingId ? 'change' : 'submit', $fromStatus, $toStatus, $content, $toStatus);
+            $this->notifyWorkflowSubmittedOnWait($entity, (int) $result['id'], $values, (string) $fromStatus, $toStatus);
+
+            return $result;
+        };
+
+        return $existingId
+            ? $this->workflowLock('internship', $entity, $existingId, $save)
+            : $save();
     }
 
     private function notifyArrangementChangeReviewed(object $change, object $arrangement, string $status, ?string $opinion, ?int $newArrangementId): void
