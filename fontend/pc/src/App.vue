@@ -2593,8 +2593,8 @@
                         <el-table :data="messageState.templates" height="100%" stripe v-loading="messageState.templateLoading">
                           <template #empty>
                             <div class="template-empty-state">
-                              <strong>暂无流程待办/消息模板</strong>
-                              <span>{{ canManageMessageTemplates ? '默认模板会写入学校业务库，可同步后调整。' : '未读取到默认模板，请联系管理员同步。' }}</span>
+                              <strong>{{ messageTemplateEmptyTitle }}</strong>
+                              <span>{{ messageTemplateEmptyText }}</span>
                               <el-button
                                 v-if="canManageMessageTemplates"
                                 type="primary"
@@ -3801,6 +3801,7 @@ const messageState = reactive({
   targetLoading: false,
   templateLoading: false,
   templateSyncing: false,
+  templateDefaultSynced: false,
   message: '',
   filters: {
     type: 'all',
@@ -4668,6 +4669,21 @@ const canViewUserAdmin = computed(() => ['super_admin', 'school_admin', 'college
 const canSendMessages = computed(() => ['super_admin', 'school_admin'].includes(currentRoleType.value));
 const canManageMessageTemplates = computed(() => ['super_admin', 'school_admin'].includes(currentRoleType.value) || hasPermission('template:manage'));
 const canViewMessageTemplates = computed(() => ['super_admin', 'school_admin'].includes(currentRoleType.value) || hasPermission('template:view') || hasPermission('template:manage'));
+const hasMessageTemplateFilters = computed(() => messageState.templateFilters.type !== 'all'
+  || messageState.templateFilters.status !== 'all'
+  || Boolean(String(messageState.templateFilters.keyword || '').trim()));
+const messageTemplateEmptyTitle = computed(() => (
+  hasMessageTemplateFilters.value ? '当前筛选无流程模板' : '暂无流程待办/消息模板'
+));
+const messageTemplateEmptyText = computed(() => {
+  if (hasMessageTemplateFilters.value) {
+    return '请调整类型、状态或关键词后重新查询。';
+  }
+
+  return canManageMessageTemplates.value
+    ? '默认流程模板会自动写入学校业务库，也可点击同步后再调整。'
+    : '未读取到默认流程模板，请联系管理员同步。';
+});
 const canManageInternship = computed(() => hasPermission('internship:manage'));
 const canSaveInternshipScore = computed(() => hasPermission('internship:score') || canManageInternship.value);
 const canManageInternshipPlan = computed(() => hasPermission('internship:plan') && isAdminRole.value);
@@ -5950,6 +5966,9 @@ async function loadMessageTemplates(page = messageState.templatePagination.page 
   messageState.templateLoading = true;
   messageState.message = '';
   try {
+    if (page === 1 && shouldSyncDefaultMessageTemplates()) {
+      await ensureDefaultMessageTemplates();
+    }
     let data = await fetchMessageTemplates({
       page,
       page_size: messageState.templatePagination.page_size,
@@ -5993,6 +6012,7 @@ async function syncDefaultMessageTemplates(showMessage = true) {
   messageState.message = '';
   try {
     const data = await syncMessageTemplates();
+    messageState.templateDefaultSynced = true;
     if (showMessage) {
       await loadMessageTemplates(1);
       messageState.message = `已同步默认流程模板，当前系统模板 ${data.system_total || 0} 个`;
@@ -6002,6 +6022,28 @@ async function syncDefaultMessageTemplates(showMessage = true) {
   } finally {
     messageState.templateSyncing = false;
   }
+}
+
+async function ensureDefaultMessageTemplates() {
+  if (!canManageMessageTemplates.value || messageState.templateDefaultSynced || messageState.templateSyncing) {
+    return;
+  }
+
+  messageState.templateSyncing = true;
+  try {
+    await syncMessageTemplates();
+    messageState.templateDefaultSynced = true;
+  } finally {
+    messageState.templateSyncing = false;
+  }
+}
+
+function shouldSyncDefaultMessageTemplates() {
+  return canManageMessageTemplates.value
+    && !messageState.templateDefaultSynced
+    && messageState.templateFilters.type === 'all'
+    && ['all', 'enabled'].includes(messageState.templateFilters.status)
+    && !String(messageState.templateFilters.keyword || '').trim();
 }
 
 function openMessageTemplateEdit(row = null) {

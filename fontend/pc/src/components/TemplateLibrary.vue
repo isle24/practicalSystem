@@ -136,8 +136,8 @@
       <el-table :data="messageTemplates" height="100%" stripe v-loading="messageLoading">
         <template #empty>
           <div class="template-empty-state">
-            <strong>暂无流程待办/消息模板</strong>
-            <span>{{ canManageMessageTemplates ? '未读取到默认流程模板，可同步后再调整。' : '未读取到默认流程模板，请联系管理员同步。' }}</span>
+            <strong>{{ messageTemplateEmptyTitle }}</strong>
+            <span>{{ messageTemplateEmptyText }}</span>
             <el-button
               v-if="canManageMessageTemplates"
               type="primary"
@@ -362,7 +362,7 @@
 </template>
 
 <script setup>
-import { onMounted, reactive, ref, watch } from 'vue';
+import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { FileText, Plus, RefreshCw, Save, Search, Upload } from '@lucide/vue';
 import {
   deleteTemplateItem,
@@ -398,6 +398,7 @@ const saving = ref(false);
 const messageLoading = ref(false);
 const messageSaving = ref(false);
 const messageSyncing = ref(false);
+const messageDefaultSynced = ref(false);
 const message = ref('');
 const categories = ref([]);
 const templates = ref([]);
@@ -428,6 +429,18 @@ const messagePagination = reactive({
   page: 1,
   page_size: 100,
   total: 0,
+});
+const messageTemplateEmptyTitle = computed(() => (
+  hasMessageTemplateFilters() ? '当前筛选无流程模板' : '暂无流程待办/消息模板'
+));
+const messageTemplateEmptyText = computed(() => {
+  if (hasMessageTemplateFilters()) {
+    return '请调整类型、状态或关键词后重新查询。';
+  }
+
+  return props.canManageMessageTemplates
+    ? '默认流程模板会自动写入学校业务库，也可点击同步后再调整。'
+    : '未读取到默认流程模板，请联系管理员同步。';
 });
 const templateDialog = reactive({
   visible: false,
@@ -523,6 +536,9 @@ async function loadMessageTemplates(page = 1) {
   messageLoading.value = true;
   message.value = '';
   try {
+    if (page === 1 && shouldSyncDefaultMessageTemplates()) {
+      await ensureDefaultMessageTemplates();
+    }
     let data = await fetchMessageTemplates({
       page,
       page_size: messagePagination.page_size,
@@ -564,6 +580,7 @@ async function syncDefaultMessageTemplates() {
   message.value = '';
   try {
     const data = await syncMessageTemplates();
+    messageDefaultSynced.value = true;
     await loadMessageTemplates(1);
     message.value = `已同步默认流程模板，当前系统模板 ${data.system_total || 0} 个`;
   } catch (error) {
@@ -571,6 +588,34 @@ async function syncDefaultMessageTemplates() {
   } finally {
     messageSyncing.value = false;
   }
+}
+
+async function ensureDefaultMessageTemplates() {
+  if (!props.canManageMessageTemplates || messageDefaultSynced.value || messageSyncing.value) {
+    return;
+  }
+
+  messageSyncing.value = true;
+  try {
+    await syncMessageTemplates();
+    messageDefaultSynced.value = true;
+  } finally {
+    messageSyncing.value = false;
+  }
+}
+
+function shouldSyncDefaultMessageTemplates() {
+  return props.canManageMessageTemplates
+    && !messageDefaultSynced.value
+    && messageFilters.type === 'all'
+    && ['all', 'enabled'].includes(messageFilters.status)
+    && !String(messageFilters.keyword || '').trim();
+}
+
+function hasMessageTemplateFilters() {
+  return messageFilters.type !== 'all'
+    || messageFilters.status !== 'all'
+    || Boolean(String(messageFilters.keyword || '').trim());
 }
 
 function setCategory(id) {
