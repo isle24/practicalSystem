@@ -1278,15 +1278,28 @@ class PracticeRecord extends TableRecord
             return;
         }
 
+        $matchedFields = [];
         foreach (['grade_id', 'dep_id', 'profession_id', 'class_id'] as $field) {
             $value = (int) ($student[$field] ?? 0);
             if ($value <= 0) {
                 continue;
             }
+            $matchedFields[$field] = $value;
             $query->where(function ($builder) use ($alias, $field, $value): void {
                 $builder->whereNull("{$alias}.{$field}")->orWhere("{$alias}.{$field}", $value);
             });
         }
+
+        if (!$matchedFields) {
+            $query->whereRaw('1 = 0');
+            return;
+        }
+
+        $query->where(function ($builder) use ($alias, $matchedFields): void {
+            foreach ($matchedFields as $field => $value) {
+                $builder->orWhere("{$alias}.{$field}", $value);
+            }
+        });
     }
 
     private static function applyOptionScope(mixed $query, array $scope, ?string $depColumn, ?string $professionColumn): mixed
