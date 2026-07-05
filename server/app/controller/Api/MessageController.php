@@ -15,7 +15,7 @@ class MessageController
     use Responds;
 
     private const ADMIN_ROLES = ['super_admin', 'school_admin'];
-    private const TEMPLATE_ROLES = ['super_admin', 'school_admin'];
+    private const TEMPLATE_ROLES = ['super_admin'];
 
     /**
      * 查询消息列表

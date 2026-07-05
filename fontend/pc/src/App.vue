@@ -4663,7 +4663,7 @@ const visibleWindows = computed(() => openWindows.filter(win => !win.minimized))
 const canManageConfig = computed(() => hasPermission('config:manage') && ['super_admin', 'school_admin'].includes(permissionState.context.role_type));
 const canViewUserAdmin = computed(() => ['super_admin', 'school_admin', 'college_admin', 'profession_admin'].includes(permissionState.context.role_type));
 const canSendMessages = computed(() => ['super_admin', 'school_admin'].includes(currentRoleType.value));
-const canManageMessageTemplates = computed(() => ['super_admin', 'school_admin'].includes(currentRoleType.value) && hasPermission('template:manage'));
+const canManageMessageTemplates = computed(() => currentRoleType.value === 'super_admin' && hasPermission('template:manage'));
 const canViewMessageTemplates = computed(() => canManageMessageTemplates.value || hasPermission('template:view') || hasPermission('template:manage'));
 const canManageInternship = computed(() => hasPermission('internship:manage'));
 const canSaveInternshipScore = computed(() => hasPermission('internship:score') || canManageInternship.value);
@@ -6003,7 +6003,7 @@ async function syncDefaultMessageTemplates(showMessage = true) {
 
 function openMessageTemplateEdit(row = null) {
   if (!canManageMessageTemplates.value) {
-    messageState.message = '仅超级管理员或学校管理员可以维护消息模板';
+    messageState.message = '仅超级管理员可以维护消息模板';
     return;
   }
   messageState.templateEdit.form = emptyMessageTemplateForm(row || {});
