@@ -1,6 +1,20 @@
 <template>
   <section class="support-panel template-library-panel">
-    <div class="support-toolbar">
+    <div class="template-library-tabs">
+      <button
+        v-if="canViewMessageTemplates"
+        type="button"
+        :class="{ active: activeTab === 'message' }"
+        @click="setActiveTab('message')"
+      >
+        流程消息模板
+      </button>
+      <button type="button" :class="{ active: activeTab === 'file' }" @click="setActiveTab('file')">
+        材料模板
+      </button>
+    </div>
+
+    <div v-if="activeTab === 'file'" class="support-toolbar">
       <el-select v-model="filters.category_id" clearable filterable placeholder="全部分类" @change="loadTemplates(1)">
         <el-option v-for="item in categories" :key="item.id" :label="item.name" :value="item.id" />
       </el-select>
@@ -11,7 +25,7 @@
       <el-button v-if="canManage" type="primary" :icon="Upload" @click="openTemplateDialog()">上传模板</el-button>
     </div>
 
-    <div class="template-category-strip">
+    <div v-if="activeTab === 'file'" class="template-category-strip">
       <button type="button" :class="{ active: !filters.category_id }" @click="setCategory('')">全部</button>
       <button
         v-for="item in categories"
@@ -24,7 +38,7 @@
       </button>
     </div>
 
-    <section class="support-table">
+    <section v-if="activeTab === 'file'" class="support-table">
       <el-table :data="templates" height="100%" stripe v-loading="loading">
         <el-table-column label="模板" min-width="260">
           <template #default="{ row }">
@@ -72,7 +86,150 @@
       </div>
     </section>
 
+    <section v-else class="support-table message-template-support">
+      <div class="message-template-library-toolbar">
+        <el-select v-model="messageFilters.type" @change="loadMessageTemplates(1)">
+          <el-option label="全部类型" value="all" />
+          <el-option label="系统通知" value="system" />
+          <el-option label="预警提醒" value="alert" />
+          <el-option label="审核消息" value="audit" />
+          <el-option label="待办提醒" value="todo" />
+          <el-option label="审核结果" value="result" />
+        </el-select>
+        <el-select v-model="messageFilters.status" @change="loadMessageTemplates(1)">
+          <el-option label="全部状态" value="all" />
+          <el-option label="启用" value="enabled" />
+          <el-option label="停用" value="disabled" />
+        </el-select>
+        <el-input v-model="messageFilters.keyword" clearable placeholder="搜索名称、编码、内容" @keyup.enter="loadMessageTemplates(1)" />
+        <el-button :icon="Search" :loading="messageLoading" @click="loadMessageTemplates(1)">查询</el-button>
+        <el-button
+          v-if="canManageMessageTemplates"
+          :icon="RefreshCw"
+          :loading="messageSyncing"
+          @click="syncDefaultMessageTemplates"
+        >
+          同步默认流程模板
+        </el-button>
+      </div>
+
+      <el-table :data="messageTemplates" height="100%" stripe v-loading="messageLoading">
+        <el-table-column prop="name" label="模板名称" min-width="170" />
+        <el-table-column prop="code" label="模板编码" min-width="210" show-overflow-tooltip />
+        <el-table-column label="类型" width="100">
+          <template #default="{ row }">{{ messageTypeText(row.type) }}</template>
+        </el-table-column>
+        <el-table-column label="级别" width="90">
+          <template #default="{ row }">{{ messageLevelText(row.level) }}</template>
+        </el-table-column>
+        <el-table-column prop="title_tpl" label="标题模板" min-width="220" show-overflow-tooltip />
+        <el-table-column prop="content_tpl" label="内容模板" min-width="320" show-overflow-tooltip />
+        <el-table-column label="状态" width="90">
+          <template #default="{ row }">
+            <el-tag :type="row.status === 'enabled' ? 'success' : 'info'" size="small">
+              {{ row.status === 'enabled' ? '启用' : '停用' }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="110" fixed="right">
+          <template #default="{ row }">
+            <el-button v-if="canManageMessageTemplates" link type="primary" @click="openMessageTemplateDialog(row)">
+              编辑
+            </el-button>
+            <span v-else>-</span>
+          </template>
+        </el-table-column>
+      </el-table>
+
+      <div class="file-pagination">
+        <span>共 {{ messagePagination.total }} 个流程消息模板</span>
+        <el-pagination
+          size="small"
+          layout="prev, pager, next"
+          :current-page="messagePagination.page"
+          :page-size="messagePagination.page_size"
+          :total="messagePagination.total"
+          @current-change="loadMessageTemplates"
+        />
+      </div>
+    </section>
+
     <small v-if="message">{{ message }}</small>
+
+    <div v-if="messageTemplateDialog.visible" class="operation-mask" @click.self="closeMessageTemplateDialog">
+      <section class="operation-dialog message-template-edit-dialog">
+        <header>
+          <strong>编辑流程消息模板</strong>
+          <button type="button" @click="closeMessageTemplateDialog">关闭</button>
+        </header>
+        <div class="message-template-edit-body">
+          <label>
+            <span>模板名称</span>
+            <el-input v-model="messageTemplateDialog.form.name" maxlength="180" />
+          </label>
+          <label>
+            <span>模板编码</span>
+            <el-input v-model="messageTemplateDialog.form.code" disabled maxlength="120" />
+          </label>
+          <label>
+            <span>消息类型</span>
+            <el-select v-model="messageTemplateDialog.form.type">
+              <el-option label="系统通知" value="system" />
+              <el-option label="预警提醒" value="alert" />
+              <el-option label="审核消息" value="audit" />
+              <el-option label="待办提醒" value="todo" />
+              <el-option label="审核结果" value="result" />
+            </el-select>
+          </label>
+          <label>
+            <span>消息级别</span>
+            <el-select v-model="messageTemplateDialog.form.level">
+              <el-option label="普通" value="normal" />
+              <el-option label="重要" value="important" />
+              <el-option label="紧急" value="urgent" />
+            </el-select>
+          </label>
+          <label>
+            <span>状态</span>
+            <el-switch
+              v-model="messageTemplateDialog.form.status"
+              active-value="enabled"
+              inactive-value="disabled"
+              active-text="启用"
+              inactive-text="停用"
+            />
+          </label>
+          <label>
+            <span>排序</span>
+            <el-input v-model.number="messageTemplateDialog.form.sort" type="number" />
+          </label>
+          <label class="wide">
+            <span>标题模板</span>
+            <el-input v-model="messageTemplateDialog.form.title_tpl" maxlength="255" show-word-limit />
+          </label>
+          <label class="wide">
+            <span>内容模板</span>
+            <el-input v-model="messageTemplateDialog.form.content_tpl" type="textarea" :rows="4" />
+          </label>
+          <label class="wide">
+            <span>跳转地址模板</span>
+            <el-input v-model="messageTemplateDialog.form.link_url_tpl" placeholder="#panel={module_key}:{panel_key}" />
+          </label>
+          <label class="wide">
+            <span>变量说明 JSON</span>
+            <el-input v-model="messageTemplateDialog.form.variables_text" type="textarea" :rows="5" />
+          </label>
+          <label class="wide">
+            <span>说明</span>
+            <el-input v-model="messageTemplateDialog.form.description" type="textarea" :rows="2" maxlength="500" show-word-limit />
+          </label>
+        </div>
+        <footer>
+          <el-button @click="closeMessageTemplateDialog">取消</el-button>
+          <el-button type="primary" :icon="Save" :loading="messageSaving" @click="saveMessageTemplateDialog">保存</el-button>
+        </footer>
+      </section>
+    </div>
 
     <div v-if="templateDialog.visible" class="operation-mask" @click.self="closeTemplateDialog">
       <section class="operation-dialog template-edit-dialog">
@@ -175,28 +332,49 @@ import { FileText, Plus, RefreshCw, Save, Search, Upload } from '@lucide/vue';
 import {
   deleteTemplateItem,
   downloadTemplateItem,
+  fetchMessageTemplates,
   fetchTemplateCategories,
   fetchTemplateList,
   saveTemplateCategory,
+  saveMessageTemplate,
   saveTemplateItem,
+  syncMessageTemplates,
   uploadTemplateFile,
 } from '../api/system';
 
-defineProps({
+const props = defineProps({
   canManage: {
+    type: Boolean,
+    default: false,
+  },
+  canViewMessageTemplates: {
+    type: Boolean,
+    default: false,
+  },
+  canManageMessageTemplates: {
     type: Boolean,
     default: false,
   },
 });
 
+const activeTab = ref(props.canViewMessageTemplates ? 'message' : 'file');
 const loading = ref(false);
 const saving = ref(false);
+const messageLoading = ref(false);
+const messageSaving = ref(false);
+const messageSyncing = ref(false);
 const message = ref('');
 const categories = ref([]);
 const templates = ref([]);
+const messageTemplates = ref([]);
 const fileInputRef = ref(null);
 const filters = reactive({
   category_id: '',
+  keyword: '',
+});
+const messageFilters = reactive({
+  type: 'all',
+  status: 'all',
   keyword: '',
 });
 const pagination = reactive({
@@ -204,10 +382,19 @@ const pagination = reactive({
   page_size: 20,
   total: 0,
 });
+const messagePagination = reactive({
+  page: 1,
+  page_size: 100,
+  total: 0,
+});
 const templateDialog = reactive({
   visible: false,
   fileName: '',
   form: emptyTemplateForm(),
+});
+const messageTemplateDialog = reactive({
+  visible: false,
+  form: emptyMessageTemplateForm(),
 });
 const categoryDialog = reactive({
   visible: false,
@@ -217,7 +404,26 @@ const categoryDialog = reactive({
 onMounted(reload);
 
 async function reload() {
+  if (activeTab.value === 'message') {
+    await loadMessageTemplates(1);
+    return;
+  }
+
   await loadCategories();
+  await loadTemplates(1);
+}
+
+async function setActiveTab(tab) {
+  activeTab.value = tab;
+  message.value = '';
+  if (tab === 'message') {
+    await loadMessageTemplates(1);
+    return;
+  }
+
+  if (!categories.value.length) {
+    await loadCategories();
+  }
   await loadTemplates(1);
 }
 
@@ -249,6 +455,48 @@ async function loadTemplates(page = 1) {
   }
 }
 
+async function loadMessageTemplates(page = 1) {
+  if (!props.canViewMessageTemplates || messageLoading.value) {
+    return;
+  }
+
+  messageLoading.value = true;
+  message.value = '';
+  try {
+    const data = await fetchMessageTemplates({
+      page,
+      page_size: messagePagination.page_size,
+      type: messageFilters.type,
+      status: messageFilters.status,
+      keyword: messageFilters.keyword,
+    });
+    messageTemplates.value = data.items || [];
+    Object.assign(messagePagination, data.pagination || {});
+  } catch (error) {
+    message.value = error.message;
+  } finally {
+    messageLoading.value = false;
+  }
+}
+
+async function syncDefaultMessageTemplates() {
+  if (!props.canManageMessageTemplates || messageSyncing.value) {
+    return;
+  }
+
+  messageSyncing.value = true;
+  message.value = '';
+  try {
+    const data = await syncMessageTemplates();
+    await loadMessageTemplates(1);
+    message.value = `已同步默认流程模板，当前系统模板 ${data.system_total || 0} 个`;
+  } catch (error) {
+    message.value = error.message;
+  } finally {
+    messageSyncing.value = false;
+  }
+}
+
 function setCategory(id) {
   filters.category_id = id;
   loadTemplates(1);
@@ -267,6 +515,21 @@ function openTemplateDialog(row = null) {
   } : emptyTemplateForm();
   templateDialog.fileName = row?.file?.download_name || row?.file?.name || '';
   templateDialog.visible = true;
+}
+
+function openMessageTemplateDialog(row) {
+  if (!props.canManageMessageTemplates) {
+    message.value = '仅超级管理员可以维护流程消息模板';
+    return;
+  }
+  messageTemplateDialog.form = emptyMessageTemplateForm(row || {});
+  messageTemplateDialog.visible = true;
+}
+
+function closeMessageTemplateDialog() {
+  if (!messageSaving.value) {
+    messageTemplateDialog.visible = false;
+  }
 }
 
 function closeTemplateDialog() {
@@ -313,6 +576,66 @@ async function saveTemplate() {
     message.value = error.message;
   } finally {
     saving.value = false;
+  }
+}
+
+async function saveMessageTemplateDialog() {
+  if (!props.canManageMessageTemplates || messageSaving.value) {
+    return;
+  }
+
+  const form = messageTemplateDialog.form;
+  if (!String(form.name || '').trim()) {
+    message.value = '请填写模板名称';
+    return;
+  }
+  if (!String(form.code || '').trim()) {
+    message.value = '模板编码不能为空';
+    return;
+  }
+  if (!String(form.title_tpl || '').trim()) {
+    message.value = '请填写标题模板';
+    return;
+  }
+  if (!String(form.content_tpl || '').trim()) {
+    message.value = '请填写内容模板';
+    return;
+  }
+
+  let variables = {};
+  try {
+    variables = form.variables_text ? JSON.parse(form.variables_text) : {};
+  } catch (error) {
+    message.value = '变量说明 JSON 格式不正确';
+    return;
+  }
+
+  messageSaving.value = true;
+  message.value = '';
+  try {
+    await saveMessageTemplate({
+      id: form.id,
+      name: form.name,
+      code: form.code,
+      title_tpl: form.title_tpl,
+      content_tpl: form.content_tpl,
+      type: form.type,
+      level: form.level,
+      status: form.status,
+      sort: form.sort,
+      description: form.description,
+      link_url_tpl: form.link_url_tpl,
+      variables,
+      channels: ['internal'],
+      is_system: form.is_system,
+    });
+    messageTemplateDialog.visible = false;
+    await loadMessageTemplates(messagePagination.page || 1);
+    message.value = '流程消息模板已保存';
+  } catch (error) {
+    message.value = error.message;
+  } finally {
+    messageSaving.value = false;
   }
 }
 
@@ -377,6 +700,42 @@ function emptyTemplateForm() {
     flag: 'on',
     status: 'enabled',
   };
+}
+
+function emptyMessageTemplateForm(row = {}) {
+  return {
+    id: row.id || null,
+    name: row.name || '',
+    code: row.code || '',
+    title_tpl: row.title_tpl || '',
+    content_tpl: row.content_tpl || '',
+    type: row.type || 'todo',
+    level: row.level || 'important',
+    status: row.status || 'enabled',
+    sort: Number(row.sort || 100),
+    description: row.description || '',
+    link_url_tpl: row.link_url_tpl || '',
+    variables_text: JSON.stringify(row.variables || {}, null, 2),
+    is_system: Boolean(row.is_system),
+  };
+}
+
+function messageTypeText(type) {
+  return {
+    system: '系统通知',
+    alert: '预警提醒',
+    audit: '审核消息',
+    todo: '待办提醒',
+    result: '审核结果',
+  }[type] || '系统通知';
+}
+
+function messageLevelText(level) {
+  return {
+    normal: '普通',
+    important: '重要',
+    urgent: '紧急',
+  }[level] || '普通';
 }
 
 function emptyCategoryForm() {

@@ -2076,7 +2076,11 @@
                 </div>
 
                 <div v-else-if="win.module.id === 'templateLib'" class="module-content-panel">
-                  <TemplateLibrary :can-manage="hasPermission('template:manage')" />
+                  <TemplateLibrary
+                    :can-manage="hasPermission('template:manage')"
+                    :can-view-message-templates="canSendMessages"
+                    :can-manage-message-templates="canManageMessageTemplates"
+                  />
                 </div>
 
                 <div v-else-if="win.module.id === 'exportTask'" class="module-content-panel">

@@ -1183,7 +1183,7 @@ class PracticeService
 
     private function notifyWorkflowSubmitted(string $entity, int $entityId, array $values): void
     {
-        $this->notifyTemplateAccounts($this->teacherAccountIds((int) ($values['teacher_id'] ?? 0)), $this->workflowTemplateCode($entity, 'submit'), [
+        $this->notifyTemplateAccounts($this->workflowSubmitReceiverAccountIds($entity, $values), $this->workflowTemplateCode($entity, 'submit'), [
             'module_name' => $this->businessName($entity),
             'submitter_name' => $this->currentAccountName(),
             'entity_title' => (string) (($values['title'] ?? '') ?: $this->businessName($entity) . '#' . $entityId),
@@ -1218,7 +1218,12 @@ class PracticeService
 
     private function notifyExecutionSubmitted(string $execution, int $entityId, array $values): void
     {
-        $this->notifyTemplateAccounts($this->teacherAccountIds((int) ($values['teacher_id'] ?? 0)), $this->workflowTemplateCode($execution, 'submit'), [
+        $accountIds = $this->teacherAccountIds((int) ($values['teacher_id'] ?? 0));
+        if (!$accountIds) {
+            $accountIds = $this->workflowAdminAccountIds();
+        }
+
+        $this->notifyTemplateAccounts($accountIds, $this->workflowTemplateCode($execution, 'submit'), [
             'module_name' => $this->businessName($execution),
             'submitter_name' => $this->currentAccountName(),
             'entity_title' => (string) (($values['title'] ?? '') ?: $this->businessName($execution) . '#' . $entityId),
@@ -1299,6 +1304,34 @@ class PracticeService
     private function teacherAccountIds(int $teacherId): array
     {
         return Account::enabledIdsByUserIds([PracticeRecord::teacherUserId($teacherId)]);
+    }
+
+    private function workflowSubmitReceiverAccountIds(string $entity, array $values): array
+    {
+        $accountIds = [];
+        if (in_array($entity, ['plan', 'syllabus', 'lessonPlan', 'reflection'], true)) {
+            $accountIds = $this->workflowAdminAccountIds();
+        }
+
+        if (!$accountIds) {
+            $accountIds = $this->teacherAccountIds((int) ($values['teacher_id'] ?? 0));
+        }
+
+        if (!$accountIds) {
+            $accountIds = $this->workflowAdminAccountIds();
+        }
+
+        return $accountIds;
+    }
+
+    private function workflowAdminAccountIds(): array
+    {
+        $ids = [];
+        foreach (['school_admin', 'college_admin', 'profession_admin'] as $roleType) {
+            $ids = array_merge($ids, Account::messageTargetIds(['role_type' => $roleType]));
+        }
+
+        return array_values(array_unique(array_filter(array_map('intval', $ids), static fn (int $id): bool => $id > 0)));
     }
 
     private function studentAccountIds(int $studentId): array
