@@ -1671,13 +1671,11 @@ const messageTypeNames = {
   system: '系统通知',
   todo: '待办提醒',
   result: '处理结果',
-  audit: '审核通知',
   alert: '预警提醒',
 };
 const mobileMessageTypeOptions = [
   { label: '全部类型', value: 'all' },
   { label: '待办', value: 'todo' },
-  { label: '审核', value: 'audit' },
   { label: '结果', value: 'result' },
   { label: '预警', value: 'alert' },
   { label: '系统', value: 'system' },

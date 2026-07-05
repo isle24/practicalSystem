@@ -15,7 +15,7 @@
     </div>
     <div class="template-library-hint">
       <span v-if="activeTab === 'message'">
-        流程审核的待办、审核结果和通过后修改消息从这里读取模板；默认模板会写入数据库，超级管理员只需要按需调整。
+        流程审核的待办、审核结果和通过后修改消息从这里读取模板；默认模板会写入学校业务库，管理员按需调整。
       </span>
       <span v-else>
         材料模板用于上传 Word、PDF 等文件；流程审核待办和消息请切换到“流程待办/消息模板”维护。
@@ -595,7 +595,7 @@ function openTemplateDialog(row = null) {
 
 function openMessageTemplateDialog(row) {
   if (!props.canManageMessageTemplates) {
-    message.value = '仅超级管理员可以维护流程消息模板';
+    message.value = '仅超级管理员或学校管理员可以维护流程消息模板';
     return;
   }
   messageTemplateDialog.form = emptyMessageTemplateForm(row || {});

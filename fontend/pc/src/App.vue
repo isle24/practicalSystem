@@ -4213,10 +4213,9 @@ const messageTypeOptions = [
   { label: '系统通知', value: 'system' },
   { label: '待办提醒', value: 'todo' },
   { label: '处理结果', value: 'result' },
-  { label: '审核通知', value: 'audit' },
   { label: '预警提醒', value: 'alert' },
 ];
-const messageTemplateTypeOptions = messageTypeOptions.filter(item => item.value !== 'audit');
+const messageTemplateTypeOptions = messageTypeOptions;
 const messageStatusOptions = [
   { label: '全部消息', value: 'all' },
   { label: '未读消息', value: 'unread' },
@@ -4656,7 +4655,7 @@ const visibleWindows = computed(() => openWindows.filter(win => !win.minimized))
 const canManageConfig = computed(() => hasPermission('config:manage') && ['super_admin', 'school_admin'].includes(permissionState.context.role_type));
 const canViewUserAdmin = computed(() => ['super_admin', 'school_admin', 'college_admin', 'profession_admin'].includes(permissionState.context.role_type));
 const canSendMessages = computed(() => ['super_admin', 'school_admin'].includes(currentRoleType.value));
-const canManageMessageTemplates = computed(() => currentRoleType.value === 'super_admin');
+const canManageMessageTemplates = computed(() => ['super_admin', 'school_admin'].includes(currentRoleType.value) && hasPermission('template:manage'));
 const canViewMessageTemplates = computed(() => canManageMessageTemplates.value || hasPermission('template:view') || hasPermission('template:manage'));
 const canManageInternship = computed(() => hasPermission('internship:manage'));
 const canSaveInternshipScore = computed(() => hasPermission('internship:score') || canManageInternship.value);
@@ -5996,7 +5995,7 @@ async function syncDefaultMessageTemplates(showMessage = true) {
 
 function openMessageTemplateEdit(row = null) {
   if (!canManageMessageTemplates.value) {
-    messageState.message = '仅超级管理员可以维护消息模板';
+    messageState.message = '仅超级管理员或学校管理员可以维护消息模板';
     return;
   }
   messageState.templateEdit.form = emptyMessageTemplateForm(row || {});
