@@ -109,12 +109,12 @@
     <section v-else class="support-table message-template-support">
       <div class="message-template-library-toolbar">
         <el-select v-model="messageFilters.type" @change="loadMessageTemplates(1)">
-          <el-option label="全部类型" value="all" />
-          <el-option label="系统通知" value="system" />
-          <el-option label="预警提醒" value="alert" />
-          <el-option label="审核消息" value="audit" />
-          <el-option label="待办提醒" value="todo" />
-          <el-option label="审核结果" value="result" />
+          <el-option
+            v-for="item in messageTemplateTypeOptions"
+            :key="item.value"
+            :label="item.label"
+            :value="item.value"
+          />
         </el-select>
         <el-select v-model="messageFilters.status" @change="loadMessageTemplates(1)">
           <el-option label="全部状态" value="all" />
@@ -208,11 +208,12 @@
           <label>
             <span>消息类型</span>
             <el-select v-model="messageTemplateDialog.form.type">
-              <el-option label="系统通知" value="system" />
-              <el-option label="预警提醒" value="alert" />
-              <el-option label="审核消息" value="audit" />
-              <el-option label="待办提醒" value="todo" />
-              <el-option label="审核结果" value="result" />
+              <el-option
+                v-for="item in messageTemplateTypeOptions.filter(option => option.value !== 'all')"
+                :key="item.value"
+                :label="item.label"
+                :value="item.value"
+              />
             </el-select>
           </label>
           <label>
@@ -411,6 +412,13 @@ const messageFilters = reactive({
   status: 'all',
   keyword: '',
 });
+const messageTemplateTypeOptions = [
+  { label: '全部类型', value: 'all' },
+  { label: '系统通知', value: 'system' },
+  { label: '待办提醒', value: 'todo' },
+  { label: '处理结果', value: 'result' },
+  { label: '预警提醒', value: 'alert' },
+];
 const pagination = reactive({
   page: 1,
   page_size: 20,

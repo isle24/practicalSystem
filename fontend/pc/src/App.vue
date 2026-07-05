@@ -2280,12 +2280,12 @@
                       发送消息
                     </el-button>
                     <el-button
-                      v-if="canManageMessageTemplates"
+                      v-if="canViewMessageTemplates"
                       :icon="FileText"
                       :loading="messageState.templateLoading"
                       @click="openMessageTemplateManager"
                     >
-                      模板管理
+                      {{ canManageMessageTemplates ? '模板管理' : '模板查看' }}
                     </el-button>
                     <el-button
                       type="primary"
@@ -2555,7 +2555,7 @@
                       <div class="message-template-toolbar">
                         <el-select v-model="messageState.templateFilters.type" @change="loadMessageTemplates(1)">
                           <el-option
-                            v-for="item in messageTypeOptions"
+                            v-for="item in messageTemplateTypeOptions"
                             :key="item.value"
                             :label="item.label"
                             :value="item.value"
@@ -2568,10 +2568,15 @@
                         </el-select>
                         <el-input v-model="messageState.templateFilters.keyword" clearable placeholder="搜索名称、编码、内容" @keyup.enter="loadMessageTemplates(1)" />
                         <el-button :icon="Search" :loading="messageState.templateLoading" @click="loadMessageTemplates(1)">查询</el-button>
-                        <el-button :icon="RefreshCw" :loading="messageState.templateSyncing" @click="syncDefaultMessageTemplates">
+                        <el-button
+                          v-if="canManageMessageTemplates"
+                          :icon="RefreshCw"
+                          :loading="messageState.templateSyncing"
+                          @click="syncDefaultMessageTemplates"
+                        >
                           同步默认流程模板
                         </el-button>
-                        <el-button type="primary" :icon="Plus" @click="openMessageTemplateEdit()">新增</el-button>
+                        <el-button v-if="canManageMessageTemplates" type="primary" :icon="Plus" @click="openMessageTemplateEdit()">新增</el-button>
                       </div>
                       <div class="message-template-table">
                         <el-table :data="messageState.templates" height="100%" stripe v-loading="messageState.templateLoading">
@@ -2580,6 +2585,7 @@
                               <strong>暂无流程待办/消息模板</strong>
                               <span>流程提交、审核结果和通过后修改都会按模板写入消息和待办。</span>
                               <el-button
+                                v-if="canManageMessageTemplates"
                                 type="primary"
                                 :icon="RefreshCw"
                                 :loading="messageState.templateSyncing"
@@ -2605,8 +2611,11 @@
                           </el-table-column>
                           <el-table-column label="操作" width="140" fixed="right">
                             <template #default="{ row }">
-                              <el-button link type="primary" @click="openMessageTemplateEdit(row)">编辑</el-button>
-                              <el-button link type="danger" :disabled="row.is_system" @click="removeMessageTemplate(row)">删除</el-button>
+                              <template v-if="canManageMessageTemplates">
+                                <el-button link type="primary" @click="openMessageTemplateEdit(row)">编辑</el-button>
+                                <el-button link type="danger" :disabled="row.is_system" @click="removeMessageTemplate(row)">删除</el-button>
+                              </template>
+                              <span v-else>-</span>
                             </template>
                           </el-table-column>
                         </el-table>
@@ -2634,7 +2643,7 @@
                       <div class="message-template-edit-body">
                         <label><span>模板名称</span><el-input v-model="messageState.templateEdit.form.name" maxlength="180" /></label>
                         <label><span>模板编码</span><el-input v-model="messageState.templateEdit.form.code" :disabled="messageState.templateEdit.form.is_system" maxlength="120" /></label>
-                        <label><span>消息类型</span><el-select v-model="messageState.templateEdit.form.type"><el-option v-for="item in messageTypeOptions.filter(option => option.value !== 'all')" :key="item.value" :label="item.label" :value="item.value" /></el-select></label>
+                        <label><span>消息类型</span><el-select v-model="messageState.templateEdit.form.type"><el-option v-for="item in messageTemplateTypeOptions.filter(option => option.value !== 'all')" :key="item.value" :label="item.label" :value="item.value" /></el-select></label>
                         <label><span>消息级别</span><el-select v-model="messageState.templateEdit.form.level"><el-option v-for="item in messageLevelOptions" :key="item.value" :label="item.label" :value="item.value" /></el-select></label>
                         <label><span>状态</span><el-switch v-model="messageState.templateEdit.form.status" active-value="enabled" inactive-value="disabled" active-text="启用" inactive-text="停用" /></label>
                         <label><span>排序</span><el-input v-model.number="messageState.templateEdit.form.sort" type="number" /></label>
@@ -4207,6 +4216,7 @@ const messageTypeOptions = [
   { label: '审核通知', value: 'audit' },
   { label: '预警提醒', value: 'alert' },
 ];
+const messageTemplateTypeOptions = messageTypeOptions.filter(item => item.value !== 'audit');
 const messageStatusOptions = [
   { label: '全部消息', value: 'all' },
   { label: '未读消息', value: 'unread' },
@@ -5903,14 +5913,16 @@ async function submitMessageSend() {
 }
 
 async function openMessageTemplateManager() {
-  if (!canManageMessageTemplates.value) {
-    messageState.message = '仅超级管理员可以维护消息模板';
+  if (!canViewMessageTemplates.value) {
+    messageState.message = '当前角色不能查看消息模板';
     return;
   }
   messageState.templateManager.visible = true;
   Object.assign(messageState.templateFilters, { type: 'all', status: 'all', keyword: '' });
   messageState.templatePagination.page = 1;
-  await syncDefaultMessageTemplates(false);
+  if (canManageMessageTemplates.value) {
+    await syncDefaultMessageTemplates(false);
+  }
   await loadMessageTemplates(1);
 }
 
@@ -5922,7 +5934,7 @@ function closeMessageTemplateManager() {
 }
 
 async function loadMessageTemplates(page = messageState.templatePagination.page || 1) {
-  if (!canSendMessages.value || messageState.templateLoading) {
+  if (!(canViewMessageTemplates.value || canSendMessages.value) || messageState.templateLoading) {
     return;
   }
   messageState.templateLoading = true;
