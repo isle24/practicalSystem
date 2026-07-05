@@ -1151,7 +1151,7 @@
               :key="filter.key"
               v-model="practiceModule(activeTab).filters[practiceModule(activeTab).panel][filter.key]"
               :aria-label="filter.label"
-              @change="reloadPracticeList(activeTab)"
+              @change="handlePracticeFilterChange(activeTab)"
             >
               <option value="">{{ filter.placeholder }}</option>
               <option v-for="item in filter.options" :key="item.value" :value="item.value">
@@ -3392,8 +3392,9 @@ function practiceFilters(module) {
   ];
   if (isAdminRole.value) {
     common.push(
-      { key: 'dep_id', label: '学院', placeholder: '全部学院', options: selectFilterItems(options.departments, 'dep_id', 'dep_name') },
-      { key: 'profession_id', label: '专业', placeholder: '全部专业', options: selectFilterItems(options.professions, 'profession_id', 'profession_name') },
+      { key: 'dep_id', label: '学院', placeholder: '全部学院', options: selectFilterItems(practiceDepartmentFilterOptions(module), 'dep_id', 'dep_name') },
+      { key: 'profession_id', label: '专业', placeholder: '全部专业', options: selectFilterItems(practiceProfessionFilterOptions(module), 'profession_id', 'profession_name') },
+      { key: 'class_id', label: '班级', placeholder: '全部班级', options: selectFilterItems(practiceClassFilterOptions(module), 'class_id', 'class_name') },
     );
   }
   if (currentPracticePanel(module).review) {
@@ -3402,6 +3403,131 @@ function practiceFilters(module) {
     common.push({ key: 'status', label: '状态', placeholder: '全部状态', options: practiceEnabledStatusOptions });
   }
   return common;
+}
+
+function currentPracticeGradeId(module) {
+  const grades = practiceModule(module).options.grades || [];
+  const currentGrade = grades.find(item => sameFilterValue(item.is_current, 'true') || sameFilterValue(item.is_current, 1));
+  return currentGrade?.grade_id || grades[0]?.grade_id || '';
+}
+
+function practiceFilterValues(module) {
+  const state = practiceModule(module);
+  const panel = currentPracticePanel(module);
+  return state.filters[panel.key] || {};
+}
+
+function practiceDepartmentFilterOptions(module) {
+  return practiceModule(module).options.departments || [];
+}
+
+function practiceProfessionFilterOptions(module, filters = practiceFilterValues(module)) {
+  const state = practiceModule(module);
+  const gradeId = Number(filters.grade_id || 0);
+  const depId = Number(filters.dep_id || 0);
+  return (state.options.professions || []).filter((item) => {
+    const matchGrade = !gradeId || Number(item.grade_id || 0) === gradeId;
+    const matchDepartment = !depId || Number(item.dep_id || 0) === depId;
+    return matchGrade && matchDepartment;
+  });
+}
+
+function practiceClassFilterOptions(module, filters = practiceFilterValues(module)) {
+  const state = practiceModule(module);
+  const gradeId = Number(filters.grade_id || 0);
+  const depId = Number(filters.dep_id || 0);
+  const professionId = Number(filters.profession_id || 0);
+  return (state.options.classes || []).filter((item) => {
+    const matchGrade = !gradeId || Number(item.grade_id || 0) === gradeId;
+    const matchDepartment = !depId || Number(item.dep_id || 0) === depId;
+    const matchProfession = !professionId || Number(item.profession_id || 0) === professionId;
+    return matchGrade && matchDepartment && matchProfession;
+  });
+}
+
+function normalizePracticeFilters(module, filters = practiceFilterValues(module)) {
+  if (!filters) {
+    return;
+  }
+  if (filters.dep_id && !practiceDepartmentFilterOptions(module).some(item => sameFilterValue(item.dep_id, filters.dep_id))) {
+    filters.dep_id = '';
+    filters.profession_id = '';
+    filters.class_id = '';
+  }
+  if (filters.profession_id && !practiceProfessionFilterOptions(module, filters).some(item => sameFilterValue(item.profession_id, filters.profession_id))) {
+    filters.profession_id = '';
+    filters.class_id = '';
+  }
+  if (filters.class_id && !practiceClassFilterOptions(module, filters).some(item => sameFilterValue(item.class_id, filters.class_id))) {
+    filters.class_id = '';
+  }
+}
+
+function practiceScopeDefaults(module) {
+  const state = practiceModule(module);
+  const defaults = {
+    grade_id: currentPracticeGradeId(module),
+    dep_id: '',
+    profession_id: '',
+    class_id: '',
+  };
+  const depIds = scopeIds('dep_id');
+  const professionIds = scopeIds('profession_id');
+  const classIds = scopeIds('class_id');
+  const scopedClass = firstScopedOption(state.options.classes, 'class_id', classIds);
+  const scopedProfession = firstScopedOption(state.options.professions, 'profession_id', professionIds);
+  const scopedDepartment = firstScopedOption(state.options.departments, 'dep_id', depIds);
+
+  if (scopedClass) {
+    defaults.class_id = scopedClass.class_id || '';
+    defaults.profession_id = scopedClass.profession_id || defaults.profession_id;
+    defaults.dep_id = scopedClass.dep_id || defaults.dep_id;
+    defaults.grade_id = defaults.grade_id || scopedClass.grade_id || '';
+  }
+  if (scopedProfession) {
+    defaults.profession_id = scopedProfession.profession_id || defaults.profession_id;
+    defaults.dep_id = scopedProfession.dep_id || defaults.dep_id;
+    defaults.grade_id = defaults.grade_id || scopedProfession.grade_id || '';
+  }
+  if (scopedDepartment) {
+    defaults.dep_id = scopedDepartment.dep_id || defaults.dep_id;
+  }
+  if (roleType.value === 'college_admin' && !defaults.dep_id) {
+    defaults.dep_id = depIds[0] || (state.options.departments?.length === 1 ? state.options.departments[0]?.dep_id : '') || '';
+  }
+  if (roleType.value === 'profession_admin' && !defaults.profession_id) {
+    const fallback = firstScopedOption(state.options.professions, 'profession_id', professionIds)
+      || (state.options.professions?.length === 1 ? state.options.professions[0] : null);
+    if (fallback) {
+      defaults.profession_id = fallback.profession_id || '';
+      defaults.dep_id = fallback.dep_id || defaults.dep_id;
+      defaults.grade_id = defaults.grade_id || fallback.grade_id || '';
+    }
+  }
+
+  return defaults;
+}
+
+function applyDefaultPracticeFilters(module) {
+  const state = practiceModule(module);
+  Object.keys(state.filters).forEach((key) => {
+    const current = {
+      ...emptyPracticeFilters(),
+      ...state.filters[key],
+    };
+    Object.entries(practiceScopeDefaults(module)).forEach(([filterKey, value]) => {
+      if (hasFilterValue(value) && !hasFilterValue(current[filterKey])) {
+        current[filterKey] = value;
+      }
+    });
+    state.filters[key] = current;
+    normalizePracticeFilters(module, current);
+  });
+}
+
+function handlePracticeFilterChange(module) {
+  normalizePracticeFilters(module);
+  reloadPracticeList(module);
 }
 
 function practiceQueryParams(module, page = 1) {
@@ -3451,6 +3577,7 @@ async function loadPractice(module) {
     ]);
     state.overview = { ...state.overview, ...(overview || {}) };
     state.options = { ...state.options, ...(options || {}) };
+    applyDefaultPracticeFilters(module);
     normalizePracticePanel(module);
     await loadPracticeList(module, 1);
   } catch (error) {
