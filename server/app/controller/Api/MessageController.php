@@ -15,7 +15,7 @@ class MessageController
     use Responds;
 
     private const ADMIN_ROLES = ['super_admin', 'school_admin'];
-    private const TEMPLATE_ROLES = ['super_admin'];
+    private const TEMPLATE_ROLES = ['super_admin', 'school_admin'];
 
     /**
      * 查询消息列表
@@ -100,7 +100,7 @@ class MessageController
         }
 
         try {
-            $isTemplateManager = in_array(CurrentContext::roleType(), self::TEMPLATE_ROLES, true);
+            $isTemplateManager = $this->canManageTemplates();
             return $this->ok((new MessageService())->templates([
                 'page' => max(1, $this->intInput($request, 'page') ?: 1),
                 'page_size' => min(100, max(10, $this->intInput($request, 'page_size') ?: 20)),
@@ -119,7 +119,7 @@ class MessageController
     #[OperationLog('保存消息模板')]
     public function saveTemplate(Request $request): Response
     {
-        if (!in_array(CurrentContext::roleType(), self::TEMPLATE_ROLES, true)) {
+        if (!$this->canManageTemplates()) {
             return $this->fail(40300, '无操作权限', 403);
         }
 
@@ -136,7 +136,7 @@ class MessageController
     #[OperationLog('同步默认消息模板')]
     public function syncTemplates(Request $request): Response
     {
-        if (!in_array(CurrentContext::roleType(), self::TEMPLATE_ROLES, true)) {
+        if (!$this->canManageTemplates()) {
             return $this->fail(40300, '无操作权限', 403);
         }
 
@@ -153,7 +153,7 @@ class MessageController
     #[OperationLog('删除消息模板')]
     public function deleteTemplate(Request $request): Response
     {
-        if (!in_array(CurrentContext::roleType(), self::TEMPLATE_ROLES, true)) {
+        if (!$this->canManageTemplates()) {
             return $this->fail(40300, '无操作权限', 403);
         }
 
@@ -204,6 +204,12 @@ class MessageController
         return in_array(CurrentContext::roleType(), self::ADMIN_ROLES, true)
             || in_array('template:view', $permissions, true)
             || in_array('template:manage', $permissions, true);
+    }
+
+    private function canManageTemplates(): bool
+    {
+        return in_array(CurrentContext::roleType(), self::TEMPLATE_ROLES, true)
+            || in_array('template:manage', CurrentContext::permissionCodes(), true);
     }
 
     private function statusCode(Throwable $exception): int
