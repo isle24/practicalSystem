@@ -34,10 +34,13 @@
       />
       <label>
         <span>作为模块</span>
-        <el-select v-model="form.is_module">
-          <el-option label="否" value="false" />
-          <el-option label="是" value="true" />
-        </el-select>
+        <el-switch
+          v-model="form.is_module"
+          active-value="true"
+          inactive-value="false"
+          active-text="是"
+          inactive-text="否"
+        />
       </label>
       <label>
         <span>模块标识</span>

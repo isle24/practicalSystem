@@ -1452,7 +1452,17 @@
                           <span>内容</span>
                           <textarea v-model="practiceModuleState(win.module.id).form.content" rows="8" />
                         </label>
-                        <label v-if="!practiceDialogUsesWorkflowButtons(win.module.id)">
+                        <label v-if="!practiceDialogUsesWorkflowButtons(win.module.id) && practiceStatusUsesSwitch(win.panel)">
+                          <span>状态</span>
+                          <el-switch
+                            v-model="practiceModuleState(win.module.id).form.status"
+                            active-value="enabled"
+                            inactive-value="disabled"
+                            active-text="启用"
+                            inactive-text="停用"
+                          />
+                        </label>
+                        <label v-else-if="!practiceDialogUsesWorkflowButtons(win.module.id)">
                           <span>状态</span>
                           <el-select v-model="practiceModuleState(win.module.id).form.status">
                             <el-option v-for="option in practiceEditStatusOptions(win.panel)" :key="option.value" :label="option.label" :value="option.value" />
@@ -9308,6 +9318,20 @@ function practiceEditStatusOptions(panel) {
   ];
 }
 
+function practiceStatusUsesSwitch(panel) {
+  return ['schedules', 'gradeRules', 'rooms'].includes(panel);
+}
+
+function practiceDefaultStatus(panel) {
+  if (practiceReviewEntity(panel)) {
+    return 'draft';
+  }
+  if (panel === 'scores') {
+    return 'accept';
+  }
+  return 'enabled';
+}
+
 function practiceRatioText(value) {
   if (Array.isArray(value)) {
     return value.map(item => `${item.name || item.label || '项目'}${item.weight || item.ratio || ''}%`).join('，');
@@ -9774,6 +9798,7 @@ function openPracticeDialog(module, panel, row = null) {
       state.form.profession_id = defaults.profession_id || null;
       state.form.class_id = defaults.class_id || null;
       state.form.plan_id = practiceNeedsPlan(panel) ? state.options.plans[0]?.id || null : null;
+      state.form.status = practiceDefaultStatus(panel);
     }
   }
   state.dialog = {
