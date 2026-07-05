@@ -60,4 +60,34 @@ class SysOrganization extends BaseModel
     {
         return self::query()->create($values);
     }
+
+    /**
+     * 替换账号角色的组织范围。
+     */
+    public static function replaceScopesForRole(int $accountId, int $userId, int $roleId, array $scopes, string $now): void
+    {
+        self::connection()->transaction(function () use ($accountId, $userId, $roleId, $scopes, $now): void {
+            self::deactivateScopes($accountId, $roleId, $now);
+
+            foreach ($scopes as $scope) {
+                $record = self::matchingScope($accountId, $roleId, $scope);
+                $values = array_merge($scope, [
+                    'account_id' => $accountId,
+                    'user_id' => $userId,
+                    'role_id' => $roleId,
+                    'disabled' => 'false',
+                    'deleted_at' => null,
+                ]);
+
+                if ($record) {
+                    $record->fill($values);
+                    $record->updated_at = $now;
+                    $record->save();
+                    continue;
+                }
+
+                self::createScope($values);
+            }
+        });
+    }
 }

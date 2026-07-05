@@ -519,29 +519,7 @@ class AdminController
             $account = $this->account($accountId);
             $now = date('Y-m-d H:i:s');
 
-            ChannelTable::connection()->transaction(function () use ($accountId, $roleId, $scopes, $account, $now): void {
-                SysOrganization::deactivateScopes($accountId, $roleId, $now);
-
-                foreach ($scopes as $scope) {
-                    $record = SysOrganization::matchingScope($accountId, $roleId, $scope);
-                    $values = array_merge($scope, [
-                        'account_id' => $accountId,
-                        'user_id' => (int) $account->user_id,
-                        'role_id' => $roleId,
-                        'disabled' => 'false',
-                        'deleted_at' => null,
-                    ]);
-
-                    if ($record) {
-                        $record->fill($values);
-                        $record->updated_at = $now;
-                        $record->save();
-                        continue;
-                    }
-
-                    SysOrganization::createScope($values);
-                }
-            });
+            SysOrganization::replaceScopesForRole($accountId, (int) $account->user_id, $roleId, $scopes, $now);
 
             return $this->organizationScopes($request);
         } catch (Throwable $exception) {
