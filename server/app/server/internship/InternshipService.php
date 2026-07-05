@@ -2810,6 +2810,7 @@ class InternshipService
                 'variables' => $variables,
                 'entity_type' => $entityType,
                 'entity_id' => $entityId,
+                'include_sender' => false,
             ], $senderId, $this->currentAccountName());
         } catch (Throwable) {
         }

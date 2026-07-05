@@ -219,9 +219,16 @@ class MessageService
         if (!$ids) {
             throw new InvalidArgumentException('缺少消息接收人');
         }
+        $includeSender = $this->boolValue($payload['include_sender'] ?? true);
+        if (!$includeSender && $senderId > 0) {
+            $ids = array_values(array_filter($ids, static fn (int $id): bool => $id !== $senderId));
+            if (!$ids) {
+                throw new InvalidArgumentException('缺少消息接收人');
+            }
+        }
         $receiverIds = array_values(array_filter($ids, static fn (int $id): bool => $id !== $senderId));
         $targetCount = count($receiverIds);
-        if ($senderId > 0) {
+        if ($includeSender && $senderId > 0) {
             $ids[] = $senderId;
             $ids = array_values(array_unique($ids));
         }
@@ -243,6 +250,19 @@ class MessageService
     {
         $text = trim((string) ($value ?? ''));
         return $text === '' ? null : mb_substr($text, 0, $limit);
+    }
+
+    private function boolValue(mixed $value): bool
+    {
+        if (is_bool($value)) {
+            return $value;
+        }
+        if (is_int($value)) {
+            return $value === 1;
+        }
+
+        $text = strtolower(trim((string) $value));
+        return in_array($text, ['1', 'true', 'yes', 'on'], true);
     }
 
     private function templateCode(mixed $value): string
