@@ -9332,6 +9332,9 @@ function showPracticeRowEdit(module, panel, row) {
   if (['journals', 'reports'].includes(panel)) {
     return isStudentRole.value && ['draft', 'modify'].includes(row?.status || '');
   }
+  if (practiceReviewEntity(panel)) {
+    return canManagePractice(module) && ['draft', 'modify'].includes(row?.status || '');
+  }
   return canManagePractice(module);
 }
 
