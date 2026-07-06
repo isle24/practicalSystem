@@ -2290,7 +2290,7 @@
                       :loading="messageState.templateLoading"
                       @click="openMessageTemplateManager"
                     >
-                      {{ canManageMessageTemplates ? '模板管理' : '模板查看' }}
+                      {{ canManageMessageTemplates ? '流程模板管理' : '流程模板查看' }}
                     </el-button>
                     <el-button
                       type="primary"
@@ -2554,7 +2554,7 @@
                   <div v-if="messageState.templateManager.visible" class="operation-mask" @click.self="closeMessageTemplateManager">
                     <section class="operation-dialog message-template-dialog">
                       <header>
-                        <strong>流程待办/消息模板管理</strong>
+                        <strong>流程审核待办/消息模板管理</strong>
                         <button type="button" @click="closeMessageTemplateManager">关闭</button>
                       </header>
                       <div class="message-template-toolbar">
@@ -2626,7 +2626,7 @@
                         </el-table>
                       </div>
                       <footer>
-                        <span>共 {{ messageState.templatePagination.total }} 个模板</span>
+                        <span>共 {{ messageState.templatePagination.total }} 个流程审核待办/消息模板</span>
                         <el-pagination
                           size="small"
                           layout="prev, pager, next"
@@ -4049,10 +4049,10 @@ const modules = [
   },
   {
     id: 'templateLib',
-    name: '模板库',
+    name: '模板管理',
     icon: FileText,
     color: 'teal',
-    scope: '流程消息模板 / 材料模板',
+    scope: '流程审核待办/消息模板 / 材料文件模板',
     viewPermission: 'template:view',
     managePermission: 'template:manage',
     defaultPanel: 'templateList',
@@ -4610,7 +4610,7 @@ const moduleSearchKeywords = {
   log: '日志 审计 操作 接口 账号 IP 登录 工作台 基础档案 流程配置',
   file: '文件 附件 上传 下载 预览 头像 壁纸 材料',
   doc: '文档 制度 流程 帮助 操作说明',
-  templateLib: '模板 表格 材料 下载 模板库',
+  templateLib: '模板 表格 材料 下载 模板管理 流程消息 待办',
   exportTask: '导出 下载 队列 任务',
   favorite: '收藏 收藏夹 网址 常用 网站 快捷方式 桌面',
   userManage: '用户 账号 角色 学生 老师 管理员 绑定 日志',
@@ -4684,7 +4684,7 @@ const hasMessageTemplateFilters = computed(() => messageState.templateFilters.ty
   || !['all', 'enabled'].includes(messageState.templateFilters.status)
   || Boolean(String(messageState.templateFilters.keyword || '').trim()));
 const messageTemplateEmptyTitle = computed(() => (
-  hasMessageTemplateFilters.value ? '当前筛选无流程模板' : '暂无启用流程待办/消息模板'
+  hasMessageTemplateFilters.value ? '当前筛选无流程模板' : '暂无启用流程审核待办/消息模板'
 ));
 const messageTemplateEmptyText = computed(() => {
   if (hasMessageTemplateFilters.value) {

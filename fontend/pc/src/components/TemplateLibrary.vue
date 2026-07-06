@@ -7,18 +7,18 @@
         :class="{ active: activeTab === 'message' }"
         @click="setActiveTab('message')"
       >
-        流程待办/消息模板
+        流程审核待办/消息模板
       </button>
       <button type="button" :class="{ active: activeTab === 'file' }" @click="setActiveTab('file')">
-        材料模板
+        材料文件模板
       </button>
     </div>
     <div class="template-library-hint">
       <span v-if="activeTab === 'message'">
-        流程提交、审核结果、通过后修改都会按这里的模板发送待办和消息；默认模板自动写入学校业务库，有权限的管理员只需要按需调整内容。
+        学生提交、教师审核、通过后修改等流程都会按这里的模板发送待办和消息；默认模板已写入学校业务库，管理员只需要按需编辑。
       </span>
       <span v-else>
-        材料模板用于上传 Word、PDF 等文件；流程审核待办和消息请切换到“流程待办/消息模板”维护。
+        材料文件模板用于上传 Word、PDF 等文件；流程审核待办和消息请切换到“流程审核待办/消息模板”维护。
       </span>
     </div>
 
@@ -50,13 +50,13 @@
       <el-table :data="templates" height="100%" stripe v-loading="loading">
         <template #empty>
           <div class="template-empty-state">
-            <strong>暂无材料模板文件</strong>
-            <span>这里仅显示 Word、PDF 等材料文件；流程审核的待办和消息模板在“流程待办/消息模板”中维护。</span>
+            <strong>暂无材料文件模板</strong>
+            <span>这里仅显示 Word、PDF 等材料文件；流程审核的待办和消息模板在“流程审核待办/消息模板”中维护。</span>
             <div>
               <el-button v-if="canViewMessageTemplates" type="primary" @click="setActiveTab('message')">
-                查看流程待办/消息模板
+                查看流程审核待办/消息模板
               </el-button>
-              <el-button v-if="canManage" @click="openTemplateDialog()">上传材料模板</el-button>
+              <el-button v-if="canManage" @click="openTemplateDialog()">上传材料文件模板</el-button>
             </div>
           </div>
         </template>
@@ -176,7 +176,7 @@
       </el-table>
 
       <div class="file-pagination">
-        <span>共 {{ messagePagination.total }} 个流程消息模板</span>
+        <span>共 {{ messagePagination.total }} 个流程审核待办/消息模板</span>
         <el-pagination
           size="small"
           layout="prev, pager, next"
@@ -431,7 +431,7 @@ const messagePagination = reactive({
   total: 0,
 });
 const messageTemplateEmptyTitle = computed(() => (
-  hasMessageTemplateFilters() ? '当前筛选无流程模板' : '暂无启用流程待办/消息模板'
+  hasMessageTemplateFilters() ? '当前筛选无流程模板' : '暂无启用流程审核待办/消息模板'
 ));
 const messageTemplateEmptyText = computed(() => {
   if (hasMessageTemplateFilters()) {
