@@ -1596,6 +1596,7 @@ import {
   reviewInternshipApplication,
   reviewInternshipArrangementChange,
   reviewInternshipDelay,
+  reviewInternshipDocument,
   reviewInternshipJournal,
   reviewInternshipPlan,
   reviewInternshipReport,
@@ -1751,6 +1752,22 @@ const defaultInternshipReviewRules = {
   delay: {
     accept: { min: 0, max: 300 },
     refuse: { min: 5, max: 500 },
+    modify: { min: 5, max: 500 },
+  },
+  syllabus_guide: {
+    accept: { min: 0, max: 300 },
+    modify: { min: 5, max: 500 },
+  },
+  implementation_sheet: {
+    accept: { min: 0, max: 300 },
+    modify: { min: 5, max: 500 },
+  },
+  teacher_work_report: {
+    accept: { min: 0, max: 300 },
+    modify: { min: 5, max: 500 },
+  },
+  inspection: {
+    accept: { min: 0, max: 300 },
     modify: { min: 5, max: 500 },
   },
 };
@@ -4697,8 +4714,12 @@ async function reviewWork(type, row, status, opinion) {
     };
     if (type === 'journal') {
       await reviewInternshipJournal(payload);
-    } else {
+    } else if (type === 'report') {
       await reviewInternshipReport(payload);
+    } else if (isInternshipDocumentReviewEntity(type)) {
+      await reviewInternshipDocument({ ...payload, entity: type });
+    } else {
+      throw new Error('该业务不支持当前审核入口');
     }
     closeReviewDialog();
     await loadInternship();
@@ -4882,6 +4903,10 @@ function reviewEntityName(entity) {
   return names[entity] || '审核事项';
 }
 
+function isInternshipDocumentReviewEntity(entity) {
+  return ['syllabus_guide', 'implementation_sheet', 'teacher_work_report', 'inspection'].includes(entity);
+}
+
 function practiceEntityName(entity) {
   const names = {
     plan: '教学计划',
@@ -4936,7 +4961,17 @@ function canRequestModification(row, entity) {
   if (!row || row.status !== 'accept') {
     return false;
   }
-  if (!['application', 'journal', 'report', 'plan', 'delay'].includes(entity)) {
+  if (![
+    'application',
+    'journal',
+    'report',
+    'plan',
+    'delay',
+    'syllabus_guide',
+    'implementation_sheet',
+    'teacher_work_report',
+    'inspection',
+  ].includes(entity)) {
     return false;
   }
   if (entity === 'plan') {

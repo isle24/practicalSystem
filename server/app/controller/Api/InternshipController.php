@@ -547,6 +547,16 @@ class InternshipController
         return $this->handle(fn (): array => $this->service()->saveInspection($request));
     }
 
+    /**
+     * 审核实习文档流程
+     */
+    #[OperationLog('审核实习文档流程')]
+    public function reviewDocument(Request $request): Response
+    {
+        OperationLogContext::setName('审核' . $this->workflowEntityName($request) . '流程');
+        return $this->handle(fn (): array => $this->service()->reviewDocument($request));
+    }
+
     private function handle(callable $callback): Response
     {
         try {

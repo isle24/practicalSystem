@@ -3618,6 +3618,7 @@ import {
   reviewInternshipApplication,
   reviewInternshipArrangementChange,
   reviewInternshipDelay,
+  reviewInternshipDocument,
   reviewInternshipJournal,
   reviewInternshipPlan,
   reviewInternshipReport,
@@ -4442,6 +4443,22 @@ const defaultInternshipReviewRules = {
     modify: { min: 5, max: 500 },
   },
   base_expense: {
+    accept: { min: 0, max: 300 },
+    modify: { min: 5, max: 500 },
+  },
+  syllabus_guide: {
+    accept: { min: 0, max: 300 },
+    modify: { min: 5, max: 500 },
+  },
+  implementation_sheet: {
+    accept: { min: 0, max: 300 },
+    modify: { min: 5, max: 500 },
+  },
+  teacher_work_report: {
+    accept: { min: 0, max: 300 },
+    modify: { min: 5, max: 500 },
+  },
+  inspection: {
     accept: { min: 0, max: 300 },
     modify: { min: 5, max: 500 },
   },
@@ -5312,6 +5329,10 @@ function internshipSidebarItemVisible(item) {
 
 function isInternshipReadOnlyListPanel(panel) {
   return ['syllabusGuides', 'implementationSheets', 'teacherWorkReports', 'inspections'].includes(panel);
+}
+
+function isInternshipDocumentReviewEntity(entity) {
+  return ['syllabus_guide', 'implementation_sheet', 'teacher_work_report', 'inspection'].includes(entity);
 }
 
 function internshipTimelineEntity(panel) {
@@ -11826,7 +11847,21 @@ function canRequestModification(row, entity) {
   if (!row || row.status !== 'accept') {
     return false;
   }
-  if (!['application', 'journal', 'report', 'plan', 'delay', 'base_application', 'base_usage', 'base_result', 'base_expense'].includes(entity)) {
+  if (![
+    'application',
+    'journal',
+    'report',
+    'plan',
+    'delay',
+    'base_application',
+    'base_usage',
+    'base_result',
+    'base_expense',
+    'syllabus_guide',
+    'implementation_sheet',
+    'teacher_work_report',
+    'inspection',
+  ].includes(entity)) {
     return false;
   }
   if (entity === 'plan') {
@@ -12309,9 +12344,14 @@ async function reviewStudentWork(type, row, status, opinion = '') {
     if (type === 'journal') {
       await reviewInternshipJournal(payload);
       await loadInternshipPanel('journals');
-    } else {
+    } else if (type === 'report') {
       await reviewInternshipReport(payload);
       await loadInternshipPanel('reports');
+    } else if (isInternshipDocumentReviewEntity(type)) {
+      await reviewInternshipDocument({ ...payload, entity: type });
+      await loadInternshipPanel(internshipReviewPanel(type));
+    } else {
+      throw new Error('该业务不支持当前审核入口');
     }
     closeInternshipDialog();
   } catch (error) {

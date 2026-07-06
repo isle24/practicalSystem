@@ -98,6 +98,22 @@ class InternshipService
             'accept' => ['min' => 0, 'max' => 300],
             'modify' => ['min' => 5, 'max' => 500],
         ],
+        'syllabus_guide' => [
+            'accept' => ['min' => 0, 'max' => 300],
+            'modify' => ['min' => 5, 'max' => 500],
+        ],
+        'implementation_sheet' => [
+            'accept' => ['min' => 0, 'max' => 300],
+            'modify' => ['min' => 5, 'max' => 500],
+        ],
+        'teacher_work_report' => [
+            'accept' => ['min' => 0, 'max' => 300],
+            'modify' => ['min' => 5, 'max' => 500],
+        ],
+        'inspection' => [
+            'accept' => ['min' => 0, 'max' => 300],
+            'modify' => ['min' => 5, 'max' => 500],
+        ],
     ];
     private const REVIEW_ENTITY_CONFIG = [
         'application' => ['table' => 'application', 'recording' => 'application_recording'],
@@ -120,7 +136,22 @@ class InternshipService
         'base_result' => ['table' => 'base_result', 'recording' => 'base_result_recording'],
         'base_expense' => ['table' => 'base_expense', 'recording' => 'base_expense_recording'],
     ];
-    private const REQUEST_MODIFICATION_ENTITIES = ['application', 'journal', 'report', 'plan', 'delay', 'base_application', 'base_usage', 'base_result', 'base_expense'];
+    private const DOCUMENT_REVIEW_ENTITIES = ['syllabus_guide', 'implementation_sheet', 'teacher_work_report', 'inspection'];
+    private const REQUEST_MODIFICATION_ENTITIES = [
+        'application',
+        'journal',
+        'report',
+        'plan',
+        'delay',
+        'base_application',
+        'base_usage',
+        'base_result',
+        'base_expense',
+        'syllabus_guide',
+        'implementation_sheet',
+        'teacher_work_report',
+        'inspection',
+    ];
     private const DELAY_CONFIG_KEYS = ['report_deadline', 'journal_deadline'];
     private const EXCEL_EXTENSIONS = ['xls', 'xlsx'];
     private const EXCEL_MAX_SIZE = 10485760;
@@ -1767,6 +1798,44 @@ class InternshipService
             'result' => '巡查结果',
             'remark' => '说明',
         ]));
+    }
+
+    public function reviewDocument(Request $request): array
+    {
+        $this->requirePermission('internship:approve');
+        $entity = $this->reviewEntity($request);
+        if (!in_array($entity, self::DOCUMENT_REVIEW_ENTITIES, true)) {
+            throw new InvalidArgumentException('该业务不支持文档流程审核');
+        }
+        $config = self::REVIEW_ENTITY_CONFIG[$entity];
+        $id = $this->requiredRowId($request, $config['table']);
+        $status = $this->enum($request, 'status', ['accept', 'modify'], 'accept');
+        $opinion = $this->reviewOpinionInput($request, $entity, $status);
+        $this->ensureRecordingTable($config['recording']);
+
+        return $this->workflowLock('internship', $entity, $id, function () use ($entity, $config, $id, $status, $opinion): array {
+            return $this->connection()->transaction(function () use ($entity, $config, $id, $status, $opinion): array {
+                $row = InternshipRecord::lockActiveRowById($config['table'], $id);
+                if (!$row) {
+                    throw new RuntimeException('数据不存在');
+                }
+                $this->assertReviewEntityWritable($entity, $row);
+                if ((string) $row->status !== 'wait') {
+                    throw new InvalidArgumentException('数据已变更，请刷新后重试', 409);
+                }
+
+                InternshipRecord::updateById($config['table'], $id, [
+                    'status' => $status,
+                    'updated_at' => $this->now(),
+                ]);
+                $content = $opinion ?: '审核处理';
+                $this->recordWorkflow($config['recording'], $entity, $id, 'review', 'wait', $status, $content, $status);
+                InternshipRecord::clearReviewOpinionDraft($entity, $id, $this->accountId(), $this->now());
+                $this->notifyWorkflowReviewed($entity, $id, $this->reviewEntitySubmitterAccountId($entity, $row), $this->entityDisplayName($entity), $status, $content);
+
+                return ['id' => $id, 'status' => $status];
+            });
+        });
     }
 
     private function reviewStudentWork(Request $request, string $table, string $recordingTable): array

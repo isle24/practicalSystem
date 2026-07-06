@@ -242,6 +242,10 @@ export function reviewInternshipReport(payload) {
   return internshipPost('review-report', payload);
 }
 
+export function reviewInternshipDocument(payload) {
+  return internshipPost('review-document', payload);
+}
+
 export function fetchInternshipDelays(params = {}) {
   return internshipList('delays', params);
 }
