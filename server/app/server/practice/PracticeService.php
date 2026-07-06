@@ -1147,7 +1147,42 @@ class PracticeService
             $filters[$key] = $request->input($key);
         }
 
+        $this->applyDefaultScopeFilters($filters, $keys);
+
         return $filters;
+    }
+
+    private function applyDefaultScopeFilters(array &$filters, array $keys): void
+    {
+        if (in_array('grade_id', $keys, true) && !$this->hasFilterValue($filters, 'grade_id')) {
+            $filters['grade_id'] = PracticeRecord::currentGradeId();
+        }
+
+        $roleType = CurrentContext::roleType();
+        if ($roleType === 'college_admin' && in_array('dep_id', $keys, true) && !$this->hasFilterValue($filters, 'dep_id')) {
+            $filters['dep_id'] = $this->singleScopeId('dep_id');
+        }
+
+        if ($roleType === 'profession_admin') {
+            if (in_array('profession_id', $keys, true) && !$this->hasFilterValue($filters, 'profession_id')) {
+                $filters['profession_id'] = $this->singleScopeId('profession_id');
+            }
+            if (in_array('dep_id', $keys, true) && !$this->hasFilterValue($filters, 'dep_id')) {
+                $depIds = PracticeRecord::depIdsByProfessionIds($this->scopeIds('profession_id'));
+                $filters['dep_id'] = count($depIds) === 1 ? $depIds[0] : null;
+            }
+        }
+    }
+
+    private function singleScopeId(string $field): ?int
+    {
+        $ids = $this->scopeIds($field);
+        return count($ids) === 1 ? $ids[0] : null;
+    }
+
+    private function hasFilterValue(array $filters, string $key): bool
+    {
+        return isset($filters[$key]) && $filters[$key] !== null && $filters[$key] !== '';
     }
 
     private function assertEntityVisible(string $entity, int $id): void

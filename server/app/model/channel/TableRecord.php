@@ -468,6 +468,18 @@ class TableRecord extends BaseModel
         ]);
     }
 
+    public static function currentGradeId(): ?int
+    {
+        $id = self::queryTable('grade_list')
+            ->where('is_current', 'true')
+            ->where('flag', 'on')
+            ->whereNull('deleted_at')
+            ->orderBy('sort')
+            ->value('grade_id');
+
+        return is_numeric($id) ? (int) $id : null;
+    }
+
     public static function enabledOptionRows(string $table, array $columns, array $order, ?string $flagField = 'flag'): array
     {
         $query = self::queryTable($table)->whereNull('deleted_at');
