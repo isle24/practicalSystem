@@ -10330,7 +10330,6 @@ function internshipFilters(keys, values = {}, options = internshipState.options)
   const definitions = {
     keyword: { key: 'keyword', label: '关键词', placeholder: '学生、学号、教师、标题' },
     student_keyword: { key: 'keyword', label: '学生', placeholder: '姓名或学号' },
-    semester: { key: 'semester', label: '学期', type: 'select', options: semesterOptions() },
     base_id: { key: 'base_id', label: '实习基地', type: 'select', options: optionItems(internshipState.options.bases, 'id', 'name') },
     grade_id: { key: 'grade_id', label: '届次', type: 'select', options: optionItems(options.grades, 'grade_id', 'grade_name') },
     dep_id: { key: 'dep_id', label: '学院', type: 'select', options: optionItems(filterAcademicDepartments(options, values), 'dep_id', 'dep_name') },
