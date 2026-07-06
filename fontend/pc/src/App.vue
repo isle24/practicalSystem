@@ -3807,7 +3807,7 @@ const messageState = reactive({
   templates: [],
   templateFilters: {
     type: 'all',
-    status: 'all',
+    status: 'enabled',
     keyword: '',
   },
   templatePagination: {
@@ -4664,10 +4664,10 @@ const canSendMessages = computed(() => ['super_admin', 'school_admin'].includes(
 const canManageMessageTemplates = computed(() => ['super_admin', 'school_admin'].includes(currentRoleType.value) || hasPermission('template:manage'));
 const canViewMessageTemplates = computed(() => ['super_admin', 'school_admin'].includes(currentRoleType.value) || hasPermission('template:view') || hasPermission('template:manage'));
 const hasMessageTemplateFilters = computed(() => messageState.templateFilters.type !== 'all'
-  || messageState.templateFilters.status !== 'all'
+  || !['all', 'enabled'].includes(messageState.templateFilters.status)
   || Boolean(String(messageState.templateFilters.keyword || '').trim()));
 const messageTemplateEmptyTitle = computed(() => (
-  hasMessageTemplateFilters.value ? '当前筛选无流程模板' : '暂无流程待办/消息模板'
+  hasMessageTemplateFilters.value ? '当前筛选无流程模板' : '暂无启用流程待办/消息模板'
 ));
 const messageTemplateEmptyText = computed(() => {
   if (hasMessageTemplateFilters.value) {
@@ -4675,7 +4675,7 @@ const messageTemplateEmptyText = computed(() => {
   }
 
   return canManageMessageTemplates.value
-    ? '默认流程模板会自动写入学校业务库，也可点击同步后再调整。'
+    ? '默认流程模板会自动写入学校业务库；学生提交、老师审核、通过后修改都会按启用模板发送待办和消息。'
     : '未读取到默认流程模板，请联系管理员同步。';
 });
 const canManageInternship = computed(() => hasPermission('internship:manage'));
@@ -5938,7 +5938,7 @@ async function openMessageTemplateManager() {
     return;
   }
   messageState.templateManager.visible = true;
-  Object.assign(messageState.templateFilters, { type: 'all', status: 'all', keyword: '' });
+  Object.assign(messageState.templateFilters, { type: 'all', status: 'enabled', keyword: '' });
   messageState.templatePagination.page = 1;
   if (canManageMessageTemplates.value) {
     await syncDefaultMessageTemplates(false);

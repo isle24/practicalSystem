@@ -410,7 +410,7 @@ const filters = reactive({
 });
 const messageFilters = reactive({
   type: 'all',
-  status: 'all',
+  status: 'enabled',
   keyword: '',
 });
 const messageTemplateTypeOptions = [
@@ -431,7 +431,7 @@ const messagePagination = reactive({
   total: 0,
 });
 const messageTemplateEmptyTitle = computed(() => (
-  hasMessageTemplateFilters() ? '当前筛选无流程模板' : '暂无流程待办/消息模板'
+  hasMessageTemplateFilters() ? '当前筛选无流程模板' : '暂无启用流程待办/消息模板'
 ));
 const messageTemplateEmptyText = computed(() => {
   if (hasMessageTemplateFilters()) {
@@ -439,7 +439,7 @@ const messageTemplateEmptyText = computed(() => {
   }
 
   return props.canManageMessageTemplates
-    ? '默认流程模板会自动写入学校业务库，也可点击同步后再调整。'
+    ? '默认流程模板会自动写入学校业务库；学生提交、老师审核、通过后修改都会按启用模板发送待办和消息。'
     : '未读取到默认流程模板，请联系管理员同步。';
 });
 const templateDialog = reactive({
@@ -614,7 +614,7 @@ function shouldSyncDefaultMessageTemplates() {
 
 function hasMessageTemplateFilters() {
   return messageFilters.type !== 'all'
-    || messageFilters.status !== 'all'
+    || !['all', 'enabled'].includes(messageFilters.status)
     || Boolean(String(messageFilters.keyword || '').trim());
 }
 
