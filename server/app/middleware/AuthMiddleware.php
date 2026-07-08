@@ -12,7 +12,21 @@ use Webman\MiddlewareInterface;
 class AuthMiddleware implements MiddlewareInterface
 {
     /**
-     * 解析登录令牌并写入当前请求上下文。
+     * 免登录接口白名单（完整路径）。
+     */
+    private const PUBLIC_PATHS = [
+        '/api/auth/login',
+        '/api/auth/register',
+        '/api/auth/register-options',
+        '/api/auth/passkey-login',
+        '/api/auth/refresh',
+        '/api/auth/logout',
+        '/api/auth/context',
+        '/api/config/login-page',
+    ];
+
+    /**
+     * 解析登录令牌并写入当前请求上下文，未登录访问受保护接口返回 401。
      */
     public function process(Request $request, callable $handler): Response
     {
@@ -25,7 +39,25 @@ class AuthMiddleware implements MiddlewareInterface
             }
         }
 
+        if ($this->requiresAuth($request) && !CurrentContext::accountId()) {
+            $message = (string) (CurrentContext::get('auth_error') ?: '请先登录');
+            return json(['code' => 40100, 'message' => $message, 'data' => null])->withStatus(401);
+        }
+
         return $handler($request);
+    }
+
+    /**
+     * 判断当前请求是否需要登录态。
+     */
+    private function requiresAuth(Request $request): bool
+    {
+        $path = '/' . trim($request->path(), '/');
+        if (!str_starts_with($path, '/api/')) {
+            return false;
+        }
+
+        return !in_array($path, self::PUBLIC_PATHS, true);
     }
 
     /**
