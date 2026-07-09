@@ -60,5 +60,10 @@ return [
                 'enable_memory_monitor' => DIRECTORY_SEPARATOR === '/',
             ]
         ]
-    ]
+    ],
+    // 定时任务调度进程（单实例，避免同一 crontab 被多进程重复触发）
+    'crontask' => [
+        'handler' => app\process\CronTask::class,
+        'count' => 1,
+    ],
 ];
