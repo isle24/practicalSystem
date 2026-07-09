@@ -6,6 +6,8 @@ use app\attribute\OperationLog;
 use app\controller\Api\Concerns\Responds;
 use app\model\channel\TableRecord as ChannelTable;
 use app\model\channel\User;
+use app\server\auth\AuthService;
+use app\server\auth\DeviceBlacklist;
 use app\server\CurrentContext;
 use app\server\file\FileService;
 use support\Request;
@@ -113,6 +115,62 @@ class ProfileController
         } catch (Throwable $exception) {
             $status = (int) $exception->getCode() === 429 ? 429 : 400;
             return $this->fail($status === 429 ? 42900 : 40001, $exception->getMessage(), $status);
+        }
+    }
+
+    /**
+     * 查询已登录设备
+     */
+    #[OperationLog('查询已登录设备')]
+    public function devices(Request $request): Response
+    {
+        $accountId = CurrentContext::accountId();
+        if (!$accountId) {
+            return $this->fail(40100, '请先登录', 401);
+        }
+
+        try {
+            $currentJti = CurrentContext::deviceJti();
+            $devices = array_map(static function (array $device) use ($currentJti): array {
+                $device['current'] = $currentJti !== null && $device['jti'] === $currentJti;
+                unset($device['jti']);
+                return $device;
+            }, ChannelTable::devices((int) $accountId));
+
+            return $this->ok(['devices' => $devices]);
+        } catch (Throwable $exception) {
+            return $this->fail(50000, $exception->getMessage(), 500);
+        }
+    }
+
+    /**
+     * 下线指定设备
+     */
+    #[OperationLog('下线设备')]
+    public function revokeDevice(Request $request): Response
+    {
+        $accountId = CurrentContext::accountId();
+        if (!$accountId) {
+            return $this->fail(40100, '请先登录', 401);
+        }
+
+        $deviceId = (int) $request->input('id', 0);
+        if ($deviceId <= 0) {
+            return $this->fail(40001, '设备标识无效', 400);
+        }
+
+        try {
+            $now = date('Y-m-d H:i:s');
+            $jti = ChannelTable::revokeDevice((int) $accountId, $deviceId, $now);
+            if ($jti === null) {
+                return $this->fail(40400, '设备不存在', 404);
+            }
+
+            DeviceBlacklist::revoke($jti, (new AuthService())->refreshExpiresIn());
+
+            return $this->ok([], '已下线');
+        } catch (Throwable $exception) {
+            return $this->fail(50000, $exception->getMessage(), 500);
         }
     }
 

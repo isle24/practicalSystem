@@ -755,6 +755,88 @@ class TableRecord extends BaseModel
         ]));
     }
 
+    /**
+     * 登记或更新登录设备（按 account_id + jti 唯一）。
+     */
+    public static function registerDevice(int $accountId, string $jti, array $values, string $now): void
+    {
+        $row = self::queryTable('user_device')
+            ->where('account_id', $accountId)
+            ->where('jti', $jti)
+            ->orderByDesc('id')
+            ->first(['id']);
+
+        $payload = [
+            'device_name' => $values['device_name'] ?? null,
+            'ip' => $values['ip'] ?? null,
+            'user_agent' => $values['user_agent'] ?? null,
+            'last_active_at' => $now,
+            'status' => 'enabled',
+            'updated_at' => $now,
+            'deleted_at' => null,
+        ];
+
+        if ($row) {
+            self::queryTable('user_device')->where('id', $row->id)->update($payload);
+            return;
+        }
+
+        self::queryTable('user_device')->insert(array_merge($payload, [
+            'uuid' => self::uuid(),
+            'account_id' => $accountId,
+            'jti' => $jti,
+            'created_at' => $now,
+        ]));
+    }
+
+    /**
+     * 查询指定账号的所有在线设备。
+     */
+    public static function devices(int $accountId): array
+    {
+        return self::queryTable('user_device')
+            ->where('account_id', $accountId)
+            ->whereNull('deleted_at')
+            ->orderByDesc('last_active_at')
+            ->orderByDesc('id')
+            ->get(['id', 'jti', 'device_name', 'ip', 'user_agent', 'last_active_at', 'created_at'])
+            ->map(static fn ($row): array => [
+                'id' => (int) $row->id,
+                'jti' => (string) $row->jti,
+                'device_name' => $row->device_name,
+                'ip' => $row->ip,
+                'user_agent' => $row->user_agent,
+                'last_active_at' => $row->last_active_at,
+                'created_at' => $row->created_at,
+            ])
+            ->all();
+    }
+
+    /**
+     * 下线设备：软删除设备记录，返回被下线设备的 jti。
+     */
+    public static function revokeDevice(int $accountId, int $deviceId, string $now): ?string
+    {
+        $row = self::queryTable('user_device')
+            ->where('id', $deviceId)
+            ->where('account_id', $accountId)
+            ->whereNull('deleted_at')
+            ->first(['id', 'jti']);
+        if (!$row) {
+            return null;
+        }
+
+        self::queryTable('user_device')
+            ->where('id', $deviceId)
+            ->update([
+                'status' => 'disabled',
+                'deleted_at' => $now,
+                'updated_at' => $now,
+            ]);
+
+        return (string) $row->jti;
+    }
+
     public static function desktopShortcuts(int $accountId): array
     {
         $items = self::queryTable('user_desktop_shortcut')

@@ -95,6 +95,12 @@ class CurrentContext
         return $roleType === null || $roleType === '' ? null : (string) $roleType;
     }
 
+    public static function deviceJti(): ?string
+    {
+        $jti = self::get('device_jti');
+        return $jti === null || $jti === '' ? null : (string) $jti;
+    }
+
     public static function permissionCodes(): array
     {
         return self::arrayValue('permissions');

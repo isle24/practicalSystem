@@ -5,6 +5,7 @@ namespace app\server\auth;
 use app\model\channel\Account;
 use app\model\channel\AuthPasskey;
 use app\model\channel\MessageRecord;
+use app\model\channel\TableRecord;
 use app\model\channel\User;
 use app\server\CurrentContext;
 use app\server\rbac\DataScopeService;
@@ -37,13 +38,7 @@ class AuthService
             throw new RuntimeException('账号或密码错误');
         }
 
-        $context = $this->contextForAccount((int) $account->id, $this->client($client));
-        $token = JwtToken::generateToken($this->tokenPayload($context, $this->client($client)));
-
-        return [
-            'token' => $token,
-            'session' => $this->session($context, (int) $token['expires_in']),
-        ];
+        return $this->issueSessionForAccount((int) $account->id, $this->client($client));
     }
 
     public function switchableAccounts(): array
@@ -184,14 +179,14 @@ class AuthService
             throw new RuntimeException('登录学校与当前学校不一致');
         }
 
-        $client = (string) ($extend['client'] ?? JwtToken::TOKEN_CLIENT_WEB);
-        $context = $this->contextForAccount($accountId, $client);
-        $token = JwtToken::generateToken($this->tokenPayload($context, $this->client($client)));
+        $jti = trim((string) ($extend['jti'] ?? ''));
+        if ($jti !== '' && DeviceBlacklist::isRevoked($jti)) {
+            throw new RuntimeException('设备已被移除，请重新登录');
+        }
 
-        return [
-            'token' => $token,
-            'session' => $this->session($context, (int) $token['expires_in']),
-        ];
+        $client = (string) ($extend['client'] ?? JwtToken::TOKEN_CLIENT_WEB);
+
+        return $this->issueSessionForAccount($accountId, $client, $jti !== '' ? $jti : null);
     }
 
     public function cookieNames(): array
@@ -227,7 +222,17 @@ class AuthService
             throw new RuntimeException('登录学校与当前学校不一致');
         }
 
-        return $this->contextForAccount($accountId, (string) ($extend['client'] ?? JwtToken::TOKEN_CLIENT_WEB));
+        $jti = trim((string) ($extend['jti'] ?? ''));
+        if ($jti !== '' && DeviceBlacklist::isRevoked($jti)) {
+            throw new RuntimeException('设备已被移除，请重新登录');
+        }
+
+        $context = $this->contextForAccount($accountId, (string) ($extend['client'] ?? JwtToken::TOKEN_CLIENT_WEB));
+        if ($jti !== '') {
+            CurrentContext::set(['device_jti' => $jti]);
+        }
+
+        return $context;
     }
 
     public function publicContext(array $context): array
@@ -305,15 +310,73 @@ class AuthService
         }
     }
 
-    private function issueSessionForAccount(int $accountId, string $client): array
+    private function issueSessionForAccount(int $accountId, string $client, ?string $jti = null): array
     {
         $context = $this->contextForAccount($accountId, $this->client($client));
-        $token = JwtToken::generateToken($this->tokenPayload($context, $this->client($client)));
+        $jti = $jti ?: $this->newDeviceId();
+        $token = JwtToken::generateToken($this->tokenPayload($context, $this->client($client), $jti));
+        $this->registerDevice((int) $context['account_id'], $jti);
 
         return [
             'token' => $token,
             'session' => $this->session($context, (int) $token['expires_in']),
         ];
+    }
+
+    /**
+     * 生成稳定的设备标识（登录时创建，刷新时沿用，用于远程下线）。
+     */
+    private function newDeviceId(): string
+    {
+        return bin2hex(random_bytes(16));
+    }
+
+    /**
+     * 登录/刷新时登记当前设备，供设备管理与远程下线使用。
+     */
+    private function registerDevice(int $accountId, string $jti): void
+    {
+        if ($accountId <= 0 || $jti === '') {
+            return;
+        }
+
+        try {
+            $request = request();
+            $ip = $request ? (string) $request->getRealIp() : '';
+            $userAgent = $request ? (string) $request->header('user-agent', '') : '';
+            TableRecord::registerDevice($accountId, $jti, [
+                'device_name' => $this->deviceName($userAgent),
+                'ip' => mb_substr($ip, 0, 80),
+                'user_agent' => mb_substr($userAgent, 0, 255),
+            ], date('Y-m-d H:i:s'));
+        } catch (\Throwable) {
+        }
+    }
+
+    /**
+     * 从 UA 粗略识别设备名称。
+     */
+    private function deviceName(string $userAgent): string
+    {
+        $agent = strtolower($userAgent);
+        $platform = match (true) {
+            str_contains($agent, 'iphone'), str_contains($agent, 'ios') => 'iPhone',
+            str_contains($agent, 'android') => 'Android',
+            str_contains($agent, 'windows') => 'Windows',
+            str_contains($agent, 'macintosh'), str_contains($agent, 'mac os') => 'Mac',
+            str_contains($agent, 'micromessenger') => '微信',
+            default => '未知设备',
+        };
+        $browser = match (true) {
+            str_contains($agent, 'micromessenger') => '企业微信',
+            str_contains($agent, 'edg') => 'Edge',
+            str_contains($agent, 'chrome') => 'Chrome',
+            str_contains($agent, 'firefox') => 'Firefox',
+            str_contains($agent, 'safari') => 'Safari',
+            default => '',
+        };
+
+        return $browser !== '' ? "{$platform} · {$browser}" : $platform;
     }
 
     private function session(array $context, int $expiresIn): array
@@ -334,7 +397,7 @@ class AuthService
         ];
     }
 
-    private function tokenPayload(array $context, string $client): array
+    private function tokenPayload(array $context, string $client, string $jti = ''): array
     {
         return [
             'id' => $context['account_id'],
@@ -350,6 +413,7 @@ class AuthService
             'school_code' => $context['school_code'],
             'school_name' => $context['school_name'],
             'client' => $client,
+            'jti' => $jti,
         ];
     }
 
