@@ -6,10 +6,14 @@ use app\model\channel\ExportTaskRecord;
 use app\server\CurrentContext;
 use app\server\message\MessageService;
 use InvalidArgumentException;
+use Throwable;
+use Webman\RedisQueue\Redis as RedisQueue;
 
 class ExportTaskService
 {
     private const ADMIN_ROLES = ['super_admin', 'school_admin', 'college_admin', 'profession_admin'];
+
+    public const QUEUE = 'export_task';
 
     public function list(array $filters): array
     {
@@ -34,6 +38,8 @@ class ExportTaskService
             'params' => ExportTaskRecord::jsonValue($payload['params'] ?? []),
         ]);
 
+        $this->enqueue($taskId);
+
         return [
             'task' => ExportTaskRecord::taskById($taskId),
         ];
@@ -51,6 +57,8 @@ class ExportTaskService
         if ($affected <= 0) {
             throw new InvalidArgumentException('导出任务不存在或不可重试');
         }
+
+        $this->enqueue($id);
 
         $task = ExportTaskRecord::taskById($id);
         if ($task && !empty($task['user_id'])) {
@@ -110,6 +118,26 @@ class ExportTaskService
                 'entity_type' => 'export_task',
                 'entity_id' => $taskId,
             ], 0, '系统');
+        } catch (\Throwable) {
+        }
+    }
+
+    /**
+     * 将导出任务推入 Redis 队列，交由 ExportConsumer 后台生成文件。
+     * 入队失败不抛错：任务已落库为 pending，CronTask 会定时补投。
+     */
+    private function enqueue(int $taskId): void
+    {
+        $databaseId = (int) (CurrentContext::schoolDatabaseId() ?: 0);
+        if ($taskId <= 0 || $databaseId <= 0) {
+            return;
+        }
+
+        try {
+            RedisQueue::send(self::QUEUE, [
+                'database_id' => $databaseId,
+                'task_id' => $taskId,
+            ]);
         } catch (\Throwable) {
         }
     }

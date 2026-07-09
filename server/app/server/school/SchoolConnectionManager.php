@@ -59,6 +59,20 @@ class SchoolConnectionManager
         return array_values(self::$active);
     }
 
+    /**
+     * 后台进程（队列消费者/定时任务）无 HTTP 上下文，
+     * 通过 database_id 从主库取连接配置并激活租户连接。
+     */
+    public function bootstrapById(int $databaseId): string
+    {
+        $config = \app\model\system\Database::connectionConfigById($databaseId);
+        if (!$config) {
+            throw new InvalidArgumentException('学校数据库不存在或未启用: ' . $databaseId);
+        }
+
+        return $this->ensureConnection($databaseId, $config);
+    }
+
     private function buildConfig(array $config): array
     {
         $template = (array) config('database.connections.school_template', config('database.connections.mysql', []));

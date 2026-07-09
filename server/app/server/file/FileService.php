@@ -177,6 +177,77 @@ class FileService
         }
     }
 
+    /**
+     * 后台进程（导出队列消费者等）用：把服务端生成的临时文件落库为正式文件。
+     * 复用 persistUploadedFile 的秒传/引用计数逻辑；成功后删除源临时文件。
+     */
+    public function storeGeneratedFile(string $sourcePath, array $options = []): array
+    {
+        if (!is_file($sourcePath)) {
+            throw new RuntimeException('待入库文件不存在');
+        }
+
+        $category = $this->category((string) ($options['category'] ?? 'export'));
+        $extension = strtolower((string) ($options['ext'] ?? pathinfo($sourcePath, PATHINFO_EXTENSION) ?: 'xlsx'));
+        $name = $this->fileName((string) ($options['name'] ?? ('export.' . $extension)));
+        $downloadName = $this->fileName((string) ($options['download_name'] ?? $name));
+        $uploaderId = (int) ($options['uploader_id'] ?? 0);
+        $isTemporary = $this->boolInput($options['is_temporary'] ?? true);
+
+        $block = $this->storageBlock();
+        $segment = $this->schoolSegment();
+        $relativeDir = "files/{$block}/{$segment}/{$category}/" . date('Ymd');
+        $absoluteDir = rtrim(public_path(), DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $relativeDir);
+        if (!is_dir($absoluteDir) && !mkdir($absoluteDir, 0775, true) && !is_dir($absoluteDir)) {
+            throw new RuntimeException('导出目录创建失败');
+        }
+
+        $savedPath = $absoluteDir . DIRECTORY_SEPARATOR . $this->uuid() . '.' . $extension;
+        if (!@copy($sourcePath, $savedPath)) {
+            throw new RuntimeException('导出文件写入失败');
+        }
+        @unlink($sourcePath);
+
+        try {
+            $md5 = md5_file($savedPath);
+            if ($md5 === false) {
+                throw new RuntimeException('导出文件校验失败');
+            }
+            $md5 = strtolower($md5);
+            $mimeType = $this->detectMimeType($savedPath);
+
+            $lockToken = $this->acquireMd5Lock($md5);
+            try {
+                return $this->persistUploadedFile([
+                    'md5' => $md5,
+                    'sha1' => sha1_file($savedPath) ?: null,
+                    'path' => $this->relativePublicPath($savedPath),
+                    'url' => '/' . $this->relativePublicPath($savedPath),
+                    'ext' => $extension,
+                    'size' => (int) (filesize($savedPath) ?: 0),
+                    'mime_type' => $mimeType,
+                    'disk' => 'public',
+                    'block' => $block,
+                    'category' => $category,
+                ], [
+                    'name' => $name,
+                    'download_name' => $downloadName,
+                    'is_temporary' => $isTemporary,
+                    'uploader_id' => $uploaderId,
+                    'category' => $category,
+                    'device' => [],
+                ], $savedPath);
+            } finally {
+                if ($lockToken !== null) {
+                    $this->releaseMd5Lock($md5, $lockToken);
+                }
+            }
+        } catch (Throwable $exception) {
+            $this->removeLocalFile($savedPath);
+            throw $exception;
+        }
+    }
+
     public function info(int $fileId): array
     {
         $this->accountId();

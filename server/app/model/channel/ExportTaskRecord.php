@@ -92,6 +92,24 @@ class ExportTaskRecord extends TableRecord
             ->update($values);
     }
 
+    /**
+     * 后台补投用：取创建于 $before 之前仍处于 pending 的任务 id（最多 $limit 条）。
+     */
+    public static function stalePendingIds(string $before, int $limit = 50): array
+    {
+        self::ensureSchema();
+
+        return self::queryTable('export_task')
+            ->where('status', 'pending')
+            ->whereNull('deleted_at')
+            ->where('created_at', '<=', $before)
+            ->orderBy('id')
+            ->limit(max(1, $limit))
+            ->pluck('id')
+            ->map(static fn ($id): int => (int) $id)
+            ->all();
+    }
+
     public static function ensureSchema(): void
     {
         $connection = self::connection();
