@@ -1,6 +1,7 @@
 import { computed, reactive } from 'vue';
 import { showToast } from 'vant';
 import { fetchMessages, fetchMessageSummary, markMessagesRead } from '../api/system';
+import { formatDateKey } from '../utils/date';
 
 const typeNames = {
   system: '系统通知',
@@ -261,12 +262,4 @@ function messageTimeText(value) {
   }
   const text = String(value || '');
   return /^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}/.test(text) ? text.slice(11, 16) : (text || '-');
-}
-
-function formatDateKey(date) {
-  return [
-    date.getFullYear(),
-    String(date.getMonth() + 1).padStart(2, '0'),
-    String(date.getDate()).padStart(2, '0'),
-  ].join('-');
 }

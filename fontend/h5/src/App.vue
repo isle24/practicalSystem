@@ -102,666 +102,7 @@
         @download="downloadMobileTemplate"
       />
 
-      <template v-else-if="activeTab === 'internship'">
-        <van-notice-bar
-          v-if="internship.message"
-          color="#8a5a00"
-          background="#fff3d8"
-          left-icon="warning-o"
-          :text="internship.message"
-        />
-
-        <section class="internship-action-tabs">
-          <button
-            v-for="item in internshipPanels"
-            :key="item.key"
-            :class="{ active: internship.panel === item.key }"
-            @click="switchInternshipPanel(item.key)"
-          >
-            <component :is="item.icon" :size="18" />
-            <span>{{ item.name }}</span>
-          </button>
-        </section>
-
-        <section v-if="internship.panel === 'workbench'" class="summary-band internship-summary">
-          <div v-for="item in internshipSummaries" :key="item.name">
-            <strong>{{ item.value }}</strong>
-            <span>{{ item.name }}</span>
-          </div>
-        </section>
-
-        <template v-if="isStudentRole && internship.panel === 'apply'">
-          <section class="mobile-card">
-            <header>
-              <ClipboardList :size="20" />
-              <strong>我的实习任务</strong>
-            </header>
-            <van-cell
-              v-for="row in internship.options.arrangements"
-              :key="row.id"
-              clickable
-              :title="row.title"
-              :label="joinFact([row.course_name, row.teacher_name, dateRangeText(row.start_date, row.end_date)])"
-              :value="row.student_count ? `${row.student_count}人` : ''"
-              @click="openTimelineDialog('arrangement', row)"
-            >
-              <template #right-icon>
-                <div class="cell-actions">
-                  <button @click.stop="openTimelineDialog('arrangement', row)">记录</button>
-                </div>
-              </template>
-            </van-cell>
-            <div v-if="!internship.options.arrangements.length" class="mobile-empty">暂无绑定任务</div>
-          </section>
-          <section class="mobile-card form-card">
-            <header>
-              <ClipboardList :size="20" />
-              <strong>提交特殊申请</strong>
-            </header>
-            <label>
-              <span>实习任务</span>
-              <select v-model.number="internship.forms.application.arrangement_id">
-                <option v-for="item in internship.options.arrangements" :key="item.id" :value="item.id">
-                  {{ item.title }}
-                </option>
-              </select>
-            </label>
-            <label>
-              <span>申请类型</span>
-              <select v-model="internship.forms.application.type">
-                <option value="centralized">集中实习</option>
-                <option value="distributed">分散实习</option>
-                <option value="autonomous">自主实习</option>
-              </select>
-            </label>
-            <label>
-              <span>申请说明</span>
-              <textarea v-model="internship.forms.application.remark" rows="4" />
-            </label>
-            <div class="workflow-button-row">
-              <van-button block plain type="primary" :loading="internship.loading" @click="submitApplication('draft')">
-                保存草稿
-              </van-button>
-              <van-button block type="primary" :loading="internship.loading" @click="submitApplication('wait')">
-                提交审核
-              </van-button>
-            </div>
-          </section>
-          <section class="mobile-card">
-            <header>
-              <FileClock :size="20" />
-              <strong>历史申请记录</strong>
-            </header>
-            <van-cell
-              v-for="row in internship.lists.applications.items"
-              :key="row.id"
-              :title="row.arrangement_title"
-              :label="`${row.student_name || '-'} / ${statusText(row.teacher_status)} / ${statusText(row.admin_status)}`"
-              :value="statusText(row.status)"
-            >
-              <template #right-icon>
-                <div class="cell-actions">
-                  <button @click.stop="openTimelineDialog('application', row)">记录</button>
-                </div>
-              </template>
-            </van-cell>
-            <div v-if="!internship.lists.applications.items.length" class="mobile-empty">暂无申请记录</div>
-            <div class="mobile-list-footer">
-              <span>共 {{ internship.lists.applications.pagination.total || 0 }} 条</span>
-              <button v-if="canLoadMore('applications')" :disabled="internship.loading" @click="loadMoreInternshipList('applications')">
-                加载更多
-              </button>
-            </div>
-          </section>
-        </template>
-
-        <template v-if="isStudentRole && internship.panel === 'submit'">
-          <section class="student-submit-cards">
-            <button
-              v-for="item in studentSubmitCards"
-              :key="item.key"
-              :class="{ active: internship.submitSection === item.key, expired: item.expired }"
-              @click="openStudentSubmitSection(item.key)"
-            >
-              <component :is="item.icon" :size="20" />
-              <span>
-                <strong>{{ item.title }}</strong>
-                <small>{{ item.desc }}</small>
-              </span>
-              <em>{{ item.meta }}</em>
-            </button>
-          </section>
-
-          <section v-if="internship.submitSection === 'sign'" class="mobile-card form-card">
-            <header>
-              <MapPin :size="20" />
-              <strong>签到</strong>
-            </header>
-            <label>
-              <span>实习任务</span>
-              <select v-model.number="internship.forms.sign.arrangement_id">
-                <option v-for="item in internship.options.arrangements" :key="item.id" :value="item.id">
-                  {{ item.title }}
-                </option>
-              </select>
-            </label>
-            <div class="gps-sign-card">
-              <div class="gps-sign-head">
-                <span>
-                  <strong>{{ signGpsTitle }}</strong>
-                  <small>{{ internship.forms.sign.location || signGpsHint }}</small>
-                </span>
-                <button type="button" :disabled="internship.forms.sign.locating" @click="locateSignPosition">
-                  {{ internship.forms.sign.locating ? '定位中' : '重新定位' }}
-                </button>
-              </div>
-              <div class="gps-map-preview">
-                <img v-if="signMapUrl" :src="signMapUrl" alt="签到定位地图">
-                <div v-else>
-                  <MapPin :size="24" />
-                  <span>获取 GPS 后显示地图</span>
-                </div>
-              </div>
-              <div class="gps-coordinate-grid">
-                <span>经度 {{ coordinateText(internship.forms.sign.longitude) }}</span>
-                <span>纬度 {{ coordinateText(internship.forms.sign.latitude) }}</span>
-                <span>精度 {{ signAccuracyText }}</span>
-              </div>
-              <small v-if="internship.forms.sign.gps_error" class="gps-error">{{ internship.forms.sign.gps_error }}</small>
-            </div>
-            <van-button block type="primary" :loading="internship.loading" :disabled="!signGpsReady" @click="submitSignIn">
-              提交签到
-            </van-button>
-          </section>
-
-          <section v-if="internship.submitSection === 'sign'" class="mobile-card">
-            <header>
-              <MapPin :size="20" />
-              <strong>签到记录</strong>
-            </header>
-            <van-cell
-              v-for="row in internship.lists.signIns.items"
-              :key="row.id"
-              clickable
-              :title="row.arrangement_title || '实习签到'"
-              :label="`${row.date || '-'} / ${row.sign_time || '-'} / ${row.location || '-'}`"
-              :value="signTypeText(row.sign_type)"
-              @click="openTimelineDialog('sign_in', row)"
-            />
-            <div v-if="!internship.lists.signIns.items.length" class="mobile-empty">暂无签到记录</div>
-            <div class="mobile-list-footer">
-              <span>共 {{ internship.lists.signIns.pagination.total || 0 }} 条</span>
-              <button v-if="canLoadMore('signIns')" :disabled="internship.loading" @click="loadMoreInternshipList('signIns')">
-                加载更多
-              </button>
-            </div>
-          </section>
-
-          <section v-if="internship.submitSection === 'journal'" class="mobile-card form-card">
-            <header>
-              <FileClock :size="20" />
-              <strong>实习日志</strong>
-              <small :class="{ danger: isStageExpired('journal_deadline') }">{{ stageDeadlineText('journal_deadline') }}</small>
-            </header>
-            <label>
-              <span>实习任务</span>
-              <select v-model.number="internship.forms.journal.arrangement_id">
-                <option v-for="item in internship.options.arrangements" :key="item.id" :value="item.id">
-                  {{ item.title }}
-                </option>
-              </select>
-            </label>
-            <div class="stage-deadline-panel" :class="{ expired: isStageExpired('journal_deadline') }">
-              <span>{{ stageDeadlineDetailText('journal_deadline') }}</span>
-              <button v-if="isStageExpired('journal_deadline')" type="button" @click="openDelayForStage('journal_deadline')">
-                申请延期
-              </button>
-            </div>
-            <label>
-              <span>标题</span>
-              <input v-model="internship.forms.journal.title">
-            </label>
-            <label>
-              <span>内容</span>
-              <textarea v-model="internship.forms.journal.content" rows="4" />
-            </label>
-            <div class="workflow-button-row">
-              <van-button block plain type="primary" :loading="internship.loading" @click="submitJournal('draft')">
-                保存草稿
-              </van-button>
-              <van-button block type="primary" :loading="internship.loading" :disabled="isStageExpired('journal_deadline')" @click="submitJournal('wait')">
-                {{ internship.forms.journal.id ? '重新提交审核' : '提交审核' }}
-              </van-button>
-            </div>
-          </section>
-
-          <section v-if="internship.submitSection === 'report'" class="mobile-card form-card">
-            <header>
-              <FileText :size="20" />
-              <strong>实习报告</strong>
-              <small :class="{ danger: isStageExpired('report_deadline') }">{{ stageDeadlineText('report_deadline') }}</small>
-            </header>
-            <label>
-              <span>实习任务</span>
-              <select v-model.number="internship.forms.report.arrangement_id">
-                <option v-for="item in internship.options.arrangements" :key="item.id" :value="item.id">
-                  {{ item.title }}
-                </option>
-              </select>
-            </label>
-            <div class="stage-deadline-panel" :class="{ expired: isStageExpired('report_deadline') }">
-              <span>{{ stageDeadlineDetailText('report_deadline') }}</span>
-              <button v-if="isStageExpired('report_deadline')" type="button" @click="openDelayForStage('report_deadline')">
-                申请延期
-              </button>
-            </div>
-            <label>
-              <span>标题</span>
-              <input v-model="internship.forms.report.title">
-            </label>
-            <label>
-              <span>内容</span>
-              <textarea v-model="internship.forms.report.content" rows="4" />
-            </label>
-            <div class="workflow-button-row">
-              <van-button block plain type="primary" :loading="internship.loading" @click="submitReport('draft')">
-                保存草稿
-              </van-button>
-              <van-button block type="primary" :loading="internship.loading" :disabled="isStageExpired('report_deadline')" @click="submitReport('wait')">
-                {{ internship.forms.report.id ? '重新提交审核' : '提交审核' }}
-              </van-button>
-            </div>
-          </section>
-
-          <section v-if="internship.submitSection === 'delay'" class="mobile-card form-card">
-            <header>
-              <FileClock :size="20" />
-              <strong>延期申请</strong>
-            </header>
-            <label>
-              <span>实习任务</span>
-              <select v-model.number="internship.forms.delay.arrangement_id">
-                <option v-for="item in internship.options.arrangements" :key="item.id" :value="item.id">
-                  {{ item.title }}
-                </option>
-              </select>
-            </label>
-            <label>
-              <span>申请模块</span>
-              <select v-model="internship.forms.delay.config_key">
-                <option v-for="item in delayConfigOptions()" :key="item.value" :value="item.value">
-                  {{ item.label }}
-                </option>
-              </select>
-              <small>{{ stageDeadlineText(internship.forms.delay.config_key) }}</small>
-            </label>
-            <label>
-              <span>申请延期至</span>
-              <input v-model="internship.forms.delay.requested_date" type="date">
-            </label>
-            <label>
-              <span>申请原因</span>
-              <textarea v-model="internship.forms.delay.reason" rows="4" />
-            </label>
-            <div class="workflow-button-row">
-              <van-button block plain type="primary" :loading="internship.loading" @click="submitDelay('draft')">
-                保存草稿
-              </van-button>
-              <van-button block type="primary" :loading="internship.loading" @click="submitDelay('wait')">
-                提交审核
-              </van-button>
-            </div>
-          </section>
-
-          <section v-if="internship.submitSection === 'journal'" class="mobile-card">
-            <header>
-              <FileClock :size="20" />
-              <strong>日志记录</strong>
-            </header>
-            <van-cell
-              v-for="row in internship.lists.journals.items"
-              :key="row.id"
-              :title="row.title"
-              :label="row.date || row.created_at || '-'"
-            >
-              <template #right-icon>
-                <div class="cell-actions record-status-actions">
-                  <AppStatusBadge :status="row.status" />
-                  <button v-if="canEditStudentWork(row)" @click.stop="editStudentWork('journal', row)">修改</button>
-                  <button @click.stop="openTimelineDialog('journal', row)">记录</button>
-                </div>
-              </template>
-            </van-cell>
-            <div v-if="!internship.lists.journals.items.length" class="mobile-empty">暂无日志记录</div>
-            <div class="mobile-list-footer">
-              <span>共 {{ internship.lists.journals.pagination.total || 0 }} 条</span>
-              <button v-if="canLoadMore('journals')" :disabled="internship.loading" @click="loadMoreInternshipList('journals')">
-                加载更多
-              </button>
-            </div>
-          </section>
-
-          <section v-if="internship.submitSection === 'report'" class="mobile-card">
-            <header>
-              <FileText :size="20" />
-              <strong>报告记录</strong>
-            </header>
-            <van-cell
-              v-for="row in internship.lists.reports.items"
-              :key="row.id"
-              :title="row.title"
-              :label="row.created_at || '-'"
-            >
-              <template #right-icon>
-                <div class="cell-actions record-status-actions">
-                  <AppStatusBadge :status="row.status" />
-                  <button v-if="canEditStudentWork(row)" @click.stop="editStudentWork('report', row)">修改</button>
-                  <button @click.stop="openTimelineDialog('report', row)">记录</button>
-                </div>
-              </template>
-            </van-cell>
-            <div v-if="!internship.lists.reports.items.length" class="mobile-empty">暂无报告记录</div>
-            <div class="mobile-list-footer">
-              <span>共 {{ internship.lists.reports.pagination.total || 0 }} 条</span>
-              <button v-if="canLoadMore('reports')" :disabled="internship.loading" @click="loadMoreInternshipList('reports')">
-                加载更多
-              </button>
-            </div>
-          </section>
-
-          <section v-if="internship.submitSection === 'delay'" class="mobile-card">
-            <header>
-              <FileClock :size="20" />
-              <strong>延期记录</strong>
-            </header>
-            <van-cell
-              v-for="row in internship.lists.delays.items"
-              :key="row.id"
-              :title="delayConfigText(row.config_key)"
-              :label="`${row.arrangement_title || '-'} / 延期至 ${row.requested_date || '-'}`"
-              :value="statusText(row.status)"
-            >
-              <template #right-icon>
-                <div class="cell-actions record-status-actions">
-                  <button v-if="canEditStudentWork(row)" @click.stop="editStudentWork('delay', row)">修改</button>
-                  <button @click.stop="openTimelineDialog('delay', row)">记录</button>
-                </div>
-              </template>
-            </van-cell>
-            <div v-if="!internship.lists.delays.items.length" class="mobile-empty">暂无延期申请</div>
-            <div class="mobile-list-footer">
-              <span>共 {{ internship.lists.delays.pagination.total || 0 }} 条</span>
-              <button v-if="canLoadMore('delays')" :disabled="internship.loading" @click="loadMoreInternshipList('delays')">
-                加载更多
-              </button>
-            </div>
-          </section>
-        </template>
-
-        <template v-if="canReviewInternship && internship.panel === 'review'">
-          <section v-if="reviewListTabs.length > 1" class="mobile-list-switch">
-            <button
-              v-for="item in reviewListTabs"
-              :key="item.key"
-              :class="{ active: internship.reviewList === item.key }"
-              @click="switchMobileList('review', item.key)"
-            >
-              <component :is="item.icon" :size="17" />
-              <span>{{ item.shortTitle }}</span>
-            </button>
-          </section>
-
-          <section v-if="currentReviewListConfig" class="mobile-card">
-            <header>
-              <component :is="currentReviewListConfig.icon" :size="20" />
-              <strong>{{ currentReviewListConfig.title }}</strong>
-            </header>
-            <MobileFilterSheet
-              :select-filters="mobileListSelectFilters(currentReviewListConfig)"
-              :status-options="currentReviewListConfig.statusOptions"
-              :values="internship.filters[currentReviewListConfig.key]"
-              :keyword-placeholder="currentReviewListConfig.keywordPlaceholder"
-              :loading="internship.loading"
-              @update-filter="payload => updateInternshipListFilter(currentReviewListConfig.key, payload)"
-              @search="reloadInternshipList(currentReviewListConfig.key)"
-              @reset="resetInternshipListFilters(currentReviewListConfig.key)"
-            />
-            <van-cell
-              v-for="row in mobileListRows(currentReviewListConfig.key)"
-              :key="row.id"
-              :title="mobileListTitle(currentReviewListConfig.key, row)"
-              :value="mobileListValue(currentReviewListConfig.key, row)"
-            >
-              <template #label>
-                <div class="mobile-cell-meta">
-                  <span
-                    v-for="(fact, index) in mobileListFacts(currentReviewListConfig.key, row)"
-                    :key="`${fact}-${index}`"
-                  >
-                    {{ fact }}
-                  </span>
-                </div>
-              </template>
-              <template #right-icon>
-                <div v-if="mobileListActions(currentReviewListConfig.key, row, 'review').length" class="cell-actions">
-                  <button
-                    v-for="action in mobileListActions(currentReviewListConfig.key, row, 'review')"
-                    :key="action.key"
-                    @click.stop="handleMobileListAction(action, row)"
-                  >
-                    {{ action.label }}
-                  </button>
-                </div>
-              </template>
-            </van-cell>
-            <div v-if="!mobileListRows(currentReviewListConfig.key).length" class="mobile-empty">
-              {{ currentReviewListConfig.emptyText }}
-            </div>
-            <div class="mobile-list-footer">
-              <span>共 {{ listTotal(currentReviewListConfig.key) }} 条</span>
-              <button
-                v-if="canLoadMore(currentReviewListConfig.key)"
-                :disabled="internship.loading"
-                @click="loadMoreInternshipList(currentReviewListConfig.key)"
-              >
-                加载更多
-              </button>
-            </div>
-          </section>
-        </template>
-
-        <template v-if="internship.panel === 'score'">
-          <section v-if="isTeacherRole" class="mobile-card form-card">
-            <header>
-              <GraduationCap :size="20" />
-              <strong>成绩录入</strong>
-            </header>
-            <label>
-              <span>学生</span>
-              <input
-                v-model="internship.filters.pairs.keyword"
-                placeholder="搜索学生、学号或任务"
-                @keyup.enter="reloadScorePairs"
-              >
-            </label>
-            <label>
-              <span>任务绑定</span>
-              <select v-model.number="internship.forms.score.pair_id" @change="selectScorePair">
-                <option v-for="pair in internship.lists.pairs.items" :key="pair.id" :value="pair.id">
-                  {{ pair.student_name }} / {{ pair.arrangement_title }}
-                </option>
-              </select>
-            </label>
-            <van-button block plain type="primary" :loading="internship.loading" @click="reloadScorePairs">
-              查询绑定学生
-            </van-button>
-            <label><span>签到成绩</span><input v-model="internship.forms.score.sign_in_score" type="number"></label>
-            <label><span>日志成绩</span><input v-model="internship.forms.score.journal_score" type="number"></label>
-            <label><span>报告成绩</span><input v-model="internship.forms.score.report_score" type="number"></label>
-            <label><span>企业成绩</span><input v-model="internship.forms.score.enterprise_score" type="number"></label>
-            <van-button block type="primary" :loading="internship.loading" @click="submitScore">
-              保存成绩
-            </van-button>
-          </section>
-
-          <section class="mobile-card">
-            <header>
-              <GraduationCap :size="20" />
-              <strong>任务成绩记录</strong>
-            </header>
-            <MobileFilterSheet
-              :select-filters="mobileListSelectFilters(getMobileListConfig('scores'))"
-              :values="internship.filters.scores"
-              keyword-placeholder="学生、学号、安排"
-              :loading="internship.loading"
-              @update-filter="payload => updateInternshipListFilter('scores', payload)"
-              @search="reloadInternshipList('scores')"
-              @reset="resetInternshipListFilters('scores')"
-            />
-            <van-cell
-              v-for="row in internship.lists.scores.items"
-              :key="row.id"
-              clickable
-              :title="row.student_name || row.student_num"
-              :label="`${row.arrangement_title || '-'} / 总评 ${row.final_score ?? '-'}`"
-              :value="row.teacher_name || '-'"
-              @click="openTimelineDialog('score', row)"
-            />
-            <div v-if="!internship.lists.scores.items.length" class="mobile-empty">暂无成绩记录</div>
-            <div class="mobile-list-footer">
-              <span>共 {{ internship.lists.scores.pagination.total || 0 }} 条</span>
-              <button v-if="canLoadMore('scores')" :disabled="internship.loading" @click="loadMoreInternshipList('scores')">
-                加载更多
-              </button>
-            </div>
-          </section>
-
-          <section class="mobile-card">
-            <header>
-              <GraduationCap :size="20" />
-              <strong>课程成绩汇总</strong>
-            </header>
-            <MobileFilterSheet
-              :select-filters="mobileListSelectFilters(getMobileListConfig('courseScores'))"
-              :values="internship.filters.courseScores"
-              keyword-placeholder="学生、学号、课程、任务"
-              :loading="internship.loading"
-              @update-filter="payload => updateInternshipListFilter('courseScores', payload)"
-              @search="reloadInternshipList('courseScores')"
-              @reset="resetInternshipListFilters('courseScores')"
-            />
-            <van-cell
-              v-for="row in internship.lists.courseScores.items"
-              :key="`${row.plan_id}-${row.student_id}`"
-              :title="joinFact([row.student_name, row.student_num]) || '学生成绩'"
-              :label="joinFact([row.course_name || row.course_code, `任务 ${row.scored_task_count || 0}/${row.task_count || 0}`])"
-              :value="row.course_final_score !== null && row.course_final_score !== undefined ? `${row.course_final_score} 分` : '-'"
-            >
-              <template #label>
-                <div class="mobile-cell-meta">
-                  <span v-for="(fact, index) in mobileListFacts('courseScores', row)" :key="`${fact}-${index}`">
-                    {{ fact }}
-                  </span>
-                </div>
-              </template>
-            </van-cell>
-            <div v-if="!internship.lists.courseScores.items.length" class="mobile-empty">暂无课程成绩汇总</div>
-            <div class="mobile-list-footer">
-              <span>共 {{ internship.lists.courseScores.pagination.total || 0 }} 条</span>
-              <button v-if="canLoadMore('courseScores')" :disabled="internship.loading" @click="loadMoreInternshipList('courseScores')">
-                加载更多
-              </button>
-            </div>
-          </section>
-        </template>
-
-        <template v-if="isAdminRole && internship.panel === 'manage'">
-          <section class="mobile-list-switch multi">
-            <button
-              v-for="item in manageListTabs"
-              :key="item.key"
-              :class="{ active: internship.manageList === item.key }"
-              @click="switchMobileList('manage', item.key)"
-            >
-              <component :is="item.icon" :size="17" />
-              <span>{{ item.shortTitle }}</span>
-            </button>
-          </section>
-
-          <section v-if="currentManageListConfig" class="mobile-card">
-            <header>
-              <component :is="currentManageListConfig.icon" :size="20" />
-              <strong>{{ currentManageListConfig.title }}</strong>
-            </header>
-            <MobileFilterSheet
-              :select-filters="mobileListSelectFilters(currentManageListConfig)"
-              :status-options="currentManageListConfig.statusOptions"
-              :status-key="currentManageListConfig.statusKey || 'status'"
-              :values="internship.filters[currentManageListConfig.key]"
-              :keyword-placeholder="currentManageListConfig.keywordPlaceholder"
-              :loading="internship.loading"
-              @update-filter="payload => updateInternshipListFilter(currentManageListConfig.key, payload)"
-              @search="reloadInternshipList(currentManageListConfig.key)"
-              @reset="resetInternshipListFilters(currentManageListConfig.key)"
-            />
-            <van-cell
-              v-for="row in mobileListRows(currentManageListConfig.key)"
-              :key="row.id"
-              :title="mobileListTitle(currentManageListConfig.key, row)"
-              :value="mobileListValue(currentManageListConfig.key, row)"
-            >
-              <template #label>
-                <div class="mobile-cell-meta">
-                  <span
-                    v-for="(fact, index) in mobileListFacts(currentManageListConfig.key, row)"
-                    :key="`${fact}-${index}`"
-                  >
-                    {{ fact }}
-                  </span>
-                </div>
-              </template>
-              <template #right-icon>
-                <div v-if="mobileListActions(currentManageListConfig.key, row, 'manage').length" class="cell-actions">
-                  <button
-                    v-for="action in mobileListActions(currentManageListConfig.key, row, 'manage')"
-                    :key="action.key"
-                    @click.stop="handleMobileListAction(action, row)"
-                  >
-                    {{ action.label }}
-                  </button>
-                </div>
-              </template>
-            </van-cell>
-            <div v-if="!mobileListRows(currentManageListConfig.key).length" class="mobile-empty">
-              {{ currentManageListConfig.emptyText }}
-            </div>
-            <div class="mobile-list-footer">
-              <span>共 {{ listTotal(currentManageListConfig.key) }} 条</span>
-              <button
-                v-if="canLoadMore(currentManageListConfig.key)"
-                :disabled="internship.loading"
-                @click="loadMoreInternshipList(currentManageListConfig.key)"
-              >
-                加载更多
-              </button>
-            </div>
-          </section>
-        </template>
-
-        <section v-if="internship.panel === 'workbench'" class="mobile-card">
-          <header>
-            <BriefcaseBusiness :size="20" />
-            <strong>当前任务</strong>
-          </header>
-          <van-cell
-            v-for="item in internshipWorkbenchCells"
-            :key="item.title"
-            :title="item.title"
-            :label="item.label"
-            :value="item.value"
-          />
-        </section>
-      </template>
+      <InternshipPage v-else-if="activeTab === 'internship'" />
 
       <template v-else-if="isPracticeTab(activeTab)">
         <van-notice-bar
@@ -869,61 +210,6 @@
       :detail="support.doc.detail"
       @close="closeMobileDoc"
     />
-
-    <van-popup
-      v-model:show="internship.reviewDialog.visible"
-      round
-      position="bottom"
-      safe-area-inset-bottom
-    >
-      <section class="review-sheet">
-        <header>
-          <strong>{{ reviewDialogTitle }}</strong>
-          <span>{{ reviewDialogRuleText }}</span>
-        </header>
-        <section v-if="reviewDialogTargetDetails.length" class="review-target-card">
-          <div
-            v-for="item in reviewDialogTargetDetails"
-            :key="item.label"
-          >
-            <span>{{ item.label }}</span>
-            <strong>{{ item.value }}</strong>
-          </div>
-        </section>
-        <section v-if="internship.reviewDialog.mode === 'review'" class="review-status-switch">
-          <button
-            v-for="option in internshipReviewStatusOptions(internship.reviewDialog.entity)"
-            :key="option.value"
-            type="button"
-            :class="{ active: internship.reviewDialog.status === option.value }"
-            @click="setInternshipReviewStatus(option.value)"
-          >
-            {{ option.label }}
-          </button>
-        </section>
-        <label>
-          <span>{{ reviewDialogReasonLabel }}</span>
-          <textarea
-            v-model="internship.reviewDialog.reason"
-            :maxlength="reviewRuleMax(internship.reviewDialog.entity, internship.reviewDialog.status) || undefined"
-            rows="5"
-            @input="trimReviewDialogMax"
-          />
-          <small>
-            {{ textLength(internship.reviewDialog.reason) }} / {{ reviewRuleMaxText(internship.reviewDialog.entity, internship.reviewDialog.status) }}
-          </small>
-        </label>
-        <div class="sheet-actions" :class="{ triple: internship.reviewDialog.mode === 'review' }">
-          <button type="button" @click="closeReviewDialog">取消</button>
-          <button v-if="internship.reviewDialog.mode === 'review'" type="button" :disabled="internship.loading" @click="saveInternshipDialogReviewDraft">
-            保存草稿
-          </button>
-          <button type="button" class="primary-action" :disabled="internship.loading" @click="confirmReviewDialog">
-            提交审核
-          </button>
-        </div>
-      </section>
-    </van-popup>
 
     <van-popup
       v-model:show="practiceReviewDialog.visible"
@@ -1052,65 +338,7 @@
       </section>
     </van-popup>
 
-    <van-popup
-      v-model:show="internship.timelineDialog.visible"
-      round
-      position="bottom"
-      safe-area-inset-bottom
-    >
-      <section class="timeline-sheet">
-        <header>
-          <strong>{{ internship.timelineDialog.title }}</strong>
-          <span>{{ internship.timelineDialog.subtitle }}</span>
-        </header>
-        <div class="timeline-list">
-          <div v-if="internship.timelineDialog.loading" class="timeline-empty">正在读取流程记录...</div>
-          <template v-else-if="internshipTimelineCycles.length">
-            <section
-              v-for="(cycle, index) in internshipTimelineCycles"
-              :key="timelineCycleKey(cycle, index)"
-              class="timeline-cycle"
-            >
-              <span />
-              <div>
-                <header class="timeline-node-head">
-                  <strong>{{ timelineCycleTitle(cycle) }}</strong>
-                  <small>{{ timelineCycleTime(cycle) }}</small>
-                </header>
-                <p>{{ timelineCycleContent(cycle) }}</p>
-                <div v-if="cycle.branches?.length" class="timeline-branches">
-                  <article
-                    v-for="(branch, branchIndex) in cycle.branches"
-                    :key="timelineBranchKey(branch, branchIndex)"
-                    class="timeline-branch"
-                    :class="{ reopen: isModifyAfterAcceptBranch(branch) }"
-                  >
-                    <span />
-                    <div>
-                      <header class="timeline-node-head">
-                        <strong>{{ timelineBranchTitle(branch) }}</strong>
-                        <small>{{ timelineBranchTime(branch) }}</small>
-                      </header>
-                      <p v-if="timelineBranchContent(branch)">{{ timelineBranchContent(branch) }}</p>
-                      <p v-for="review in timelineBranchReviews(branch)" :key="review.id" class="timeline-review">
-                        <span>状态：{{ statusText(review.status) }}</span>
-                        <span>审核意见：{{ review.opinion || '-' }}</span>
-                        <span v-if="review.score !== null && review.score !== undefined">评分：{{ review.score }}</span>
-                      </p>
-                    </div>
-                  </article>
-                </div>
-              </div>
-            </section>
-          </template>
-          <div v-else class="timeline-empty">{{ internship.timelineDialog.message || '暂无流程记录' }}</div>
-        </div>
-        <div class="sheet-actions single">
-          <button type="button" @click="closeTimelineDialog">关闭</button>
-        </div>
-      </section>
-    </van-popup>
-    </template>
+        </template>
   </MobileAppShell>
 </template>
 
@@ -1140,6 +368,8 @@ import {
 import MobileFilterSheet from './components/MobileFilterSheet.vue';
 import AppStatusBadge from './components/ui/AppStatusBadge.vue';
 import DocumentDetail from './features/support/DocumentDetail.vue';
+import InternshipPage from './features/internship/InternshipPage.vue';
+import { provideInternshipContext } from './features/internship/internshipContext';
 import MobileAppShell from './layouts/MobileAppShell.vue';
 import DocumentPage from './pages/DocumentPage.vue';
 import HomePage from './pages/HomePage.vue';
@@ -1148,10 +378,13 @@ import MessagePage from './pages/MessagePage.vue';
 import ProfilePage from './pages/ProfilePage.vue';
 import TemplatePage from './pages/TemplatePage.vue';
 import { useAuthSession } from './composables/useAuthSession';
+import { useInternship } from './composables/useInternship';
 import { useMessageCenter } from './composables/useMessageCenter';
 import { useMobileNavigation } from './composables/useMobileNavigation';
 import { useMobilePermissions } from './composables/useMobilePermissions';
 import { statusText as resolveStatusText } from './constants/status';
+import { formatDateKey } from './utils/date';
+import { emptyPagedList } from './utils/pagination';
 import {
   downloadTemplateItem,
   fetchDocCategories,
@@ -1254,173 +487,13 @@ const support = reactive({
   },
 });
 
-const defaultInternshipReviewRules = {
-  arrangement_change: {
-    accept: { min: 0, max: 300 },
-    modify: { min: 5, max: 500 },
-    refuse: { min: 5, max: 500 },
-  },
-  application: {
-    accept: { min: 0, max: 200 },
-    modify: { min: 5, max: 500 },
-    skipped: { min: 0, max: 200 },
-  },
-  journal: {
-    accept: { min: 0, max: 200 },
-    modify: { min: 5, max: 500 },
-  },
-  report: {
-    accept: { min: 0, max: 300 },
-    modify: { min: 8, max: 800 },
-  },
-  plan: {
-    accept: { min: 0, max: 300 },
-    modify: { min: 8, max: 800 },
-  },
-  delay: {
-    accept: { min: 0, max: 300 },
-    refuse: { min: 5, max: 500 },
-    modify: { min: 5, max: 500 },
-  },
-  syllabus_guide: {
-    accept: { min: 0, max: 300 },
-    modify: { min: 5, max: 500 },
-  },
-  implementation_sheet: {
-    accept: { min: 0, max: 300 },
-    modify: { min: 5, max: 500 },
-  },
-  teacher_work_report: {
-    accept: { min: 0, max: 300 },
-    modify: { min: 5, max: 500 },
-  },
-  inspection: {
-    accept: { min: 0, max: 300 },
-    modify: { min: 5, max: 500 },
-  },
-};
-
-const reviewStatusLabels = {
-  accept: '通过',
-  modify: '退回修改',
-  refuse: '退回',
-  skipped: '跳过',
-};
-
-const internship = reactive({
-  loading: false,
-  message: '',
-  panel: 'workbench',
-  submitSection: '',
-  reviewList: 'applications',
-  manageList: 'arrangements',
-  overview: emptyInternshipOverview(),
-  options: emptyInternshipOptions(),
-  lists: {
-    arrangements: emptyPagedList(),
-    arrangementChanges: emptyPagedList(),
-    plans: emptyPagedList(),
-    syllabusGuides: emptyPagedList(),
-    implementationSheets: emptyPagedList(),
-    applications: emptyPagedList(),
-    pairs: emptyPagedList(),
-    signIns: emptyPagedList(),
-    journals: emptyPagedList(),
-    reports: emptyPagedList(),
-    teacherWorkReports: emptyPagedList(),
-    delays: emptyPagedList(),
-    scores: emptyPagedList(),
-    courseScores: emptyPagedList(),
-    inspections: emptyPagedList(),
-    archiveMaterials: emptyPagedList(),
-    insurances: emptyPagedList(),
-    safetyLetters: emptyPagedList(),
-  },
-  filters: {
-    arrangements: emptyInternshipFilters(),
-    arrangementChanges: emptyInternshipFilters(),
-    plans: emptyInternshipFilters(),
-    syllabusGuides: emptyInternshipFilters(),
-    implementationSheets: emptyInternshipFilters(),
-    applications: emptyInternshipFilters(),
-    pairs: emptyInternshipFilters(),
-    signIns: emptyInternshipFilters(),
-    journals: emptyInternshipFilters(),
-    reports: emptyInternshipFilters(),
-    teacherWorkReports: emptyInternshipFilters(),
-    delays: emptyInternshipFilters(),
-    scores: emptyInternshipFilters(),
-    courseScores: emptyInternshipFilters(),
-    inspections: emptyInternshipFilters(),
-    archiveMaterials: emptyInternshipFilters(),
-    insurances: emptyInternshipFilters(),
-    safetyLetters: emptyInternshipFilters(),
-  },
-  forms: {
-    application: {
-      arrangement_id: null,
-      type: 'distributed',
-      remark: '',
-    },
-    sign: {
-      arrangement_id: null,
-      location: '',
-      longitude: null,
-      latitude: null,
-      accuracy: null,
-      located_at: '',
-      locating: false,
-      gps_error: '',
-    },
-    journal: {
-      id: null,
-      arrangement_id: null,
-      title: '',
-      content: '',
-    },
-    report: {
-      id: null,
-      arrangement_id: null,
-      title: '',
-      content: '',
-    },
-    delay: {
-      id: null,
-      arrangement_id: null,
-      config_key: 'report_deadline',
-      requested_date: '',
-      reason: '',
-    },
-    score: {
-      pair_id: null,
-      student_id: null,
-      arrangement_id: null,
-      sign_in_score: '',
-      journal_score: '',
-      report_score: '',
-      enterprise_score: '',
-    },
-  },
-  reviewDialog: {
-    visible: false,
-    mode: 'review',
-    entity: 'application',
-    status: 'accept',
-    row: null,
-    reason: '',
-  },
-  timelineDialog: {
-    visible: false,
-    loading: false,
-    entity: 'application',
-    row: null,
-    title: '',
-    subtitle: '',
-    items: [],
-    cycles: [],
-    message: '',
-  },
-});
+const {
+  internship,
+  reviewStatusLabels,
+  emptyFilters: emptyInternshipFilters,
+  emptyOptions: emptyInternshipOptions,
+  emptyOverview: emptyInternshipOverview,
+} = useInternship();
 
 const practice = reactive({
   training: createPracticeState(),
@@ -2168,17 +1241,6 @@ const practiceExecutionDialogSubtitle = computed(() => {
   return project?.title || project?.course_name || '请选择项目';
 });
 
-function emptyPagedList() {
-  return {
-    items: [],
-    pagination: {
-      page: 1,
-      page_size: 10,
-      total: 0,
-    },
-  };
-}
-
 function createPracticeState() {
   const panels = ['plans', 'schedules', 'projects', 'signIns', 'journals', 'reports', 'syllabus', 'lessonPlans', 'gradeRules', 'scores', 'reflections'];
   return {
@@ -2222,45 +1284,6 @@ function emptyPracticeFilters() {
     plan_id: '',
     status: '',
     keyword: '',
-  };
-}
-
-function emptyInternshipFilters() {
-  return {
-    grade_id: '',
-    dep_id: '',
-    profession_id: '',
-    class_id: '',
-    arrangement_id: '',
-    status: '',
-    result: '',
-    keyword: '',
-  };
-}
-
-function emptyInternshipOverview() {
-  return {
-    arrangements: 0,
-    applications_waiting: 0,
-    active_pairs: 0,
-    journals_waiting: 0,
-    reports_waiting: 0,
-    today_sign_ins: 0,
-  };
-}
-
-function emptyInternshipOptions() {
-  return {
-    plans: [],
-    arrangements: [],
-    grades: [],
-    departments: [],
-    professions: [],
-    classes: [],
-    teachers: [],
-    report_templates: [],
-    review_rules: defaultInternshipReviewRules,
-    deadline_configs: {},
   };
 }
 
@@ -5522,6 +4545,92 @@ function openMobileMessages() {
     activeTab.value = 'message';
   }
 }
+
+provideInternshipContext({
+  canEditStudentWork,
+  canLoadMore,
+  canReviewInternship,
+  closeReviewDialog,
+  closeTimelineDialog,
+  confirmReviewDialog,
+  coordinateText,
+  currentManageListConfig,
+  currentReviewListConfig,
+  dateRangeText,
+  delayConfigOptions,
+  delayConfigText,
+  editStudentWork,
+  getMobileListConfig,
+  handleMobileListAction,
+  internship,
+  internshipPanels,
+  internshipReviewStatusOptions,
+  internshipSummaries,
+  internshipTimelineCycles,
+  internshipWorkbenchCells,
+  isAdminRole,
+  isModifyAfterAcceptBranch,
+  isStageExpired,
+  isStudentRole,
+  isTeacherRole,
+  joinFact,
+  listTotal,
+  loadMoreInternshipList,
+  locateSignPosition,
+  manageListTabs,
+  mobileListActions,
+  mobileListFacts,
+  mobileListRows,
+  mobileListSelectFilters,
+  mobileListTitle,
+  mobileListValue,
+  openDelayForStage,
+  openStudentSubmitSection,
+  openTimelineDialog,
+  reloadInternshipList,
+  reloadScorePairs,
+  resetInternshipListFilters,
+  reviewDialogReasonLabel,
+  reviewDialogRuleText,
+  reviewDialogTargetDetails,
+  reviewDialogTitle,
+  reviewListTabs,
+  reviewRuleMax,
+  reviewRuleMaxText,
+  saveInternshipDialogReviewDraft,
+  selectScorePair,
+  setInternshipReviewStatus,
+  signAccuracyText,
+  signGpsHint,
+  signGpsReady,
+  signGpsTitle,
+  signMapUrl,
+  signTypeText,
+  stageDeadlineDetailText,
+  stageDeadlineText,
+  statusText,
+  studentSubmitCards,
+  submitApplication,
+  submitDelay,
+  submitJournal,
+  submitReport,
+  submitScore,
+  submitSignIn,
+  switchInternshipPanel,
+  switchMobileList,
+  textLength,
+  timelineBranchContent,
+  timelineBranchKey,
+  timelineBranchReviews,
+  timelineBranchTime,
+  timelineBranchTitle,
+  timelineCycleContent,
+  timelineCycleKey,
+  timelineCycleTime,
+  timelineCycleTitle,
+  trimReviewDialogMax,
+  updateInternshipListFilter,
+});
 
 watch(activeTab, (tab) => {
   if (tab === 'internship') {
