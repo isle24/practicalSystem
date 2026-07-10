@@ -1,0 +1,53 @@
+.app-field {
+  display: grid;
+  gap: 7px;
+  color: var(--app-text-secondary);
+  font-size: 13px;
+}
+
+.app-field > span:first-child {
+  color: var(--app-text-secondary);
+  font-weight: 500;
+}
+
+.app-field input,
+.app-field select,
+.app-field textarea {
+  width: 100%;
+  min-height: var(--app-touch-size);
+  border: 1px solid var(--app-line);
+  border-radius: var(--app-radius);
+  padding: 0 11px;
+  color: var(--app-text);
+  outline: 0;
+  background: var(--app-surface);
+  transition: border-color var(--app-motion-control) var(--app-ease-standard),
+    box-shadow var(--app-motion-control) var(--app-ease-standard),
+    background var(--app-motion-control) var(--app-ease-standard);
+}
+
+.app-field textarea {
+  min-height: 112px;
+  padding-top: 10px;
+  padding-bottom: 10px;
+  resize: vertical;
+}
+
+.app-field input:focus,
+.app-field select:focus,
+.app-field textarea:focus {
+  border-color: color-mix(in srgb, var(--app-primary) 62%, var(--app-line));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--app-primary) 11%, transparent);
+}
+
+.app-field-error {
+  color: var(--app-danger);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.app-field-help {
+  color: var(--app-text-tertiary);
+  font-size: 12px;
+  line-height: 1.45;
+}

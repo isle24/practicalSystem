@@ -643,7 +643,7 @@
             >
               <template #right-icon>
                 <div class="cell-actions record-status-actions">
-                  <span class="cell-status">{{ statusText(row.status) }}</span>
+                  <AppStatusBadge :status="row.status" />
                   <button v-if="canEditStudentWork(row)" @click.stop="editStudentWork('journal', row)">修改</button>
                   <button @click.stop="openTimelineDialog('journal', row)">记录</button>
                 </div>
@@ -671,7 +671,7 @@
             >
               <template #right-icon>
                 <div class="cell-actions record-status-actions">
-                  <span class="cell-status">{{ statusText(row.status) }}</span>
+                  <AppStatusBadge :status="row.status" />
                   <button v-if="canEditStudentWork(row)" @click.stop="editStudentWork('report', row)">修改</button>
                   <button @click.stop="openTimelineDialog('report', row)">记录</button>
                 </div>
@@ -1390,7 +1390,9 @@ import MobileBottomNav from './components/MobileBottomNav.vue';
 import MobileFilterSheet from './components/MobileFilterSheet.vue';
 import MobilePageHeader from './components/MobilePageHeader.vue';
 import RoleHomePanel from './components/RoleHomePanel.vue';
+import AppStatusBadge from './components/ui/AppStatusBadge.vue';
 import { useMobilePermissions } from './composables/useMobilePermissions';
+import { statusText as resolveStatusText } from './constants/status';
 import {
   downloadTemplateItem,
   fetchDocCategories,
@@ -5449,31 +5451,7 @@ function practiceRatioText(value) {
 }
 
 function statusText(value) {
-  const names = {
-    draft: '草稿',
-    wait: '待审核',
-    accept: '已通过',
-    modify: '需修改',
-    refuse: '已退回',
-    skipped: '跳过',
-    enabled: '启用',
-    changing: '变更中',
-    disabled: '停用',
-    changed: '已变更',
-    completed: '已完成',
-    pending: '待处理',
-    active: '有效',
-    removed: '已移除',
-    signed: '已签署',
-    published: '已发布',
-    confirmed: '已确认',
-    complete: '完整',
-    incomplete: '待补齐',
-    archived: '已归档',
-    missing: '待补齐',
-    not_required: '不适用',
-  };
-  return names[value] || value || '-';
+  return resolveStatusText(value);
 }
 
 async function loadMobileSupportCategories() {

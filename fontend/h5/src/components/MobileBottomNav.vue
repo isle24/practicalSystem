@@ -40,3 +40,23 @@ defineProps({
 
 const emit = defineEmits(['update:modelValue']);
 </script>
+
+<style scoped>
+.mobile-bottom-nav :deep(.van-tabbar-item) {
+  transition: color var(--app-motion-tab) var(--app-ease-standard),
+    background var(--app-motion-tab) var(--app-ease-standard);
+}
+
+.mobile-bottom-nav :deep(.van-tabbar-item__icon) {
+  transform: translateY(0) scale(1);
+  transition: transform var(--app-motion-tab) var(--app-ease-enter);
+}
+
+.mobile-bottom-nav :deep(.van-tabbar-item--active .van-tabbar-item__icon) {
+  transform: translateY(-1px) scale(1.06);
+}
+
+.mobile-bottom-nav :deep(.van-tabbar-item:active .van-tabbar-item__icon) {
+  transform: scale(.92);
+}
+</style>
