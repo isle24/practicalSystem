@@ -733,43 +733,16 @@
               <component :is="currentReviewListConfig.icon" :size="20" />
               <strong>{{ currentReviewListConfig.title }}</strong>
             </header>
-            <section class="mobile-list-tools" :class="mobileListToolClass(currentReviewListConfig)">
-              <select
-                v-for="filter in mobileListSelectFilters(currentReviewListConfig)"
-                :key="filter.key"
-                v-model="internship.filters[currentReviewListConfig.key][filter.key]"
-                :aria-label="filter.label"
-                @change="handleMobileListFilterChange(currentReviewListConfig.key, filter.key)"
-              >
-                <option value="">{{ filter.placeholder }}</option>
-                <option v-for="item in filter.options" :key="item.value" :value="item.value">
-                  {{ item.label }}
-                </option>
-              </select>
-              <input
-                class="mobile-keyword-input"
-                v-model="internship.filters[currentReviewListConfig.key].keyword"
-                :placeholder="currentReviewListConfig.keywordPlaceholder"
-                @keyup.enter="reloadInternshipList(currentReviewListConfig.key)"
-              >
-              <select
-                v-if="currentReviewListConfig.statusOptions.length"
-                v-model="internship.filters[currentReviewListConfig.key].status"
-                @change="reloadInternshipList(currentReviewListConfig.key)"
-              >
-                <option value="">全部状态</option>
-                <option
-                  v-for="option in currentReviewListConfig.statusOptions"
-                  :key="option.value"
-                  :value="option.value"
-                >
-                  {{ option.label }}
-                </option>
-              </select>
-              <button type="button" :disabled="internship.loading" @click="reloadInternshipList(currentReviewListConfig.key)">
-                查询
-              </button>
-            </section>
+            <MobileFilterSheet
+              :select-filters="mobileListSelectFilters(currentReviewListConfig)"
+              :status-options="currentReviewListConfig.statusOptions"
+              :values="internship.filters[currentReviewListConfig.key]"
+              :keyword-placeholder="currentReviewListConfig.keywordPlaceholder"
+              :loading="internship.loading"
+              @update-filter="payload => updateInternshipListFilter(currentReviewListConfig.key, payload)"
+              @search="reloadInternshipList(currentReviewListConfig.key)"
+              @reset="resetInternshipListFilters(currentReviewListConfig.key)"
+            />
             <van-cell
               v-for="row in mobileListRows(currentReviewListConfig.key)"
               :key="row.id"
@@ -853,22 +826,15 @@
               <GraduationCap :size="20" />
               <strong>任务成绩记录</strong>
             </header>
-            <section class="mobile-list-tools" :class="mobileListToolClass(getMobileListConfig('scores'))">
-              <select
-                v-for="filter in mobileListSelectFilters(getMobileListConfig('scores'))"
-                :key="filter.key"
-                v-model="internship.filters.scores[filter.key]"
-                :aria-label="filter.label"
-                @change="handleMobileListFilterChange('scores', filter.key)"
-              >
-                <option value="">{{ filter.placeholder }}</option>
-                <option v-for="item in filter.options" :key="item.value" :value="item.value">
-                  {{ item.label }}
-                </option>
-              </select>
-              <input class="mobile-keyword-input" v-model="internship.filters.scores.keyword" placeholder="学生、学号、安排" @keyup.enter="reloadInternshipList('scores')">
-              <button type="button" :disabled="internship.loading" @click="reloadInternshipList('scores')">查询</button>
-            </section>
+            <MobileFilterSheet
+              :select-filters="mobileListSelectFilters(getMobileListConfig('scores'))"
+              :values="internship.filters.scores"
+              keyword-placeholder="学生、学号、安排"
+              :loading="internship.loading"
+              @update-filter="payload => updateInternshipListFilter('scores', payload)"
+              @search="reloadInternshipList('scores')"
+              @reset="resetInternshipListFilters('scores')"
+            />
             <van-cell
               v-for="row in internship.lists.scores.items"
               :key="row.id"
@@ -892,22 +858,15 @@
               <GraduationCap :size="20" />
               <strong>课程成绩汇总</strong>
             </header>
-            <section class="mobile-list-tools" :class="mobileListToolClass(getMobileListConfig('courseScores'))">
-              <select
-                v-for="filter in mobileListSelectFilters(getMobileListConfig('courseScores'))"
-                :key="filter.key"
-                v-model="internship.filters.courseScores[filter.key]"
-                :aria-label="filter.label"
-                @change="handleMobileListFilterChange('courseScores', filter.key)"
-              >
-                <option value="">{{ filter.placeholder }}</option>
-                <option v-for="item in filter.options" :key="item.value" :value="item.value">
-                  {{ item.label }}
-                </option>
-              </select>
-              <input class="mobile-keyword-input" v-model="internship.filters.courseScores.keyword" placeholder="学生、学号、课程、任务" @keyup.enter="reloadInternshipList('courseScores')">
-              <button type="button" :disabled="internship.loading" @click="reloadInternshipList('courseScores')">查询</button>
-            </section>
+            <MobileFilterSheet
+              :select-filters="mobileListSelectFilters(getMobileListConfig('courseScores'))"
+              :values="internship.filters.courseScores"
+              keyword-placeholder="学生、学号、课程、任务"
+              :loading="internship.loading"
+              @update-filter="payload => updateInternshipListFilter('courseScores', payload)"
+              @search="reloadInternshipList('courseScores')"
+              @reset="resetInternshipListFilters('courseScores')"
+            />
             <van-cell
               v-for="row in internship.lists.courseScores.items"
               :key="`${row.plan_id}-${row.student_id}`"
@@ -951,43 +910,17 @@
               <component :is="currentManageListConfig.icon" :size="20" />
               <strong>{{ currentManageListConfig.title }}</strong>
             </header>
-            <section class="mobile-list-tools" :class="mobileListToolClass(currentManageListConfig)">
-              <select
-                v-for="filter in mobileListSelectFilters(currentManageListConfig)"
-                :key="filter.key"
-                v-model="internship.filters[currentManageListConfig.key][filter.key]"
-                :aria-label="filter.label"
-                @change="handleMobileListFilterChange(currentManageListConfig.key, filter.key)"
-              >
-                <option value="">{{ filter.placeholder }}</option>
-                <option v-for="item in filter.options" :key="item.value" :value="item.value">
-                  {{ item.label }}
-                </option>
-              </select>
-              <input
-                class="mobile-keyword-input"
-                v-model="internship.filters[currentManageListConfig.key].keyword"
-                :placeholder="currentManageListConfig.keywordPlaceholder"
-                @keyup.enter="reloadInternshipList(currentManageListConfig.key)"
-              >
-              <select
-                v-if="currentManageListConfig.statusOptions.length"
-                v-model="internship.filters[currentManageListConfig.key][currentManageListConfig.statusKey || 'status']"
-                @change="reloadInternshipList(currentManageListConfig.key)"
-              >
-                <option value="">全部状态</option>
-                <option
-                  v-for="option in currentManageListConfig.statusOptions"
-                  :key="option.value"
-                  :value="option.value"
-                >
-                  {{ option.label }}
-                </option>
-              </select>
-              <button type="button" :disabled="internship.loading" @click="reloadInternshipList(currentManageListConfig.key)">
-                查询
-              </button>
-            </section>
+            <MobileFilterSheet
+              :select-filters="mobileListSelectFilters(currentManageListConfig)"
+              :status-options="currentManageListConfig.statusOptions"
+              :status-key="currentManageListConfig.statusKey || 'status'"
+              :values="internship.filters[currentManageListConfig.key]"
+              :keyword-placeholder="currentManageListConfig.keywordPlaceholder"
+              :loading="internship.loading"
+              @update-filter="payload => updateInternshipListFilter(currentManageListConfig.key, payload)"
+              @search="reloadInternshipList(currentManageListConfig.key)"
+              @reset="resetInternshipListFilters(currentManageListConfig.key)"
+            />
             <van-cell
               v-for="row in mobileListRows(currentManageListConfig.key)"
               :key="row.id"
@@ -1090,30 +1023,17 @@
             <component :is="currentPracticePanel(activeTab).icon" :size="20" />
             <strong>{{ currentPracticePanel(activeTab).title }}</strong>
           </header>
-          <section v-if="practiceFilters(activeTab).length || !isStudentRole" class="mobile-list-tools" :class="{ compact: isStudentRole }">
-            <select
-              v-for="filter in practiceFilters(activeTab)"
-              :key="filter.key"
-              v-model="practiceModule(activeTab).filters[practiceModule(activeTab).panel][filter.key]"
-              :aria-label="filter.label"
-              @change="handlePracticeFilterChange(activeTab)"
-            >
-              <option value="">{{ filter.placeholder }}</option>
-              <option v-for="item in filter.options" :key="item.value" :value="item.value">
-                {{ item.label }}
-              </option>
-            </select>
-            <input
-              v-if="!isStudentRole"
-              class="mobile-keyword-input"
-              v-model="practiceModule(activeTab).filters[practiceModule(activeTab).panel].keyword"
-              placeholder="标题、课程、学生、内容"
-              @keyup.enter="reloadPracticeList(activeTab)"
-            >
-            <button v-if="!isStudentRole" type="button" :disabled="practiceModule(activeTab).loading" @click="reloadPracticeList(activeTab)">
-              查询
-            </button>
-          </section>
+          <MobileFilterSheet
+            v-if="!isStudentRole"
+            :select-filters="practiceFilters(activeTab).filter(filter => filter.key !== 'status')"
+            :status-options="practiceFilters(activeTab).find(filter => filter.key === 'status')?.options || []"
+            :values="practiceModule(activeTab).filters[practiceModule(activeTab).panel]"
+            keyword-placeholder="标题、课程、学生、内容"
+            :loading="practiceModule(activeTab).loading"
+            @update-filter="payload => updatePracticeListFilter(activeTab, payload)"
+            @search="reloadPracticeList(activeTab)"
+            @reset="resetPracticeListFilters(activeTab)"
+          />
           <van-cell
             v-for="row in currentPracticeRows(activeTab)"
             :key="row.id"
@@ -1467,6 +1387,7 @@ import {
   Workflow,
 } from '@lucide/vue';
 import MobileBottomNav from './components/MobileBottomNav.vue';
+import MobileFilterSheet from './components/MobileFilterSheet.vue';
 import MobilePageHeader from './components/MobilePageHeader.vue';
 import RoleHomePanel from './components/RoleHomePanel.vue';
 import { useMobilePermissions } from './composables/useMobilePermissions';
@@ -2703,13 +2624,6 @@ function mobileListSelectFilters(config) {
   return filters;
 }
 
-function mobileListToolClass(config) {
-  return {
-    compact: !config?.statusOptions?.length && !mobileListSelectFilters(config).length,
-    'with-filters': mobileListSelectFilters(config).length > 0,
-  };
-}
-
 function normalizeMobileListFilters(key) {
   const filters = internship.filters[key] || {};
   if (filters.dep_id && !mobileDepartmentOptions(key).some(item => Number(item.dep_id) === Number(filters.dep_id))) {
@@ -2723,8 +2637,21 @@ function normalizeMobileListFilters(key) {
   }
 }
 
-function handleMobileListFilterChange(key) {
+function updateInternshipListFilter(key, payload) {
+  if (!payload?.key || !internship.filters[key]) {
+    return;
+  }
+  internship.filters[key][payload.key] = payload.value;
   normalizeMobileListFilters(key);
+}
+
+function resetInternshipListFilters(key) {
+  if (!internship.filters[key]) {
+    return;
+  }
+  const filters = emptyInternshipFilters();
+  applyInternshipFilterDefaults(filters);
+  internship.filters[key] = filters;
   reloadInternshipList(key);
 }
 
@@ -3463,8 +3390,21 @@ function applyDefaultPracticeFilters(module) {
   });
 }
 
-function handlePracticeFilterChange(module) {
-  normalizePracticeFilters(module);
+function updatePracticeListFilter(module, payload) {
+  if (!payload?.key) {
+    return;
+  }
+  const state = practiceModule(module);
+  const panel = currentPracticePanel(module);
+  state.filters[panel.key][payload.key] = payload.value;
+  normalizePracticeFilters(module, state.filters[panel.key]);
+}
+
+function resetPracticeListFilters(module) {
+  const state = practiceModule(module);
+  const panel = currentPracticePanel(module);
+  state.filters[panel.key] = emptyPracticeFilters();
+  applyDefaultPracticeFilters(module);
   reloadPracticeList(module);
 }
 
