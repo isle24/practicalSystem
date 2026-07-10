@@ -1,40 +1,14 @@
 <template>
-  <main class="mobile-shell">
-    <header class="mobile-top">
-      <div class="mobile-history-actions">
-        <button aria-label="后退" title="后退" :disabled="!canGoMobileBack" @click="goMobileBack">
-          <ChevronLeft :size="18" />
-          <span>后退</span>
-        </button>
-        <button aria-label="前进" title="前进" :disabled="!canGoMobileForward" @click="goMobileForward">
-          <span>前进</span>
-          <ChevronRight :size="18" />
-        </button>
-      </div>
-      <div class="mobile-title">
-        <span>实践管理系统</span>
-        <strong>{{ currentPage.title }}</strong>
-      </div>
-      <div class="mobile-actions">
-        <button aria-label="刷新" title="刷新" :disabled="state.loading" @click="refreshMobilePage">
-          <RefreshCw :size="18" />
-        </button>
-        <button v-if="isLoggedIn" aria-label="退出" title="退出" :disabled="loginState.loading" @click="submitLogout">
-          <LogOut :size="18" />
-        </button>
-      </div>
-    </header>
-
-    <section class="context-strip">
-      <div>
-        <small>当前角色</small>
-        <strong>{{ roleText }}</strong>
-      </div>
-      <div>
-        <small>数据范围</small>
-        <strong>{{ scopeText }}</strong>
-      </div>
-    </section>
+  <main class="mobile-shell" :class="{ 'is-authenticated': isLoggedIn }">
+    <MobilePageHeader
+      :logged-in="isLoggedIn"
+      :title="mobileHeaderTitle"
+      :school-name="schoolText"
+      :show-back="showMobileHeaderBack"
+      :unread-count="messageUnreadCount"
+      @back="goMobileBack"
+      @message="openMobileMessages"
+    />
 
     <van-notice-bar
       v-if="state.error"
@@ -165,6 +139,16 @@
             :value="account.is_current ? '当前' : '切换'"
             :is-link="!account.is_current"
             @click="switchMobileAccount(account)"
+          />
+        </van-cell-group>
+
+        <van-cell-group inset class="mobile-account-actions">
+          <van-cell
+            class="mobile-logout-cell"
+            title="退出当前账号"
+            clickable
+            :is-link="false"
+            @click="confirmMobileLogout"
           />
         </van-cell-group>
       </template>
@@ -1220,32 +1204,13 @@
       </template>
     </section>
 
-    <van-tabbar v-model="activeTab" safe-area-inset-bottom>
-      <van-tabbar-item name="home">
-        <template #icon><Home :size="20" /></template>
-        首页
-      </van-tabbar-item>
-      <van-tabbar-item v-if="isMobileModuleVisible('internship')" name="internship">
-        <template #icon><BriefcaseBusiness :size="20" /></template>
-        实习
-      </van-tabbar-item>
-      <van-tabbar-item v-if="isMobileModuleVisible('training')" name="training">
-        <template #icon><Workflow :size="20" /></template>
-        实训
-      </van-tabbar-item>
-      <van-tabbar-item v-if="isMobileModuleVisible('lab')" name="lab">
-        <template #icon><FlaskConical :size="20" /></template>
-        实验
-      </van-tabbar-item>
-      <van-tabbar-item v-if="isLoggedIn" name="message" :badge="messageUnreadCount > 0 ? (messageUnreadCount > 99 ? '99+' : String(messageUnreadCount)) : ''">
-        <template #icon><MessageCircle :size="20" /></template>
-        消息
-      </van-tabbar-item>
-      <van-tabbar-item name="mine">
-        <template #icon><UserRound :size="20" /></template>
-        我的
-      </van-tabbar-item>
-    </van-tabbar>
+    <MobileBottomNav
+      v-if="isLoggedIn"
+      v-model="activeTab"
+      :internship-visible="isMobileModuleVisible('internship')"
+      :training-visible="isMobileModuleVisible('training')"
+      :lab-visible="isMobileModuleVisible('lab')"
+    />
 
     <van-popup
       v-model:show="support.doc.detail.visible"
@@ -1522,13 +1487,12 @@
 
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
-import { showToast } from 'vant';
+import { showConfirmDialog, showToast } from 'vant';
 import {
   BriefcaseBusiness,
   BookOpen,
   CalendarCheck,
   CheckCircle2,
-  ChevronLeft,
   ChevronRight,
   ClipboardList,
   FileClock,
@@ -1537,10 +1501,8 @@ import {
   GraduationCap,
   Home,
   LogIn,
-  LogOut,
   MapPin,
   MessageCircle,
-  RefreshCw,
   Route,
   Search,
   Send,
@@ -1548,6 +1510,8 @@ import {
   UserRound,
   Workflow,
 } from '@lucide/vue';
+import MobileBottomNav from './components/MobileBottomNav.vue';
+import MobilePageHeader from './components/MobilePageHeader.vue';
 import { useMobilePermissions } from './composables/useMobilePermissions';
 import {
   downloadTemplateItem,
@@ -1933,7 +1897,6 @@ const practiceExecutionDialog = reactive({
 });
 const mobileNavigationState = reactive({
   backStack: [],
-  forwardStack: [],
   restoring: false,
 });
 
@@ -2006,9 +1969,14 @@ const summaries = computed(() => [
 const messageUnreadCount = computed(() => Number(messageState.summary.unread || 0));
 const messageGroups = computed(() => groupMessagesByDay(messageState.items));
 const canGoMobileBack = computed(() => mobileNavigationState.backStack.length > 0);
-const canGoMobileForward = computed(() => mobileNavigationState.forwardStack.length > 0);
 
 const isLoggedIn = computed(() => Boolean(state.context.account_id));
+const mobileHeaderTitle = computed(() => (isLoggedIn.value ? currentPage.value.title : '实践管理系统'));
+const showMobileHeaderBack = computed(() => (
+  isLoggedIn.value
+  && ['message', 'doc', 'templateLib'].includes(activeTab.value)
+  && canGoMobileBack.value
+));
 const roleType = computed(() => state.context.role_type || '');
 const isStudentRole = computed(() => roleType.value === 'student');
 const isTeacherRole = computed(() => roleType.value === 'teacher');
@@ -6153,36 +6121,15 @@ async function goMobileBack() {
     return;
   }
 
-  const current = mobileNavigationKey();
   const target = mobileNavigationState.backStack.pop();
   if (!target) {
     return;
-  }
-  if (current !== target) {
-    mobileNavigationState.forwardStack.push(current);
-  }
-  await applyMobileNavigationKey(target);
-}
-
-async function goMobileForward() {
-  if (!canGoMobileForward.value) {
-    return;
-  }
-
-  const current = mobileNavigationKey();
-  const target = mobileNavigationState.forwardStack.pop();
-  if (!target) {
-    return;
-  }
-  if (current !== target) {
-    mobileNavigationState.backStack.push(current);
   }
   await applyMobileNavigationKey(target);
 }
 
 function clearMobileNavigation() {
   mobileNavigationState.backStack.splice(0);
-  mobileNavigationState.forwardStack.splice(0);
 }
 
 function resetMobileNavigationToHome() {
@@ -6398,6 +6345,29 @@ async function submitLogin() {
   }
 }
 
+function openMobileMessages() {
+  if (isLoggedIn.value && activeTab.value !== 'message') {
+    activeTab.value = 'message';
+  }
+}
+
+async function confirmMobileLogout() {
+  if (loginState.loading) {
+    return;
+  }
+  try {
+    await showConfirmDialog({
+      title: '退出登录',
+      message: '确认退出当前账号？',
+      confirmButtonText: '退出',
+      cancelButtonText: '取消',
+    });
+  } catch {
+    return;
+  }
+  await submitLogout();
+}
+
 async function submitLogout() {
   if (loginState.loading) {
     return;
@@ -6463,7 +6433,6 @@ watch(() => mobileNavigationKey(), (current, previous) => {
   if (mobileNavigationState.backStack.length > 40) {
     mobileNavigationState.backStack.shift();
   }
-  mobileNavigationState.forwardStack.splice(0);
 });
 
 onMounted(async () => {
