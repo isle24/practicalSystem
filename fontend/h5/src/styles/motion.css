@@ -1,9 +1,9 @@
 :root {
   --app-motion-fast: 90ms;
   --app-motion-control: 160ms;
-  --app-motion-tab: 180ms;
-  --app-motion-back: 240ms;
-  --app-motion-page: 280ms;
+  --app-motion-tab: 200ms;
+  --app-motion-back: 220ms;
+  --app-motion-page: 240ms;
   --app-motion-sheet: 300ms;
   --app-ease-standard: cubic-bezier(.2, .8, .2, 1);
   --app-ease-enter: cubic-bezier(.22, 1, .36, 1);
@@ -12,59 +12,93 @@
 }
 
 .app-tab-enter-active,
-.app-tab-leave-active {
-  transition: opacity var(--app-motion-tab) var(--app-ease-standard),
-    transform var(--app-motion-tab) var(--app-ease-standard);
-}
-
-.app-tab-enter-from {
-  opacity: 0;
-  transform: translateY(6px);
-}
-
-.app-tab-leave-to {
-  opacity: 0;
-  transform: translateY(-3px);
-}
-
+.app-tab-leave-active,
 .app-page-forward-enter-active,
 .app-page-forward-leave-active,
 .app-page-back-enter-active,
 .app-page-back-leave-active {
-  transition-property: opacity, transform;
   will-change: opacity, transform;
 }
 
-.app-page-forward-enter-active {
-  transition-duration: var(--app-motion-page);
-  transition-timing-function: var(--app-ease-enter);
+.app-tab-leave-active,
+.app-page-forward-leave-active,
+.app-page-back-leave-active {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  pointer-events: none;
 }
 
-.app-page-forward-leave-active,
-.app-page-back-enter-active,
+.app-tab-enter-active,
+.app-page-forward-enter-active {
+  position: relative;
+  z-index: 2;
+}
+
+.app-tab-leave-active,
+.app-page-forward-leave-active {
+  z-index: 1;
+}
+
+.app-page-back-enter-active {
+  position: relative;
+  z-index: 2;
+}
+
 .app-page-back-leave-active {
-  transition-duration: var(--app-motion-back);
-  transition-timing-function: var(--app-ease-standard);
+  z-index: 1;
+}
+
+.app-tab-enter-active,
+.app-tab-leave-active {
+  transition: opacity var(--app-motion-tab) var(--app-ease-standard),
+    transform var(--app-motion-tab) var(--app-ease-enter);
+}
+
+.app-tab-enter-from {
+  opacity: .72;
+  transform: translate3d(0, 4px, 0) scale(.995);
+}
+
+.app-tab-leave-to {
+  opacity: 0;
+  transform: translate3d(0, -2px, 0) scale(.998);
+}
+
+.app-page-forward-enter-active {
+  transition: opacity 200ms var(--app-ease-standard),
+    transform var(--app-motion-page) var(--app-ease-enter);
+}
+
+.app-page-forward-leave-active {
+  transition: opacity 180ms var(--app-ease-standard),
+    transform 200ms var(--app-ease-standard);
 }
 
 .app-page-forward-enter-from {
-  opacity: .72;
-  transform: translateX(22%);
+  opacity: .78;
+  transform: translate3d(12px, 0, 0) scale(.995);
 }
 
 .app-page-forward-leave-to {
-  opacity: .72;
-  transform: translateX(-8%);
+  opacity: .88;
+  transform: translate3d(-6px, 0, 0);
+}
+
+.app-page-back-enter-active,
+.app-page-back-leave-active {
+  transition: opacity 180ms var(--app-ease-standard),
+    transform var(--app-motion-back) var(--app-ease-enter);
 }
 
 .app-page-back-enter-from {
-  opacity: .72;
-  transform: translateX(-8%);
+  opacity: .82;
+  transform: translate3d(-6px, 0, 0);
 }
 
 .app-page-back-leave-to {
-  opacity: .72;
-  transform: translateX(22%);
+  opacity: .82;
+  transform: translate3d(12px, 0, 0) scale(.995);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -84,5 +118,15 @@
     animation-duration: 1ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 1ms !important;
+  }
+
+  .app-tab-enter-from,
+  .app-tab-leave-to,
+  .app-page-forward-enter-from,
+  .app-page-forward-leave-to,
+  .app-page-back-enter-from,
+  .app-page-back-leave-to {
+    opacity: 1;
+    transform: none;
   }
 }

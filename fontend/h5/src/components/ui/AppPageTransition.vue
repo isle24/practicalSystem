@@ -1,6 +1,6 @@
 <template>
   <div class="app-page-transition">
-    <Transition :name="transitionName" mode="out-in">
+    <Transition :name="transitionName">
       <div :key="pageKey" class="app-page-transition-view"><slot /></div>
     </Transition>
   </div>
@@ -29,9 +29,13 @@ const transitionName = computed(() => {
 .app-page-transition {
   position: relative;
   min-height: 100%;
+  overflow-x: clip;
+  isolation: isolate;
 }
 
 .app-page-transition-view {
   min-height: 100%;
+  transform-origin: center top;
+  backface-visibility: hidden;
 }
 </style>

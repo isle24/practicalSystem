@@ -54,9 +54,14 @@ select {
   gap: 4px;
   padding: env(safe-area-inset-top) 10px 0;
   color: var(--text);
-  background: rgba(255, 255, 255, .92);
-  border-bottom: 1px solid rgba(216, 224, 232, .88);
-  backdrop-filter: blur(18px) saturate(130%);
+  background: var(--app-glass-bg);
+  border-bottom: 1px solid var(--app-glass-line);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, .58), var(--app-glass-shadow);
+  -webkit-backdrop-filter: blur(20px) saturate(145%);
+  backdrop-filter: blur(20px) saturate(145%);
+  transition: background-color var(--app-motion-control) var(--app-ease-standard),
+    border-color var(--app-motion-control) var(--app-ease-standard),
+    box-shadow var(--app-motion-control) var(--app-ease-standard);
 }
 
 .mobile-app-header.login-header {
@@ -1564,10 +1569,21 @@ select {
 
 .mobile-bottom-nav.van-tabbar {
   height: calc(58px + env(safe-area-inset-bottom));
-  border-top: 1px solid rgba(216, 224, 232, .9);
-  background: rgba(255, 255, 255, .96);
-  box-shadow: 0 -8px 24px rgba(24, 33, 43, .05);
-  backdrop-filter: blur(16px) saturate(125%);
+  border-top: 1px solid var(--app-glass-line);
+  background: var(--app-glass-bg);
+  box-shadow: 0 -1px 0 rgba(255, 255, 255, .62), 0 -10px 30px rgba(24, 33, 43, .055);
+  -webkit-backdrop-filter: blur(20px) saturate(145%);
+  backdrop-filter: blur(20px) saturate(145%);
+  transition: background-color var(--app-motion-control) var(--app-ease-standard),
+    border-color var(--app-motion-control) var(--app-ease-standard),
+    box-shadow var(--app-motion-control) var(--app-ease-standard);
+}
+
+@supports not ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+  .mobile-app-header,
+  .mobile-bottom-nav.van-tabbar {
+    background: var(--app-glass-bg-fallback);
+  }
 }
 
 .mobile-bottom-nav .van-tabbar-item {
