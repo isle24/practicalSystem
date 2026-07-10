@@ -118,7 +118,6 @@
         <el-button v-else text :icon="LogOut" :loading="loginState.loading" @click="submitLogout">
           退出
         </el-button>
-        <span>{{ clock }}</span>
       </div>
     </header>
 
@@ -146,6 +145,7 @@
         :initial-top="win.top"
         :initial-width="win.width"
         :initial-height="win.height"
+        :active="focusedWindowId === win.id"
         @focus="focusWindow(win.id)"
         @minimize="minimizeWindow(win.id)"
         @close="closeWindow(win.id)"
@@ -3439,33 +3439,38 @@
     />
 
     <footer class="taskbar">
-      <button class="taskbar-icon-button" title="开始" aria-label="开始" @click="openDesktopLauncher">
-        <LayoutGrid :size="18" />
-      </button>
-      <div class="taskbar-apps">
-        <a
-          v-for="win in openWindows"
-          :key="win.id"
-          :href="windowHref(win)"
-          :title="win.module.name"
-          :aria-label="win.module.name"
-          :class="{ active: focusedWindowId === win.id && !win.minimized }"
-          @click="toggleTaskWindow(win.id)"
-        >
-          <AppIcon class="taskbar-glyph" :icon="win.module.icon" :icon-url="win.module.iconUrl" :label="win.module.name" :color="win.module.color" :size="17" :backend-url="backendUrl" />
-        </a>
-        <button
-          class="taskbar-icon-button message-taskbar-button"
-          :class="{ active: isModuleFocused('message') }"
-          title="消息中心"
-          aria-label="消息中心"
-          @click="openMessageCenter"
-        >
-          <MessageCircle :size="18" />
-          <i v-if="messageUnreadCount > 0">{{ messageUnreadCount > 99 ? '99+' : messageUnreadCount }}</i>
+      <div class="taskbar-center">
+        <button class="taskbar-icon-button taskbar-launcher-button" title="启动台" aria-label="启动台" @click="openDesktopLauncher">
+          <LayoutGrid :size="20" />
         </button>
+        <div class="taskbar-apps">
+          <a
+            v-for="win in openWindows"
+            :key="win.id"
+            :href="windowHref(win)"
+            :title="win.module.name"
+            :aria-label="win.module.name"
+            :class="{ active: focusedWindowId === win.id && !win.minimized, running: !win.minimized }"
+            @click="toggleTaskWindow(win.id)"
+          >
+            <AppIcon class="taskbar-glyph" :icon="win.module.icon" :icon-url="win.module.iconUrl" :label="win.module.name" :color="win.module.color" :size="17" :backend-url="backendUrl" />
+          </a>
+          <button
+            class="taskbar-icon-button message-taskbar-button"
+            :class="{ active: isModuleFocused('message') }"
+            title="消息中心"
+            aria-label="消息中心"
+            @click="openMessageCenter"
+          >
+            <MessageCircle :size="19" />
+            <i v-if="messageUnreadCount > 0">{{ messageUnreadCount > 99 ? '99+' : messageUnreadCount }}</i>
+          </button>
+        </div>
       </div>
-      <span>在线</span>
+      <div class="taskbar-status" aria-label="系统状态">
+        <span class="taskbar-online"><i />在线</span>
+        <span class="taskbar-clock">{{ clock }}</span>
+      </div>
     </footer>
     <input
       ref="archiveImportInputRef"
@@ -6421,8 +6426,7 @@ function defaultWindowModule() {
   return defaultDesktopModuleIds
     .map(id => allLaunchableModules.value.find(module => module.id === id))
     .find(Boolean)
-    || mainEntryModules.value.find(module => module.id !== 'config')
-    || mainEntryModules.value[0]
+    || mainEntryModules.value.find(module => isPrimaryWorkWindow({ module }))
     || null;
 }
 

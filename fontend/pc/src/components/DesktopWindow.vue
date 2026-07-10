@@ -2,19 +2,24 @@
   <section
     ref="windowRef"
     class="desktop-window"
-    :class="{ dragging: interaction?.type === 'drag', resizing: interaction?.type === 'resize' }"
+    :class="{
+      active,
+      maximized,
+      dragging: interaction?.type === 'drag',
+      resizing: interaction?.type === 'resize',
+    }"
     :style="windowStyle"
-    @mousedown.self="emit('focus')"
+    @mousedown.capture="focusWindow"
   >
-    <header class="window-title" @mousedown="startDrag">
+    <header class="window-title" @mousedown="startDrag" @dblclick="toggleMaximize">
       <div class="window-name">
         <component :is="icon" :size="18" />
         <span>{{ title }}</span>
       </div>
       <div class="window-controls">
-        <button title="最小化" @mousedown.stop @click.stop="emit('minimize')"><Minus :size="14" /></button>
-        <button title="最大化" @mousedown.stop @click.stop="toggleMaximize"><Square :size="13" /></button>
-        <button title="关闭" @mousedown.stop @click.stop="emit('close')"><X :size="14" /></button>
+        <button class="window-control-minimize" title="最小化" @mousedown.stop @click.stop="emit('minimize')"><Minus :size="14" /></button>
+        <button class="window-control-maximize" :title="maximized ? '还原' : '最大化'" @mousedown.stop @click.stop="toggleMaximize"><Square :size="13" /></button>
+        <button class="window-control-close" title="关闭" @mousedown.stop @click.stop="emit('close')"><X :size="15" /></button>
       </div>
     </header>
 
@@ -44,6 +49,7 @@ const props = defineProps({
   initialTop: { type: Number, default: 70 },
   initialWidth: { type: Number, default: 1120 },
   initialHeight: { type: Number, default: 680 },
+  active: { type: Boolean, default: false },
 });
 
 const emit = defineEmits(['close', 'focus', 'minimize']);
@@ -74,6 +80,12 @@ function startDrag(event) {
   }
   emit('focus');
   startInteraction(event, 'drag');
+}
+
+function focusWindow() {
+  if (!props.active) {
+    emit('focus');
+  }
 }
 
 function startResize(event, direction) {
