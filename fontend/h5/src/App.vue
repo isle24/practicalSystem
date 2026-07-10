@@ -18,6 +18,7 @@
       :text="state.error"
     />
 
+    <van-pull-refresh v-model="mobileRefreshing" :disabled="!isLoggedIn" @refresh="handleMobilePullRefresh">
     <section class="page-content">
       <section v-if="!isLoggedIn" class="mobile-login">
         <header>
@@ -72,16 +73,25 @@
       </section>
 
       <template v-else-if="activeTab === 'home'">
-        <section class="summary-band">
-          <div v-for="item in summaries" :key="item.name">
-            <strong>{{ item.value }}</strong>
-            <span>{{ item.name }}</span>
-          </div>
-        </section>
+        <RoleHomePanel
+          :school-name="schoolText"
+          :user-name="userText"
+          :role-name="roleDisplayText"
+          :scope-text="scopeText"
+          :section-title="homeFocusTitle"
+          :section-description="homeFocusDescription"
+          :items="homeFocusItems"
+          @open="openHomeFocus"
+        />
 
-        <section class="module-list">
+        <section v-if="supportHomeModules.length" class="home-service-section">
+          <header>
+            <strong>常用服务</strong>
+            <small>制度、流程和材料下载</small>
+          </header>
+          <div class="home-service-list">
           <button
-            v-for="module in visibleMobileModules"
+            v-for="module in supportHomeModules"
             :key="module.key"
             @click="activeTab = module.key"
           >
@@ -94,6 +104,7 @@
             </div>
             <ChevronRight :size="18" />
           </button>
+          </div>
         </section>
 
         <section v-if="isStudentRole" class="student-guide-card">
@@ -154,16 +165,6 @@
       </template>
 
       <template v-else-if="activeTab === 'message'">
-        <section class="module-head">
-          <span class="teal">
-            <MessageCircle :size="25" />
-          </span>
-          <div>
-            <h1>消息中心</h1>
-            <p>按时间查看待办、审核结果和系统通知</p>
-          </div>
-        </section>
-
         <van-notice-bar
           v-if="messageState.message"
           color="#8a5a00"
@@ -240,16 +241,6 @@
       </template>
 
       <template v-else-if="activeTab === 'doc'">
-        <section class="module-head">
-          <span class="green">
-            <BookOpen :size="25" />
-          </span>
-          <div>
-            <h1>文档中心</h1>
-            <p>学校制度、流程说明和常见问题</p>
-          </div>
-        </section>
-
         <section class="mobile-list-tools support-mobile-tools">
           <select v-model="support.doc.filters.category_id" @change="loadMobileDocs(1)">
             <option value="">全部分类</option>
@@ -288,16 +279,6 @@
       </template>
 
       <template v-else-if="activeTab === 'templateLib'">
-        <section class="module-head">
-          <span class="teal">
-            <FileText :size="25" />
-          </span>
-          <div>
-            <h1>模板库</h1>
-            <p>实习实践材料模板查看和下载</p>
-          </div>
-        </section>
-
         <section class="mobile-list-tools support-mobile-tools">
           <select v-model="support.template.filters.category_id" @change="loadMobileTemplates(1)">
             <option value="">全部分类</option>
@@ -339,16 +320,6 @@
       </template>
 
       <template v-else-if="activeTab === 'internship'">
-        <section class="module-head">
-          <span class="blue">
-            <BriefcaseBusiness :size="25" />
-          </span>
-          <div>
-            <h1>{{ internshipRoleTitle }}</h1>
-            <p>{{ internshipRoleDesc }}</p>
-          </div>
-        </section>
-
         <van-notice-bar
           v-if="internship.message"
           color="#8a5a00"
@@ -1077,16 +1048,6 @@
       </template>
 
       <template v-else-if="isPracticeTab(activeTab)">
-        <section class="module-head">
-          <span :class="currentPage.theme">
-            <component :is="currentPage.icon" :size="25" />
-          </span>
-          <div>
-            <h1>{{ currentPage.title }}</h1>
-            <p>{{ currentPage.desc }}</p>
-          </div>
-        </section>
-
         <van-notice-bar
           v-if="practiceModule(activeTab).message"
           color="#8a5a00"
@@ -1191,18 +1152,13 @@
       </template>
 
       <template v-else>
-        <section class="module-head">
-          <span :class="currentPage.theme">
-            <component :is="currentPage.icon" :size="25" />
-          </span>
-          <div>
-            <h1>{{ currentPage.title }}</h1>
-            <p>{{ currentPage.desc }}</p>
-          </div>
+        <section class="mobile-empty-card">
+          <strong>暂无可用内容</strong>
+          <span>请从底部导航进入可用模块。</span>
         </section>
-
       </template>
     </section>
+    </van-pull-refresh>
 
     <MobileBottomNav
       v-if="isLoggedIn"
@@ -1512,6 +1468,7 @@ import {
 } from '@lucide/vue';
 import MobileBottomNav from './components/MobileBottomNav.vue';
 import MobilePageHeader from './components/MobilePageHeader.vue';
+import RoleHomePanel from './components/RoleHomePanel.vue';
 import { useMobilePermissions } from './composables/useMobilePermissions';
 import {
   downloadTemplateItem,
@@ -1585,6 +1542,7 @@ import {
 
 const { state, hasPermission, load } = useMobilePermissions();
 const activeTab = ref('home');
+const mobileRefreshing = ref(false);
 const loginForm = reactive({
   login_name: '',
   password: '',
@@ -1961,11 +1919,6 @@ const currentPage = computed(() => {
   return modules.find(item => item.key === activeTab.value) || modules[0];
 });
 
-const summaries = computed(() => [
-  { name: '学校', value: schoolShortText.value },
-  { name: '角色', value: roleDisplayText.value },
-  { name: '范围', value: scopeText.value },
-]);
 const messageUnreadCount = computed(() => Number(messageState.summary.unread || 0));
 const messageGroups = computed(() => groupMessagesByDay(messageState.items));
 const canGoMobileBack = computed(() => mobileNavigationState.backStack.length > 0);
@@ -1982,6 +1935,7 @@ const isStudentRole = computed(() => roleType.value === 'student');
 const isTeacherRole = computed(() => roleType.value === 'teacher');
 const isAdminRole = computed(() => ['super_admin', 'school_admin', 'college_admin', 'profession_admin'].includes(roleType.value));
 const visibleMobileModules = computed(() => modules.filter(canShowMobileModule));
+const supportHomeModules = computed(() => visibleMobileModules.value.filter(module => ['doc', 'templateLib'].includes(module.key)));
 const canReviewInternship = computed(() => hasPermission('internship:approve'));
 const canReviewInternshipPlan = computed(() => hasPermission('internship:plan') && isAdminRole.value);
 const signGpsReady = computed(() => hasCoordinateValue(internship.forms.sign.longitude) && hasCoordinateValue(internship.forms.sign.latitude));
@@ -2042,7 +1996,6 @@ const scopeNameMap = {
   student_user_id: '本人实习数据',
 };
 const roleDisplayText = computed(() => state.context.role_name || roleNameMap[roleType.value] || state.context.role_id || '未登录');
-const roleText = computed(() => roleDisplayText.value);
 const registerRoleOptions = computed(() => registerState.roles.length
   ? registerState.roles
   : [
@@ -2052,7 +2005,6 @@ const registerRoleOptions = computed(() => registerState.roles.length
 const userText = computed(() => state.context.user_name || state.context.name || state.context.login_name || '未登录');
 const accountText = computed(() => state.context.login_name || '-');
 const schoolText = computed(() => state.context.school_name || '成都锦城学院');
-const schoolShortText = computed(() => schoolText.value.replace('成都', '').replace('学院', '') || schoolText.value);
 const scopeText = computed(() => {
   if (!isLoggedIn.value) {
     return '未登录';
@@ -2092,30 +2044,6 @@ const activeScopeEntries = computed(() => {
     }
     return value !== null && value !== undefined && value !== '' && value !== false;
   });
-});
-const internshipRoleTitle = computed(() => {
-  if (isStudentRole.value) {
-    return '学生实习';
-  }
-  if (isTeacherRole.value) {
-    return '任务指导';
-  }
-  if (isAdminRole.value) {
-    return '实习管理';
-  }
-  return '实习';
-});
-const internshipRoleDesc = computed(() => {
-  if (isStudentRole.value) {
-    return '查看任务、签到、日志和报告提交';
-  }
-  if (isTeacherRole.value) {
-    return '按任务评阅材料和录入成绩';
-  }
-  if (isAdminRole.value) {
-    return '查看计划、任务、任务绑定和数据状态';
-  }
-  return '按当前角色展示可用实习功能';
 });
 const internshipPanels = computed(() => {
   if (isStudentRole.value) {
@@ -2482,6 +2410,33 @@ const internshipWorkbenchCells = computed(() => {
     { title: '特殊申请', label: '分散、自主等场景待审', value: internship.overview.applications_waiting || 0 },
   ];
 });
+
+const homeFocusTitle = computed(() => {
+  if (isStudentRole.value) {
+    return '我的实践进度';
+  }
+  if (isTeacherRole.value) {
+    return '今日待处理';
+  }
+  return '学校实践概况';
+});
+const homeFocusDescription = computed(() => {
+  if (isStudentRole.value) {
+    return '优先处理待提交和需修改事项';
+  }
+  if (isTeacherRole.value) {
+    return '查看待审核材料和指导任务';
+  }
+  return '关注任务绑定、待审和异常数据';
+});
+const homeFocusItems = computed(() => internshipWorkbenchCells.value.map(item => ({
+  ...item,
+  target: 'internship',
+})));
+
+function openHomeFocus(item) {
+  activeTab.value = item?.target || 'internship';
+}
 
 const practiceFlowSteps = [
   '教学计划来源于教务拉取或教师填报',
@@ -6166,6 +6121,14 @@ async function refreshMobilePage() {
   }
   await loadMobileSupportCategories();
   await loadMessageSummary();
+}
+
+async function handleMobilePullRefresh() {
+  try {
+    await refreshMobilePage();
+  } finally {
+    mobileRefreshing.value = false;
+  }
 }
 
 async function refreshMobileSession(resetWorkspace = false) {
