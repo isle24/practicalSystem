@@ -3,7 +3,9 @@
     <section class="operation-dialog" :class="dialogClass">
       <header>
         <strong>{{ title }}</strong>
-        <button type="button" @click="emit('close')">关闭</button>
+        <button type="button" class="operation-dialog-close" title="关闭" aria-label="关闭" @click="emit('close')">
+          <X :size="17" />
+        </button>
       </header>
       <slot />
       <footer v-if="$slots.footer">
@@ -14,6 +16,8 @@
 </template>
 
 <script setup>
+import { X } from '@lucide/vue';
+
 defineProps({
   visible: { type: Boolean, default: false },
   title: { type: String, default: '' },

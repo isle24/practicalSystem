@@ -44,7 +44,7 @@
       </div>
     </div>
 
-    <el-table :data="rows" height="100%" stripe>
+    <el-table :data="rows" height="100%" size="small" stripe v-loading="loading">
       <el-table-column
         v-for="column in columns"
         :key="column.key || column.prop"
@@ -62,7 +62,7 @@
           <span v-else>{{ columnText(column, row) }}</span>
         </template>
       </el-table-column>
-      <el-table-column v-if="actions.length || $slots.actions" label="操作" width="280" fixed="right">
+      <el-table-column v-if="actions.length || $slots.actions" label="操作" :width="actionColumnWidth" fixed="right">
         <template #default="{ row }">
           <template v-if="actions.length">
             <button
@@ -99,7 +99,7 @@
 </template>
 
 <script setup>
-import { reactive, watch } from 'vue';
+import { computed, reactive, watch } from 'vue';
 import { RefreshCw } from '@lucide/vue';
 
 const props = defineProps({
@@ -140,6 +140,12 @@ const props = defineProps({
 const emit = defineEmits(['filter-change', 'page-change', 'reset', 'row-action', 'search']);
 const localFilterValues = reactive({});
 let lastActionAt = 0;
+const actionColumnWidth = computed(() => {
+  if (!props.actions.length) {
+    return 280;
+  }
+  return Math.min(320, Math.max(128, props.actions.length * 72 + 20));
+});
 
 watch(
   () => props.filterValues,
