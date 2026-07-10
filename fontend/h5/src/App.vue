@@ -104,96 +104,7 @@
 
       <InternshipPage v-else-if="activeTab === 'internship'" />
 
-      <template v-else-if="isPracticeTab(activeTab)">
-        <van-notice-bar
-          v-if="practiceModule(activeTab).message"
-          color="#8a5a00"
-          background="#fff3d8"
-          left-icon="warning-o"
-          :text="practiceModule(activeTab).message"
-        />
-
-        <section class="summary-band internship-summary">
-          <div v-for="item in practiceSummaries(activeTab)" :key="item.name">
-            <strong>{{ item.value }}</strong>
-            <span>{{ item.name }}</span>
-          </div>
-        </section>
-
-        <section v-if="isStudentRole" class="student-guide-card">
-          <header>
-            <Route :size="20" />
-            <strong>{{ currentPage.title }}流程</strong>
-          </header>
-          <div class="student-guide-steps">
-            <span v-for="step in practiceFlowSteps" :key="step">{{ step }}</span>
-          </div>
-        </section>
-
-        <section class="mobile-list-switch multi practice-switch">
-          <button
-            v-for="item in practicePanels(activeTab)"
-            :key="item.key"
-            :class="{ active: practiceModule(activeTab).panel === item.key }"
-            @click="switchPracticePanel(activeTab, item.key)"
-          >
-            <component :is="item.icon" :size="17" />
-            <span>{{ item.shortTitle }}</span>
-          </button>
-        </section>
-
-        <section class="mobile-card">
-          <header>
-            <component :is="currentPracticePanel(activeTab).icon" :size="20" />
-            <strong>{{ currentPracticePanel(activeTab).title }}</strong>
-          </header>
-          <MobileFilterSheet
-            v-if="!isStudentRole"
-            :select-filters="practiceFilters(activeTab).filter(filter => filter.key !== 'status')"
-            :status-options="practiceFilters(activeTab).find(filter => filter.key === 'status')?.options || []"
-            :values="practiceModule(activeTab).filters[practiceModule(activeTab).panel]"
-            keyword-placeholder="标题、课程、学生、内容"
-            :loading="practiceModule(activeTab).loading"
-            @update-filter="payload => updatePracticeListFilter(activeTab, payload)"
-            @search="reloadPracticeList(activeTab)"
-            @reset="resetPracticeListFilters(activeTab)"
-          />
-          <van-cell
-            v-for="row in currentPracticeRows(activeTab)"
-            :key="row.id"
-            :title="practiceRowTitle(activeTab, row)"
-            :value="practiceRowValue(activeTab, row)"
-          >
-            <template #label>
-              <div class="mobile-cell-meta">
-                <span v-for="(fact, index) in practiceRowFacts(activeTab, row)" :key="`${fact}-${index}`">
-                  {{ fact }}
-                </span>
-              </div>
-            </template>
-            <template #right-icon>
-              <div v-if="practiceRowActions(activeTab, row).length" class="cell-actions">
-                <button
-                  v-for="action in practiceRowActions(activeTab, row)"
-                  :key="action.key"
-                  @click.stop="handlePracticeAction(activeTab, action, row)"
-                >
-                  {{ action.label }}
-                </button>
-              </div>
-            </template>
-          </van-cell>
-          <div v-if="!currentPracticeRows(activeTab).length" class="mobile-empty">
-            {{ currentPracticePanel(activeTab).emptyText }}
-          </div>
-          <div class="mobile-list-footer">
-            <span>共 {{ practiceListTotal(activeTab) }} 条</span>
-            <button v-if="canLoadMorePractice(activeTab)" :disabled="practiceModule(activeTab).loading" @click="loadMorePracticeList(activeTab)">
-              加载更多
-            </button>
-          </div>
-        </section>
-      </template>
+      <PracticePage v-else-if="isPracticeTab(activeTab)" :module-type="activeTab" />
 
       <template v-else>
         <section class="mobile-empty-card">
@@ -210,133 +121,6 @@
       :detail="support.doc.detail"
       @close="closeMobileDoc"
     />
-
-    <van-popup
-      v-model:show="practiceReviewDialog.visible"
-      round
-      position="bottom"
-      safe-area-inset-bottom
-    >
-      <section class="review-sheet">
-        <header>
-          <strong>{{ practiceReviewDialogTitle }}</strong>
-          <span>{{ practiceReviewDialogRuleText }}</span>
-        </header>
-        <section v-if="practiceReviewTargetDetails.length" class="review-target-card">
-          <div v-for="item in practiceReviewTargetDetails" :key="item.label">
-            <span>{{ item.label }}</span>
-            <strong>{{ item.value }}</strong>
-          </div>
-        </section>
-        <section v-if="practiceReviewDialog.mode === 'review'" class="review-status-switch">
-          <button
-            v-for="option in practiceReviewStatusOptions(practiceReviewDialog.module, practiceReviewDialog.entity)"
-            :key="option.value"
-            type="button"
-            :class="{ active: practiceReviewDialog.status === option.value }"
-            @click="setPracticeReviewStatus(option.value)"
-          >
-            {{ option.label }}
-          </button>
-        </section>
-        <label>
-          <span>{{ practiceReviewReasonLabel }}</span>
-          <textarea
-            v-model="practiceReviewDialog.reason"
-            :maxlength="practiceRuleMax(practiceReviewDialog.module, practiceReviewDialog.entity, practiceReviewDialog.status) || undefined"
-            rows="5"
-            @input="trimPracticeReviewMax"
-          />
-          <small>
-            {{ textLength(practiceReviewDialog.reason) }} / {{ practiceRuleMaxText(practiceReviewDialog.module, practiceReviewDialog.entity, practiceReviewDialog.status) }}
-          </small>
-        </label>
-        <div class="sheet-actions" :class="{ triple: practiceReviewDialog.mode === 'review' }">
-          <button type="button" @click="closePracticeReviewDialog">取消</button>
-          <button v-if="practiceReviewDialog.mode === 'review'" type="button" :disabled="practiceModule(practiceReviewDialog.module).loading" @click="savePracticeReviewDraftFromDialog">
-            保存草稿
-          </button>
-          <button type="button" class="primary-action" :disabled="practiceModule(practiceReviewDialog.module).loading" @click="confirmPracticeReview">
-            提交审核
-          </button>
-        </div>
-      </section>
-    </van-popup>
-
-    <van-popup
-      v-model:show="practiceExecutionDialog.visible"
-      round
-      position="bottom"
-      safe-area-inset-bottom
-    >
-      <section class="review-sheet">
-        <header>
-          <strong>{{ practiceExecutionDialogTitle }}</strong>
-          <span>{{ practiceExecutionDialogSubtitle }}</span>
-        </header>
-        <label>
-          <span>项目</span>
-          <select v-model.number="practiceExecutionDialog.form.project_id">
-            <option v-for="item in practiceModule(practiceExecutionDialog.module).options.projects" :key="item.id" :value="item.id">
-              {{ item.title || item.course_name }}
-            </option>
-          </select>
-        </label>
-        <template v-if="practiceExecutionDialog.execution === 'sign_in'">
-          <div class="gps-sign-card">
-            <div class="gps-sign-head">
-              <span>
-                <strong>{{ practiceGpsTitle }}</strong>
-                <small>{{ practiceExecutionDialog.form.location || practiceGpsHint }}</small>
-              </span>
-              <button type="button" :disabled="practiceExecutionDialog.form.locating" @click="locatePracticePosition">
-                {{ practiceExecutionDialog.form.locating ? '定位中' : '重新定位' }}
-              </button>
-            </div>
-            <div class="gps-map-preview">
-              <img v-if="practiceMapUrl" :src="practiceMapUrl" alt="签到定位地图">
-              <div v-else>
-                <MapPin :size="24" />
-                <span>获取 GPS 后显示地图</span>
-              </div>
-            </div>
-            <div class="gps-coordinate-grid">
-              <span>经度 {{ coordinateText(practiceExecutionDialog.form.longitude) }}</span>
-              <span>纬度 {{ coordinateText(practiceExecutionDialog.form.latitude) }}</span>
-              <span>精度 {{ practiceAccuracyText }}</span>
-            </div>
-            <small v-if="practiceExecutionDialog.form.gps_error" class="gps-error">{{ practiceExecutionDialog.form.gps_error }}</small>
-          </div>
-        </template>
-        <template v-else>
-          <label>
-            <span>标题</span>
-            <input v-model="practiceExecutionDialog.form.title">
-          </label>
-          <label>
-            <span>日期</span>
-            <input v-model="practiceExecutionDialog.form.date" type="date">
-          </label>
-          <label>
-            <span>内容</span>
-            <textarea v-model="practiceExecutionDialog.form.content" rows="5" />
-          </label>
-        </template>
-        <label>
-          <span>备注</span>
-          <textarea v-model="practiceExecutionDialog.form.remark" rows="3" />
-        </label>
-        <div class="sheet-actions" :class="{ triple: practiceExecutionDialog.execution !== 'sign_in' }">
-          <button type="button" @click="closePracticeExecutionDialog">取消</button>
-          <button v-if="practiceExecutionDialog.execution !== 'sign_in'" type="button" :disabled="practiceModule(practiceExecutionDialog.module).loading" @click="submitPracticeExecution('draft')">
-            保存草稿
-          </button>
-          <button type="button" class="primary-action" :disabled="practiceModule(practiceExecutionDialog.module).loading || (practiceExecutionDialog.execution === 'sign_in' && !practiceGpsReady)" @click="submitPracticeExecution(practiceExecutionDialog.execution === 'sign_in' ? 'signed' : 'wait')">
-            {{ practiceExecutionDialog.execution === 'sign_in' ? '提交签到' : '提交审核' }}
-          </button>
-        </div>
-      </section>
-    </van-popup>
 
         </template>
   </MobileAppShell>
@@ -358,18 +142,17 @@ import {
   Home,
   MapPin,
   MessageCircle,
-  Route,
   Search,
   Send,
   UsersRound,
   UserRound,
   Workflow,
 } from '@lucide/vue';
-import MobileFilterSheet from './components/MobileFilterSheet.vue';
-import AppStatusBadge from './components/ui/AppStatusBadge.vue';
 import DocumentDetail from './features/support/DocumentDetail.vue';
 import InternshipPage from './features/internship/InternshipPage.vue';
 import { provideInternshipContext } from './features/internship/internshipContext';
+import PracticePage from './features/practice/PracticePage.vue';
+import { providePracticeContext } from './features/practice/practiceContext';
 import MobileAppShell from './layouts/MobileAppShell.vue';
 import DocumentPage from './pages/DocumentPage.vue';
 import HomePage from './pages/HomePage.vue';
@@ -382,6 +165,7 @@ import { useInternship } from './composables/useInternship';
 import { useMessageCenter } from './composables/useMessageCenter';
 import { useMobileNavigation } from './composables/useMobileNavigation';
 import { useMobilePermissions } from './composables/useMobilePermissions';
+import { createPracticeState, usePracticeModule } from './composables/usePracticeModule';
 import { statusText as resolveStatusText } from './constants/status';
 import { formatDateKey } from './utils/date';
 import { emptyPagedList } from './utils/pagination';
@@ -495,43 +279,13 @@ const {
   emptyOverview: emptyInternshipOverview,
 } = useInternship();
 
-const practice = reactive({
-  training: createPracticeState(),
-  lab: createPracticeState(),
-});
-
-const practiceReviewDialog = reactive({
-  visible: false,
-  mode: 'review',
-  module: 'training',
-  panel: 'plans',
-  entity: 'plan',
-  status: 'accept',
-  row: null,
-  reason: '',
-});
-const practiceExecutionDialog = reactive({
-  visible: false,
-  module: 'training',
-  panel: 'journals',
-  execution: 'journal',
-  row: null,
-  form: {
-    id: null,
-    project_id: null,
-    title: '',
-    date: '',
-    content: '',
-    location: '',
-    longitude: '',
-    latitude: '',
-    accuracy: null,
-    located_at: '',
-    locating: false,
-    gps_error: '',
-    remark: '',
-  },
-});
+const {
+  practice,
+  reviewDialog: practiceReviewDialog,
+  executionDialog: practiceExecutionDialog,
+  timelineDialog: practiceTimelineDialog,
+  emptyFilters: emptyPracticeFilters,
+} = usePracticeModule();
 const {
   activeTab,
   canGoBack: canGoMobileBack,
@@ -1213,11 +967,6 @@ const practiceReviewReasonLabel = computed(() => (
 const practiceReviewDialogRuleText = computed(() => (
   practiceRuleText(practiceReviewDialog.module, practiceReviewDialog.entity, practiceReviewDialog.status, practiceReviewReasonLabel.value)
 ));
-const practiceReviewConfirmText = computed(() => (
-  practiceReviewDialog.mode === 'reopen'
-    ? '确认修改'
-    : (practiceReviewDialog.status === 'accept' ? '确认通过' : '确认退回')
-));
 const practiceReviewTargetDetails = computed(() => {
   const row = practiceReviewDialog.row;
   if (!row) {
@@ -1240,52 +989,6 @@ const practiceExecutionDialogSubtitle = computed(() => {
   const project = practiceModule(practiceExecutionDialog.module).options.projects.find(item => Number(item.id) === Number(practiceExecutionDialog.form.project_id || 0));
   return project?.title || project?.course_name || '请选择项目';
 });
-
-function createPracticeState() {
-  const panels = ['plans', 'schedules', 'projects', 'signIns', 'journals', 'reports', 'syllabus', 'lessonPlans', 'gradeRules', 'scores', 'reflections'];
-  return {
-    loading: false,
-    message: '',
-    panel: 'plans',
-    overview: {
-      plans_waiting: 0,
-      schedules: 0,
-      projects: 0,
-      syllabus_waiting: 0,
-      lesson_plans_waiting: 0,
-      scores_submitted: 0,
-      reflections_waiting: 0,
-      today_schedules: 0,
-    },
-    options: {
-      grades: [],
-      departments: [],
-      professions: [],
-      classes: [],
-      teachers: [],
-      students: [],
-      rooms: [],
-      plans: [],
-      schedules: [],
-      projects: [],
-      review_rules: {},
-    },
-    filters: Object.fromEntries(panels.map(panel => [panel, emptyPracticeFilters()])),
-    lists: Object.fromEntries(panels.map(panel => [panel, emptyPagedList()])),
-  };
-}
-
-function emptyPracticeFilters() {
-  return {
-    grade_id: '',
-    dep_id: '',
-    profession_id: '',
-    class_id: '',
-    plan_id: '',
-    status: '',
-    keyword: '',
-  };
-}
 
 function getMobileListConfig(key) {
   return mobileListConfigs.value?.[key] || null;
@@ -2983,26 +2686,28 @@ async function openTimelineDialog(entity, row) {
 }
 
 async function openPracticeTimeline(module, panel, row) {
-  internship.timelineDialog.visible = true;
-  internship.timelineDialog.loading = true;
-  internship.timelineDialog.entity = panel.entity;
-  internship.timelineDialog.row = row;
-  internship.timelineDialog.title = `${practiceEntityName(panel.entity)}流程记录`;
-  internship.timelineDialog.subtitle = row.title || row.name || String(row.id);
-  internship.timelineDialog.items = [];
-  internship.timelineDialog.cycles = [];
-  internship.timelineDialog.message = '';
+  practiceTimelineDialog.visible = true;
+  practiceTimelineDialog.loading = true;
+  practiceTimelineDialog.title = `${practiceEntityName(panel.entity)}流程记录`;
+  practiceTimelineDialog.subtitle = row.title || row.name || String(row.id);
+  practiceTimelineDialog.items = [];
+  practiceTimelineDialog.cycles = [];
+  practiceTimelineDialog.message = '';
   try {
     const data = panel.execution
       ? await fetchPracticeExecutionTimeline(module, { execution: panel.execution, id: row.id })
       : await fetchPracticeTimeline(module, { entity: panel.entity, id: row.id });
-    internship.timelineDialog.cycles = data.cycles || [];
-    internship.timelineDialog.items = data.items || data.records || [];
+    practiceTimelineDialog.cycles = data.cycles || [];
+    practiceTimelineDialog.items = data.items || data.records || [];
   } catch (error) {
-    internship.timelineDialog.message = error.message;
+    practiceTimelineDialog.message = error.message;
   } finally {
-    internship.timelineDialog.loading = false;
+    practiceTimelineDialog.loading = false;
   }
+}
+
+function closePracticeTimeline() {
+  practiceTimelineDialog.visible = false;
 }
 
 function openPracticeExecutionDialog(module, panelKey, row = null, context = {}) {
@@ -3694,6 +3399,10 @@ const reviewDialogTargetDetails = computed(() => (
 const internshipTimelineCycles = computed(() => normalizeTimelineCycles(
   internship.timelineDialog.cycles || [],
   internship.timelineDialog.items || [],
+));
+const practiceTimelineCycles = computed(() => normalizeTimelineCycles(
+  practiceTimelineDialog.cycles || [],
+  practiceTimelineDialog.items || [],
 ));
 
 function workflowActionText(action) {
@@ -4630,6 +4339,70 @@ provideInternshipContext({
   timelineCycleTitle,
   trimReviewDialogMax,
   updateInternshipListFilter,
+});
+
+providePracticeContext({
+  canLoadMorePractice,
+  closePracticeExecutionDialog,
+  closePracticeReviewDialog,
+  closePracticeTimeline,
+  confirmPracticeReview,
+  coordinateText,
+  currentPracticePanel,
+  currentPracticeRows,
+  handlePracticeAction,
+  isModifyAfterAcceptBranch,
+  isStudentRole,
+  loadMorePracticeList,
+  locatePracticePosition,
+  practiceAccuracyText,
+  practiceExecutionDialog,
+  practiceExecutionDialogSubtitle,
+  practiceExecutionDialogTitle,
+  practiceFilters,
+  practiceFlowSteps,
+  practiceGpsHint,
+  practiceGpsReady,
+  practiceGpsTitle,
+  practiceListTotal,
+  practiceMapUrl,
+  practiceModule,
+  practiceModuleName,
+  practicePanels,
+  practiceReviewDialog,
+  practiceReviewDialogRuleText,
+  practiceReviewDialogTitle,
+  practiceReviewReasonLabel,
+  practiceReviewStatusOptions,
+  practiceReviewTargetDetails,
+  practiceRowActions,
+  practiceRowFacts,
+  practiceRowTitle,
+  practiceRowValue,
+  practiceRuleMax,
+  practiceRuleMaxText,
+  practiceSummaries,
+  practiceTimelineCycles,
+  practiceTimelineDialog,
+  reloadPracticeList,
+  resetPracticeListFilters,
+  savePracticeReviewDraftFromDialog,
+  setPracticeReviewStatus,
+  statusText,
+  submitPracticeExecution,
+  switchPracticePanel,
+  textLength,
+  timelineBranchContent,
+  timelineBranchKey,
+  timelineBranchReviews,
+  timelineBranchTime,
+  timelineBranchTitle,
+  timelineCycleContent,
+  timelineCycleKey,
+  timelineCycleTime,
+  timelineCycleTitle,
+  trimPracticeReviewMax,
+  updatePracticeListFilter,
 });
 
 watch(activeTab, (tab) => {
