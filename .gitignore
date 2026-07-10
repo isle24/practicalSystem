@@ -20,5 +20,6 @@ tmp/
 # editor/system
 .idea/
 .vscode/
+.worktrees/
 *.log
 test/*
