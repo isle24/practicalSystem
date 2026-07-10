@@ -1,76 +1,37 @@
 <template>
-  <main class="mobile-shell" :class="{ 'is-authenticated': isLoggedIn }">
-    <MobilePageHeader
-      :logged-in="isLoggedIn"
-      :title="mobileHeaderTitle"
-      :school-name="schoolText"
-      :show-back="showMobileHeaderBack"
-      :unread-count="messageUnreadCount"
-      @back="goMobileBack"
-      @message="openMobileMessages"
-    />
-
-    <van-notice-bar
-      v-if="state.error"
-      color="#8a5a00"
-      background="#fff3d8"
-      left-icon="warning-o"
-      :text="state.error"
-    />
-
-    <van-pull-refresh v-model="mobileRefreshing" :disabled="!isLoggedIn" @refresh="handleMobilePullRefresh">
+  <MobileAppShell
+    v-model:active-tab="activeTab"
+    v-model:refreshing="mobileRefreshing"
+    :logged-in="isLoggedIn"
+    :title="mobileHeaderTitle"
+    :school-name="schoolText"
+    :show-back="showMobileHeaderBack"
+    :unread-count="messageUnreadCount"
+    :error="state.error"
+    :page-key="navigationPageKey"
+    :transition-direction="navigationTransitionDirection"
+    :internship-visible="isMobileModuleVisible('internship')"
+    :training-visible="isMobileModuleVisible('training')"
+    :lab-visible="isMobileModuleVisible('lab')"
+    @back="goMobileBack"
+    @message="openMobileMessages"
+    @refresh="handleMobilePullRefresh"
+  >
+    <template #default>
     <section class="page-content">
-      <section v-if="!isLoggedIn" class="mobile-login">
-        <header>
-          <UserRound :size="30" />
-          <div>
-            <strong>账号登录</strong>
-            <span>{{ schoolText }}</span>
-          </div>
-        </header>
-        <label>
-          <span>账号</span>
-          <input v-model="loginForm.login_name" autocomplete="username" placeholder="请输入账号">
-        </label>
-        <label>
-          <span>密码</span>
-          <input v-model="loginForm.password" autocomplete="current-password" placeholder="请输入密码" type="password">
-        </label>
-        <button :disabled="loginState.loading" @click="submitLogin">
-          <LogIn :size="17" />
-          登录
-        </button>
-        <section v-if="registerState.enabled" class="mobile-register">
-          <button type="button" class="mobile-secondary-button" @click="toggleRegisterForm">
-            {{ registerState.open ? '收起注册' : '注册测试账号' }}
-          </button>
-          <div v-if="registerState.open" class="mobile-register-form">
-            <label>
-              <span>注册角色</span>
-              <select v-model="registerForm.role_type">
-                <option
-                  v-for="role in registerRoleOptions"
-                  :key="role.role_type"
-                  :value="role.role_type"
-                >
-                  {{ role.name || roleNameMap[role.role_type] || role.role_type }}
-                </option>
-              </select>
-            </label>
-            <label><span>姓名</span><input v-model="registerForm.name" autocomplete="name"></label>
-            <label><span>登录账号</span><input v-model="registerForm.login_name" autocomplete="username"></label>
-            <label><span>密码</span><input v-model="registerForm.password" autocomplete="new-password" type="password"></label>
-            <label><span>手机</span><input v-model="registerForm.mobile" autocomplete="tel"></label>
-            <label v-if="registerForm.role_type === 'student'"><span>学号</span><input v-model="registerForm.student_num"></label>
-            <label v-if="registerForm.role_type === 'teacher'"><span>工号</span><input v-model="registerForm.teacher_num"></label>
-            <button type="button" :disabled="registerState.loading" @click="submitRegister">
-              创建并登录
-            </button>
-          </div>
-        </section>
-        <small v-if="loginState.message">{{ loginState.message }}</small>
-        <small v-if="registerState.message">{{ registerState.message }}</small>
-      </section>
+      <LoginPage
+        v-if="!isLoggedIn"
+        :school-name="schoolText"
+        :login-form="loginForm"
+        :login-state="loginState"
+        :register-form="registerForm"
+        :register-state="registerState"
+        :register-role-options="registerRoleOptions"
+        :role-labels="roleNameMap"
+        @login="submitLogin"
+        @register="submitRegister"
+        @toggle-register="toggleRegisterForm"
+      />
 
       <template v-else-if="activeTab === 'home'">
         <RoleHomePanel
@@ -1078,15 +1039,9 @@
         </section>
       </template>
     </section>
-    </van-pull-refresh>
+    </template>
 
-    <MobileBottomNav
-      v-if="isLoggedIn"
-      v-model="activeTab"
-      :internship-visible="isMobileModuleVisible('internship')"
-      :training-visible="isMobileModuleVisible('training')"
-      :lab-visible="isMobileModuleVisible('lab')"
-    />
+    <template #overlays>
 
     <van-popup
       v-model:show="support.doc.detail.visible"
@@ -1358,12 +1313,13 @@
         </div>
       </section>
     </van-popup>
-  </main>
+    </template>
+  </MobileAppShell>
 </template>
 
 <script setup>
-import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
-import { showConfirmDialog, showToast } from 'vant';
+import { computed, nextTick, reactive, ref, watch } from 'vue';
+import { showToast } from 'vant';
 import {
   BriefcaseBusiness,
   BookOpen,
@@ -1376,7 +1332,6 @@ import {
   FlaskConical,
   GraduationCap,
   Home,
-  LogIn,
   MapPin,
   MessageCircle,
   Route,
@@ -1386,11 +1341,13 @@ import {
   UserRound,
   Workflow,
 } from '@lucide/vue';
-import MobileBottomNav from './components/MobileBottomNav.vue';
 import MobileFilterSheet from './components/MobileFilterSheet.vue';
-import MobilePageHeader from './components/MobilePageHeader.vue';
 import RoleHomePanel from './components/RoleHomePanel.vue';
 import AppStatusBadge from './components/ui/AppStatusBadge.vue';
+import MobileAppShell from './layouts/MobileAppShell.vue';
+import LoginPage from './pages/LoginPage.vue';
+import { useAuthSession } from './composables/useAuthSession';
+import { useMobileNavigation } from './composables/useMobileNavigation';
 import { useMobilePermissions } from './composables/useMobilePermissions';
 import { statusText as resolveStatusText } from './constants/status';
 import {
@@ -1422,8 +1379,6 @@ import {
   fetchInternshipTimeline,
   fetchMessages,
   fetchMessageSummary,
-  fetchRegisterOptions,
-  fetchSwitchableAccounts,
   fetchPracticeList,
   fetchPracticeOptions,
   fetchPracticeOverview,
@@ -1456,46 +1411,10 @@ import {
   savePracticeExecution,
   savePracticeProjectScore,
   savePracticeReviewDraft,
-  passkeyLogin,
-  login as loginApi,
-  logout as logoutApi,
-  registerAccount,
-  switchAccount,
 } from './api/system';
 
 const { state, hasPermission, load } = useMobilePermissions();
-const activeTab = ref('home');
 const mobileRefreshing = ref(false);
-const loginForm = reactive({
-  login_name: '',
-  password: '',
-});
-const loginState = reactive({
-  loading: false,
-  message: '',
-});
-const registerForm = reactive({
-  role_type: 'student',
-  name: '',
-  login_name: '',
-  password: '',
-  mobile: '',
-  email: '',
-  student_num: '',
-  teacher_num: '',
-});
-const registerState = reactive({
-  enabled: false,
-  open: false,
-  loading: false,
-  message: '',
-  roles: [],
-});
-const switchAccountState = reactive({
-  loading: false,
-  message: '',
-  items: [],
-});
 const messageState = reactive({
   loading: false,
   message: '',
@@ -1776,9 +1695,59 @@ const practiceExecutionDialog = reactive({
     remark: '',
   },
 });
-const mobileNavigationState = reactive({
-  backStack: [],
-  restoring: false,
+const {
+  activeTab,
+  canGoBack: canGoMobileBack,
+  pageKey: navigationPageKey,
+  transitionDirection: navigationTransitionDirection,
+  goBack: goMobileBack,
+  resetToHome: resetMobileNavigationToHome,
+} = useMobileNavigation({
+  captureExtras: () => ({
+    internshipPanel: internship.panel,
+    internshipSubmitSection: internship.submitSection,
+    internshipReviewList: internship.reviewList,
+    internshipManageList: internship.manageList,
+    trainingPanel: practice.training.panel,
+    labPanel: practice.lab.panel,
+  }),
+  restoreExtras: async (snapshot) => {
+    internship.panel = snapshot.internshipPanel || 'workbench';
+    internship.submitSection = snapshot.internshipSubmitSection || '';
+    internship.reviewList = snapshot.internshipReviewList || 'applications';
+    internship.manageList = snapshot.internshipManageList || 'arrangements';
+    practice.training.panel = snapshot.trainingPanel || practice.training.panel;
+    practice.lab.panel = snapshot.labPanel || practice.lab.panel;
+  },
+});
+
+const {
+  loginForm,
+  loginState,
+  registerForm,
+  registerRoleOptions,
+  registerState,
+  switchAccountState,
+  accountSwitchLabel,
+  accountSwitchTitle,
+  confirmMobileLogout,
+  loadSwitchableAccounts,
+  resetAccountChoices,
+  submitLogin,
+  submitRegister,
+  switchMobileAccount,
+  toggleRegisterForm,
+} = useAuthSession({
+  isLoggedIn: () => Boolean(state.context.account_id),
+  roleLabel: type => roleNameMap[type] || '',
+  onAuthenticated: refreshMobileSession,
+  onLoggedOut: async () => {
+    await resetMobileNavigationToHome();
+    resetMobileLocalState();
+    await load();
+  },
+  onExpired: expireMobileSession,
+  onInitialLoad: refreshMobileSession,
 });
 
 const modules = [
@@ -1844,7 +1813,6 @@ const currentPage = computed(() => {
 
 const messageUnreadCount = computed(() => Number(messageState.summary.unread || 0));
 const messageGroups = computed(() => groupMessagesByDay(messageState.items));
-const canGoMobileBack = computed(() => mobileNavigationState.backStack.length > 0);
 
 const isLoggedIn = computed(() => Boolean(state.context.account_id));
 const mobileHeaderTitle = computed(() => (isLoggedIn.value ? currentPage.value.title : '实践管理系统'));
@@ -1919,12 +1887,6 @@ const scopeNameMap = {
   student_user_id: '本人实习数据',
 };
 const roleDisplayText = computed(() => state.context.role_name || roleNameMap[roleType.value] || state.context.role_id || '未登录');
-const registerRoleOptions = computed(() => registerState.roles.length
-  ? registerState.roles
-  : [
-      { role_type: 'student', name: '学生' },
-      { role_type: 'teacher', name: '教师' },
-    ]);
 const userText = computed(() => state.context.user_name || state.context.name || state.context.login_name || '未登录');
 const accountText = computed(() => state.context.login_name || '-');
 const schoolText = computed(() => state.context.school_name || '成都锦城学院');
@@ -5822,27 +5784,20 @@ function resetPracticeState() {
 }
 
 function resetMobileLocalState() {
-  switchAccountState.items = [];
-  switchAccountState.message = '';
-  switchAccountState.loading = false;
   resetMessageState();
   resetSupportState();
   resetInternshipState();
   resetPracticeState();
 }
 
-function handleAuthExpired(event) {
-  const message = event?.detail?.message || '登录已过期，请重新登录';
+function expireMobileSession(message) {
   state.context = {};
   state.permissions = [];
   state.menus = [];
   state.dataScope = null;
   state.error = message;
-  loginState.loading = false;
-  loginState.message = message;
   resetMobileNavigationToHome();
   resetMobileLocalState();
-  showToast(message);
 }
 
 function messageTypeText(type) {
@@ -5953,67 +5908,6 @@ function formatDateKey(date) {
   ].join('-');
 }
 
-function mobileNavigationSnapshot() {
-  return {
-    tab: activeTab.value,
-    internshipPanel: internship.panel,
-    internshipSubmitSection: internship.submitSection,
-    internshipReviewList: internship.reviewList,
-    internshipManageList: internship.manageList,
-    trainingPanel: practice.training.panel,
-    labPanel: practice.lab.panel,
-  };
-}
-
-function mobileNavigationKey() {
-  return JSON.stringify(mobileNavigationSnapshot());
-}
-
-async function applyMobileNavigationKey(key) {
-  let snapshot = null;
-  try {
-    snapshot = JSON.parse(key);
-  } catch {
-    return;
-  }
-
-  mobileNavigationState.restoring = true;
-  activeTab.value = snapshot.tab || 'home';
-  internship.panel = snapshot.internshipPanel || 'workbench';
-  internship.submitSection = snapshot.internshipSubmitSection || '';
-  internship.reviewList = snapshot.internshipReviewList || 'applications';
-  internship.manageList = snapshot.internshipManageList || 'arrangements';
-  practice.training.panel = snapshot.trainingPanel || practice.training.panel;
-  practice.lab.panel = snapshot.labPanel || practice.lab.panel;
-  await nextTick();
-  mobileNavigationState.restoring = false;
-}
-
-async function goMobileBack() {
-  if (!canGoMobileBack.value) {
-    return;
-  }
-
-  const target = mobileNavigationState.backStack.pop();
-  if (!target) {
-    return;
-  }
-  await applyMobileNavigationKey(target);
-}
-
-function clearMobileNavigation() {
-  mobileNavigationState.backStack.splice(0);
-}
-
-function resetMobileNavigationToHome() {
-  mobileNavigationState.restoring = true;
-  activeTab.value = 'home';
-  clearMobileNavigation();
-  nextTick(() => {
-    mobileNavigationState.restoring = false;
-  });
-}
-
 async function refreshMobilePage() {
   await load();
   await loadSwitchableAccounts();
@@ -6056,7 +5950,7 @@ async function refreshMobileSession(resetWorkspace = false) {
 
   await load();
   if (!isLoggedIn.value) {
-    switchAccountState.items = [];
+    resetAccountChoices();
     return;
   }
 
@@ -6069,202 +5963,9 @@ async function refreshMobileSession(resetWorkspace = false) {
   }
 }
 
-async function loadSwitchableAccounts() {
-  if (!isLoggedIn.value) {
-    switchAccountState.items = [];
-    switchAccountState.message = '';
-    return;
-  }
-
-  switchAccountState.loading = true;
-  switchAccountState.message = '';
-  try {
-    const data = await fetchSwitchableAccounts();
-    switchAccountState.items = data.accounts || [];
-  } catch (error) {
-    switchAccountState.items = [];
-    switchAccountState.message = error.message;
-  } finally {
-    switchAccountState.loading = false;
-  }
-}
-
-async function switchMobileAccount(account) {
-  const accountId = Number(account?.id || 0);
-  if (!accountId || account?.is_current || switchAccountState.loading) {
-    return;
-  }
-
-  switchAccountState.loading = true;
-  switchAccountState.message = '';
-  try {
-    await switchAccount({
-      account_id: accountId,
-      client: 'H5',
-    });
-    await refreshMobileSession(true);
-    showToast('已切换身份');
-  } catch (error) {
-    switchAccountState.message = error.message;
-    showToast(error.message);
-  } finally {
-    switchAccountState.loading = false;
-  }
-}
-
-function accountSwitchTitle(account) {
-  return account?.name || account?.login_name || '未命名账号';
-}
-
-function accountSwitchLabel(account) {
-  const parts = [
-    account?.role_name || roleNameMap[account?.role_type] || account?.role_type || '未分配角色',
-    account?.login_name || '',
-  ].filter(Boolean);
-  return parts.join(' / ');
-}
-
-async function consumeUrlPasskey() {
-  const params = new URLSearchParams(window.location.search);
-  const passkey = params.get('passkey') || params.get('login_key');
-  if (!passkey) {
-    return false;
-  }
-
-  loginState.loading = true;
-  loginState.message = '';
-  try {
-    await passkeyLogin({
-      passkey,
-      client: 'H5',
-    });
-    params.delete('passkey');
-    params.delete('login_key');
-    const query = params.toString();
-    history.replaceState(null, '', `${window.location.pathname}${query ? `?${query}` : ''}${window.location.hash}`);
-    return true;
-  } catch (error) {
-    loginState.message = error.message;
-    showToast(error.message);
-    return false;
-  } finally {
-    loginState.loading = false;
-  }
-}
-
-function applyRegisterOptions(data = {}) {
-  const roles = (data.roles || []).filter(role => ['student', 'teacher'].includes(role.role_type));
-  registerState.enabled = data.enabled === true;
-  registerState.roles = roles;
-  if (roles.length && !roles.some(role => role.role_type === registerForm.role_type)) {
-    registerForm.role_type = roles[0].role_type;
-  }
-  if (!registerState.enabled) {
-    registerState.open = false;
-  }
-}
-
-async function loadRegisterOptions() {
-  registerState.message = '';
-  try {
-    applyRegisterOptions(await fetchRegisterOptions());
-  } catch (error) {
-    registerState.enabled = false;
-    registerState.open = false;
-  }
-}
-
-function toggleRegisterForm() {
-  registerState.open = !registerState.open;
-  registerState.message = '';
-}
-
-async function submitRegister() {
-  if (!registerState.enabled || registerState.loading) {
-    return;
-  }
-  if (!registerForm.name.trim() || !registerForm.login_name.trim() || !registerForm.password.trim()) {
-    registerState.message = '姓名、账号和密码不能为空';
-    return;
-  }
-
-  registerState.loading = true;
-  registerState.message = '';
-  try {
-    await registerAccount({
-      ...registerForm,
-      client: 'H5',
-    });
-    registerState.open = false;
-    await refreshMobileSession(true);
-    showToast('注册成功');
-  } catch (error) {
-    registerState.message = error.message;
-    showToast(error.message);
-  } finally {
-    registerState.loading = false;
-  }
-}
-
-async function submitLogin() {
-  if (loginState.loading) {
-    return;
-  }
-  loginState.loading = true;
-  loginState.message = '';
-  try {
-    await loginApi({
-      login_name: loginForm.login_name,
-      password: loginForm.password,
-      client: 'H5',
-    });
-    await refreshMobileSession(true);
-  } catch (error) {
-    loginState.message = error.message;
-  } finally {
-    loginState.loading = false;
-  }
-}
-
 function openMobileMessages() {
   if (isLoggedIn.value && activeTab.value !== 'message') {
     activeTab.value = 'message';
-  }
-}
-
-async function confirmMobileLogout() {
-  if (loginState.loading) {
-    return;
-  }
-  try {
-    await showConfirmDialog({
-      title: '退出登录',
-      message: '确认退出当前账号？',
-      confirmButtonText: '退出',
-      cancelButtonText: '取消',
-    });
-  } catch {
-    return;
-  }
-  await submitLogout();
-}
-
-async function submitLogout() {
-  if (loginState.loading) {
-    return;
-  }
-  loginState.loading = true;
-  loginState.message = '';
-  try {
-    await logoutApi();
-    resetMobileNavigationToHome();
-    resetMobileLocalState();
-    await load();
-    await loadRegisterOptions();
-  } catch (error) {
-    loginState.message = error.message;
-  } finally {
-    loginState.loading = false;
   }
 }
 
@@ -6305,25 +6006,4 @@ watch(visibleMobileModules, () => {
   }
 });
 
-watch(() => mobileNavigationKey(), (current, previous) => {
-  if (mobileNavigationState.restoring || !previous || current === previous) {
-    return;
-  }
-
-  mobileNavigationState.backStack.push(previous);
-  if (mobileNavigationState.backStack.length > 40) {
-    mobileNavigationState.backStack.shift();
-  }
-});
-
-onMounted(async () => {
-  window.addEventListener('practical-auth-expired', handleAuthExpired);
-  await loadRegisterOptions();
-  await consumeUrlPasskey();
-  await refreshMobileSession();
-});
-
-onBeforeUnmount(() => {
-  window.removeEventListener('practical-auth-expired', handleAuthExpired);
-});
 </script>

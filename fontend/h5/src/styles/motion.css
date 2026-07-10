@@ -31,9 +31,6 @@
 .app-page-forward-leave-active,
 .app-page-back-enter-active,
 .app-page-back-leave-active {
-  position: absolute;
-  inset: 0;
-  width: 100%;
   transition-property: opacity, transform;
   will-change: opacity, transform;
 }
