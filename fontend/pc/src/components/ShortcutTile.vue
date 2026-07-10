@@ -35,7 +35,8 @@
       :title="actionTitle"
       @click.stop="emit('action', item)"
     >
-      <CheckCircle2 v-if="added" :size="actionIconSize" />
+      <LockKeyhole v-if="locked" :size="actionIconSize" />
+      <Check v-else-if="added" :size="actionIconSize" />
       <Plus v-else :size="actionIconSize" />
     </button>
   </span>
@@ -43,7 +44,7 @@
 
 <script setup>
 import { computed } from 'vue';
-import { CheckCircle2, Plus } from '@lucide/vue';
+import { Check, LockKeyhole, Plus } from '@lucide/vue';
 import AppIcon from './AppIcon.vue';
 
 const props = defineProps({
@@ -63,8 +64,8 @@ const props = defineProps({
 
 const emit = defineEmits(['open', 'action']);
 const tagName = computed(() => (props.href ? 'a' : 'button'));
-const iconSize = computed(() => (props.mode === 'launcher' ? 24 : 25));
-const actionIconSize = computed(() => (props.mode === 'launcher' ? 18 : 16));
+const iconSize = computed(() => (props.mode === 'launcher' ? 28 : 25));
+const actionIconSize = computed(() => (props.mode === 'launcher' ? 14 : 16));
 const tileClasses = computed(() => [
   `shortcut-tile-${props.mode}`,
   {

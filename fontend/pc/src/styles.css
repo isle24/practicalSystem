@@ -442,8 +442,9 @@ a {
   inset: 0;
   z-index: 5000;
   display: grid;
-  background: rgba(3, 10, 16, .62);
-  backdrop-filter: blur(16px) saturate(120%);
+  background: rgba(12, 22, 34, .38);
+  backdrop-filter: blur(26px) saturate(130%);
+  animation: launcher-fade-in .2s ease-out;
 }
 
 .desktop-launcher-panel {
@@ -451,7 +452,7 @@ a {
   height: 100%;
   min-height: 0;
   display: grid;
-  grid-template-rows: 112px auto minmax(0, 1fr);
+  grid-template-rows: 100px auto minmax(0, 1fr) 38px;
   overflow: hidden;
   background: transparent;
 }
@@ -459,44 +460,53 @@ a {
 .desktop-launcher-message {
   justify-self: center;
   margin: 0 24px 8px;
-  color: #fecaca;
+  color: #ffe0e5;
 }
 
 .desktop-launcher-close {
   position: fixed;
-  top: 18px;
-  right: 22px;
+  top: 22px;
+  right: 26px;
   z-index: 2;
-  width: 42px;
-  height: 42px;
+  width: 40px;
+  height: 40px;
   display: grid;
   place-items: center;
   border: 0;
   border-radius: 50%;
   color: rgba(255, 255, 255, .84);
-  background: rgba(255, 255, 255, .08);
+  background: rgba(255, 255, 255, .10);
+  transition: color .16s ease, background .16s ease, transform .16s ease;
 }
 
 .desktop-launcher-close:hover {
   color: #fff;
   background: rgba(255, 255, 255, .16);
+  transform: scale(1.04);
 }
 
 .desktop-launcher-search {
   align-self: center;
   justify-self: center;
-  width: min(46vw, 740px);
-  min-width: 360px;
-  height: 52px;
-  border: 1px solid rgba(255, 255, 255, .48);
+  width: min(44vw, 680px);
+  min-width: 340px;
+  height: 46px;
+  border: 1px solid rgba(255, 255, 255, .44);
   border-radius: 999px;
   display: grid;
-  grid-template-columns: 42px minmax(0, 1fr);
+  grid-template-columns: 36px minmax(0, 1fr);
   align-items: center;
-  padding: 0 16px 0 24px;
+  padding: 0 16px 0 20px;
   color: rgba(255, 255, 255, .78);
-  background: rgba(9, 18, 28, .28);
-  box-shadow: 0 12px 42px rgba(0, 0, 0, .16);
+  background: rgba(18, 28, 40, .30);
+  box-shadow: 0 14px 42px rgba(0, 0, 0, .16), inset 0 1px 0 rgba(255, 255, 255, .10);
+  transition: border-color .16s ease, background .16s ease, box-shadow .16s ease;
+}
+
+.desktop-launcher-search:focus-within {
+  border-color: rgba(255, 255, 255, .72);
+  background: rgba(18, 28, 40, .42);
+  box-shadow: 0 16px 46px rgba(0, 0, 0, .20), 0 0 0 3px rgba(255, 255, 255, .10);
 }
 
 .desktop-launcher-search input {
@@ -505,27 +515,67 @@ a {
   outline: 0;
   color: #fff;
   background: transparent;
-  font-size: 17px;
+  font-size: 15px;
 }
 
 .desktop-launcher-search input::placeholder {
   color: rgba(255, 255, 255, .52);
 }
 
-.desktop-launcher-grid {
+.desktop-launcher-content {
+  position: relative;
   min-height: 0;
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(108px, 1fr));
-  align-content: start;
-  gap: 30px 38px;
-  padding: 28px clamp(44px, 12vw, 220px) 72px;
+  padding: 4px 76px 14px;
+  overflow: hidden;
+}
+
+.desktop-launcher-page {
+  width: min(1180px, 100%);
+  height: 100%;
+  margin: 0 auto;
   overflow: auto;
+  scrollbar-width: none;
+  animation: launcher-page-enter .2s ease-out;
+}
+
+.desktop-launcher-page::-webkit-scrollbar {
+  display: none;
+}
+
+.desktop-launcher-group {
+  padding: 8px 0 16px;
+}
+
+.desktop-launcher-group > header {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  margin-bottom: 12px;
+  padding: 0 4px;
+  color: rgba(255, 255, 255, .92);
+}
+
+.desktop-launcher-group > header strong {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.desktop-launcher-group > header span {
+  color: rgba(255, 255, 255, .56);
+  font-size: 12px;
+}
+
+.desktop-launcher-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  align-content: start;
+  gap: 18px 24px;
 }
 
 .shortcut-tile-launcher {
   position: relative;
   min-width: 0;
-  min-height: 104px;
+  min-height: 102px;
   display: grid;
   place-items: start center;
 }
@@ -535,7 +585,7 @@ a {
   border: 0;
   display: grid;
   justify-items: center;
-  gap: 10px;
+  gap: 9px;
   padding: 0;
   color: rgba(255, 255, 255, .94);
   text-align: center;
@@ -543,9 +593,16 @@ a {
 }
 
 .shortcut-tile-launcher .app-glyph {
-  width: 62px;
-  height: 62px;
-  box-shadow: 0 14px 30px rgba(0, 0, 0, .26);
+  width: 58px;
+  height: 58px;
+  border-radius: 13px;
+  box-shadow: 0 14px 30px rgba(0, 0, 0, .22), inset 0 1px 0 rgba(255, 255, 255, .22);
+  transition: transform .16s ease, box-shadow .16s ease;
+}
+
+.shortcut-tile-launcher .shortcut-tile-main:hover .app-glyph {
+  transform: translateY(-2px) scale(1.035);
+  box-shadow: 0 18px 36px rgba(0, 0, 0, .26), inset 0 1px 0 rgba(255, 255, 255, .26);
 }
 
 .shortcut-tile-launcher .shortcut-tile-label strong {
@@ -555,23 +612,24 @@ a {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 14px;
+  font-size: 13px;
+  font-weight: 500;
   text-shadow: 0 2px 8px rgba(0, 0, 0, .42);
 }
 
 .shortcut-tile-action {
   position: absolute;
-  top: 6px;
-  right: 6px;
-  width: 24px;
-  height: 24px;
+  top: 3px;
+  right: 4px;
+  width: 22px;
+  height: 22px;
   border: 1px solid rgba(255, 255, 255, .22);
   border-radius: 50%;
   display: grid;
   place-items: center;
   padding: 0;
   color: #fff;
-  background: rgba(34, 197, 94, .88);
+  background: rgba(22, 163, 74, .92);
   box-shadow: 0 6px 14px rgba(0, 0, 0, .28);
   line-height: 0;
   overflow: hidden;
@@ -581,17 +639,104 @@ a {
   width: 14px;
   height: 14px;
   display: block;
-  stroke-width: 3;
+  stroke-width: 2.6;
 }
 
 .shortcut-tile-action.added {
-  background: rgba(100, 116, 139, .76);
+  background: rgba(84, 103, 124, .88);
 }
 
 .shortcut-tile-action.locked,
 .shortcut-tile-action:disabled {
   cursor: default;
   opacity: .88;
+}
+
+.desktop-launcher-page-arrow {
+  position: absolute;
+  top: 50%;
+  z-index: 2;
+  width: 42px;
+  height: 64px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  color: rgba(255, 255, 255, .82);
+  background: rgba(255, 255, 255, .08);
+  transform: translateY(-50%);
+}
+
+.desktop-launcher-page-arrow.previous { left: 18px; }
+.desktop-launcher-page-arrow.next { right: 18px; }
+
+.desktop-launcher-page-arrow:hover:not(:disabled) {
+  color: #fff;
+  background: rgba(255, 255, 255, .14);
+}
+
+.desktop-launcher-page-arrow:disabled {
+  opacity: .24;
+  cursor: default;
+}
+
+.desktop-launcher-pagination {
+  align-self: start;
+  justify-self: center;
+  display: flex;
+  gap: 8px;
+  padding-top: 4px;
+}
+
+.desktop-launcher-pagination button {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  padding: 0;
+  background: rgba(255, 255, 255, .38);
+  transition: background .16s ease, transform .16s ease;
+}
+
+.desktop-launcher-pagination button.active {
+  background: #fff;
+  transform: scale(1.18);
+}
+
+.desktop-launcher-pagination-spacer {
+  min-height: 1px;
+}
+
+.desktop-launcher-empty {
+  height: 100%;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 8px;
+  color: rgba(255, 255, 255, .68);
+}
+
+.desktop-launcher-empty strong {
+  color: rgba(255, 255, 255, .94);
+  font-size: 15px;
+}
+
+.desktop-launcher-empty span {
+  font-size: 13px;
+}
+
+@keyframes launcher-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes launcher-page-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .window-title {
