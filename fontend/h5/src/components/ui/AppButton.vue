@@ -2,9 +2,10 @@
   <button
     :type="type"
     class="app-button"
-    :class="[`is-${variant}`, `is-${size}`, { 'is-block': block, 'is-loading': loading }]"
+    :class="[`is-${variant}`, `is-${size}`, { 'is-block': block, 'is-loading': loading, 'is-selected': selected }]"
     :disabled="disabled || loading"
     :aria-busy="loading ? 'true' : 'false'"
+    :aria-pressed="selected ? 'true' : undefined"
     @click="handleClick"
   >
     <LoaderCircle v-if="loading" class="app-button-spinner" :size="iconSize" />
@@ -24,6 +25,7 @@ const props = defineProps({
   loading: { type: Boolean, default: false },
   disabled: { type: Boolean, default: false },
   block: { type: Boolean, default: false },
+  selected: { type: Boolean, default: false },
 });
 
 const emit = defineEmits(['click']);
@@ -86,6 +88,12 @@ function handleClick(event) {
   border-color: var(--app-line);
   color: var(--app-primary);
   background: var(--app-surface);
+}
+
+.app-button.is-secondary.is-selected {
+  border-color: color-mix(in srgb, var(--app-primary) 32%, var(--app-line));
+  color: var(--app-primary);
+  background: var(--app-primary-soft);
 }
 
 .app-button.is-quiet {

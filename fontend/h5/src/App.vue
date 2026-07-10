@@ -33,252 +33,74 @@
         @toggle-register="toggleRegisterForm"
       />
 
-      <template v-else-if="activeTab === 'home'">
-        <RoleHomePanel
-          :school-name="schoolText"
-          :user-name="userText"
-          :role-name="roleDisplayText"
-          :scope-text="scopeText"
-          :section-title="homeFocusTitle"
-          :section-description="homeFocusDescription"
-          :items="homeFocusItems"
-          @open="openHomeFocus"
-        />
+      <HomePage
+        v-else-if="activeTab === 'home'"
+        :school-name="schoolText"
+        :user-name="userText"
+        :role-name="roleDisplayText"
+        :scope-text="scopeText"
+        :section-title="homeFocusTitle"
+        :section-description="homeFocusDescription"
+        :items="homeFocusItems"
+        :support-modules="supportHomeModules"
+        :student="isStudentRole"
+        :flow-steps="studentFlowSteps"
+        @open-focus="openHomeFocus"
+        @open-tab="activeTab = $event"
+      />
 
-        <section v-if="supportHomeModules.length" class="home-service-section">
-          <header>
-            <strong>常用服务</strong>
-            <small>制度、流程和材料下载</small>
-          </header>
-          <div class="home-service-list">
-          <button
-            v-for="module in supportHomeModules"
-            :key="module.key"
-            @click="activeTab = module.key"
-          >
-            <span :class="module.theme">
-              <component :is="module.icon" :size="21" />
-            </span>
-            <div>
-              <strong>{{ module.title }}</strong>
-              <small>{{ module.desc }}</small>
-            </div>
-            <ChevronRight :size="18" />
-          </button>
-          </div>
-        </section>
+      <ProfilePage
+        v-else-if="activeTab === 'mine'"
+        :user-name="userText"
+        :account-name="accountText"
+        :role-name="roleDisplayText"
+        :school-name="schoolText"
+        :scope-text="scopeText"
+        :scope-detail="scopeDetailText"
+        :document-visible="hasPermission('doc:view')"
+        :template-visible="hasPermission('template:view')"
+        :switch-state="switchAccountState"
+        :role-labels="roleNameMap"
+        @open-tab="activeTab = $event"
+        @switch-account="switchMobileAccount"
+        @logout="confirmMobileLogout"
+      />
 
-        <section v-if="isStudentRole" class="student-guide-card">
-          <header>
-            <Route :size="20" />
-            <strong>实习流程</strong>
-          </header>
-          <div class="student-guide-steps">
-            <span v-for="step in studentFlowSteps" :key="step">{{ step }}</span>
-          </div>
-        </section>
-      </template>
+      <MessagePage
+        v-else-if="activeTab === 'message'"
+        :state="messageState"
+        :groups="messageGroups"
+        :unread-count="messageUnreadCount"
+        :type-options="mobileMessageTypeOptions"
+        :is-own="isOwnMobileMessage"
+        :level-text="messageLevelText"
+        :time-text="messageTimeText"
+        :type-text="messageTypeText"
+        :type-unread="mobileMessageTypeUnread"
+        @filter="setMobileMessageFilter"
+        @type="setMobileMessageType"
+        @open="handleMobileMessageClick"
+        @linked="openMobileMessageLink"
+        @read-all="markAllMobileMessagesRead"
+        @load-more="loadMoreMessages"
+        @reload="loadMessages(1)"
+      />
 
-      <template v-else-if="activeTab === 'mine'">
-        <section class="profile-panel">
-          <UserRound :size="34" />
-          <div>
-            <strong>{{ userText }}</strong>
-            <span>{{ schoolText }}</span>
-          </div>
-        </section>
+      <DocumentPage
+        v-else-if="activeTab === 'doc'"
+        :model="support.doc"
+        :can-load-more="canLoadMoreSupport('doc')"
+        @load="loadMobileDocs"
+        @open="openMobileDoc"
+      />
 
-        <van-cell-group inset>
-          <van-cell title="姓名" :value="userText" />
-          <van-cell title="登录账号" :value="accountText" />
-          <van-cell title="当前角色" :value="roleDisplayText" />
-          <van-cell title="所属学校" :value="schoolText" />
-          <van-cell title="数据范围" :label="scopeDetailText" :value="scopeText" />
-          <van-cell v-if="hasPermission('doc:view')" title="文档中心" value="查看" is-link @click="activeTab = 'doc'" />
-          <van-cell v-if="hasPermission('template:view')" title="模板库" value="下载" is-link @click="activeTab = 'templateLib'" />
-        </van-cell-group>
-
-        <van-cell-group v-if="switchAccountState.items.length > 1" inset class="switch-account-group">
-          <van-cell
-            title="切换身份"
-            :label="switchAccountState.message || '同一用户或同手机号绑定账号可快速切换'"
-          />
-          <van-cell
-            v-for="account in switchAccountState.items"
-            :key="account.id"
-            :title="accountSwitchTitle(account)"
-            :label="accountSwitchLabel(account)"
-            :value="account.is_current ? '当前' : '切换'"
-            :is-link="!account.is_current"
-            @click="switchMobileAccount(account)"
-          />
-        </van-cell-group>
-
-        <van-cell-group inset class="mobile-account-actions">
-          <van-cell
-            class="mobile-logout-cell"
-            title="退出当前账号"
-            clickable
-            :is-link="false"
-            @click="confirmMobileLogout"
-          />
-        </van-cell-group>
-      </template>
-
-      <template v-else-if="activeTab === 'message'">
-        <van-notice-bar
-          v-if="messageState.message"
-          color="#8a5a00"
-          background="#fff3d8"
-          left-icon="warning-o"
-          :text="messageState.message"
-        />
-
-        <section class="mobile-message-actions">
-          <button :class="{ active: messageState.filter === 'all' }" @click="setMobileMessageFilter('all')">
-            全部
-          </button>
-          <button :class="{ active: messageState.filter === 'unread' }" @click="setMobileMessageFilter('unread')">
-            未读 {{ messageUnreadCount }}
-          </button>
-          <button :disabled="messageUnreadCount <= 0 || messageState.loading" @click="markAllMobileMessagesRead">
-            全部已读
-          </button>
-        </section>
-
-        <section class="mobile-message-type-scroll" aria-label="消息类型">
-          <button
-            v-for="item in mobileMessageTypeOptions"
-            :key="item.value"
-            :class="{ active: messageState.type === item.value }"
-            @click="setMobileMessageType(item.value)"
-          >
-            <span>{{ item.label }}</span>
-            <strong>{{ mobileMessageTypeUnread(item.value) }}</strong>
-          </button>
-        </section>
-
-        <section class="mobile-message-list">
-          <template v-if="messageGroups.length">
-            <div v-for="group in messageGroups" :key="group.key" class="mobile-message-day">
-              <span>{{ group.label }}</span>
-              <article
-                v-for="item in group.items"
-                :key="item.target_id"
-                class="mobile-message-card"
-                :class="{ unread: !item.is_read, urgent: item.level === 'urgent', own: isOwnMobileMessage(item) }"
-                @click="handleMobileMessageClick(item)"
-                >
-                <header>
-                  <em :class="item.type">{{ messageTypeText(item.type) }}</em>
-                  <small>{{ messageTimeText(item) }}</small>
-                </header>
-                <strong>{{ item.title }}</strong>
-                <p>{{ item.content }}</p>
-                <footer>
-                  <span>{{ isOwnMobileMessage(item) ? '我发送' : (item.sender_name || '系统') }}</span>
-                  <span>{{ messageLevelText(item.level) }}</span>
-                  <span>{{ item.is_read ? '已读' : '未读' }}</span>
-                  <button v-if="item.link_url" type="button" @click.stop="openMobileMessageLink(item)">
-                    查看关联
-                  </button>
-                </footer>
-              </article>
-            </div>
-          </template>
-          <section v-else class="mobile-empty-card">
-            <strong>暂无消息</strong>
-            <span>新的通知会按时间显示在这里。</span>
-          </section>
-          <div class="mobile-list-footer">
-            <button
-              :disabled="messageState.loading || messageState.items.length >= messageState.pagination.total"
-              @click="loadMoreMessages"
-            >
-              {{ messageState.items.length >= messageState.pagination.total ? '没有更多' : '加载更多' }}
-            </button>
-          </div>
-        </section>
-      </template>
-
-      <template v-else-if="activeTab === 'doc'">
-        <section class="mobile-list-tools support-mobile-tools">
-          <select v-model="support.doc.filters.category_id" @change="loadMobileDocs(1)">
-            <option value="">全部分类</option>
-            <option v-for="item in support.doc.categories" :key="item.id" :value="item.id">
-              {{ item.name }}
-            </option>
-          </select>
-          <input v-model="support.doc.filters.keyword" placeholder="搜索文档" @keyup.enter="loadMobileDocs(1)">
-        </section>
-
-        <section class="mobile-support-list">
-          <article
-            v-for="item in support.doc.items"
-            :key="item.id"
-            class="mobile-card support-mobile-card"
-            @click="openMobileDoc(item)"
-          >
-            <header>
-              <BookOpen :size="19" />
-              <strong>{{ item.title }}</strong>
-              <small>{{ item.category_name || '未分类' }}</small>
-            </header>
-            <p>{{ item.version ? `版本 ${item.version}` : '文档' }} / {{ item.updated_at || '-' }}</p>
-          </article>
-          <section v-if="!support.doc.items.length" class="mobile-empty-card">
-            <strong>暂无文档</strong>
-            <span>已发布文档会显示在这里。</span>
-          </section>
-          <div class="mobile-list-footer">
-            <button :disabled="support.doc.loading" @click="loadMobileDocs(1)">刷新</button>
-            <button v-if="canLoadMoreSupport('doc')" :disabled="support.doc.loading" @click="loadMobileDocs(support.doc.pagination.page + 1, true)">
-              加载更多
-            </button>
-          </div>
-        </section>
-      </template>
-
-      <template v-else-if="activeTab === 'templateLib'">
-        <section class="mobile-list-tools support-mobile-tools">
-          <select v-model="support.template.filters.category_id" @change="loadMobileTemplates(1)">
-            <option value="">全部分类</option>
-            <option v-for="item in support.template.categories" :key="item.id" :value="item.id">
-              {{ item.name }}
-            </option>
-          </select>
-          <input v-model="support.template.filters.keyword" placeholder="搜索模板" @keyup.enter="loadMobileTemplates(1)">
-        </section>
-
-        <section class="mobile-support-list">
-          <article
-            v-for="item in support.template.items"
-            :key="item.id"
-            class="mobile-card support-mobile-card"
-          >
-            <header>
-              <FileText :size="19" />
-              <strong>{{ item.name }}</strong>
-              <small>{{ item.category_name || '未分类' }}</small>
-            </header>
-            <p>{{ item.description || item.file?.download_name || '暂无说明' }}</p>
-            <footer>
-              <span>版本 {{ item.version || '-' }} / 下载 {{ item.download_count || 0 }}</span>
-              <button type="button" @click="downloadMobileTemplate(item)">下载</button>
-            </footer>
-          </article>
-          <section v-if="!support.template.items.length" class="mobile-empty-card">
-            <strong>暂无模板</strong>
-            <span>学校管理员上传模板后会显示在这里。</span>
-          </section>
-          <div class="mobile-list-footer">
-            <button :disabled="support.template.loading" @click="loadMobileTemplates(1)">刷新</button>
-            <button v-if="canLoadMoreSupport('template')" :disabled="support.template.loading" @click="loadMobileTemplates(support.template.pagination.page + 1, true)">
-              加载更多
-            </button>
-          </div>
-        </section>
-      </template>
+      <TemplatePage
+        v-else-if="activeTab === 'templateLib'"
+        :model="support.template"
+        :can-load-more="canLoadMoreSupport('template')"
+        @load="loadMobileTemplates"
+        @download="downloadMobileTemplate"
+      />
 
       <template v-else-if="activeTab === 'internship'">
         <van-notice-bar
@@ -1042,36 +864,11 @@
     </template>
 
     <template #overlays>
-
-    <van-popup
-      v-model:show="support.doc.detail.visible"
-      round
-      position="bottom"
-      safe-area-inset-bottom
-    >
-      <section class="support-doc-sheet">
-        <header>
-          <span>{{ support.doc.detail.article?.category_name || '未分类' }}</span>
-          <strong>{{ support.doc.detail.article?.title || '文档详情' }}</strong>
-          <small>
-            版本 {{ support.doc.detail.article?.version || '-' }} /
-            浏览 {{ support.doc.detail.article?.view_count || 0 }}
-          </small>
-        </header>
-        <article
-          v-if="support.doc.detail.article"
-          class="support-mobile-rich"
-          v-html="support.doc.detail.article.content"
-        />
-        <div v-else class="mobile-empty-card">
-          <strong>{{ support.doc.detail.loading ? '正在读取文档' : '暂无文档内容' }}</strong>
-          <span>{{ support.doc.detail.message || '请稍后重试。' }}</span>
-        </div>
-        <div class="sheet-actions single">
-          <button type="button" @click="closeMobileDoc">关闭</button>
-        </div>
-      </section>
-    </van-popup>
+    <DocumentDetail
+      :visible="support.doc.detail.visible"
+      :detail="support.doc.detail"
+      @close="closeMobileDoc"
+    />
 
     <van-popup
       v-model:show="internship.reviewDialog.visible"
@@ -1325,7 +1122,6 @@ import {
   BookOpen,
   CalendarCheck,
   CheckCircle2,
-  ChevronRight,
   ClipboardList,
   FileClock,
   FileText,
@@ -1342,11 +1138,17 @@ import {
   Workflow,
 } from '@lucide/vue';
 import MobileFilterSheet from './components/MobileFilterSheet.vue';
-import RoleHomePanel from './components/RoleHomePanel.vue';
 import AppStatusBadge from './components/ui/AppStatusBadge.vue';
+import DocumentDetail from './features/support/DocumentDetail.vue';
 import MobileAppShell from './layouts/MobileAppShell.vue';
+import DocumentPage from './pages/DocumentPage.vue';
+import HomePage from './pages/HomePage.vue';
 import LoginPage from './pages/LoginPage.vue';
+import MessagePage from './pages/MessagePage.vue';
+import ProfilePage from './pages/ProfilePage.vue';
+import TemplatePage from './pages/TemplatePage.vue';
 import { useAuthSession } from './composables/useAuthSession';
+import { useMessageCenter } from './composables/useMessageCenter';
 import { useMobileNavigation } from './composables/useMobileNavigation';
 import { useMobilePermissions } from './composables/useMobilePermissions';
 import { statusText as resolveStatusText } from './constants/status';
@@ -1377,8 +1179,6 @@ import {
   fetchInternshipTeacherWorkReports,
   fetchInternshipInspections,
   fetchInternshipTimeline,
-  fetchMessages,
-  fetchMessageSummary,
   fetchPracticeList,
   fetchPracticeOptions,
   fetchPracticeOverview,
@@ -1388,7 +1188,6 @@ import {
   fetchPracticeTimeline,
   fetchTemplateCategories,
   fetchTemplateList,
-  markMessagesRead,
   requestInternshipModification,
   requestPracticeExecutionModification,
   requestPracticeModification,
@@ -1415,41 +1214,6 @@ import {
 
 const { state, hasPermission, load } = useMobilePermissions();
 const mobileRefreshing = ref(false);
-const messageState = reactive({
-  loading: false,
-  message: '',
-  filter: 'all',
-  type: 'all',
-  items: [],
-  summary: {
-    unread: 0,
-    by_type: {},
-  },
-  pagination: {
-    page: 1,
-    page_size: 20,
-    total: 0,
-  },
-});
-
-const messageTypeNames = {
-  system: '系统通知',
-  todo: '待办提醒',
-  result: '处理结果',
-  alert: '预警提醒',
-};
-const mobileMessageTypeOptions = [
-  { label: '全部类型', value: 'all' },
-  { label: '待办', value: 'todo' },
-  { label: '结果', value: 'result' },
-  { label: '预警', value: 'alert' },
-  { label: '系统', value: 'system' },
-];
-const messageLevelNames = {
-  normal: '普通',
-  important: '重要',
-  urgent: '紧急',
-};
 
 const support = reactive({
   doc: {
@@ -1722,14 +1486,38 @@ const {
 });
 
 const {
+  state: messageState,
+  groups: messageGroups,
+  typeOptions: mobileMessageTypeOptions,
+  unreadCount: messageUnreadCount,
+  isOwn: isOwnMobileMessage,
+  levelText: messageLevelText,
+  load: loadMessages,
+  loadMore: loadMoreMessages,
+  loadSummary: loadMessageSummary,
+  markAllRead: markAllMobileMessagesRead,
+  markRead: handleMobileMessageClick,
+  openLinked: openMobileMessageLink,
+  reset: resetMessageState,
+  setFilter: setMobileMessageFilter,
+  setType: setMobileMessageType,
+  timeText: messageTimeText,
+  typeText: messageTypeText,
+  typeUnread: mobileMessageTypeUnread,
+} = useMessageCenter({
+  isLoggedIn: () => Boolean(state.context.account_id),
+  currentAccountId: () => state.context.account_id,
+  navigate: tab => { activeTab.value = tab; },
+  canNavigate: isMobileModuleVisible,
+});
+
+const {
   loginForm,
   loginState,
   registerForm,
   registerRoleOptions,
   registerState,
   switchAccountState,
-  accountSwitchLabel,
-  accountSwitchTitle,
   confirmMobileLogout,
   loadSwitchableAccounts,
   resetAccountChoices,
@@ -1810,9 +1598,6 @@ const currentPage = computed(() => {
   }
   return modules.find(item => item.key === activeTab.value) || modules[0];
 });
-
-const messageUnreadCount = computed(() => Number(messageState.summary.unread || 0));
-const messageGroups = computed(() => groupMessagesByDay(messageState.items));
 
 const isLoggedIn = computed(() => Boolean(state.context.account_id));
 const mobileHeaderTitle = computed(() => (isLoggedIn.value ? currentPage.value.title : '实践管理系统'));
@@ -5577,129 +5362,6 @@ function flattenSupportCategories(rows, level = 0) {
   return result;
 }
 
-async function loadMessageSummary() {
-  if (!isLoggedIn.value) {
-    resetMessageState();
-    return;
-  }
-
-  try {
-    const data = await fetchMessageSummary();
-    messageState.summary = {
-      unread: Number(data.unread || 0),
-      by_type: data.by_type || {},
-    };
-  } catch (error) {
-    messageState.message = error.message;
-  }
-}
-
-async function loadMessages(page = 1, append = false) {
-  if (!isLoggedIn.value || messageState.loading) {
-    return;
-  }
-
-  messageState.loading = true;
-  messageState.message = '';
-  try {
-    const data = await fetchMessages({
-      page,
-      page_size: messageState.pagination.page_size,
-      status: messageState.filter,
-      type: messageState.type,
-    });
-    const items = data.items || [];
-    messageState.items = append ? [...messageState.items, ...items] : items;
-    messageState.pagination = {
-      page: Number(data.pagination?.page || page),
-      page_size: Number(data.pagination?.page_size || messageState.pagination.page_size),
-      total: Number(data.pagination?.total || 0),
-    };
-    await loadMessageSummary();
-  } catch (error) {
-    messageState.message = error.message;
-  } finally {
-    messageState.loading = false;
-  }
-}
-
-function loadMoreMessages() {
-  if (messageState.items.length >= messageState.pagination.total) {
-    return;
-  }
-  loadMessages(messageState.pagination.page + 1, true);
-}
-
-function setMobileMessageFilter(filter) {
-  messageState.filter = filter;
-  loadMessages(1);
-}
-
-function setMobileMessageType(type) {
-  messageState.type = type;
-  loadMessages(1);
-}
-
-async function handleMobileMessageClick(item) {
-  if (!item?.target_id || item.is_read) {
-    return;
-  }
-
-  try {
-    const data = await markMessagesRead({ ids: [item.target_id] });
-    item.is_read = true;
-    item.read_at = new Date().toLocaleString();
-    messageState.summary = data.summary || messageState.summary;
-    if (messageState.filter === 'unread') {
-      messageState.items = messageState.items.filter(row => row.target_id !== item.target_id);
-      messageState.pagination.total = Math.max(0, messageState.pagination.total - 1);
-    }
-  } catch (error) {
-    messageState.message = error.message;
-    showToast(error.message);
-  }
-}
-
-async function markAllMobileMessagesRead() {
-  if (messageUnreadCount.value <= 0 || messageState.loading) {
-    return;
-  }
-
-  messageState.loading = true;
-  messageState.message = '';
-  try {
-    const data = await markMessagesRead({ all: true });
-    messageState.summary = data.summary || { unread: 0, by_type: {} };
-    messageState.items = messageState.filter === 'unread'
-      ? []
-      : messageState.items.map(item => ({ ...item, is_read: true, read_at: item.read_at || new Date().toLocaleString() }));
-    if (messageState.filter === 'unread') {
-      messageState.pagination = { ...messageState.pagination, page: 1, total: 0 };
-    }
-  } catch (error) {
-    messageState.message = error.message;
-    showToast(error.message);
-  } finally {
-    messageState.loading = false;
-  }
-}
-
-function resetMessageState() {
-  messageState.message = '';
-  messageState.filter = 'all';
-  messageState.type = 'all';
-  messageState.items = [];
-  messageState.summary = {
-    unread: 0,
-    by_type: {},
-  };
-  messageState.pagination = {
-    page: 1,
-    page_size: 20,
-    total: 0,
-  };
-}
-
 function resetSupportState() {
   support.doc.loading = false;
   support.doc.message = '';
@@ -5798,114 +5460,6 @@ function expireMobileSession(message) {
   state.error = message;
   resetMobileNavigationToHome();
   resetMobileLocalState();
-}
-
-function messageTypeText(type) {
-  return messageTypeNames[type] || type || '系统通知';
-}
-
-function mobileMessageTypeUnread(type) {
-  if (type === 'all') {
-    return messageUnreadCount.value;
-  }
-  return Number(messageState.summary.by_type?.[type] || 0);
-}
-
-function messageLevelText(level) {
-  return messageLevelNames[level] || level || '普通';
-}
-
-function isOwnMobileMessage(item) {
-  return Number(item?.sender_id || 0) > 0
-    && Number(item.sender_id) === Number(state.context.account_id || 0);
-}
-
-async function openMobileMessageLink(item) {
-  await handleMobileMessageClick(item);
-  const link = String(item?.link_url || '').trim();
-  if (!link) {
-    return;
-  }
-  if (link.startsWith('#tab=')) {
-    const tab = link.replace('#tab=', '').trim();
-    if (tab) {
-      activeTab.value = tab;
-    }
-    return;
-  }
-  if (link.startsWith('#')) {
-    const tab = link.slice(1).split(':')[0].replace('panel=', '').trim();
-    if (tab && isMobileModuleVisible(tab)) {
-      activeTab.value = tab;
-    }
-    return;
-  }
-  window.open(link, '_blank', 'noopener,noreferrer');
-}
-
-function groupMessagesByDay(items) {
-  const groups = new Map();
-  const sortedItems = [...(items || [])].sort((a, b) => {
-    const timeA = new Date(String(a.created_at || '').replace(' ', 'T')).getTime() || 0;
-    const timeB = new Date(String(b.created_at || '').replace(' ', 'T')).getTime() || 0;
-    if (timeA !== timeB) {
-      return timeA - timeB;
-    }
-    return Number(a.target_id || 0) - Number(b.target_id || 0);
-  });
-  sortedItems.forEach((item) => {
-    const key = messageDateKey(item.date_key || item.created_at);
-    if (!groups.has(key)) {
-      groups.set(key, {
-        key,
-        label: messageDayLabel(key),
-        items: [],
-      });
-    }
-    groups.get(key).items.push(item);
-  });
-  return Array.from(groups.values());
-}
-
-function messageDateKey(value) {
-  const text = String(value || '');
-  if (/^\d{4}-\d{2}-\d{2}/.test(text)) {
-    return text.slice(0, 10);
-  }
-  return formatDateKey(new Date());
-}
-
-function messageDayLabel(key) {
-  const today = formatDateKey(new Date());
-  const yesterdayDate = new Date();
-  yesterdayDate.setDate(yesterdayDate.getDate() - 1);
-  const yesterday = formatDateKey(yesterdayDate);
-  if (key === today) {
-    return '今天';
-  }
-  if (key === yesterday) {
-    return '昨天';
-  }
-  return key;
-}
-
-function messageTimeText(value) {
-  if (value && typeof value === 'object') {
-    return value.time_label || messageTimeText(value.created_at);
-  }
-  const text = String(value || '');
-  if (/^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}/.test(text)) {
-    return text.slice(11, 16);
-  }
-  return text || '-';
-}
-
-function formatDateKey(date) {
-  return [
-    date.getFullYear(),
-    String(date.getMonth() + 1).padStart(2, '0'),
-    String(date.getDate()).padStart(2, '0'),
-  ].join('-');
 }
 
 async function refreshMobilePage() {
