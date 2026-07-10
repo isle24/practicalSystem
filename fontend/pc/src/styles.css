@@ -28,7 +28,9 @@
 
 body {
   margin: 0;
-  min-height: 100vh;
+  height: 100vh;
+  height: 100dvh;
+  min-height: 0;
   color: var(--text);
   background: var(--bg);
   overflow: hidden;
@@ -61,11 +63,14 @@ a {
 
 .desktop-shell {
   position: relative;
-  min-height: 100vh;
+  height: 100vh;
+  height: 100dvh;
+  min-height: 0;
   display: grid;
-  grid-template-rows: 48px 1fr 50px;
+  grid-template-rows: 48px minmax(0, 1fr) 50px;
   background-position: center;
   background-size: cover;
+  overflow: hidden;
 }
 
 .topbar {
@@ -3789,6 +3794,8 @@ a {
 
 .taskbar-center {
   grid-column: 2;
+  min-width: 0;
+  max-width: calc(100vw - 24px);
   display: flex;
   align-items: center;
   gap: 6px;
@@ -3796,14 +3803,22 @@ a {
 
 .taskbar-apps {
   min-width: 0;
+  max-width: calc(100vw - 74px);
   display: flex;
   align-items: center;
   gap: 4px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.taskbar-apps::-webkit-scrollbar {
+  display: none;
 }
 
 .taskbar button,
 .taskbar a {
   position: relative;
+  flex: 0 0 38px;
   width: 38px;
   height: 38px;
   border-radius: 7px;
@@ -3847,7 +3862,7 @@ a {
 }
 
 .taskbar a.running::after,
-.taskbar .message-taskbar-button.active::after {
+.taskbar .message-taskbar-button.running::after {
   background: #6b7a8a;
 }
 
@@ -3863,6 +3878,7 @@ a {
 }
 
 .taskbar-launcher-button {
+  flex: 0 0 38px;
   color: #0f65aa !important;
 }
 
@@ -4739,7 +4755,7 @@ a {
 @media (max-width: 980px) {
   .desktop-shell {
     min-width: 0;
-    min-height: 100vh;
+    min-height: 0;
   }
 
   .topbar {

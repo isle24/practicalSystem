@@ -3445,7 +3445,7 @@
         </button>
         <div class="taskbar-apps">
           <a
-            v-for="win in openWindows"
+            v-for="win in taskbarWindows"
             :key="win.id"
             :href="windowHref(win)"
             :title="win.module.name"
@@ -3457,10 +3457,10 @@
           </a>
           <button
             class="taskbar-icon-button message-taskbar-button"
-            :class="{ active: isModuleFocused('message') }"
+            :class="{ active: isModuleFocused('message'), running: isModuleOpen('message') }"
             title="消息中心"
             aria-label="消息中心"
-            @click="openMessageCenter"
+            @click="toggleMessageTaskWindow"
           >
             <MessageCircle :size="19" />
             <i v-if="messageUnreadCount > 0">{{ messageUnreadCount > 99 ? '99+' : messageUnreadCount }}</i>
@@ -4680,6 +4680,7 @@ const desktopShortcutPayloadItems = desktopLauncher.payloadItems;
 const favoriteDesktopShortcuts = desktopLauncher.favoriteDesktopShortcuts;
 const showGlobalSearchResults = computed(() => globalSearchKeyword.value && globalSearchResults.value.length > 0);
 const visibleWindows = computed(() => openWindows.filter(win => !win.minimized));
+const taskbarWindows = computed(() => openWindows.filter(win => win.module.id !== 'message'));
 const canManageConfig = computed(() => hasPermission('config:manage') && ['super_admin', 'school_admin'].includes(permissionState.context.role_type));
 const canViewUserAdmin = computed(() => ['super_admin', 'school_admin', 'college_admin', 'profession_admin'].includes(permissionState.context.role_type));
 const canSendMessages = computed(() => ['super_admin', 'school_admin'].includes(currentRoleType.value));
@@ -5602,6 +5603,15 @@ function sidebarItems(win) {
 
 function openMessageCenter() {
   openModuleWindow(messageModule, { reuse: true });
+}
+
+function toggleMessageTaskWindow() {
+  const win = openWindows.find(item => item.module.id === 'message');
+  if (!win) {
+    openMessageCenter();
+    return;
+  }
+  toggleTaskWindow(win.id);
 }
 
 async function loadMessageSummary() {
@@ -7169,6 +7179,10 @@ function clearNavigationHash() {
 function isModuleFocused(moduleId) {
   const focused = openWindows.find(win => win.id === focusedWindowId.value);
   return focused?.module.id === moduleId && !focused.minimized;
+}
+
+function isModuleOpen(moduleId) {
+  return openWindows.some(win => win.module.id === moduleId);
 }
 
 function syncOpenWindowModules() {
