@@ -3,44 +3,66 @@
 namespace app\process;
 
 use app\model\system\Database;
-use app\model\channel\ExportTaskRecord;
-use app\server\export\ExportTaskService;
+use app\server\WorkflowLock;
+use app\server\maintenance\InternshipScheduledService;
+use app\server\maintenance\ScheduledMaintenanceService;
 use app\server\school\SchoolConnectionManager;
 use support\Log;
 use Throwable;
-use Webman\RedisQueue\Redis as RedisQueue;
 use Workerman\Crontab\Crontab;
 
 /**
- * 定时任务调度进程（骨架）。
- *
- * 后台进程无 HTTP 上下文，逐个学校库切换连接后执行。
- * 目前仅注册一个任务：补投滞留的待处理导出任务
- * （入队失败或消费者宕机时的兜底，保证导出最终会被处理）。
- * 后续的超时标记、临时文件清理、简报生成等定时任务在此处追加。
+ * 后台定时任务调度进程。
  */
 class CronTask
 {
     /**
-     * 单个学校库单次补投的最大任务数，避免堆积时一次扫太多。
+     * 注册后台任务执行时间。
      */
-    private const REQUEUE_LIMIT = 50;
-
     public function onWorkerStart(): void
     {
-        // 每分钟第 5 秒执行，避开整点，降低与其它任务的碰撞
         new Crontab('5 * * * * *', function (): void {
-            $this->requeueStuckExports();
+            $this->runForSchools('export_requeue', date('YmdHi'), 55, function (int $databaseId): int {
+                return (new ScheduledMaintenanceService())->requeuePendingExports($databaseId);
+            });
+        });
+
+        new Crontab('15 */5 * * * *', function (): void {
+            $this->runForSchools('export_timeout', date('YmdHi'), 290, function (int $_databaseId): int {
+                return (new ScheduledMaintenanceService())->timeoutExports();
+            });
+        });
+
+        new Crontab('0 0 2 * * *', function (): void {
+            $this->runForSchools('temporary_file_cleanup', date('Ymd'), 82800, function (int $_databaseId): array {
+                return (new ScheduledMaintenanceService())->cleanupTemporaryFiles();
+            });
+        });
+
+        new Crontab('0 30 2 * 7,12 *', function (): void {
+            $this->runForSchools('recording_archive', date('Ymd'), 82800, function (int $_databaseId): array {
+                return (new ScheduledMaintenanceService())->archiveRecordings();
+            });
+        });
+
+        new Crontab('0 30 6 * * 1', function (): void {
+            $this->runForSchools('internship_weekly_brief', date('oW'), 604000, function (int $_databaseId): array {
+                return (new InternshipScheduledService())->generateWeeklyBrief();
+            });
+        });
+
+        new Crontab('0 0 9 * * *', function (): void {
+            $this->runForSchools('insurance_expiry_reminder', date('Ymd'), 82800, function (int $_databaseId): array {
+                return (new InternshipScheduledService())->remindExpiringInsurance();
+            });
         });
     }
 
     /**
-     * 扫描所有启用学校库，补投滞留超过 1 分钟仍未处理的导出任务。
+     * 在所有启用学校业务库执行指定任务。
      */
-    private function requeueStuckExports(): void
+    private function runForSchools(string $taskCode, string $periodKey, int $lockTtl, callable $callback): void
     {
-        // 后台进程无 HTTP 生命周期，手动初始化上下文存储，
-        // 避免 Fiber\Context 未初始化的致命错误。
         \support\Context::reset();
 
         try {
@@ -50,7 +72,6 @@ class CronTask
             return;
         }
 
-        $before = date('Y-m-d H:i:s', time() - 60);
         foreach ($databases as $config) {
             $databaseId = (int) ($config['database_id'] ?? 0);
             if ($databaseId <= 0) {
@@ -59,16 +80,47 @@ class CronTask
 
             try {
                 (new SchoolConnectionManager())->ensureConnection($databaseId, $config);
-                $taskIds = ExportTaskRecord::stalePendingIds($before, self::REQUEUE_LIMIT);
-                foreach ($taskIds as $taskId) {
-                    RedisQueue::send(ExportTaskService::QUEUE, [
-                        'database_id' => $databaseId,
-                        'task_id' => (int) $taskId,
-                    ]);
-                }
+                $result = (new WorkflowLock())->runOnce(
+                    "cron_task:{$databaseId}:{$taskCode}:{$periodKey}",
+                    fn (): mixed => $callback($databaseId),
+                    $lockTtl
+                );
+                $this->logResult($taskCode, $databaseId, $result);
             } catch (Throwable $exception) {
-                Log::error('cron 补投导出任务失败 db=' . $databaseId . ': ' . $exception->getMessage());
+                if ((int) $exception->getCode() !== 409) {
+                    Log::error("cron {$taskCode} 失败 db={$databaseId}: " . $exception->getMessage());
+                }
             }
         }
+    }
+
+    /**
+     * 记录产生实际处理结果的后台任务。
+     */
+    private function logResult(string $taskCode, int $databaseId, mixed $result): void
+    {
+        $hasResult = is_int($result) ? $result > 0 : (is_array($result) && $this->arrayHasWork($result));
+        if (!$hasResult) {
+            return;
+        }
+
+        Log::info("cron {$taskCode} 完成 db={$databaseId} result=" . json_encode($result, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+    }
+
+    /**
+     * 判断任务结果是否包含正数处理量。
+     */
+    private function arrayHasWork(array $result): bool
+    {
+        $workKeys = ['archived', 'created', 'deleted', 'physical_deleted', 'orphan_blobs_deleted', 'failed', 'physical_delete_failed', 'sent', 'notified_accounts'];
+        foreach ($result as $key => $value) {
+            if ($key === 'created' && $value === true) {
+                return true;
+            }
+            if (in_array((string) $key, $workKeys, true) && is_numeric($value) && (float) $value > 0) {
+                return true;
+            }
+        }
+        return false;
     }
 }

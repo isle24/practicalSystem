@@ -485,6 +485,97 @@ class Account extends BaseModel
             ->all();
     }
 
+    /**
+     * 按用户和角色类型读取有效身份账号 ID。
+     */
+    public static function enabledAccountIdByUserRole(int $userId, string $roleType): int
+    {
+        if ($userId <= 0 || $roleType === '') {
+            return 0;
+        }
+
+        return (int) (self::query()
+            ->join('user_role', 'account.id', '=', 'user_role.account_id')
+            ->join('role', 'user_role.role_id', '=', 'role.id')
+            ->where('account.user_id', $userId)
+            ->where('role.role_type', $roleType)
+            ->where('account.status', 'enabled')
+            ->where('role.status', 'enabled')
+            ->whereNull('account.deleted_at')
+            ->whereNull('user_role.deleted_at')
+            ->whereNull('role.deleted_at')
+            ->orderByDesc('user_role.is_primary')
+            ->value('account.id') ?: 0);
+    }
+
+    /**
+     * 读取学生所属学院和专业的管理员账号 ID。
+     */
+    public static function scopedAdminAccountIds(int $depId, int $professionId): array
+    {
+        return self::query()
+            ->join('user_role', 'account.id', '=', 'user_role.account_id')
+            ->join('role', 'user_role.role_id', '=', 'role.id')
+            ->join('sys_organization', function ($join): void {
+                $join->on('account.id', '=', 'sys_organization.account_id')
+                    ->on('role.id', '=', 'sys_organization.role_id')
+                    ->where('sys_organization.disabled', 'false')
+                    ->whereNull('sys_organization.deleted_at');
+            })
+            ->where(function ($query) use ($depId, $professionId): void {
+                $query->where(function ($builder) use ($depId): void {
+                    $builder->where('role.role_type', 'college_admin')
+                        ->where('sys_organization.dep_id', (string) $depId);
+                })->orWhere(function ($builder) use ($professionId): void {
+                    $builder->where('role.role_type', 'profession_admin')
+                        ->where('sys_organization.profession_id', (string) $professionId);
+                });
+            })
+            ->where('account.status', 'enabled')
+            ->where('role.status', 'enabled')
+            ->whereNull('account.deleted_at')
+            ->whereNull('user_role.deleted_at')
+            ->whereNull('role.deleted_at')
+            ->distinct()
+            ->pluck('account.id')
+            ->map(static fn ($id): int => (int) $id)
+            ->all();
+    }
+
+    /**
+     * 读取实习简报管理员及其组织范围。
+     */
+    public static function internshipBriefRecipientRows(): array
+    {
+        return self::query()
+            ->join('user_role', 'account.id', '=', 'user_role.account_id')
+            ->join('role', 'user_role.role_id', '=', 'role.id')
+            ->leftJoin('sys_organization', function ($join): void {
+                $join->on('account.id', '=', 'sys_organization.account_id')
+                    ->on('role.id', '=', 'sys_organization.role_id')
+                    ->where('sys_organization.disabled', 'false')
+                    ->whereNull('sys_organization.deleted_at');
+            })
+            ->leftJoin('department', 'sys_organization.dep_id', '=', 'department.dep_id')
+            ->leftJoin('profession', 'sys_organization.profession_id', '=', 'profession.profession_id')
+            ->whereIn('role.role_type', ['school_admin', 'college_admin', 'profession_admin'])
+            ->where('account.status', 'enabled')
+            ->where('role.status', 'enabled')
+            ->whereNull('account.deleted_at')
+            ->whereNull('user_role.deleted_at')
+            ->whereNull('role.deleted_at')
+            ->get([
+                'account.id as account_id',
+                'role.role_type',
+                'sys_organization.dep_id',
+                'sys_organization.profession_id',
+                'department.dep_name',
+                'profession.profession_name',
+            ])
+            ->map(static fn ($row): array => $row->getAttributes())
+            ->all();
+    }
+
     public static function registerRoleByType(string $roleType): ?array
     {
         $row = TableRecord::queryTable('role')

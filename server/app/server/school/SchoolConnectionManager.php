@@ -61,7 +61,7 @@ class SchoolConnectionManager
 
     /**
      * 后台进程（队列消费者/定时任务）无 HTTP 上下文，
-     * 通过 database_id 从主库取连接配置并激活租户连接。
+     * 通过 database_id 从主库取连接配置并激活学校业务库连接。
      */
     public function bootstrapById(int $databaseId): string
     {

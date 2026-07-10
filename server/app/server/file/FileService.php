@@ -67,7 +67,7 @@ class FileService
         $md5 = $this->md5Input((string) $request->input('md5', ''));
         $name = $this->fileName((string) $request->input('name', ''));
         $category = $this->category((string) $request->input('category', 'general'));
-        $isTemporary = $this->boolInput($request->input('is_temporary', false));
+        $isTemporary = false;
         $device = $this->deviceInfo($request);
 
         if (!$this->instantUploadEnabled()) {
@@ -109,7 +109,7 @@ class FileService
         $name = $this->fileName((string) ($options['name'] ?? $request->input('name', $file->getUploadName() ?: '')));
         $category = $this->category((string) ($options['category'] ?? $request->input('category', 'general')));
         $downloadName = $this->fileName((string) ($options['download_name'] ?? $request->input('download_name', $name)));
-        $isTemporary = $this->boolInput($options['is_temporary'] ?? $request->input('is_temporary', false));
+        $isTemporary = $this->boolInput($options['is_temporary'] ?? false);
         $requireMd5 = (bool) ($options['require_md5'] ?? true);
         $declaredMd5 = $this->optionalMd5((string) ($options['md5'] ?? $request->header('x-file-md5', $request->input('md5', ''))));
         $device = $this->deviceInfo($request);
@@ -347,13 +347,102 @@ class FileService
             throw new InvalidArgumentException('file_id 无效');
         }
 
+        return $this->deleteFile($fileId, $force);
+    }
+
+    /**
+     * 清理超过保留期限的临时文件及无引用物理文件。
+     */
+    public function cleanupExpiredTemporaryFiles(int $retentionDays, int $limit = 500): array
+    {
+        $retentionDays = max(1, min(365, $retentionDays));
+        $before = date('Y-m-d H:i:s', time() - $retentionDays * 86400);
+        $ids = FileRecord::expiredTemporaryIds($before, $limit);
+        $deleted = 0;
+        $physicalDeleted = 0;
+        $failed = 0;
+
+        foreach ($ids as $fileId) {
+            try {
+                $result = $this->deleteFile($fileId, true, $before);
+                $deleted++;
+                if (!empty($result['physical_deleted'])) {
+                    $physicalDeleted++;
+                }
+            } catch (Throwable) {
+                $failed++;
+            }
+        }
+
+        $orphanResult = $this->cleanupUnreferencedBlobs($limit);
+
+        return [
+            'matched' => count($ids),
+            'deleted' => $deleted,
+            'physical_deleted' => $physicalDeleted,
+            'orphan_blobs_deleted' => $orphanResult['deleted'],
+            'failed' => $failed,
+            'physical_delete_failed' => $orphanResult['failed'],
+        ];
+    }
+
+    /**
+     * 重试删除没有有效引用的物理文件。
+     */
+    private function cleanupUnreferencedBlobs(int $limit): array
+    {
+        $deleted = 0;
+        $failed = 0;
+        foreach (FileBlob::unreferencedIds($limit) as $blobId) {
+            $deletePath = null;
+            $marked = $this->connection()->transaction(function () use ($blobId, &$deletePath): bool {
+                $blob = FileBlob::lockById($blobId);
+                if (!$blob || $blob->deleted_at !== null || (int) $blob->ref_count > 0) {
+                    return false;
+                }
+                if (FileRecord::activeCountByBlob($blobId) > 0) {
+                    return false;
+                }
+                if (FileRelation::activeCountByBlob($blobId) > 0) {
+                    return false;
+                }
+
+                $deletePath = $this->absolutePublicPath((string) $blob->path);
+                FileBlob::softDeleteById($blobId, $this->now());
+                return true;
+            });
+            if (!$marked || $deletePath === null) {
+                continue;
+            }
+
+            if ($this->removeLocalFile($deletePath)) {
+                $deleted++;
+            } else {
+                FileBlob::restoreDeleteCandidate($blobId, $this->now());
+                $failed++;
+            }
+        }
+
+        return ['deleted' => $deleted, 'failed' => $failed];
+    }
+
+    /**
+     * 删除文件记录，并在无有效引用时删除物理文件。
+     */
+    private function deleteFile(int $fileId, bool $force, ?string $temporaryBefore = null): array
+    {
+
         $deletePath = null;
-        $result = $this->connection()->transaction(function () use ($fileId, $force, &$deletePath): array {
+        $result = $this->connection()->transaction(function () use ($fileId, $force, $temporaryBefore, &$deletePath): array {
             $now = $this->now();
             $file = FileRecord::lockActiveById($fileId);
 
             if (!$file) {
                 throw new RuntimeException('文件不存在');
+            }
+            if ($temporaryBefore !== null
+                && (!(bool) $file->is_temporary || (string) $file->created_at > $temporaryBefore)) {
+                throw new RuntimeException('文件不符合临时清理条件');
             }
 
             $relationCount = FileRelation::activeCountByFile($fileId);
@@ -372,9 +461,10 @@ class FileService
             $blob = FileBlob::lockById((int) $file->blob_id);
 
             $activeRelationCount = FileRelation::activeCountByBlob((int) $file->blob_id);
+            $activeFileCount = FileRecord::activeCountByBlob((int) $file->blob_id);
 
             $physicalDeleted = false;
-            if ($blob && (int) $blob->ref_count <= 0 && $activeRelationCount === 0) {
+            if ($blob && (int) $blob->ref_count <= 0 && $activeFileCount === 0 && $activeRelationCount === 0) {
                 $deletePath = $this->absolutePublicPath((string) $blob->path);
                 FileBlob::softDeleteById((int) $blob->id, $now);
                 $physicalDeleted = true;
@@ -387,11 +477,15 @@ class FileService
             ];
         });
 
+        $physicalDeleted = false;
         if ($deletePath) {
-            $this->removeLocalFile($deletePath);
+            $physicalDeleted = $this->removeLocalFile($deletePath);
+            if (!$physicalDeleted) {
+                FileBlob::restoreDeleteCandidate((int) $result['blob_id'], $this->now());
+            }
         }
 
-        $result['physical_deleted'] = $deletePath !== null;
+        $result['physical_deleted'] = $physicalDeleted;
         unset($result['physical_delete_pending']);
 
         return $result;
@@ -1030,11 +1124,13 @@ class FileService
         return rtrim(public_path(), DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $path);
     }
 
-    private function removeLocalFile(string $path): void
+    private function removeLocalFile(string $path): bool
     {
-        if (is_file($path)) {
-            @unlink($path);
+        if (!is_file($path)) {
+            return true;
         }
+
+        return @unlink($path) && !is_file($path);
     }
 
     private function fileInfo(object $row): array

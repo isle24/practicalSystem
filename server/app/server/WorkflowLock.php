@@ -7,6 +7,9 @@ use Throwable;
 
 class WorkflowLock
 {
+    /**
+     * 在 Redis 互斥锁内执行回调。
+     */
     public function run(string $key, callable $callback, int $ttl = 15): mixed
     {
         $token = $this->acquire($key, $ttl);
@@ -21,6 +24,24 @@ class WorkflowLock
         }
     }
 
+    /**
+     * 每个锁周期只执行一次，成功后保留锁至过期。
+     */
+    public function runOnce(string $key, callable $callback, int $ttl): mixed
+    {
+        $token = $this->acquire($key, $ttl, true);
+        if ($token === null) {
+            throw new RuntimeException('定时任务本周期已执行或正在执行', 409);
+        }
+
+        try {
+            return $callback();
+        } catch (Throwable $exception) {
+            $this->release($key, $token);
+            throw $exception;
+        }
+    }
+
     public static function key(string $module, string $entity, int $id): string
     {
         return implode(':', [
@@ -32,7 +53,7 @@ class WorkflowLock
         ]);
     }
 
-    private function acquire(string $key, int $ttl): ?string
+    private function acquire(string $key, int $ttl, bool $strict = false): ?string
     {
         $token = bin2hex(random_bytes(12));
         for ($attempt = 0; $attempt < 5; $attempt++) {
@@ -40,7 +61,10 @@ class WorkflowLock
                 if ($this->redisCommand(['SET', $key, $token, 'NX', 'EX', (string) max(1, $ttl)]) === 'OK') {
                     return $token;
                 }
-            } catch (Throwable) {
+            } catch (Throwable $exception) {
+                if ($strict) {
+                    throw $exception;
+                }
                 return null;
             }
             usleep(100000);

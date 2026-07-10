@@ -151,6 +151,33 @@ class FileRecord extends BaseModel
             ->first();
     }
 
+    /**
+     * 读取超过保留期限的临时文件 ID。
+     */
+    public static function expiredTemporaryIds(string $before, int $limit = 500): array
+    {
+        return self::query()
+            ->where('is_temporary', 1)
+            ->where('created_at', '<=', $before)
+            ->whereNull('deleted_at')
+            ->orderBy('id')
+            ->limit(max(1, $limit))
+            ->pluck('id')
+            ->map(static fn ($id): int => (int) $id)
+            ->all();
+    }
+
+    /**
+     * 统计物理文件对应的有效文件记录。
+     */
+    public static function activeCountByBlob(int $blobId): int
+    {
+        return (int) self::query()
+            ->where('blob_id', $blobId)
+            ->whereNull('deleted_at')
+            ->count();
+    }
+
     public static function softDeleteById(int $fileId, string $now): int
     {
         return self::query()

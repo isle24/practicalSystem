@@ -93,6 +93,43 @@ class ExportTaskRecord extends TableRecord
     }
 
     /**
+     * 原子领取可执行的导出任务。
+     */
+    public static function claimTask(int $id, string $startedAt): int
+    {
+        self::ensureSchema();
+
+        return (int) self::queryTable('export_task')
+            ->where('id', $id)
+            ->whereIn('status', ['pending', 'failed', 'timeout'])
+            ->whereNull('deleted_at')
+            ->update([
+                'status' => 'processing',
+                'progress' => 10,
+                'error_message' => null,
+                'error_trace' => null,
+                'started_at' => $startedAt,
+                'finished_at' => null,
+                'updated_at' => $startedAt,
+            ]);
+    }
+
+    /**
+     * 更新仍属于当前执行批次的导出任务。
+     */
+    public static function updateClaimedTask(int $id, string $startedAt, array $values): int
+    {
+        self::ensureSchema();
+
+        return (int) self::queryTable('export_task')
+            ->where('id', $id)
+            ->where('status', 'processing')
+            ->where('started_at', $startedAt)
+            ->whereNull('deleted_at')
+            ->update($values);
+    }
+
+    /**
      * 后台补投用：取创建于 $before 之前仍处于 pending 的任务 id（最多 $limit 条）。
      */
     public static function stalePendingIds(string $before, int $limit = 50): array
@@ -108,6 +145,26 @@ class ExportTaskRecord extends TableRecord
             ->pluck('id')
             ->map(static fn ($id): int => (int) $id)
             ->all();
+    }
+
+    /**
+     * 将执行超过限制的处理中任务标记为超时。
+     */
+    public static function markProcessingTimedOut(string $before, string $now): int
+    {
+        self::ensureSchema();
+
+        return (int) self::queryTable('export_task')
+            ->where('status', 'processing')
+            ->whereNotNull('started_at')
+            ->where('started_at', '<=', $before)
+            ->whereNull('deleted_at')
+            ->update([
+                'status' => 'timeout',
+                'error_message' => '导出超时，请缩小筛选范围后重试',
+                'finished_at' => $now,
+                'updated_at' => $now,
+            ]);
     }
 
     public static function ensureSchema(): void
@@ -267,6 +324,7 @@ class ExportTaskRecord extends TableRecord
             UNIQUE KEY `uk_uuid` (`uuid`),
             KEY `idx_user_status` (`user_id`, `status`),
             KEY `idx_type_status` (`type`, `status`),
+            KEY `idx_status_started` (`status`, `started_at`),
             KEY `idx_deleted_at` (`deleted_at`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 

@@ -262,6 +262,31 @@ function createSchoolSchema(PDO $pdo): void
     ensureDocSchema($pdo);
     ensureTemplateSchema($pdo);
     ensureExportTaskSchema($pdo);
+    ensureRecordingArchiveSchema($pdo, (int) date('Y'));
+}
+
+function ensureRecordingArchiveSchema(PDO $pdo, int $year): void
+{
+    $table = 'recording_archive_' . max(2000, min(2999, $year));
+    foreach ([
+        'source_table' => "ALTER TABLE `{$table}` ADD COLUMN `source_table` VARCHAR(80) DEFAULT NULL AFTER `uuid`",
+        'source_id' => "ALTER TABLE `{$table}` ADD COLUMN `source_id` BIGINT UNSIGNED DEFAULT NULL AFTER `source_table`",
+        'parent_table' => "ALTER TABLE `{$table}` ADD COLUMN `parent_table` VARCHAR(80) DEFAULT NULL AFTER `source_id`",
+        'parent_id' => "ALTER TABLE `{$table}` ADD COLUMN `parent_id` BIGINT UNSIGNED DEFAULT NULL AFTER `parent_table`",
+        'grade_id' => "ALTER TABLE `{$table}` ADD COLUMN `grade_id` BIGINT UNSIGNED DEFAULT NULL AFTER `parent_id`",
+        'action' => "ALTER TABLE `{$table}` ADD COLUMN `action` VARCHAR(40) DEFAULT NULL AFTER `entity_id`",
+        'content' => "ALTER TABLE `{$table}` ADD COLUMN `content` MEDIUMTEXT DEFAULT NULL AFTER `to_status`",
+        'snapshot_data' => "ALTER TABLE `{$table}` ADD COLUMN `snapshot_data` JSON DEFAULT NULL AFTER `content`",
+        'review_snapshot' => "ALTER TABLE `{$table}` ADD COLUMN `review_snapshot` JSON DEFAULT NULL AFTER `snapshot_data`",
+        'original_created_at' => "ALTER TABLE `{$table}` ADD COLUMN `original_created_at` DATETIME DEFAULT NULL AFTER `review_snapshot`",
+        'archived_at' => "ALTER TABLE `{$table}` ADD COLUMN `archived_at` DATETIME DEFAULT NULL AFTER `original_created_at`",
+    ] as $column => $ddl) {
+        ensureColumn($pdo, $table, $column, $ddl);
+    }
+    ensureIndex($pdo, $table, 'uk_source', "ALTER TABLE `{$table}` ADD UNIQUE KEY `uk_source` (`source_table`, `source_id`)");
+    ensureIndex($pdo, $table, 'idx_parent', "ALTER TABLE `{$table}` ADD KEY `idx_parent` (`parent_table`, `parent_id`)");
+    ensureIndex($pdo, $table, 'idx_grade', "ALTER TABLE `{$table}` ADD KEY `idx_grade` (`grade_id`)");
+    ensureIndex($pdo, $table, 'idx_original_created', "ALTER TABLE `{$table}` ADD KEY `idx_original_created` (`original_created_at`)");
 }
 
 function ensureMenuSchema(PDO $pdo): void
@@ -673,7 +698,7 @@ function schoolBusinessStatements(): array
         simpleTable('report_template', ['`template_json` JSON DEFAULT NULL']),
         simpleTable('review_opinion', entityColumns(['`reviewer_id` BIGINT UNSIGNED DEFAULT NULL', '`opinion` TEXT DEFAULT NULL'])),
         simpleTable('review_opinion_draft', entityColumns(['`reviewer_id` BIGINT UNSIGNED DEFAULT NULL', '`teacher_id` BIGINT UNSIGNED DEFAULT NULL', '`review_status` VARCHAR(40) DEFAULT NULL', '`opinion` TEXT DEFAULT NULL', '`score` DECIMAL(5,2) DEFAULT NULL', 'UNIQUE KEY `uk_review_draft` (`entity_type`, `entity_id`, `reviewer_id`)', 'KEY `idx_reviewer` (`reviewer_id`)'])),
-        simpleTable('recording_archive_2026', recordingColumns()),
+        simpleTable('recording_archive_' . date('Y'), recordingArchiveColumns()),
         simpleTable('apply_report_delay', entityColumns(['`student_id` BIGINT UNSIGNED DEFAULT NULL', '`config_key` VARCHAR(120) DEFAULT NULL', '`requested_date` DATE DEFAULT NULL', '`reason` TEXT DEFAULT NULL'])),
         simpleTable('apply_report_delay_recording', recordingColumns()),
         simpleTable('score', entityColumns(['`student_id` BIGINT UNSIGNED DEFAULT NULL', '`score_value` DECIMAL(5,2) DEFAULT NULL'])),
@@ -684,6 +709,7 @@ function schoolBusinessStatements(): array
         simpleTable('plan_recording', recordingColumns()),
         simpleTable('insurance', ['`student_id` BIGINT UNSIGNED DEFAULT NULL', '`company_id` BIGINT UNSIGNED DEFAULT NULL', '`policy_no` VARCHAR(120) DEFAULT NULL']),
         simpleTable('insurance_recording', recordingColumns()),
+        simpleTable('internship_brief', ['`week_key` VARCHAR(80) DEFAULT NULL', '`week_start` DATE DEFAULT NULL', '`week_end` DATE DEFAULT NULL', "`scope_type` VARCHAR(20) DEFAULT 'school'", '`scope_id` BIGINT UNSIGNED DEFAULT 0', '`scope_name` VARCHAR(120) DEFAULT NULL', '`title` VARCHAR(180) DEFAULT NULL', '`content_json` JSON DEFAULT NULL', '`generated_at` DATETIME DEFAULT NULL', 'UNIQUE KEY `uk_week_key` (`week_key`)', 'KEY `idx_period` (`week_start`, `week_end`)', 'KEY `idx_scope_period` (`scope_type`, `scope_id`, `week_start`)']),
         simpleTable('safety_letter_sign', ['`student_id` BIGINT UNSIGNED DEFAULT NULL', '`signed_at` DATETIME DEFAULT NULL']),
         simpleTable('safety_letter_recording', recordingColumns()),
         simpleTable('syllabus_guide', ['`dep_id` BIGINT UNSIGNED DEFAULT NULL', '`file_id` BIGINT UNSIGNED DEFAULT NULL']),
@@ -945,6 +971,7 @@ function ensureFileSchema(PDO $pdo): void
     ensureIndex($pdo, 'file', 'idx_blob_id', "ALTER TABLE `file` ADD KEY `idx_blob_id` (`blob_id`)");
     ensureIndex($pdo, 'file', 'idx_uploader_id', "ALTER TABLE `file` ADD KEY `idx_uploader_id` (`uploader_id`)");
     ensureIndex($pdo, 'file', 'idx_category', "ALTER TABLE `file` ADD KEY `idx_category` (`category`)");
+    ensureIndex($pdo, 'file', 'idx_temporary_created', "ALTER TABLE `file` ADD KEY `idx_temporary_created` (`is_temporary`, `deleted_at`, `created_at`)");
     ensureIndex($pdo, 'file', 'idx_deleted_at', "ALTER TABLE `file` ADD KEY `idx_deleted_at` (`deleted_at`)");
 
     $relationColumns = [
@@ -1259,6 +1286,7 @@ function ensureInternshipSchema(PDO $pdo): void
     ensureIndex($pdo, 'course_score', 'uk_course_score', "ALTER TABLE `course_score` ADD UNIQUE KEY `uk_course_score` (`plan_id`, `student_id`)");
     ensureIndex($pdo, 'course_score', 'idx_course_score_student', "ALTER TABLE `course_score` ADD KEY `idx_course_score_student` (`student_id`, `status`)");
     ensureIndex($pdo, 'insurance', 'idx_insurance_student_task_date', "ALTER TABLE `insurance` ADD KEY `idx_insurance_student_task_date` (`student_id`, `arrangement_id`, `status`, `start_date`, `end_date`)");
+    ensureIndex($pdo, 'insurance', 'idx_insurance_expiry', "ALTER TABLE `insurance` ADD KEY `idx_insurance_expiry` (`end_date`, `status`, `deleted_at`)");
     ensureIndex($pdo, 'safety_letter_sign', 'idx_safety_student_task_status', "ALTER TABLE `safety_letter_sign` ADD KEY `idx_safety_student_task_status` (`student_id`, `arrangement_id`, `status`, `signed_at`)");
 }
 
@@ -1605,6 +1633,7 @@ function ensureExportTaskSchema(PDO $pdo): void
 
     ensureIndex($pdo, 'export_task', 'idx_user_status', "ALTER TABLE `export_task` ADD KEY `idx_user_status` (`user_id`, `status`)");
     ensureIndex($pdo, 'export_task', 'idx_type_status', "ALTER TABLE `export_task` ADD KEY `idx_type_status` (`type`, `status`)");
+    ensureIndex($pdo, 'export_task', 'idx_status_started', "ALTER TABLE `export_task` ADD KEY `idx_status_started` (`status`, `started_at`)");
     ensureIndex($pdo, 'export_task', 'idx_deleted_at', "ALTER TABLE `export_task` ADD KEY `idx_deleted_at` (`deleted_at`)");
 }
 
@@ -1664,6 +1693,33 @@ function recordingColumns(): array
         '`to_status` VARCHAR(40) DEFAULT NULL',
         '`opinion` TEXT DEFAULT NULL',
         'KEY `idx_entity` (`entity_type`, `entity_id`)',
+    ];
+}
+
+function recordingArchiveColumns(): array
+{
+    return [
+        '`source_table` VARCHAR(80) DEFAULT NULL',
+        '`source_id` BIGINT UNSIGNED DEFAULT NULL',
+        '`parent_table` VARCHAR(80) DEFAULT NULL',
+        '`parent_id` BIGINT UNSIGNED DEFAULT NULL',
+        '`grade_id` BIGINT UNSIGNED DEFAULT NULL',
+        '`entity_type` VARCHAR(40) DEFAULT NULL',
+        '`entity_id` BIGINT UNSIGNED DEFAULT NULL',
+        '`action` VARCHAR(40) DEFAULT NULL',
+        '`operator_id` BIGINT UNSIGNED DEFAULT NULL',
+        '`from_status` VARCHAR(40) DEFAULT NULL',
+        '`to_status` VARCHAR(40) DEFAULT NULL',
+        '`content` MEDIUMTEXT DEFAULT NULL',
+        '`snapshot_data` JSON DEFAULT NULL',
+        '`review_snapshot` JSON DEFAULT NULL',
+        '`original_created_at` DATETIME DEFAULT NULL',
+        '`archived_at` DATETIME DEFAULT NULL',
+        'UNIQUE KEY `uk_source` (`source_table`, `source_id`)',
+        'KEY `idx_parent` (`parent_table`, `parent_id`)',
+        'KEY `idx_grade` (`grade_id`)',
+        'KEY `idx_entity` (`entity_type`, `entity_id`)',
+        'KEY `idx_original_created` (`original_created_at`)',
     ];
 }
 
@@ -2554,6 +2610,7 @@ function seedConfig(PDO $pdo, string $wechatProxyUrl): void
         [6, 'instant_upload_enabled', false, '是否启用文件秒传', 10],
         [6, 'block', 'b1', '文件存储块标识', 20],
         [6, 'school_code', '2184', '默认学校文件隔离标识', 30],
+        [6, 'file_retention_days', 7, '临时文件保留天数', 40],
     ];
 
     $itemStmt = $pdo->prepare(

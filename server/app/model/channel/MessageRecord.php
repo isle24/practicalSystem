@@ -151,6 +151,21 @@ class MessageRecord extends TableRecord
         });
     }
 
+    /**
+     * 判断指定模板和业务标识的消息是否已经发送。
+     */
+    public static function messageExists(string $code, string $entityType, int $entityId): bool
+    {
+        self::ensureSchema();
+
+        return self::queryTable('message')
+            ->where('code', $code)
+            ->where('entity_type', $entityType)
+            ->where('entity_id', $entityId)
+            ->whereNull('deleted_at')
+            ->exists();
+    }
+
     public static function templateByCode(string $code): ?array
     {
         self::ensureSchema();
@@ -913,6 +928,40 @@ class MessageRecord extends TableRecord
                 ],
                 'link_url_tpl' => '#panel=exportTask:list',
                 'sort' => 80,
+            ],
+            [
+                'uuid' => '00000000-0000-0000-0000-000000240009',
+                'name' => '实习每周简报通知',
+                'code' => 'internship_weekly_brief',
+                'title_tpl' => '{brief_title}',
+                'content_tpl' => '{date_text}实习简报已生成。{summary_text}',
+                'type' => 'system',
+                'level' => 'normal',
+                'description' => '每周实习简报生成后通知学校、学院和专业管理员。',
+                'variables' => [
+                    'brief_title' => '简报标题',
+                    'date_text' => '统计周期',
+                    'summary_text' => '简报摘要',
+                ],
+                'link_url_tpl' => '#panel=internship:overview',
+                'sort' => 90,
+            ],
+            [
+                'uuid' => '00000000-0000-0000-0000-000000240010',
+                'name' => '实习保险到期提醒',
+                'code' => 'internship_insurance_expiry',
+                'title_tpl' => '实习保险即将到期：{student_name}',
+                'content_tpl' => '{student_name}的实习保险将于{end_date}到期，保单号：{policy_number}，请及时续保。',
+                'type' => 'todo',
+                'level' => 'urgent',
+                'description' => '保险到期前 7 天提醒学生、任务老师及对应学院和专业管理员。',
+                'variables' => [
+                    'student_name' => '学生姓名',
+                    'end_date' => '保险到期日',
+                    'policy_number' => '保单号',
+                ],
+                'link_url_tpl' => '#panel=internship:insurances',
+                'sort' => 100,
             ],
             ...self::workflowTemplates(),
         ];

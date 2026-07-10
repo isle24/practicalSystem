@@ -81,4 +81,33 @@ class FileBlob extends BaseModel
                 'ref_count' => 0,
             ]);
     }
+
+    /**
+     * 读取没有文件引用的物理文件 ID。
+     */
+    public static function unreferencedIds(int $limit = 500): array
+    {
+        return self::query()
+            ->where('ref_count', '<=', 0)
+            ->whereNull('deleted_at')
+            ->orderBy('id')
+            ->limit(max(1, $limit))
+            ->pluck('id')
+            ->map(static fn ($id): int => (int) $id)
+            ->all();
+    }
+
+    /**
+     * 恢复物理删除失败的零引用记录，供后续重试。
+     */
+    public static function restoreDeleteCandidate(int $id, string $now): int
+    {
+        return self::query()
+            ->where('id', $id)
+            ->where('ref_count', '<=', 0)
+            ->update([
+                'deleted_at' => null,
+                'updated_at' => $now,
+            ]);
+    }
 }
