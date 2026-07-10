@@ -165,11 +165,18 @@ export function createInternshipState() {
 }
 
 export function useInternship() {
+  const internship = reactive(createInternshipState());
+
+  function reset() {
+    Object.assign(internship, createInternshipState());
+  }
+
   return {
-    internship: reactive(createInternshipState()),
+    internship,
     reviewStatusLabels: internshipReviewStatusLabels,
     emptyFilters: emptyInternshipFilters,
     emptyOptions: emptyInternshipOptions,
     emptyOverview: emptyInternshipOverview,
+    reset,
   };
 }

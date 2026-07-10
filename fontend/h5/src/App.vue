@@ -127,7 +127,7 @@
 </template>
 
 <script setup>
-import { computed, nextTick, reactive, ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { showToast } from 'vant';
 import {
   BriefcaseBusiness,
@@ -165,15 +165,11 @@ import { useInternship } from './composables/useInternship';
 import { useMessageCenter } from './composables/useMessageCenter';
 import { useMobileNavigation } from './composables/useMobileNavigation';
 import { useMobilePermissions } from './composables/useMobilePermissions';
-import { createPracticeState, usePracticeModule } from './composables/usePracticeModule';
+import { usePracticeModule } from './composables/usePracticeModule';
+import { useSupportCenter } from './composables/useSupportCenter';
 import { statusText as resolveStatusText } from './constants/status';
 import { formatDateKey } from './utils/date';
-import { emptyPagedList } from './utils/pagination';
 import {
-  downloadTemplateItem,
-  fetchDocCategories,
-  fetchDocDetail,
-  fetchDocList,
   fetchInternshipArchiveMaterials,
   fetchInternshipApplications,
   fetchInternshipArrangementChanges,
@@ -203,8 +199,6 @@ import {
   fetchPracticeExecutionTimeline,
   fetchPracticeReviewDraft,
   fetchPracticeTimeline,
-  fetchTemplateCategories,
-  fetchTemplateList,
   requestInternshipModification,
   requestPracticeExecutionModification,
   requestPracticeModification,
@@ -232,43 +226,19 @@ import {
 const { state, hasPermission, load } = useMobilePermissions();
 const mobileRefreshing = ref(false);
 
-const support = reactive({
-  doc: {
-    loading: false,
-    message: '',
-    categories: [],
-    items: [],
-    detail: {
-      visible: false,
-      loading: false,
-      message: '',
-      article: null,
-    },
-    filters: {
-      category_id: '',
-      keyword: '',
-    },
-    pagination: {
-      page: 1,
-      page_size: 20,
-      total: 0,
-    },
-  },
-  template: {
-    loading: false,
-    message: '',
-    categories: [],
-    items: [],
-    filters: {
-      category_id: '',
-      keyword: '',
-    },
-    pagination: {
-      page: 1,
-      page_size: 20,
-      total: 0,
-    },
-  },
+const {
+  support,
+  canLoadMore: canLoadMoreSupport,
+  closeDoc: closeMobileDoc,
+  downloadTemplate: downloadMobileTemplate,
+  loadCategories: loadMobileSupportCategories,
+  loadDocs: loadMobileDocs,
+  loadTemplates: loadMobileTemplates,
+  openDoc: openMobileDoc,
+  reset: resetSupportState,
+} = useSupportCenter({
+  isLoggedIn: () => Boolean(state.context.account_id),
+  hasPermission,
 });
 
 const {
@@ -277,6 +247,7 @@ const {
   emptyFilters: emptyInternshipFilters,
   emptyOptions: emptyInternshipOptions,
   emptyOverview: emptyInternshipOverview,
+  reset: resetInternshipState,
 } = useInternship();
 
 const {
@@ -285,6 +256,7 @@ const {
   executionDialog: practiceExecutionDialog,
   timelineDialog: practiceTimelineDialog,
   emptyFilters: emptyPracticeFilters,
+  reset: resetPracticeState,
 } = usePracticeModule();
 const {
   activeTab,
@@ -3594,13 +3566,6 @@ const reviewDialogRuleText = computed(() => (
   reviewRuleText(internship.reviewDialog.entity, internship.reviewDialog.status, reviewDialogReasonLabel.value)
 ));
 
-const reviewDialogConfirmText = computed(() => {
-  if (internship.reviewDialog.mode === 'reopen') {
-    return '确认修改';
-  }
-  return isRejectReviewStatus(internship.reviewDialog.status) ? '确认退回' : '确认通过';
-});
-
 function textLength(value) {
   return Array.from(String(value || '').trim()).length;
 }
@@ -3931,250 +3896,6 @@ function practiceRatioText(value) {
 
 function statusText(value) {
   return resolveStatusText(value);
-}
-
-async function loadMobileSupportCategories() {
-  if (!isLoggedIn.value) {
-    support.doc.categories = [];
-    support.template.categories = [];
-    return;
-  }
-
-  const tasks = [];
-  if (hasPermission('doc:view')) {
-    tasks.push(fetchDocCategories().then((data) => {
-      support.doc.categories = flattenSupportCategories(data.tree || data.items || []);
-    }));
-  }
-  if (hasPermission('template:view')) {
-    tasks.push(fetchTemplateCategories().then((data) => {
-      support.template.categories = data.items || [];
-    }));
-  }
-
-  if (!tasks.length) {
-    return;
-  }
-
-  try {
-    await Promise.all(tasks);
-  } catch (error) {
-    support.doc.message = error.message;
-    support.template.message = error.message;
-  }
-}
-
-async function loadMobileDocs(page = 1, append = false) {
-  if (!isLoggedIn.value || !hasPermission('doc:view') || support.doc.loading) {
-    return;
-  }
-
-  support.doc.loading = true;
-  support.doc.message = '';
-  try {
-    if (!support.doc.categories.length) {
-      const categories = await fetchDocCategories();
-      support.doc.categories = flattenSupportCategories(categories.tree || categories.items || []);
-    }
-    const data = await fetchDocList({
-      page,
-      page_size: support.doc.pagination.page_size,
-      category_id: support.doc.filters.category_id || '',
-      keyword: support.doc.filters.keyword || '',
-    });
-    const items = data.items || [];
-    support.doc.items = append ? [...support.doc.items, ...items] : items;
-    support.doc.pagination = {
-      page: Number(data.pagination?.page || page),
-      page_size: Number(data.pagination?.page_size || support.doc.pagination.page_size),
-      total: Number(data.pagination?.total || 0),
-    };
-  } catch (error) {
-    support.doc.message = error.message;
-    showToast(error.message);
-  } finally {
-    support.doc.loading = false;
-  }
-}
-
-async function loadMobileTemplates(page = 1, append = false) {
-  if (!isLoggedIn.value || !hasPermission('template:view') || support.template.loading) {
-    return;
-  }
-
-  support.template.loading = true;
-  support.template.message = '';
-  try {
-    if (!support.template.categories.length) {
-      const categories = await fetchTemplateCategories();
-      support.template.categories = categories.items || [];
-    }
-    const data = await fetchTemplateList({
-      page,
-      page_size: support.template.pagination.page_size,
-      category_id: support.template.filters.category_id || '',
-      keyword: support.template.filters.keyword || '',
-    });
-    const items = data.items || [];
-    support.template.items = append ? [...support.template.items, ...items] : items;
-    support.template.pagination = {
-      page: Number(data.pagination?.page || page),
-      page_size: Number(data.pagination?.page_size || support.template.pagination.page_size),
-      total: Number(data.pagination?.total || 0),
-    };
-  } catch (error) {
-    support.template.message = error.message;
-    showToast(error.message);
-  } finally {
-    support.template.loading = false;
-  }
-}
-
-async function openMobileDoc(row) {
-  if (!row?.id) {
-    return;
-  }
-
-  support.doc.detail.visible = true;
-  support.doc.detail.loading = true;
-  support.doc.detail.message = '';
-  support.doc.detail.article = row;
-  try {
-    const data = await fetchDocDetail(row.id);
-    support.doc.detail.article = data.article || row;
-  } catch (error) {
-    support.doc.detail.message = error.message;
-    showToast(error.message);
-  } finally {
-    support.doc.detail.loading = false;
-  }
-}
-
-function closeMobileDoc() {
-  support.doc.detail.visible = false;
-}
-
-async function downloadMobileTemplate(row) {
-  if (!row?.id) {
-    return;
-  }
-
-  support.template.message = '';
-  try {
-    const data = await downloadTemplateItem(row.id);
-    if (data.url) {
-      window.open(data.url, '_blank', 'noopener');
-    } else {
-      support.template.message = '模板文件暂无下载地址';
-      showToast(support.template.message);
-    }
-    await loadMobileTemplates(support.template.pagination.page || 1);
-  } catch (error) {
-    support.template.message = error.message;
-    showToast(error.message);
-  }
-}
-
-function canLoadMoreSupport(type) {
-  const target = type === 'template' ? support.template : support.doc;
-  return target.items.length < (target.pagination.total || 0);
-}
-
-function flattenSupportCategories(rows, level = 0) {
-  const result = [];
-  (rows || []).forEach((row) => {
-    result.push({
-      ...row,
-      name: `${'　'.repeat(level)}${row.name || '-'}`,
-    });
-    if (row.children?.length) {
-      result.push(...flattenSupportCategories(row.children, level + 1));
-    }
-  });
-  return result;
-}
-
-function resetSupportState() {
-  support.doc.loading = false;
-  support.doc.message = '';
-  support.doc.categories = [];
-  support.doc.items = [];
-  support.doc.filters = {
-    category_id: '',
-    keyword: '',
-  };
-  support.doc.pagination = {
-    page: 1,
-    page_size: 20,
-    total: 0,
-  };
-  support.doc.detail = {
-    visible: false,
-    loading: false,
-    message: '',
-    article: null,
-  };
-
-  support.template.loading = false;
-  support.template.message = '';
-  support.template.categories = [];
-  support.template.items = [];
-  support.template.filters = {
-    category_id: '',
-    keyword: '',
-  };
-  support.template.pagination = {
-    page: 1,
-    page_size: 20,
-    total: 0,
-  };
-}
-
-function resetInternshipState() {
-  internship.loading = false;
-  internship.message = '';
-  internship.panel = 'workbench';
-  internship.submitSection = '';
-  internship.reviewList = 'applications';
-  internship.manageList = 'arrangements';
-  internship.overview = emptyInternshipOverview();
-  internship.options = emptyInternshipOptions();
-  Object.keys(internship.lists).forEach((key) => {
-    internship.lists[key] = emptyPagedList();
-  });
-  Object.keys(internship.filters).forEach((key) => {
-    internship.filters[key] = emptyInternshipFilters();
-  });
-  internship.forms.application = { arrangement_id: null, type: 'distributed', remark: '' };
-  internship.forms.sign = { arrangement_id: null, location: '', longitude: null, latitude: null, accuracy: null, located_at: '', locating: false, gps_error: '' };
-  internship.forms.journal = { id: null, arrangement_id: null, title: '', content: '' };
-  internship.forms.report = { id: null, arrangement_id: null, title: '', content: '' };
-  internship.forms.delay = { id: null, arrangement_id: null, config_key: 'report_deadline', requested_date: '', reason: '' };
-  internship.forms.score = {
-    pair_id: null,
-    student_id: null,
-    arrangement_id: null,
-    sign_in_score: '',
-    journal_score: '',
-    report_score: '',
-    enterprise_score: '',
-  };
-  internship.reviewDialog.visible = false;
-  internship.reviewDialog.row = null;
-  internship.reviewDialog.reason = '';
-  internship.timelineDialog.visible = false;
-  internship.timelineDialog.row = null;
-  internship.timelineDialog.items = [];
-  internship.timelineDialog.cycles = [];
-  internship.timelineDialog.message = '';
-}
-
-function resetPracticeState() {
-  practice.training = createPracticeState();
-  practice.lab = createPracticeState();
-  practiceReviewDialog.visible = false;
-  practiceReviewDialog.row = null;
-  practiceReviewDialog.reason = '';
 }
 
 function resetMobileLocalState() {

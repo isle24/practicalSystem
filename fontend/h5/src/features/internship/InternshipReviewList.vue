@@ -1,15 +1,10 @@
 <template>
-  <section v-if="reviewListTabs.length > 1" class="mobile-list-switch">
-    <button
-      v-for="item in reviewListTabs"
-      :key="item.key"
-      :class="{ active: internship.reviewList === item.key }"
-      @click="switchMobileList('review', item.key)"
-    >
-      <component :is="item.icon" :size="17" />
-      <span>{{ item.shortTitle }}</span>
-    </button>
-  </section>
+  <AppScrollTabs
+    v-if="reviewListTabs.length > 1"
+    :model-value="internship.reviewList"
+    :items="reviewListTabs"
+    @update:model-value="switchMobileList('review', $event)"
+  />
 
   <section v-if="currentReviewListConfig" class="mobile-card">
     <header>
@@ -108,6 +103,7 @@ import AppButton from '../../components/ui/AppButton.vue';
 import AppListCard from '../../components/ui/AppListCard.vue';
 import AppSegmented from '../../components/ui/AppSegmented.vue';
 import AppSheet from '../../components/ui/AppSheet.vue';
+import AppScrollTabs from '../../components/ui/AppScrollTabs.vue';
 import InternshipListFooter from './InternshipListFooter.vue';
 import { useInternshipContext } from './internshipContext';
 

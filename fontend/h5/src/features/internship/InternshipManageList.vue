@@ -1,15 +1,9 @@
 <template>
-  <section class="mobile-list-switch multi">
-    <button
-      v-for="item in manageListTabs"
-      :key="item.key"
-      :class="{ active: internship.manageList === item.key }"
-      @click="switchMobileList('manage', item.key)"
-    >
-      <component :is="item.icon" :size="17" />
-      <span>{{ item.shortTitle }}</span>
-    </button>
-  </section>
+  <AppScrollTabs
+    :model-value="internship.manageList"
+    :items="manageListTabs"
+    @update:model-value="switchMobileList('manage', $event)"
+  />
 
   <section v-if="currentManageListConfig" class="mobile-card">
     <header>
@@ -60,6 +54,7 @@
 import MobileFilterSheet from '../../components/MobileFilterSheet.vue';
 import AppButton from '../../components/ui/AppButton.vue';
 import AppListCard from '../../components/ui/AppListCard.vue';
+import AppScrollTabs from '../../components/ui/AppScrollTabs.vue';
 import InternshipListFooter from './InternshipListFooter.vue';
 import { useInternshipContext } from './internshipContext';
 

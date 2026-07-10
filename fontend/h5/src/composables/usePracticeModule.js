@@ -111,14 +111,28 @@ function createTimelineDialog() {
 }
 
 export function usePracticeModule() {
+  const practice = reactive({
+    training: createPracticeState(),
+    lab: createPracticeState(),
+  });
+  const reviewDialog = reactive(createReviewDialog());
+  const executionDialog = reactive(createExecutionDialog());
+  const timelineDialog = reactive(createTimelineDialog());
+
+  function reset() {
+    practice.training = createPracticeState();
+    practice.lab = createPracticeState();
+    Object.assign(reviewDialog, createReviewDialog());
+    Object.assign(executionDialog, createExecutionDialog());
+    Object.assign(timelineDialog, createTimelineDialog());
+  }
+
   return {
-    practice: reactive({
-      training: createPracticeState(),
-      lab: createPracticeState(),
-    }),
-    reviewDialog: reactive(createReviewDialog()),
-    executionDialog: reactive(createExecutionDialog()),
-    timelineDialog: reactive(createTimelineDialog()),
+    practice,
+    reviewDialog,
+    executionDialog,
+    timelineDialog,
     emptyFilters: emptyPracticeFilters,
+    reset,
   };
 }

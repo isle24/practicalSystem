@@ -24,17 +24,12 @@
     </div>
   </section>
 
-  <section class="mobile-list-switch multi practice-switch">
-    <button
-      v-for="item in panels"
-      :key="item.key"
-      :class="{ active: moduleState.panel === item.key }"
-      @click="switchPracticePanel(moduleType, item.key)"
-    >
-      <component :is="item.icon" :size="17" />
-      <span>{{ item.shortTitle }}</span>
-    </button>
-  </section>
+  <AppScrollTabs
+    class="practice-switch"
+    :model-value="moduleState.panel"
+    :items="panels"
+    @update:model-value="switchPracticePanel(moduleType, $event)"
+  />
 
   <section class="mobile-card">
     <header>
@@ -100,6 +95,7 @@ import { Route } from '@lucide/vue';
 import MobileFilterSheet from '../../components/MobileFilterSheet.vue';
 import AppButton from '../../components/ui/AppButton.vue';
 import AppListCard from '../../components/ui/AppListCard.vue';
+import AppScrollTabs from '../../components/ui/AppScrollTabs.vue';
 import PracticeExecutionPage from './PracticeExecutionPage.vue';
 import PracticeReviewPage from './PracticeReviewPage.vue';
 import PracticeTimeline from './PracticeTimeline.vue';
