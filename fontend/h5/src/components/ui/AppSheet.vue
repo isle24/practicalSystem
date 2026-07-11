@@ -3,6 +3,8 @@
     :show="modelValue"
     class="app-sheet-popup"
     position="bottom"
+    teleport="body"
+    :z-index="2100"
     safe-area-inset-bottom
     :close-on-click-overlay="closeOnOverlay"
     @update:show="emit('update:modelValue', $event)"

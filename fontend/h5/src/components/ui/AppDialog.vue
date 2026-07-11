@@ -3,6 +3,8 @@
     :show="modelValue"
     class="app-dialog-popup"
     position="center"
+    teleport="body"
+    :z-index="2100"
     :close-on-click-overlay="closeOnOverlay"
     @update:show="emit('update:modelValue', $event)"
   >

@@ -12,10 +12,11 @@ export function useMobileNavigation(options = {}) {
     tab: activeTab.value,
     ...(options.captureExtras?.() || {}),
   });
-  const pageKey = computed(() => JSON.stringify(snapshot()));
+  const snapshotKey = computed(() => JSON.stringify(snapshot()));
+  const pageKey = computed(() => activeTab.value);
   const canGoBack = computed(() => state.backStack.length > 0);
 
-  watch(pageKey, (current, previous) => {
+  watch(snapshotKey, (current, previous) => {
     if (state.restoring || !previous || current === previous) {
       return;
     }
