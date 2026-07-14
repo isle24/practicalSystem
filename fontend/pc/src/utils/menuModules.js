@@ -30,7 +30,7 @@ export function buildLaunchableMenuModules(menus = [], builtInModules = [], reso
         url: menu.url || builtIn?.url || '',
         viewPermission: menu.code || builtIn?.viewPermission || '',
         managePermission: builtIn?.managePermission || '',
-        defaultPanel: builtIn?.defaultPanel || 'menuModule',
+        defaultPanel: isBuiltIn ? (builtIn.defaultPanel || 'overview') : 'menuModule',
         source: isBuiltIn ? builtIn.source : 'menu',
         menu,
         menuId: menu.id,
