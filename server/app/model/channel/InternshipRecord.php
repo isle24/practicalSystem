@@ -1096,8 +1096,12 @@ class InternshipRecord extends TableRecord
             'internship_plan.id', 'internship_plan.uuid', 'internship_plan.dep_id',
             'internship_plan.profession_id', 'internship_plan.grade_id',
             'internship_plan.source_type', 'internship_plan.course_code',
-            'internship_plan.course_name', 'internship_plan.semester',
-            'internship_plan.credit', 'internship_plan.student_count',
+            'internship_plan.course_name', 'internship_plan.course_category', 'internship_plan.semester',
+            'internship_plan.credit', 'internship_plan.total_credit', 'internship_plan.internship_credit',
+            'internship_plan.total_hours', 'internship_plan.internship_hours',
+            'internship_plan.source_teacher', 'internship_plan.source_time', 'internship_plan.source_location',
+            'internship_plan.remark', 'internship_plan.business_type', 'internship_plan.import_file_id',
+            'internship_plan.imported_at', 'internship_plan.student_count',
             'internship_plan.score_rule', 'internship_plan.plan_content', 'internship_plan.status',
             'internship_plan.submitter_id', 'internship_plan.created_at',
             'department.dep_name', 'profession.profession_name', 'grade_list.grade_name',
@@ -1508,6 +1512,24 @@ class InternshipRecord extends TableRecord
         return $row ? self::rows([$row])[0] : null;
     }
 
+    /** 查询导入范围内的全部专业 */
+    public static function professionRowsForImport(int $gradeId, int $depId, array $scope): array
+    {
+        $query = self::queryTable('profession')
+            ->where('profession.grade_id', $gradeId)
+            ->where('profession.dep_id', $depId)
+            ->where('profession.flag', 'on')
+            ->whereNull('profession.deleted_at');
+        self::applyDepProfessionScope($query, $scope, 'profession.dep_id', 'profession.profession_id');
+
+        return self::rows($query->orderBy('profession.sort')->orderBy('profession.profession_id')->get([
+            'profession.profession_id',
+            'profession.profession_name',
+            'profession.grade_id',
+            'profession.dep_id',
+        ]));
+    }
+
     public static function teacherImportRow(string $teacherNum, ?string $teacherName, array $scope): ?array
     {
         $row = null;
@@ -1572,6 +1594,38 @@ class InternshipRecord extends TableRecord
         }
 
         return (int) ($query->orderByDesc('id')->value('id') ?: 0);
+    }
+
+    /** 按届次、学院、专业和课程查找重复计划 */
+    public static function planImportDuplicate(array $values, bool $lock = false): ?array
+    {
+        $gradeId = (int) ($values['grade_id'] ?? 0);
+        $depId = (int) ($values['dep_id'] ?? 0);
+        $professionId = (int) ($values['profession_id'] ?? 0);
+        $courseName = trim((string) ($values['course_name'] ?? ''));
+        if ($gradeId <= 0 || $depId <= 0 || $professionId <= 0 || $courseName === '') {
+            return null;
+        }
+
+        $query = self::queryTable('internship_plan')
+            ->where('grade_id', $gradeId)
+            ->where('dep_id', $depId)
+            ->where('profession_id', $professionId)
+            ->whereNull('deleted_at');
+        $courseCode = trim((string) ($values['course_code'] ?? ''));
+        if ($courseCode !== '') {
+            $query->where('course_code', $courseCode);
+        } else {
+            $query->where('course_name', $courseName);
+        }
+        if ($lock) {
+            $query->lockForUpdate();
+        }
+        $row = $query->orderByDesc('id')->first([
+            'id', 'uuid', 'course_code', 'course_name', 'grade_id', 'dep_id', 'profession_id', 'status',
+        ]);
+
+        return $row ? self::rows([$row])[0] : null;
     }
 
     public static function arrangementIdByPlanTaskNo(int $planId, string $taskNo): int

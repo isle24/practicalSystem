@@ -1590,6 +1590,37 @@ class InternshipService
             : $save();
     }
 
+    /** 返回实习计划 Excel 导入模板 */
+    public function planImportTemplate(Request $request): array
+    {
+        $this->requirePermission('internship:plan');
+        $this->requireAdminRole();
+
+        return (new InternshipPlanImportService())->template();
+    }
+
+    /** 预览并校验实习计划 Excel */
+    public function previewPlanImport(Request $request): array
+    {
+        $this->requirePermission('internship:plan');
+        $this->requireAdminRole();
+
+        return (new InternshipPlanImportService())->preview($request, $this->scopeContext());
+    }
+
+    /** 确认导入实习计划草稿 */
+    public function confirmPlanImport(Request $request): array
+    {
+        $this->requirePermission('internship:plan');
+        $this->requireAdminRole();
+
+        return (new InternshipPlanImportService())->confirm(
+            $request,
+            $this->scopeContext(),
+            (int) CurrentContext::accountId()
+        );
+    }
+
     public function reviewPlan(Request $request): array
     {
         $this->requirePermission('internship:plan');

@@ -522,6 +522,10 @@ export function saveInternshipBase(payload) {
   return internshipPost('save-base', payload);
 }
 
+export function fetchInternshipBaseDetail(params = {}) {
+  return internshipList('base-detail', params);
+}
+
 export function fetchInternshipBaseFlows(params = {}) {
   return internshipList('base-flows', params);
 }
@@ -540,6 +544,23 @@ export function fetchInternshipMentors(params = {}) {
 
 export function saveInternshipMentor(payload) {
   return internshipPost('save-mentor', payload);
+}
+
+export function fetchInternshipPlanImportTemplate() {
+  return request('/internship/plan-import-template');
+}
+
+export function previewInternshipPlanImport(file) {
+  const body = new FormData();
+  body.append('file', file);
+  return request('/internship/preview-plan-import', {
+    method: 'POST',
+    body,
+  });
+}
+
+export function confirmInternshipPlanImport(payload) {
+  return internshipPost('confirm-plan-import', payload);
 }
 
 export function fetchInternshipArrangements(params = {}) {

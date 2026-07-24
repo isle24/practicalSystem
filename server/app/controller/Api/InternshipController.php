@@ -440,6 +440,33 @@ class InternshipController
     }
 
     /**
+     * 获取实习计划导入模板
+     */
+    #[OperationLog('获取实习计划导入模板')]
+    public function planImportTemplate(Request $request): Response
+    {
+        return $this->handle(fn (): array => $this->service()->planImportTemplate($request));
+    }
+
+    /**
+     * 预览实习计划导入数据
+     */
+    #[OperationLog('预览实习计划导入数据')]
+    public function previewPlanImport(Request $request): Response
+    {
+        return $this->handle(fn (): array => $this->service()->previewPlanImport($request));
+    }
+
+    /**
+     * 确认导入实习计划草稿
+     */
+    #[OperationLog('确认导入实习计划草稿')]
+    public function confirmPlanImport(Request $request): Response
+    {
+        return $this->handle(fn (): array => $this->service()->confirmPlanImport($request));
+    }
+
+    /**
      * 审核实习计划
      */
     #[OperationLog('审核实习计划')]
