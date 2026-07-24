@@ -8,12 +8,7 @@ use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use RuntimeException;
 
-/**
- * 导出文件生成器：按 type 分发，产出临时 xlsx 文件。
- *
- * 当前实现通用表格导出（common_export）：params 提供 headers + rows。
- * 具体业务类型（成绩/学生列表等）后续在 generate() 的 match 中扩展。
- */
+/** 导出文件生成器 */
 class ExportGenerator
 {
     /**
@@ -22,6 +17,8 @@ class ExportGenerator
     public function generate(string $type, array $params): array
     {
         return match ($type) {
+            'internship_base_word' => (new InternshipDocumentExporter())->baseWord((int) ($params['base_id'] ?? 0)),
+            'internship_implementation_pdf' => (new InternshipDocumentExporter())->implementationPdf((int) ($params['arrangement_id'] ?? 0)),
             default => $this->tabular($params),
         };
     }

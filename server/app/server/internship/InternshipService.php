@@ -8,6 +8,7 @@ use app\model\channel\PracticeRecord;
 use app\server\CurrentContext;
 use app\server\WorkflowLock;
 use app\server\config\ConfigService;
+use app\server\export\ExportTaskService;
 use app\server\message\MessageService;
 use InvalidArgumentException;
 use PhpOffice\PhpSpreadsheet\IOFactory;
@@ -236,6 +237,27 @@ class InternshipService
         }
 
         return $detail;
+    }
+
+    /** 创建长期实习基地申报 Word 导出任务 */
+    public function exportBaseWord(Request $request): array
+    {
+        $this->requirePermission('internship:manage');
+        $this->requireAdminRole();
+        $id = $this->requiredRowId($request, 'base');
+        $detail = InternshipRecord::baseDetail($this->scopeContext(), $id);
+        if (!$detail) {
+            throw new RuntimeException('实习基地不存在或无权限', 40301);
+        }
+        if (($detail['item']['base_type'] ?? '') !== 'long_term') {
+            throw new InvalidArgumentException('临时基地不使用长期基地申报书');
+        }
+
+        return (new ExportTaskService())->create([
+            'type' => 'internship_base_word',
+            'file_name' => $this->exportFileName((string) ($detail['item']['name'] ?? '实习基地'), '实习基地申报书.docx'),
+            'params' => ['base_id' => $id],
+        ], true);
     }
 
     /** 保存长期或临时基地及其结构化资料 */
@@ -1822,6 +1844,27 @@ class InternshipService
         }
 
         return $detail;
+    }
+
+    /** 创建教学实习实施经费 PDF 导出任务 */
+    public function exportImplementationPdf(Request $request): array
+    {
+        $this->requirePermission('internship:view');
+        $arrangementId = $this->requiredInt($request, 'arrangement_id');
+        $detail = InternshipRecord::implementationDetail($this->scopeContext(), $arrangementId);
+        if (!$detail) {
+            throw new RuntimeException('实习任务不存在或无权限', 40301);
+        }
+        if (empty($detail['implementation_sheet'])) {
+            throw new InvalidArgumentException('请先保存教学实习实施表');
+        }
+
+        $name = (string) ($detail['implementation_sheet']['course_name'] ?? $detail['task']['course_name'] ?? $detail['task']['title'] ?? '教学实习');
+        return (new ExportTaskService())->create([
+            'type' => 'internship_implementation_pdf',
+            'file_name' => $this->exportFileName($name, '教学实习实施经费表.pdf'),
+            'params' => ['arrangement_id' => $arrangementId],
+        ], true);
     }
 
     public function saveImplementationSheet(Request $request): array
@@ -4816,6 +4859,14 @@ class InternshipService
     {
         $text = is_scalar($value) ? (string) $value : $this->jsonValue($value);
         return mb_strlen($text) > 180 ? mb_substr($text, 0, 180) . '...' : $text;
+    }
+
+    private function exportFileName(string $name, string $suffix): string
+    {
+        $name = preg_replace('/[\\\\\/:*?"<>|\x00-\x1F]+/u', ' ', trim($name)) ?: '导出文件';
+        $name = trim((string) preg_replace('/\s+/u', ' ', $name));
+
+        return mb_substr($name, 0, 100) . '-' . $suffix;
     }
 
     private function now(): string

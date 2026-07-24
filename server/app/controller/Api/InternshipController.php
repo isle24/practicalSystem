@@ -51,6 +51,15 @@ class InternshipController
     }
 
     /**
+     * 导出实习基地申报书
+     */
+    #[OperationLog('导出实习基地申报书')]
+    public function exportBaseWord(Request $request): Response
+    {
+        return $this->handle(fn (): array => $this->service()->exportBaseWord($request));
+    }
+
+    /**
      * 保存实习基地
      */
     #[OperationLog('保存实习基地')]
@@ -545,6 +554,15 @@ class InternshipController
     public function implementationDetail(Request $request): Response
     {
         return $this->handle(fn (): array => $this->service()->implementationDetail($request));
+    }
+
+    /**
+     * 导出教学实习实施经费表
+     */
+    #[OperationLog('导出教学实习实施经费表')]
+    public function exportImplementationPdf(Request $request): Response
+    {
+        return $this->handle(fn (): array => $this->service()->exportImplementationPdf($request));
     }
 
     /**

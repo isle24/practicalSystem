@@ -12,6 +12,8 @@ use Webman\RedisQueue\Redis as RedisQueue;
 class ExportTaskService
 {
     private const ADMIN_ROLES = ['super_admin', 'school_admin', 'college_admin', 'profession_admin'];
+    private const MANAGE_ALL_ROLES = ['super_admin', 'school_admin'];
+    private const BUSINESS_EXPORT_TYPES = ['internship_base_word', 'internship_implementation_pdf'];
 
     public const QUEUE = 'export_task';
 
@@ -22,14 +24,17 @@ class ExportTaskService
         return ExportTaskRecord::taskPage($filters, $accountId, $this->canViewAll($filters));
     }
 
-    public function create(array $payload): array
+    public function create(array $payload, bool $businessValidated = false): array
     {
         $accountId = $this->accountId();
-        if (!in_array('export:create', CurrentContext::permissionCodes(), true) && !$this->isAdmin()) {
+        if (!in_array('export:create', CurrentContext::permissionCodes(), true) && !$this->isAdminRole()) {
             throw new InvalidArgumentException('无操作权限', 403);
         }
 
         $type = $this->requiredString($payload['type'] ?? '', '导出类型', 80);
+        if (in_array($type, self::BUSINESS_EXPORT_TYPES, true) && !$businessValidated) {
+            throw new InvalidArgumentException('请从对应业务页面创建导出任务');
+        }
         $fileName = $this->nullableString($payload['file_name'] ?? null, 255) ?: $this->defaultFileName($type);
         $taskId = ExportTaskRecord::createTask([
             'user_id' => $accountId,
@@ -51,11 +56,22 @@ class ExportTaskService
         if ($id <= 0) {
             throw new InvalidArgumentException('id 无效');
         }
+        if (!in_array('export:retry', CurrentContext::permissionCodes(), true) && !$this->canManageAll()) {
+            throw new InvalidArgumentException('无操作权限', 403);
+        }
 
-        $includeAll = $this->isAdmin();
+        $includeAll = $this->canManageAll();
+        $task = ExportTaskRecord::taskById($id);
+        if (!$task || (!$includeAll && (int) ($task['user_id'] ?? 0) !== $accountId)) {
+            throw new InvalidArgumentException('导出任务不存在或不可重试');
+        }
+        if (in_array((string) ($task['type'] ?? ''), self::BUSINESS_EXPORT_TYPES, true)) {
+            throw new InvalidArgumentException('业务导出请返回对应业务页面重新创建任务');
+        }
+
         $affected = ExportTaskRecord::resetTask($id, $accountId, $includeAll, date('Y-m-d H:i:s'));
         if ($affected <= 0) {
-            throw new InvalidArgumentException('导出任务不存在或不可重试');
+            throw new InvalidArgumentException('仅失败或超时任务可重试');
         }
 
         $this->enqueue($id);
@@ -78,7 +94,7 @@ class ExportTaskService
         }
 
         $task = ExportTaskRecord::taskById($id);
-        if (!$task || (!$this->isAdmin() && (int) ($task['user_id'] ?? 0) !== $accountId)) {
+        if (!$task || (!$this->canManageAll() && (int) ($task['user_id'] ?? 0) !== $accountId)) {
             throw new InvalidArgumentException('导出任务不存在');
         }
 
@@ -87,12 +103,17 @@ class ExportTaskService
 
     private function canViewAll(array $filters): bool
     {
-        return $this->isAdmin() && (string) ($filters['scope'] ?? '') === 'all';
+        return $this->canManageAll() && (string) ($filters['scope'] ?? '') === 'all';
     }
 
-    private function isAdmin(): bool
+    private function isAdminRole(): bool
     {
         return in_array(CurrentContext::roleType(), self::ADMIN_ROLES, true);
+    }
+
+    private function canManageAll(): bool
+    {
+        return in_array(CurrentContext::roleType(), self::MANAGE_ALL_ROLES, true);
     }
 
     private function accountId(): int
@@ -144,7 +165,13 @@ class ExportTaskService
 
     private function defaultFileName(string $type): string
     {
-        return $type . '_' . date('Ymd_His') . '.xlsx';
+        $extension = match ($type) {
+            'internship_base_word' => 'docx',
+            'internship_implementation_pdf' => 'pdf',
+            default => 'xlsx',
+        };
+
+        return $type . '_' . date('Ymd_His') . '.' . $extension;
     }
 
     private function requiredString(mixed $value, string $label, int $maxLength): string

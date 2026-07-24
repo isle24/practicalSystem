@@ -66,6 +66,7 @@ class ExportTaskRecord extends TableRecord
 
         $query = self::queryTable('export_task')
             ->where('id', $id)
+            ->whereIn('status', ['failed', 'timeout'])
             ->whereNull('deleted_at');
         if (!$includeAll) {
             $query->where('user_id', $accountId);
@@ -74,6 +75,8 @@ class ExportTaskRecord extends TableRecord
         return (int) $query->update([
             'status' => 'pending',
             'progress' => 0,
+            'total_rows' => 0,
+            'file_id' => null,
             'error_message' => null,
             'error_trace' => null,
             'started_at' => null,

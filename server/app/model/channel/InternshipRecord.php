@@ -193,6 +193,12 @@ class InternshipRecord extends TableRecord
         ];
     }
 
+    /** 查询已校验导出任务的基地资料 */
+    public static function baseExportDetail(int $baseId): ?array
+    {
+        return self::baseDetail(['role_type' => 'super_admin'], $baseId);
+    }
+
     /** 查询基地关联专业 */
     public static function baseProfessionIds(int $baseId): array
     {
@@ -1336,6 +1342,29 @@ class InternshipRecord extends TableRecord
             'schedules' => $schedules,
             'expenses' => $expenses,
         ];
+    }
+
+    /** 查询已校验导出任务的实施表资料 */
+    public static function implementationExportDetail(int $arrangementId): ?array
+    {
+        return self::implementationDetail(['role_type' => 'super_admin'], $arrangementId);
+    }
+
+    /** 查询实施表附件名称 */
+    public static function fileNamesByIds(array $fileIds): array
+    {
+        $fileIds = self::ids($fileIds);
+        if (!$fileIds) {
+            return [];
+        }
+
+        return self::queryTable('file')
+            ->whereIn('id', $fileIds)
+            ->whereNull('deleted_at')
+            ->orderBy('id')
+            ->get(['id', 'name', 'download_name'])
+            ->map(static fn ($row): string => (string) ($row->download_name ?: $row->name ?: ('文件#' . $row->id)))
+            ->all();
     }
 
     /** 查询任务当前实施表主键 */

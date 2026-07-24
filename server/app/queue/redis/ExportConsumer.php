@@ -52,7 +52,8 @@ class ExportConsumer implements Consumer
 
         try {
             $generated = (new ExportGenerator())->generate((string) $task['type'], (array) ($task['params'] ?? []));
-            $stored = (new FileService())->storeGeneratedFile($generated['path'], [
+            $fileService = new FileService();
+            $stored = $fileService->storeGeneratedFile($generated['path'], [
                 'name' => $task['file_name'] ?: ($task['type'] . '_' . date('Ymd_His') . '.' . $generated['ext']),
                 'ext' => $generated['ext'],
                 'category' => 'export',
@@ -72,6 +73,12 @@ class ExportConsumer implements Consumer
 
             if ($affected > 0) {
                 $this->notify((int) ($task['user_id'] ?? 0), $taskId, '导出任务完成', '导出文件已生成，可在导出中心下载。');
+            } else {
+                try {
+                    $fileService->discardGeneratedFile((int) $stored['file_id']);
+                } catch (Throwable $exception) {
+                    Log::error('export task ' . $taskId . ' 失效文件回收失败: ' . $exception->getMessage());
+                }
             }
         } catch (Throwable $exception) {
             $finishedAt = date('Y-m-d H:i:s');
