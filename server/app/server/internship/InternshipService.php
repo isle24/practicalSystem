@@ -1528,7 +1528,7 @@ class InternshipService
     {
         $this->requirePermission('internship:plan');
 
-        return InternshipRecord::planPage($this->scopeContext(), $this->requestFilters($request, [
+        return InternshipRecord::planTablePage($this->scopeContext(), $this->requestFilters($request, [
             'page', 'page_size', 'per_page', 'status', 'grade_id', 'dep_id', 'profession_id', 'keyword',
         ]), self::PLAN_APPROVAL_LEVELS);
     }
@@ -1805,11 +1805,23 @@ class InternshipService
             'arrangement.semester',
             'department.dep_name',
             'profession.profession_name',
-            'profession.grade_id',
             'grade_list.grade_name',
             'teacher_list.teacher_name',
             'syllabus_guide.title as syllabus_title',
         ]);
+    }
+
+    /** 返回任务绑定、变更和实施表聚合详情 */
+    public function implementationDetail(Request $request): array
+    {
+        $this->requirePermission('internship:view');
+        $arrangementId = $this->requiredInt($request, 'arrangement_id');
+        $detail = InternshipRecord::implementationDetail($this->scopeContext(), $arrangementId);
+        if (!$detail) {
+            throw new RuntimeException('实习任务不存在或无权限', 40301);
+        }
+
+        return $detail;
     }
 
     public function saveImplementationSheet(Request $request): array
@@ -1817,28 +1829,203 @@ class InternshipService
         $this->requirePermission('internship:manage');
         $arrangementId = $this->requiredInt($request, 'arrangement_id');
         $this->assertCurrentArrangementVisible($arrangementId);
-        $values = [
-            'arrangement_id' => $arrangementId,
-            'teacher_id' => $this->optionalInt($request, 'teacher_id') ?? $this->currentTeacherId(false),
-            'plan_ref_id' => $this->optionalInt($request, 'plan_ref_id'),
-            'syllabus_ref_id' => $this->optionalInt($request, 'syllabus_ref_id'),
-            'signed_count' => $this->optionalInt($request, 'signed_count') ?? 0,
-            'unsigned_count' => $this->optionalInt($request, 'unsigned_count') ?? 0,
-            'insurance_verified' => $this->enum($request, 'insurance_verified', ['false', 'true'], 'false'),
-            'fee_detail' => $this->jsonValue($request->input('fee_detail', [])),
-            'confirmed_at' => $this->dateTimeInput($request, 'confirmed_at'),
-            'status' => $this->enum($request, 'status', ['draft', 'confirmed'], 'draft'),
-            'updated_at' => $this->now(),
-            'deleted_at' => null,
-        ];
+        $scope = $this->scopeContext();
+        $requestedId = $this->inputRowId($request, 'implementation_sheet');
+        $existingId = $requestedId ?: InternshipRecord::implementationSheetIdByArrangement($arrangementId);
+        if ($requestedId && !InternshipRecord::implementationSheetWritable($scope, $requestedId, $arrangementId)) {
+            throw new RuntimeException('实施表不存在或无权限', 40301);
+        }
+        $requestedUuid = $this->nullableString($request, 'uuid', 36);
+        $input = $request->all();
+        $this->ensureRecordingTable('implementation_sheet_recording');
 
-        return $this->saveWorkflowRow('implementation_sheet', 'implementation_sheet', 'implementation_sheet_recording', $request, $values, $this->workflowContent('保存教学实习实施表', $values, [
-            'signed_count' => '已签承诺',
-            'unsigned_count' => '未签承诺',
-            'insurance_verified' => '保险核验',
-            'confirmed_at' => '确认时间',
-            'status' => '状态',
-        ]));
+        return $this->workflowLock('internship', 'implementation_sheet_arrangement', $arrangementId, function () use (
+            $arrangementId,
+            $existingId,
+            $input,
+            $request,
+            $requestedUuid,
+            $scope
+        ): array {
+            return $this->connection()->transaction(function () use (
+                $arrangementId,
+                $existingId,
+                $input,
+                $request,
+                $requestedUuid,
+                $scope
+            ): array {
+                $arrangement = InternshipRecord::lockCurrentArrangement($arrangementId);
+                if (!$arrangement) {
+                    throw new InvalidArgumentException('实习任务已变更，请刷新后重试', 409);
+                }
+                $locked = InternshipRecord::lockImplementationSheet($arrangementId, $existingId ?: null);
+                if ($existingId && !$locked) {
+                    throw new InvalidArgumentException('数据已变更，请刷新后重试', 409);
+                }
+                if ($locked && in_array((string) ($locked->status ?? ''), ['wait', 'accept'], true)) {
+                    throw new InvalidArgumentException('数据已变更，请刷新后重试', 409);
+                }
+
+                $currentDetail = InternshipRecord::implementationDetail(
+                    $scope,
+                    $arrangementId,
+                    $locked ? (int) $locked->id : null
+                );
+                if (!$currentDetail) {
+                    throw new RuntimeException('实习任务不存在或无权限', 40301);
+                }
+
+                $task = (array) $currentDetail['task'];
+                $current = (array) ($currentDetail['implementation_sheet'] ?? []);
+                $has = static fn (string $key): bool => array_key_exists($key, $input);
+                $currentSheetJson = (array) ($current['sheet_json'] ?? []);
+                $requestSheetJson = $has('sheet_json') ? $this->requestArray($request, 'sheet_json') : [];
+                $sheetJson = $has('sheet_json')
+                    ? array_merge($currentSheetJson, $requestSheetJson)
+                    : $currentSheetJson;
+
+                $scheduleProvided = $has('schedules');
+                $scheduleInput = $scheduleProvided ? $this->requestArray($request, 'schedules') : [];
+                if (!$scheduleProvided && is_array($requestSheetJson['schedules'] ?? null)) {
+                    $scheduleProvided = true;
+                    $scheduleInput = $requestSheetJson['schedules'];
+                }
+                $schedules = $scheduleProvided
+                    ? $this->implementationSchedulesInput($scheduleInput, $scope)
+                    : (array) ($currentDetail['schedules'] ?? []);
+
+                $expenseProvided = $has('expenses') || $has('fee_detail');
+                if ($has('expenses')) {
+                    $expenseInput = $this->requestArray($request, 'expenses');
+                } elseif ($has('fee_detail')) {
+                    $expenseInput = $this->legacyImplementationExpenses($this->requestArray($request, 'fee_detail'));
+                } else {
+                    $expenseInput = [];
+                }
+                if (!$expenseProvided && is_array($requestSheetJson['expenses'] ?? null)) {
+                    $expenseProvided = true;
+                    $expenseInput = $requestSheetJson['expenses'];
+                }
+                $expenses = $expenseProvided
+                    ? $this->implementationExpensesInput($expenseInput)
+                    : (array) ($currentDetail['expenses'] ?? []);
+
+                $totalPeople = array_sum(array_column($schedules, 'people_count'));
+                $totalAmount = round(array_sum(array_map(static fn (array $item): float => (float) ($item['amount'] ?? 0), $expenses)), 2);
+                $status = $has('status')
+                    ? $this->enum($request, 'status', ['draft', 'confirmed'], 'draft')
+                    : (string) ($current['status'] ?? 'draft');
+
+                $now = $this->now();
+                $submittedAt = $has('submitted_at') ? $this->dateTimeInput($request, 'submitted_at') : ($current['submitted_at'] ?? null);
+                $confirmedAt = $has('confirmed_at') ? $this->dateTimeInput($request, 'confirmed_at') : ($current['confirmed_at'] ?? null);
+                if ($status === 'confirmed' && ($has('status') || !$locked)) {
+                    $submittedAt ??= $now;
+                    $confirmedAt ??= $now;
+                }
+
+                if ($has('fee_detail')) {
+                    $feeDetail = $this->requestArray($request, 'fee_detail');
+                } elseif ($expenseProvided) {
+                    $feeDetail = $expenses;
+                } else {
+                    $feeDetail = is_array($current['fee_detail'] ?? null) ? $current['fee_detail'] : $expenses;
+                }
+
+                $sheetJsonValues = $sheetJson;
+                if ($scheduleProvided || !$locked) {
+                    $sheetJsonValues['schedules'] = $schedules;
+                }
+                if ($expenseProvided || !$locked) {
+                    $sheetJsonValues['expenses'] = $expenses;
+                }
+                if ($scheduleProvided || $expenseProvided || !$locked) {
+                    $sheetJsonValues['total_people'] = $totalPeople;
+                    $sheetJsonValues['total_amount'] = $totalAmount;
+                }
+
+                $values = [
+                    'arrangement_id' => $arrangementId,
+                    'teacher_id' => (int) ($task['teacher_id'] ?? 0) ?: null,
+                    'plan_ref_id' => (int) ($task['plan_id'] ?? 0) ?: null,
+                    'syllabus_ref_id' => $has('syllabus_ref_id') ? $this->optionalInt($request, 'syllabus_ref_id') : ($current['syllabus_ref_id'] ?? null),
+                    'applicant_name' => $has('applicant_name') ? $this->nullableString($request, 'applicant_name', 80) : ($locked ? ($current['applicant_name'] ?? null) : $this->currentAccountName()),
+                    'applicant_department' => $has('applicant_department') ? $this->nullableString($request, 'applicant_department', 180) : ($locked ? ($current['applicant_department'] ?? null) : ($task['dep_name'] ?? null)),
+                    'submitted_at' => $submittedAt,
+                    'approval_no' => $has('approval_no') ? $this->nullableString($request, 'approval_no', 120) : ($current['approval_no'] ?? null),
+                    'grade_id' => $has('grade_id') ? $this->optionalInt($request, 'grade_id') : ($locked ? ($current['grade_id'] ?? null) : ((int) ($task['grade_id'] ?? 0) ?: null)),
+                    'course_name' => $has('course_name') ? $this->nullableString($request, 'course_name', 180) : ($locked ? ($current['course_name'] ?? null) : ($task['course_name'] ?? null)),
+                    'course_type' => $has('course_type') ? $this->nullableString($request, 'course_type', 80) : ($current['course_type'] ?? null),
+                    'detail_content' => $has('detail_content') ? $this->nullableString($request, 'detail_content', 50000) : ($current['detail_content'] ?? null),
+                    'credit' => $has('credit') ? $this->decimalInput($request, 'credit') : ($locked ? ($current['credit'] ?? null) : (isset($task['credit']) ? (float) $task['credit'] : null)),
+                    'practice_type' => $has('practice_type') ? $this->nullableString($request, 'practice_type', 80) : ($locked ? ($current['practice_type'] ?? null) : ($task['type'] ?? null)),
+                    'internship_mode' => $has('internship_mode') ? $this->nullableString($request, 'internship_mode', 80) : ($current['internship_mode'] ?? null),
+                    'organize_mode' => $has('organize_mode') ? $this->nullableString($request, 'organize_mode', 80) : ($locked ? ($current['organize_mode'] ?? null) : ($task['organize_mode'] ?? null)),
+                    'total_people' => $totalPeople,
+                    'total_amount' => $totalAmount,
+                    'attachment_ids' => $this->jsonValue($has('attachment_ids')
+                        ? array_slice($this->intArray($this->requestArray($request, 'attachment_ids')), 0, 100)
+                        : (array) ($current['attachment_ids'] ?? [])),
+                    'remark' => $has('remark') ? $this->nullableString($request, 'remark', 10000) : ($current['remark'] ?? null),
+                    'signed_count' => $has('signed_count') ? max(0, $this->optionalInt($request, 'signed_count') ?? 0) : max(0, (int) ($current['signed_count'] ?? 0)),
+                    'unsigned_count' => $has('unsigned_count') ? max(0, $this->optionalInt($request, 'unsigned_count') ?? 0) : max(0, (int) ($current['unsigned_count'] ?? 0)),
+                    'insurance_verified' => $has('insurance_verified') ? $this->enum($request, 'insurance_verified', ['false', 'true'], 'false') : (string) ($current['insurance_verified'] ?? 'false'),
+                    'fee_detail' => $this->jsonValue($feeDetail),
+                    'sheet_json' => $this->jsonValue($sheetJsonValues),
+                    'confirmed_at' => $confirmedAt,
+                    'status' => $status,
+                    'updated_at' => $now,
+                    'deleted_at' => null,
+                ];
+                if ($values['syllabus_ref_id'] && !InternshipRecord::syllabusGuideBelongsToArrangement((int) $values['syllabus_ref_id'], $arrangementId)) {
+                    throw new RuntimeException('实习大纲指导书不存在或不属于当前任务', 40301);
+                }
+
+                $fromStatus = $locked ? (string) ($locked->status ?? 'draft') : 'draft';
+                $values['applicant_id'] = $locked && (int) ($locked->applicant_id ?? 0) > 0
+                    ? (int) $locked->applicant_id
+                    : CurrentContext::accountId();
+                if ($locked) {
+                    InternshipRecord::updateById('implementation_sheet', (int) $locked->id, $values);
+                    $result = ['id' => (int) $locked->id, 'uuid' => (string) ($locked->uuid ?? '')];
+                } else {
+                    $uuid = $requestedUuid ?: $this->uuid();
+                    $result = [
+                        'id' => InternshipRecord::insertRow('implementation_sheet', array_merge($values, [
+                            'uuid' => $uuid,
+                            'created_at' => $now,
+                        ])),
+                        'uuid' => $uuid,
+                    ];
+                }
+                InternshipRecord::saveImplementationRelations(
+                    (int) $result['id'],
+                    $scheduleProvided || !$locked ? $schedules : null,
+                    $expenseProvided || !$locked ? $expenses : null,
+                    $now
+                );
+                $content = $this->workflowContent('保存教学实习实施表', $values, [
+                    'course_name' => '课程',
+                    'total_people' => '总人数',
+                    'total_amount' => '总金额',
+                    'status' => '状态',
+                ]);
+                $this->recordWorkflow(
+                    'implementation_sheet_recording',
+                    'implementation_sheet',
+                    (int) $result['id'],
+                    $locked ? 'change' : 'submit',
+                    $fromStatus,
+                    $status,
+                    $content,
+                    $status
+                );
+
+                $result['detail'] = InternshipRecord::implementationDetail($scope, $arrangementId, (int) $result['id']);
+                return $result;
+            });
+        });
     }
 
     public function teacherWorkReports(Request $request): array
@@ -2081,6 +2268,9 @@ class InternshipService
 
         $result = $this->connection()->transaction(function () use ($classRows, $endDate, $existingId, $input, $plan, $planId, $source, $startDate, $taskNo, $teacherId, $title): array {
             $now = $this->now();
+            if ($existingId > 0 && !InternshipRecord::lockCurrentArrangement($existingId)) {
+                throw new InvalidArgumentException('实习任务已变更，请刷新后重试', 409);
+            }
             $studentRows = InternshipRecord::studentRowsByClassIds(array_column($classRows, 'class_id'));
             if (!$studentRows) {
                 throw new InvalidArgumentException('所选任务班级暂无可绑定学生');
@@ -4137,6 +4327,96 @@ class InternshipService
                 'amount' => is_numeric($value['amount'] ?? null) ? round((float) $value['amount'], 2) : null,
                 'remark' => $this->stringValue($value['remark'] ?? null, 10000),
             ];
+        }
+
+        return $items;
+    }
+
+    /** 规范化实施组织安排 */
+    private function implementationSchedulesInput(array $values, array $scope): array
+    {
+        $items = [];
+        foreach ($values as $value) {
+            if (!is_array($value)) {
+                continue;
+            }
+
+            $professionId = is_numeric($value['profession_id'] ?? null) ? (int) $value['profession_id'] : null;
+            $gradeId = is_numeric($value['grade_id'] ?? null) ? (int) $value['grade_id'] : null;
+            $teacherId = is_numeric($value['teacher_id'] ?? null) ? (int) $value['teacher_id'] : null;
+            $peopleCount = is_numeric($value['people_count'] ?? null) ? (int) $value['people_count'] : 0;
+            if ($peopleCount < 0) {
+                throw new InvalidArgumentException('组织安排人数不能小于 0');
+            }
+            if ($professionId && !InternshipRecord::professionVisible($scope, $professionId)) {
+                throw new RuntimeException('组织安排专业不存在或无权限', 40301);
+            }
+            if ($teacherId && !InternshipRecord::teacherVisible($scope, $teacherId)) {
+                throw new RuntimeException('带队教师不存在或无权限', 40301);
+            }
+
+            $professionName = $this->stringValue($value['profession_name'] ?? null, 180);
+            $gradeName = $this->stringValue($value['grade_name'] ?? null, 80);
+            $teacherName = $this->stringValue($value['teacher_name'] ?? null, 80);
+            if ($professionId && $professionName === '') {
+                $professionName = (string) (InternshipRecord::professionNameById($professionId) ?? '');
+            }
+            if ($gradeId && $gradeName === '') {
+                $gradeName = (string) (InternshipRecord::gradeNameById($gradeId) ?? '');
+                if ($gradeName === '') {
+                    throw new InvalidArgumentException('组织安排届次不存在');
+                }
+            }
+            if ($teacherId && $teacherName === '') {
+                $teacherName = (string) (InternshipRecord::teacherProfile($teacherId)?->teacher_name ?? '');
+            }
+
+            $item = [
+                'profession_id' => $professionId,
+                'profession_name' => $professionName,
+                'grade_id' => $gradeId,
+                'grade_name' => $gradeName,
+                'people_count' => $peopleCount,
+                'week_text' => $this->stringValue($value['week_text'] ?? null, 120),
+                'weekday_text' => $this->stringValue($value['weekday_text'] ?? null, 120),
+                'location' => $this->stringValue($value['location'] ?? null, 255),
+                'time_text' => $this->stringValue($value['time_text'] ?? null, 255),
+                'teacher_id' => $teacherId,
+                'teacher_name' => $teacherName,
+            ];
+            if ($professionId || $gradeId || $teacherId || $peopleCount > 0 || implode('', array_filter($item, 'is_string')) !== '') {
+                $items[] = $item;
+            }
+        }
+
+        return $items;
+    }
+
+    /** 规范化实施费用明细 */
+    private function implementationExpensesInput(array $values): array
+    {
+        $items = $this->baseBudgetsInput($values);
+        foreach ($items as $item) {
+            if (($item['amount'] ?? null) !== null && (float) $item['amount'] < 0) {
+                throw new InvalidArgumentException('费用金额不能小于 0');
+            }
+        }
+
+        return $items;
+    }
+
+    /** 兼容旧实施表的费用 JSON */
+    private function legacyImplementationExpenses(array $value): array
+    {
+        if (array_is_list($value)) {
+            return $value;
+        }
+
+        $items = [];
+        foreach ($value as $name => $amount) {
+            if (is_scalar($amount)) {
+                $items[] = ['item_name' => (string) $name, 'amount' => $amount];
+            }
         }
 
         return $items;

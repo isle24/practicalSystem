@@ -1119,6 +1119,15 @@ class InternshipRecord extends TableRecord
         return $page;
     }
 
+    /** 查询计划表及其任务摘要 */
+    public static function planTablePage(array $scope, array $filters, array $approvalLevels = []): array
+    {
+        $page = self::planPage($scope, $filters, $approvalLevels);
+        $page['items'] = self::appendPlanTaskSummaries($page['items'] ?? []);
+
+        return $page;
+    }
+
     public static function insertPlanApproval(int $planId, array $values, string $planStatus, string $now): int
     {
         $approvalId = self::insertRow('internship_plan_approval', $values);
@@ -1260,22 +1269,23 @@ class InternshipRecord extends TableRecord
         if (in_array($table, ['implementation_sheet', 'teacher_work_report'], true)) {
             $query->leftJoin('arrangement', "{$table}.arrangement_id", '=', 'arrangement.id')
                 ->leftJoin('department', 'arrangement.dep_id', '=', 'department.dep_id')
-                ->leftJoin('profession', 'arrangement.profession_id', '=', 'profession.profession_id')
-                ->leftJoin('grade_list', 'profession.grade_id', '=', 'grade_list.grade_id');
+                ->leftJoin('profession', 'arrangement.profession_id', '=', 'profession.profession_id');
             if ($table === 'implementation_sheet') {
                 $query->leftJoin('teacher_list', "{$table}.teacher_id", '=', 'teacher_list.teacher_id')
                     ->leftJoin('internship_plan', "{$table}.plan_ref_id", '=', 'internship_plan.id')
-                    ->leftJoin('syllabus_guide', "{$table}.syllabus_ref_id", '=', 'syllabus_guide.id');
+                    ->leftJoin('syllabus_guide', "{$table}.syllabus_ref_id", '=', 'syllabus_guide.id')
+                    ->leftJoin('grade_list', "{$table}.grade_id", '=', 'grade_list.grade_id');
             }
             if ($table === 'teacher_work_report') {
-                $query->leftJoin('teacher_list', "{$table}.teacher_id", '=', 'teacher_list.teacher_id');
+                $query->leftJoin('teacher_list', "{$table}.teacher_id", '=', 'teacher_list.teacher_id')
+                    ->leftJoin('grade_list', 'profession.grade_id', '=', 'grade_list.grade_id');
             }
             self::applyArrangementScope($query, $scope);
             self::currentArrangementQuery($query);
             self::listFilters($query, $filters, [
                 'dep_id' => 'arrangement.dep_id',
                 'profession_id' => 'arrangement.profession_id',
-                'grade_id' => 'profession.grade_id',
+                'grade_id' => $table === 'implementation_sheet' ? 'implementation_sheet.grade_id' : 'profession.grade_id',
                 'semester' => 'arrangement.semester',
             ]);
             self::keyword($query, $filters, array_filter([
@@ -1292,6 +1302,151 @@ class InternshipRecord extends TableRecord
         self::filter($query, $filters, "{$table}.status", 'status');
 
         return self::paginate($query->orderByDesc("{$table}.id"), $filters, $columns);
+    }
+
+    /** 查询任务范围内的实习实施完整资料 */
+    public static function implementationDetail(array $scope, int $arrangementId, ?int $implementationId = null): ?array
+    {
+        $detail = self::arrangementDetail($scope, $arrangementId);
+        if (!$detail) {
+            return null;
+        }
+
+        $sheet = self::implementationSheetByArrangement($arrangementId, $implementationId);
+        $sheetId = (int) ($sheet['id'] ?? 0);
+        $schedules = $sheetId > 0 ? self::implementationScheduleRows($sheetId) : [];
+        $expenses = $sheetId > 0 ? self::implementationExpenseRows($sheetId) : [];
+        if (!$schedules && is_array($sheet['sheet_json']['schedules'] ?? null)) {
+            $schedules = array_values($sheet['sheet_json']['schedules']);
+        }
+        if (!$expenses && is_array($sheet['sheet_json']['expenses'] ?? null)) {
+            $expenses = array_values($sheet['sheet_json']['expenses']);
+        }
+        if (!$expenses && is_array($sheet['fee_detail'] ?? null)) {
+            $expenses = self::legacyImplementationExpenses($sheet['fee_detail']);
+        }
+
+        return [
+            'item' => $detail['item'],
+            'task' => $detail['item'],
+            'classes' => $detail['classes'],
+            'students' => $detail['students'],
+            'changes' => self::implementationChangeRows($arrangementId),
+            'implementation_sheet' => $sheet,
+            'schedules' => $schedules,
+            'expenses' => $expenses,
+        ];
+    }
+
+    /** 查询任务当前实施表主键 */
+    public static function implementationSheetIdByArrangement(int $arrangementId): int
+    {
+        if ($arrangementId <= 0) {
+            return 0;
+        }
+
+        return (int) (self::queryTable('implementation_sheet')
+            ->where('arrangement_id', $arrangementId)
+            ->whereNull('deleted_at')
+            ->orderByDesc('id')
+            ->value('id') ?: 0);
+    }
+
+    /** 校验实施表与任务是否位于当前数据范围 */
+    public static function implementationSheetWritable(array $scope, int $implementationId, int $arrangementId): bool
+    {
+        if ($implementationId <= 0 || $arrangementId <= 0) {
+            return false;
+        }
+
+        return self::applyArrangementScope(self::queryTable('implementation_sheet')
+            ->leftJoin('arrangement', 'implementation_sheet.arrangement_id', '=', 'arrangement.id')
+            ->where('implementation_sheet.id', $implementationId)
+            ->where('implementation_sheet.arrangement_id', $arrangementId)
+            ->whereNull('implementation_sheet.deleted_at')
+            ->whereNull('arrangement.deleted_at'), $scope)
+            ->exists();
+    }
+
+    /** 锁定任务当前实施表 */
+    public static function lockImplementationSheet(int $arrangementId, ?int $implementationId = null): ?object
+    {
+        $query = self::queryTable('implementation_sheet')
+            ->where('arrangement_id', $arrangementId)
+            ->whereNull('deleted_at');
+        if ($implementationId) {
+            $query->where('id', $implementationId);
+        }
+
+        return $query->orderByDesc('id')->lockForUpdate()->first();
+    }
+
+    /** 保存实施组织安排和费用明细 */
+    public static function saveImplementationRelations(int $implementationId, ?array $schedules, ?array $expenses, string $now): void
+    {
+        if ($schedules !== null) {
+            self::queryTable('implementation_schedule')
+                ->where('implementation_id', $implementationId)
+                ->whereNull('deleted_at')
+                ->update([
+                    'status' => 'disabled',
+                    'updated_at' => $now,
+                    'deleted_at' => $now,
+                ]);
+        }
+        if ($expenses !== null) {
+            self::queryTable('implementation_expense')
+                ->where('implementation_id', $implementationId)
+                ->whereNull('deleted_at')
+                ->update([
+                    'status' => 'disabled',
+                    'updated_at' => $now,
+                    'deleted_at' => $now,
+                ]);
+        }
+
+        if ($schedules !== null) {
+            foreach ($schedules as $sort => $schedule) {
+                self::insertRow('implementation_schedule', [
+                    'uuid' => self::relationUuid(),
+                    'implementation_id' => $implementationId,
+                    'profession_id' => self::nullableRelationInt($schedule['profession_id'] ?? null),
+                    'profession_name' => self::relationText($schedule['profession_name'] ?? null, 180),
+                    'grade_id' => self::nullableRelationInt($schedule['grade_id'] ?? null),
+                    'grade_name' => self::relationText($schedule['grade_name'] ?? null, 80),
+                    'people_count' => max(0, (int) ($schedule['people_count'] ?? 0)),
+                    'week_text' => self::relationText($schedule['week_text'] ?? null, 120),
+                    'weekday_text' => self::relationText($schedule['weekday_text'] ?? null, 120),
+                    'location' => self::relationText($schedule['location'] ?? null, 255),
+                    'time_text' => self::relationText($schedule['time_text'] ?? null, 255),
+                    'teacher_id' => self::nullableRelationInt($schedule['teacher_id'] ?? null),
+                    'teacher_name' => self::relationText($schedule['teacher_name'] ?? null, 80),
+                    'sort' => $sort,
+                    'status' => 'enabled',
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                    'deleted_at' => null,
+                ]);
+            }
+        }
+
+        if ($expenses !== null) {
+            foreach ($expenses as $sort => $expense) {
+                self::insertRow('implementation_expense', [
+                    'uuid' => self::relationUuid(),
+                    'implementation_id' => $implementationId,
+                    'item_name' => self::relationText($expense['item_name'] ?? null, 180),
+                    'content' => self::relationText($expense['content'] ?? null, 10000),
+                    'amount' => self::relationDecimal($expense['amount'] ?? null),
+                    'remark' => self::relationText($expense['remark'] ?? null, 10000),
+                    'sort' => $sort,
+                    'status' => 'enabled',
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                    'deleted_at' => null,
+                ]);
+            }
+        }
     }
 
     public static function inspectionPage(array $scope, array $filters): array
@@ -1363,6 +1518,17 @@ class InternshipRecord extends TableRecord
             ->exists();
     }
 
+    /** 锁定当前实习任务 */
+    public static function lockCurrentArrangement(int $arrangementId): ?object
+    {
+        return self::queryTable('arrangement')
+            ->where('id', $arrangementId)
+            ->where('status', '<>', self::HISTORY_ARRANGEMENT_STATUS)
+            ->whereNull('deleted_at')
+            ->lockForUpdate()
+            ->first();
+    }
+
     public static function applicationVisible(array $scope, int $applicationId): bool
     {
         return self::applyApplicationScope(self::queryTable('application')
@@ -1417,6 +1583,38 @@ class InternshipRecord extends TableRecord
         self::applyDepProfessionScope($query, $scope, 'profession.dep_id', 'profession.profession_id');
 
         return $query->exists();
+    }
+
+    /** 返回专业名称快照 */
+    public static function professionNameById(int $professionId): ?string
+    {
+        $name = self::queryTable('profession')
+            ->where('profession_id', $professionId)
+            ->whereNull('deleted_at')
+            ->value('profession_name');
+
+        return $name ? (string) $name : null;
+    }
+
+    /** 返回届次名称快照 */
+    public static function gradeNameById(int $gradeId): ?string
+    {
+        $name = self::queryTable('grade_list')
+            ->where('grade_id', $gradeId)
+            ->whereNull('deleted_at')
+            ->value('grade_name');
+
+        return $name ? (string) $name : null;
+    }
+
+    /** 校验指导书是否属于指定任务 */
+    public static function syllabusGuideBelongsToArrangement(int $syllabusId, int $arrangementId): bool
+    {
+        return $syllabusId > 0 && $arrangementId > 0 && self::queryTable('syllabus_guide')
+            ->where('id', $syllabusId)
+            ->where('arrangement_id', $arrangementId)
+            ->whereNull('deleted_at')
+            ->exists();
     }
 
     public static function professionBelongsTo(int $professionId, int $gradeId, int $depId): bool
@@ -1896,6 +2094,140 @@ class InternshipRecord extends TableRecord
             $item['task_score_progress_text'] = ((int) ($item['scored_task_binding_count'] ?? 0)) . '/' . $taskBindings;
         }
         unset($item);
+
+        return $items;
+    }
+
+    private static function appendPlanTaskSummaries(array $items): array
+    {
+        $planIds = self::ids(array_column($items, 'id'));
+        if (!$planIds) {
+            return $items;
+        }
+
+        $tasks = self::rows(self::queryTable('arrangement')
+            ->leftJoin('teacher_list', 'arrangement.teacher_id', '=', 'teacher_list.teacher_id')
+            ->leftJoin('base', 'arrangement.base_id', '=', 'base.id')
+            ->whereIn('arrangement.plan_id', $planIds)
+            ->where('arrangement.status', '<>', self::HISTORY_ARRANGEMENT_STATUS)
+            ->whereNull('arrangement.deleted_at')
+            ->orderBy('arrangement.plan_id')
+            ->orderBy('arrangement.start_date')
+            ->orderBy('arrangement.id')
+            ->get([
+                'arrangement.id',
+                'arrangement.uuid',
+                'arrangement.plan_id',
+                'arrangement.base_id',
+                'arrangement.teacher_id',
+                'arrangement.task_no',
+                'arrangement.batch_no',
+                'arrangement.credit',
+                'arrangement.student_count',
+                'arrangement.type',
+                'arrangement.organize_mode',
+                'arrangement.title',
+                'arrangement.start_date',
+                'arrangement.end_date',
+                'arrangement.location',
+                'arrangement.status',
+                'teacher_list.teacher_name',
+                'base.name as base_name',
+            ]));
+        $tasks = self::appendArrangementProgress(self::appendArrangementClassNames($tasks));
+
+        $grouped = [];
+        foreach ($tasks as $task) {
+            $grouped[(int) ($task['plan_id'] ?? 0)][] = $task;
+        }
+        foreach ($items as &$item) {
+            $item['tasks'] = $grouped[(int) ($item['id'] ?? 0)] ?? [];
+        }
+        unset($item);
+
+        return $items;
+    }
+
+    private static function implementationSheetByArrangement(int $arrangementId, ?int $implementationId = null): ?array
+    {
+        $query = self::queryTable('implementation_sheet')
+            ->leftJoin('account as applicant_account', 'implementation_sheet.applicant_id', '=', 'applicant_account.id')
+            ->leftJoin('users as applicant_user', 'applicant_account.user_id', '=', 'applicant_user.id')
+            ->leftJoin('teacher_list', 'implementation_sheet.teacher_id', '=', 'teacher_list.teacher_id')
+            ->leftJoin('internship_plan', 'implementation_sheet.plan_ref_id', '=', 'internship_plan.id')
+            ->leftJoin('syllabus_guide', 'implementation_sheet.syllabus_ref_id', '=', 'syllabus_guide.id')
+            ->leftJoin('grade_list', 'implementation_sheet.grade_id', '=', 'grade_list.grade_id')
+            ->where('implementation_sheet.arrangement_id', $arrangementId)
+            ->whereNull('implementation_sheet.deleted_at');
+        if ($implementationId) {
+            $query->where('implementation_sheet.id', $implementationId);
+        }
+
+        $row = $query->orderByDesc('implementation_sheet.id')->first([
+                'implementation_sheet.*',
+                'applicant_user.name as applicant_user_name',
+                'teacher_list.teacher_name',
+                'internship_plan.course_code',
+                'internship_plan.course_name as plan_course_name',
+                'syllabus_guide.title as syllabus_title',
+                'grade_list.grade_name',
+            ]);
+
+        return $row ? self::rows([$row])[0] : null;
+    }
+
+    private static function implementationChangeRows(int $arrangementId): array
+    {
+        return self::rows(self::queryTable('arrangement_change')
+            ->leftJoin('account as submit_account', 'arrangement_change.submitter_id', '=', 'submit_account.id')
+            ->leftJoin('users as submit_user', 'submit_account.user_id', '=', 'submit_user.id')
+            ->leftJoin('account as review_account', 'arrangement_change.reviewer_id', '=', 'review_account.id')
+            ->leftJoin('users as review_user', 'review_account.user_id', '=', 'review_user.id')
+            ->leftJoin('arrangement as new_arrangement', 'arrangement_change.new_arrangement_id', '=', 'new_arrangement.id')
+            ->where('arrangement_change.arrangement_id', $arrangementId)
+            ->whereNull('arrangement_change.deleted_at')
+            ->orderByDesc('arrangement_change.id')
+            ->get([
+                'arrangement_change.*',
+                'submit_user.name as submitter_name',
+                'review_user.name as reviewer_name',
+                'new_arrangement.title as new_arrangement_title',
+                'new_arrangement.task_no as new_task_no',
+            ]));
+    }
+
+    private static function implementationScheduleRows(int $implementationId): array
+    {
+        return self::rows(self::queryTable('implementation_schedule')
+            ->where('implementation_id', $implementationId)
+            ->whereNull('deleted_at')
+            ->orderBy('sort')
+            ->orderBy('id')
+            ->get());
+    }
+
+    private static function implementationExpenseRows(int $implementationId): array
+    {
+        return self::rows(self::queryTable('implementation_expense')
+            ->where('implementation_id', $implementationId)
+            ->whereNull('deleted_at')
+            ->orderBy('sort')
+            ->orderBy('id')
+            ->get());
+    }
+
+    private static function legacyImplementationExpenses(array $values): array
+    {
+        if (array_is_list($values)) {
+            return array_values(array_filter($values, 'is_array'));
+        }
+
+        $items = [];
+        foreach ($values as $name => $amount) {
+            if (is_scalar($amount)) {
+                $items[] = ['item_name' => (string) $name, 'amount' => $amount];
+            }
+        }
 
         return $items;
     }
@@ -4559,7 +4891,7 @@ class InternshipRecord extends TableRecord
         $items = [];
         foreach ($rows as $row) {
             $item = method_exists($row, 'getAttributes') ? $row->getAttributes() : (array) $row;
-            foreach (['materials', 'plan_content', 'form_schema', 'fee_detail', 'items', 'payload'] as $jsonField) {
+            foreach (['materials', 'plan_content', 'form_schema', 'fee_detail', 'items', 'payload', 'attachment_ids', 'sheet_json', 'source_row'] as $jsonField) {
                 if (isset($item[$jsonField]) && is_string($item[$jsonField])) {
                     $decoded = json_decode($item[$jsonField], true);
                     $item[$jsonField] = json_last_error() === JSON_ERROR_NONE ? $decoded : $item[$jsonField];

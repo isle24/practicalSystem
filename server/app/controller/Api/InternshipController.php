@@ -539,6 +539,15 @@ class InternshipController
     }
 
     /**
+     * 查看实习实施聚合详情
+     */
+    #[OperationLog('查看实习实施详情')]
+    public function implementationDetail(Request $request): Response
+    {
+        return $this->handle(fn (): array => $this->service()->implementationDetail($request));
+    }
+
+    /**
      * 保存实施计划表
      */
     #[OperationLog('保存实施计划表')]
