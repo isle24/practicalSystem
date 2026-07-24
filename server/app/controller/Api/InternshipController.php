@@ -42,6 +42,15 @@ class InternshipController
     }
 
     /**
+     * 查看实习基地详情
+     */
+    #[OperationLog('查看实习基地详情')]
+    public function baseDetail(Request $request): Response
+    {
+        return $this->handle(fn (): array => $this->service()->baseDetail($request));
+    }
+
+    /**
      * 保存实习基地
      */
     #[OperationLog('保存实习基地')]

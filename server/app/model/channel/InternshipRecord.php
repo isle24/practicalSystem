@@ -115,9 +115,244 @@ class InternshipRecord extends TableRecord
 
         return self::paginate($query->orderByDesc('base.id'), $filters, [
             'base.id', 'base.uuid', 'base.name', 'base.code', 'base.company_id', 'base.dep_id',
-            'base.address', 'base.capacity', 'base.used_count', 'base.status', 'base.created_at',
+            'base.base_type', 'base.address', 'base.area', 'base.annual_student_count',
+            'base.current_student_count', 'base.service_courses', 'base.category',
+            'base.manager_name', 'base.manager_phone', 'base.capacity', 'base.used_count',
+            'base.status', 'base.created_at',
             'companies.company_name', 'department.dep_name',
         ]);
+    }
+
+    /** 查询基地及其结构化申报资料 */
+    public static function baseDetail(array $scope, int $baseId): ?array
+    {
+        $query = self::applyBaseScope(self::queryTable('base')
+            ->leftJoin('companies', 'base.company_id', '=', 'companies.company_id')
+            ->leftJoin('department', 'base.dep_id', '=', 'department.dep_id')
+            ->where('base.id', $baseId)
+            ->whereNull('base.deleted_at'), $scope);
+        $item = $query->first([
+            'base.*',
+            'companies.company_name',
+            'department.dep_name',
+        ]);
+        if (!$item) {
+            return null;
+        }
+
+        $professions = self::queryTable('base_profession')
+            ->leftJoin('profession', 'base_profession.profession_id', '=', 'profession.profession_id')
+            ->where('base_profession.base_id', $baseId)
+            ->whereNull('base_profession.deleted_at')
+            ->orderBy('base_profession.id')
+            ->get([
+                'base_profession.id',
+                'base_profession.profession_id',
+                'profession.profession_name',
+            ]);
+        $people = self::queryTable('base_person')
+            ->where('base_person.base_id', $baseId)
+            ->whereNull('base_person.deleted_at')
+            ->orderBy('base_person.person_type')
+            ->orderBy('base_person.sort')
+            ->orderBy('base_person.id')
+            ->get();
+        $existingSites = self::queryTable('base_existing_site')
+            ->where('base_id', $baseId)
+            ->whereNull('deleted_at')
+            ->orderBy('sort')
+            ->orderBy('id')
+            ->get();
+        $companyProfile = self::queryTable('base_company_profile')
+            ->where('base_id', $baseId)
+            ->whereNull('deleted_at')
+            ->first();
+        $construction = self::queryTable('base_construction')
+            ->where('base_id', $baseId)
+            ->whereNull('deleted_at')
+            ->first();
+        $budgets = self::queryTable('base_budget')
+            ->where('base_id', $baseId)
+            ->whereNull('deleted_at')
+            ->orderBy('sort')
+            ->orderBy('id')
+            ->get();
+
+        $people = self::rows($people);
+        return [
+            'item' => self::rows([$item])[0],
+            'profession_ids' => array_values(array_map(static fn ($row): int => (int) $row->profession_id, $professions->all())),
+            'professions' => self::rows($professions),
+            'manager' => array_values(array_filter($people, static fn (array $row): bool => ($row['person_type'] ?? '') === 'manager'))[0] ?? null,
+            'teachers' => array_values(array_filter($people, static fn (array $row): bool => ($row['person_type'] ?? '') === 'teacher')),
+            'mentors' => array_values(array_filter($people, static fn (array $row): bool => ($row['person_type'] ?? '') === 'mentor')),
+            'existing_sites' => self::rows($existingSites),
+            'company_profile' => $companyProfile ? self::rows([$companyProfile])[0] : null,
+            'construction' => $construction ? self::rows([$construction])[0] : null,
+            'budgets' => self::rows($budgets),
+        ];
+    }
+
+    /** 查询基地关联专业 */
+    public static function baseProfessionIds(int $baseId): array
+    {
+        if ($baseId <= 0) {
+            return [];
+        }
+
+        return self::queryTable('base_profession')
+            ->where('base_id', $baseId)
+            ->whereNull('deleted_at')
+            ->pluck('profession_id')
+            ->map(static fn ($id): int => (int) $id)
+            ->values()
+            ->all();
+    }
+
+    /** 保存基地关联快照 */
+    public static function saveBaseRelations(int $baseId, array $relations, string $now): void
+    {
+        $relationTables = ['base_person', 'base_existing_site', 'base_budget'];
+        foreach ($relationTables as $table) {
+            self::queryTable($table)
+                ->where('base_id', $baseId)
+                ->whereNull('deleted_at')
+                ->update(['deleted_at' => $now, 'updated_at' => $now]);
+        }
+
+        foreach (self::ids($relations['profession_ids'] ?? []) as $professionId) {
+            $existing = self::queryTable('base_profession')
+                ->where('base_id', $baseId)
+                ->where('profession_id', $professionId)
+                ->first(['id']);
+            if ($existing) {
+                self::updateById('base_profession', (int) $existing->id, [
+                    'status' => 'enabled',
+                    'updated_at' => $now,
+                    'deleted_at' => null,
+                ]);
+            } else {
+                self::insertRow('base_profession', [
+                    'uuid' => self::relationUuid(),
+                    'base_id' => $baseId,
+                    'profession_id' => $professionId,
+                    'status' => 'enabled',
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                    'deleted_at' => null,
+                ]);
+            }
+        }
+
+        self::queryTable('base_profession')
+            ->where('base_id', $baseId)
+            ->whereNotIn('profession_id', self::ids($relations['profession_ids'] ?? []) ?: [0])
+            ->whereNull('deleted_at')
+            ->update(['deleted_at' => $now, 'updated_at' => $now]);
+
+        $people = [];
+        if (is_array($relations['manager'] ?? null)) {
+            $people[] = array_merge($relations['manager'], ['person_type' => 'manager', 'sort' => 0]);
+        }
+        foreach (['teachers', 'mentors'] as $type) {
+            foreach ((array) ($relations[$type] ?? []) as $sort => $person) {
+                if (is_array($person)) {
+                    $people[] = array_merge($person, ['person_type' => $type === 'teachers' ? 'teacher' : 'mentor', 'sort' => $sort]);
+                }
+            }
+        }
+        foreach ($people as $person) {
+            self::insertRow('base_person', [
+                'uuid' => self::relationUuid(),
+                'base_id' => $baseId,
+                'person_type' => (string) ($person['person_type'] ?? 'mentor'),
+                'user_id' => self::nullableRelationInt($person['user_id'] ?? null),
+                'name' => self::relationText($person['name'] ?? null, 80),
+                'gender' => self::relationText($person['gender'] ?? null, 20),
+                'birth_date' => self::relationText($person['birth_date'] ?? null, 40),
+                'title' => self::relationText($person['title'] ?? null, 120),
+                'education' => self::relationText($person['education'] ?? null, 80),
+                'phone' => self::relationText($person['phone'] ?? null, 40),
+                'duties' => self::relationText($person['duties'] ?? null, 10000),
+                'sort' => (int) ($person['sort'] ?? 0),
+                'status' => 'enabled',
+                'created_at' => $now,
+                'updated_at' => $now,
+                'deleted_at' => null,
+            ]);
+        }
+
+        foreach ((array) ($relations['existing_sites'] ?? []) as $sort => $site) {
+            if (!is_array($site) || self::relationText($site['site_name'] ?? null, 180) === '') {
+                continue;
+            }
+            self::insertRow('base_existing_site', [
+                'uuid' => self::relationUuid(),
+                'base_id' => $baseId,
+                'site_name' => self::relationText($site['site_name'] ?? null, 180),
+                'cooperation' => self::relationText($site['cooperation'] ?? null, 10000),
+                'sort' => $sort,
+                'status' => 'enabled',
+                'created_at' => $now,
+                'updated_at' => $now,
+                'deleted_at' => null,
+            ]);
+        }
+
+        foreach ((array) ($relations['budgets'] ?? []) as $sort => $budget) {
+            if (!is_array($budget) || self::relationText($budget['item_name'] ?? null, 180) === '') {
+                continue;
+            }
+            self::insertRow('base_budget', [
+                'uuid' => self::relationUuid(),
+                'base_id' => $baseId,
+                'item_name' => self::relationText($budget['item_name'] ?? null, 180),
+                'content' => self::relationText($budget['content'] ?? null, 10000),
+                'amount' => self::relationDecimal($budget['amount'] ?? null),
+                'remark' => self::relationText($budget['remark'] ?? null, 10000),
+                'sort' => $sort,
+                'status' => 'enabled',
+                'created_at' => $now,
+                'updated_at' => $now,
+                'deleted_at' => null,
+            ]);
+        }
+
+        self::saveBaseOneToOne('base_company_profile', $baseId, $relations['company_profile'] ?? null, $now);
+        self::saveBaseOneToOne('base_construction', $baseId, $relations['construction'] ?? null, $now);
+    }
+
+    private static function saveBaseOneToOne(string $table, int $baseId, mixed $data, string $now): void
+    {
+        $existing = self::queryTable($table)->where('base_id', $baseId)->first(['id']);
+        $values = [
+            'base_id' => $baseId,
+            'updated_at' => $now,
+            'deleted_at' => null,
+        ];
+        if ($table === 'base_company_profile') {
+            $values += [
+                'company_name' => self::relationText(is_array($data) ? ($data['company_name'] ?? null) : null, 180),
+                'registered_capital' => self::relationText(is_array($data) ? ($data['registered_capital'] ?? null) : null, 80),
+                'main_business' => self::relationText(is_array($data) ? ($data['main_business'] ?? null) : null, 10000),
+                'employee_count' => self::nullableRelationInt(is_array($data) ? ($data['employee_count'] ?? null) : null) ?? 0,
+                'annual_intern_count' => self::nullableRelationInt(is_array($data) ? ($data['annual_intern_count'] ?? null) : null) ?? 0,
+                'senior_title_count' => self::nullableRelationInt(is_array($data) ? ($data['senior_title_count'] ?? null) : null) ?? 0,
+            ];
+        } else {
+            $values['content'] = self::relationText(is_array($data) ? ($data['content'] ?? null) : null, 100000);
+        }
+
+        if ($existing) {
+            self::updateById($table, (int) $existing->id, $values);
+            return;
+        }
+
+        self::insertRow($table, array_merge($values, [
+            'uuid' => self::relationUuid(),
+            'status' => 'enabled',
+            'created_at' => $now,
+        ]));
     }
 
     public static function baseFlowPage(string $table, array $scope, array $filters): array
@@ -4036,11 +4271,53 @@ class InternshipRecord extends TableRecord
         if ($roleType === 'college_admin') {
             return self::whereInOrDeny($query, 'base.dep_id', $scope['dep_ids'] ?? []);
         }
+        if ($roleType === 'profession_admin') {
+            $professionIds = self::ids($scope['profession_ids'] ?? []);
+            if (!$professionIds) {
+                return $query->whereRaw('1 = 0');
+            }
+
+            return $query->whereExists(function ($subQuery) use ($professionIds): void {
+                $subQuery->selectRaw('1')
+                    ->from('base_profession')
+                    ->whereColumn('base_profession.base_id', 'base.id')
+                    ->whereIn('base_profession.profession_id', $professionIds)
+                    ->whereNull('base_profession.deleted_at');
+            });
+        }
         if ($roleType === 'enterprise') {
             return self::whereInOrDeny($query, 'base.company_id', $scope['company_ids'] ?? []);
         }
 
         return $query;
+    }
+
+    private static function relationUuid(): string
+    {
+        $data = random_bytes(16);
+        $data[6] = chr((ord($data[6]) & 0x0f) | 0x40);
+        $data[8] = chr((ord($data[8]) & 0x3f) | 0x80);
+        return vsprintf('%s%s-%s-%s-%s-%s%s%s', str_split(bin2hex($data), 4));
+    }
+
+    private static function relationText(mixed $value, int $maxLength): ?string
+    {
+        $text = trim((string) ($value ?? ''));
+        if ($text === '') {
+            return null;
+        }
+
+        return function_exists('mb_substr') ? mb_substr($text, 0, $maxLength) : substr($text, 0, $maxLength);
+    }
+
+    private static function nullableRelationInt(mixed $value): ?int
+    {
+        return is_numeric($value) ? (int) $value : null;
+    }
+
+    private static function relationDecimal(mixed $value): ?float
+    {
+        return is_numeric($value) ? round((float) $value, 2) : null;
     }
 
     private static function applyBaseFlowScope(mixed $query, array $scope, string $table): mixed
@@ -4053,7 +4330,18 @@ class InternshipRecord extends TableRecord
             return self::whereInOrDeny($query, "{$table}.dep_id", $scope['dep_ids'] ?? []);
         }
         if ($roleType === 'profession_admin') {
-            return self::whereInOrDeny($query, "{$table}.dep_id", $scope['profession_dep_ids'] ?? []);
+            $professionIds = self::ids($scope['profession_ids'] ?? []);
+            if (!$professionIds) {
+                return $query->whereRaw('1 = 0');
+            }
+
+            return $query->whereExists(function ($subQuery) use ($professionIds, $table): void {
+                $subQuery->selectRaw('1')
+                    ->from('base_profession')
+                    ->whereColumn('base_profession.base_id', "{$table}.base_id")
+                    ->whereIn('base_profession.profession_id', $professionIds)
+                    ->whereNull('base_profession.deleted_at');
+            });
         }
         if ($roleType === 'enterprise') {
             return self::whereInOrDeny($query, "{$table}.base_id", $scope['base_ids'] ?? []);

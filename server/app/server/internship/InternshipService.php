@@ -225,24 +225,115 @@ class InternshipService
         return InternshipRecord::basePage($this->scopeContext(), $this->requestFilters($request, ['page', 'page_size', 'per_page', 'keyword']));
     }
 
+    /** 返回当前账号可见的基地完整资料 */
+    public function baseDetail(Request $request): array
+    {
+        $this->requirePermission('internship:view');
+        $id = $this->requiredRowId($request, 'base');
+        $detail = InternshipRecord::baseDetail($this->scopeContext(), $id);
+        if (!$detail) {
+            throw new RuntimeException('实习基地不存在或无权限', 40301);
+        }
+
+        return $detail;
+    }
+
+    /** 保存长期或临时基地及其结构化资料 */
     public function saveBase(Request $request): array
     {
         $this->requirePermission('internship:manage');
         $this->requireAdminRole();
 
+        $scope = $this->scopeContext();
+        $id = $this->inputRowId($request, 'base');
+        if ($id && !InternshipRecord::baseDetail($scope, $id)) {
+            throw new RuntimeException('实习基地不存在或无权限', 40301);
+        }
+
+        $baseType = $this->enum($request, 'base_type', ['long_term', 'temporary'], 'long_term');
+        $depId = $this->optionalInt($request, 'dep_id');
+        if (!$depId && CurrentContext::roleType() === 'college_admin') {
+            $depId = $this->singleScopeId('dep_id');
+        }
+        if ($depId) {
+            $this->assertDepartmentVisible($depId);
+        }
+
+        $professionIds = $this->intArray($this->requestArray($request, 'profession_ids'));
+        foreach ($professionIds as $professionId) {
+            if (!InternshipRecord::professionVisible($scope, $professionId)) {
+                throw new RuntimeException('专业不在当前账号管理范围内', 40301);
+            }
+        }
+        if (!$depId && CurrentContext::roleType() === 'profession_admin') {
+            $professionDepIds = $this->professionDepIds($professionIds ?: $this->scopeIds('profession_id'));
+            $depId = count($professionDepIds) === 1 ? $professionDepIds[0] : null;
+        }
+        if (CurrentContext::roleType() === 'profession_admin' && !$professionIds) {
+            throw new InvalidArgumentException('专业管理员至少需要选择一个服务专业');
+        }
+
+        $manager = $this->basePersonInput($this->requestArray($request, 'manager'));
+        if (!$manager && $this->stringInput($request, 'manager_name', 80) !== '') {
+            $manager = $this->basePersonInput([
+                'name' => $this->stringInput($request, 'manager_name', 80),
+                'phone' => $this->stringInput($request, 'manager_phone', 40),
+            ]);
+        }
+        $address = $this->nullableString($request, 'address', 255);
+        $managerName = (string) ($manager['name'] ?? '');
+        if ($baseType === 'temporary' && $this->stringInput($request, 'name', 180) === '') {
+            $generatedName = trim(implode('－', array_filter([$address, $managerName, '临时基地'])));
+            if ($generatedName === '') {
+                throw new InvalidArgumentException('临时基地名称为空时，基地位置和负责人至少填写一项');
+            }
+            $name = $generatedName;
+        } else {
+            $name = $this->requiredString($request, 'name', 180);
+        }
+
+        $relations = [
+            'profession_ids' => $professionIds,
+            'manager' => $manager,
+            'teachers' => $this->basePeopleInput($this->requestArray($request, 'teachers')),
+            'mentors' => $this->basePeopleInput($this->requestArray($request, 'mentors')),
+            'existing_sites' => $this->baseExistingSitesInput($this->requestArray($request, 'existing_sites')),
+            'company_profile' => $this->baseCompanyProfileInput($this->requestArray($request, 'company_profile')),
+            'construction' => [
+                'content' => $this->stringValue($request->input('construction_content', $request->input('construction.content', null)), 100000),
+            ],
+            'budgets' => $this->baseBudgetsInput($this->requestArray($request, 'budgets')),
+        ];
+        $now = $this->now();
         $values = [
-            'name' => $this->requiredString($request, 'name', 180),
+            'name' => $name,
             'code' => $this->nullableString($request, 'code', 120),
             'company_id' => $this->optionalInt($request, 'company_id'),
-            'dep_id' => $this->optionalInt($request, 'dep_id'),
-            'address' => $this->nullableString($request, 'address', 255),
+            'dep_id' => $depId,
+            'base_type' => $baseType,
+            'address' => $address,
+            'area' => $this->decimalInput($request, 'area'),
+            'annual_student_count' => $this->optionalInt($request, 'annual_student_count') ?? 0,
+            'current_student_count' => $this->optionalInt($request, 'current_student_count') ?? 0,
+            'service_courses' => $this->nullableString($request, 'service_courses', 10000),
+            'category' => $this->nullableString($request, 'category', 80),
+            'manager_name' => $managerName !== '' ? $managerName : null,
+            'manager_phone' => $manager['phone'] ?? null,
             'capacity' => $this->optionalInt($request, 'capacity') ?? 0,
-            'status' => $this->enum($request, 'status', ['enabled', 'disabled'], 'enabled'),
-            'updated_at' => $this->now(),
+            'status' => 'enabled',
+            'updated_by' => CurrentContext::accountId(),
+            'updated_at' => $now,
             'deleted_at' => null,
         ];
+        if (!$id) {
+            $values['created_by'] = CurrentContext::accountId();
+        }
 
-        return $this->saveRow('base', $request, $values);
+        return $this->connection()->transaction(function () use ($request, $values, $relations, $now, $scope): array {
+            $result = $this->saveRow('base', $request, $values);
+            InternshipRecord::saveBaseRelations((int) $result['id'], $relations, $now);
+            return InternshipRecord::baseDetail($scope, (int) $result['id']) ?: $result;
+        });
     }
 
     public function baseFlows(Request $request): array
@@ -3921,6 +4012,113 @@ class InternshipService
     {
         $value = $request->input($key);
         return is_numeric($value) ? (int) $value : null;
+    }
+
+    private function requestArray(Request $request, string $key): array
+    {
+        $value = $request->input($key);
+        if (is_string($value)) {
+            $decoded = json_decode($value, true);
+            $value = json_last_error() === JSON_ERROR_NONE ? $decoded : null;
+        }
+
+        return is_array($value) ? $value : [];
+    }
+
+    private function basePersonInput(mixed $value): array
+    {
+        if (!is_array($value)) {
+            return [];
+        }
+
+        $person = [
+            'user_id' => is_numeric($value['user_id'] ?? null) ? (int) $value['user_id'] : null,
+            'name' => $this->stringValue($value['name'] ?? null, 80),
+            'gender' => $this->stringValue($value['gender'] ?? null, 20),
+            'birth_date' => $this->stringValue($value['birth_date'] ?? null, 40),
+            'title' => $this->stringValue($value['title'] ?? ($value['position'] ?? null), 120),
+            'education' => $this->stringValue($value['education'] ?? null, 80),
+            'phone' => $this->stringValue($value['phone'] ?? ($value['mobile'] ?? null), 40),
+            'duties' => $this->stringValue($value['duties'] ?? ($value['responsibility'] ?? null), 10000),
+        ];
+        if ($person['name'] === '' && !$person['user_id']) {
+            return [];
+        }
+
+        return $person;
+    }
+
+    private function basePeopleInput(array $values): array
+    {
+        $items = [];
+        foreach ($values as $value) {
+            $person = $this->basePersonInput($value);
+            if ($person) {
+                $items[] = $person;
+            }
+        }
+
+        return $items;
+    }
+
+    private function baseExistingSitesInput(array $values): array
+    {
+        $items = [];
+        foreach ($values as $value) {
+            if (!is_array($value)) {
+                continue;
+            }
+            $name = $this->stringValue($value['site_name'] ?? ($value['name'] ?? null), 180);
+            if ($name === '') {
+                continue;
+            }
+            $items[] = [
+                'site_name' => $name,
+                'cooperation' => $this->stringValue($value['cooperation'] ?? ($value['content'] ?? null), 10000),
+            ];
+        }
+
+        return $items;
+    }
+
+    private function baseCompanyProfileInput(array $value): array
+    {
+        return [
+            'company_name' => $this->stringValue($value['company_name'] ?? null, 180),
+            'registered_capital' => $this->stringValue($value['registered_capital'] ?? null, 80),
+            'main_business' => $this->stringValue($value['main_business'] ?? null, 10000),
+            'employee_count' => is_numeric($value['employee_count'] ?? null) ? (int) $value['employee_count'] : 0,
+            'annual_intern_count' => is_numeric($value['annual_intern_count'] ?? null) ? (int) $value['annual_intern_count'] : 0,
+            'senior_title_count' => is_numeric($value['senior_title_count'] ?? null) ? (int) $value['senior_title_count'] : 0,
+        ];
+    }
+
+    private function baseBudgetsInput(array $values): array
+    {
+        $items = [];
+        foreach ($values as $value) {
+            if (!is_array($value) || $this->stringValue($value['item_name'] ?? ($value['name'] ?? null), 180) === '') {
+                continue;
+            }
+            $items[] = [
+                'item_name' => $this->stringValue($value['item_name'] ?? ($value['name'] ?? null), 180),
+                'content' => $this->stringValue($value['content'] ?? null, 10000),
+                'amount' => is_numeric($value['amount'] ?? null) ? round((float) $value['amount'], 2) : null,
+                'remark' => $this->stringValue($value['remark'] ?? null, 10000),
+            ];
+        }
+
+        return $items;
+    }
+
+    private function stringValue(mixed $value, int $maxLength): string
+    {
+        $text = trim((string) ($value ?? ''));
+        if ($text === '') {
+            return '';
+        }
+
+        return function_exists('mb_substr') ? mb_substr($text, 0, $maxLength) : substr($text, 0, $maxLength);
     }
 
     private function intArray(mixed $value): array

@@ -675,7 +675,73 @@ function schoolBusinessStatements(): array
         simpleTable('favorite_link', ['`account_id` BIGINT UNSIGNED DEFAULT NULL', '`user_id` BIGINT UNSIGNED DEFAULT NULL', '`title` VARCHAR(180) DEFAULT NULL', '`url` VARCHAR(500) DEFAULT NULL', '`icon_url` VARCHAR(500) DEFAULT NULL', '`icon_file_id` BIGINT UNSIGNED DEFAULT NULL', '`sort` INT DEFAULT 0', 'KEY `idx_account_status` (`account_id`, `status`)', 'KEY `idx_user_id` (`user_id`)']),
         simpleTable('theme_preset', ['`theme_json` JSON DEFAULT NULL']),
         simpleTable('api_key', ['`account_id` BIGINT UNSIGNED DEFAULT NULL', '`api_key_hash` CHAR(64) DEFAULT NULL', '`enabled` ENUM(\'false\',\'true\') DEFAULT \'false\'']),
-        simpleTable('base', ['`company_id` BIGINT UNSIGNED DEFAULT NULL', '`dep_id` BIGINT UNSIGNED DEFAULT NULL', '`address` VARCHAR(255) DEFAULT NULL']),
+        simpleTable('base', [
+            '`company_id` BIGINT UNSIGNED DEFAULT NULL',
+            '`dep_id` BIGINT UNSIGNED DEFAULT NULL',
+            '`base_type` VARCHAR(20) DEFAULT \'long_term\'',
+            '`address` VARCHAR(255) DEFAULT NULL',
+            '`area` DECIMAL(12,2) DEFAULT NULL',
+            '`annual_student_count` INT UNSIGNED DEFAULT 0',
+            '`current_student_count` INT UNSIGNED DEFAULT 0',
+            '`service_courses` TEXT DEFAULT NULL',
+            '`category` VARCHAR(80) DEFAULT NULL',
+            '`manager_name` VARCHAR(80) DEFAULT NULL',
+            '`manager_phone` VARCHAR(40) DEFAULT NULL',
+            '`created_by` BIGINT UNSIGNED DEFAULT NULL',
+            '`updated_by` BIGINT UNSIGNED DEFAULT NULL',
+        ]),
+        simpleTable('base_profession', [
+            '`base_id` BIGINT UNSIGNED NOT NULL',
+            '`profession_id` BIGINT UNSIGNED NOT NULL',
+            'UNIQUE KEY `uk_base_profession` (`base_id`, `profession_id`)',
+            'KEY `idx_profession_id` (`profession_id`)',
+        ]),
+        simpleTable('base_person', [
+            '`base_id` BIGINT UNSIGNED NOT NULL',
+            '`person_type` VARCHAR(20) NOT NULL',
+            '`user_id` BIGINT UNSIGNED DEFAULT NULL',
+            '`name` VARCHAR(80) DEFAULT NULL',
+            '`gender` VARCHAR(20) DEFAULT NULL',
+            '`birth_date` VARCHAR(40) DEFAULT NULL',
+            '`title` VARCHAR(120) DEFAULT NULL',
+            '`education` VARCHAR(80) DEFAULT NULL',
+            '`phone` VARCHAR(40) DEFAULT NULL',
+            '`duties` TEXT DEFAULT NULL',
+            '`sort` INT DEFAULT 0',
+            'KEY `idx_base_type` (`base_id`, `person_type`, `status`)',
+            'KEY `idx_user_id` (`user_id`)',
+        ]),
+        simpleTable('base_existing_site', [
+            '`base_id` BIGINT UNSIGNED NOT NULL',
+            '`site_name` VARCHAR(180) DEFAULT NULL',
+            '`cooperation` TEXT DEFAULT NULL',
+            '`sort` INT DEFAULT 0',
+            'KEY `idx_base_sort` (`base_id`, `sort`, `status`)',
+        ]),
+        simpleTable('base_company_profile', [
+            '`base_id` BIGINT UNSIGNED NOT NULL',
+            '`company_name` VARCHAR(180) DEFAULT NULL',
+            '`registered_capital` VARCHAR(80) DEFAULT NULL',
+            '`main_business` TEXT DEFAULT NULL',
+            '`employee_count` INT UNSIGNED DEFAULT 0',
+            '`annual_intern_count` INT UNSIGNED DEFAULT 0',
+            '`senior_title_count` INT UNSIGNED DEFAULT 0',
+            'UNIQUE KEY `uk_base_company_profile` (`base_id`)',
+        ]),
+        simpleTable('base_construction', [
+            '`base_id` BIGINT UNSIGNED NOT NULL',
+            '`content` MEDIUMTEXT DEFAULT NULL',
+            'UNIQUE KEY `uk_base_construction` (`base_id`)',
+        ]),
+        simpleTable('base_budget', [
+            '`base_id` BIGINT UNSIGNED NOT NULL',
+            '`item_name` VARCHAR(180) DEFAULT NULL',
+            '`content` TEXT DEFAULT NULL',
+            '`amount` DECIMAL(12,2) DEFAULT NULL',
+            '`remark` TEXT DEFAULT NULL',
+            '`sort` INT DEFAULT 0',
+            'KEY `idx_base_sort` (`base_id`, `sort`, `status`)',
+        ]),
         simpleTable('base_profession_direction', ['`base_id` BIGINT UNSIGNED NOT NULL', '`profession_id` BIGINT UNSIGNED NOT NULL', '`direction_id` BIGINT UNSIGNED NOT NULL', 'UNIQUE KEY `uk_base_profession_direction` (`base_id`, `profession_id`, `direction_id`)']),
         simpleTable('enterprise_mentor', ['`company_id` BIGINT UNSIGNED DEFAULT NULL', '`mentor_name` VARCHAR(80) DEFAULT NULL', '`mobile` VARCHAR(40) DEFAULT NULL']),
         simpleTable('arrangement', ['`plan_id` BIGINT UNSIGNED DEFAULT NULL', '`base_id` BIGINT UNSIGNED DEFAULT NULL', '`dep_id` BIGINT UNSIGNED DEFAULT NULL', '`profession_id` BIGINT UNSIGNED DEFAULT NULL', '`semester` VARCHAR(80) DEFAULT NULL', '`teacher_id` BIGINT UNSIGNED DEFAULT NULL', '`task_no` VARCHAR(80) DEFAULT NULL', '`batch_no` VARCHAR(80) DEFAULT NULL', '`credit` DECIMAL(5,2) DEFAULT NULL', '`student_count` INT DEFAULT 0', '`start_date` DATE DEFAULT NULL', '`end_date` DATE DEFAULT NULL']),
@@ -997,9 +1063,63 @@ function ensureInternshipSchema(PDO $pdo): void
         'base' => [
             'company_id' => "ALTER TABLE `base` ADD COLUMN `company_id` BIGINT UNSIGNED DEFAULT NULL AFTER `code`",
             'dep_id' => "ALTER TABLE `base` ADD COLUMN `dep_id` BIGINT UNSIGNED DEFAULT NULL AFTER `company_id`",
+            'base_type' => "ALTER TABLE `base` ADD COLUMN `base_type` VARCHAR(20) DEFAULT 'long_term' AFTER `dep_id`",
             'address' => "ALTER TABLE `base` ADD COLUMN `address` VARCHAR(255) DEFAULT NULL AFTER `dep_id`",
+            'area' => "ALTER TABLE `base` ADD COLUMN `area` DECIMAL(12,2) DEFAULT NULL AFTER `address`",
+            'annual_student_count' => "ALTER TABLE `base` ADD COLUMN `annual_student_count` INT UNSIGNED DEFAULT 0 AFTER `area`",
+            'current_student_count' => "ALTER TABLE `base` ADD COLUMN `current_student_count` INT UNSIGNED DEFAULT 0 AFTER `annual_student_count`",
+            'service_courses' => "ALTER TABLE `base` ADD COLUMN `service_courses` TEXT DEFAULT NULL AFTER `current_student_count`",
+            'category' => "ALTER TABLE `base` ADD COLUMN `category` VARCHAR(80) DEFAULT NULL AFTER `service_courses`",
+            'manager_name' => "ALTER TABLE `base` ADD COLUMN `manager_name` VARCHAR(80) DEFAULT NULL AFTER `category`",
+            'manager_phone' => "ALTER TABLE `base` ADD COLUMN `manager_phone` VARCHAR(40) DEFAULT NULL AFTER `manager_name`",
+            'created_by' => "ALTER TABLE `base` ADD COLUMN `created_by` BIGINT UNSIGNED DEFAULT NULL AFTER `manager_phone`",
+            'updated_by' => "ALTER TABLE `base` ADD COLUMN `updated_by` BIGINT UNSIGNED DEFAULT NULL AFTER `created_by`",
             'capacity' => "ALTER TABLE `base` ADD COLUMN `capacity` INT UNSIGNED DEFAULT 0 AFTER `address`",
             'used_count' => "ALTER TABLE `base` ADD COLUMN `used_count` INT UNSIGNED DEFAULT 0 AFTER `capacity`",
+        ],
+        'base_profession' => [
+            'base_id' => "ALTER TABLE `base_profession` ADD COLUMN `base_id` BIGINT UNSIGNED NOT NULL AFTER `code`",
+            'profession_id' => "ALTER TABLE `base_profession` ADD COLUMN `profession_id` BIGINT UNSIGNED NOT NULL AFTER `base_id`",
+        ],
+        'base_person' => [
+            'base_id' => "ALTER TABLE `base_person` ADD COLUMN `base_id` BIGINT UNSIGNED NOT NULL AFTER `code`",
+            'person_type' => "ALTER TABLE `base_person` ADD COLUMN `person_type` VARCHAR(20) NOT NULL AFTER `base_id`",
+            'user_id' => "ALTER TABLE `base_person` ADD COLUMN `user_id` BIGINT UNSIGNED DEFAULT NULL AFTER `person_type`",
+            'name' => "ALTER TABLE `base_person` ADD COLUMN `name` VARCHAR(80) DEFAULT NULL AFTER `user_id`",
+            'gender' => "ALTER TABLE `base_person` ADD COLUMN `gender` VARCHAR(20) DEFAULT NULL AFTER `name`",
+            'birth_date' => "ALTER TABLE `base_person` ADD COLUMN `birth_date` VARCHAR(40) DEFAULT NULL AFTER `gender`",
+            'title' => "ALTER TABLE `base_person` ADD COLUMN `title` VARCHAR(120) DEFAULT NULL AFTER `birth_date`",
+            'education' => "ALTER TABLE `base_person` ADD COLUMN `education` VARCHAR(80) DEFAULT NULL AFTER `title`",
+            'phone' => "ALTER TABLE `base_person` ADD COLUMN `phone` VARCHAR(40) DEFAULT NULL AFTER `education`",
+            'duties' => "ALTER TABLE `base_person` ADD COLUMN `duties` TEXT DEFAULT NULL AFTER `phone`",
+            'sort' => "ALTER TABLE `base_person` ADD COLUMN `sort` INT DEFAULT 0 AFTER `duties`",
+        ],
+        'base_existing_site' => [
+            'base_id' => "ALTER TABLE `base_existing_site` ADD COLUMN `base_id` BIGINT UNSIGNED NOT NULL AFTER `code`",
+            'site_name' => "ALTER TABLE `base_existing_site` ADD COLUMN `site_name` VARCHAR(180) DEFAULT NULL AFTER `base_id`",
+            'cooperation' => "ALTER TABLE `base_existing_site` ADD COLUMN `cooperation` TEXT DEFAULT NULL AFTER `site_name`",
+            'sort' => "ALTER TABLE `base_existing_site` ADD COLUMN `sort` INT DEFAULT 0 AFTER `cooperation`",
+        ],
+        'base_company_profile' => [
+            'base_id' => "ALTER TABLE `base_company_profile` ADD COLUMN `base_id` BIGINT UNSIGNED NOT NULL AFTER `code`",
+            'company_name' => "ALTER TABLE `base_company_profile` ADD COLUMN `company_name` VARCHAR(180) DEFAULT NULL AFTER `base_id`",
+            'registered_capital' => "ALTER TABLE `base_company_profile` ADD COLUMN `registered_capital` VARCHAR(80) DEFAULT NULL AFTER `company_name`",
+            'main_business' => "ALTER TABLE `base_company_profile` ADD COLUMN `main_business` TEXT DEFAULT NULL AFTER `registered_capital`",
+            'employee_count' => "ALTER TABLE `base_company_profile` ADD COLUMN `employee_count` INT UNSIGNED DEFAULT 0 AFTER `main_business`",
+            'annual_intern_count' => "ALTER TABLE `base_company_profile` ADD COLUMN `annual_intern_count` INT UNSIGNED DEFAULT 0 AFTER `employee_count`",
+            'senior_title_count' => "ALTER TABLE `base_company_profile` ADD COLUMN `senior_title_count` INT UNSIGNED DEFAULT 0 AFTER `annual_intern_count`",
+        ],
+        'base_construction' => [
+            'base_id' => "ALTER TABLE `base_construction` ADD COLUMN `base_id` BIGINT UNSIGNED NOT NULL AFTER `code`",
+            'content' => "ALTER TABLE `base_construction` ADD COLUMN `content` MEDIUMTEXT DEFAULT NULL AFTER `base_id`",
+        ],
+        'base_budget' => [
+            'base_id' => "ALTER TABLE `base_budget` ADD COLUMN `base_id` BIGINT UNSIGNED NOT NULL AFTER `code`",
+            'item_name' => "ALTER TABLE `base_budget` ADD COLUMN `item_name` VARCHAR(180) DEFAULT NULL AFTER `base_id`",
+            'content' => "ALTER TABLE `base_budget` ADD COLUMN `content` TEXT DEFAULT NULL AFTER `item_name`",
+            'amount' => "ALTER TABLE `base_budget` ADD COLUMN `amount` DECIMAL(12,2) DEFAULT NULL AFTER `content`",
+            'remark' => "ALTER TABLE `base_budget` ADD COLUMN `remark` TEXT DEFAULT NULL AFTER `amount`",
+            'sort' => "ALTER TABLE `base_budget` ADD COLUMN `sort` INT DEFAULT 0 AFTER `remark`",
         ],
         'enterprise_mentor' => [
             'company_id' => "ALTER TABLE `enterprise_mentor` ADD COLUMN `company_id` BIGINT UNSIGNED DEFAULT NULL AFTER `code`",
@@ -1472,6 +1592,15 @@ function ensurePracticeSchema(PDO $pdo): void
         }
         ensureIndex($pdo, $table, "idx_{$table}_base", "ALTER TABLE `{$table}` ADD KEY `idx_{$table}_base` (`base_id`, `dep_id`, `status`)");
     }
+
+    ensureIndex($pdo, 'base', 'idx_base_scope', "ALTER TABLE `base` ADD KEY `idx_base_scope` (`base_type`, `dep_id`, `status`)");
+    ensureIndex($pdo, 'base_profession', 'uk_base_profession', "ALTER TABLE `base_profession` ADD UNIQUE KEY `uk_base_profession` (`base_id`, `profession_id`)");
+    ensureIndex($pdo, 'base_person', 'idx_base_person_type', "ALTER TABLE `base_person` ADD KEY `idx_base_person_type` (`base_id`, `person_type`, `status`)");
+    ensureIndex($pdo, 'base_person', 'idx_base_person_user', "ALTER TABLE `base_person` ADD KEY `idx_base_person_user` (`user_id`)");
+    ensureIndex($pdo, 'base_existing_site', 'idx_base_existing_site', "ALTER TABLE `base_existing_site` ADD KEY `idx_base_existing_site` (`base_id`, `sort`, `status`)");
+    ensureIndex($pdo, 'base_company_profile', 'uk_base_company_profile', "ALTER TABLE `base_company_profile` ADD UNIQUE KEY `uk_base_company_profile` (`base_id`)");
+    ensureIndex($pdo, 'base_construction', 'uk_base_construction', "ALTER TABLE `base_construction` ADD UNIQUE KEY `uk_base_construction` (`base_id`)");
+    ensureIndex($pdo, 'base_budget', 'idx_base_budget', "ALTER TABLE `base_budget` ADD KEY `idx_base_budget` (`base_id`, `sort`, `status`)");
 }
 
 function ensureMessageSchema(PDO $pdo): void
