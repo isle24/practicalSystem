@@ -362,20 +362,20 @@
                 <div v-if="win.module.id === 'internship'" class="internship-panel">
                   <div v-if="hasInternshipToolbarActions(win.panel)" class="internship-toolbar action-only">
                     <div class="data-list-actions">
-                      <el-button v-if="win.panel === 'arrangements' && canManageInternship" :icon="CalendarCheck" @click="openArrangementDialog">
-                        新增任务
-                      </el-button>
-                      <el-button v-if="win.panel === 'arrangements' && canManageInternship" :icon="Upload" :loading="internshipState.importing" @click="chooseArrangementImportExcel">
-                        导入任务分配
+                      <el-button v-if="win.panel === 'baseFlows' && canManageInternship" :icon="Plus" @click="openBaseDialog()">
+                        新增基地
                       </el-button>
                       <el-button v-if="win.panel === 'plans' && canManageInternshipPlan" :icon="FileText" @click="openPlanDialog">
                         新增计划
                       </el-button>
+                      <el-button v-if="win.panel === 'plans' && canManageInternshipPlan" :icon="Download" @click="downloadPlanImportTemplate">
+                        下载模板
+                      </el-button>
+                      <el-button v-if="win.panel === 'plans' && canManageInternshipPlan" :icon="Upload" :loading="internshipState.importing" @click="choosePlanImportExcel">
+                        导入计划表
+                      </el-button>
                       <el-button v-if="win.panel === 'scores' && canSaveInternshipScore" :icon="GraduationCap" @click="openScoreDialog">
                         录入成绩
-                      </el-button>
-                      <el-button v-if="win.panel === 'baseFlows' && canManageInternship" :icon="Plus" @click="openBaseFlowDialog">
-                        新增基地流程
                       </el-button>
                     </div>
                   </div>
@@ -387,15 +387,121 @@
                     show-icon
                     :title="internshipState.message"
                   />
+                  <el-alert
+                    v-else-if="internshipState.savedMessage"
+                    type="success"
+                    :closable="true"
+                    show-icon
+                    :title="internshipState.savedMessage"
+                    @close="internshipState.savedMessage = ''"
+                  />
 
+                  <Teleport to="body">
                   <div v-if="internshipState.dialog.type" class="operation-mask" @click.self="closeInternshipDialog">
-                    <section class="operation-dialog" :class="{ 'task-detail-dialog': internshipState.dialog.type === 'arrangementDetail' }">
+                    <section
+                      class="operation-dialog"
+                      :class="{
+                        'task-detail-dialog': ['arrangementDetail', 'planDetail', 'implementationDetail', 'base', 'contentDetail', 'planImport'].includes(internshipState.dialog.type),
+                        'internship-complex-dialog': ['planDetail', 'implementationDetail', 'base', 'planImport'].includes(internshipState.dialog.type),
+                      }"
+                    >
                       <header>
                         <strong>{{ internshipState.dialog.title }}</strong>
                         <button type="button" @click="closeInternshipDialog">关闭</button>
                       </header>
 
-                      <div v-if="internshipState.dialog.type === 'arrangement'" class="operation-form">
+                      <InternshipBaseForm
+                        v-if="internshipState.dialog.type === 'base'"
+                        :detail="internshipState.baseDetail"
+                        :loading="internshipState.loading"
+                        :options="internshipState.options"
+                        :readonly="internshipState.dialog.readonly"
+                        @cancel="closeInternshipDialog"
+                        @submit="submitInternshipBase"
+                      />
+
+                      <InternshipPlanDetail
+                        v-else-if="internshipState.dialog.type === 'planDetail'"
+                        :can-manage="canManageInternshipPlan"
+                        :plan="internshipState.planDetail"
+                        :status-tag-type="statusTagType"
+                        :status-text="statusText"
+                        @add-task="openTaskFromPlan"
+                        @close="closeInternshipDialog"
+                        @edit-plan="openPlanDialog"
+                        @edit-task="openArrangementDialog"
+                        @implementation="openImplementationDetail"
+                      />
+
+                      <InternshipImplementationDetail
+                        v-else-if="internshipState.dialog.type === 'implementationDetail'"
+                        :can-manage="canManageInternship"
+                        :detail="internshipState.implementationDetail"
+                        :loading="internshipState.loading"
+                        :options="internshipState.options"
+                        :status-tag-type="statusTagType"
+                        :status-text="statusText"
+                        @add-student="bindImplementationStudent"
+                        @close="closeInternshipDialog"
+                        @edit-task="openArrangementDialog"
+                        @export="exportImplementationDocument"
+                        @remove-student="unbindImplementationStudent"
+                        @save="submitImplementationSheet"
+                      />
+
+                      <div v-else-if="internshipState.dialog.type === 'planImport'" class="plan-import-preview">
+                        <div class="plan-import-summary">
+                          <article><span>原始行</span><strong>{{ internshipState.planImport.summary.source_rows }}</strong></article>
+                          <article><span>拆分后</span><strong>{{ internshipState.planImport.summary.preview_rows }}</strong></article>
+                          <article><span>错误行</span><strong>{{ internshipState.planImport.summary.error_rows }}</strong></article>
+                          <article><span>重复行</span><strong>{{ internshipState.planImport.summary.duplicate_rows }}</strong></article>
+                          <el-button size="small" @click="confirmAllPlanImportTypes">确认全部建议分类</el-button>
+                        </div>
+                        <el-table :data="internshipState.planImport.items" height="100%" stripe size="small">
+                          <el-table-column prop="row_number" label="行" width="62" fixed="left" />
+                          <el-table-column prop="course_name" label="课程名称" min-width="170" fixed="left" />
+                          <el-table-column prop="grade_name" label="届次" width="100" />
+                          <el-table-column prop="dep_name" label="学院" min-width="130" />
+                          <el-table-column prop="profession_name" label="专业" min-width="150" />
+                          <el-table-column prop="internship_credit" label="实习学分" width="90" />
+                          <el-table-column label="业务归属" width="150">
+                            <template #default="{ row }">
+                              <el-select v-model="row.business_type" size="small" :disabled="Boolean(row.errors?.length)">
+                                <el-option v-for="item in internshipState.planImport.business_types" :key="item.value" :label="item.label" :value="item.value" />
+                              </el-select>
+                            </template>
+                          </el-table-column>
+                          <el-table-column label="确认" width="78">
+                            <template #default="{ row }"><el-switch v-model="row.business_type_confirmed" :disabled="Boolean(row.errors?.length)" /></template>
+                          </el-table-column>
+                          <el-table-column label="重复处理" width="120">
+                            <template #default="{ row }">
+                              <el-select v-if="row.duplicate" v-model="row.duplicate_action" size="small">
+                                <el-option label="跳过" value="skip" />
+                                <el-option v-if="['draft', 'modify'].includes(row.duplicate.status)" label="更新草稿" value="update" />
+                              </el-select>
+                              <span v-else>-</span>
+                            </template>
+                          </el-table-column>
+                          <el-table-column label="校验结果" min-width="220">
+                            <template #default="{ row }">
+                              <span v-if="row.errors?.length" class="import-error-text">{{ row.errors.join('；') }}</span>
+                              <span v-else-if="row.duplicate">重复：{{ statusText(row.duplicate.status) }}</span>
+                              <span v-else class="import-ok-text">可导入</span>
+                            </template>
+                          </el-table-column>
+                        </el-table>
+                      </div>
+
+                      <div v-else-if="internshipState.dialog.type === 'contentDetail'" class="content-detail-view">
+                        <section v-for="field in internshipState.dialog.fields || []" :key="field.label">
+                          <span>{{ field.label }}</span>
+                          <div v-if="field.rich" class="rich-content-view" v-html="safeRichHtml(field.value)" />
+                          <pre v-else>{{ detailFieldText(field.value) }}</pre>
+                        </section>
+                      </div>
+
+                      <div v-else-if="internshipState.dialog.type === 'arrangement'" class="operation-form">
                         <label>
                           <span>实习计划</span>
                           <el-select v-model="internshipState.arrangementForm.plan_id" clearable filterable @change="handleArrangementPlanChange">
@@ -745,8 +851,8 @@
                         </div>
                       </div>
 
-                      <footer>
-                        <el-button @click="closeInternshipDialog">取消</el-button>
+                      <footer v-if="!['base', 'planDetail', 'implementationDetail'].includes(internshipState.dialog.type)">
+                        <el-button @click="closeInternshipDialog">{{ internshipState.dialog.type === 'contentDetail' ? '关闭' : '取消' }}</el-button>
                         <template v-if="internshipState.dialog.type === 'plan'">
                           <el-button :disabled="internshipState.loading" :loading="internshipState.loading" @click="submitInternshipPlan('draft')">保存草稿</el-button>
                           <el-button type="primary" :disabled="internshipState.loading" :loading="internshipState.loading" @click="submitInternshipPlan('wait')">提交审核</el-button>
@@ -759,12 +865,16 @@
                           <el-button :disabled="internshipState.loading" :loading="internshipState.loading" @click="saveInternshipDialogReviewDraft">保存草稿</el-button>
                           <el-button type="primary" :disabled="internshipState.loading" :loading="internshipState.loading" @click="confirmInternshipDialog">提交审核</el-button>
                         </template>
-                        <el-button v-else-if="internshipState.dialog.type !== 'timeline'" type="primary" :disabled="internshipState.loading" :loading="internshipState.loading" @click="confirmInternshipDialog">
+                        <el-button v-else-if="internshipState.dialog.type === 'planImport'" type="primary" :disabled="internshipState.loading" :loading="internshipState.loading" @click="confirmPlanImportPreview">
+                          确认导入
+                        </el-button>
+                        <el-button v-else-if="!['timeline', 'contentDetail'].includes(internshipState.dialog.type)" type="primary" :disabled="internshipState.loading" :loading="internshipState.loading" @click="confirmInternshipDialog">
                           确认
                         </el-button>
                       </footer>
                     </section>
                   </div>
+                  </Teleport>
 
                   <template v-if="win.panel === 'overview'">
                     <div class="internship-overview-work">
@@ -876,20 +986,14 @@
                       @search="loadInternshipPanel('baseFlows', 1)"
                     >
                       <template #actions="{ row }">
-                        <el-button v-if="canManageInternship && ['draft', 'modify'].includes(row.status)" link type="primary" @click="openBaseFlowDialog(row)">
+                        <el-button size="small" type="primary" plain @click="openBaseDialog(row, true)">
+                          查看
+                        </el-button>
+                        <el-button v-if="canManageInternship" link type="primary" @click="openBaseDialog(row)">
                           编辑
                         </el-button>
-                        <el-button v-if="canReviewRow(row, baseFlowEntity(row))" link type="primary" @click="openReviewDialog(baseFlowEntity(row), row, 'accept')">
-                          通过
-                        </el-button>
-                        <el-button v-if="canReviewRow(row, baseFlowEntity(row))" link type="warning" @click="openReviewDialog(baseFlowEntity(row), row, 'modify')">
-                          退回
-                        </el-button>
-                        <el-button v-if="canRequestModification(row, baseFlowEntity(row))" link type="danger" @click="openReopenDialog(baseFlowEntity(row), row)">
-                          通过后修改
-                        </el-button>
-                        <el-button size="small" type="primary" plain @click="openTimelineDialog(baseFlowEntity(row), row)">
-                          记录
+                        <el-button v-if="canManageInternship && row.base_type === 'long_term'" link type="success" @click="exportBaseDocument(row)">
+                          导出 Word
                         </el-button>
                       </template>
                     </DataListPanel>
@@ -974,6 +1078,9 @@
                       @search="loadInternshipPanel('plans', 1)"
                     >
                       <template #actions="{ row }">
+                        <el-button size="small" type="primary" plain @click="openPlanDetail(row)">
+                          查看
+                        </el-button>
                         <el-button v-if="canEditInternshipPlan(row)" link type="primary" @click="openPlanDialog(row)">
                           {{ row.status === 'modify' ? '重新提交' : '编辑' }}
                         </el-button>
@@ -993,6 +1100,30 @@
                     </DataListPanel>
                   </template>
 
+                  <template v-else-if="win.panel === 'implementationSheets'">
+                    <DataListPanel
+                      :columns="internshipListConfigs.implementationSheets.columns"
+                      :filters="internshipListConfigs.implementationSheets.filters"
+                      :filter-values="internshipState.filters.implementationSheets"
+                      :loading="internshipState.loading"
+                      :pagination="internshipState.lists.implementationSheets.pagination"
+                      :rows="internshipState.lists.implementationSheets.items"
+                      @filter-change="setInternshipFilter('implementationSheets', $event)"
+                      @page-change="page => loadInternshipPanel('implementationSheets', page)"
+                      @reset="resetInternshipFilters('implementationSheets')"
+                      @search="loadInternshipPanel('implementationSheets', 1)"
+                    >
+                      <template #actions="{ row }">
+                        <el-button size="small" type="primary" plain @click="openImplementationDetail(row)">
+                          查看实施
+                        </el-button>
+                        <el-button v-if="canManageInternship" link type="primary" @click="openArrangementDialog(row)">
+                          任务变更
+                        </el-button>
+                      </template>
+                    </DataListPanel>
+                  </template>
+
                   <template v-else-if="isInternshipReadOnlyListPanel(win.panel)">
                     <DataListPanel
                       :columns="internshipListConfigs[win.panel].columns"
@@ -1007,6 +1138,9 @@
                       @search="loadInternshipPanel(win.panel, 1)"
                     >
                       <template #actions="{ row }">
+                        <el-button v-if="hasInternshipContentDetail(win.panel)" size="small" type="primary" plain @click="openInternshipContentDetail(win.panel, row)">
+                          查看
+                        </el-button>
                         <el-button v-if="internshipTimelineEntity(win.panel)" size="small" type="primary" plain @click="openTimelineDialog(internshipTimelineEntity(win.panel), row)">
                           记录
                         </el-button>
@@ -1098,6 +1232,9 @@
                       @search="loadInternshipPanel('journals', 1)"
                     >
                       <template #actions="{ row }">
+                        <el-button size="small" type="primary" plain @click="openInternshipContentDetail('journals', row)">
+                          查看
+                        </el-button>
                         <el-button v-if="canReviewRow(row, 'journal')" link type="primary" @click="openReviewDialog('journal', row, 'accept')">
                           通过
                         </el-button>
@@ -1128,6 +1265,9 @@
                       @search="loadInternshipPanel('reports', 1)"
                     >
                       <template #actions="{ row }">
+                        <el-button size="small" type="primary" plain @click="openInternshipContentDetail('reports', row)">
+                          查看
+                        </el-button>
                         <el-button v-if="canReviewRow(row, 'report')" link type="primary" @click="openReviewDialog('report', row, 'accept')">
                           通过
                         </el-button>
@@ -3486,6 +3626,13 @@
       hidden
       @change="handleArrangementImportFile"
     >
+    <input
+      ref="planImportInputRef"
+      type="file"
+      accept=".xls,.xlsx"
+      hidden
+      @change="handlePlanImportFile"
+    >
   </main>
 </template>
 
@@ -3500,6 +3647,7 @@ import {
   ChartColumn,
   CheckCircle2,
   ClipboardList,
+  Download,
   Edit3,
   FileClock,
   FileText,
@@ -3540,6 +3688,9 @@ import DataListPanel from './components/DataListPanel.vue';
 import DocCenter from './components/DocCenter.vue';
 import ExportTaskCenter from './components/ExportTaskCenter.vue';
 import IconUpload from './components/IconUpload.vue';
+import InternshipBaseForm from './components/InternshipBaseForm.vue';
+import InternshipImplementationDetail from './components/InternshipImplementationDetail.vue';
+import InternshipPlanDetail from './components/InternshipPlanDetail.vue';
 import MenuEditDialog from './components/MenuEditDialog.vue';
 import OperationDialog from './components/OperationDialog.vue';
 import ShortcutTile from './components/ShortcutTile.vue';
@@ -3554,6 +3705,8 @@ import {
   clearTestData,
   deleteArchiveItem,
   deleteFavorite,
+  exportInternshipBaseWord,
+  exportInternshipImplementationPdf,
   fetchAdminAccountDetail,
   fetchAdminAccounts,
   fetchAdminMenus,
@@ -3571,6 +3724,8 @@ import {
   fetchInternshipArrangements,
   fetchInternshipDelays,
   fetchInternshipBaseFlows,
+  fetchInternshipBaseDetail,
+  fetchInternshipBases,
   fetchInternshipCourseScores,
   fetchInternshipInsurances,
   fetchInternshipJournals,
@@ -3586,9 +3741,11 @@ import {
   fetchInternshipStats,
   fetchInternshipSyllabusGuides,
   fetchInternshipImplementationSheets,
+  fetchInternshipImplementationDetail,
   fetchInternshipTeacherWorkReports,
   fetchInternshipInspections,
   fetchInternshipTimeline,
+  fetchInternshipPlanImportTemplate,
   fetchLoginPageSettings,
   fetchMessages,
   fetchMessageTargets,
@@ -3611,6 +3768,8 @@ import {
   generateAdminLoginPasskey,
   importArchiveExcel,
   importInternshipArrangementAssignments,
+  previewInternshipPlanImport,
+  confirmInternshipPlanImport,
   deleteMenu as deleteMenuApi,
   deleteOperationGuide,
   login as loginApi,
@@ -3637,9 +3796,12 @@ import {
   saveAdminAccount,
   saveInternshipArrangement,
   saveInternshipArrangementChange,
+  saveInternshipBase,
   saveInternshipBaseFlow,
   saveInternshipCourseScore,
   saveInternshipPlan,
+  saveInternshipImplementationSheet,
+  saveInternshipPair,
   saveInternshipReviewDraft,
   saveInternshipScore,
   savePracticeExecution,
@@ -3658,6 +3820,7 @@ import {
   saveRoleMenus,
   saveWechatConfig,
   switchAccount,
+  removeInternshipPair,
   uploadFavoriteIcon,
   uploadLoginBackground,
   uploadMenuIcon,
@@ -3674,6 +3837,7 @@ const menuTreeRef = ref(null);
 const archiveImportInputRef = ref(null);
 const archiveImportType = ref('');
 const arrangementImportInputRef = ref(null);
+const planImportInputRef = ref(null);
 const focusedWindowId = ref(null);
 const zIndexSeed = ref(20);
 const wallpaperCacheKey = 'practical_pc_wallpaper';
@@ -3688,6 +3852,7 @@ const iconRegistry = {
   ChartColumn,
   CheckCircle2,
   ClipboardList,
+  Download,
   Edit3,
   FileClock,
   FileText,
@@ -4521,12 +4686,10 @@ const dataManageState = reactive({
 const internshipSidebarItems = [
   { key: 'overview', name: '总览', icon: ChartColumn },
   { key: 'baseFlows', name: '基地建设', icon: Building2, permission: 'internship:manage' },
-  { key: 'plans', name: '实习计划', icon: FileText, permission: 'internship:plan' },
-  { key: 'arrangements', name: '实习任务', icon: CalendarCheck },
-  { key: 'pairs', name: '任务绑定', icon: UsersRound },
-  { key: 'arrangementChanges', name: '任务变更', icon: Workflow, permission: 'internship:manage' },
+  { key: 'plans', name: '计划表', icon: FileText, permission: 'internship:plan' },
+  { key: 'implementationSheets', name: '实习实施', icon: ClipboardList },
+  { key: 'arrangements', name: '我的任务', icon: CalendarCheck, studentOnly: true },
   { key: 'syllabusGuides', name: '大纲指导书', icon: BookOpen },
-  { key: 'implementationSheets', name: '实施表', icon: ClipboardList },
   { key: 'signIns', name: '签到记录', icon: MapPin },
   { key: 'journals', name: '实习日志', icon: FileClock },
   { key: 'reports', name: '实习报告', icon: FileText },
@@ -4549,6 +4712,10 @@ const internshipState = reactive({
   dialog: emptyOperationDialog(),
   overview: emptyInternshipOverview(),
   options: emptyInternshipOptions(),
+  baseDetail: {},
+  planDetail: {},
+  implementationDetail: emptyImplementationDetail(),
+  planImport: emptyPlanImportState(),
   arrangementDetail: emptyArrangementDetail(),
   arrangementForm: emptyArrangementForm(),
   planForm: emptyPlanForm(),
@@ -4961,15 +5128,18 @@ const internshipListConfigs = computed(() => ({
   baseFlows: {
     listKey: 'baseFlows',
     filename: '基地建设',
-    filters: baseFlowFilters(),
+    filters: internshipFilters(['keyword'], internshipState.filters.baseFlows),
     columns: [
-      { key: 'flow_type', label: '流程类型', width: 110, formatter: row => baseFlowTypeText(row.flow_type || internshipState.filters.baseFlows.type) },
-      { prop: 'base_name', label: '基地', minWidth: 160 },
+      { prop: 'name', label: '基地名称', minWidth: 180 },
+      { key: 'base_type', label: '基地类型', width: 100, tag: true, tagType: row => row.base_type === 'temporary' ? 'warning' : 'success', formatter: row => row.base_type === 'temporary' ? '临时基地' : '长期基地' },
       { prop: 'dep_name', label: '学院', minWidth: 130 },
-      { prop: 'title', label: '标题', minWidth: 180 },
-      { key: 'detail', label: '类型/金额', minWidth: 130, formatter: row => baseFlowDetailText(row) },
-      { prop: 'submitter_name', label: '提交人', width: 110 },
-      { prop: 'status', label: '状态', width: 90, tag: true, tagType: row => statusTagType(row.status), formatter: row => statusText(row.status) },
+      { prop: 'company_name', label: '合作单位', minWidth: 170 },
+      { prop: 'address', label: '基地位置', minWidth: 200 },
+      { prop: 'service_courses', label: '服务课程', minWidth: 180, formatter: row => contentSummary(row.service_courses) },
+      { prop: 'manager_name', label: '负责人', width: 110 },
+      { prop: 'manager_phone', label: '联系电话', width: 130 },
+      { prop: 'capacity', label: '可接收人数', width: 100 },
+      { prop: 'status', label: '启用状态', width: 90, tag: true, tagType: row => row.status === 'enabled' ? 'success' : 'info', formatter: row => row.status === 'enabled' ? '启用' : '停用' },
       { prop: 'created_at', label: '创建时间', width: 168 },
     ],
   },
@@ -5039,7 +5209,7 @@ const internshipListConfigs = computed(() => ({
   },
   plans: {
     listKey: 'plans',
-    filename: '实习计划',
+    filename: '计划表',
     filters: internshipListFilters('plans', ['grade_id', 'dep_id', 'profession_id', 'status', 'keyword']),
     columns: [
       { prop: 'course_name', label: '课程名称', minWidth: 180 },
@@ -5051,10 +5221,10 @@ const internshipListConfigs = computed(() => ({
       { prop: 'profession_name', label: '专业', minWidth: 150 },
       { prop: 'credit', label: '学分', width: 80 },
       { prop: 'task_count', label: '任务数', width: 80 },
-      { prop: 'task_coverage_text', label: '任务覆盖', width: 100 },
+      { prop: 'task_student_count', label: '绑定学生', width: 90 },
       { prop: 'task_score_progress_text', label: '任务评分', width: 100 },
       { key: 'score_rule', label: '成绩规则', width: 110, formatter: row => scoreRuleText(row.score_rule) },
-      { key: 'content', label: '计划内容', minWidth: 220, formatter: row => planContentText(row.plan_content) },
+      { key: 'content', label: '计划内容', minWidth: 220, formatter: row => contentSummary(planContentText(row.plan_content)) },
       { prop: 'submitter_name', label: '提交人', width: 120 },
       { prop: 'approval_progress_text', label: '审核进度', width: 100 },
       { prop: 'current_approval_name', label: '当前节点', width: 110 },
@@ -5106,7 +5276,7 @@ const internshipListConfigs = computed(() => ({
       { prop: 'title', label: '日志标题', minWidth: 180 },
       { prop: 'date', label: '日期', width: 110 },
       { prop: 'status', label: '状态', width: 90, tag: true, tagType: row => statusTagType(row.status), formatter: row => statusText(row.status) },
-      { prop: 'content', label: '内容', minWidth: 220 },
+      { prop: 'content', label: '内容摘要', minWidth: 220, formatter: row => contentSummary(row.content) },
     ],
   },
   reports: {
@@ -5119,7 +5289,7 @@ const internshipListConfigs = computed(() => ({
       { prop: 'title', label: '报告标题', minWidth: 180 },
       { prop: 'status', label: '状态', width: 90, tag: true, tagType: row => statusTagType(row.status), formatter: row => statusText(row.status) },
       { prop: 'submitted_at', label: '提交时间', width: 168 },
-      { prop: 'content', label: '内容', minWidth: 240 },
+      { prop: 'content', label: '内容摘要', minWidth: 240, formatter: row => contentSummary(row.content) },
     ],
   },
   delays: {
@@ -5247,24 +5417,25 @@ const internshipListConfigs = computed(() => ({
       { prop: 'creator_name', label: '录入人', width: 110 },
       { prop: 'status', label: '状态', width: 90, tag: true, tagType: row => statusTagType(row.status), formatter: row => statusText(row.status) },
       { prop: 'created_at', label: '创建时间', width: 168 },
-      { prop: 'content', label: '内容', minWidth: 240 },
+      { prop: 'content', label: '内容摘要', minWidth: 240, formatter: row => contentSummary(row.content) },
     ],
   },
   implementationSheets: {
     listKey: 'implementationSheets',
-    filename: '教学实习实施表',
-    filters: internshipListFilters('implementationSheets', ['grade_id', 'dep_id', 'profession_id', 'arrangement_id', 'status', 'keyword']),
+    filename: '实习实施',
+    filters: internshipListFilters('implementationSheets', ['grade_id', 'dep_id', 'profession_id', 'plan_id', 'type', 'organize_mode', 'status', 'keyword']),
     columns: [
       { prop: 'grade_name', label: '届次', width: 100 },
-      { prop: 'arrangement_title', label: '实习任务', minWidth: 190 },
+      { prop: 'title', label: '实习任务', minWidth: 190 },
+      { prop: 'course_name', label: '课程计划', minWidth: 170 },
       { prop: 'dep_name', label: '学院', minWidth: 130 },
       { prop: 'profession_name', label: '专业', minWidth: 130 },
       { prop: 'teacher_name', label: '负责老师', width: 120 },
-      { prop: 'signed_count', label: '已签承诺', width: 100 },
-      { prop: 'unsigned_count', label: '未签承诺', width: 100 },
-      { key: 'insurance_verified', label: '保险核验', width: 100, formatter: row => row.insurance_verified === 'true' ? '已核验' : '未核验' },
+      { prop: 'class_names', label: '任务班级', minWidth: 170 },
+      { prop: 'task_binding_count', label: '绑定学生', width: 90 },
+      { key: 'date', label: '实施时间', minWidth: 180, formatter: row => dateRangeText(row.start_date, row.end_date) },
+      { prop: 'location', label: '实施地点', minWidth: 150 },
       { prop: 'status', label: '状态', width: 90, tag: true, tagType: row => statusTagType(row.status), formatter: row => statusText(row.status) },
-      { prop: 'confirmed_at', label: '确认时间', width: 168 },
     ],
   },
   teacherWorkReports: {
@@ -5276,9 +5447,9 @@ const internshipListConfigs = computed(() => ({
       { prop: 'arrangement_title', label: '实习任务', minWidth: 190 },
       { prop: 'teacher_name', label: '任务老师', width: 120 },
       { prop: 'guidance_count', label: '负责人数', width: 100 },
-      { prop: 'summary', label: '工作总结', minWidth: 220 },
-      { prop: 'problems', label: '问题', minWidth: 180 },
-      { prop: 'suggestions', label: '建议', minWidth: 180 },
+      { prop: 'summary', label: '工作总结', minWidth: 220, formatter: row => contentSummary(row.summary) },
+      { prop: 'problems', label: '问题', minWidth: 180, formatter: row => contentSummary(row.problems) },
+      { prop: 'suggestions', label: '建议', minWidth: 180, formatter: row => contentSummary(row.suggestions) },
       { prop: 'status', label: '状态', width: 90, tag: true, tagType: row => statusTagType(row.status), formatter: row => statusText(row.status) },
       { prop: 'created_at', label: '提交时间', width: 168 },
     ],
@@ -5328,13 +5499,81 @@ function internshipSidebarItemVisible(item) {
     return false;
   }
   if (!isStudentRole.value) {
-    return true;
+    return !item.studentOnly;
   }
   return ['overview', 'arrangements', 'applications', 'signIns', 'journals', 'reports', 'delays', 'scores', 'courseScores', 'documents'].includes(item.key);
 }
 
 function isInternshipReadOnlyListPanel(panel) {
-  return ['syllabusGuides', 'implementationSheets', 'teacherWorkReports', 'inspections'].includes(panel);
+  return ['syllabusGuides', 'teacherWorkReports', 'inspections'].includes(panel);
+}
+
+function hasInternshipContentDetail(panel) {
+  return ['syllabusGuides', 'teacherWorkReports', 'inspections'].includes(panel);
+}
+
+function openInternshipContentDetail(panel, row) {
+  const definitions = {
+    journals: {
+      title: row.title || '实习日志',
+      fields: [
+        { label: '学生', value: row.student_name },
+        { label: '实习任务', value: row.arrangement_title },
+        { label: '日期', value: row.date },
+        { label: '日志内容', value: row.content, rich: true },
+        { label: '附件', value: row.attachment_ids || row.file_ids },
+      ],
+    },
+    reports: {
+      title: row.title || '实习报告',
+      fields: [
+        { label: '学生', value: row.student_name },
+        { label: '实习任务', value: row.arrangement_title },
+        { label: '提交时间', value: row.submitted_at || row.created_at },
+        { label: '报告内容', value: row.content, rich: true },
+        { label: '附件', value: row.attachment_ids || row.file_ids },
+      ],
+    },
+    syllabusGuides: {
+      title: row.title || '实习大纲指导书',
+      fields: [
+        { label: '实习任务', value: row.arrangement_title },
+        { label: '录入人', value: row.creator_name },
+        { label: '大纲内容', value: row.content, rich: true },
+        { label: '附件', value: row.file_id },
+      ],
+    },
+    teacherWorkReports: {
+      title: `${row.teacher_name || '指导教师'}工作报告`,
+      fields: [
+        { label: '实习任务', value: row.arrangement_title },
+        { label: '负责人数', value: row.guidance_count },
+        { label: '工作总结', value: row.summary, rich: true },
+        { label: '存在问题', value: row.problems, rich: true },
+        { label: '改进建议', value: row.suggestions, rich: true },
+        { label: '附件', value: row.attachment_ids || row.file_ids },
+      ],
+    },
+    inspections: {
+      title: '实习巡查记录',
+      fields: [
+        { label: '实习任务', value: row.arrangement_title },
+        { label: '巡查人', value: row.inspector_name },
+        { label: '巡查结果', value: inspectionResultText(row.result) },
+        { label: '巡查说明', value: row.remark, rich: true },
+      ],
+    },
+  };
+  const definition = definitions[panel];
+  if (!definition) {
+    return;
+  }
+  internshipState.dialog = {
+    ...emptyOperationDialog(),
+    type: 'contentDetail',
+    title: definition.title,
+    fields: definition.fields,
+  };
 }
 
 function isInternshipDocumentReviewEntity(entity) {
@@ -5365,9 +5604,6 @@ function internshipListFilters(listKey, adminKeys) {
 
 function hasInternshipToolbarActions(panel) {
   if (panel === 'baseFlows') {
-    return canManageInternship.value;
-  }
-  if (panel === 'arrangements') {
     return canManageInternship.value;
   }
   if (panel === 'plans') {
@@ -6946,6 +7182,13 @@ function normalizeConfigPanel(panel) {
   return visibleItems[0].key;
 }
 
+function normalizeInternshipPanel(panel) {
+  if (!isStudentRole.value && ['arrangements', 'pairs', 'arrangementChanges'].includes(panel)) {
+    return 'implementationSheets';
+  }
+  return panel;
+}
+
 function defaultPanelForModule(module) {
   if (module.id === 'config') {
     return normalizeConfigPanel(module.defaultPanel || 'menuManage');
@@ -7200,6 +7443,9 @@ function activateWindowPanel(win, panel) {
   }
   if (win.module.id === 'config') {
     panel = normalizeConfigPanel(panel);
+  }
+  if (win.module.id === 'internship') {
+    panel = normalizeInternshipPanel(panel);
   }
   win.panel = panel;
   focusWindow(win.id);
@@ -9030,6 +9276,33 @@ function emptyArrangementDetail() {
   };
 }
 
+function emptyImplementationDetail() {
+  return {
+    item: null,
+    task: null,
+    classes: [],
+    students: [],
+    changes: [],
+    implementation_sheet: null,
+    schedules: [],
+    expenses: [],
+  };
+}
+
+function emptyPlanImportState() {
+  return {
+    file: null,
+    items: [],
+    business_types: [],
+    summary: {
+      source_rows: 0,
+      preview_rows: 0,
+      error_rows: 0,
+      duplicate_rows: 0,
+    },
+  };
+}
+
 function emptyInternshipFilters() {
   return {
     keyword: '',
@@ -9039,6 +9312,7 @@ function emptyInternshipFilters() {
     profession_id: '',
     grade_id: '',
     class_id: '',
+    plan_id: '',
     arrangement_id: '',
     config_key: '',
     status: '',
@@ -9158,6 +9432,8 @@ function emptyOperationDialog() {
     status: '',
     row: null,
     reason: '',
+    readonly: false,
+    fields: [],
     timeline: [],
     cycles: [],
   };
@@ -10790,6 +11066,46 @@ function planContentText(value) {
   return text ? (text.length > 80 ? `${text.slice(0, 80)}...` : text) : '-';
 }
 
+function contentSummary(value, limit = 80) {
+  const text = detailFieldText(value)
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!text || text === '-') {
+    return '-';
+  }
+  return text.length > limit ? `${text.slice(0, limit)}...` : text;
+}
+
+function detailFieldText(value) {
+  if (value === null || value === undefined || value === '') {
+    return '-';
+  }
+  if (typeof value === 'string') {
+    return value;
+  }
+  return JSON.stringify(value, null, 2);
+}
+
+function safeRichHtml(value) {
+  const html = detailFieldText(value);
+  if (typeof DOMParser === 'undefined') {
+    return html;
+  }
+  const documentNode = new DOMParser().parseFromString(html, 'text/html');
+  documentNode.querySelectorAll('script, style, iframe, object, embed, form').forEach(node => node.remove());
+  documentNode.querySelectorAll('*').forEach((node) => {
+    Array.from(node.attributes).forEach((attribute) => {
+      const name = attribute.name.toLowerCase();
+      const attributeValue = attribute.value.trim().toLowerCase();
+      if (name.startsWith('on') || ((name === 'href' || name === 'src') && attributeValue.startsWith('javascript:'))) {
+        node.removeAttribute(attribute.name);
+      }
+    });
+  });
+  return documentNode.body.innerHTML;
+}
+
 async function exportStatReport() {
   if (statState.loading) {
     return;
@@ -11414,6 +11730,330 @@ function openBaseFlowDialog(row = null) {
   };
 }
 
+async function openBaseDialog(row = null, readonly = false) {
+  internshipState.loading = true;
+  internshipState.message = '';
+  internshipState.savedMessage = '';
+  try {
+    if (row?.id) {
+      internshipState.baseDetail = await fetchInternshipBaseDetail({ id: row.id });
+    } else {
+      const defaults = defaultScopedFilters();
+      internshipState.baseDetail = {
+        item: {
+          base_type: 'long_term',
+          dep_id: defaults.dep_id || null,
+        },
+        profession_ids: defaults.profession_id ? [defaults.profession_id] : [],
+        teachers: [],
+        mentors: [],
+        existing_sites: [],
+        budgets: [],
+      };
+    }
+    internshipState.dialog = {
+      ...emptyOperationDialog(),
+      type: 'base',
+      title: `${readonly ? '查看' : row ? '编辑' : '新增'}实习基地`,
+      readonly,
+      row,
+    };
+  } catch (error) {
+    internshipState.message = error.message;
+  } finally {
+    internshipState.loading = false;
+  }
+}
+
+async function submitInternshipBase(form) {
+  if (!canManageInternship.value || internshipState.loading) {
+    return;
+  }
+  if (form.base_type === 'long_term' && !String(form.name || '').trim()) {
+    internshipState.message = '请填写长期基地名称';
+    return;
+  }
+  if (form.base_type === 'temporary') {
+    const missing = [];
+    if (!String(form.address || '').trim()) missing.push('基地所在位置');
+    if (!(form.profession_ids || []).length) missing.push('服务专业');
+    if (!String(form.service_courses || '').trim()) missing.push('服务课程');
+    if (!String(form.manager?.name || '').trim()) missing.push('基地负责人');
+    if (missing.length) {
+      internshipState.message = `请填写${missing.join('、')}`;
+      return;
+    }
+  }
+
+  internshipState.loading = true;
+  internshipState.message = '';
+  internshipState.savedMessage = '';
+  try {
+    await saveInternshipBase({
+      ...form,
+      dep_id: form.dep_id || null,
+      company_id: form.company_id || null,
+      area: numericOrNull(form.area),
+      capacity: numericOrNull(form.capacity),
+      annual_student_count: numericOrNull(form.annual_student_count),
+      current_student_count: numericOrNull(form.current_student_count),
+      budgets: (form.budgets || []).map(item => ({ ...item, amount: numericOrNull(item.amount) })),
+    });
+    closeInternshipDialog();
+    await loadInternshipPanel('baseFlows', 1);
+    internshipState.savedMessage = '实习基地已保存';
+  } catch (error) {
+    internshipState.message = error.message;
+  } finally {
+    internshipState.loading = false;
+  }
+}
+
+async function exportBaseDocument(row) {
+  if (!row?.id || internshipState.loading) {
+    return;
+  }
+  internshipState.loading = true;
+  internshipState.message = '';
+  internshipState.savedMessage = '';
+  try {
+    await exportInternshipBaseWord({ id: row.id });
+    internshipState.savedMessage = '基地申报书导出任务已创建，请在导出任务中下载';
+  } catch (error) {
+    internshipState.message = error.message;
+  } finally {
+    internshipState.loading = false;
+  }
+}
+
+function openPlanDetail(row) {
+  internshipState.planDetail = row || {};
+  internshipState.dialog = {
+    ...emptyOperationDialog(),
+    type: 'planDetail',
+    title: '计划表详情',
+    row,
+  };
+}
+
+async function openTaskFromPlan(plan) {
+  await openArrangementDialog();
+  internshipState.arrangementForm.plan_id = plan?.id || null;
+  handleArrangementPlanChange();
+}
+
+async function downloadPlanImportTemplate() {
+  if (internshipState.loading) {
+    return;
+  }
+  internshipState.loading = true;
+  internshipState.message = '';
+  try {
+    const result = await fetchInternshipPlanImportTemplate();
+    const link = document.createElement('a');
+    link.href = backendUrl(result.url);
+    link.download = result.download_name || '实习计划导入模板.xlsx';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  } catch (error) {
+    internshipState.message = error.message;
+  } finally {
+    internshipState.loading = false;
+  }
+}
+
+function choosePlanImportExcel() {
+  if (!canManageInternshipPlan.value || internshipState.importing) {
+    return;
+  }
+  planImportInputRef.value?.click();
+}
+
+async function handlePlanImportFile(event) {
+  const file = event.target.files?.[0];
+  event.target.value = '';
+  if (!file) {
+    return;
+  }
+  internshipState.importing = true;
+  internshipState.loading = true;
+  internshipState.message = '';
+  internshipState.savedMessage = '';
+  try {
+    internshipState.planImport = {
+      ...emptyPlanImportState(),
+      ...(await previewInternshipPlanImport(file)),
+    };
+    internshipState.dialog = {
+      ...emptyOperationDialog(),
+      type: 'planImport',
+      title: '实习计划导入预览',
+    };
+  } catch (error) {
+    internshipState.message = error.message;
+  } finally {
+    internshipState.importing = false;
+    internshipState.loading = false;
+  }
+}
+
+function confirmAllPlanImportTypes() {
+  internshipState.planImport.items.forEach((item) => {
+    if (!item.errors?.length) {
+      item.business_type_confirmed = true;
+    }
+  });
+}
+
+async function confirmPlanImportPreview() {
+  if (internshipState.loading) {
+    return;
+  }
+  const rows = internshipState.planImport.items.filter(item => item.can_import && !item.errors?.length);
+  if (!rows.length) {
+    internshipState.message = '没有可导入的计划数据';
+    return;
+  }
+  const unconfirmed = rows.filter(item => !item.business_type_confirmed);
+  if (unconfirmed.length) {
+    internshipState.message = `还有 ${unconfirmed.length} 行未确认业务归属`;
+    return;
+  }
+  const fileId = internshipState.planImport.file?.id;
+  if (!fileId) {
+    internshipState.message = '导入文件信息已失效，请重新选择文件';
+    return;
+  }
+
+  internshipState.loading = true;
+  internshipState.message = '';
+  internshipState.savedMessage = '';
+  try {
+    const result = await confirmInternshipPlanImport({
+      import_file_id: fileId,
+      rows,
+    });
+    closeInternshipDialog();
+    await loadInternshipPanel('plans', 1);
+    internshipState.savedMessage = `计划表导入完成：新增 ${result.created || 0}，更新 ${result.updated || 0}，分类 ${result.classified || 0}，跳过 ${result.skipped || 0}，失败 ${result.failed || 0}`;
+  } catch (error) {
+    internshipState.message = error.message;
+  } finally {
+    internshipState.loading = false;
+  }
+}
+
+async function openImplementationDetail(row) {
+  const arrangementId = Number(row?.arrangement_id || row?.id || 0);
+  if (!arrangementId) {
+    return;
+  }
+  internshipState.loading = true;
+  internshipState.message = '';
+  internshipState.savedMessage = '';
+  try {
+    internshipState.implementationDetail = {
+      ...emptyImplementationDetail(),
+      ...(await fetchInternshipImplementationDetail({ arrangement_id: arrangementId })),
+    };
+    internshipState.dialog = {
+      ...emptyOperationDialog(),
+      type: 'implementationDetail',
+      title: '实习实施详情',
+      row,
+    };
+  } catch (error) {
+    internshipState.message = error.message;
+  } finally {
+    internshipState.loading = false;
+  }
+}
+
+async function reloadImplementationDetail() {
+  const arrangementId = Number(internshipState.implementationDetail.task?.id || internshipState.implementationDetail.item?.id || 0);
+  if (!arrangementId) {
+    return;
+  }
+  internshipState.implementationDetail = {
+    ...emptyImplementationDetail(),
+    ...(await fetchInternshipImplementationDetail({ arrangement_id: arrangementId })),
+  };
+}
+
+async function bindImplementationStudent(payload) {
+  if (internshipState.loading) {
+    return;
+  }
+  internshipState.loading = true;
+  internshipState.message = '';
+  try {
+    await saveInternshipPair(payload);
+    await reloadImplementationDetail();
+    internshipState.savedMessage = '学生已绑定到实习任务';
+  } catch (error) {
+    internshipState.message = error.message;
+  } finally {
+    internshipState.loading = false;
+  }
+}
+
+async function unbindImplementationStudent(row) {
+  if (!row?.id || internshipState.loading) {
+    return;
+  }
+  internshipState.loading = true;
+  internshipState.message = '';
+  try {
+    await removeInternshipPair({ id: row.id, remove_reason: '实习实施页面解除绑定' });
+    await reloadImplementationDetail();
+    internshipState.savedMessage = '学生任务绑定已解除';
+  } catch (error) {
+    internshipState.message = error.message;
+  } finally {
+    internshipState.loading = false;
+  }
+}
+
+async function submitImplementationSheet(payload) {
+  if (!canManageInternship.value || internshipState.loading) {
+    return;
+  }
+  internshipState.loading = true;
+  internshipState.message = '';
+  internshipState.savedMessage = '';
+  try {
+    const result = await saveInternshipImplementationSheet(payload);
+    internshipState.implementationDetail = {
+      ...emptyImplementationDetail(),
+      ...(result.detail || await fetchInternshipImplementationDetail({ arrangement_id: payload.arrangement_id })),
+    };
+    internshipState.savedMessage = payload.status === 'confirmed' ? '实习实施表已确认' : '实习实施表草稿已保存';
+  } catch (error) {
+    internshipState.message = error.message;
+  } finally {
+    internshipState.loading = false;
+  }
+}
+
+async function exportImplementationDocument(row) {
+  const arrangementId = Number(row?.arrangement_id || row?.id || 0);
+  if (!arrangementId || internshipState.loading) {
+    return;
+  }
+  internshipState.loading = true;
+  internshipState.message = '';
+  internshipState.savedMessage = '';
+  try {
+    await exportInternshipImplementationPdf({ arrangement_id: arrangementId });
+    internshipState.savedMessage = '实习实施经费表导出任务已创建，请在导出任务中下载';
+  } catch (error) {
+    internshipState.message = error.message;
+  } finally {
+    internshipState.loading = false;
+  }
+}
+
 async function openReviewDialog(entity, row, status) {
   if (!canReviewRow(row, entity)) {
     internshipState.message = '仅待审核数据可处理';
@@ -11520,6 +12160,10 @@ async function saveInternshipDialogReviewDraft() {
 
 function closeInternshipDialog() {
   internshipState.dialog = emptyOperationDialog();
+  internshipState.baseDetail = {};
+  internshipState.planDetail = {};
+  internshipState.implementationDetail = emptyImplementationDetail();
+  internshipState.planImport = emptyPlanImportState();
   internshipState.arrangementDetail = emptyArrangementDetail();
   internshipState.courseScoreForm = emptyCourseScoreForm();
 }
@@ -11969,18 +12613,13 @@ async function loadInternshipPanel(panel = 'overview', page = 1) {
     } else if (panel === 'arrangementChanges') {
       setPagedList('arrangementChanges', await fetchInternshipArrangementChanges(params('arrangementChanges')));
     } else if (panel === 'baseFlows') {
-      const flowType = internshipState.filters.baseFlows.type || 'application';
-      const data = await fetchInternshipBaseFlows({
-        ...params('baseFlows'),
-        type: flowType,
-      });
-      setPagedList('baseFlows', markBaseFlowItems(data, flowType));
+      setPagedList('baseFlows', await fetchInternshipBases(params('baseFlows')));
     } else if (panel === 'plans') {
       setPagedList('plans', await fetchInternshipPlans(params('plans')));
     } else if (panel === 'syllabusGuides') {
       setPagedList('syllabusGuides', await fetchInternshipSyllabusGuides(params('syllabusGuides')));
     } else if (panel === 'implementationSheets') {
-      setPagedList('implementationSheets', await fetchInternshipImplementationSheets(params('implementationSheets')));
+      setPagedList('implementationSheets', await fetchInternshipArrangements(params('implementationSheets')));
     } else if (panel === 'applications') {
       setPagedList('applications', await fetchInternshipApplications(params('applications')));
     } else if (panel === 'pairs') {

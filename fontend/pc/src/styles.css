@@ -2285,6 +2285,15 @@ a {
   flex-wrap: wrap;
 }
 
+.data-list-filters.is-collapsed {
+  max-height: 50px;
+  overflow: hidden;
+}
+
+.data-list-filters.is-measuring {
+  max-height: none !important;
+}
+
 .data-list-filters label {
   width: 142px;
   display: grid;
@@ -2426,6 +2435,14 @@ a {
 
 .operation-dialog.task-detail-dialog {
   width: min(980px, calc(100vw - 48px));
+}
+
+.operation-dialog.internship-complex-dialog {
+  width: min(1180px, calc(100vw - 48px));
+  height: min(820px, calc(100vh - 48px));
+  min-width: 760px;
+  min-height: 520px;
+  resize: both;
 }
 
 .operation-dialog.guide-edit-dialog {
@@ -2592,6 +2609,367 @@ a {
   padding: 9px 12px;
   border-bottom: 1px solid var(--line);
   background: #fbfcfe;
+}
+
+.internship-dialog-component {
+  min-height: 0;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  overflow: hidden;
+}
+
+.internship-detail-scroll {
+  min-height: 0;
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  padding: 14px;
+  overflow: auto;
+  background: #f6f8fb;
+}
+
+.internship-component-footer {
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 14px;
+  border-top: 1px solid var(--line);
+  background: #fbfcfe;
+}
+
+.internship-component-footer > div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.internship-section-head,
+.internship-edit-section > header {
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.internship-section-head > div,
+.internship-edit-section > header > div {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.internship-section-head strong,
+.internship-edit-section > header strong {
+  color: var(--text);
+  font-size: 14px;
+}
+
+.internship-section-head small,
+.internship-edit-section > header small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.internship-edit-section {
+  min-width: 0;
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.base-main-form,
+.implementation-sheet-form {
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  overflow: visible;
+}
+
+.base-main-form.compact-form {
+  padding: 0;
+  border: 0;
+}
+
+.dynamic-row-list {
+  display: grid;
+  gap: 8px;
+}
+
+.dynamic-form-row {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) auto;
+  align-items: end;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid #e3e9f0;
+  border-radius: 7px;
+  background: #fbfcfe;
+}
+
+.dynamic-form-row.two-columns {
+  grid-template-columns: repeat(2, minmax(0, 1fr)) auto;
+}
+
+.dynamic-form-row.person-row {
+  grid-template-columns: repeat(4, minmax(110px, 1fr));
+}
+
+.dynamic-form-row.schedule-row {
+  grid-template-columns: repeat(4, minmax(120px, 1fr)) auto;
+}
+
+.dynamic-form-row label,
+.detail-text-grid label {
+  min-width: 0;
+  display: grid;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.dynamic-form-row input,
+.section-textarea {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 0 9px;
+  color: var(--text);
+  outline: none;
+  background: #fff;
+}
+
+.dynamic-form-row input {
+  height: 32px;
+}
+
+.section-textarea {
+  min-height: 130px;
+  padding-top: 8px;
+  resize: vertical;
+}
+
+.dynamic-form-row .wide-field {
+  grid-column: auto;
+}
+
+.dynamic-form-row.person-row .wide-field {
+  grid-column: span 2;
+}
+
+.detail-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.detail-summary-grid article {
+  min-width: 0;
+  min-height: 62px;
+  display: grid;
+  align-content: center;
+  gap: 5px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.detail-summary-grid span,
+.detail-text-grid span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.detail-summary-grid strong,
+.detail-text-grid strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.detail-text-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.detail-text-grid .wide-field {
+  grid-column: 1 / -1;
+}
+
+.detail-long-text {
+  margin: 0;
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+}
+
+.implementation-detail-component {
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
+
+.implementation-tabs {
+  min-height: 54px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--line);
+  overflow-x: auto;
+  background: #fff;
+}
+
+.implementation-tabs button {
+  height: 34px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 11px;
+  color: var(--muted);
+  background: #f1f4f8;
+  white-space: nowrap;
+}
+
+.implementation-tabs button.active {
+  border-color: #bdd5f2;
+  color: var(--primary);
+  background: var(--primary-soft);
+}
+
+.implementation-tabs small {
+  min-width: 20px;
+  height: 20px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 10px;
+  padding: 0 5px;
+  color: inherit;
+  background: rgba(255, 255, 255, .72);
+}
+
+.implementation-tab-body {
+  height: 100%;
+}
+
+.implementation-tab-body > .el-table {
+  min-height: 360px;
+}
+
+.implementation-add-student {
+  display: grid;
+  grid-template-columns: minmax(260px, 520px) auto;
+  justify-content: start;
+  gap: 8px;
+}
+
+.operation-form .switch-field {
+  align-content: end;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  min-height: 34px;
+}
+
+.plan-import-preview {
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 10px;
+  padding: 12px;
+  overflow: hidden;
+}
+
+.plan-import-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(90px, 1fr)) auto;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.plan-import-summary article {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #fbfcfe;
+}
+
+.plan-import-summary span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.plan-import-summary strong {
+  color: var(--text);
+  font-size: 18px;
+}
+
+.import-error-text {
+  color: var(--danger);
+}
+
+.import-ok-text {
+  color: var(--green);
+}
+
+.content-detail-view {
+  min-height: 0;
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  padding: 14px;
+  overflow: auto;
+  background: #f6f8fb;
+}
+
+.content-detail-view section {
+  display: grid;
+  gap: 7px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.content-detail-view section > span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.content-detail-view pre,
+.rich-content-view {
+  margin: 0;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.75;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.rich-content-view > :first-child {
+  margin-top: 0;
+}
+
+.rich-content-view > :last-child {
+  margin-bottom: 0;
 }
 
 .user-detail-body {
@@ -2974,7 +3352,27 @@ a {
     max-height: calc(100vh - 36px);
   }
 
+  .operation-dialog.internship-complex-dialog {
+    width: calc(100vw - 36px);
+    min-width: 0;
+    min-height: 0;
+    resize: none;
+  }
+
   .task-detail-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .detail-summary-grid,
+  .detail-text-grid,
+  .plan-import-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .dynamic-form-row,
+  .dynamic-form-row.person-row,
+  .dynamic-form-row.schedule-row,
+  .dynamic-form-row.budget-row {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 

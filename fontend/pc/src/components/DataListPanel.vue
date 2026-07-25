@@ -1,7 +1,11 @@
 <template>
   <section class="data-list-panel">
     <div class="data-list-toolbar">
-      <div class="data-list-filters">
+      <div
+        ref="filtersRef"
+        class="data-list-filters"
+        :class="{ 'is-collapsed': filterCollapsible && !filtersExpanded }"
+      >
         <label
           v-for="filter in filters"
           :key="filter.key"
@@ -35,6 +39,14 @@
         </label>
       </div>
       <div class="data-list-actions">
+        <el-button
+          v-if="filterCollapsible"
+          text
+          :icon="filtersExpanded ? ChevronUp : ChevronDown"
+          @click="filtersExpanded = !filtersExpanded"
+        >
+          {{ filtersExpanded ? '收起条件' : '显示更多' }}
+        </el-button>
         <el-button :icon="RefreshCw" :loading="loading" @click="emit('search')">
           查询
         </el-button>
@@ -99,8 +111,8 @@
 </template>
 
 <script setup>
-import { computed, reactive, watch } from 'vue';
-import { RefreshCw } from '@lucide/vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
+import { ChevronDown, ChevronUp, RefreshCw } from '@lucide/vue';
 
 const props = defineProps({
   actions: {
@@ -139,6 +151,10 @@ const props = defineProps({
 
 const emit = defineEmits(['filter-change', 'page-change', 'reset', 'row-action', 'search']);
 const localFilterValues = reactive({});
+const filtersRef = ref(null);
+const filtersExpanded = ref(false);
+const filterCollapsible = ref(false);
+let filterResizeObserver = null;
 let lastActionAt = 0;
 const actionColumnWidth = computed(() => {
   if (!props.actions.length) {
@@ -161,6 +177,43 @@ watch(
   },
   { immediate: true, deep: true },
 );
+
+watch(
+  () => props.filters,
+  async () => {
+    filtersExpanded.value = false;
+    await nextTick();
+    updateFilterOverflow();
+  },
+  { deep: true },
+);
+
+onMounted(() => {
+  updateFilterOverflow();
+  if (typeof ResizeObserver !== 'undefined' && filtersRef.value) {
+    filterResizeObserver = new ResizeObserver(updateFilterOverflow);
+    filterResizeObserver.observe(filtersRef.value);
+  }
+});
+
+onBeforeUnmount(() => {
+  filterResizeObserver?.disconnect();
+});
+
+function updateFilterOverflow() {
+  const element = filtersRef.value;
+  if (!element || props.filters.length < 2) {
+    filterCollapsible.value = false;
+    return;
+  }
+  const wasExpanded = filtersExpanded.value;
+  element.classList.add('is-measuring');
+  filterCollapsible.value = element.scrollHeight > 52;
+  element.classList.remove('is-measuring');
+  if (!filterCollapsible.value && wasExpanded) {
+    filtersExpanded.value = false;
+  }
+}
 
 function filterValue(key) {
   return Object.prototype.hasOwnProperty.call(localFilterValues, key)

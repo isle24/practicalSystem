@@ -526,6 +526,10 @@ export function fetchInternshipBaseDetail(params = {}) {
   return internshipList('base-detail', params);
 }
 
+export function exportInternshipBaseWord(payload) {
+  return internshipPost('export-base-word', payload);
+}
+
 export function fetchInternshipBaseFlows(params = {}) {
   return internshipList('base-flows', params);
 }
@@ -742,6 +746,14 @@ export function saveInternshipSyllabusGuide(payload) {
 
 export function fetchInternshipImplementationSheets(params = {}) {
   return internshipList('implementation-sheets', params);
+}
+
+export function fetchInternshipImplementationDetail(params = {}) {
+  return internshipList('implementation-detail', params);
+}
+
+export function exportInternshipImplementationPdf(payload) {
+  return internshipPost('export-implementation-pdf', payload);
 }
 
 export function saveInternshipImplementationSheet(payload) {
