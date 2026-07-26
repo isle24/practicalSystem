@@ -792,6 +792,8 @@ class InternshipRecord extends TableRecord
         return self::paginate($query->orderByDesc('journal.date')->orderByDesc('journal.id'), $filters, [
             'journal.id', 'journal.uuid', 'journal.student_id', 'journal.entity_id as arrangement_id',
             'journal.title', 'journal.content', 'journal.date', 'journal.status', 'journal.teacher_id',
+            'journal.location', 'journal.work_content', 'journal.gains', 'journal.problems',
+            'journal.form_data', 'journal.attachment_ids',
             'journal.created_at', 'students.name as student_name', 'students.student_num',
             'students.grade_id', 'grade_list.grade_name',
             'teacher_list.teacher_name', 'arrangement.title as arrangement_title',
@@ -809,6 +811,7 @@ class InternshipRecord extends TableRecord
         self::currentArrangementQuery($query);
         self::filter($query, $filters, 'report.status', 'status');
         self::filter($query, $filters, 'report.arrangement_id', 'arrangement_id');
+        self::filter($query, $filters, 'report.report_type', 'report_type');
         self::listFilters($query, $filters, [
             'dep_id' => 'students.dep_id',
             'profession_id' => 'students.profession_id',
@@ -822,7 +825,8 @@ class InternshipRecord extends TableRecord
 
         return self::paginate($query->orderByDesc('report.id'), $filters, [
             'report.id', 'report.uuid', 'report.student_id', 'report.arrangement_id', 'report.template_id',
-            'report.title', 'report.content', 'report.status', 'report.teacher_id',
+            'report.title', 'report.content', 'report.report_type', 'report.form_data',
+            'report.attachment_ids', 'report.status', 'report.teacher_id',
             'report.submitted_at', 'report.reviewed_at', 'report.created_at',
             'students.name as student_name', 'students.student_num',
             'students.grade_id', 'grade_list.grade_name',
@@ -1227,6 +1231,7 @@ class InternshipRecord extends TableRecord
             ->whereNull('syllabus_guide.deleted_at'), $scope);
         self::filter($query, $filters, 'syllabus_guide.arrangement_id', 'arrangement_id');
         self::filter($query, $filters, 'syllabus_guide.status', 'status');
+        self::filter($query, $filters, 'syllabus_guide.document_type', 'document_type');
         self::listFilters($query, $filters, [
             'dep_id' => 'syllabus_guide.dep_id',
             'profession_id' => 'syllabus_guide.profession_id',
@@ -3064,9 +3069,17 @@ class InternshipRecord extends TableRecord
             ->where('student_id', $studentId)
             ->where('arrangement_id', $arrangementId)
             ->where('status', 'enabled')
+            ->whereNotNull('attachment_id')
             ->whereDate('start_date', '<=', $date)
             ->whereDate('end_date', '>=', $date)
             ->whereNull('deleted_at')
+            ->whereExists(function ($query): void {
+                $query->selectRaw('1')
+                    ->from('file')
+                    ->whereColumn('file.id', 'insurance.attachment_id')
+                    ->where('file.status', 'enabled')
+                    ->whereNull('file.deleted_at');
+            })
             ->exists();
     }
 
@@ -3077,7 +3090,15 @@ class InternshipRecord extends TableRecord
             ->where('arrangement_id', $arrangementId)
             ->where('status', 'signed')
             ->whereNotNull('signed_at')
+            ->whereNotNull('signature_file_id')
             ->whereNull('deleted_at')
+            ->whereExists(function ($query): void {
+                $query->selectRaw('1')
+                    ->from('file')
+                    ->whereColumn('file.id', 'safety_letter_sign.signature_file_id')
+                    ->where('file.status', 'enabled')
+                    ->whereNull('file.deleted_at');
+            })
             ->exists();
     }
 

@@ -1399,7 +1399,11 @@
                       :title="studentPanelMeta('archiveMaterials').title"
                       @page-change="page => loadInternshipPanel('documents', page)"
                       @refresh="loadInternshipPanel('documents')"
-                    />
+                    >
+                      <template #actions="{ row }">
+                        <el-button size="small" type="primary" @click="openArchiveDetail(row)">查看材料</el-button>
+                      </template>
+                    </StudentOwnPanel>
                     <DataListPanel
                       v-else
                       :columns="internshipListConfigs.archiveMaterials.columns"
@@ -1412,7 +1416,11 @@
                       @page-change="page => loadInternshipPanel('documents', page)"
                       @reset="resetInternshipFilters('archiveMaterials')"
                       @search="loadInternshipPanel('documents', 1)"
-                    />
+                    >
+                      <template #actions="{ row }">
+                        <el-button link type="primary" @click="openArchiveDetail(row)">查看档案</el-button>
+                      </template>
+                    </DataListPanel>
                   </template>
                 </div>
 
@@ -3578,6 +3586,15 @@
       @toggle="toggleDesktopShortcut"
     />
 
+    <InternshipArchiveDetail
+      v-model="archiveDetailVisible"
+      :plan-id="archiveDetailPlanId"
+      :can-manage="canManageInternshipArchive"
+      :can-edit-appraisal="canSaveInternshipScore"
+      :can-approve="canApproveInternship"
+      @changed="loadInternshipPanel('documents')"
+    />
+
     <footer class="taskbar">
       <div class="taskbar-center">
         <button class="taskbar-icon-button taskbar-launcher-button" title="启动台" aria-label="启动台" @click="openDesktopLauncher">
@@ -3688,6 +3705,7 @@ import DataListPanel from './components/DataListPanel.vue';
 import DocCenter from './components/DocCenter.vue';
 import ExportTaskCenter from './components/ExportTaskCenter.vue';
 import IconUpload from './components/IconUpload.vue';
+import InternshipArchiveDetail from './components/InternshipArchiveDetail.vue';
 import InternshipBaseForm from './components/InternshipBaseForm.vue';
 import InternshipImplementationDetail from './components/InternshipImplementationDetail.vue';
 import InternshipPlanDetail from './components/InternshipPlanDetail.vue';
@@ -4702,6 +4720,9 @@ const internshipSidebarItems = [
   { key: 'documents', name: '归档材料', icon: FolderOpen },
 ];
 
+const archiveDetailVisible = ref(false);
+const archiveDetailPlanId = ref(0);
+
 const internshipState = reactive({
   loading: false,
   message: '',
@@ -4869,6 +4890,7 @@ const messageTemplateEmptyText = computed(() => {
     : '未读取到默认流程模板，请联系管理员同步。';
 });
 const canManageInternship = computed(() => hasPermission('internship:manage'));
+const canManageInternshipArchive = computed(() => hasPermission('internship:archive'));
 const canSaveInternshipScore = computed(() => hasPermission('internship:score') || canManageInternship.value);
 const canManageInternshipPlan = computed(() => hasPermission('internship:plan') && isAdminRole.value);
 const canApproveInternship = computed(() => hasPermission('internship:approve') && !isStudentRole.value);
@@ -5349,30 +5371,17 @@ const internshipListConfigs = computed(() => ({
   archiveMaterials: {
     listKey: 'archiveMaterials',
     filename: '归档材料',
-    filters: internshipListFilters('archiveMaterials', ['grade_id', 'dep_id', 'profession_id', 'class_id', 'arrangement_id', 'archive_status', 'keyword']),
+    filters: internshipListFilters('archiveMaterials', ['grade_id', 'dep_id', 'profession_id', 'archive_status', 'keyword']),
     columns: [
-      { prop: 'student_name', label: '学生', width: 110 },
-      { prop: 'student_num', label: '学号', width: 130 },
       { prop: 'grade_name', label: '届次', width: 100 },
       { prop: 'dep_name', label: '学院', minWidth: 130 },
       { prop: 'profession_name', label: '专业', minWidth: 130 },
-      { prop: 'arrangement_title', label: '实习任务', minWidth: 190 },
-      { prop: 'arrangement_type_text', label: '实习类型', width: 110 },
-      // 暂时隐藏学期列，后续需要时恢复。
-      // { prop: 'semester', label: '学期', width: 120 },
+      { prop: 'course_code', label: '课程代码', width: 130 },
+      { prop: 'course_name', label: '课程名称', minWidth: 190 },
+      { prop: 'task_count', label: '任务数', width: 80 },
+      { prop: 'student_task_count', label: '学生任务数', width: 100 },
+      { prop: 'class_count', label: '班级数', width: 80 },
       { prop: 'material_progress', label: '归档进度', width: 100 },
-      { prop: 'plan_status', label: '计划表', width: 95 },
-      { prop: 'implementation_sheet_status', label: '实施表', width: 95 },
-      { prop: 'syllabus_guide_status', label: '大纲指导书', width: 110 },
-      { prop: 'score_summary_status', label: '成绩汇总', width: 95 },
-      { prop: 'safety_letter_status', label: '安全承诺', width: 95 },
-      { prop: 'journal_status', label: '实习周志', width: 95 },
-      { prop: 'report_status', label: '实习报告', width: 95 },
-      { prop: 'graduation_appraisal_status', label: '鉴定表', width: 95 },
-      { prop: 'teacher_work_report_status', label: '教师工作报告', width: 120 },
-      { prop: 'inspection_record_status', label: '抽检记录', width: 95 },
-      { prop: 'insurance_status', label: '保险单', width: 95 },
-      { prop: 'missing_materials', label: '缺失材料', minWidth: 240 },
       { prop: 'archive_status_text', label: '归档状态', width: 100 },
     ],
   },
@@ -5783,12 +5792,10 @@ function studentPanelFields(panel) {
     ],
     archiveMaterials: [
       { key: 'grade_name', label: '届次' },
+      { key: 'course_name', label: '课程' },
       { key: 'arrangement_title', label: '实习任务' },
       { key: 'arrangement_type_text', label: '实习类型' },
-      // 暂时隐藏学期字段，后续需要时恢复。
-      // { key: 'semester', label: '学期' },
       { key: 'material_progress', label: '归档进度' },
-      { key: 'inspection_record_status', label: '抽检记录' },
       { key: 'missing_materials', label: '缺失材料' },
     ],
     insurances: [
@@ -12659,6 +12666,16 @@ async function loadInternshipPanel(panel = 'overview', page = 1) {
   } finally {
     internshipState.loading = false;
   }
+}
+
+function openArchiveDetail(row) {
+  const planId = Number(row?.plan_id || row?.id || 0);
+  if (!planId) {
+    internshipState.message = '未找到档案所属实习计划';
+    return;
+  }
+  archiveDetailPlanId.value = planId;
+  archiveDetailVisible.value = true;
 }
 
 async function submitBaseFlow(status) {

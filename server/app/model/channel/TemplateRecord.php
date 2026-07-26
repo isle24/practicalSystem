@@ -178,6 +178,26 @@ class TemplateRecord extends TableRecord
             $query->where('template.category_id', $categoryId);
         }
 
+        $businessCode = trim((string) ($filters['business_code'] ?? ''));
+        if ($businessCode !== '' && $businessCode !== 'all') {
+            $query->where('template.business_code', $businessCode);
+        }
+
+        $materialType = trim((string) ($filters['material_type'] ?? ''));
+        if ($materialType !== '' && $materialType !== 'all') {
+            $query->where('template.material_type', $materialType);
+        }
+
+        $scopeType = trim((string) ($filters['scope_type'] ?? ''));
+        if ($scopeType !== '' && $scopeType !== 'all') {
+            $query->where('template.scope_type', $scopeType);
+        }
+
+        $practiceType = trim((string) ($filters['practice_type'] ?? ''));
+        if ($practiceType !== '' && $practiceType !== 'all') {
+            $query->whereJsonContains('template.practice_types', $practiceType);
+        }
+
         $keyword = trim((string) ($filters['keyword'] ?? ''));
         if ($keyword !== '') {
             $like = '%' . str_replace(['%', '_'], ['\\%', '\\_'], $keyword) . '%';
@@ -204,6 +224,10 @@ class TemplateRecord extends TableRecord
             'template.version',
             'template.download_count',
             'template.flag',
+            'template.business_code',
+            'template.material_type',
+            'template.scope_type',
+            'template.practice_types',
             'template.status',
             'template.created_at',
             'template.updated_at',
@@ -232,6 +256,10 @@ class TemplateRecord extends TableRecord
             'version' => $row->version,
             'download_count' => (int) ($row->download_count ?? 0),
             'flag' => $row->flag,
+            'business_code' => $row->business_code,
+            'material_type' => $row->material_type,
+            'scope_type' => $row->scope_type,
+            'practice_types' => self::jsonArray($row->practice_types ?? null),
             'status' => $row->status,
             'created_at' => $row->created_at,
             'updated_at' => $row->updated_at,
@@ -281,9 +309,13 @@ class TemplateRecord extends TableRecord
             `description` VARCHAR(1000) DEFAULT NULL,
             `file_id` BIGINT UNSIGNED DEFAULT NULL,
             `version` VARCHAR(40) DEFAULT '1.0',
-            `download_count` INT UNSIGNED DEFAULT 0,
-            `flag` ENUM('off','on') DEFAULT 'on',
-            PRIMARY KEY (`id`),
+                `download_count` INT UNSIGNED DEFAULT 0,
+                `flag` ENUM('off','on') DEFAULT 'on',
+                `business_code` VARCHAR(80) DEFAULT NULL,
+                `material_type` VARCHAR(60) DEFAULT NULL,
+                `scope_type` VARCHAR(40) DEFAULT NULL,
+                `practice_types` JSON DEFAULT NULL,
+                PRIMARY KEY (`id`),
             UNIQUE KEY `uk_uuid` (`uuid`),
             KEY `idx_category_flag` (`category_id`, `flag`),
             KEY `idx_file_id` (`file_id`),
@@ -309,6 +341,10 @@ class TemplateRecord extends TableRecord
                 'version' => "ALTER TABLE `template` ADD COLUMN `version` VARCHAR(40) DEFAULT '1.0' AFTER `file_id`",
                 'download_count' => "ALTER TABLE `template` ADD COLUMN `download_count` INT UNSIGNED DEFAULT 0 AFTER `version`",
                 'flag' => "ALTER TABLE `template` ADD COLUMN `flag` ENUM('off','on') DEFAULT 'on' AFTER `download_count`",
+                'business_code' => "ALTER TABLE `template` ADD COLUMN `business_code` VARCHAR(80) DEFAULT NULL AFTER `flag`",
+                'material_type' => "ALTER TABLE `template` ADD COLUMN `material_type` VARCHAR(60) DEFAULT NULL AFTER `business_code`",
+                'scope_type' => "ALTER TABLE `template` ADD COLUMN `scope_type` VARCHAR(40) DEFAULT NULL AFTER `material_type`",
+                'practice_types' => "ALTER TABLE `template` ADD COLUMN `practice_types` JSON DEFAULT NULL AFTER `scope_type`",
             ],
         ];
 
@@ -328,6 +364,7 @@ class TemplateRecord extends TableRecord
             ['template', 'idx_category_flag', "ALTER TABLE `template` ADD KEY `idx_category_flag` (`category_id`, `flag`)"],
             ['template', 'idx_file_id', "ALTER TABLE `template` ADD KEY `idx_file_id` (`file_id`)"],
             ['template', 'idx_deleted_at', "ALTER TABLE `template` ADD KEY `idx_deleted_at` (`deleted_at`)"],
+            ['template', 'idx_template_business_material', "ALTER TABLE `template` ADD KEY `idx_template_business_material` (`business_code`, `material_type`, `status`)"],
         ];
 
         foreach ($indexes as [$table, $index, $ddl]) {
@@ -363,5 +400,19 @@ class TemplateRecord extends TableRecord
         $data[6] = chr((ord($data[6]) & 0x0f) | 0x40);
         $data[8] = chr((ord($data[8]) & 0x3f) | 0x80);
         return vsprintf('%s%s-%s-%s-%s-%s%s%s', str_split(bin2hex($data), 4));
+    }
+
+    private static function jsonArray(mixed $value): array
+    {
+        if (is_array($value)) {
+            return array_values($value);
+        }
+
+        if (!is_string($value) || trim($value) === '') {
+            return [];
+        }
+
+        $decoded = json_decode($value, true);
+        return is_array($decoded) ? array_values($decoded) : [];
     }
 }

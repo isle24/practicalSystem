@@ -986,6 +986,7 @@ class MessageRecord extends TableRecord
             ['seq' => 140, 'prefix' => 'internship_base_usage', 'name' => '基地使用', 'panel' => '#panel=internship:baseFlows'],
             ['seq' => 143, 'prefix' => 'internship_base_result', 'name' => '基地成果', 'panel' => '#panel=internship:baseFlows'],
             ['seq' => 146, 'prefix' => 'internship_base_expense', 'name' => '基地费用', 'panel' => '#panel=internship:baseFlows'],
+            ['seq' => 149, 'prefix' => 'internship_graduation_appraisal', 'name' => '毕业实习成绩鉴定表', 'panel' => '#panel=internship:documents'],
             ['seq' => 201, 'prefix' => 'training_plan', 'name' => '实训教学计划', 'panel' => '#panel=training:plans'],
             ['seq' => 204, 'prefix' => 'training_syllabus', 'name' => '实训大纲', 'panel' => '#panel=training:syllabus'],
             ['seq' => 207, 'prefix' => 'training_lesson_plan', 'name' => '实训教案', 'panel' => '#panel=training:lessonPlans'],

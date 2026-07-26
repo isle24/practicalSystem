@@ -77,6 +77,10 @@ class TemplateService
             'file_id' => $fileId,
             'version' => $this->nullableString($payload['version'] ?? null, 40) ?: '1.0',
             'flag' => $this->enum($payload['flag'] ?? 'on', ['on', 'off'], 'on'),
+            'business_code' => $this->nullableString($payload['business_code'] ?? null, 80),
+            'material_type' => $this->nullableString($payload['material_type'] ?? null, 60),
+            'scope_type' => $this->enum($payload['scope_type'] ?? '', ['', 'plan', 'arrangement', 'student_task', 'plan_class'], '' ) ?: null,
+            'practice_types' => $this->jsonArray($payload['practice_types'] ?? []),
             'status' => $this->enum($payload['status'] ?? 'enabled', ['enabled', 'disabled'], 'enabled'),
             'deleted_at' => null,
         ]);
@@ -181,5 +185,16 @@ class TemplateService
     {
         $value = (string) $value;
         return in_array($value, $values, true) ? $value : $default;
+    }
+
+    private function jsonArray(mixed $value): string
+    {
+        $items = is_array($value) ? $value : [];
+        $items = array_values(array_unique(array_filter(array_map(
+            static fn (mixed $item): string => trim((string) $item),
+            $items
+        ))));
+
+        return json_encode($items, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '[]';
     }
 }

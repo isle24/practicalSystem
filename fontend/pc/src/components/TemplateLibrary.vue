@@ -26,6 +26,15 @@
       <el-select v-model="filters.category_id" clearable filterable placeholder="全部分类" @change="loadTemplates(1)">
         <el-option v-for="item in categories" :key="item.id" :label="item.name" :value="item.id" />
       </el-select>
+      <el-select v-model="filters.business_code" clearable placeholder="全部业务" @change="loadTemplates(1)">
+        <el-option v-for="item in businessOptions" :key="item.value" :label="item.label" :value="item.value" />
+      </el-select>
+      <el-select v-model="filters.material_type" clearable filterable placeholder="全部材料" @change="loadTemplates(1)">
+        <el-option v-for="item in materialOptions" :key="item.value" :label="item.label" :value="item.value" />
+      </el-select>
+      <el-select v-model="filters.scope_type" clearable placeholder="全部层级" @change="loadTemplates(1)">
+        <el-option v-for="item in scopeOptions" :key="item.value" :label="item.label" :value="item.value" />
+      </el-select>
       <el-input v-model="filters.keyword" clearable placeholder="搜索模板、说明、分类" @keyup.enter="loadTemplates(1)" />
       <el-button :icon="Search" :loading="loading" @click="loadTemplates(1)">查询</el-button>
       <el-button :icon="RefreshCw" :loading="loading" @click="reload">刷新</el-button>
@@ -72,6 +81,17 @@
           </template>
         </el-table-column>
         <el-table-column prop="category_name" label="分类" width="150" />
+        <el-table-column label="业务用途" min-width="190">
+          <template #default="{ row }">
+            <div class="template-purpose-cell">
+              <strong>{{ businessText(row.business_code) }}</strong>
+              <small>{{ materialText(row.material_type) }} · {{ scopeText(row.scope_type) }}</small>
+            </div>
+          </template>
+        </el-table-column>
+        <el-table-column label="适用类型" min-width="150">
+          <template #default="{ row }">{{ practiceTypesText(row.practice_types) }}</template>
+        </el-table-column>
         <el-table-column prop="version" label="版本" width="90" />
         <el-table-column label="文件" min-width="180">
           <template #default="{ row }">
@@ -297,6 +317,30 @@
               inactive-text="停用"
             />
           </label>
+          <label>
+            <span>业务编码</span>
+            <el-select v-model="templateDialog.form.business_code" clearable filterable allow-create default-first-option placeholder="选择或输入业务编码">
+              <el-option v-for="item in businessOptions" :key="item.value" :label="item.label" :value="item.value" />
+            </el-select>
+          </label>
+          <label>
+            <span>材料类型</span>
+            <el-select v-model="templateDialog.form.material_type" clearable filterable placeholder="选择材料类型">
+              <el-option v-for="item in materialOptions" :key="item.value" :label="item.label" :value="item.value" />
+            </el-select>
+          </label>
+          <label>
+            <span>材料层级</span>
+            <el-select v-model="templateDialog.form.scope_type" clearable placeholder="选择材料层级">
+              <el-option v-for="item in scopeOptions" :key="item.value" :label="item.label" :value="item.value" />
+            </el-select>
+          </label>
+          <label class="span-2">
+            <span>适用实习类型</span>
+            <el-select v-model="templateDialog.form.practice_types" multiple collapse-tags collapse-tags-tooltip clearable placeholder="全部类型">
+              <el-option v-for="item in practiceTypeOptions" :key="item.value" :label="item.label" :value="item.value" />
+            </el-select>
+          </label>
           <label class="span-2">
             <span>说明</span>
             <textarea v-model="templateDialog.form.description" rows="3" />
@@ -406,8 +450,42 @@ const messageTemplates = ref([]);
 const fileInputRef = ref(null);
 const filters = reactive({
   category_id: '',
+  business_code: '',
+  material_type: '',
+  scope_type: '',
   keyword: '',
 });
+const businessOptions = [
+  { label: '实习档案', value: 'internship_archive' },
+];
+const materialOptions = [
+  { label: '实习计划', value: 'plan' },
+  { label: '教学实习实施表', value: 'implementation_sheet' },
+  { label: '实习教学大纲', value: 'syllabus' },
+  { label: '实习指导书', value: 'guide' },
+  { label: '实习情况登记表', value: 'registration' },
+  { label: '指导教师工作报告', value: 'teacher_work_report' },
+  { label: '实习周（日）志', value: 'journal' },
+  { label: '实习/实训报告', value: 'report' },
+  { label: '毕业实习报告', value: 'graduation_report' },
+  { label: '毕业实习成绩鉴定表', value: 'graduation_appraisal' },
+  { label: '成绩登记表', value: 'score_register' },
+  { label: '学生实习安全承诺书', value: 'safety_commitment' },
+];
+const scopeOptions = [
+  { label: '计划', value: 'plan' },
+  { label: '任务', value: 'arrangement' },
+  { label: '学生任务', value: 'student_task' },
+  { label: '计划班级', value: 'plan_class' },
+];
+const practiceTypeOptions = [
+  { label: '认识实习（校内）', value: 'cognition_internal' },
+  { label: '认识实习（校外）', value: 'cognition_external' },
+  { label: '专业实习（校内）', value: 'major_internal' },
+  { label: '专业实习（校外）', value: 'major_external' },
+  { label: '生产实习', value: 'production' },
+  { label: '毕业实习', value: 'graduation' },
+];
 const messageFilters = reactive({
   type: 'all',
   status: 'enabled',
@@ -517,6 +595,9 @@ async function loadTemplates(page = 1) {
       page,
       page_size: pagination.page_size,
       category_id: filters.category_id || '',
+      business_code: filters.business_code || '',
+      material_type: filters.material_type || '',
+      scope_type: filters.scope_type || '',
       keyword: filters.keyword,
     });
     templates.value = data.items || [];
@@ -633,6 +714,10 @@ function openTemplateDialog(row = null) {
     version: row.version || '1.0',
     flag: row.flag || 'on',
     status: row.status || 'enabled',
+    business_code: row.business_code || '',
+    material_type: row.material_type || '',
+    scope_type: row.scope_type || '',
+    practice_types: Array.isArray(row.practice_types) ? [...row.practice_types] : [],
   } : emptyTemplateForm();
   templateDialog.fileName = row?.file?.download_name || row?.file?.name || '';
   templateDialog.visible = true;
@@ -820,7 +905,32 @@ function emptyTemplateForm() {
     version: '1.0',
     flag: 'on',
     status: 'enabled',
+    business_code: '',
+    material_type: '',
+    scope_type: '',
+    practice_types: [],
   };
+}
+
+function optionText(options, value, fallback = '-') {
+  return options.find(item => item.value === value)?.label || value || fallback;
+}
+
+function businessText(value) {
+  return optionText(businessOptions, value, '通用模板');
+}
+
+function materialText(value) {
+  return optionText(materialOptions, value, '未绑定材料');
+}
+
+function scopeText(value) {
+  return optionText(scopeOptions, value, '通用层级');
+}
+
+function practiceTypesText(values) {
+  if (!Array.isArray(values) || !values.length) return '全部类型';
+  return values.map(value => optionText(practiceTypeOptions, value, value)).join('、');
 }
 
 function emptyMessageTemplateForm(row = {}) {

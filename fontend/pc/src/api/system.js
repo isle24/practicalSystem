@@ -724,6 +724,34 @@ export function fetchInternshipArchiveMaterials(params = {}) {
   return internshipList('archive-materials', params);
 }
 
+export function fetchInternshipArchiveMaterialDetail(params = {}) {
+  return internshipList('archive-material-detail', params);
+}
+
+export function fetchInternshipArchiveMaterialHistory(params = {}) {
+  return internshipList('archive-material-history', params);
+}
+
+export function saveInternshipArchiveMaterial(payload) {
+  return internshipPost('save-archive-material', payload);
+}
+
+export function generateInternshipArchiveMaterial(payload) {
+  return internshipPost('generate-archive-material', payload);
+}
+
+export function archiveInternshipMaterial(payload) {
+  return internshipPost('archive-material', payload);
+}
+
+export function saveInternshipGraduationAppraisal(payload) {
+  return internshipPost('save-graduation-appraisal', payload);
+}
+
+export function fetchInternshipGraduationAppraisal(params = {}) {
+  return internshipList('graduation-appraisal', params);
+}
+
 export function saveInternshipScore(payload) {
   return internshipPost('save-score', payload);
 }

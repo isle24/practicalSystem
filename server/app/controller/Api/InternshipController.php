@@ -421,6 +421,55 @@ class InternshipController
         return $this->handle(fn (): array => $this->service()->archiveMaterials($request));
     }
 
+    /** 查看实习计划档案详情 */
+    #[OperationLog('查看实习计划档案详情')]
+    public function archiveMaterialDetail(Request $request): Response
+    {
+        return $this->handle(fn (): array => $this->service()->archiveMaterialDetail($request));
+    }
+
+    /** 查看实习档案材料历史版本 */
+    #[OperationLog('查看实习档案材料历史版本')]
+    public function archiveMaterialHistory(Request $request): Response
+    {
+        return $this->handle(fn (): array => $this->service()->archiveMaterialHistory($request));
+    }
+
+    /** 保存实习档案材料 */
+    #[OperationLog('保存实习档案材料')]
+    public function saveArchiveMaterial(Request $request): Response
+    {
+        return $this->handle(fn (): array => $this->service()->saveArchiveMaterial($request));
+    }
+
+    /** 生成实习档案材料 */
+    #[OperationLog('生成实习档案材料')]
+    public function generateArchiveMaterial(Request $request): Response
+    {
+        return $this->handle(fn (): array => $this->service()->generateArchiveMaterial($request));
+    }
+
+    /** 归档实习材料 */
+    #[OperationLog('归档实习材料')]
+    public function archiveMaterial(Request $request): Response
+    {
+        return $this->handle(fn (): array => $this->service()->archiveMaterial($request));
+    }
+
+    /** 保存毕业实习成绩鉴定 */
+    #[OperationLog('保存毕业实习成绩鉴定')]
+    public function saveGraduationAppraisal(Request $request): Response
+    {
+        return $this->handle(fn (): array => $this->service()->saveGraduationAppraisal($request));
+    }
+
+    /** 查看毕业实习成绩鉴定 */
+    #[OperationLog('查看毕业实习成绩鉴定')]
+    public function graduationAppraisal(Request $request): Response
+    {
+        return $this->handle(fn (): array => $this->service()->graduationAppraisal($request));
+    }
+
     /**
      * 保存实习成绩
      */

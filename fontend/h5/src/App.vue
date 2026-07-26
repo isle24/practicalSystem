@@ -168,6 +168,7 @@ import { useMobilePermissions } from './composables/useMobilePermissions';
 import { usePracticeModule } from './composables/usePracticeModule';
 import { useSupportCenter } from './composables/useSupportCenter';
 import { statusText as resolveStatusText } from './constants/status';
+import { backendUrl } from './api/client';
 import { formatDateKey } from './utils/date';
 import {
   fetchInternshipArchiveMaterials,
@@ -192,6 +193,7 @@ import {
   fetchInternshipTeacherWorkReports,
   fetchInternshipInspections,
   fetchInternshipTimeline,
+  fetchTemplateList,
   fetchPracticeList,
   fetchPracticeOptions,
   fetchPracticeOverview,
@@ -218,9 +220,11 @@ import {
   saveInternshipReviewDraft,
   saveInternshipScore,
   saveInternshipSignIn,
+  saveInternshipSafetyLetter,
   savePracticeExecution,
   savePracticeProjectScore,
   savePracticeReviewDraft,
+  uploadFile,
 } from './api/system';
 
 const { state, hasPermission, load } = useMobilePermissions();
@@ -422,6 +426,8 @@ const practiceGpsTitle = computed(() => (practiceGpsReady.value ? '已获取 GPS
 const practiceGpsHint = computed(() => (practiceGpsReady.value ? '坐标来自当前设备定位' : '签到前请先授权并获取当前位置'));
 const practiceMapUrl = computed(() => coordinateMapUrl(practiceExecutionDialog.form.longitude, practiceExecutionDialog.form.latitude, practiceGpsReady.value));
 const signAccuracyText = computed(() => accuracyDisplayText(internship.forms.sign.accuracy));
+const currentReportIsGraduation = computed(() => currentArrangement()?.type === 'graduation');
+const safetyTemplate = computed(() => internship.options.archive_templates.find(item => item.material_type === 'safety_commitment') || null);
 const practiceAccuracyText = computed(() => accuracyDisplayText(practiceExecutionDialog.form.accuracy));
 
 function coordinateMapUrl(longitudeValue, latitudeValue, ready) {
@@ -749,7 +755,7 @@ const mobileListConfigs = computed(() => ({
     title: '归档材料',
     shortTitle: '归档',
     icon: FileText,
-    keywordPlaceholder: '学生、学号、安排、材料',
+    keywordPlaceholder: '课程、任务、材料',
     gradeFilter: true,
     statusOptions: [
       { value: 'complete', label: '完整' },
@@ -849,6 +855,13 @@ const studentSubmitCards = computed(() => [
     icon: FileText,
     meta: stageDeadlineText('report_deadline'),
     expired: isStageExpired('report_deadline'),
+  },
+  {
+    key: 'safety',
+    title: '安全承诺',
+    desc: '下载模板签署后上传定稿件',
+    icon: CheckCircle2,
+    meta: internship.forms.safety.signature_file_id ? '已选择定稿' : '待签署',
   },
   {
     key: 'delay',
@@ -1143,7 +1156,7 @@ function mobileListTitle(key, row) {
     scores: student || `成绩ID ${row.id}`,
     courseScores: joinFact([row.student_name, row.student_num]) || `课程成绩 ${row.plan_id}-${row.student_id}`,
     inspections: joinFact([row.arrangement_title, row.student_name]) || `巡查ID ${row.id}`,
-    archiveMaterials: student || arrangement || `归档ID ${row.id}`,
+    archiveMaterials: row.course_name || student || arrangement || `归档ID ${row.id}`,
     insurances: student || row.insurance_company || `保险ID ${row.id}`,
     safetyLetters: student || `承诺ID ${row.id}`,
   };
@@ -1316,12 +1329,12 @@ function mobileListFacts(key, row) {
       namedFact('说明', previewText(row.remark, 42)),
     ],
     archiveMaterials: [
-      namedFact('学生', student || (row.student_id ? `学生ID ${row.student_id}` : '')),
       namedFact('届次', row.grade_name),
-      namedFact('任务', arrangement),
-      namedFact('类型', row.arrangement_type_text),
+      namedFact(row.student_id ? '学生' : '学院专业', row.student_id ? student : joinFact([row.dep_name, row.profession_name])),
+      namedFact(row.student_id ? '任务' : '课程', row.student_id ? arrangement : joinFact([row.course_code, row.course_name])),
+      namedFact('任务数', row.task_count),
+      namedFact('学生任务数', row.student_task_count),
       namedFact('进度', row.material_progress),
-      namedFact('抽检', row.inspection_record_status),
       namedFact('缺失', row.missing_materials),
     ],
     insurances: [
@@ -2158,7 +2171,10 @@ function applyDefaultInternshipSelection() {
     internship.forms.journal.arrangement_id ||= firstArrangement.id;
     internship.forms.report.arrangement_id ||= firstArrangement.id;
     internship.forms.delay.arrangement_id ||= firstArrangement.id;
+    internship.forms.safety.arrangement_id ||= firstArrangement.id;
   }
+  internship.forms.journal.date ||= formatDateKey(new Date());
+  internship.forms.safety.template_id ||= safetyTemplate.value?.id || null;
 }
 
 async function loadInternship() {
@@ -2169,9 +2185,10 @@ async function loadInternship() {
   internship.loading = true;
   internship.message = '';
   try {
-    const [overview, options] = await Promise.all([
+    const [overview, options, archiveTemplates] = await Promise.all([
       fetchInternshipOverview(),
       fetchInternshipOptions(),
+      fetchTemplateList({ business_code: 'internship_archive', page: 1, page_size: 100 }),
     ]);
     internship.overview = {
       ...emptyInternshipOverview(),
@@ -2180,6 +2197,7 @@ async function loadInternship() {
     internship.options = {
       ...emptyInternshipOptions(),
       ...(options || {}),
+      archive_templates: archiveTemplates.items || [],
     };
     applyDefaultInternshipFilters();
     applyDefaultInternshipSelection();
@@ -2211,6 +2229,7 @@ async function loadInternshipPanelData() {
       loadInternshipList('journals'),
       loadInternshipList('reports'),
       loadInternshipList('delays'),
+      loadInternshipList('safetyLetters'),
     ]);
     return;
   }
@@ -2373,21 +2392,46 @@ async function submitJournal(status = 'wait') {
     openDelayForStage('journal_deadline');
     return;
   }
+  if (!String(internship.forms.journal.title || '').trim()) {
+    internship.message = '请填写日志标题';
+    showToast(internship.message);
+    return;
+  }
+  if (!String(internship.forms.journal.work_content || '').trim()) {
+    internship.message = '请填写工作内容';
+    showToast(internship.message);
+    return;
+  }
   internship.loading = true;
   internship.message = '';
   try {
     await saveInternshipJournal({
       id: internship.forms.journal.id || undefined,
       arrangement_id: arrangementId,
+      date: internship.forms.journal.date || formatDateKey(new Date()),
       title: internship.forms.journal.title,
-      content: internship.forms.journal.content,
+      content: internship.forms.journal.work_content,
+      location: internship.forms.journal.location,
+      work_content: internship.forms.journal.work_content,
+      gains: internship.forms.journal.gains,
+      problems: internship.forms.journal.problems,
+      form_data: {
+        location: internship.forms.journal.location,
+        gains: internship.forms.journal.gains,
+        problems: internship.forms.journal.problems,
+      },
+      attachment_ids: internship.forms.journal.attachments.map(item => item.id),
       status,
     });
     if (status === 'wait') {
       internship.forms.journal.id = null;
       internship.forms.journal.arrangement_id = arrangementId;
       internship.forms.journal.title = '';
-      internship.forms.journal.content = '';
+      internship.forms.journal.location = '';
+      internship.forms.journal.work_content = '';
+      internship.forms.journal.gains = '';
+      internship.forms.journal.problems = '';
+      internship.forms.journal.attachments = [];
     }
     internship.message = status === 'wait' ? '日志已提交审核' : '日志草稿已保存';
     await loadInternship();
@@ -2416,6 +2460,11 @@ async function submitReport(status = 'wait') {
     openDelayForStage('report_deadline');
     return;
   }
+  if (!String(internship.forms.report.title || '').trim() || !String(internship.forms.report.content || '').trim()) {
+    internship.message = '请填写报告标题和主要内容';
+    showToast(internship.message);
+    return;
+  }
   internship.loading = true;
   internship.message = '';
   try {
@@ -2425,6 +2474,14 @@ async function submitReport(status = 'wait') {
       template_id: internship.options.report_templates[0]?.id || null,
       title: internship.forms.report.title,
       content: internship.forms.report.content,
+      report_type: currentReportIsGraduation.value ? 'graduation' : 'general',
+      form_data: {
+        purpose: internship.forms.report.purpose,
+        gains: internship.forms.report.gains,
+        suggestions: internship.forms.report.suggestions,
+        company_profile: internship.forms.report.company_profile,
+      },
+      attachment_ids: internship.forms.report.attachments.map(item => item.id),
       status,
     });
     if (status === 'wait') {
@@ -2432,12 +2489,96 @@ async function submitReport(status = 'wait') {
       internship.forms.report.arrangement_id = arrangementId;
       internship.forms.report.title = '';
       internship.forms.report.content = '';
+      internship.forms.report.purpose = '';
+      internship.forms.report.gains = '';
+      internship.forms.report.suggestions = '';
+      internship.forms.report.company_profile = '';
+      internship.forms.report.attachments = [];
     }
     internship.message = status === 'wait' ? '报告已提交审核' : '报告草稿已保存';
     await loadInternship();
     showToast(internship.message);
   } catch (error) {
     internship.message = error.message;
+    showToast(error.message);
+  } finally {
+    internship.loading = false;
+  }
+}
+
+async function uploadInternshipAttachments(type, event) {
+  const files = Array.from(event.target.files || []);
+  event.target.value = '';
+  if (!files.length || internship.loading) {
+    return;
+  }
+  internship.loading = true;
+  try {
+    for (const file of files.slice(0, 10)) {
+      const uploaded = await uploadFile(file, { category: 'internship_material', is_temporary: 'false' });
+      internship.forms[type].attachments.push({ id: uploaded.file_id, name: uploaded.name || file.name, url: uploaded.url || '' });
+    }
+    showToast('附件已上传');
+  } catch (error) {
+    showToast(error.message);
+  } finally {
+    internship.loading = false;
+  }
+}
+
+function removeInternshipAttachment(type, fileId) {
+  internship.forms[type].attachments = internship.forms[type].attachments.filter(item => Number(item.id) !== Number(fileId));
+}
+
+function openSafetyTemplate() {
+  const url = safetyTemplate.value?.file?.url;
+  if (!url) {
+    showToast('安全承诺模板暂不可用');
+    return;
+  }
+  window.open(backendUrl(url), '_blank', 'noopener,noreferrer');
+}
+
+async function uploadSafetyFinal(event) {
+  const file = event.target.files?.[0];
+  event.target.value = '';
+  if (!file || internship.loading) {
+    return;
+  }
+  internship.loading = true;
+  try {
+    const uploaded = await uploadFile(file, { category: 'internship_archive', is_temporary: 'false' });
+    internship.forms.safety.signature_file_id = uploaded.file_id;
+    internship.forms.safety.file_name = uploaded.name || file.name;
+    showToast('签署定稿已上传');
+  } catch (error) {
+    showToast(error.message);
+  } finally {
+    internship.loading = false;
+  }
+}
+
+async function submitSafetyLetter() {
+  if (internship.loading) {
+    return;
+  }
+  if (!internship.forms.safety.arrangement_id || !internship.forms.safety.signature_file_id) {
+    showToast('请选择实习任务并上传签署定稿');
+    return;
+  }
+  internship.loading = true;
+  try {
+    await saveInternshipSafetyLetter({
+      arrangement_id: internship.forms.safety.arrangement_id,
+      template_id: internship.forms.safety.template_id || safetyTemplate.value?.id || null,
+      signature_file_id: internship.forms.safety.signature_file_id,
+      status: 'signed',
+    });
+    internship.forms.safety.signature_file_id = null;
+    internship.forms.safety.file_name = '';
+    await loadInternship();
+    showToast('安全承诺已提交');
+  } catch (error) {
     showToast(error.message);
   } finally {
     internship.loading = false;
@@ -2506,7 +2647,12 @@ function editStudentWork(type, row) {
     internship.forms.journal.id = row.id || null;
     internship.forms.journal.arrangement_id = row.arrangement_id || null;
     internship.forms.journal.title = row.title || '';
-    internship.forms.journal.content = row.content || '';
+    internship.forms.journal.date = row.date || formatDateKey(new Date());
+    internship.forms.journal.location = row.location || '';
+    internship.forms.journal.work_content = row.work_content || row.content || '';
+    internship.forms.journal.gains = row.gains || '';
+    internship.forms.journal.problems = row.problems || '';
+    internship.forms.journal.attachments = (row.attachment_ids || []).map(id => ({ id, name: `附件 ${id}` }));
     internship.forms.sign.arrangement_id = row.arrangement_id || internship.forms.sign.arrangement_id;
     internship.message = '已载入日志内容，请修改后重新提交';
   }
@@ -2516,6 +2662,11 @@ function editStudentWork(type, row) {
     internship.forms.report.arrangement_id = row.arrangement_id || null;
     internship.forms.report.title = row.title || '';
     internship.forms.report.content = row.content || '';
+    internship.forms.report.purpose = row.form_data?.purpose || '';
+    internship.forms.report.gains = row.form_data?.gains || '';
+    internship.forms.report.suggestions = row.form_data?.suggestions || '';
+    internship.forms.report.company_profile = row.form_data?.company_profile || '';
+    internship.forms.report.attachments = (row.attachment_ids || []).map(id => ({ id, name: `附件 ${id}` }));
     internship.forms.sign.arrangement_id = row.arrangement_id || internship.forms.sign.arrangement_id;
     internship.message = '已载入报告内容，请修改后重新提交';
   }
@@ -3730,6 +3881,7 @@ function currentArrangement() {
     report: internship.forms.report.arrangement_id,
     delay: internship.forms.delay.arrangement_id,
     sign: internship.forms.sign.arrangement_id,
+    safety: internship.forms.safety.arrangement_id,
   }[internship.submitSection];
   const arrangementId = Number(
     formArrangementId
@@ -3738,6 +3890,7 @@ function currentArrangement() {
     || internship.forms.report.arrangement_id
     || internship.forms.application.arrangement_id
     || internship.forms.delay.arrangement_id
+    || internship.forms.safety.arrangement_id
     || 0,
   );
   return internship.options.arrangements.find(item => Number(item.id) === arrangementId) || internship.options.arrangements[0] || null;
@@ -4044,8 +4197,14 @@ provideInternshipContext({
   submitDelay,
   submitJournal,
   submitReport,
+  submitSafetyLetter,
   submitScore,
   submitSignIn,
+  uploadInternshipAttachments,
+  uploadSafetyFinal,
+  removeInternshipAttachment,
+  openSafetyTemplate,
+  currentReportIsGraduation,
   switchInternshipPanel,
   switchMobileList,
   textLength,

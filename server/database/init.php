@@ -760,6 +760,25 @@ function schoolBusinessStatements(): array
         simpleTable('journal_recording', recordingColumns()),
         simpleTable('report', entityColumns(['`student_id` BIGINT UNSIGNED DEFAULT NULL', '`teacher_id` BIGINT UNSIGNED DEFAULT NULL', '`date` DATE DEFAULT NULL', '`title` VARCHAR(180) DEFAULT NULL', '`content` TEXT DEFAULT NULL', '`template_id` BIGINT UNSIGNED DEFAULT NULL', '`submitted_at` DATETIME DEFAULT NULL', '`remark` TEXT DEFAULT NULL'])),
         simpleTable('report_recording', recordingColumns()),
+        simpleTable('internship_graduation_appraisal', [
+            '`student_id` BIGINT UNSIGNED NOT NULL',
+            '`arrangement_id` BIGINT UNSIGNED NOT NULL',
+            '`teacher_id` BIGINT UNSIGNED DEFAULT NULL',
+            '`process_score` DECIMAL(5,2) DEFAULT NULL',
+            '`enterprise_score` DECIMAL(5,2) DEFAULT NULL',
+            '`school_score` DECIMAL(5,2) DEFAULT NULL',
+            '`report_score` DECIMAL(5,2) DEFAULT NULL',
+            '`final_score` DECIMAL(5,2) DEFAULT NULL',
+            '`grade_level` VARCHAR(40) DEFAULT NULL',
+            '`enterprise_comment` TEXT DEFAULT NULL',
+            '`school_comment` TEXT DEFAULT NULL',
+            '`form_data` JSON DEFAULT NULL',
+            '`attachment_id` BIGINT UNSIGNED DEFAULT NULL',
+            '`submitted_at` DATETIME DEFAULT NULL',
+            '`reviewed_at` DATETIME DEFAULT NULL',
+            'KEY `idx_graduation_appraisal_student_task` (`student_id`, `arrangement_id`, `status`)',
+        ]),
+        simpleTable('internship_graduation_appraisal_recording', recordingColumns()),
         simpleTable('report_template', ['`template_json` JSON DEFAULT NULL']),
         simpleTable('review_opinion', entityColumns(['`reviewer_id` BIGINT UNSIGNED DEFAULT NULL', '`opinion` TEXT DEFAULT NULL'])),
         simpleTable('review_opinion_draft', entityColumns(['`reviewer_id` BIGINT UNSIGNED DEFAULT NULL', '`teacher_id` BIGINT UNSIGNED DEFAULT NULL', '`review_status` VARCHAR(40) DEFAULT NULL', '`opinion` TEXT DEFAULT NULL', '`score` DECIMAL(5,2) DEFAULT NULL', 'UNIQUE KEY `uk_review_draft` (`entity_type`, `entity_id`, `reviewer_id`)', 'KEY `idx_reviewer` (`reviewer_id`)'])),
@@ -805,6 +824,33 @@ function schoolBusinessStatements(): array
         simpleTable('safety_letter_recording', recordingColumns()),
         simpleTable('syllabus_guide', ['`dep_id` BIGINT UNSIGNED DEFAULT NULL', '`file_id` BIGINT UNSIGNED DEFAULT NULL']),
         simpleTable('syllabus_guide_recording', recordingColumns()),
+        simpleTable('internship_archive_material', [
+            '`material_type` VARCHAR(60) NOT NULL',
+            '`scope_type` VARCHAR(40) NOT NULL',
+            '`plan_id` BIGINT UNSIGNED DEFAULT NULL',
+            '`arrangement_id` BIGINT UNSIGNED DEFAULT NULL',
+            '`student_id` BIGINT UNSIGNED DEFAULT NULL',
+            '`class_id` BIGINT UNSIGNED DEFAULT NULL',
+            '`template_id` BIGINT UNSIGNED DEFAULT NULL',
+            '`template_version` VARCHAR(40) DEFAULT NULL',
+            '`source_entity_type` VARCHAR(60) DEFAULT NULL',
+            '`source_entity_id` BIGINT UNSIGNED DEFAULT NULL',
+            '`content_json` JSON DEFAULT NULL',
+            '`generated_file_id` BIGINT UNSIGNED DEFAULT NULL',
+            '`signed_file_id` BIGINT UNSIGNED DEFAULT NULL',
+            '`recording_id` BIGINT UNSIGNED DEFAULT NULL',
+            '`archive_version` INT UNSIGNED DEFAULT 1',
+            '`archived_at` DATETIME DEFAULT NULL',
+            '`created_by` BIGINT UNSIGNED DEFAULT NULL',
+            '`updated_by` BIGINT UNSIGNED DEFAULT NULL',
+            "`scope_key` VARCHAR(180) GENERATED ALWAYS AS (CONCAT(`scope_type`, ':', IFNULL(`plan_id`, 0), ':', IFNULL(`arrangement_id`, 0), ':', IFNULL(`student_id`, 0), ':', IFNULL(`class_id`, 0))) STORED",
+            "`current_flag` TINYINT GENERATED ALWAYS AS (CASE WHEN `status` IN ('draft','submitted','archived') AND `deleted_at` IS NULL THEN 1 ELSE NULL END) STORED",
+            'UNIQUE KEY `uk_archive_material_current` (`material_type`, `scope_key`, `current_flag`)',
+            'KEY `idx_archive_material_plan` (`plan_id`, `scope_type`, `status`)',
+            'KEY `idx_archive_material_task` (`arrangement_id`, `student_id`, `status`)',
+            'KEY `idx_archive_material_files` (`generated_file_id`, `signed_file_id`)',
+        ]),
+        simpleTable('internship_archive_material_recording', recordingColumns()),
         simpleTable('implementation_sheet', [
             '`arrangement_id` BIGINT UNSIGNED DEFAULT NULL',
             '`teacher_id` BIGINT UNSIGNED DEFAULT NULL',
@@ -1224,6 +1270,7 @@ function ensureInternshipSchema(PDO $pdo): void
             'location' => "ALTER TABLE `arrangement` ADD COLUMN `location` VARCHAR(255) DEFAULT NULL AFTER `end_date`",
             'description' => "ALTER TABLE `arrangement` ADD COLUMN `description` TEXT DEFAULT NULL AFTER `location`",
             'created_by' => "ALTER TABLE `arrangement` ADD COLUMN `created_by` BIGINT UNSIGNED DEFAULT NULL AFTER `description`",
+            'required_journal_count' => "ALTER TABLE `arrangement` ADD COLUMN `required_journal_count` INT UNSIGNED DEFAULT 1 AFTER `created_by`",
         ],
         'arrangement_change' => [
             'arrangement_id' => "ALTER TABLE `arrangement_change` ADD COLUMN `arrangement_id` BIGINT UNSIGNED DEFAULT NULL AFTER `code`",
@@ -1302,6 +1349,12 @@ function ensureInternshipSchema(PDO $pdo): void
             'content' => "ALTER TABLE `journal` ADD COLUMN `content` TEXT DEFAULT NULL AFTER `title`",
             'date' => "ALTER TABLE `journal` ADD COLUMN `date` DATE DEFAULT NULL AFTER `content`",
             'teacher_id' => "ALTER TABLE `journal` ADD COLUMN `teacher_id` BIGINT UNSIGNED DEFAULT NULL AFTER `date`",
+            'location' => "ALTER TABLE `journal` ADD COLUMN `location` VARCHAR(255) DEFAULT NULL AFTER `teacher_id`",
+            'work_content' => "ALTER TABLE `journal` ADD COLUMN `work_content` TEXT DEFAULT NULL AFTER `location`",
+            'gains' => "ALTER TABLE `journal` ADD COLUMN `gains` TEXT DEFAULT NULL AFTER `work_content`",
+            'problems' => "ALTER TABLE `journal` ADD COLUMN `problems` TEXT DEFAULT NULL AFTER `gains`",
+            'form_data' => "ALTER TABLE `journal` ADD COLUMN `form_data` JSON DEFAULT NULL AFTER `problems`",
+            'attachment_ids' => "ALTER TABLE `journal` ADD COLUMN `attachment_ids` JSON DEFAULT NULL AFTER `form_data`",
         ],
         'report' => [
             'student_id' => "ALTER TABLE `report` ADD COLUMN `student_id` BIGINT UNSIGNED DEFAULT NULL AFTER `code`",
@@ -1312,6 +1365,9 @@ function ensureInternshipSchema(PDO $pdo): void
             'teacher_id' => "ALTER TABLE `report` ADD COLUMN `teacher_id` BIGINT UNSIGNED DEFAULT NULL AFTER `content`",
             'submitted_at' => "ALTER TABLE `report` ADD COLUMN `submitted_at` DATETIME DEFAULT NULL AFTER `teacher_id`",
             'reviewed_at' => "ALTER TABLE `report` ADD COLUMN `reviewed_at` DATETIME DEFAULT NULL AFTER `submitted_at`",
+            'report_type' => "ALTER TABLE `report` ADD COLUMN `report_type` VARCHAR(40) DEFAULT 'general' AFTER `reviewed_at`",
+            'form_data' => "ALTER TABLE `report` ADD COLUMN `form_data` JSON DEFAULT NULL AFTER `report_type`",
+            'attachment_ids' => "ALTER TABLE `report` ADD COLUMN `attachment_ids` JSON DEFAULT NULL AFTER `form_data`",
         ],
         'report_template' => [
             'content' => "ALTER TABLE `report_template` ADD COLUMN `content` TEXT DEFAULT NULL AFTER `code`",
@@ -1415,12 +1471,15 @@ function ensureInternshipSchema(PDO $pdo): void
         ],
         'syllabus_guide' => [
             'arrangement_id' => "ALTER TABLE `syllabus_guide` ADD COLUMN `arrangement_id` BIGINT UNSIGNED DEFAULT NULL AFTER `code`",
+            'plan_id' => "ALTER TABLE `syllabus_guide` ADD COLUMN `plan_id` BIGINT UNSIGNED DEFAULT NULL AFTER `arrangement_id`",
+            'document_type' => "ALTER TABLE `syllabus_guide` ADD COLUMN `document_type` VARCHAR(40) DEFAULT 'syllabus' AFTER `plan_id`",
             'dep_id' => "ALTER TABLE `syllabus_guide` ADD COLUMN `dep_id` BIGINT UNSIGNED DEFAULT NULL AFTER `arrangement_id`",
             'profession_id' => "ALTER TABLE `syllabus_guide` ADD COLUMN `profession_id` BIGINT UNSIGNED DEFAULT NULL AFTER `dep_id`",
             'title' => "ALTER TABLE `syllabus_guide` ADD COLUMN `title` VARCHAR(180) DEFAULT NULL AFTER `profession_id`",
             'content' => "ALTER TABLE `syllabus_guide` ADD COLUMN `content` TEXT DEFAULT NULL AFTER `title`",
             'file_id' => "ALTER TABLE `syllabus_guide` ADD COLUMN `file_id` BIGINT UNSIGNED DEFAULT NULL AFTER `content`",
             'created_by' => "ALTER TABLE `syllabus_guide` ADD COLUMN `created_by` BIGINT UNSIGNED DEFAULT NULL AFTER `file_id`",
+            'form_data' => "ALTER TABLE `syllabus_guide` ADD COLUMN `form_data` JSON DEFAULT NULL AFTER `created_by`",
         ],
         'implementation_sheet' => [
             'arrangement_id' => "ALTER TABLE `implementation_sheet` ADD COLUMN `arrangement_id` BIGINT UNSIGNED DEFAULT NULL AFTER `code`",
@@ -1483,6 +1542,20 @@ function ensureInternshipSchema(PDO $pdo): void
             'suggestions' => "ALTER TABLE `teacher_work_report` ADD COLUMN `suggestions` TEXT DEFAULT NULL AFTER `problems`",
             'attachment_id' => "ALTER TABLE `teacher_work_report` ADD COLUMN `attachment_id` BIGINT UNSIGNED DEFAULT NULL AFTER `suggestions`",
         ],
+        'internship_graduation_appraisal' => [
+            'process_score' => "ALTER TABLE `internship_graduation_appraisal` ADD COLUMN `process_score` DECIMAL(5,2) DEFAULT NULL AFTER `teacher_id`",
+            'enterprise_score' => "ALTER TABLE `internship_graduation_appraisal` ADD COLUMN `enterprise_score` DECIMAL(5,2) DEFAULT NULL AFTER `process_score`",
+            'school_score' => "ALTER TABLE `internship_graduation_appraisal` ADD COLUMN `school_score` DECIMAL(5,2) DEFAULT NULL AFTER `enterprise_score`",
+            'report_score' => "ALTER TABLE `internship_graduation_appraisal` ADD COLUMN `report_score` DECIMAL(5,2) DEFAULT NULL AFTER `school_score`",
+            'final_score' => "ALTER TABLE `internship_graduation_appraisal` ADD COLUMN `final_score` DECIMAL(5,2) DEFAULT NULL AFTER `report_score`",
+            'grade_level' => "ALTER TABLE `internship_graduation_appraisal` ADD COLUMN `grade_level` VARCHAR(40) DEFAULT NULL AFTER `final_score`",
+            'enterprise_comment' => "ALTER TABLE `internship_graduation_appraisal` ADD COLUMN `enterprise_comment` TEXT DEFAULT NULL AFTER `grade_level`",
+            'school_comment' => "ALTER TABLE `internship_graduation_appraisal` ADD COLUMN `school_comment` TEXT DEFAULT NULL AFTER `enterprise_comment`",
+            'form_data' => "ALTER TABLE `internship_graduation_appraisal` ADD COLUMN `form_data` JSON DEFAULT NULL AFTER `school_comment`",
+            'attachment_id' => "ALTER TABLE `internship_graduation_appraisal` ADD COLUMN `attachment_id` BIGINT UNSIGNED DEFAULT NULL AFTER `form_data`",
+            'submitted_at' => "ALTER TABLE `internship_graduation_appraisal` ADD COLUMN `submitted_at` DATETIME DEFAULT NULL AFTER `attachment_id`",
+            'reviewed_at' => "ALTER TABLE `internship_graduation_appraisal` ADD COLUMN `reviewed_at` DATETIME DEFAULT NULL AFTER `submitted_at`",
+        ],
         'inspection_record' => [
             'semester' => "ALTER TABLE `inspection_record` ADD COLUMN `semester` VARCHAR(80) DEFAULT NULL AFTER `code`",
             'arrangement_id' => "ALTER TABLE `inspection_record` ADD COLUMN `arrangement_id` BIGINT UNSIGNED DEFAULT NULL AFTER `semester`",
@@ -1500,7 +1573,7 @@ function ensureInternshipSchema(PDO $pdo): void
         }
     }
 
-    foreach (['application_recording', 'arrangement_recording', 'arrangement_change_recording', 'sign_in_recording', 'journal_recording', 'report_recording', 'join_recording', 'apply_report_delay_recording', 'score_recording', 'plan_recording', 'insurance_recording', 'safety_letter_recording', 'syllabus_guide_recording', 'implementation_sheet_recording', 'teacher_work_report_recording', 'inspection_recording'] as $table) {
+    foreach (['application_recording', 'arrangement_recording', 'arrangement_change_recording', 'sign_in_recording', 'journal_recording', 'report_recording', 'internship_graduation_appraisal_recording', 'internship_archive_material_recording', 'join_recording', 'apply_report_delay_recording', 'score_recording', 'plan_recording', 'insurance_recording', 'safety_letter_recording', 'syllabus_guide_recording', 'implementation_sheet_recording', 'teacher_work_report_recording', 'inspection_recording'] as $table) {
         ensureColumn($pdo, $table, 'parent_id', "ALTER TABLE `{$table}` ADD COLUMN `parent_id` BIGINT UNSIGNED DEFAULT NULL AFTER `code`");
         ensureColumn($pdo, $table, 'action', "ALTER TABLE `{$table}` ADD COLUMN `action` VARCHAR(40) DEFAULT NULL AFTER `parent_id`");
         ensureColumn($pdo, $table, 'operator_id', "ALTER TABLE `{$table}` ADD COLUMN `operator_id` BIGINT UNSIGNED DEFAULT NULL AFTER `action`");
@@ -1523,6 +1596,9 @@ function ensureInternshipSchema(PDO $pdo): void
     ensureIndex($pdo, 'implementation_sheet', 'idx_implementation_arrangement', "ALTER TABLE `implementation_sheet` ADD KEY `idx_implementation_arrangement` (`arrangement_id`, `status`)");
     ensureIndex($pdo, 'implementation_schedule', 'idx_implementation_schedule', "ALTER TABLE `implementation_schedule` ADD KEY `idx_implementation_schedule` (`implementation_id`, `sort`, `status`)");
     ensureIndex($pdo, 'implementation_expense', 'idx_implementation_expense', "ALTER TABLE `implementation_expense` ADD KEY `idx_implementation_expense` (`implementation_id`, `sort`, `status`)");
+    ensureIndex($pdo, 'syllabus_guide', 'idx_syllabus_plan_type', "ALTER TABLE `syllabus_guide` ADD KEY `idx_syllabus_plan_type` (`plan_id`, `document_type`, `status`)");
+    ensureIndex($pdo, 'report', 'idx_report_student_task_type', "ALTER TABLE `report` ADD KEY `idx_report_student_task_type` (`student_id`, `arrangement_id`, `report_type`, `status`)");
+    ensureIndex($pdo, 'internship_graduation_appraisal', 'idx_graduation_appraisal_student_task', "ALTER TABLE `internship_graduation_appraisal` ADD KEY `idx_graduation_appraisal_student_task` (`student_id`, `arrangement_id`, `status`)");
     ensureIndex($pdo, 'internship_plan_approval', 'idx_plan_approval_flow', "ALTER TABLE `internship_plan_approval` ADD KEY `idx_plan_approval_flow` (`plan_id`, `approval_level`, `status`, `created_at`)");
     ensureIndex($pdo, 'internship_task_class', 'uk_task_class', "ALTER TABLE `internship_task_class` ADD UNIQUE KEY `uk_task_class` (`arrangement_id`, `class_id`)");
     ensureIndex($pdo, 'internship_task_class', 'idx_task_class_scope', "ALTER TABLE `internship_task_class` ADD KEY `idx_task_class_scope` (`grade_id`, `dep_id`, `profession_id`, `class_id`)");
@@ -1861,6 +1937,10 @@ function ensureTemplateSchema(PDO $pdo): void
             'version' => "ALTER TABLE `template` ADD COLUMN `version` VARCHAR(40) DEFAULT '1.0' AFTER `file_id`",
             'download_count' => "ALTER TABLE `template` ADD COLUMN `download_count` INT UNSIGNED DEFAULT 0 AFTER `version`",
             'flag' => "ALTER TABLE `template` ADD COLUMN `flag` ENUM('off','on') DEFAULT 'on' AFTER `download_count`",
+            'business_code' => "ALTER TABLE `template` ADD COLUMN `business_code` VARCHAR(80) DEFAULT NULL AFTER `flag`",
+            'material_type' => "ALTER TABLE `template` ADD COLUMN `material_type` VARCHAR(60) DEFAULT NULL AFTER `business_code`",
+            'scope_type' => "ALTER TABLE `template` ADD COLUMN `scope_type` VARCHAR(40) DEFAULT NULL AFTER `material_type`",
+            'practice_types' => "ALTER TABLE `template` ADD COLUMN `practice_types` JSON DEFAULT NULL AFTER `scope_type`",
         ],
     ];
 
@@ -1876,6 +1956,7 @@ function ensureTemplateSchema(PDO $pdo): void
     ensureIndex($pdo, 'template', 'idx_category_flag', "ALTER TABLE `template` ADD KEY `idx_category_flag` (`category_id`, `flag`)");
     ensureIndex($pdo, 'template', 'idx_file_id', "ALTER TABLE `template` ADD KEY `idx_file_id` (`file_id`)");
     ensureIndex($pdo, 'template', 'idx_deleted_at', "ALTER TABLE `template` ADD KEY `idx_deleted_at` (`deleted_at`)");
+    ensureIndex($pdo, 'template', 'idx_template_business_material', "ALTER TABLE `template` ADD KEY `idx_template_business_material` (`business_code`, `material_type`, `status`)");
 }
 
 function ensureExportTaskSchema(PDO $pdo): void
@@ -2788,10 +2869,124 @@ function seedTemplateLibraryData(PDO $pdo): void
         [5, '00000000-0000-0000-0000-000000230005', 'tripartite_agreement', '三方协议模板库', '学校、学生、企业三方协议相关模板。', 50],
         [6, '00000000-0000-0000-0000-000000230006', 'process_document', '过程文档模板库', '签到、日志、周志、过程检查材料模板。', 60],
         [7, '00000000-0000-0000-0000-000000230007', 'report_template_lib', '实习报告模板库', '实习报告、总结、鉴定类模板。', 70],
+        [8, '00000000-0000-0000-0000-000000230008', 'internship_archive', '实习档案模板', '实习计划、实施、大纲、指导书、过程、报告、成绩和安全承诺档案模板。', 80],
     ];
     foreach ($categories as $category) {
         $stmt->execute($category);
     }
+
+    $templateStmt = $pdo->prepare(
+        "INSERT INTO `template` (`uuid`, `category_id`, `code`, `name`, `description`, `file_id`, `version`, `download_count`, `flag`, `business_code`, `material_type`, `scope_type`, `practice_types`, `status`)
+         VALUES (?, 8, ?, ?, ?, ?, ?, 0, 'on', 'internship_archive', ?, ?, ?, 'enabled')
+         ON DUPLICATE KEY UPDATE
+            `category_id` = 8,
+            `code` = VALUES(`code`),
+            `name` = VALUES(`name`),
+            `description` = VALUES(`description`),
+            `file_id` = VALUES(`file_id`),
+            `version` = VALUES(`version`),
+            `flag` = 'on',
+            `business_code` = 'internship_archive',
+            `material_type` = VALUES(`material_type`),
+            `scope_type` = VALUES(`scope_type`),
+            `practice_types` = VALUES(`practice_types`),
+            `status` = 'enabled',
+            `deleted_at` = NULL"
+    );
+    $templates = [
+        ['plan', '实习计划', '计划表导入和归档模板。', 'plan.xlsx', 'plan', 'plan', ['internship']],
+        ['implementation_sheet', '教学实习实施表', '按已确认的新版实施（经费）表生成。', 'implementation-sheet.pdf', 'implementation_sheet', 'arrangement', ['internship']],
+        ['syllabus', '实习教学大纲', '成都锦城学院实习教学大纲模板。', 'syllabus.docx', 'syllabus', 'plan', ['internship']],
+        ['guide', '实习指导书', '实习指导书模板。', 'guide.doc', 'guide', 'plan', ['internship']],
+        ['registration', '实习情况登记表', '根据实习任务和学生绑定生成。', 'registration.xlsx', 'registration', 'arrangement', ['internship']],
+        ['teacher_work_report', '指导教师工作报告', '实习指导教师工作报告模板。', 'teacher-work-report.docx', 'teacher_work_report', 'arrangement', ['internship']],
+        ['journal', '实习周（日）志', '学生实习周志和日志模板。', 'journal.docx', 'journal', 'student_task', ['internship']],
+        ['report', '实习/实训报告', '普通实习报告模板。', 'report.docx', 'report', 'student_task', ['internship']],
+        ['graduation_report', '毕业实习报告', '毕业实习报告模板。', 'graduation-report.docx', 'graduation_report', 'student_task', ['graduation']],
+        ['graduation_appraisal', '毕业实习成绩鉴定表', '毕业实习过程管理、实习单位和校内指导教师成绩鉴定模板。', 'graduation-appraisal.docx', 'graduation_appraisal', 'student_task', ['graduation']],
+        ['score_register', '成绩登记表', '按计划、任务和班级生成成绩登记表。', 'score-register.pdf', 'score_register', 'plan_class', ['internship']],
+        ['safety_commitment', '学生实习安全承诺书', '学生签署后上传定稿文件。', 'safety-commitment.pdf', 'safety_commitment', 'student_task', ['internship']],
+    ];
+    foreach ($templates as $index => [$code, $name, $description, $fileName, $materialType, $scopeType, $practiceTypes]) {
+        $sequence = $index + 1;
+        $fileId = seedArchiveTemplateFile($pdo, $fileName, $name, $sequence);
+        $templateStmt->execute([
+            sprintf('00000000-0000-0000-0000-%012d', 250000 + $sequence),
+            'internship_archive_' . $code,
+            $name,
+            $description,
+            $fileId ?: null,
+            '2026.1',
+            $materialType,
+            $scopeType,
+            json_encode($practiceTypes, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+        ]);
+    }
+}
+
+function seedArchiveTemplateFile(PDO $pdo, string $fileName, string $downloadName, int $sequence): ?int
+{
+    $source = dirname(__DIR__) . '/resources/templates/internship/archive/' . $fileName;
+    if (!is_file($source)) {
+        return null;
+    }
+
+    $relativePath = 'files/b1/system/template/archive/' . $fileName;
+    $target = dirname(__DIR__) . '/public/' . $relativePath;
+    $directory = dirname($target);
+    if (!is_dir($directory) && !mkdir($directory, 0775, true) && !is_dir($directory)) {
+        throw new RuntimeException('模板文件目录创建失败');
+    }
+    if (!is_file($target) || md5_file($target) !== md5_file($source)) {
+        if (!copy($source, $target)) {
+            throw new RuntimeException('模板文件复制失败：' . $fileName);
+        }
+    }
+
+    $md5 = md5_file($target);
+    $sha1 = sha1_file($target);
+    if ($md5 === false || $sha1 === false) {
+        throw new RuntimeException('模板文件校验失败：' . $fileName);
+    }
+    $ext = strtolower((string) pathinfo($fileName, PATHINFO_EXTENSION));
+    $mime = function_exists('mime_content_type') ? (string) mime_content_type($target) : 'application/octet-stream';
+    $blobStmt = $pdo->prepare(
+        "INSERT INTO `file_blob` (`md5`, `sha1`, `path`, `url`, `ext`, `size`, `mime_type`, `disk`, `block`, `category`, `ref_count`, `deleted_at`)
+         VALUES (?, ?, ?, ?, ?, ?, ?, 'public', 'b1', 'template', 1, NULL)
+         ON DUPLICATE KEY UPDATE
+            `id` = LAST_INSERT_ID(`id`),
+            `sha1` = VALUES(`sha1`),
+            `path` = VALUES(`path`),
+            `url` = VALUES(`url`),
+            `ext` = VALUES(`ext`),
+            `size` = VALUES(`size`),
+            `mime_type` = VALUES(`mime_type`),
+            `category` = 'template',
+            `ref_count` = GREATEST(`ref_count`, 1),
+            `deleted_at` = NULL"
+    );
+    $url = '/' . $relativePath;
+    $blobStmt->execute([$md5, $sha1, $relativePath, $url, $ext, (int) filesize($target), $mime]);
+    $blobId = (int) $pdo->lastInsertId();
+
+    $fileStmt = $pdo->prepare(
+        "INSERT INTO `file` (`uuid`, `blob_id`, `name`, `download_name`, `url`, `is_temporary`, `uploader_id`, `client`, `category`, `status`, `deleted_at`)
+         VALUES (?, ?, ?, ?, ?, 0, 1, 'system', 'template', 'enabled', NULL)
+         ON DUPLICATE KEY UPDATE
+            `id` = LAST_INSERT_ID(`id`),
+            `blob_id` = VALUES(`blob_id`),
+            `name` = VALUES(`name`),
+            `download_name` = VALUES(`download_name`),
+            `url` = VALUES(`url`),
+            `is_temporary` = 0,
+            `category` = 'template',
+            `status` = 'enabled',
+            `deleted_at` = NULL"
+    );
+    $uuid = sprintf('00000000-0000-0000-0000-%012d', 240000 + $sequence);
+    $fileStmt->execute([$uuid, $blobId, $fileName, $downloadName . '.' . $ext, $url]);
+
+    return (int) $pdo->lastInsertId();
 }
 
 function seedOperationGuides(PDO $pdo): void

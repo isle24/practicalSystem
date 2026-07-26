@@ -84,6 +84,28 @@
     <InternshipListFooter list-key="reports" />
   </section>
 
+  <section v-if="internship.submitSection === 'safety'" class="app-record-section">
+    <header class="app-record-section-title">
+      <CheckCircle2 :size="20" />
+      <strong>安全承诺记录</strong>
+    </header>
+    <div class="app-record-list">
+      <AppListCard
+        v-for="row in internship.lists.safetyLetters.items"
+        :key="row.id"
+        :title="row.arrangement_title || '学生实习安全承诺书'"
+        :subtitle="row.signed_at || row.created_at || '-'"
+        :status="row.status"
+      >
+        <template #actions>
+          <AppButton variant="quiet" size="small" @click="openTimelineDialog('safety_letter', row)">记录</AppButton>
+        </template>
+      </AppListCard>
+    </div>
+    <div v-if="!internship.lists.safetyLetters.items.length" class="mobile-empty">暂无安全承诺记录</div>
+    <InternshipListFooter list-key="safetyLetters" />
+  </section>
+
   <section v-if="internship.submitSection === 'delay'" class="app-record-section">
     <header class="app-record-section-title">
       <FileClock :size="20" />
@@ -110,7 +132,7 @@
 </template>
 
 <script setup>
-import { FileClock, FileText, MapPin } from '@lucide/vue';
+import { CheckCircle2, FileClock, FileText, MapPin } from '@lucide/vue';
 import AppButton from '../../components/ui/AppButton.vue';
 import AppListCard from '../../components/ui/AppListCard.vue';
 import InternshipFormPage from './InternshipFormPage.vue';

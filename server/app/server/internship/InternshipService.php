@@ -3,12 +3,15 @@
 namespace app\server\internship;
 
 use app\model\channel\Account;
+use app\model\channel\InternshipArchiveRecord;
 use app\model\channel\InternshipRecord;
 use app\model\channel\PracticeRecord;
 use app\server\CurrentContext;
 use app\server\WorkflowLock;
 use app\server\config\ConfigService;
 use app\server\export\ExportTaskService;
+use app\server\export\InternshipDocumentExporter;
+use app\server\file\FileService;
 use app\server\message\MessageService;
 use InvalidArgumentException;
 use PhpOffice\PhpSpreadsheet\IOFactory;
@@ -115,6 +118,10 @@ class InternshipService
             'accept' => ['min' => 0, 'max' => 300],
             'modify' => ['min' => 5, 'max' => 500],
         ],
+        'graduation_appraisal' => [
+            'accept' => ['min' => 0, 'max' => 300],
+            'modify' => ['min' => 5, 'max' => 500],
+        ],
     ];
     private const REVIEW_ENTITY_CONFIG = [
         'application' => ['table' => 'application', 'recording' => 'application_recording'],
@@ -132,12 +139,13 @@ class InternshipService
         'implementation_sheet' => ['table' => 'implementation_sheet', 'recording' => 'implementation_sheet_recording'],
         'teacher_work_report' => ['table' => 'teacher_work_report', 'recording' => 'teacher_work_report_recording'],
         'inspection' => ['table' => 'inspection_record', 'recording' => 'inspection_recording'],
+        'graduation_appraisal' => ['table' => 'internship_graduation_appraisal', 'recording' => 'internship_graduation_appraisal_recording'],
         'base_application' => ['table' => 'base_application', 'recording' => 'base_application_recording'],
         'base_usage' => ['table' => 'base_usage', 'recording' => 'base_usage_recording'],
         'base_result' => ['table' => 'base_result', 'recording' => 'base_result_recording'],
         'base_expense' => ['table' => 'base_expense', 'recording' => 'base_expense_recording'],
     ];
-    private const DOCUMENT_REVIEW_ENTITIES = ['syllabus_guide', 'implementation_sheet', 'teacher_work_report', 'inspection'];
+    private const DOCUMENT_REVIEW_ENTITIES = ['syllabus_guide', 'implementation_sheet', 'teacher_work_report', 'inspection', 'graduation_appraisal'];
     private const REQUEST_MODIFICATION_ENTITIES = [
         'application',
         'journal',
@@ -152,6 +160,7 @@ class InternshipService
         'implementation_sheet',
         'teacher_work_report',
         'inspection',
+        'graduation_appraisal',
     ];
     private const DELAY_CONFIG_KEYS = ['report_deadline', 'journal_deadline'];
     private const EXCEL_EXTENSIONS = ['xls', 'xlsx'];
@@ -923,6 +932,9 @@ class InternshipService
             if ($entity === 'report') {
                 $updates['reviewed_at'] = $this->now();
             }
+            if ($entity === 'graduation_appraisal') {
+                $updates['reviewed_at'] = null;
+            }
 
             InternshipRecord::updateById($config['table'], $id, $updates);
             $this->recordWorkflow($config['recording'], $entity, $id, 'modify_after_accept', 'accept', 'modify', $opinion ?: '通过后要求修改', 'modify');
@@ -1182,6 +1194,12 @@ class InternshipService
             }
         }
 
+        $attachmentIds = $this->intArray($request->input('attachment_ids', []));
+        foreach ($attachmentIds as $attachmentId) {
+            if (!InternshipArchiveRecord::fileExists($attachmentId)) {
+                throw new InvalidArgumentException('日志附件不存在');
+            }
+        }
         $values = [
             'student_id' => $studentId,
             'entity_type' => 'internship',
@@ -1189,6 +1207,12 @@ class InternshipService
             'title' => $this->requiredString($request, 'title', 180),
             'content' => $this->requiredString($request, 'content', 10000),
             'date' => $this->dateInput($request, 'date') ?: date('Y-m-d'),
+            'location' => $this->nullableString($request, 'location', 255),
+            'work_content' => $this->nullableString($request, 'work_content', 10000),
+            'gains' => $this->nullableString($request, 'gains', 10000),
+            'problems' => $this->nullableString($request, 'problems', 10000),
+            'form_data' => $this->jsonValue($request->input('form_data', [])),
+            'attachment_ids' => $this->jsonValue($attachmentIds),
             'status' => $status,
             'updated_at' => $this->now(),
             'deleted_at' => null,
@@ -1206,9 +1230,12 @@ class InternshipService
             return $result;
         };
 
-        return $existingId
+        $result = $existingId
             ? $this->workflowLock('internship', 'journal', $existingId, $save)
             : $save();
+        $this->attachEntityFiles($attachmentIds, 'journal', (int) $result['id'], 'attachment');
+
+        return $result;
     }
 
     public function reviewJournal(Request $request): array
@@ -1221,7 +1248,7 @@ class InternshipService
         $this->requirePermission('internship:view');
 
         return InternshipRecord::reportPage($this->scopeContext(), $this->requestFilters($request, [
-            'page', 'page_size', 'per_page', 'keyword', 'status', 'arrangement_id',
+            'page', 'page_size', 'per_page', 'keyword', 'status', 'report_type', 'arrangement_id',
             'dep_id', 'profession_id', 'grade_id', 'class_id', 'semester',
         ]));
     }
@@ -1249,12 +1276,26 @@ class InternshipService
             }
         }
 
+        $attachmentIds = $this->intArray($request->input('attachment_ids', []));
+        foreach ($attachmentIds as $attachmentId) {
+            if (!InternshipArchiveRecord::fileExists($attachmentId)) {
+                throw new InvalidArgumentException('报告附件不存在');
+            }
+        }
         $values = [
             'student_id' => $studentId,
             'arrangement_id' => $arrangementId,
             'template_id' => $this->optionalInt($request, 'template_id'),
             'title' => $this->requiredString($request, 'title', 180),
             'content' => $this->requiredString($request, 'content', 20000),
+            'report_type' => $this->enum(
+                $request,
+                'report_type',
+                ['general', 'graduation'],
+                InternshipArchiveRecord::arrangementType($arrangementId) === 'graduation' ? 'graduation' : 'general'
+            ),
+            'form_data' => $this->jsonValue($request->input('form_data', [])),
+            'attachment_ids' => $this->jsonValue($attachmentIds),
             'status' => $status,
             'submitted_at' => $status === 'wait' ? $this->now() : null,
             'updated_at' => $this->now(),
@@ -1273,9 +1314,12 @@ class InternshipService
             return $result;
         };
 
-        return $existingId
+        $result = $existingId
             ? $this->workflowLock('internship', 'report', $existingId, $save)
             : $save();
+        $this->attachEntityFiles($attachmentIds, 'report', (int) $result['id'], 'attachment');
+
+        return $result;
     }
 
     public function reviewReport(Request $request): array
@@ -1461,10 +1505,318 @@ class InternshipService
     {
         $this->requirePermission('internship:view');
 
-        return InternshipRecord::archiveMaterialPage($this->scopeContext(), $this->requestFilters($request, [
+        $filters = $this->requestFilters($request, [
             'page', 'page_size', 'per_page', 'keyword', 'archive_status',
-            'arrangement_id', 'dep_id', 'profession_id', 'grade_id', 'class_id', 'semester',
-        ]));
+            'dep_id', 'profession_id', 'grade_id', 'arrangement_id',
+        ]);
+        if ($this->isStudent()) {
+            return InternshipArchiveRecord::studentMaterialPage($this->scopeContext(), $filters);
+        }
+
+        return InternshipArchiveRecord::planPage($this->scopeContext(), $filters);
+    }
+
+    /** 查看计划的分层档案材料 */
+    public function archiveMaterialDetail(Request $request): array
+    {
+        $this->requirePermission('internship:view');
+        $planId = $this->requiredInt($request, 'plan_id');
+        $detail = InternshipArchiveRecord::planDetail($this->scopeContext(), $planId);
+        if (!$detail) {
+            throw new RuntimeException('实习计划不存在或无查看权限', 404);
+        }
+
+        return $detail;
+    }
+
+    /** 查看档案材料历史版本 */
+    public function archiveMaterialHistory(Request $request): array
+    {
+        $this->requirePermission('internship:view');
+        $id = $this->requiredInt($request, 'id');
+        $items = InternshipArchiveRecord::materialHistory($this->scopeContext(), $id);
+        if (!$items) {
+            throw new RuntimeException('档案材料不存在或无查看权限', 404);
+        }
+
+        return ['items' => $items];
+    }
+
+    /** 保存档案材料草稿或提交版本 */
+    public function saveArchiveMaterial(Request $request): array
+    {
+        $this->requirePermission('internship:archive');
+        $materialType = trim((string) $request->input('material_type', ''));
+        $definition = InternshipArchiveRecord::materialDefinition($materialType);
+        if (!$definition) {
+            throw new InvalidArgumentException('档案材料类型无效');
+        }
+        $target = $this->archiveTargetFromRequest($request, $definition);
+        $status = $this->enum($request, 'status', ['draft', 'submitted'], 'draft');
+        $generatedFileId = $this->optionalInt($request, 'generated_file_id') ?: 0;
+        $signedFileId = $this->optionalInt($request, 'signed_file_id') ?: 0;
+        if ($generatedFileId && !InternshipArchiveRecord::fileExists($generatedFileId)) {
+            throw new InvalidArgumentException('生成文件不存在');
+        }
+        if ($signedFileId && !InternshipArchiveRecord::fileExists($signedFileId)) {
+            throw new InvalidArgumentException('定稿文件不存在');
+        }
+        $input = $request->all();
+        $metadata = [
+            'action' => $signedFileId > 0 ? 'upload_final' : ($status === 'submitted' ? 'submit' : 'save_draft'),
+        ];
+        if (array_key_exists('template_id', $input)) {
+            $metadata['template_id'] = $this->optionalInt($request, 'template_id');
+        }
+        if (array_key_exists('template_version', $input)) {
+            $metadata['template_version'] = $this->nullableString($request, 'template_version', 40);
+        }
+        if (array_key_exists('source_entity_type', $input)) {
+            $metadata['source_entity_type'] = $this->nullableString($request, 'source_entity_type', 60);
+        }
+        if (array_key_exists('source_entity_id', $input)) {
+            $metadata['source_entity_id'] = $this->optionalInt($request, 'source_entity_id');
+        }
+        if (array_key_exists('content_json', $input)) {
+            $metadata['content_json'] = $this->jsonValue($request->input('content_json', []));
+        }
+
+        return $this->persistArchiveMaterial($materialType, $definition, $target, $status, $generatedFileId, $signedFileId, $metadata);
+    }
+
+    /** 根据业务源数据生成档案文件并保存当前版本 */
+    public function generateArchiveMaterial(Request $request): array
+    {
+        $this->requirePermission('internship:archive');
+        $materialType = trim((string) $request->input('material_type', ''));
+        $definition = InternshipArchiveRecord::materialDefinition($materialType);
+        if (!$definition) {
+            throw new InvalidArgumentException('档案材料类型无效');
+        }
+        $target = $this->archiveTargetFromRequest($request, $definition);
+        return $this->workflowLock('internship_archive', $materialType, $this->archiveLockId($materialType, $target), function () use (
+            $definition,
+            $materialType,
+            $target
+        ): array {
+            $source = InternshipArchiveRecord::generationReady($materialType, $target);
+            if (empty($source['ready'])) {
+                throw new InvalidArgumentException('材料源数据尚未完成：' . (string) ($source['text'] ?? '待完善'));
+            }
+
+            $generated = (new InternshipDocumentExporter())->archiveMaterial($materialType, $target);
+            $fileService = new FileService();
+            $stored = $fileService->storeGeneratedFile((string) $generated['path'], [
+                'name' => $definition['label'] . '_' . date('Ymd_His') . '.' . $generated['ext'],
+                'download_name' => $definition['label'] . '.' . $generated['ext'],
+                'ext' => (string) $generated['ext'],
+                'category' => 'internship_archive',
+                'uploader_id' => CurrentContext::accountId(),
+                'is_temporary' => false,
+            ]);
+            try {
+                return $this->persistArchiveMaterial(
+                    $materialType,
+                    $definition,
+                    $target,
+                    'submitted',
+                    (int) $stored['file_id'],
+                    0,
+                    [
+                        'source_entity_type' => 'internship_archive_generation',
+                        'content_json' => json_encode(['generated_at' => $this->now()], JSON_UNESCAPED_UNICODE),
+                        'action' => 'generate',
+                    ],
+                    false
+                );
+            } catch (Throwable $exception) {
+                $fileService->discardGeneratedFile((int) $stored['file_id']);
+                throw $exception;
+            }
+        });
+    }
+
+    /** 将档案材料冻结为归档版本 */
+    public function archiveMaterial(Request $request): array
+    {
+        $this->requirePermission('internship:archive');
+        $id = $this->requiredInt($request, 'id');
+        $scope = $this->scopeContext();
+        $material = InternshipArchiveRecord::materialById($scope, $id);
+        if (!$material) {
+            throw new RuntimeException('档案材料不存在或无操作权限', 404);
+        }
+        $this->ensureRecordingTable('internship_archive_material_recording');
+
+        return $this->workflowLock(
+            'internship_archive',
+            (string) $material['material_type'],
+            $this->archiveLockId((string) $material['material_type'], $material),
+            function () use ($id, $material, $scope): array {
+            return $this->connection()->transaction(function () use ($id, $material, $scope): array {
+                $current = InternshipArchiveRecord::currentMaterial((string) $material['material_type'], $material, true);
+                if (!$current || (int) $current->id !== $id) {
+                    throw new InvalidArgumentException('档案材料已变更，请刷新后重试', 409);
+                }
+                if ((string) $current->status === 'archived') {
+                    return ['id' => $id, 'status' => 'archived'];
+                }
+
+                $source = InternshipArchiveRecord::sourceReady((string) $current->material_type, (array) $material);
+                if (empty($source['ready'])) {
+                    throw new InvalidArgumentException('材料源数据尚未完成：' . (string) ($source['text'] ?? '待完善'));
+                }
+                $file = InternshipArchiveRecord::archiveFileReady(
+                    (string) $current->material_type,
+                    (int) ($current->generated_file_id ?? 0),
+                    (int) ($current->signed_file_id ?? 0)
+                );
+                if (empty($file['ready'])) {
+                    throw new InvalidArgumentException((string) ($file['text'] ?? '归档文件不存在'));
+                }
+
+                $now = $this->now();
+                InternshipArchiveRecord::updateMaterial($id, [
+                    'status' => 'archived',
+                    'archived_at' => $now,
+                    'updated_by' => CurrentContext::accountId(),
+                    'updated_at' => $now,
+                ]);
+                $this->record(
+                    'internship_archive_material_recording',
+                    $id,
+                    'archive',
+                    (string) $current->status,
+                    'archived',
+                    (string) ($material['name'] ?? '档案材料') . '归档'
+                );
+
+                return [
+                    'id' => $id,
+                    'status' => 'archived',
+                    'material' => InternshipArchiveRecord::materialById($scope, $id),
+                ];
+            });
+            }
+        );
+    }
+
+    /** 保存毕业实习成绩鉴定 */
+    public function saveGraduationAppraisal(Request $request): array
+    {
+        $this->requirePermission($this->canScoreWithoutManage() ? 'internship:score' : 'internship:manage');
+        $studentId = $this->requiredInt($request, 'student_id');
+        $arrangementId = $this->requiredInt($request, 'arrangement_id');
+        $this->assertStudentVisible($studentId);
+        $this->assertCurrentArrangementVisible($arrangementId);
+        $this->assertTaskBindingVisible($studentId, $arrangementId);
+        if (InternshipArchiveRecord::arrangementType($arrangementId) !== 'graduation') {
+            throw new InvalidArgumentException('该任务不是毕业实习任务');
+        }
+
+        $status = $this->enum($request, 'status', ['draft', 'wait'], 'draft');
+        $processScore = $this->archiveScore($request, 'process_score', 50, '过程管理得分');
+        $enterpriseScore = $this->archiveScore($request, 'enterprise_score', 30, '实习单位评分');
+        $schoolScore = $this->archiveScore($request, 'school_score', 20, '校内指导教师评分');
+        if ($status === 'wait' && ($processScore === null || $enterpriseScore === null || $schoolScore === null)) {
+            throw new InvalidArgumentException('提交审核前请填写全部评分');
+        }
+        $finalScore = round(($processScore ?? 0) + ($enterpriseScore ?? 0) + ($schoolScore ?? 0), 2);
+        $attachmentId = $this->optionalInt($request, 'attachment_id');
+        if ($attachmentId && !InternshipArchiveRecord::fileExists($attachmentId)) {
+            throw new InvalidArgumentException('鉴定表附件不存在');
+        }
+        $id = $this->optionalInt($request, 'id') ?: InternshipArchiveRecord::graduationAppraisalId($studentId, $arrangementId);
+        $this->ensureRecordingTable('internship_graduation_appraisal_recording');
+
+        $result = $this->workflowLock('internship', 'graduation_appraisal', $id ?: (int) sprintf('%u', crc32("{$studentId}:{$arrangementId}")), function () use (
+            $arrangementId,
+            $enterpriseScore,
+            $finalScore,
+            $id,
+            $attachmentId,
+            $processScore,
+            $request,
+            $schoolScore,
+            $status,
+            $studentId
+        ): array {
+            return $this->connection()->transaction(function () use (
+                $arrangementId,
+                $enterpriseScore,
+                $finalScore,
+                $id,
+                $attachmentId,
+                $processScore,
+                $request,
+                $schoolScore,
+                $status,
+                $studentId
+            ): array {
+                $current = $id ? InternshipArchiveRecord::graduationAppraisalById($this->scopeContext(), $id, true) : null;
+                $fromStatus = $current ? (string) $current->status : 'draft';
+                if ($current && !in_array($fromStatus, ['draft', 'modify'], true)) {
+                    throw new InvalidArgumentException('鉴定记录已变更，请刷新后重试', 409);
+                }
+                $now = $this->now();
+                $values = [
+                    'uuid' => $current->uuid ?? $this->uuid(),
+                    'name' => '毕业实习成绩鉴定表',
+                    'student_id' => $studentId,
+                    'arrangement_id' => $arrangementId,
+                    'teacher_id' => $this->currentTeacherId(false) ?: ($current->teacher_id ?? null),
+                    'process_score' => $processScore,
+                    'enterprise_score' => $enterpriseScore,
+                    'school_score' => $schoolScore,
+                    'report_score' => null,
+                    'final_score' => $finalScore,
+                    'grade_level' => $this->archiveGradeLevel($finalScore),
+                    'enterprise_comment' => $this->nullableString($request, 'enterprise_comment', 5000),
+                    'school_comment' => $this->nullableString($request, 'school_comment', 5000),
+                    'form_data' => $this->jsonValue($request->input('form_data', [])),
+                    'attachment_id' => $attachmentId,
+                    'submitted_at' => $status === 'wait' ? $now : null,
+                    'reviewed_at' => null,
+                    'status' => $status,
+                    'updated_at' => $now,
+                    'deleted_at' => null,
+                ];
+                if (!$current) {
+                    $values['created_at'] = $now;
+                }
+                $savedId = InternshipArchiveRecord::saveGraduationAppraisal($values, $current ? (int) $current->id : 0);
+                $content = '毕业实习成绩鉴定：' . $finalScore . '分';
+                if ($status === 'wait') {
+                    $this->recordWorkflow('internship_graduation_appraisal_recording', 'graduation_appraisal', $savedId, 'submit', $fromStatus, 'wait', $content, 'wait');
+                    $this->notifyWorkflowSubmittedOnWait('graduation_appraisal', $savedId, $values, $fromStatus, 'wait');
+                } else {
+                    $this->record('internship_graduation_appraisal_recording', $savedId, 'save_draft', $fromStatus, 'draft', $content);
+                }
+
+                return ['id' => $savedId, 'status' => $status, 'final_score' => $finalScore, 'grade_level' => $this->archiveGradeLevel($finalScore)];
+            });
+        });
+
+        if ($attachmentId) {
+            $this->attachEntityFiles([$attachmentId], 'internship_graduation_appraisal', (int) $result['id'], 'attachment');
+        }
+
+        return $result;
+    }
+
+    /** 查看毕业实习成绩鉴定 */
+    public function graduationAppraisal(Request $request): array
+    {
+        $this->requirePermission('internship:view');
+        $studentId = $this->requiredInt($request, 'student_id');
+        $arrangementId = $this->requiredInt($request, 'arrangement_id');
+        $this->assertStudentVisible($studentId);
+        $this->assertArrangementVisible($arrangementId);
+        $this->assertTaskBindingVisible($studentId, $arrangementId);
+
+        return [
+            'item' => InternshipArchiveRecord::graduationAppraisalForTask($this->scopeContext(), $studentId, $arrangementId),
+        ];
     }
 
     public function saveScore(Request $request): array
@@ -1730,15 +2082,25 @@ class InternshipService
         $this->assertCurrentArrangementVisible($arrangementId);
         $this->assertTaskBindingVisible($studentId, $arrangementId);
 
+        $attachmentId = $this->requiredInt($request, 'attachment_id');
+        if (!InternshipArchiveRecord::fileExists($attachmentId)) {
+            throw new InvalidArgumentException('请上传有效的保险单附件');
+        }
+        $startDate = $this->requiredDate($request, 'start_date');
+        $endDate = $this->requiredDate($request, 'end_date');
+        if ($endDate < $startDate) {
+            throw new InvalidArgumentException('保险结束日期不能早于开始日期');
+        }
+
         $values = [
             'arrangement_id' => $arrangementId,
             'student_id' => $studentId,
             'insurance_company' => $this->nullableString($request, 'insurance_company', 120),
             'policy_number' => $this->nullableString($request, 'policy_number', 120),
             'insured_amount' => $this->decimalInput($request, 'insured_amount'),
-            'start_date' => $this->dateInput($request, 'start_date'),
-            'end_date' => $this->dateInput($request, 'end_date'),
-            'attachment_id' => $this->optionalInt($request, 'attachment_id'),
+            'start_date' => $startDate,
+            'end_date' => $endDate,
+            'attachment_id' => $attachmentId,
             'status' => 'enabled',
             'updated_at' => $this->now(),
             'deleted_at' => null,
@@ -1768,29 +2130,41 @@ class InternshipService
         $this->assertTaskBindingVisible($studentId, $arrangementId);
         $status = $this->enum($request, 'status', ['pending', 'signed'], 'pending');
         $signedAt = $this->dateTimeInput($request, 'signed_at');
+        $signatureFileId = $this->optionalInt($request, 'signature_file_id');
+        if ($status === 'signed' && (!$signatureFileId || !InternshipArchiveRecord::fileExists($signatureFileId))) {
+            throw new InvalidArgumentException('签署安全承诺书必须上传签字定稿文件');
+        }
 
         $values = [
             'arrangement_id' => $arrangementId,
             'student_id' => $studentId,
             'template_id' => $this->optionalInt($request, 'template_id'),
             'signed_at' => $status === 'signed' ? ($signedAt ?: $this->now()) : $signedAt,
-            'signature_file_id' => $this->optionalInt($request, 'signature_file_id'),
+            'signature_file_id' => $signatureFileId,
             'status' => $status,
             'updated_at' => $this->now(),
             'deleted_at' => null,
         ];
 
-        return $this->saveWorkflowRow('safety_letter_sign', 'safety_letter', 'safety_letter_recording', $request, $values, $this->workflowContent('保存安全承诺', $values, [
+        $result = $this->saveWorkflowRow('safety_letter_sign', 'safety_letter', 'safety_letter_recording', $request, $values, $this->workflowContent('保存安全承诺', $values, [
             'status' => '状态',
             'signed_at' => '签署时间',
-        ]));
+        ]), [
+            'student_id' => $studentId,
+            'arrangement_id' => $arrangementId,
+        ]);
+        if ($signatureFileId) {
+            (new FileService())->attach($signatureFileId, 'safety_letter_sign', (int) $result['id'], 'signed');
+        }
+
+        return $result;
     }
 
     public function syllabusGuides(Request $request): array
     {
         $this->requirePermission('internship:view');
         return InternshipRecord::syllabusGuidePage($this->scopeContext(), $this->requestFilters($request, [
-            'page', 'page_size', 'per_page', 'keyword', 'arrangement_id', 'status',
+            'page', 'page_size', 'per_page', 'keyword', 'arrangement_id', 'document_type', 'status',
             'dep_id', 'profession_id', 'grade_id', 'class_id', 'semester',
         ]));
     }
@@ -1800,21 +2174,30 @@ class InternshipService
         $this->requirePermission('internship:manage');
         $arrangementId = $this->requiredInt($request, 'arrangement_id');
         $this->assertCurrentArrangementVisible($arrangementId);
+        $planId = InternshipArchiveRecord::planIdByArrangement($arrangementId);
+        if ($planId <= 0) {
+            throw new InvalidArgumentException('实习任务未关联计划');
+        }
+        $documentType = $this->enum($request, 'document_type', ['syllabus', 'guide'], 'syllabus');
         $values = [
             'arrangement_id' => $arrangementId,
+            'plan_id' => $planId,
+            'document_type' => $documentType,
             'dep_id' => $this->optionalInt($request, 'dep_id'),
             'profession_id' => $this->optionalInt($request, 'profession_id'),
             'title' => $this->requiredString($request, 'title', 180),
             'content' => $this->nullableString($request, 'content', 20000),
             'file_id' => $this->optionalInt($request, 'file_id'),
             'created_by' => CurrentContext::accountId(),
+            'form_data' => $this->jsonValue($request->input('form_data', [])),
             'status' => $this->enum($request, 'status', ['draft', 'published'], 'draft'),
             'updated_at' => $this->now(),
             'deleted_at' => null,
         ];
 
-        return $this->saveWorkflowRow('syllabus_guide', 'syllabus_guide', 'syllabus_guide_recording', $request, $values, $this->workflowContent('保存实习大纲及指导书', $values, [
+        return $this->saveWorkflowRow('syllabus_guide', 'syllabus_guide', 'syllabus_guide_recording', $request, $values, $this->workflowContent($documentType === 'guide' ? '保存实习指导书' : '保存实习教学大纲', $values, [
             'title' => '标题',
+            'document_type' => '文档类型',
             'status' => '状态',
         ]));
     }
@@ -2176,10 +2559,14 @@ class InternshipService
                     throw new InvalidArgumentException('数据已变更，请刷新后重试', 409);
                 }
 
-                InternshipRecord::updateById($config['table'], $id, [
+                $updates = [
                     'status' => $status,
                     'updated_at' => $this->now(),
-                ]);
+                ];
+                if ($entity === 'graduation_appraisal') {
+                    $updates['reviewed_at'] = $status === 'accept' ? $this->now() : null;
+                }
+                InternshipRecord::updateById($config['table'], $id, $updates);
                 $content = $opinion ?: '审核处理';
                 $this->recordWorkflow($config['recording'], $entity, $id, 'review', 'wait', $status, $content, $status);
                 InternshipRecord::clearReviewOpinionDraft($entity, $id, $this->accountId(), $this->now());
@@ -3018,6 +3405,208 @@ class InternshipService
         return ['id' => $id, 'uuid' => $uuid];
     }
 
+    private function archiveTargetFromRequest(Request $request, array $definition): array
+    {
+        $target = [
+            'plan_id' => $this->requiredInt($request, 'plan_id'),
+            'arrangement_id' => $this->optionalInt($request, 'arrangement_id'),
+            'student_id' => $this->optionalInt($request, 'student_id'),
+            'class_id' => $this->optionalInt($request, 'class_id'),
+        ];
+        $scopeType = (string) ($definition['scope_type'] ?? '');
+        if (in_array($scopeType, ['arrangement', 'student_task', 'plan_class'], true) && !$target['arrangement_id']) {
+            throw new InvalidArgumentException('arrangement_id 无效');
+        }
+        if ($scopeType === 'student_task' && !$target['student_id']) {
+            throw new InvalidArgumentException('student_id 无效');
+        }
+        if ($scopeType === 'plan_class' && !$target['class_id']) {
+            throw new InvalidArgumentException('class_id 无效');
+        }
+        if ($scopeType === 'plan') {
+            $target['arrangement_id'] = null;
+            $target['student_id'] = null;
+            $target['class_id'] = null;
+        } elseif ($scopeType === 'arrangement') {
+            $target['student_id'] = null;
+            $target['class_id'] = null;
+        } elseif ($scopeType === 'student_task') {
+            $target['class_id'] = null;
+        } elseif ($scopeType === 'plan_class') {
+            $target['student_id'] = null;
+        }
+
+        $visible = InternshipArchiveRecord::targetContext($this->scopeContext(), $target);
+        if (!$visible) {
+            throw new RuntimeException('档案材料范围不存在或无操作权限', 40301);
+        }
+
+        return $visible;
+    }
+
+    private function persistArchiveMaterial(
+        string $materialType,
+        array $definition,
+        array $target,
+        string $status,
+        int $generatedFileId,
+        int $signedFileId,
+        array $metadata,
+        bool $withLock = true
+    ): array {
+        $this->ensureRecordingTable('internship_archive_material_recording');
+        $save = function () use (
+            $definition,
+            $generatedFileId,
+            $materialType,
+            $metadata,
+            $signedFileId,
+            $status,
+            $target
+        ): array {
+            return $this->connection()->transaction(function () use (
+                $definition,
+                $generatedFileId,
+                $materialType,
+                $metadata,
+                $signedFileId,
+                $status,
+                $target
+            ): array {
+                $current = InternshipArchiveRecord::currentMaterial($materialType, $target, true);
+                $now = $this->now();
+                $action = (string) ($metadata['action'] ?? ($status === 'submitted' ? 'submit' : 'save_draft'));
+                $fromStatus = $current ? (string) $current->status : 'draft';
+                $replaceCurrent = $current && in_array($fromStatus, ['submitted', 'archived'], true);
+                $resolvedGeneratedFileId = $generatedFileId ?: (!$replaceCurrent ? (int) ($current->generated_file_id ?? 0) : 0);
+                $resolvedSignedFileId = $action === 'generate'
+                    ? 0
+                    : ($signedFileId ?: (!$replaceCurrent ? (int) ($current->signed_file_id ?? 0) : 0));
+                $values = array_merge($target, [
+                    'name' => $definition['label'],
+                    'material_type' => $materialType,
+                    'scope_type' => $definition['scope_type'],
+                    'template_id' => $metadata['template_id'] ?? ($current->template_id ?? null),
+                    'template_version' => $metadata['template_version'] ?? ($current->template_version ?? null),
+                    'source_entity_type' => $metadata['source_entity_type'] ?? ($current->source_entity_type ?? null),
+                    'source_entity_id' => $metadata['source_entity_id'] ?? ($current->source_entity_id ?? null),
+                    'content_json' => array_key_exists('content_json', $metadata)
+                        ? $metadata['content_json']
+                        : ($current->content_json ?? json_encode([], JSON_UNESCAPED_UNICODE)),
+                    'generated_file_id' => $resolvedGeneratedFileId ?: null,
+                    'signed_file_id' => $resolvedSignedFileId ?: null,
+                    'status' => $status,
+                    'archived_at' => null,
+                    'updated_by' => CurrentContext::accountId(),
+                    'updated_at' => $now,
+                    'deleted_at' => null,
+                ]);
+
+                if ($current && !$replaceCurrent) {
+                    $id = (int) $current->id;
+                    InternshipArchiveRecord::updateMaterial($id, $values);
+                } else {
+                    if ($current) {
+                        InternshipArchiveRecord::updateMaterial((int) $current->id, [
+                            'status' => 'replaced',
+                            'updated_by' => CurrentContext::accountId(),
+                            'updated_at' => $now,
+                        ]);
+                    }
+                    $id = InternshipArchiveRecord::insertMaterial(array_merge($values, [
+                        'uuid' => $this->uuid(),
+                        'archive_version' => InternshipArchiveRecord::nextArchiveVersion($materialType, $target),
+                        'created_by' => CurrentContext::accountId(),
+                        'created_at' => $now,
+                    ]));
+                }
+
+                $actionText = match ($action) {
+                    'generate' => '生成文件',
+                    'upload_final' => '上传定稿',
+                    'submit' => '提交',
+                    default => '保存草稿',
+                };
+                $recordingId = $this->record(
+                    'internship_archive_material_recording',
+                    $id,
+                    $action,
+                    $fromStatus,
+                    $status,
+                    $definition['label'] . $actionText
+                );
+                InternshipArchiveRecord::updateMaterial($id, ['recording_id' => $recordingId]);
+
+                return ['id' => $id];
+            });
+        };
+
+        $result = $withLock
+            ? $this->workflowLock('internship_archive', $materialType, $this->archiveLockId($materialType, $target), $save)
+            : $save();
+        $result['material'] = InternshipArchiveRecord::materialById($this->scopeContext(), (int) $result['id']);
+        $this->attachArchiveFiles(
+            (int) $result['id'],
+            (int) ($result['material']['generated_file_id'] ?? 0),
+            (int) ($result['material']['signed_file_id'] ?? 0)
+        );
+
+        return $result;
+    }
+
+    private function archiveLockId(string $materialType, array $target): int
+    {
+        return (int) sprintf('%u', crc32($materialType . ':' . implode(':', array_map(
+            static fn ($value): int => (int) ($value ?? 0),
+            $target
+        ))));
+    }
+
+    private function attachArchiveFiles(int $materialId, int $generatedFileId, int $signedFileId): void
+    {
+        $fileService = new FileService();
+        if ($generatedFileId > 0) {
+            $fileService->attach($generatedFileId, 'internship_archive_material', $materialId, 'generated');
+        }
+        if ($signedFileId > 0) {
+            $fileService->attach($signedFileId, 'internship_archive_material', $materialId, 'signed');
+        }
+    }
+
+    private function attachEntityFiles(array $fileIds, string $entityType, int $entityId, string $tag): void
+    {
+        if ($entityId <= 0 || !$fileIds) {
+            return;
+        }
+        $fileService = new FileService();
+        foreach (array_values(array_unique(array_map('intval', $fileIds))) as $fileId) {
+            if ($fileId > 0) {
+                $fileService->attach($fileId, $entityType, $entityId, $tag);
+            }
+        }
+    }
+
+    private function archiveScore(Request $request, string $key, float $max, string $label): ?float
+    {
+        $score = $this->decimalInput($request, $key);
+        if ($score !== null && ($score < 0 || $score > $max)) {
+            throw new InvalidArgumentException("{$label}必须在 0 到 {$max} 之间");
+        }
+
+        return $score;
+    }
+
+    private function archiveGradeLevel(float $score): string
+    {
+        return match (true) {
+            $score >= 90 => '优秀',
+            $score >= 80 => '良好',
+            $score >= 70 => '中等',
+            $score >= 60 => '及格',
+            default => '不及格',
+        };
+    }
+
     private function saveWorkflowRow(string $table, string $entity, string $recordingTable, Request $request, array $values, string $content, array $unique = []): array
     {
         $existingId = $this->inputRowId($request, $table);
@@ -3157,7 +3746,7 @@ class InternshipService
             }
         }
 
-        if (!$accountIds || in_array($entity, ['plan', 'syllabus_guide', 'implementation_sheet', 'teacher_work_report', 'inspection'], true)) {
+        if (!$accountIds || in_array($entity, ['plan', 'syllabus_guide', 'implementation_sheet', 'teacher_work_report', 'inspection', 'graduation_appraisal'], true)) {
             $accountIds = array_merge(
                 $accountIds,
                 Account::messageTargetIds(['role_type' => 'school_admin']),
@@ -3283,6 +3872,7 @@ class InternshipService
             'implementation_sheet' => 'internship_implementation_sheet',
             'teacher_work_report' => 'internship_teacher_work_report',
             'inspection' => 'internship_inspection',
+            'graduation_appraisal' => 'internship_graduation_appraisal',
             'base_application' => 'internship_base_application',
             'base_usage' => 'internship_base_usage',
             'base_result' => 'internship_base_result',
@@ -3305,6 +3895,9 @@ class InternshipService
 
     private function reviewEntitySubmitterAccountId(string $entity, object $row): ?int
     {
+        if ($entity === 'graduation_appraisal' && isset($row->teacher_id)) {
+            return InternshipRecord::teacherAccountId((int) $row->teacher_id) ?: null;
+        }
         if (isset($row->student_id)) {
             return InternshipRecord::studentAccountId((int) $row->student_id);
         }
@@ -3329,6 +3922,7 @@ class InternshipService
             'implementation_sheet' => '教学实习实施表',
             'teacher_work_report' => '指导教师工作报告',
             'inspection' => '实习巡查记录',
+            'graduation_appraisal' => '毕业实习成绩鉴定表',
             'base_application' => '基地申报',
             'base_usage' => '基地使用',
             'base_result' => '基地成果',
@@ -3350,6 +3944,7 @@ class InternshipService
             'implementation_sheet' => 'implementationSheets',
             'teacher_work_report' => 'teacherWorkReports',
             'inspection' => 'inspections',
+            'graduation_appraisal' => 'documents',
             'base_application' => 'baseFlows',
             'base_usage' => 'baseFlows',
             'base_result' => 'baseFlows',
@@ -3876,9 +4471,9 @@ class InternshipService
             }
             return;
         }
-        if (in_array($entity, ['syllabus_guide', 'implementation_sheet', 'teacher_work_report', 'inspection'], true)) {
+        if (in_array($entity, ['syllabus_guide', 'implementation_sheet', 'teacher_work_report', 'inspection', 'graduation_appraisal'], true)) {
             $this->assertArrangementVisible((int) $row->arrangement_id);
-            if ($entity === 'inspection' && (int) ($row->student_id ?? 0) > 0) {
+            if (in_array($entity, ['inspection', 'graduation_appraisal'], true) && (int) ($row->student_id ?? 0) > 0) {
                 $this->assertStudentVisible((int) $row->student_id);
                 $this->assertTaskBindingVisible((int) $row->student_id, (int) $row->arrangement_id);
             }
@@ -3897,9 +4492,9 @@ class InternshipService
             $this->assertTaskBindingVisible((int) $row->student_id, (int) $row->arrangement_id);
             return;
         }
-        if (in_array($entity, ['syllabus_guide', 'implementation_sheet', 'teacher_work_report', 'inspection'], true)) {
+        if (in_array($entity, ['syllabus_guide', 'implementation_sheet', 'teacher_work_report', 'inspection', 'graduation_appraisal'], true)) {
             $this->assertCurrentArrangementVisible((int) $row->arrangement_id);
-            if ($entity === 'inspection' && (int) ($row->student_id ?? 0) > 0) {
+            if (in_array($entity, ['inspection', 'graduation_appraisal'], true) && (int) ($row->student_id ?? 0) > 0) {
                 $this->assertStudentVisible((int) $row->student_id);
                 $this->assertTaskBindingVisible((int) $row->student_id, (int) $row->arrangement_id);
             }
@@ -3922,7 +4517,7 @@ class InternshipService
     {
         return match ($entity) {
             'sign_in', 'journal', 'delay' => (int) $row->entity_id,
-            'report', 'score', 'insurance', 'safety_letter' => (int) $row->arrangement_id,
+            'report', 'score', 'insurance', 'safety_letter', 'graduation_appraisal' => (int) $row->arrangement_id,
             default => 0,
         };
     }

@@ -95,6 +95,17 @@ export function fetchTemplateList(params = {}) {
   return request(`/template/list${query ? `?${query}` : ''}`);
 }
 
+export function uploadFile(file, options = {}) {
+  const body = new FormData();
+  Object.entries({ require_md5: 'false', ...options }).forEach(([key, value]) => {
+    if (value !== undefined && value !== null) {
+      body.append(key, value);
+    }
+  });
+  body.append('file', file);
+  return request('/file/upload', { method: 'POST', body });
+}
+
 export function downloadTemplateItem(id) {
   return request('/template/download', {
     method: 'POST',
@@ -286,6 +297,30 @@ export function fetchInternshipArchiveMaterials(params = {}) {
   return internshipList('archive-materials', params);
 }
 
+export function fetchInternshipArchiveMaterialDetail(params = {}) {
+  return internshipList('archive-material-detail', params);
+}
+
+export function fetchInternshipArchiveMaterialHistory(params = {}) {
+  return internshipList('archive-material-history', params);
+}
+
+export function saveInternshipArchiveMaterial(payload) {
+  return internshipPost('save-archive-material', payload);
+}
+
+export function generateInternshipArchiveMaterial(payload) {
+  return internshipPost('generate-archive-material', payload);
+}
+
+export function archiveInternshipMaterial(payload) {
+  return internshipPost('archive-material', payload);
+}
+
+export function saveInternshipGraduationAppraisal(payload) {
+  return internshipPost('save-graduation-appraisal', payload);
+}
+
 export function saveInternshipScore(payload) {
   return internshipPost('save-score', payload);
 }
@@ -296,6 +331,10 @@ export function fetchInternshipInsurances(params = {}) {
 
 export function fetchInternshipSafetyLetters(params = {}) {
   return internshipList('safety-letters', params);
+}
+
+export function saveInternshipSafetyLetter(payload) {
+  return internshipPost('save-safety-letter', payload);
 }
 
 export function fetchInternshipSyllabusGuides(params = {}) {
