@@ -7,7 +7,7 @@ use Illuminate\Database\Query\Expression;
 
 class TableRecord extends BaseModel
 {
-    private const DEFAULT_DESKTOP_MODULE_KEYS = ['internship', 'training', 'lab', 'config'];
+    private const DEFAULT_DESKTOP_MODULE_KEYS = ['internship', 'practice', 'config'];
 
     protected $guarded = [];
     public $timestamps = false;

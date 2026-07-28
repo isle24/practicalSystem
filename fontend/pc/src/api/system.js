@@ -804,32 +804,32 @@ export function saveInternshipInspection(payload) {
   return internshipPost('save-inspection', payload);
 }
 
-function practiceList(module, params = {}) {
-  const query = new URLSearchParams(params).toString();
-  return request(`/${module}/list${query ? `?${query}` : ''}`);
+function practiceList(moduleType, params = {}) {
+  const query = new URLSearchParams({ ...params, module_type: moduleType }).toString();
+  return request(`/practice/list${query ? `?${query}` : ''}`);
 }
 
-function practicePost(module, path, payload) {
-  return request(`/${module}/${path}`, {
+function practicePost(moduleType, path, payload = {}) {
+  return request(`/practice/${path}`, {
     method: 'POST',
-    body: JSON.stringify(payload),
+    body: JSON.stringify({ ...payload, module_type: moduleType }),
   });
 }
 
-export function fetchPracticeOverview(module) {
-  return request(`/${module}/overview`);
+export function fetchPracticeOverview(moduleType = 'all') {
+  return request(`/practice/overview?${new URLSearchParams({ module_type: moduleType })}`);
 }
 
-export function fetchPracticeOptions(module) {
-  return request(`/${module}/options`);
+export function fetchPracticeOptions(moduleType = 'all') {
+  return request(`/practice/options?${new URLSearchParams({ module_type: moduleType })}`);
 }
 
-export function fetchPracticeList(module, params = {}) {
-  return practiceList(module, params);
+export function fetchPracticeList(moduleType, params = {}) {
+  return practiceList(moduleType, params);
 }
 
-export function savePracticeItem(module, payload) {
-  return practicePost(module, 'save', payload);
+export function savePracticeItem(moduleType, payload) {
+  return practicePost(moduleType, 'save', payload);
 }
 
 export function reviewPracticeItem(module, payload) {
@@ -837,8 +837,8 @@ export function reviewPracticeItem(module, payload) {
 }
 
 export function fetchPracticeReviewDraft(module, params = {}) {
-  const query = new URLSearchParams(params).toString();
-  return request(`/${module}/review-draft${query ? `?${query}` : ''}`);
+  const query = new URLSearchParams({ ...params, module_type: module }).toString();
+  return request(`/practice/review-draft?${query}`);
 }
 
 export function savePracticeReviewDraft(module, payload) {
@@ -850,8 +850,8 @@ export function requestPracticeModification(module, payload) {
 }
 
 export function fetchPracticeTimeline(module, params = {}) {
-  const query = new URLSearchParams(params).toString();
-  return request(`/${module}/timeline${query ? `?${query}` : ''}`);
+  const query = new URLSearchParams({ ...params, module_type: module }).toString();
+  return request(`/practice/timeline?${query}`);
 }
 
 export function fetchPracticeExecutionList(module, execution, params = {}) {
@@ -860,8 +860,8 @@ export function fetchPracticeExecutionList(module, execution, params = {}) {
     journal: 'journals',
     report: 'reports',
   }[execution] || 'journals';
-  const query = new URLSearchParams(params).toString();
-  return request(`/${module}/${path}${query ? `?${query}` : ''}`);
+  const query = new URLSearchParams({ ...params, module_type: module }).toString();
+  return request(`/practice/${path}?${query}`);
 }
 
 export function savePracticeExecution(module, execution, payload) {
@@ -887,6 +887,20 @@ export function savePracticeProjectScore(module, payload) {
 }
 
 export function fetchPracticeExecutionTimeline(module, params = {}) {
-  const query = new URLSearchParams(params).toString();
-  return request(`/${module}/execution-timeline${query ? `?${query}` : ''}`);
+  const query = new URLSearchParams({ ...params, module_type: module }).toString();
+  return request(`/practice/execution-timeline?${query}`);
+}
+
+export function fetchPracticePeriods(params = {}) {
+  const query = new URLSearchParams({ ...params, module_type: 'all' }).toString();
+  return request(`/practice/periods${query ? `?${query}` : ''}`);
+}
+
+export function savePracticePeriod(payload) {
+  return practicePost('all', 'save-period', payload);
+}
+
+export function fetchPracticeScheduleWeek(moduleType, params = {}) {
+  const query = new URLSearchParams({ ...params, module_type: moduleType }).toString();
+  return request(`/practice/schedule-week?${query}`);
 }

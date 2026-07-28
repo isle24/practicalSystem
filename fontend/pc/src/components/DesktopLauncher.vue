@@ -119,7 +119,7 @@ const groupDefinitions = [
   {
     key: 'teaching',
     title: '教学业务',
-    ids: new Set(['internship', 'training', 'lab', 'stat']),
+    ids: new Set(['internship', 'practice', 'stat']),
   },
   {
     key: 'data',

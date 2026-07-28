@@ -810,6 +810,7 @@ a {
 
 .window-content {
   min-height: 0;
+  overflow: hidden;
 }
 
 .profile-app {
@@ -2028,6 +2029,266 @@ a {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   gap: 12px;
+}
+
+.practice-module-head {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 2px 2px 4px;
+}
+
+.practice-module-head > div {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.practice-module-head strong {
+  font-size: 15px;
+}
+
+.practice-module-head small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.practice-module-type {
+  width: 126px;
+  flex: 0 0 auto;
+}
+
+.practice-schedule-workspace {
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 8px;
+}
+
+.practice-schedule-filters {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow-x: auto;
+}
+
+.practice-schedule-filters .el-select {
+  width: 150px;
+  flex: 0 0 auto;
+}
+
+.practice-schedule-board {
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+  background: #fff;
+}
+
+.schedule-board-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+  background: #fbfcfe;
+}
+
+.schedule-board-toolbar > div:first-child {
+  display: grid;
+  gap: 2px;
+}
+
+.schedule-board-toolbar strong {
+  font-size: 14px;
+}
+
+.schedule-board-toolbar small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.schedule-board-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  white-space: nowrap;
+}
+
+.schedule-board-scroll {
+  position: relative;
+  min-height: 0;
+  overflow: auto;
+}
+
+.schedule-board-grid {
+  min-width: 680px;
+  min-height: 100%;
+  display: grid;
+  grid-template-columns: 88px repeat(7, minmax(76px, 1fr));
+  grid-auto-flow: row;
+  position: relative;
+}
+
+.schedule-board-corner,
+.schedule-board-day,
+.schedule-board-period,
+.schedule-board-cell {
+  border-right: 1px solid #e1e7ed;
+  border-bottom: 1px solid #e1e7ed;
+}
+
+.schedule-board-corner,
+.schedule-board-day {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: #f7f9fb;
+}
+
+.schedule-board-corner {
+  grid-column: 1;
+  grid-row: 1;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.schedule-board-day {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 3px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.schedule-board-day strong {
+  color: var(--text);
+  font-size: 13px;
+}
+
+.schedule-board-day.today {
+  background: var(--primary-soft);
+}
+
+.schedule-board-period {
+  grid-column: 1;
+  display: grid;
+  align-content: center;
+  gap: 3px;
+  padding: 6px 8px;
+  background: #fbfcfe;
+}
+
+.schedule-board-period strong {
+  font-size: 12px;
+}
+
+.schedule-board-period span {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.schedule-board-cell {
+  min-width: 0;
+  min-height: 62px;
+  border-radius: 0;
+  background: #fff;
+}
+
+.schedule-board-cell:not(:disabled):hover {
+  background: #f3f7fc;
+}
+
+.schedule-board-item {
+  z-index: 2;
+  min-width: 0;
+  margin: 4px;
+  padding: 7px 8px;
+  border: 1px solid #a8c5e9;
+  border-radius: 5px;
+  display: grid;
+  align-content: start;
+  gap: 3px;
+  color: #164b7b;
+  text-align: left;
+  background: #eaf3ff;
+  overflow: hidden;
+}
+
+.schedule-board-item.training {
+  border-color: #9fd4cb;
+  color: #0b675a;
+  background: #e7f6f3;
+}
+
+.schedule-board-item.lab {
+  border-color: #e6c986;
+  color: #805500;
+  background: #fff4dc;
+}
+
+.schedule-board-item:disabled {
+  cursor: default;
+}
+
+.schedule-board-item:not(:disabled):hover {
+  filter: brightness(.98);
+}
+
+.schedule-board-item strong,
+.schedule-board-item span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.schedule-board-item strong {
+  font-size: 12px;
+}
+
+.schedule-board-item span {
+  font-size: 11px;
+}
+
+.schedule-board-empty,
+.schedule-board-empty-overlay {
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.schedule-board-empty {
+  min-height: 180px;
+}
+
+.schedule-board-empty-overlay {
+  position: absolute;
+  inset: 54px 0 0 88px;
+  z-index: 1;
+  pointer-events: none;
+  color: #7a8794;
+}
+
+.practice-period-manager {
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  gap: 10px;
+}
+
+.period-edit-dialog {
+  width: min(620px, calc(100vw - 48px));
 }
 
 .practice-stat-button {

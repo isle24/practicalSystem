@@ -96,16 +96,16 @@ class PracticeRecord extends TableRecord
                 ->get(['base.id', 'base.name', 'base.company_id', 'base.dep_id'])),
             'rooms' => self::rows(self::applyPracticeScope(self::moduleQuery('practice_room', $moduleType)->where('practice_room.status', 'enabled'), $scope, 'practice_room', false, 'room')
                 ->orderBy('practice_room.id')
-                ->get(['id', 'uuid', 'name', 'code', 'dep_id', 'room_type', 'capacity', 'location'])),
+                ->get(['id', 'uuid', 'module_type', 'name', 'code', 'dep_id', 'room_type', 'capacity', 'location'])),
             'plans' => self::rows(self::applyPracticeScope(self::moduleQuery('practice_plan', $moduleType)->whereIn('practice_plan.status', ['wait', 'accept', 'enabled']), $scope, 'practice_plan')
                 ->orderByDesc('practice_plan.id')
-                ->get(['id', 'uuid', 'title', 'course_name', 'grade_id', 'dep_id', 'profession_id', 'class_id', 'teacher_id', 'status'])),
+                ->get(['id', 'uuid', 'module_type', 'title', 'course_name', 'grade_id', 'dep_id', 'profession_id', 'class_id', 'teacher_id', 'status'])),
             'schedules' => self::rows(self::applyPracticeScope(self::moduleQuery('practice_schedule', $moduleType)->where('practice_schedule.status', 'enabled'), $scope, 'practice_schedule')
                 ->orderByDesc('practice_schedule.id')
-                ->get(['id', 'uuid', 'title', 'course_name', 'plan_id', 'grade_id', 'dep_id', 'profession_id', 'class_id', 'teacher_id', 'schedule_date', 'start_time', 'end_time', 'status'])),
+                ->get(['id', 'uuid', 'module_type', 'title', 'course_name', 'plan_id', 'grade_id', 'dep_id', 'profession_id', 'class_id', 'teacher_id', 'schedule_date', 'period_start_id', 'period_end_id', 'start_time', 'end_time', 'status'])),
             'projects' => self::rows(self::applyPracticeScope(self::moduleQuery('practice_project', $moduleType)->whereIn('practice_project.status', ['enabled', 'completed']), $scope, 'practice_project', false, 'project')
                 ->orderByDesc('practice_project.id')
-                ->get(['id', 'uuid', 'title', 'course_name', 'plan_id', 'schedule_id', 'grade_id', 'dep_id', 'profession_id', 'class_id', 'teacher_id', 'start_date', 'end_date', 'student_count', 'status'])),
+                ->get(['id', 'uuid', 'module_type', 'title', 'course_name', 'plan_id', 'schedule_id', 'grade_id', 'dep_id', 'profession_id', 'class_id', 'teacher_id', 'start_date', 'end_date', 'student_count', 'status'])),
         ];
     }
 
@@ -117,6 +117,22 @@ class PracticeRecord extends TableRecord
         self::applyEntityFilters($query, $table, $entity, $filters);
 
         return self::paginate($query->orderByDesc("{$table}.id"), $filters, self::entityColumns($entity, $table));
+    }
+
+    /** 查询指定周的专业课表 */
+    public static function scheduleWeekRows(array $scope, string $moduleType, string $weekStart, string $weekEnd, array $filters): array
+    {
+        $query = self::entityQuery($moduleType, 'schedule')
+            ->whereBetween('practice_schedule.schedule_date', [$weekStart, $weekEnd])
+            ->where('practice_schedule.status', '<>', 'disabled');
+        self::applyPracticeScope($query, $scope, 'practice_schedule', false, 'schedule');
+        self::applyEntityFilters($query, 'practice_schedule', 'schedule', $filters);
+
+        return self::rows($query
+            ->orderBy('practice_schedule.schedule_date')
+            ->orderBy('practice_schedule.start_time')
+            ->orderBy('practice_schedule.id')
+            ->get(self::entityColumns('schedule', 'practice_schedule')));
     }
 
     public static function courseScoreSheetReport(array $scope, array $filters): array
@@ -165,6 +181,41 @@ class PracticeRecord extends TableRecord
         $query = self::moduleQuery($table, $moduleType)->where("{$table}.id", $id);
         self::applyPracticeScope($query, $scope, $table, $entity === 'score', $entity);
         return $query->exists();
+    }
+
+    /** 校验待写入记录是否属于当前账号的数据范围 */
+    public static function entityValuesVisible(array $scope, string $entity, array $values): bool
+    {
+        $roleType = (string) ($scope['role_type'] ?? '');
+        if (in_array($roleType, ['super_admin', 'school_admin'], true)) {
+            return true;
+        }
+
+        if ($roleType === 'college_admin') {
+            $depId = (int) ($values['dep_id'] ?? 0);
+            return $depId > 0 && in_array($depId, self::ids($scope['dep_ids'] ?? []), true);
+        }
+
+        if ($roleType === 'profession_admin') {
+            if ($entity === 'room') {
+                $depId = (int) ($values['dep_id'] ?? 0);
+                return $depId > 0 && in_array($depId, self::ids($scope['profession_dep_ids'] ?? []), true);
+            }
+            $professionId = (int) ($values['profession_id'] ?? 0);
+            return $professionId > 0 && in_array($professionId, self::ids($scope['profession_ids'] ?? []), true);
+        }
+
+        if ($roleType === 'teacher') {
+            $teacherId = (int) ($values['teacher_id'] ?? 0);
+            return $teacherId > 0 && $teacherId === (int) ($scope['teacher_id'] ?? 0);
+        }
+
+        if ($roleType === 'student') {
+            $studentId = (int) ($values['student_id'] ?? 0);
+            return $studentId > 0 && $studentId === (int) ($scope['student_id'] ?? 0);
+        }
+
+        return false;
     }
 
     public static function insertEntity(string $entity, array $values): int
@@ -326,6 +377,23 @@ class PracticeRecord extends TableRecord
         return $row ? $row->getAttributes() : null;
     }
 
+    /** 查询当前账号可用的校外基地 */
+    public static function baseRowForSchedule(array $scope, int $baseId): ?array
+    {
+        if ($baseId <= 0) {
+            return null;
+        }
+
+        $query = self::queryTable('base')
+            ->where('base.id', $baseId)
+            ->where('base.status', 'enabled')
+            ->whereNull('base.deleted_at');
+        self::applyPracticeBaseScope($query, $scope);
+        $row = $query->first(['base.id', 'base.name', 'base.dep_id']);
+
+        return $row ? $row->getAttributes() : null;
+    }
+
     public static function scheduleRowForProject(array $scope, string $moduleType, int $scheduleId): ?array
     {
         if ($scheduleId <= 0) {
@@ -347,6 +415,8 @@ class PracticeRecord extends TableRecord
             'practice_schedule.course_name',
             'practice_schedule.title',
             'practice_schedule.schedule_date',
+            'practice_schedule.period_start_id',
+            'practice_schedule.period_end_id',
             'practice_schedule.start_time',
             'practice_schedule.end_time',
             'practice_schedule.student_count',
@@ -376,6 +446,37 @@ class PracticeRecord extends TableRecord
 
         return self::rows(self::queryTable('students')
             ->where('class_id', $classId)
+            ->where('status', 'enabled')
+            ->whereNull('deleted_at')
+            ->orderBy('student_id')
+            ->get(['student_id', 'grade_id', 'dep_id', 'profession_id', 'class_id']));
+    }
+
+    /** 统计届次专业下的启用学生 */
+    public static function enabledStudentCountByProfession(int $gradeId, int $professionId): int
+    {
+        if ($gradeId <= 0 || $professionId <= 0) {
+            return 0;
+        }
+
+        return (int) self::queryTable('students')
+            ->where('grade_id', $gradeId)
+            ->where('profession_id', $professionId)
+            ->where('status', 'enabled')
+            ->whereNull('deleted_at')
+            ->count();
+    }
+
+    /** 查询届次专业下的启用学生 */
+    public static function enabledStudentsByProfession(int $gradeId, int $professionId): array
+    {
+        if ($gradeId <= 0 || $professionId <= 0) {
+            return [];
+        }
+
+        return self::rows(self::queryTable('students')
+            ->where('grade_id', $gradeId)
+            ->where('profession_id', $professionId)
             ->where('status', 'enabled')
             ->whereNull('deleted_at')
             ->orderBy('student_id')
@@ -512,8 +613,12 @@ class PracticeRecord extends TableRecord
         $table = self::executionTable($execution);
         $query = self::queryTable($table)
             ->where("{$table}.id", $id)
-            ->where("{$table}.entity_type", $moduleType)
             ->whereNull("{$table}.deleted_at");
+        if (in_array($moduleType, ['training', 'lab'], true)) {
+            $query->where("{$table}.entity_type", $moduleType);
+        } else {
+            $query->whereIn("{$table}.entity_type", ['training', 'lab']);
+        }
         self::applyExecutionScope($query, $scope, $moduleType, $table);
 
         return $query->first(["{$table}.*"]);
@@ -528,8 +633,12 @@ class PracticeRecord extends TableRecord
         $table = self::executionTable($execution);
         $query = self::queryTable($table)
             ->where("{$table}.id", $id)
-            ->where("{$table}.entity_type", $moduleType)
             ->whereNull("{$table}.deleted_at");
+        if (in_array($moduleType, ['training', 'lab'], true)) {
+            $query->where("{$table}.entity_type", $moduleType);
+        } else {
+            $query->whereIn("{$table}.entity_type", ['training', 'lab']);
+        }
         self::applyExecutionScope($query, $scope, $moduleType, $table);
 
         return $query->lockForUpdate()->first(["{$table}.*"]);
@@ -564,7 +673,7 @@ class PracticeRecord extends TableRecord
         return (int) self::queryTable('practice_score')->insertGetId($values);
     }
 
-    public static function scheduleConflictExists(string $moduleType, array $values, ?int $excludeId = null): bool
+    public static function scheduleConflictExists(array $values, ?int $excludeId = null): bool
     {
         $date = (string) ($values['schedule_date'] ?? '');
         $start = (string) ($values['start_time'] ?? '');
@@ -573,7 +682,7 @@ class PracticeRecord extends TableRecord
             return false;
         }
 
-        $query = self::moduleQuery('practice_schedule', $moduleType)
+        $query = self::moduleQuery('practice_schedule', 'all')
             ->where('practice_schedule.schedule_date', $date)
             ->where('practice_schedule.start_time', '<', $end)
             ->where('practice_schedule.end_time', '>', $start)
@@ -583,20 +692,24 @@ class PracticeRecord extends TableRecord
         }
 
         $teacherId = (int) ($values['teacher_id'] ?? 0);
-        $classId = (int) ($values['class_id'] ?? 0);
+        $gradeId = (int) ($values['grade_id'] ?? 0);
+        $professionId = (int) ($values['profession_id'] ?? 0);
         $roomId = (int) ($values['room_id'] ?? 0);
         $baseId = (int) ($values['base_id'] ?? 0);
         $placeType = (string) ($values['place_type'] ?? 'inside');
-        if ($teacherId <= 0 && $classId <= 0 && !($placeType === 'inside' && $roomId > 0) && !($placeType === 'outside' && $baseId > 0)) {
+        if ($teacherId <= 0 && ($gradeId <= 0 || $professionId <= 0) && !($placeType === 'inside' && $roomId > 0) && !($placeType === 'outside' && $baseId > 0)) {
             return false;
         }
 
-        return $query->where(function ($builder) use ($baseId, $classId, $placeType, $roomId, $teacherId): void {
+        return $query->where(function ($builder) use ($baseId, $gradeId, $placeType, $professionId, $roomId, $teacherId): void {
             if ($teacherId > 0) {
                 $builder->orWhere('practice_schedule.teacher_id', $teacherId);
             }
-            if ($classId > 0) {
-                $builder->orWhere('practice_schedule.class_id', $classId);
+            if ($gradeId > 0 && $professionId > 0) {
+                $builder->orWhere(function ($academic) use ($gradeId, $professionId): void {
+                    $academic->where('practice_schedule.grade_id', $gradeId)
+                        ->where('practice_schedule.profession_id', $professionId);
+                });
             }
             if ($placeType === 'inside' && $roomId > 0) {
                 $builder->orWhere('practice_schedule.room_id', $roomId);
@@ -983,9 +1096,12 @@ class PracticeRecord extends TableRecord
 
     private static function moduleQuery(string $table, string $moduleType): mixed
     {
-        return self::queryTable($table)
-            ->where("{$table}.module_type", $moduleType)
-            ->whereNull("{$table}.deleted_at");
+        $query = self::queryTable($table)->whereNull("{$table}.deleted_at");
+        if (in_array($moduleType, ['training', 'lab'], true)) {
+            $query->where("{$table}.module_type", $moduleType);
+        }
+
+        return $query;
     }
 
     private static function entityQuery(string $moduleType, string $entity): mixed
@@ -1009,7 +1125,9 @@ class PracticeRecord extends TableRecord
 
         if ($entity === 'schedule') {
             $query->leftJoin('practice_room', 'practice_schedule.room_id', '=', 'practice_room.id')
-                ->leftJoin('base', 'practice_schedule.base_id', '=', 'base.id');
+                ->leftJoin('base', 'practice_schedule.base_id', '=', 'base.id')
+                ->leftJoin('practice_period as period_start', 'practice_schedule.period_start_id', '=', 'period_start.id')
+                ->leftJoin('practice_period as period_end', 'practice_schedule.period_end_id', '=', 'period_end.id');
         }
         if ($entity === 'project') {
             $query->leftJoin('practice_schedule', 'practice_project.schedule_id', '=', 'practice_schedule.id');
@@ -1027,8 +1145,10 @@ class PracticeRecord extends TableRecord
         $query = self::queryTable($table)
             ->leftJoin('practice_project', function ($join) use ($moduleType, $table): void {
                 $join->on("{$table}.entity_id", '=', 'practice_project.id')
-                    ->where('practice_project.module_type', $moduleType)
                     ->whereNull('practice_project.deleted_at');
+                if (in_array($moduleType, ['training', 'lab'], true)) {
+                    $join->where('practice_project.module_type', $moduleType);
+                }
             })
             ->leftJoin('practice_plan', 'practice_project.plan_id', '=', 'practice_plan.id')
             ->leftJoin('students', "{$table}.student_id", '=', 'students.student_id')
@@ -1037,8 +1157,12 @@ class PracticeRecord extends TableRecord
             ->leftJoin('profession', 'students.profession_id', '=', 'profession.profession_id')
             ->leftJoin('class', 'students.class_id', '=', 'class.class_id')
             ->leftJoin('teacher_list', "{$table}.teacher_id", '=', 'teacher_list.teacher_id')
-            ->where("{$table}.entity_type", $moduleType)
             ->whereNull("{$table}.deleted_at");
+        if (in_array($moduleType, ['training', 'lab'], true)) {
+            $query->where("{$table}.entity_type", $moduleType);
+        } else {
+            $query->whereIn("{$table}.entity_type", ['training', 'lab']);
+        }
 
         return $query;
     }
@@ -1065,6 +1189,8 @@ class PracticeRecord extends TableRecord
         if ($entity === 'schedule') {
             $columns[] = 'practice_room.name as room_name';
             $columns[] = 'base.name as base_name';
+            $columns[] = 'period_start.name as period_start_name';
+            $columns[] = 'period_end.name as period_end_name';
         }
         if ($entity === 'project') {
             $columns[] = 'practice_schedule.title as schedule_title';
@@ -1260,11 +1386,13 @@ class PracticeRecord extends TableRecord
             return $query->whereExists(function ($builder) use ($alias, $moduleType): void {
                 $builder->selectRaw('1')
                     ->from('practice_project_student')
-                    ->where('practice_project_student.module_type', $moduleType)
                     ->whereColumn('practice_project_student.project_id', "{$alias}.entity_id")
                     ->whereColumn('practice_project_student.student_id', "{$alias}.student_id")
                     ->where('practice_project_student.status', 'active')
                     ->whereNull('practice_project_student.deleted_at');
+                if (in_array($moduleType, ['training', 'lab'], true)) {
+                    $builder->where('practice_project_student.module_type', $moduleType);
+                }
             });
         }
 

@@ -369,89 +369,89 @@ export function saveInternshipInspection(payload) {
   return internshipPost('save-inspection', payload);
 }
 
-function practiceList(module, params = {}) {
-  const query = new URLSearchParams(params).toString();
-  return request(`/${module}/list${query ? `?${query}` : ''}`);
+function practiceQuery(path, moduleType = 'all', params = {}) {
+  const query = new URLSearchParams({ module_type: moduleType, ...params }).toString();
+  return request(`/practice/${path}${query ? `?${query}` : ''}`);
 }
 
-function practicePost(module, path, payload) {
-  return request(`/${module}/${path}`, {
+function practicePost(path, moduleType, payload) {
+  return request(`/practice/${path}`, {
     method: 'POST',
-    body: JSON.stringify(payload),
+    body: JSON.stringify({ ...payload, module_type: payload.module_type || moduleType }),
   });
 }
 
-export function fetchPracticeOverview(module) {
-  return request(`/${module}/overview`);
+export function fetchPracticeOverview(moduleType = 'all') {
+  return practiceQuery('overview', moduleType);
 }
 
-export function fetchPracticeOptions(module) {
-  return request(`/${module}/options`);
+export function fetchPracticeOptions(moduleType = 'all') {
+  return practiceQuery('options', moduleType);
 }
 
-export function fetchPracticeList(module, params = {}) {
-  return practiceList(module, params);
+export function fetchPracticeList(moduleType = 'all', params = {}) {
+  return practiceQuery('list', moduleType, params);
 }
 
-export function savePracticeItem(module, payload) {
-  return practicePost(module, 'save', payload);
+export function fetchPracticeScheduleWeek(moduleType = 'all', params = {}) {
+  return practiceQuery('schedule-week', moduleType, params);
 }
 
-export function reviewPracticeItem(module, payload) {
-  return practicePost(module, 'review', payload);
+export function savePracticeItem(moduleType, payload) {
+  return practicePost('save', moduleType, payload);
 }
 
-export function fetchPracticeReviewDraft(module, params = {}) {
-  const query = new URLSearchParams(params).toString();
-  return request(`/${module}/review-draft${query ? `?${query}` : ''}`);
+export function reviewPracticeItem(moduleType, payload) {
+  return practicePost('review', moduleType, payload);
 }
 
-export function savePracticeReviewDraft(module, payload) {
-  return practicePost(module, 'save-review-draft', payload);
+export function fetchPracticeReviewDraft(moduleType = 'all', params = {}) {
+  return practiceQuery('review-draft', moduleType, params);
 }
 
-export function requestPracticeModification(module, payload) {
-  return practicePost(module, 'request-modification', payload);
+export function savePracticeReviewDraft(moduleType, payload) {
+  return practicePost('save-review-draft', moduleType, payload);
 }
 
-export function fetchPracticeTimeline(module, params = {}) {
-  const query = new URLSearchParams(params).toString();
-  return request(`/${module}/timeline${query ? `?${query}` : ''}`);
+export function requestPracticeModification(moduleType, payload) {
+  return practicePost('request-modification', moduleType, payload);
 }
 
-export function fetchPracticeExecutionList(module, execution, params = {}) {
+export function fetchPracticeTimeline(moduleType = 'all', params = {}) {
+  return practiceQuery('timeline', moduleType, params);
+}
+
+export function fetchPracticeExecutionList(moduleType = 'all', execution, params = {}) {
   const path = {
     sign_in: 'sign-ins',
     journal: 'journals',
     report: 'reports',
   }[execution] || 'journals';
-  const query = new URLSearchParams(params).toString();
-  return request(`/${module}/${path}${query ? `?${query}` : ''}`);
+  return practiceQuery(path, moduleType, params);
 }
 
-export function savePracticeExecution(module, execution, payload) {
+export function savePracticeExecution(moduleType, execution, payload) {
   const path = {
     sign_in: 'save-sign-in',
     journal: 'save-journal',
     report: 'save-report',
   }[execution] || 'save-journal';
-  return practicePost(module, path, payload);
+  return practicePost(path, moduleType, payload);
 }
 
-export function reviewPracticeExecution(module, execution, payload) {
+export function reviewPracticeExecution(moduleType, execution, payload) {
   const path = execution === 'report' ? 'review-report' : 'review-journal';
-  return practicePost(module, path, payload);
+  return practicePost(path, moduleType, payload);
 }
 
-export function requestPracticeExecutionModification(module, payload) {
-  return practicePost(module, 'request-execution-modification', payload);
+export function requestPracticeExecutionModification(moduleType, payload) {
+  return practicePost('request-execution-modification', moduleType, payload);
 }
 
-export function savePracticeProjectScore(module, payload) {
-  return practicePost(module, 'save-score', payload);
+export function savePracticeProjectScore(moduleType, payload) {
+  return practicePost('save-score', moduleType, payload);
 }
 
-export function fetchPracticeExecutionTimeline(module, params = {}) {
-  const query = new URLSearchParams(params).toString();
-  return request(`/${module}/execution-timeline${query ? `?${query}` : ''}`);
+export function fetchPracticeExecutionTimeline(moduleType = 'all', params = {}) {
+  return practiceQuery('execution-timeline', moduleType, params);
 }

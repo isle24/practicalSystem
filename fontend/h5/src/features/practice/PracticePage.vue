@@ -47,7 +47,20 @@
       @search="reloadPracticeList(moduleType)"
       @reset="resetPracticeListFilters(moduleType)"
     />
-    <div class="app-practice-list">
+    <div v-if="isScheduleBoard" class="practice-schedule-groups">
+      <section v-for="group in scheduleGroups" :key="group.date" class="practice-schedule-day">
+        <header>{{ group.date }}</header>
+        <article v-for="row in group.rows" :key="row.id" class="practice-schedule-item">
+          <div>
+            <strong>{{ practiceRowTitle(moduleType, row) }}</strong>
+            <span>{{ practiceTypeName(row.module_type) }}</span>
+          </div>
+          <p v-for="fact in practiceRowFacts(moduleType, row)" :key="fact">{{ fact }}</p>
+        </article>
+      </section>
+      <div v-if="!scheduleGroups.length" class="mobile-empty">{{ currentPanel.emptyText }}</div>
+    </div>
+    <div v-else class="app-practice-list">
       <AppListCard
         v-for="row in rows"
         :key="row.id"
@@ -69,8 +82,8 @@
         </template>
       </AppListCard>
     </div>
-    <div v-if="!rows.length" class="mobile-empty">{{ currentPanel.emptyText }}</div>
-    <div class="mobile-list-footer">
+    <div v-if="!isScheduleBoard && !rows.length" class="mobile-empty">{{ currentPanel.emptyText }}</div>
+    <div v-if="!isScheduleBoard" class="mobile-list-footer">
       <span>共 {{ practiceListTotal(moduleType) }} 条</span>
       <AppButton
         v-if="canLoadMorePractice(moduleType)"
@@ -111,17 +124,20 @@ const {
   currentPracticeRows,
   handlePracticeAction,
   isStudentRole,
+  isAdminRole,
   loadMorePracticeList,
   practiceFilters,
   practiceFlowSteps,
   practiceListTotal,
   practiceModule,
   practiceModuleName,
+  practiceScheduleGroups,
   practicePanels,
   practiceRowActions,
   practiceRowFacts,
   practiceRowTitle,
   practiceRowValue,
+  practiceTypeName,
   practiceSummaries,
   reloadPracticeList,
   resetPracticeListFilters,
@@ -136,6 +152,8 @@ const panels = computed(() => practicePanels(props.moduleType));
 const currentPanel = computed(() => currentPracticePanel(props.moduleType));
 const filters = computed(() => practiceFilters(props.moduleType));
 const rows = computed(() => currentPracticeRows(props.moduleType));
+const isScheduleBoard = computed(() => isAdminRole.value && currentPanel.value.key === 'schedules');
+const scheduleGroups = computed(() => practiceScheduleGroups(props.moduleType));
 
 function rowSubtitle(row) {
   const value = practiceRowValue(props.moduleType, row);
@@ -148,5 +166,65 @@ function rowSubtitle(row) {
   display: grid;
   gap: 10px;
   margin-top: 12px;
+}
+
+.practice-schedule-groups {
+  display: grid;
+  gap: 12px;
+  padding-top: 12px;
+}
+
+.practice-schedule-day {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.practice-schedule-day > header {
+  min-height: 38px;
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  color: var(--muted);
+  background: #f7f9fc;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.practice-schedule-item {
+  display: grid;
+  gap: 5px;
+  padding: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.practice-schedule-item > div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.practice-schedule-item strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+}
+
+.practice-schedule-item span {
+  flex: 0 0 auto;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 1px 5px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.practice-schedule-item p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
 }
 </style>

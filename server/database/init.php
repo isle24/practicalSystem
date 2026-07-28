@@ -914,8 +914,9 @@ function schoolBusinessStatements(): array
         simpleTable('base_usage', ['`base_id` BIGINT UNSIGNED DEFAULT NULL', '`dep_id` BIGINT UNSIGNED DEFAULT NULL', '`usage_type` VARCHAR(80) DEFAULT NULL']),
         simpleTable('base_result', ['`base_id` BIGINT UNSIGNED DEFAULT NULL', '`dep_id` BIGINT UNSIGNED DEFAULT NULL', '`result_type` VARCHAR(80) DEFAULT NULL']),
         simpleTable('base_expense', ['`base_id` BIGINT UNSIGNED DEFAULT NULL', '`dep_id` BIGINT UNSIGNED DEFAULT NULL', '`amount` DECIMAL(12,2) DEFAULT NULL']),
+        simpleTable('practice_period', ['`start_time` TIME NOT NULL', '`end_time` TIME NOT NULL', '`sort` INT DEFAULT 0', 'KEY `idx_period_sort` (`sort`, `status`)']),
         simpleTable('practice_plan', practiceCommonColumns(['`source_type` VARCHAR(40) DEFAULT \'manual\'', '`submitter_id` BIGINT UNSIGNED DEFAULT NULL'])),
-        simpleTable('practice_schedule', practiceCommonColumns(['`room_id` BIGINT UNSIGNED DEFAULT NULL', '`base_id` BIGINT UNSIGNED DEFAULT NULL', '`place_type` VARCHAR(40) DEFAULT \'inside\'', '`schedule_date` DATE DEFAULT NULL', '`start_time` VARCHAR(20) DEFAULT NULL', '`end_time` VARCHAR(20) DEFAULT NULL', '`location` VARCHAR(255) DEFAULT NULL', '`student_count` INT DEFAULT 0', '`roster_printed_at` DATETIME DEFAULT NULL'])),
+        simpleTable('practice_schedule', practiceCommonColumns(['`room_id` BIGINT UNSIGNED DEFAULT NULL', '`base_id` BIGINT UNSIGNED DEFAULT NULL', '`place_type` VARCHAR(40) DEFAULT \'inside\'', '`schedule_date` DATE DEFAULT NULL', '`period_start_id` BIGINT UNSIGNED DEFAULT NULL', '`period_end_id` BIGINT UNSIGNED DEFAULT NULL', '`start_time` VARCHAR(20) DEFAULT NULL', '`end_time` VARCHAR(20) DEFAULT NULL', '`location` VARCHAR(255) DEFAULT NULL', '`student_count` INT DEFAULT 0', '`roster_printed_at` DATETIME DEFAULT NULL'])),
         simpleTable('practice_project', practiceCommonColumns(['`schedule_id` BIGINT UNSIGNED DEFAULT NULL', '`start_date` DATE DEFAULT NULL', '`end_date` DATE DEFAULT NULL', '`student_count` INT DEFAULT 0', '`published_at` DATETIME DEFAULT NULL', '`submitter_id` BIGINT UNSIGNED DEFAULT NULL'])),
         simpleTable('practice_project_student', ['`module_type` ENUM(\'training\',\'lab\') DEFAULT \'training\'', '`project_id` BIGINT UNSIGNED NOT NULL', '`student_id` BIGINT UNSIGNED NOT NULL', '`teacher_id` BIGINT UNSIGNED DEFAULT NULL', '`plan_id` BIGINT UNSIGNED DEFAULT NULL', '`schedule_id` BIGINT UNSIGNED DEFAULT NULL', '`grade_id` BIGINT UNSIGNED DEFAULT NULL', '`dep_id` BIGINT UNSIGNED DEFAULT NULL', '`profession_id` BIGINT UNSIGNED DEFAULT NULL', '`class_id` BIGINT UNSIGNED DEFAULT NULL', '`active_flag` TINYINT GENERATED ALWAYS AS (CASE WHEN `status` = \'active\' AND `deleted_at` IS NULL THEN 1 ELSE NULL END) STORED', 'UNIQUE KEY `uk_project_student` (`project_id`, `student_id`, `active_flag`)', 'KEY `idx_student` (`student_id`)', 'KEY `idx_project` (`project_id`)']),
         simpleTable('practice_syllabus', practiceCommonColumns(['`submitter_id` BIGINT UNSIGNED DEFAULT NULL'])),
@@ -1659,7 +1660,9 @@ function ensurePracticeSchema(PDO $pdo): void
             'base_id' => "ALTER TABLE `practice_schedule` ADD COLUMN `base_id` BIGINT UNSIGNED DEFAULT NULL AFTER `room_id`",
             'place_type' => "ALTER TABLE `practice_schedule` ADD COLUMN `place_type` VARCHAR(40) DEFAULT 'inside' AFTER `base_id`",
             'schedule_date' => "ALTER TABLE `practice_schedule` ADD COLUMN `schedule_date` DATE DEFAULT NULL AFTER `place_type`",
-            'start_time' => "ALTER TABLE `practice_schedule` ADD COLUMN `start_time` VARCHAR(20) DEFAULT NULL AFTER `schedule_date`",
+            'period_start_id' => "ALTER TABLE `practice_schedule` ADD COLUMN `period_start_id` BIGINT UNSIGNED DEFAULT NULL AFTER `schedule_date`",
+            'period_end_id' => "ALTER TABLE `practice_schedule` ADD COLUMN `period_end_id` BIGINT UNSIGNED DEFAULT NULL AFTER `period_start_id`",
+            'start_time' => "ALTER TABLE `practice_schedule` ADD COLUMN `start_time` VARCHAR(20) DEFAULT NULL AFTER `period_end_id`",
             'end_time' => "ALTER TABLE `practice_schedule` ADD COLUMN `end_time` VARCHAR(20) DEFAULT NULL AFTER `start_time`",
             'location' => "ALTER TABLE `practice_schedule` ADD COLUMN `location` VARCHAR(255) DEFAULT NULL AFTER `end_time`",
             'student_count' => "ALTER TABLE `practice_schedule` ADD COLUMN `student_count` INT DEFAULT 0 AFTER `location`",
@@ -1714,6 +1717,7 @@ function ensurePracticeSchema(PDO $pdo): void
     }
 
     ensureIndex($pdo, 'practice_schedule', 'idx_practice_schedule_date', "ALTER TABLE `practice_schedule` ADD KEY `idx_practice_schedule_date` (`module_type`, `schedule_date`, `status`)");
+    ensureIndex($pdo, 'practice_schedule', 'idx_practice_schedule_period', "ALTER TABLE `practice_schedule` ADD KEY `idx_practice_schedule_period` (`schedule_date`, `period_start_id`, `period_end_id`, `status`)");
     ensureIndex($pdo, 'practice_project', 'idx_practice_project_schedule', "ALTER TABLE `practice_project` ADD KEY `idx_practice_project_schedule` (`module_type`, `schedule_id`, `status`)");
     ensureIndex($pdo, 'practice_score', 'idx_practice_score_student', "ALTER TABLE `practice_score` ADD KEY `idx_practice_score_student` (`module_type`, `student_id`, `status`)");
     ensureIndex($pdo, 'practice_score', 'idx_practice_score_project', "ALTER TABLE `practice_score` ADD KEY `idx_practice_score_project` (`module_type`, `project_id`, `student_id`, `status`)");
@@ -2074,6 +2078,7 @@ function recordingArchiveColumns(): array
 function seedSchool(PDO $pdo, string $wechatProxyUrl): void
 {
     seedRoles($pdo);
+    seedPracticePeriods($pdo);
     seedArchives($pdo);
     seedAdmin($pdo);
     seedPermissionAccounts($pdo);
@@ -2086,9 +2091,44 @@ function seedSchool(PDO $pdo, string $wechatProxyUrl): void
     seedInternshipDemo($pdo);
 }
 
+function seedPracticePeriods(PDO $pdo): void
+{
+    $periods = [
+        [1, '00000000-0000-0000-0000-000000310001', '第 1 节', '08:30:00', '09:15:00', 10],
+        [2, '00000000-0000-0000-0000-000000310002', '第 2 节', '09:20:00', '10:05:00', 20],
+        [3, '00000000-0000-0000-0000-000000310003', '第 3 节', '10:25:00', '11:10:00', 30],
+        [4, '00000000-0000-0000-0000-000000310004', '第 4 节', '11:15:00', '12:00:00', 40],
+        [5, '00000000-0000-0000-0000-000000310005', '第 5 节', '14:00:00', '14:45:00', 50],
+        [6, '00000000-0000-0000-0000-000000310006', '第 6 节', '14:50:00', '15:35:00', 60],
+        [7, '00000000-0000-0000-0000-000000310007', '第 7 节', '15:55:00', '16:40:00', 70],
+        [8, '00000000-0000-0000-0000-000000310008', '第 8 节', '16:45:00', '17:30:00', 80],
+        [9, '00000000-0000-0000-0000-000000310009', '第 9 节', '18:30:00', '19:15:00', 90],
+        [10, '00000000-0000-0000-0000-000000310010', '第 10 节', '19:20:00', '20:05:00', 100],
+        [11, '00000000-0000-0000-0000-000000310011', '第 11 节', '20:15:00', '21:00:00', 110],
+        [12, '00000000-0000-0000-0000-000000310012', '第 12 节', '21:05:00', '21:50:00', 120],
+    ];
+    $stmt = $pdo->prepare(
+        "INSERT IGNORE INTO `practice_period` (`id`, `uuid`, `name`, `start_time`, `end_time`, `sort`, `status`)
+         VALUES (?, ?, ?, ?, ?, ?, 'enabled')"
+    );
+    foreach ($periods as $period) {
+        $stmt->execute($period);
+    }
+}
+
 function seedMessageTemplates(PDO $pdo): void
 {
     MessageRecord::ensureDefaultTemplates($pdo);
+    $pdo->exec(
+        "UPDATE `message_template`
+         SET `link_url_tpl` = REPLACE(`link_url_tpl`, '#panel=training:', '#panel=practice:')
+         WHERE `code` LIKE 'training\\_%' ESCAPE '\\\\' AND `link_url_tpl` LIKE '#panel=training:%'"
+    );
+    $pdo->exec(
+        "UPDATE `message_template`
+         SET `link_url_tpl` = REPLACE(`link_url_tpl`, '#panel=lab:', '#panel=practice:')
+         WHERE `code` LIKE 'lab\\_%' ESCAPE '\\\\' AND `link_url_tpl` LIKE '#panel=lab:%'"
+    );
 }
 
 function seedRoles(PDO $pdo): void
@@ -2504,64 +2544,35 @@ function seedMenus(PDO $pdo): void
         [1951, 195, '列表', 'internship:delay:list', '/internship/delays', 'both', 'list', 1951, 'List'],
         [19511, 1951, '提交', 'internship:apply', null, 'both', 'button', 1951, null],
         [19512, 1951, '审核', 'internship:approve', null, 'both', 'button', 1952, null],
-        [2, 0, '实训管理', null, null, 'both', 'directory', 20, 'Workflow'],
+        [2, 0, '实验实训管理', null, null, 'both', 'directory', 20, 'FlaskConical'],
         [21, 2, '教学计划', null, null, 'both', 'menu', 21, 'FileText'],
-        [211, 21, '列表', 'training:view', '/training/plans', 'both', 'list', 211, 'List'],
-        [201, 211, '维护', 'training:manage', null, 'both', 'button', 201, null],
-        [202, 211, '审核', 'training:approve', null, 'both', 'button', 202, null],
+        [211, 21, '列表', 'practice:view', '/practice/plans', 'both', 'list', 211, 'List'],
+        [201, 211, '维护', 'practice:manage', null, 'both', 'button', 201, null],
+        [202, 211, '审核', 'practice:approve', null, 'both', 'button', 202, null],
         [22, 2, '课表安排', null, null, 'both', 'menu', 22, 'CalendarCheck'],
-        [221, 22, '列表', 'training:schedule:list', '/training/schedules', 'both', 'list', 221, 'List'],
-        [2211, 221, '维护', 'training:manage', null, 'both', 'button', 2211, null],
+        [221, 22, '列表', 'practice:view', '/practice/schedules', 'both', 'list', 221, 'List'],
+        [2211, 221, '维护', 'practice:manage', null, 'both', 'button', 2211, null],
         [222, 2, '项目发布', null, null, 'both', 'menu', 222, 'ClipboardList'],
-        [2221, 222, '列表', 'training:project:list', '/training/projects', 'both', 'list', 2221, 'List'],
-        [22211, 2221, '维护', 'training:manage', null, 'pc', 'button', 2221, null],
+        [2221, 222, '列表', 'practice:view', '/practice/projects', 'both', 'list', 2221, 'List'],
+        [22211, 2221, '维护', 'practice:manage', null, 'pc', 'button', 2221, null],
         [23, 2, '大纲编写', null, null, 'both', 'menu', 23, 'BookOpen'],
-        [231, 23, '列表', 'training:syllabus:list', '/training/syllabus', 'both', 'list', 231, 'List'],
-        [2311, 231, '维护', 'training:manage', null, 'both', 'button', 2311, null],
-        [2312, 231, '审核', 'training:approve', null, 'both', 'button', 2312, null],
+        [231, 23, '列表', 'practice:view', '/practice/syllabus', 'both', 'list', 231, 'List'],
+        [2311, 231, '维护', 'practice:manage', null, 'both', 'button', 2311, null],
+        [2312, 231, '审核', 'practice:approve', null, 'both', 'button', 2312, null],
         [24, 2, '教案编写', null, null, 'both', 'menu', 24, 'FileText'],
-        [241, 24, '列表', 'training:lesson:list', '/training/lesson-plans', 'both', 'list', 241, 'List'],
-        [2411, 241, '维护', 'training:manage', null, 'both', 'button', 2411, null],
-        [2412, 241, '审核', 'training:approve', null, 'both', 'button', 2412, null],
+        [241, 24, '列表', 'practice:view', '/practice/lesson-plans', 'both', 'list', 241, 'List'],
+        [2411, 241, '维护', 'practice:manage', null, 'both', 'button', 2411, null],
+        [2412, 241, '审核', 'practice:approve', null, 'both', 'button', 2412, null],
         [25, 2, '成绩评定', null, null, 'both', 'menu', 25, 'GraduationCap'],
-        [251, 25, '列表', 'training:score:list', '/training/scores', 'both', 'list', 251, 'List'],
-        [2511, 251, '维护', 'training:manage', null, 'both', 'button', 2511, null],
+        [251, 25, '列表', 'practice:view', '/practice/scores', 'both', 'list', 251, 'List'],
+        [2511, 251, '维护', 'practice:manage', null, 'both', 'button', 2511, null],
         [26, 2, '反思报告', null, null, 'both', 'menu', 26, 'FileClock'],
-        [261, 26, '列表', 'training:reflection:list', '/training/reflections', 'both', 'list', 261, 'List'],
-        [2611, 261, '维护', 'training:manage', null, 'both', 'button', 2611, null],
-        [2612, 261, '审核', 'training:approve', null, 'both', 'button', 2612, null],
+        [261, 26, '列表', 'practice:view', '/practice/reflections', 'both', 'list', 261, 'List'],
+        [2611, 261, '维护', 'practice:manage', null, 'both', 'button', 2611, null],
+        [2612, 261, '审核', 'practice:approve', null, 'both', 'button', 2612, null],
         [27, 2, '场地管理', null, null, 'pc', 'menu', 27, 'Building2'],
-        [271, 27, '列表', 'training:room:list', '/training/rooms', 'pc', 'list', 271, 'List'],
-        [2711, 271, '维护', 'training:manage', null, 'pc', 'button', 2711, null],
-        [3, 0, '实验管理', null, null, 'both', 'directory', 30, 'FlaskConical'],
-        [31, 3, '教学计划', null, null, 'both', 'menu', 31, 'FileText'],
-        [311, 31, '列表', 'lab:view', '/lab/plans', 'both', 'list', 311, 'List'],
-        [301, 311, '维护', 'lab:manage', null, 'both', 'button', 301, null],
-        [302, 311, '审核', 'lab:approve', null, 'both', 'button', 302, null],
-        [32, 3, '课表安排', null, null, 'both', 'menu', 32, 'CalendarCheck'],
-        [321, 32, '列表', 'lab:schedule:list', '/lab/schedules', 'both', 'list', 321, 'List'],
-        [3211, 321, '维护', 'lab:manage', null, 'both', 'button', 3211, null],
-        [322, 3, '项目发布', null, null, 'both', 'menu', 322, 'ClipboardList'],
-        [3221, 322, '列表', 'lab:project:list', '/lab/projects', 'both', 'list', 3221, 'List'],
-        [32211, 3221, '维护', 'lab:manage', null, 'pc', 'button', 3221, null],
-        [33, 3, '大纲编写', null, null, 'both', 'menu', 33, 'BookOpen'],
-        [331, 33, '列表', 'lab:syllabus:list', '/lab/syllabus', 'both', 'list', 331, 'List'],
-        [3311, 331, '维护', 'lab:manage', null, 'both', 'button', 3311, null],
-        [3312, 331, '审核', 'lab:approve', null, 'both', 'button', 3312, null],
-        [34, 3, '教案编写', null, null, 'both', 'menu', 34, 'FileText'],
-        [341, 34, '列表', 'lab:lesson:list', '/lab/lesson-plans', 'both', 'list', 341, 'List'],
-        [3411, 341, '维护', 'lab:manage', null, 'both', 'button', 3411, null],
-        [3412, 341, '审核', 'lab:approve', null, 'both', 'button', 3412, null],
-        [35, 3, '成绩评定', null, null, 'both', 'menu', 35, 'GraduationCap'],
-        [351, 35, '列表', 'lab:score:list', '/lab/scores', 'both', 'list', 351, 'List'],
-        [3511, 351, '维护', 'lab:manage', null, 'both', 'button', 3511, null],
-        [36, 3, '反思报告', null, null, 'both', 'menu', 36, 'FileClock'],
-        [361, 36, '列表', 'lab:reflection:list', '/lab/reflections', 'both', 'list', 361, 'List'],
-        [3611, 361, '维护', 'lab:manage', null, 'both', 'button', 3611, null],
-        [3612, 361, '审核', 'lab:approve', null, 'both', 'button', 3612, null],
-        [37, 3, '场地管理', null, null, 'pc', 'menu', 37, 'Building2'],
-        [371, 37, '列表', 'lab:room:list', '/lab/rooms', 'pc', 'list', 371, 'List'],
-        [3711, 371, '维护', 'lab:manage', null, 'pc', 'button', 3711, null],
+        [271, 27, '列表', 'practice:view', '/practice/rooms', 'pc', 'list', 271, 'List'],
+        [2711, 271, '维护', 'practice:manage', null, 'pc', 'button', 2711, null],
         [4, 0, '统计报表', null, null, 'pc', 'directory', 40, 'ChartColumn'],
         [41, 4, '实习统计', null, null, 'pc', 'menu', 41, 'ChartColumn'],
         [411, 41, '列表', 'stat:view', '/stat', 'pc', 'list', 411, 'List'],
@@ -2625,6 +2636,9 @@ function seedMenus(PDO $pdo): void
         [631, 63, '列表', 'guide:view', '/config/guides', 'pc', 'list', 731, 'List'],
         [6311, 631, '保存', 'guide:save', null, 'pc', 'button', 631, null],
         [6312, 631, '删除', 'guide:delete', null, 'pc', 'button', 632, null],
+        [64, 6, '课节配置', null, null, 'pc', 'menu', 74, 'Clock3'],
+        [641, 64, '列表', 'practice:period:manage', '/config/practice-periods', 'pc', 'list', 741, 'List'],
+        [6411, 641, '维护', 'practice:period:manage', null, 'pc', 'button', 7411, null],
         [7, 6, '企业微信应用', null, null, 'pc', 'menu', 74, 'Network'],
         [711, 7, '列表', 'wechat:proxy', '/config/wechat-proxy', 'pc', 'list', 741, 'List'],
         [701, 711, '保存', 'wechat:proxy:save', null, 'pc', 'button', 701, null],
@@ -2654,27 +2668,47 @@ function seedMenus(PDO $pdo): void
         "INSERT INTO `menu` (`id`, `parent_id`, `name`, `code`, `path`, `platform`, `type`, `sort`, `icon`, `visible`, `status`)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'true', 'enabled')
          ON DUPLICATE KEY UPDATE
-            `parent_id` = VALUES(`parent_id`),
-            `name` = VALUES(`name`),
-            `code` = VALUES(`code`),
-            `path` = VALUES(`path`),
-            `platform` = VALUES(`platform`),
-            `type` = VALUES(`type`),
-            `sort` = VALUES(`sort`),
-            `icon` = VALUES(`icon`),
-            `visible` = 'true',
-            `status` = 'enabled',
-            `deleted_at` = NULL"
+            `id` = VALUES(`id`)"
     );
 
     foreach ($menus as $menu) {
         $stmt->execute($menu);
     }
 
+    $practiceMenuIds = [
+        2, 21, 211, 201, 202, 22, 221, 2211, 222, 2221, 22211,
+        23, 231, 2311, 2312, 24, 241, 2411, 2412, 25, 251, 2511,
+        26, 261, 2611, 2612, 27, 271, 2711,
+    ];
+    $practiceMenuById = [];
+    foreach ($menus as $menu) {
+        if (in_array((int) $menu[0], $practiceMenuIds, true)) {
+            $practiceMenuById[(int) $menu[0]] = $menu;
+        }
+    }
+    $legacyPracticeStmt = $pdo->prepare(
+        "UPDATE `menu`
+         SET `parent_id` = ?, `code` = ?, `path` = ?, `platform` = ?, `type` = ?, `sort` = ?, `icon` = ?
+         WHERE `id` = ? AND (`code` LIKE 'training:%' OR `path` LIKE '/training/%')"
+    );
+    foreach ($practiceMenuIds as $menuId) {
+        $menu = $practiceMenuById[$menuId] ?? null;
+        if (!$menu) {
+            continue;
+        }
+        $legacyPracticeStmt->execute([
+            $menu[1], $menu[3], $menu[4], $menu[5], $menu[6], $menu[7], $menu[8], $menu[0],
+        ]);
+    }
+    $pdo->exec(
+        "UPDATE `menu`
+         SET `name` = '实验实训管理', `icon` = 'FlaskConical'
+         WHERE `id` = 2 AND `name` IN ('实训管理', '实验管理')"
+    );
+
     $moduleMenus = [
         1 => 'internship',
-        2 => 'training',
-        3 => 'lab',
+        2 => 'practice',
         4 => 'stat',
         5 => 'log',
         6 => 'config',
@@ -2698,7 +2732,11 @@ function seedMenus(PDO $pdo): void
         $moduleStmt->execute([$moduleKey, $menuId]);
     }
 
-    $disabledMenuIds = [102, 401];
+    $disabledMenuIds = [
+        3, 31, 311, 301, 302, 32, 321, 3211, 322, 3221, 32211,
+        33, 331, 3311, 3312, 34, 341, 3411, 3412, 35, 351, 3511,
+        36, 361, 3611, 3612, 37, 371, 3711, 102, 401,
+    ];
     $disableStmt = $pdo->prepare(
         "UPDATE `menu`
          SET `visible` = 'false', `status` = 'disabled', `deleted_at` = COALESCE(`deleted_at`, NOW())
@@ -2711,28 +2749,54 @@ function seedMenus(PDO $pdo): void
     $roleMenu = $pdo->prepare(
         "INSERT INTO `role_menu` (`role_id`, `menu_id`)
          VALUES (?, ?)
-         ON DUPLICATE KEY UPDATE `deleted_at` = NULL"
+         ON DUPLICATE KEY UPDATE `role_id` = VALUES(`role_id`)"
     );
+
+    $legacyPracticeRoleMap = [
+        3 => 2, 31 => 21, 311 => 211, 301 => 201, 302 => 202,
+        32 => 22, 321 => 221, 3211 => 2211, 322 => 222, 3221 => 2221,
+        32211 => 22211, 33 => 23, 331 => 231, 3311 => 2311, 3312 => 2312,
+        34 => 24, 341 => 241, 3411 => 2411, 3412 => 2412, 35 => 25,
+        351 => 251, 3511 => 2511, 36 => 26, 361 => 261, 3611 => 2611,
+        3612 => 2612, 37 => 27, 371 => 271, 3711 => 2711,
+    ];
+    $legacyRoleStmt = $pdo->prepare(
+        "SELECT DISTINCT `role_id` FROM `role_menu` WHERE `menu_id` = ? AND `deleted_at` IS NULL"
+    );
+    $migrateRoleStmt = $pdo->prepare(
+        "INSERT INTO `role_menu` (`role_id`, `menu_id`)
+         VALUES (?, ?)
+         ON DUPLICATE KEY UPDATE `deleted_at` = NULL, `updated_at` = NOW()"
+    );
+    $disableLegacyRoleStmt = $pdo->prepare(
+        "UPDATE `role_menu` SET `deleted_at` = NOW(), `updated_at` = NOW()
+         WHERE `role_id` = ? AND `menu_id` = ? AND `deleted_at` IS NULL"
+    );
+    foreach ($legacyPracticeRoleMap as $legacyMenuId => $practiceMenuId) {
+        $legacyRoleStmt->execute([$legacyMenuId]);
+        foreach ($legacyRoleStmt->fetchAll(PDO::FETCH_COLUMN) as $roleId) {
+            $migrateRoleStmt->execute([(int) $roleId, $practiceMenuId]);
+            $disableLegacyRoleStmt->execute([(int) $roleId, $legacyMenuId]);
+        }
+    }
 
     $internshipAdminMenus = [
         1, 11, 111, 101, 1112, 12, 121, 103, 104, 1213, 13, 131, 1311, 1312,
         14, 141, 105, 15, 151, 106, 1512, 16, 161, 107, 1612, 17, 171, 108,
         18, 181, 109, 19, 191, 110, 195, 1951, 19511, 19512,
     ];
-    $trainingMenus = [2, 21, 211, 201, 202, 22, 221, 2211, 222, 2221, 22211, 23, 231, 2311, 2312, 24, 241, 2411, 2412, 25, 251, 2511, 26, 261, 2611, 2612, 27, 271, 2711];
-    $labMenus = [3, 31, 311, 301, 302, 32, 321, 3211, 322, 3221, 32211, 33, 331, 3311, 3312, 34, 341, 3411, 3412, 35, 351, 3511, 36, 361, 3611, 3612, 37, 371, 3711];
-    $trainingReadonlyMenus = [2, 21, 211, 22, 221, 222, 2221, 25, 251];
-    $labReadonlyMenus = [3, 31, 311, 32, 321, 322, 3221, 35, 351];
+    $practiceMenus = [2, 21, 211, 201, 202, 22, 221, 2211, 222, 2221, 22211, 23, 231, 2311, 2312, 24, 241, 2411, 2412, 25, 251, 2511, 26, 261, 2611, 2612, 27, 271, 2711];
+    $practiceReadonlyMenus = [2, 21, 211, 22, 221, 222, 2221, 25, 251];
     $statMenus = [4, 41, 411, 402, 42, 421, 43, 431, 44, 441, 45, 451, 46, 461, 47, 471];
     $commonViewMenus = [9, 91, 911, 10, 100, 1000, 10001, 20, 200, 2000, 20001, 20002];
     $allMenuIds = array_map(static fn (array $menu): int => (int) $menu[0], $menus);
     $roleMenuIds = [
         1 => $allMenuIds,
         2 => $allMenuIds,
-        3 => array_merge($internshipAdminMenus, $trainingMenus, $labMenus, $statMenus, $commonViewMenus),
-        4 => array_merge($internshipAdminMenus, $trainingMenus, $labMenus, $statMenus, $commonViewMenus),
-        5 => array_merge([1, 11, 111, 12, 121, 104, 1213, 13, 131, 14, 141, 105, 15, 151, 106, 1512, 16, 161, 107, 1612, 17, 171, 108, 195, 1951, 19512, 201, 202, 2311, 2312, 2411, 2412, 2511, 2611, 2612, 301, 302, 3311, 3312, 3411, 3412, 3511, 3611, 3612], $trainingReadonlyMenus, $labReadonlyMenus, $commonViewMenus),
-        6 => array_merge([1, 11, 111, 12, 121, 103, 14, 141, 105, 15, 151, 106, 16, 161, 107, 195, 1951, 19511], $trainingReadonlyMenus, $labReadonlyMenus, $commonViewMenus),
+        3 => array_merge($internshipAdminMenus, $practiceMenus, $statMenus, $commonViewMenus),
+        4 => array_merge($internshipAdminMenus, $practiceMenus, $statMenus, $commonViewMenus),
+        5 => array_merge([1, 11, 111, 12, 121, 104, 1213, 13, 131, 14, 141, 105, 15, 151, 106, 1512, 16, 161, 107, 1612, 17, 171, 108, 195, 1951, 19512, 201, 202, 2311, 2312, 2411, 2412, 2511, 2611, 2612], $practiceReadonlyMenus, $commonViewMenus),
+        6 => array_merge([1, 11, 111, 12, 121, 103, 14, 141, 105, 15, 151, 106, 16, 161, 107, 195, 1951, 19511], $practiceReadonlyMenus, $commonViewMenus),
         7 => array_merge([1, 17, 171, 108], $commonViewMenus),
     ];
 
@@ -2741,28 +2805,7 @@ function seedMenus(PDO $pdo): void
         foreach ($menuIds as $menuId) {
             $roleMenu->execute([$roleId, $menuId]);
         }
-        syncSeedRoleMenus($pdo, (int) $roleId, $menuIds);
     }
-}
-
-function syncSeedRoleMenus(PDO $pdo, int $roleId, array $menuIds): void
-{
-    if (!$menuIds) {
-        $pdo->prepare(
-            "UPDATE `role_menu`
-             SET `deleted_at` = NOW(), `updated_at` = NOW()
-             WHERE `role_id` = ? AND `deleted_at` IS NULL"
-        )->execute([$roleId]);
-        return;
-    }
-
-    $placeholders = implode(',', array_fill(0, count($menuIds), '?'));
-    $stmt = $pdo->prepare(
-        "UPDATE `role_menu`
-         SET `deleted_at` = NOW(), `updated_at` = NOW()
-         WHERE `role_id` = ? AND `deleted_at` IS NULL AND `menu_id` NOT IN ({$placeholders})"
-    );
-    $stmt->execute(array_merge([$roleId], $menuIds));
 }
 
 function seedCommonSupportData(PDO $pdo): void
@@ -2993,8 +3036,7 @@ function seedOperationGuides(PDO $pdo): void
 {
     $guides = [
         ['internship', '实习管理操作说明', '实习管理围绕实习计划、实习任务、任务绑定、补充申请、签到、日志、报告、成绩和归档材料进行全过程留痕。', '管理员按计划拆分任务并绑定班级，系统展开学生生成任务绑定；学生按任务完成过程材料，任务老师按任务审核评阅，学校管理员按学院、专业、届次查看整体进度。', '学生看不到列表筛选时，先确认当前账号是否为学生角色；教师看不到学生时，检查任务绑定和组织范围；审核退回后学生重新提交会形成新的记录。', 10],
-        ['training', '实训管理操作说明', '实训管理围绕教学计划、课表安排、大纲、教案、成绩评定和反思报告进行维护。', '教学计划可由教务拉取或教师填报，经过系主任、学院教务科、学院主管院长、教务处和教务处领导等节点审核；课表安排区分校内实训室和校外基地，并支持签到册打印记录；大纲、教案和反思报告由任课教师提交后按学院流程审核。', '待审核数据才能通过或退回；已通过数据只能发起通过后修改；学生端主要查看本人课表、成绩和可提交材料。', 20],
-        ['lab', '实验管理操作说明', '实验管理围绕教学计划、课表安排、大纲、教案、成绩评定和反思报告进行维护。', '教学计划可由教务拉取或教师填报，课表安排维护实验室、时间地点和学生范围；大纲、教案由任课教师编写后进入系主任和学院分管院长审核；成绩评定包含比例设定、成绩录入、成绩提交和成绩统计。', '实验室、课程、项目和课表数据要先维护基础信息；待审核数据才能处理，退回后需重新提交形成新记录。', 30],
+        ['practice', '实验实训管理操作说明', '实验实训管理统一维护教学计划、专业课表、项目、大纲、教案、成绩和反思报告，并通过类别区分实验与实训。', '管理员先维护届次、学院、专业和十二节通用课节，再按专业安排二维周课表；每条课表明确实验或实训类别、教师、日期、起止课节和场地，项目发布后按届次与专业绑定学生。', '课表必须先选择届次、学院和专业；同专业、教师或场地在重叠课节内不能重复排课；历史课表仍按保存时的时间快照显示。', 20],
         ['stat', '统计报表操作说明', '统计报表按当前角色的数据范围展示实习总览、学院统计、专业统计、任务老师统计、学生过程统计和归档材料统计。', '选择左侧报表菜单后，通过届次、学院、专业和关键词筛选数据；切换报表菜单可查看不同统计口径的数据明细。', '如果统计值与列表不一致，优先确认当前角色的数据范围、筛选条件和业务数据是否已刷新。', 40],
         ['log', '日志审计操作说明', '日志审计读取当前学校业务库下所有 operation_log 按月分表，支持关键词、动作、IP 和日期范围查询。', '管理员进入日志审计后先设置查询条件，再查看来源分表、操作账号、动作、IP 和日志内容。', '如果日志为空，检查当前月份日志分表是否存在，以及账号是否具备日志查看权限。', 50],
         ['file', '文件管理操作说明', '文件管理用于查看学校业务库内的上传文件、上传人、上传时间、设备信息和文件状态。', '通过关键词、状态和分类定位文件，点击打开可查看文件访问地址。', '如果文件打不开，检查文件状态、存储配置和浏览器访问权限。', 60],
@@ -3023,6 +3065,7 @@ function seedOperationGuides(PDO $pdo): void
             $sort,
         ]);
     }
+    $pdo->exec("UPDATE `operation_guide` SET `status` = 'disabled', `deleted_at` = COALESCE(`deleted_at`, NOW()) WHERE `module_key` IN ('training', 'lab')");
 }
 
 function guideContent(string $flow, string $process, string $faq): string
@@ -3037,8 +3080,7 @@ function seedConfig(PDO $pdo, string $wechatProxyUrl): void
     $groups = [
         [1, 0, 'system', '系统配置', 10],
         [2, 0, 'internship', '实习管理', 20],
-        [3, 0, 'training', '实训管理', 30],
-        [4, 0, 'lab', '实验管理', 40],
+        [3, 0, 'practice', '实验实训管理', 30],
         [5, 0, 'wechat', '企业微信', 50],
         [6, 0, 'file', '文件管理', 60],
     ];
@@ -3046,7 +3088,13 @@ function seedConfig(PDO $pdo, string $wechatProxyUrl): void
     $groupStmt = $pdo->prepare(
         "INSERT INTO `config_group` (`id`, `parent_id`, `code`, `name`, `sort`, `status`)
          VALUES (?, ?, ?, ?, ?, 'enabled')
-         ON DUPLICATE KEY UPDATE `name` = VALUES(`name`), `sort` = VALUES(`sort`), `status` = 'enabled'"
+         ON DUPLICATE KEY UPDATE
+            `parent_id` = VALUES(`parent_id`),
+            `code` = VALUES(`code`),
+            `name` = VALUES(`name`),
+            `sort` = VALUES(`sort`),
+            `status` = 'enabled',
+            `deleted_at` = NULL"
     );
     foreach ($groups as $group) {
         $groupStmt->execute($group);
@@ -3058,8 +3106,7 @@ function seedConfig(PDO $pdo, string $wechatProxyUrl): void
         [2, 'sign_in_radius', 500, '学生 GPS 签到时允许的最大距离，单位米', 10],
         [2, 'pair_mode', 'admin_assign', '实习任务绑定模式', 20],
         [2, 'max_student_count', 20, '任务老师默认负责学生数上限', 30],
-        [3, 'booking_max_days', 14, '实训室最长可预约天数', 10],
-        [4, 'booking_max_days', 14, '实验室最长可预约天数', 10],
+        [3, 'booking_max_days', 14, '实验实训室最长可预约天数', 10],
         [5, 'app_id', '', '企业微信应用 AppID，可用于第三方应用或自建应用标识', 5],
         [5, 'corp_id', '', '企业微信企业 ID', 10],
         [5, 'agent_id', '', '企业微信自建应用 AgentId', 15],
@@ -3089,4 +3136,6 @@ function seedConfig(PDO $pdo, string $wechatProxyUrl): void
     foreach ($items as [$groupId, $key, $value, $description, $sort]) {
         $itemStmt->execute([$groupId, $key, json_encode($value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), $description, $sort]);
     }
+    $pdo->exec("UPDATE `config_group` SET `status` = 'disabled', `deleted_at` = COALESCE(`deleted_at`, NOW()) WHERE `id` = 4");
+    $pdo->exec("UPDATE `config_item` SET `status` = 'disabled', `deleted_at` = COALESCE(`deleted_at`, NOW()) WHERE `group_id` = 4");
 }

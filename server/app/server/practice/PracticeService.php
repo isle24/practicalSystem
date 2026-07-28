@@ -3,6 +3,7 @@
 namespace app\server\practice;
 
 use app\model\channel\Account;
+use app\model\channel\PracticePeriod;
 use app\model\channel\PracticeRecord;
 use app\server\CurrentContext;
 use app\server\WorkflowLock;
@@ -16,17 +17,19 @@ class PracticeService
 {
     private const MODULES = [
         'training' => [
-            'view' => 'training:view',
-            'manage' => 'training:manage',
-            'approve' => 'training:approve',
             'name' => '实训',
         ],
         'lab' => [
-            'view' => 'lab:view',
-            'manage' => 'lab:manage',
-            'approve' => 'lab:approve',
             'name' => '实验',
         ],
+        'all' => ['name' => '实验实训'],
+    ];
+
+    private const PERMISSIONS = [
+        'view' => 'practice:view',
+        'manage' => 'practice:manage',
+        'approve' => 'practice:approve',
+        'period' => 'practice:period:manage',
     ];
 
     private const ENTITIES = [
@@ -98,7 +101,84 @@ class PracticeService
             'review_rules' => self::REVIEW_RULES,
             'source_types' => ['jw', 'manual'],
             'place_types' => ['inside', 'outside'],
+            'periods' => PracticePeriod::optionRows(),
         ]);
+    }
+
+    /** 查询课节配置 */
+    public function periods(Request $request): array
+    {
+        $this->requirePermission('period');
+        $filters = [
+            'page' => $request->input('page', 1),
+            'page_size' => $request->input('page_size', 50),
+            'keyword' => $request->input('keyword'),
+            'status' => $request->input('status'),
+        ];
+
+        return PracticePeriod::page($filters);
+    }
+
+    /** 保存课节配置 */
+    public function savePeriod(Request $request): array
+    {
+        $this->requirePermission('period');
+        $id = $this->optionalInt($request, 'id');
+        $name = $this->requiredString($request, 'name', 60);
+        $startTime = $this->timeInput($request, 'start_time');
+        $endTime = $this->timeInput($request, 'end_time');
+        if (strcmp($endTime, $startTime) <= 0) {
+            throw new InvalidArgumentException('课节结束时间必须晚于开始时间');
+        }
+        $now = $this->now();
+        $values = [
+            'name' => $name,
+            'start_time' => $startTime,
+            'end_time' => $endTime,
+            'sort' => max(0, (int) ($request->input('sort', 0))),
+            'status' => $this->enum($request, 'status', ['enabled', 'disabled'], 'enabled'),
+            'updated_at' => $now,
+            'deleted_at' => null,
+        ];
+        if (!$id) {
+            $values['uuid'] = $this->uuid();
+            $values['created_at'] = $now;
+        }
+
+        return ['id' => PracticePeriod::saveRecord($id, $values)];
+    }
+
+    /** 查询专业周课表 */
+    public function scheduleWeek(Request $request): array
+    {
+        $this->requirePermission('view');
+        $weekStart = $this->dateInput($request, 'week_start');
+        if (!$weekStart) {
+            throw new InvalidArgumentException('请选择课表周');
+        }
+        $weekEnd = date('Y-m-d', strtotime($weekStart . ' +6 days'));
+        $filters = $this->requestFilters($request);
+        foreach (['grade_id' => '届次', 'dep_id' => '学院', 'profession_id' => '专业'] as $key => $label) {
+            if (empty($filters[$key])) {
+                throw new InvalidArgumentException("请选择{$label}");
+            }
+        }
+
+        $items = PracticeRecord::scheduleWeekRows($this->scopeContext(), $this->moduleType, $weekStart, $weekEnd, $filters);
+        $periodReferences = [];
+        foreach ($items as $item) {
+            $periodReferences[] = [
+                'start_id' => (int) ($item['period_start_id'] ?? 0),
+                'end_id' => (int) ($item['period_end_id'] ?? 0),
+            ];
+        }
+
+        return [
+            'week_start' => $weekStart,
+            'week_end' => $weekEnd,
+            'periods' => PracticePeriod::scheduleRows($periodReferences),
+            'items' => $items,
+        ];
     }
 
     public function list(Request $request): array
@@ -111,49 +191,71 @@ class PracticeService
 
     public function save(Request $request): array
     {
+        $this->assertWritableModule();
         $entity = $this->entityInput($request);
         $this->requireEntityPermission($entity);
         $existingId = $this->inputEntityId($request, $entity);
         $fromStatus = $existingId ? PracticeRecord::statusById($entity, $existingId) : 'draft';
         $values = $this->entityValues($request, $entity);
-        if ($entity === 'schedule') {
-            $values = $this->scheduleValues($request, $values, $existingId);
-        }
-        if ($entity === 'project') {
-            $values = $this->projectValues($request, $values);
-        }
         if ($this->entityRequiresReview($entity) && $existingId && !in_array($fromStatus, ['draft', 'modify'], true)) {
             throw new InvalidArgumentException('数据已变更，请刷新后重试', 409);
         }
 
         $save = function () use ($entity, $existingId, $request, $values, $fromStatus): array {
-            if ($existingId) {
-                $row = PracticeRecord::activeRowByEntity($this->moduleType, $entity, $existingId);
-                if (!$row) {
-                    throw new RuntimeException('数据不存在');
+            return PracticeRecord::connection()->transaction(function () use ($entity, $existingId, $request, $values, $fromStatus): array {
+                $currentFromStatus = $fromStatus;
+                if ($existingId) {
+                    $row = PracticeRecord::lockActiveRowByEntity($this->moduleType, $entity, $existingId);
+                    if (!$row) {
+                        throw new RuntimeException('数据不存在');
+                    }
+                    $this->assertEntityVisible($entity, $existingId);
+                    $currentFromStatus = (string) $row->status;
+                    if ($this->entityRequiresReview($entity) && !in_array($currentFromStatus, ['draft', 'modify'], true)) {
+                        throw new InvalidArgumentException('数据已变更，请刷新后重试', 409);
+                    }
                 }
-                $this->assertEntityVisible($entity, $existingId);
-            }
 
-            $id = $this->saveEntity($entity, $request, $values);
-            if ($entity === 'project') {
-                $this->syncProjectStudents($id, $values);
-            }
-            if (($values['status'] ?? '') === 'wait' && $this->entityRequiresReview($entity)) {
-                $this->recordWorkflow($entity, $id, 'submit', $fromStatus, 'wait', $this->workflowContent($entity, $values), 'wait');
-                $this->notifyWorkflowSubmitted($entity, $id, $values);
-            }
+                if ($entity === 'schedule') {
+                    $values = $this->scheduleValues($request, $values, $existingId);
+                }
+                if ($entity === 'project') {
+                    $values = $this->projectValues($request, $values);
+                }
+                $this->assertEntityValuesVisible($entity, $values);
 
-            return ['id' => $id, 'uuid' => PracticeRecord::uuidById($entity, $id)];
+                $id = $this->saveEntity($entity, $request, $values);
+                if ($entity === 'project') {
+                    $this->syncProjectStudents($id, $values);
+                }
+                if (($values['status'] ?? '') === 'wait' && $this->entityRequiresReview($entity)) {
+                    $this->recordWorkflow($entity, $id, 'submit', $currentFromStatus, 'wait', $this->workflowContent($entity, $values), 'wait');
+                    $this->notifyWorkflowSubmitted($entity, $id, $values);
+                }
+
+                return ['id' => $id, 'uuid' => PracticeRecord::uuidById($entity, $id)];
+            });
         };
 
-        return $existingId
-            ? $this->workflowLock('practice', $this->entityType($entity), $existingId, $save)
-            : $save();
+        if ($entity === 'schedule') {
+            $scheduleSave = fn (): array => $this->workflowLock('practice', 'schedule_date', $this->scheduleLockId($values), $save);
+            return $existingId
+                ? $this->workflowLock('practice', $this->entityType($entity), $existingId, $scheduleSave)
+                : $scheduleSave();
+        }
+        if ($entity === 'project') {
+            $projectSave = fn (): array => $this->workflowLock('practice', 'project_schedule', (int) ($values['schedule_id'] ?? $existingId ?? 0), $save);
+            return $existingId
+                ? $this->workflowLock('practice', $this->entityType($entity), $existingId, $projectSave)
+                : $projectSave();
+        }
+
+        return $existingId ? $this->workflowLock('practice', $this->entityType($entity), $existingId, $save) : $save();
     }
 
     public function review(Request $request): array
     {
+        $this->assertWritableModule();
         $entity = $this->entityInput($request);
         if (!$this->entityRequiresReview($entity)) {
             throw new InvalidArgumentException('该业务不需要审核');
@@ -203,6 +305,7 @@ class PracticeService
 
     public function saveReviewDraft(Request $request): array
     {
+        $this->assertWritableModule();
         $this->requirePermission('approve');
         $target = $this->reviewDraftTarget($request);
         $status = $this->enum($request, 'status', ['accept', 'modify'], 'accept');
@@ -233,6 +336,7 @@ class PracticeService
 
     public function requestModification(Request $request): array
     {
+        $this->assertWritableModule();
         $entity = $this->entityInput($request);
         if (!$this->entityRequiresReview($entity)) {
             throw new InvalidArgumentException('该业务不支持通过后修改');
@@ -271,7 +375,15 @@ class PracticeService
         $entity = $this->entityInput($request);
         $id = $this->requiredEntityId($request, $entity);
         $this->assertEntityVisible($entity, $id);
-        $entityType = $this->entityType($entity);
+        $moduleType = $this->moduleType;
+        if ($moduleType === 'all') {
+            $row = PracticeRecord::activeRowByEntity('all', $entity, $id);
+            $moduleType = (string) ($row?->module_type ?? '');
+        }
+        if (!in_array($moduleType, ['training', 'lab'], true)) {
+            throw new RuntimeException('数据不存在');
+        }
+        $entityType = "{$moduleType}_{$entity}";
         $records = PracticeRecord::recordingRows($entityType, $id);
         $reviews = PracticeRecord::reviewOpinionRows($entityType, $id);
 
@@ -293,6 +405,7 @@ class PracticeService
 
     public function saveSignIn(Request $request): array
     {
+        $this->assertWritableModule();
         $this->requirePermission('view');
         $project = $this->projectForExecution($request);
         $studentId = $this->executionStudentId($request, $project);
@@ -361,6 +474,7 @@ class PracticeService
 
     public function requestExecutionModification(Request $request): array
     {
+        $this->assertWritableModule();
         $execution = $this->executionInput($request);
         if (!(self::EXECUTIONS[$execution]['review'] ?? false)) {
             throw new InvalidArgumentException('该执行记录不支持通过后修改');
@@ -393,6 +507,7 @@ class PracticeService
 
     public function saveScore(Request $request): array
     {
+        $this->assertWritableModule();
         $this->requireEntityPermission('score');
         $project = $this->projectForExecution($request);
         $studentId = $this->executionStudentId($request, $project);
@@ -453,7 +568,11 @@ class PracticeService
         if (!$row) {
             throw new RuntimeException('数据不存在或无权限', 40301);
         }
-        $entityType = $this->executionEntityType($execution);
+        $moduleType = (string) ($row->entity_type ?? $this->moduleType);
+        if (!in_array($moduleType, ['training', 'lab'], true)) {
+            throw new RuntimeException('数据不存在');
+        }
+        $entityType = "{$moduleType}_{$execution}";
         $records = PracticeRecord::recordingRows($entityType, $id);
         $reviews = PracticeRecord::reviewOpinionRows($entityType, $id);
 
@@ -471,6 +590,7 @@ class PracticeService
      */
     private function saveReviewExecution(Request $request, string $execution): array
     {
+        $this->assertWritableModule();
         if (!(self::EXECUTIONS[$execution]['review'] ?? false)) {
             throw new InvalidArgumentException('该执行记录不需要审核');
         }
@@ -525,6 +645,7 @@ class PracticeService
      */
     private function reviewExecution(Request $request, string $execution): array
     {
+        $this->assertWritableModule();
         if (!(self::EXECUTIONS[$execution]['review'] ?? false)) {
             throw new InvalidArgumentException('该执行记录不需要审核');
         }
@@ -571,11 +692,15 @@ class PracticeService
             if ((string) $row->status !== 'wait') {
                 throw new InvalidArgumentException('数据已变更，请刷新后重试', 409);
             }
+            $moduleType = (string) ($row->entity_type ?? '');
+            if (!in_array($moduleType, ['training', 'lab'], true)) {
+                throw new RuntimeException('数据不存在');
+            }
 
             return [
                 'id' => $id,
                 'rule_entity' => $execution,
-                'entity_type' => $this->executionEntityType($execution),
+                'entity_type' => "{$moduleType}_{$execution}",
             ];
         }
 
@@ -592,11 +717,15 @@ class PracticeService
         if ((string) $row->status !== 'wait') {
             throw new InvalidArgumentException('数据已变更，请刷新后重试', 409);
         }
+        $moduleType = (string) ($row->module_type ?? '');
+        if (!in_array($moduleType, ['training', 'lab'], true)) {
+            throw new RuntimeException('数据不存在');
+        }
 
         return [
             'id' => $id,
             'rule_entity' => $entity,
-            'entity_type' => $this->entityType($entity),
+            'entity_type' => "{$moduleType}_{$entity}",
         ];
     }
 
@@ -792,6 +921,8 @@ class PracticeService
                 'base_id' => $this->optionalInt($request, 'base_id'),
                 'place_type' => $this->enum($request, 'place_type', ['inside', 'outside'], 'inside'),
                 'schedule_date' => $this->dateInput($request, 'schedule_date'),
+                'period_start_id' => $this->optionalInt($request, 'period_start_id'),
+                'period_end_id' => $this->optionalInt($request, 'period_end_id'),
                 'start_time' => $this->nullableString($request, 'start_time', 20),
                 'end_time' => $this->nullableString($request, 'end_time', 20),
                 'location' => $this->nullableString($request, 'location', 255),
@@ -876,27 +1007,29 @@ class PracticeService
         }
 
         foreach (['grade_id', 'dep_id', 'profession_id', 'course_name'] as $field) {
-            if (($values[$field] ?? null) === null || $values[$field] === '') {
-                $values[$field] = $plan[$field] ?? null;
-            }
+            $values[$field] = $plan[$field] ?? null;
         }
 
         if (empty($values['teacher_id'])) {
             throw new InvalidArgumentException('请选择任课教师');
         }
-        if (empty($values['class_id'])) {
-            throw new InvalidArgumentException('请选择课表班级');
+        if (empty($values['grade_id']) || empty($values['dep_id']) || empty($values['profession_id'])) {
+            throw new InvalidArgumentException('请选择完整的届次、学院和专业');
         }
-        if (empty($values['schedule_date']) || empty($values['start_time']) || empty($values['end_time'])) {
-            throw new InvalidArgumentException('请填写完整课表日期和时间');
+        if (empty($values['schedule_date'])) {
+            throw new InvalidArgumentException('请选择课表日期');
         }
-        if (strcmp((string) $values['end_time'], (string) $values['start_time']) <= 0) {
-            throw new InvalidArgumentException('课表结束时间必须晚于开始时间');
+        $periodRange = PracticePeriod::activeRange((int) ($values['period_start_id'] ?? 0), (int) ($values['period_end_id'] ?? 0));
+        if (!$periodRange) {
+            throw new InvalidArgumentException('请选择有效的起止课节');
         }
+        $values['start_time'] = substr((string) $periodRange['start']['start_time'], 0, 5);
+        $values['end_time'] = substr((string) $periodRange['end']['end_time'], 0, 5);
+        $values['class_id'] = null;
 
-        $studentCount = PracticeRecord::enabledStudentCountByClass((int) $values['class_id']);
+        $studentCount = PracticeRecord::enabledStudentCountByProfession((int) $values['grade_id'], (int) $values['profession_id']);
         if ($studentCount <= 0) {
-            throw new InvalidArgumentException('所选班级暂无可参与学生');
+            throw new InvalidArgumentException('所选届次和专业暂无可参与学生');
         }
         $values['student_count'] = $studentCount;
 
@@ -908,11 +1041,19 @@ class PracticeService
             if ((int) ($room['capacity'] ?? 0) > 0 && (int) $room['capacity'] < $studentCount) {
                 throw new InvalidArgumentException('实验实训室容量不足');
             }
-        } elseif (empty($values['base_id']) && trim((string) ($values['location'] ?? '')) === '') {
-            throw new InvalidArgumentException('校外安排需选择基地或填写地点');
+            $values['base_id'] = null;
+        } else {
+            $values['room_id'] = null;
+            $baseId = (int) ($values['base_id'] ?? 0);
+            if ($baseId > 0 && !PracticeRecord::baseRowForSchedule($this->scopeContext(), $baseId)) {
+                throw new InvalidArgumentException('请选择当前数据范围内的可用基地');
+            }
+            if ($baseId <= 0 && trim((string) ($values['location'] ?? '')) === '') {
+                throw new InvalidArgumentException('校外安排需选择基地或填写地点');
+            }
         }
 
-        if (PracticeRecord::scheduleConflictExists($this->moduleType, $values, $existingId)) {
+        if (PracticeRecord::scheduleConflictExists($values, $existingId)) {
             throw new InvalidArgumentException('课表时间与已有安排冲突');
         }
 
@@ -934,10 +1075,8 @@ class PracticeService
             throw new RuntimeException('课表不存在或无权限', 40301);
         }
 
-        foreach (['plan_id', 'grade_id', 'dep_id', 'profession_id', 'class_id', 'teacher_id', 'course_name'] as $field) {
-            if (($values[$field] ?? null) === null || $values[$field] === '') {
-                $values[$field] = $schedule[$field] ?? null;
-            }
+        foreach (['plan_id', 'grade_id', 'dep_id', 'profession_id', 'teacher_id', 'course_name'] as $field) {
+            $values[$field] = $schedule[$field] ?? null;
         }
         if (empty($values['start_date']) && !empty($schedule['schedule_date'])) {
             $values['start_date'] = $schedule['schedule_date'];
@@ -948,16 +1087,17 @@ class PracticeService
         if (empty($values['teacher_id'])) {
             throw new InvalidArgumentException('请选择项目负责人');
         }
-        if (empty($values['class_id'])) {
-            throw new InvalidArgumentException('课表缺少班级，无法发布项目');
+        if (empty($values['grade_id']) || empty($values['profession_id'])) {
+            throw new InvalidArgumentException('课表缺少届次或专业，无法发布项目');
         }
         if (!empty($values['start_date']) && !empty($values['end_date']) && strcmp((string) $values['end_date'], (string) $values['start_date']) < 0) {
             throw new InvalidArgumentException('项目结束日期不能早于开始日期');
         }
 
-        $studentCount = PracticeRecord::enabledStudentCountByClass((int) $values['class_id']);
+        $values['class_id'] = null;
+        $studentCount = PracticeRecord::enabledStudentCountByProfession((int) $values['grade_id'], (int) $values['profession_id']);
         if ($studentCount <= 0) {
-            throw new InvalidArgumentException('所选课表班级暂无可参与学生');
+            throw new InvalidArgumentException('所选课表专业暂无可参与学生');
         }
         $values['student_count'] = $studentCount;
         if (($values['status'] ?? '') === 'enabled' && empty($values['published_at'])) {
@@ -972,7 +1112,7 @@ class PracticeService
      */
     private function syncProjectStudents(int $projectId, array $values): void
     {
-        $students = PracticeRecord::enabledStudentsByClass((int) ($values['class_id'] ?? 0));
+        $students = PracticeRecord::enabledStudentsByProfession((int) ($values['grade_id'] ?? 0), (int) ($values['profession_id'] ?? 0));
         $students = array_map(function (array $student): array {
             $student['uuid'] = $this->uuid();
             return $student;
@@ -1192,6 +1332,14 @@ class PracticeService
         }
     }
 
+    /** 校验待写入数据范围 */
+    private function assertEntityValuesVisible(string $entity, array $values): void
+    {
+        if (!PracticeRecord::entityValuesVisible($this->scopeContext(), $entity, $values)) {
+            throw new RuntimeException('无数据写入权限', 40301);
+        }
+    }
+
     private function requireEntityPermission(string $entity): void
     {
         $this->requirePermission(self::ENTITIES[$entity]['permission'] ?? 'manage');
@@ -1200,9 +1348,17 @@ class PracticeService
     private function requirePermission(string $type): void
     {
         $this->accountId();
-        $code = self::MODULES[$this->moduleType][$type] ?? '';
+        $code = self::PERMISSIONS[$type] ?? '';
         if (!$code || !in_array($code, CurrentContext::permissionCodes(), true)) {
             throw new RuntimeException('无操作权限', 40300);
+        }
+    }
+
+    /** 校验业务写操作的类别。 */
+    private function assertWritableModule(): void
+    {
+        if (!in_array($this->moduleType, ['training', 'lab'], true)) {
+            throw new InvalidArgumentException('请选择实验或实训类别');
         }
     }
 
@@ -1599,6 +1755,24 @@ class PracticeService
     {
         $value = trim((string) $request->input($key, ''));
         return preg_match('/^\d{4}-\d{2}-\d{2}$/', $value) ? $value : null;
+    }
+
+    /** 读取标准时间。 */
+    private function timeInput(Request $request, string $key): string
+    {
+        $value = trim((string) $request->input($key, ''));
+        if (!preg_match('/^(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d)?$/', $value)) {
+            throw new InvalidArgumentException("{$key} 无效");
+        }
+
+        return strlen($value) === 5 ? $value . ':00' : $value;
+    }
+
+    /** 生成排课日期锁标识。 */
+    private function scheduleLockId(array $values): int
+    {
+        $date = (string) ($values['schedule_date'] ?? date('Y-m-d'));
+        return max(1, (int) sprintf('%u', crc32($date)));
     }
 
     private function dateTimeInput(Request $request, string $key): ?string

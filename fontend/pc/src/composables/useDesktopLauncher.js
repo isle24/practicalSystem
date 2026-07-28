@@ -1,7 +1,7 @@
 import { computed, reactive } from 'vue';
 import { Globe2 } from '@lucide/vue';
 
-export const DEFAULT_DESKTOP_MODULE_IDS = ['internship', 'training', 'lab', 'config'];
+export const DEFAULT_DESKTOP_MODULE_IDS = ['internship', 'practice', 'config'];
 
 export function useDesktopLauncher(options) {
   const state = reactive({

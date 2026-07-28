@@ -1425,7 +1425,22 @@
                 </div>
 
                 <div v-else-if="isPracticeModule(win.module.id)" class="internship-panel practice-panel">
-                  <div v-if="canManagePractice(win.module.id) || showPracticeAddButton(win.module.id, win.panel)" class="internship-toolbar action-only">
+                  <header class="practice-module-head">
+                    <div>
+                      <strong>实验实训管理</strong>
+                      <small>按类别、届次、学院和专业处理教学与执行记录。</small>
+                    </div>
+                    <el-select
+                      :model-value="practiceModuleState(win.module.id).module_type"
+                      class="practice-module-type"
+                      @update:model-value="value => changePracticeModuleType(win.module.id, value, win.panel)"
+                    >
+                      <el-option label="全部类别" value="all" />
+                      <el-option label="实验" value="lab" />
+                      <el-option label="实训" value="training" />
+                    </el-select>
+                  </header>
+                  <div v-if="canManagePractice(win.module.id) || showPracticeAddButton(win.module.id, win.panel) || win.panel === 'schedules'" class="internship-toolbar action-only">
                     <div class="data-list-actions">
                       <el-button
                         v-if="showPracticeAddButton(win.module.id, win.panel)"
@@ -1436,6 +1451,20 @@
                       </el-button>
                       <el-button :icon="RefreshCw" :loading="practiceModuleState(win.module.id).loading" @click="loadPracticePanel(win.module.id, win.panel)">
                         刷新
+                      </el-button>
+                      <el-segmented
+                        v-if="win.panel === 'schedules'"
+                        v-model="practiceModuleState(win.module.id).schedule.view"
+                        :options="practiceScheduleViewOptions"
+                        @change="loadPracticePanel(win.module.id, 'schedules', 1)"
+                      />
+                      <el-button
+                        v-if="win.panel === 'schedules' && practiceModuleState(win.module.id).schedule.view === 'list'"
+                        :icon="Download"
+                        :loading="practiceModuleState(win.module.id).loading"
+                        @click="exportPracticeScheduleList(win.module.id)"
+                      >
+                        导出
                       </el-button>
                     </div>
                   </div>
@@ -1457,9 +1486,13 @@
 
                       <div v-if="practiceModuleState(win.module.id).dialog.type === 'execution'" class="operation-form">
                         <label>
+                          <span>类别</span>
+                          <el-segmented v-model="practiceModuleState(win.module.id).form.module_type" :options="practiceWriteModuleTypeOptions" @change="handlePracticeWriteModuleTypeChange(win.module.id)" />
+                        </label>
+                        <label>
                           <span>项目</span>
                           <el-select v-model="practiceModuleState(win.module.id).form.project_id" clearable filterable>
-                            <el-option v-for="project in practiceModuleState(win.module.id).options.projects" :key="project.id" :label="project.title || project.course_name" :value="project.id" />
+                            <el-option v-for="project in practiceProjectOptions(win.module.id)" :key="project.id" :label="project.title || project.course_name" :value="project.id" />
                           </el-select>
                         </label>
                         <label v-if="!isStudentRole">
@@ -1486,9 +1519,13 @@
 
                       <div v-else-if="practiceModuleState(win.module.id).dialog.type === 'scoreProject'" class="operation-form">
                         <label>
+                          <span>类别</span>
+                          <el-segmented v-model="practiceModuleState(win.module.id).form.module_type" :options="practiceWriteModuleTypeOptions" @change="handlePracticeWriteModuleTypeChange(win.module.id)" />
+                        </label>
+                        <label>
                           <span>项目</span>
                           <el-select v-model="practiceModuleState(win.module.id).form.project_id" clearable filterable>
-                            <el-option v-for="project in practiceModuleState(win.module.id).options.projects" :key="project.id" :label="project.title || project.course_name" :value="project.id" />
+                            <el-option v-for="project in practiceProjectOptions(win.module.id)" :key="project.id" :label="project.title || project.course_name" :value="project.id" />
                           </el-select>
                         </label>
                         <label>
@@ -1505,36 +1542,34 @@
 
                       <div v-else-if="practiceModuleState(win.module.id).dialog.type === 'edit'" class="operation-form">
                         <label>
+                          <span>类别</span>
+                          <el-segmented v-model="practiceModuleState(win.module.id).form.module_type" :options="practiceWriteModuleTypeOptions" @change="handlePracticeWriteModuleTypeChange(win.module.id)" />
+                        </label>
+                        <label>
                           <span>标题</span>
                           <input v-model="practiceModuleState(win.module.id).form.title">
                         </label>
                         <label>
                           <span>届次</span>
-                          <el-select v-model="practiceModuleState(win.module.id).form.grade_id" clearable filterable @change="normalizePracticeCascade(win.module.id)">
+                          <el-select v-model="practiceModuleState(win.module.id).form.grade_id" clearable filterable :disabled="win.panel === 'projects'" @change="normalizePracticeCascade(win.module.id)">
                             <el-option v-for="grade in practiceModuleState(win.module.id).options.grades" :key="grade.grade_id" :label="grade.grade_name" :value="grade.grade_id" />
                           </el-select>
                         </label>
                         <label>
                           <span>学院</span>
-                          <el-select v-model="practiceModuleState(win.module.id).form.dep_id" clearable filterable @change="normalizePracticeCascade(win.module.id)">
+                          <el-select v-model="practiceModuleState(win.module.id).form.dep_id" clearable filterable :disabled="win.panel === 'projects'" @change="normalizePracticeCascade(win.module.id)">
                             <el-option v-for="dep in practiceModuleState(win.module.id).options.departments" :key="dep.dep_id" :label="dep.dep_name" :value="dep.dep_id" />
                           </el-select>
                         </label>
                         <label>
                           <span>专业</span>
-                          <el-select v-model="practiceModuleState(win.module.id).form.profession_id" clearable filterable @change="handlePracticeProfessionChange(win.module.id)">
+                          <el-select v-model="practiceModuleState(win.module.id).form.profession_id" clearable filterable :disabled="win.panel === 'projects'" @change="handlePracticeProfessionChange(win.module.id)">
                             <el-option v-for="profession in practiceProfessionOptions(win.module.id)" :key="profession.profession_id" :label="profession.profession_name" :value="profession.profession_id" />
-                          </el-select>
-                        </label>
-                        <label v-if="win.panel === 'schedules'">
-                          <span>班级</span>
-                          <el-select v-model="practiceModuleState(win.module.id).form.class_id" clearable filterable>
-                            <el-option v-for="clazz in practiceClassOptions(win.module.id)" :key="clazz.class_id" :label="clazz.class_name" :value="clazz.class_id" />
                           </el-select>
                         </label>
                         <label>
                           <span>任课教师</span>
-                          <el-select v-model="practiceModuleState(win.module.id).form.teacher_id" clearable filterable>
+                          <el-select v-model="practiceModuleState(win.module.id).form.teacher_id" clearable filterable :disabled="win.panel === 'projects'">
                             <el-option v-for="teacher in practiceModuleState(win.module.id).options.teachers" :key="teacher.teacher_id" :label="teacher.teacher_name" :value="teacher.teacher_id" />
                           </el-select>
                         </label>
@@ -1567,7 +1602,7 @@
                         <label v-if="win.panel === 'schedules' && practiceModuleState(win.module.id).form.place_type === 'inside'">
                           <span>场地</span>
                           <el-select v-model="practiceModuleState(win.module.id).form.room_id" clearable filterable>
-                            <el-option v-for="room in practiceModuleState(win.module.id).options.rooms" :key="room.id" :label="room.name" :value="room.id" />
+                            <el-option v-for="room in practiceRoomOptions(win.module.id)" :key="room.id" :label="room.name" :value="room.id" />
                           </el-select>
                         </label>
                         <label v-if="win.panel === 'schedules' && practiceModuleState(win.module.id).form.place_type === 'outside'">
@@ -1577,13 +1612,23 @@
                           </el-select>
                         </label>
                         <label v-if="win.panel === 'schedules'"><span>日期</span><input v-model="practiceModuleState(win.module.id).form.schedule_date" type="date"></label>
-                        <label v-if="win.panel === 'schedules'"><span>开始时间</span><input v-model="practiceModuleState(win.module.id).form.start_time" type="time"></label>
-                        <label v-if="win.panel === 'schedules'"><span>结束时间</span><input v-model="practiceModuleState(win.module.id).form.end_time" type="time"></label>
+                        <label v-if="win.panel === 'schedules'">
+                          <span>起始课节</span>
+                          <el-select v-model="practiceModuleState(win.module.id).form.period_start_id" filterable>
+                            <el-option v-for="period in practiceModuleState(win.module.id).options.periods" :key="period.id" :label="practicePeriodLabel(period)" :value="period.id" />
+                          </el-select>
+                        </label>
+                        <label v-if="win.panel === 'schedules'">
+                          <span>结束课节</span>
+                          <el-select v-model="practiceModuleState(win.module.id).form.period_end_id" filterable>
+                            <el-option v-for="period in practicePeriodEndOptions(win.module.id)" :key="period.id" :label="practicePeriodLabel(period)" :value="period.id" />
+                          </el-select>
+                        </label>
                         <label v-if="win.panel === 'schedules'"><span>地点</span><input v-model="practiceModuleState(win.module.id).form.location"></label>
-                        <label v-if="win.panel === 'schedules'"><span>学生数</span><input v-model="practiceModuleState(win.module.id).form.student_count" type="number" disabled placeholder="保存时按班级自动计算"></label>
+                        <label v-if="win.panel === 'schedules'"><span>学生数</span><input v-model="practiceModuleState(win.module.id).form.student_count" type="number" disabled placeholder="保存时按专业自动计算"></label>
                         <label v-if="win.panel === 'projects'"><span>开始日期</span><input v-model="practiceModuleState(win.module.id).form.start_date" type="date"></label>
                         <label v-if="win.panel === 'projects'"><span>结束日期</span><input v-model="practiceModuleState(win.module.id).form.end_date" type="date"></label>
-                        <label v-if="win.panel === 'projects'"><span>学生范围</span><input v-model="practiceModuleState(win.module.id).form.student_count" type="number" disabled placeholder="保存时按课表班级自动生成"></label>
+                        <label v-if="win.panel === 'projects'"><span>学生范围</span><input v-model="practiceModuleState(win.module.id).form.student_count" type="number" disabled placeholder="保存时按届次和专业自动生成"></label>
                         <label v-if="win.panel === 'rooms'"><span>名称</span><input v-model="practiceModuleState(win.module.id).form.name"></label>
                         <label v-if="win.panel === 'rooms'"><span>编号</span><input v-model="practiceModuleState(win.module.id).form.code"></label>
                         <label v-if="win.panel === 'rooms'"><span>容量</span><input v-model="practiceModuleState(win.module.id).form.capacity" type="number"></label>
@@ -1725,6 +1770,31 @@
                         </button>
                       </div>
                     </section>
+                  </div>
+                  <div v-else-if="win.panel === 'schedules' && practiceModuleState(win.module.id).schedule.view === 'board'" class="practice-schedule-workspace">
+                    <div class="practice-schedule-filters">
+                      <el-select v-model="practiceModuleState(win.module.id).filters.schedules.grade_id" clearable filterable placeholder="届次" @change="refreshPracticeScheduleBoard(win.module.id)">
+                        <el-option v-for="grade in practiceModuleState(win.module.id).options.grades" :key="grade.grade_id" :label="grade.grade_name" :value="grade.grade_id" />
+                      </el-select>
+                      <el-select v-model="practiceModuleState(win.module.id).filters.schedules.dep_id" clearable filterable placeholder="学院" @change="refreshPracticeScheduleBoard(win.module.id)">
+                        <el-option v-for="dep in practiceModuleState(win.module.id).options.departments" :key="dep.dep_id" :label="dep.dep_name" :value="dep.dep_id" />
+                      </el-select>
+                      <el-select v-model="practiceModuleState(win.module.id).filters.schedules.profession_id" clearable filterable placeholder="专业" @change="refreshPracticeScheduleBoard(win.module.id)">
+                        <el-option v-for="profession in practiceScheduleProfessionOptions(win.module.id)" :key="profession.profession_id" :label="profession.profession_name" :value="profession.profession_id" />
+                      </el-select>
+                    </div>
+                    <PracticeScheduleBoard
+                      :week-start="practiceModuleState(win.module.id).schedule.week_start"
+                      :periods="practiceModuleState(win.module.id).schedule.periods"
+                      :rows="practiceModuleState(win.module.id).schedule.rows"
+                      :loading="practiceModuleState(win.module.id).loading"
+                      :readonly="!canManagePractice(win.module.id)"
+                      @create="slot => openPracticeScheduleSlot(win.module.id, slot)"
+                      @edit="row => openPracticeDialog(win.module.id, 'schedules', row)"
+                      @previous-week="changePracticeScheduleWeek(win.module.id, -7)"
+                      @next-week="changePracticeScheduleWeek(win.module.id, 7)"
+                      @today="resetPracticeScheduleWeek(win.module.id)"
+                    />
                   </div>
                   <DataListPanel
                     v-else
@@ -2904,6 +2974,10 @@
                   <small v-if="fileState.message">{{ fileState.message }}</small>
                 </div>
 
+                <div v-else-if="win.module.id === 'config' && win.panel === 'practicePeriods'" class="admin-panel practice-period-admin">
+                  <PracticePeriodManager :can-manage="canManagePracticePeriods" />
+                </div>
+
                 <div v-else-if="win.module.id === 'config' && win.panel === 'menuManage'" class="admin-panel menu-admin">
                   <div class="admin-toolbar">
                     <el-button :icon="Plus" @click="openMenuDialog()">
@@ -3702,6 +3776,8 @@ import DesktopWindow from './components/DesktopWindow.vue';
 import DesktopLauncher from './components/DesktopLauncher.vue';
 import AppIcon from './components/AppIcon.vue';
 import DataListPanel from './components/DataListPanel.vue';
+import PracticePeriodManager from './components/PracticePeriodManager.vue';
+import PracticeScheduleBoard from './components/PracticeScheduleBoard.vue';
 import DocCenter from './components/DocCenter.vue';
 import ExportTaskCenter from './components/ExportTaskCenter.vue';
 import IconUpload from './components/IconUpload.vue';
@@ -3778,6 +3854,7 @@ import {
   fetchPracticeOverview,
   fetchPracticeExecutionList,
   fetchPracticeExecutionTimeline,
+  fetchPracticeScheduleWeek,
   fetchPracticeReviewDraft,
   fetchPracticeTimeline,
   fetchProfileSettings,
@@ -4039,7 +4116,7 @@ const statState = reactive({
     profession_id: '',
     grade_id: '',
     class_id: '',
-    module_type: 'training',
+    module_type: 'all',
     plan_id: '',
     academic_year: '',
     keyword: '',
@@ -4178,23 +4255,13 @@ const modules = [
     managePermission: 'internship:manage',
   },
   {
-    id: 'training',
-    name: '实训管理',
-    icon: Workflow,
-    color: 'teal',
-    scope: '实训模块入口',
-    viewPermission: 'training:view',
-    managePermission: 'training:manage',
-    defaultPanel: 'overview',
-  },
-  {
-    id: 'lab',
-    name: '实验管理',
+    id: 'practice',
+    name: '实验实训管理',
     icon: FlaskConical,
-    color: 'green',
-    scope: '实验模块入口',
-    viewPermission: 'lab:view',
-    managePermission: 'lab:manage',
+    color: 'teal',
+    scope: '实验与实训统一管理',
+    viewPermission: 'practice:view',
+    managePermission: 'practice:manage',
     defaultPanel: 'overview',
   },
   {
@@ -4789,16 +4856,14 @@ const internshipState = reactive({
 });
 
 const practiceState = reactive({
-  training: createPracticeModuleState(),
-  lab: createPracticeModuleState(),
+  practice: createPracticeModuleState(),
 });
 
 const openWindows = reactive([]);
 
 const moduleSearchKeywords = {
   internship: '学生 教师 学院 专业 企业 任务 绑定 特殊申请 审核 签到 日志 报告 延期 成绩 归档 实习任务 实习计划',
-  training: '实训 项目 任务 过程 记录 成绩 审核',
-  lab: '实验 项目 任务 过程 记录 成绩 审核',
+  practice: '实验 实训 教学计划 课表 项目 过程记录 成绩 审核 课节',
   stat: '统计 报表 数据 概览 分析 学院 专业 学生 成绩',
   log: '日志 审计 操作 接口 账号 IP 登录 工作台 基础档案 流程配置',
   file: '文件 附件 上传 下载 预览 头像 壁纸 材料',
@@ -4826,6 +4891,7 @@ const configSidebarDefinitions = [
   { key: 'departmentManage', name: '学院管理', permission: 'config:department' },
   { key: 'professionManage', name: '专业管理', permission: 'config:profession' },
   { key: 'classManage', name: '班级管理', permission: 'config:class' },
+  { key: 'practicePeriods', name: '课节配置', permission: 'practice:period:manage', schoolConfig: true },
   { key: 'menuManage', name: '菜单管理', permission: 'config:view', schoolConfig: true },
   { key: 'roleMenus', name: '角色权限', permission: 'config:view', schoolConfig: true },
   { key: 'organizationScope', name: '组织范围', permission: 'config:view', schoolConfig: true },
@@ -4894,8 +4960,9 @@ const canManageInternshipArchive = computed(() => hasPermission('internship:arch
 const canSaveInternshipScore = computed(() => hasPermission('internship:score') || canManageInternship.value);
 const canManageInternshipPlan = computed(() => hasPermission('internship:plan') && isAdminRole.value);
 const canApproveInternship = computed(() => hasPermission('internship:approve') && !isStudentRole.value);
-const canManagePractice = module => hasPermission(`${module}:manage`) && !isStudentRole.value;
-const canApprovePractice = module => hasPermission(`${module}:approve`) && !isStudentRole.value;
+const canManagePractice = () => hasPermission('practice:manage') && !isStudentRole.value;
+const canApprovePractice = () => hasPermission('practice:approve') && !isStudentRole.value;
+const canManagePracticePeriods = computed(() => hasPermission('practice:period:manage'));
 const statReports = [
   { key: 'overview', name: '实习总览', description: '实习任务、任务绑定和过程材料汇总。', icon: ChartColumn },
   { key: 'department', name: '学院统计', description: '按学院统计学生参与、审核进度和成绩分布。', icon: Building2 },
@@ -5067,7 +5134,7 @@ function canShowModule(module) {
   if (module.adminOnly) {
     return ['super_admin', 'school_admin'].includes(currentRoleType.value);
   }
-  if (['training', 'lab'].includes(module.id)) {
+  if (module.id === 'practice') {
     return ['student', 'teacher', 'super_admin', 'school_admin', 'college_admin', 'profession_admin'].includes(currentRoleType.value);
   }
   if (module.id === 'internship') {
@@ -9111,7 +9178,8 @@ async function loadStats(page = 1) {
     applyAcademicDefaults(statState.filters, organizationScopeDefaults(statAcademicOptions()));
     normalizeStatCascade();
     if (isPracticeScoreSheetReport()) {
-      await loadPracticeFoundation(statState.filters.module_type || 'training');
+      practiceModuleState('practice').module_type = statState.filters.module_type || 'all';
+      await loadPracticeFoundation('practice');
       applyAcademicDefaults(statState.filters, organizationScopeDefaults(statAcademicOptions()));
       normalizeStatCascade();
     }
@@ -9160,7 +9228,7 @@ function resetStatFilters() {
     profession_id: '',
     grade_id: '',
     class_id: '',
-    module_type: 'training',
+    module_type: 'all',
     plan_id: '',
     academic_year: '',
     keyword: '',
@@ -9175,8 +9243,7 @@ function isPracticeScoreSheetReport() {
 }
 
 function practiceScoreSheetPlanOptions() {
-  const module = statState.filters.module_type || 'training';
-  const plans = practiceModuleState(module).options.plans || [];
+  const plans = practiceModuleState('practice').options.plans || [];
   const gradeId = statState.filters.grade_id;
   const depId = statState.filters.dep_id;
   const professionId = statState.filters.profession_id;
@@ -9454,6 +9521,13 @@ function createPracticeModuleState() {
     overview: emptyPracticeOverview(),
     options: emptyPracticeOptions(),
     form: emptyPracticeForm(),
+    module_type: 'all',
+    schedule: {
+      view: 'board',
+      week_start: mondayOf(new Date()),
+      rows: [],
+      periods: [],
+    },
     dialog: emptyOperationDialog(),
     filters: Object.fromEntries(panels.map(panel => [panel, emptyPracticeFilters()])),
     lists: Object.fromEntries(panels.map(panel => [panel, emptyPagedList()])),
@@ -9486,11 +9560,13 @@ function emptyPracticeOptions() {
     plans: [],
     schedules: [],
     review_rules: {},
+    periods: [],
   };
 }
 
 function emptyPracticeFilters() {
   return {
+    module_type: 'all',
     keyword: '',
     status: '',
     grade_id: '',
@@ -9507,6 +9583,7 @@ function emptyPracticeFilters() {
 
 function emptyPracticeForm(row = {}) {
   return {
+    module_type: row.module_type || 'training',
     id: row.id || null,
     title: row.title || '',
     course_name: row.course_name || '',
@@ -9522,6 +9599,8 @@ function emptyPracticeForm(row = {}) {
     room_id: row.room_id || null,
     base_id: row.base_id || null,
     schedule_date: row.schedule_date || '',
+    period_start_id: row.period_start_id || null,
+    period_end_id: row.period_end_id || null,
     start_time: row.start_time || '',
     end_time: row.end_time || '',
     start_date: row.start_date || '',
@@ -9561,11 +9640,110 @@ function emptyPracticeExecutionForm(row = {}) {
 }
 
 function practiceModuleState(module) {
-  return practiceState[module] || practiceState.training;
+  return practiceState.practice;
 }
 
 function isPracticeModule(module) {
-  return ['training', 'lab'].includes(module);
+  return module === 'practice';
+}
+
+function practiceWriteModuleType(value) {
+  return ['lab', 'training'].includes(value) ? value : 'training';
+}
+
+function practiceRequestModuleType(module, value = null) {
+  return value || practiceModuleState(module).module_type || 'all';
+}
+
+function practicePeriodLabel(period) {
+  const times = [period.start_time, period.end_time]
+    .filter(Boolean)
+    .map(value => String(value).slice(0, 5))
+    .join('-');
+  return [period.name, times].filter(Boolean).join(' / ');
+}
+
+function practicePeriodEndOptions(module) {
+  const state = practiceModuleState(module);
+  const start = state.options.periods.find(item => Number(item.id) === Number(state.form.period_start_id));
+  if (!start) {
+    return state.options.periods;
+  }
+  return state.options.periods.filter(item => Number(item.sort || 0) >= Number(start.sort || 0));
+}
+
+function practiceScheduleProfessionOptions(module) {
+  const state = practiceModuleState(module);
+  return filterAcademicItems(state.options.professions, state.filters.schedules, ['grade_id', 'dep_id']);
+}
+
+function changePracticeModuleType(module, value, panel) {
+  const state = practiceModuleState(module);
+  state.module_type = value || 'all';
+  Object.values(state.filters).forEach((filters) => {
+    filters.module_type = state.module_type;
+  });
+  loadPracticePanel(module, panel, 1);
+}
+
+function refreshPracticeScheduleBoard(module) {
+  const state = practiceModuleState(module);
+  normalizeFilterCascade(state.filters.schedules, state.options);
+  loadPracticePanel(module, 'schedules', 1);
+}
+
+function changePracticeScheduleWeek(module, offset) {
+  const state = practiceModuleState(module);
+  state.schedule.week_start = addDaysToDate(state.schedule.week_start, offset);
+  loadPracticePanel(module, 'schedules', 1);
+}
+
+function resetPracticeScheduleWeek(module) {
+  const state = practiceModuleState(module);
+  state.schedule.week_start = mondayOf(new Date());
+  loadPracticePanel(module, 'schedules', 1);
+}
+
+function openPracticeScheduleSlot(module, slot) {
+  openPracticeDialog(module, 'schedules');
+  Object.assign(practiceModuleState(module).form, slot);
+}
+
+async function loadPracticeScheduleWeek(module) {
+  const state = practiceModuleState(module);
+  const filters = state.filters.schedules;
+  if (!filters.grade_id || !filters.dep_id || !filters.profession_id) {
+    state.schedule.rows = [];
+    state.schedule.periods = state.options.periods || [];
+    state.message = '请先选择届次、学院和专业';
+    return;
+  }
+  const data = await fetchPracticeScheduleWeek(practiceRequestModuleType(module, filters.module_type), {
+    week_start: state.schedule.week_start,
+    grade_id: filters.grade_id,
+    dep_id: filters.dep_id,
+    profession_id: filters.profession_id,
+  });
+  state.schedule.week_start = data.week_start || state.schedule.week_start;
+  state.schedule.periods = data.periods || state.options.periods || [];
+  state.schedule.rows = data.items || [];
+}
+
+function mondayOf(date) {
+  const value = new Date(date);
+  const weekday = value.getDay() || 7;
+  value.setDate(value.getDate() - weekday + 1);
+  return dateText(value);
+}
+
+function addDaysToDate(value, offset) {
+  const date = new Date(`${value}T00:00:00`);
+  date.setDate(date.getDate() + offset);
+  return dateText(date);
+}
+
+function dateText(date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
 
 function practiceSidebarItems() {
@@ -9592,6 +9770,16 @@ function practiceSidebarItems() {
   }
   return items;
 }
+
+const practiceWriteModuleTypeOptions = [
+  { label: '实验', value: 'lab' },
+  { label: '实训', value: 'training' },
+];
+
+const practiceScheduleViewOptions = [
+  { label: '周视图', value: 'board' },
+  { label: '列表视图', value: 'list' },
+];
 
 function practicePanelEntity(panel) {
   return {
@@ -9662,7 +9850,7 @@ function practicePanelLabel(panel) {
 }
 
 function practiceNeedsPlan(panel) {
-  return ['schedules', 'projects', 'syllabus', 'lessonPlans', 'gradeRules', 'scores', 'reflections'].includes(panel);
+  return ['schedules', 'syllabus', 'lessonPlans', 'gradeRules', 'scores', 'reflections'].includes(panel);
 }
 
 function practiceTextPanel(panel) {
@@ -9740,17 +9928,17 @@ function practiceRatioText(value) {
 }
 
 function practiceListConfig(module, panel) {
-  const commonFilters = ['grade_id', 'dep_id', 'profession_id', 'status', 'keyword'];
+  const commonFilters = ['module_type', 'grade_id', 'dep_id', 'profession_id', 'status', 'keyword'];
   const filters = practiceFilters(module, panel, panel === 'schedules'
-    ? ['grade_id', 'dep_id', 'profession_id', 'plan_id', 'place_type', 'status', 'keyword']
+    ? ['module_type', 'grade_id', 'dep_id', 'profession_id', 'plan_id', 'place_type', 'status', 'keyword']
     : panel === 'projects'
-      ? ['grade_id', 'dep_id', 'profession_id', 'class_id', 'plan_id', 'schedule_id', 'status', 'keyword']
+      ? ['module_type', 'grade_id', 'dep_id', 'profession_id', 'plan_id', 'schedule_id', 'status', 'keyword']
     : panel === 'rooms'
-      ? ['dep_id', 'status', 'keyword']
+      ? ['module_type', 'dep_id', 'status', 'keyword']
     : ['signIns', 'journals', 'reports'].includes(panel)
-      ? ['grade_id', 'dep_id', 'profession_id', 'class_id', 'plan_id', 'project_id', 'status', 'date', 'keyword']
+      ? ['module_type', 'grade_id', 'dep_id', 'profession_id', 'class_id', 'plan_id', 'project_id', 'status', 'date', 'keyword']
       : panel === 'scores'
-        ? ['grade_id', 'dep_id', 'profession_id', 'plan_id', 'keyword']
+        ? ['module_type', 'grade_id', 'dep_id', 'profession_id', 'plan_id', 'keyword']
         : commonFilters);
   const columns = {
     plans: [
@@ -9776,7 +9964,9 @@ function practiceListConfig(module, panel) {
       { prop: 'title', label: '项目名称', minWidth: 180 },
       { prop: 'plan_title', label: '教学计划', minWidth: 160 },
       { prop: 'schedule_title', label: '关联课表', minWidth: 160 },
-      { prop: 'class_name', label: '班级', minWidth: 120 },
+      { prop: 'grade_name', label: '届次', width: 100 },
+      { prop: 'dep_name', label: '学院', minWidth: 130 },
+      { prop: 'profession_name', label: '专业', minWidth: 140 },
       { prop: 'teacher_name', label: '负责人', width: 120 },
       { key: 'date_range', label: '执行日期', width: 160, formatter: row => [row.start_date, row.end_date].filter(Boolean).join(' 至 ') || '-' },
       { key: 'bound_student_count', label: '学生范围', width: 100, formatter: row => row.bound_student_count ?? row.student_count ?? 0 },
@@ -9840,7 +10030,20 @@ function practiceListConfig(module, panel) {
       { prop: 'status', label: '状态', width: 90, tag: true, tagType: row => statusTagType(row.status), formatter: row => statusText(row.status) },
     ],
   }[panel] || [];
-  return { filters, columns };
+  return {
+    filters,
+    columns: [
+      {
+        key: 'module_type',
+        label: '类别',
+        width: 90,
+        tag: true,
+        tagType: row => row.module_type === 'lab' ? 'warning' : 'success',
+        formatter: row => row.module_type === 'lab' ? '实验' : '实训',
+      },
+      ...columns,
+    ],
+  };
 }
 
 function practiceDocumentColumns(label) {
@@ -9861,7 +10064,7 @@ function practiceFilters(module, panel, keys) {
     return [];
   }
   if (isTeacherRole.value) {
-    return practiceFilterDefinitions(module, panel, ['grade_id', 'keyword']);
+    return practiceFilterDefinitions(module, panel, ['module_type', 'grade_id', 'keyword']);
   }
   return practiceFilterDefinitions(module, panel, keys);
 }
@@ -9870,6 +10073,7 @@ function practiceFilterDefinitions(module, panel, keys) {
   const options = practiceModuleState(module).options;
   const values = practiceModuleState(module).filters[panel] || {};
   const definitions = {
+    module_type: { key: 'module_type', label: '类别', type: 'select', options: practiceReadModuleTypeOptions() },
     keyword: { key: 'keyword', label: '关键词', placeholder: '标题、课程、学生、内容' },
     grade_id: { key: 'grade_id', label: '届次', type: 'select', options: optionItems(options.grades, 'grade_id', 'grade_name') },
     dep_id: { key: 'dep_id', label: '学院', type: 'select', options: optionItems(filterAcademicDepartments(options, values), 'dep_id', 'dep_name') },
@@ -9898,6 +10102,13 @@ function practicePlaceTypeOptions() {
   return [
     { value: 'inside', label: '校内' },
     { value: 'outside', label: '校外' },
+  ];
+}
+
+function practiceReadModuleTypeOptions() {
+  return [
+    { value: 'all', label: '全部类别' },
+    ...practiceWriteModuleTypeOptions,
   ];
 }
 
@@ -9944,7 +10155,7 @@ function handlePracticePlanChange(module) {
   if (!plan) {
     return;
   }
-  ['grade_id', 'dep_id', 'profession_id', 'class_id', 'teacher_id', 'course_name'].forEach((field) => {
+  ['grade_id', 'dep_id', 'profession_id', 'teacher_id', 'course_name'].forEach((field) => {
     if (hasFilterValue(plan[field])) {
       state.form[field] = plan[field];
     }
@@ -9966,7 +10177,7 @@ function handlePracticeScheduleChange(module) {
   if (!schedule) {
     return;
   }
-  ['plan_id', 'grade_id', 'dep_id', 'profession_id', 'class_id', 'teacher_id', 'course_name'].forEach((field) => {
+  ['plan_id', 'grade_id', 'dep_id', 'profession_id', 'teacher_id', 'course_name'].forEach((field) => {
     if (hasFilterValue(schedule[field])) {
       state.form[field] = schedule[field];
     }
@@ -9986,7 +10197,7 @@ function practiceClassOptions(module) {
 function practicePlanOptions(module, panel) {
   const state = practiceModuleState(module);
   const planKeys = panel === 'schedules' ? ['grade_id', 'dep_id', 'profession_id'] : ['grade_id', 'dep_id', 'profession_id', 'class_id'];
-  const plans = filterAcademicItems(state.options.plans, state.form, planKeys);
+  const plans = filterAcademicItems(practiceItemsByModuleType(state.options.plans, state.form.module_type), state.form, planKeys);
   if (panel === 'schedules') {
     return plans.filter(item => ['accept', 'enabled'].includes(String(item.status || '')));
   }
@@ -10001,7 +10212,37 @@ function practiceBaseOptions(module) {
 
 function practiceScheduleOptions(module) {
   const state = practiceModuleState(module);
-  return filterAcademicItems(state.options.schedules, state.form, ['grade_id', 'dep_id', 'profession_id', 'class_id', 'plan_id']);
+  return filterAcademicItems(practiceItemsByModuleType(state.options.schedules, state.form.module_type), state.form, ['grade_id', 'dep_id', 'profession_id']);
+}
+
+function practiceRoomOptions(module) {
+  const state = practiceModuleState(module);
+  return practiceItemsByModuleType(state.options.rooms, state.form.module_type);
+}
+
+function practiceProjectOptions(module) {
+  const state = practiceModuleState(module);
+  return practiceItemsByModuleType(state.options.projects || [], state.form.module_type);
+}
+
+function practiceItemsByModuleType(items, moduleType) {
+  return (items || []).filter(item => !item.module_type || item.module_type === moduleType);
+}
+
+function handlePracticeWriteModuleTypeChange(module) {
+  const state = practiceModuleState(module);
+  if (!practicePlanOptions(module, state.dialog.panel || 'plans').some(item => Number(item.id) === Number(state.form.plan_id || 0))) {
+    state.form.plan_id = null;
+  }
+  if (!practiceScheduleOptions(module).some(item => Number(item.id) === Number(state.form.schedule_id || 0))) {
+    state.form.schedule_id = null;
+  }
+  if (!practiceRoomOptions(module).some(item => Number(item.id) === Number(state.form.room_id || 0))) {
+    state.form.room_id = null;
+  }
+  if (!practiceProjectOptions(module).some(item => Number(item.id) === Number(state.form.project_id || 0))) {
+    state.form.project_id = null;
+  }
 }
 
 function practiceScheduleLabel(schedule) {
@@ -10031,6 +10272,9 @@ function normalizePracticePlan(module) {
 }
 
 function validatePracticeForm(module, panel, form) {
+  if (!['lab', 'training'].includes(form.module_type)) {
+    return '请选择实验或实训类别';
+  }
   const title = String(form.title || form.course_name || '').trim();
   if (panel === 'plans') {
     if (!title) {
@@ -10051,17 +10295,11 @@ function validatePracticeForm(module, panel, form) {
       if (!title) {
         return '请填写项目名称';
       }
-      if (!form.plan_id) {
-        return '请选择教学计划';
-      }
       if (!form.schedule_id) {
         return '请选择已发布课表';
       }
       if (!form.teacher_id) {
         return '请选择项目负责人';
-      }
-      if (!form.class_id) {
-        return '请选择项目班级';
       }
       if (form.start_date && form.end_date && String(form.end_date) < String(form.start_date)) {
         return '项目结束日期不能早于开始日期';
@@ -10078,14 +10316,14 @@ function validatePracticeForm(module, panel, form) {
   if (!form.teacher_id) {
     return '请选择任课教师';
   }
-  if (!form.class_id) {
-    return '请选择课表班级';
+  if (!form.grade_id || !form.dep_id || !form.profession_id) {
+    return '请选择完整的届次、学院和专业';
   }
-  if (!form.schedule_date || !form.start_time || !form.end_time) {
-    return '请填写完整课表日期和时间';
+  if (!form.schedule_date || !form.period_start_id || !form.period_end_id) {
+    return '请选择日期和起止课节';
   }
-  if (String(form.end_time) <= String(form.start_time)) {
-    return '课表结束时间必须晚于开始时间';
+  if (!practicePeriodEndOptions(module).some(item => Number(item.id) === Number(form.period_end_id))) {
+    return '结束课节不能早于起始课节';
   }
   if ((form.place_type || 'inside') === 'inside' && !form.room_id) {
     return '请选择可用实验实训室';
@@ -10113,9 +10351,13 @@ function practiceQueryParams(module, panel, page = 1) {
 }
 
 function setPracticeFilter(module, panel, event) {
-  const values = practiceModuleState(module).filters[panel];
+  const state = practiceModuleState(module);
+  const values = state.filters[panel];
   values[event.key] = event.value ?? '';
-  normalizeFilterCascade(values, practiceModuleState(module).options, event.key);
+  if (event.key === 'module_type') {
+    state.module_type = values.module_type || 'all';
+  }
+  normalizeFilterCascade(values, state.options, event.key);
 }
 
 function resetPracticeFilters(module, panel) {
@@ -10129,13 +10371,14 @@ function resetPracticeFilters(module, panel) {
 }
 
 async function loadPracticeFoundation(module) {
-  if (!hasPermission(`${module}:view`)) {
+  if (!hasPermission('practice:view')) {
     return;
   }
   const state = practiceModuleState(module);
+  const moduleType = state.module_type;
   const [overview, options] = await Promise.all([
-    fetchPracticeOverview(module),
-    fetchPracticeOptions(module),
+    fetchPracticeOverview(moduleType),
+    fetchPracticeOptions(moduleType),
   ]);
   state.overview = {
     ...emptyPracticeOverview(),
@@ -10147,13 +10390,14 @@ async function loadPracticeFoundation(module) {
   };
   const defaults = organizationScopeDefaults(state.options);
   Object.keys(state.filters).forEach((panel) => {
+    state.filters[panel].module_type = moduleType;
     applyAcademicDefaults(state.filters[panel], defaults);
     normalizeFilterCascade(state.filters[panel], state.options);
   });
 }
 
 async function loadPracticePanel(module, panel = 'overview', page = 1) {
-  if (!hasPermission(`${module}:view`)) {
+  if (!hasPermission('practice:view')) {
     return;
   }
   const state = practiceModuleState(module);
@@ -10161,16 +10405,39 @@ async function loadPracticePanel(module, panel = 'overview', page = 1) {
   state.message = '';
   try {
     await loadPracticeFoundation(module);
-    if (panel !== 'overview') {
+    if (panel === 'schedules' && state.schedule.view === 'board') {
+      await loadPracticeScheduleWeek(module);
+    } else if (panel !== 'overview') {
       const data = isPracticeExecutionPanel(panel)
-        ? await fetchPracticeExecutionList(module, practiceExecutionType(panel), practiceExecutionQueryParams(module, panel, page))
-        : await fetchPracticeList(module, practiceQueryParams(module, panel, page));
+        ? await fetchPracticeExecutionList(practiceRequestModuleType(module, state.filters[panel].module_type), practiceExecutionType(panel), practiceExecutionQueryParams(module, panel, page))
+        : await fetchPracticeList(practiceRequestModuleType(module, state.filters[panel].module_type), practiceQueryParams(module, panel, page));
       state.lists[panel].items = data.items || [];
       state.lists[panel].pagination = {
         ...state.lists[panel].pagination,
         ...(data.pagination || {}),
       };
     }
+  } catch (error) {
+    state.message = error.message;
+  } finally {
+    state.loading = false;
+  }
+}
+
+async function exportPracticeScheduleList(module) {
+  const state = practiceModuleState(module);
+  if (state.loading) {
+    return;
+  }
+  state.loading = true;
+  state.message = '';
+  try {
+    const moduleType = practiceRequestModuleType(module, state.filters.schedules.module_type);
+    const rows = await collectPagedRows(
+      params => fetchPracticeList(moduleType, { ...practiceQueryParams(module, 'schedules', params.page), page_size: params.page_size }),
+      practiceQueryParams(module, 'schedules', 1),
+    );
+    exportRowsToCsv('实验实训课表', practiceListConfig(module, 'schedules').columns, rows);
   } catch (error) {
     state.message = error.message;
   } finally {
@@ -10198,6 +10465,7 @@ function openPracticeDialog(module, panel, row = null) {
       state.form.status = practiceDefaultStatus(panel);
     }
   }
+  state.form.module_type = row?.module_type || practiceWriteModuleType(state.module_type);
   state.dialog = {
     ...emptyOperationDialog(),
     type: panel === 'scores' ? 'scoreProject' : (isPracticeExecutionPanel(panel) ? 'execution' : 'edit'),
@@ -10298,6 +10566,10 @@ async function savePracticeExecutionDialog(module, workflowStatus = 'wait') {
     state.message = '请选择项目';
     return;
   }
+  if (!['lab', 'training'].includes(state.form.module_type)) {
+    state.message = '请选择实验或实训类别';
+    return;
+  }
   if (execution !== 'sign_in' && !String(state.form.content || '').trim()) {
     state.message = '请填写内容';
     return;
@@ -10305,7 +10577,7 @@ async function savePracticeExecutionDialog(module, workflowStatus = 'wait') {
   state.loading = true;
   state.message = '';
   try {
-    await savePracticeExecution(module, execution, {
+    await savePracticeExecution(state.form.module_type, execution, {
       id: state.form.id || undefined,
       project_id: state.form.project_id,
       student_id: state.form.student_id || undefined,
@@ -10333,10 +10605,14 @@ async function savePracticeProjectScoreDialog(module) {
     state.message = '请选择项目和学生';
     return;
   }
+  if (!['lab', 'training'].includes(state.form.module_type)) {
+    state.message = '请选择实验或实训类别';
+    return;
+  }
   state.loading = true;
   state.message = '';
   try {
-    await savePracticeProjectScore(module, {
+    await savePracticeProjectScore(state.form.module_type, {
       project_id: state.form.project_id,
       student_id: state.form.student_id,
       attendance_score: state.form.attendance_score,
@@ -10382,7 +10658,7 @@ async function savePractice(module, workflowStatus = null) {
   state.loading = true;
   state.message = '';
   try {
-    await savePracticeItem(module, payload);
+    await savePracticeItem(state.form.module_type, payload);
     closePracticeDialog(module);
     await loadPracticePanel(module, panel, state.lists[panel]?.pagination.page || 1);
   } catch (error) {
@@ -10466,8 +10742,8 @@ async function openPracticeTimelineDialog(module, panel, row) {
   state.message = '';
   try {
     const data = isPracticeExecutionPanel(panel)
-      ? await fetchPracticeExecutionTimeline(module, { execution: practiceExecutionType(panel), id: row.id })
-      : await fetchPracticeTimeline(module, { entity: practiceReviewEntity(panel), id: row.id });
+      ? await fetchPracticeExecutionTimeline(practiceRequestModuleType(module, row.module_type), { execution: practiceExecutionType(panel), id: row.id })
+      : await fetchPracticeTimeline(practiceRequestModuleType(module, row.module_type), { entity: practiceReviewEntity(panel), id: row.id });
     state.dialog.cycles = data.cycles || [];
     state.dialog.timeline = data.items || data.records || [];
   } catch (error) {
@@ -10487,7 +10763,7 @@ async function loadPracticeDialogReviewDraft(module) {
     ? { execution: practiceExecutionType(panel), id: row.id }
     : { entity, id: row.id };
   try {
-    const data = await fetchPracticeReviewDraft(module, params);
+    const data = await fetchPracticeReviewDraft(practiceRequestModuleType(module, row.module_type), params);
     const draft = data.draft || null;
     if (draft) {
       state.dialog.status = draft.review_status || state.dialog.status;
@@ -10513,7 +10789,7 @@ async function savePracticeDialogReviewDraft(module) {
   state.loading = true;
   state.message = '';
   try {
-    await savePracticeReviewDraft(module, payload);
+    await savePracticeReviewDraft(practiceRequestModuleType(module, row.module_type), payload);
     state.message = '审核草稿已保存';
   } catch (error) {
     state.message = error.message;
@@ -10585,13 +10861,13 @@ async function reviewPractice(module) {
   state.message = '';
   try {
     if (isPracticeExecutionPanel(panel)) {
-      await reviewPracticeExecution(module, practiceExecutionType(panel), {
+      await reviewPracticeExecution(practiceRequestModuleType(module, state.dialog.row.module_type), practiceExecutionType(panel), {
         id: state.dialog.row.id,
         status: state.dialog.status,
         opinion: state.dialog.reason,
       });
     } else {
-      await reviewPracticeItem(module, {
+      await reviewPracticeItem(practiceRequestModuleType(module, state.dialog.row.module_type), {
         entity: state.dialog.entity,
         id: state.dialog.row.id,
         status: state.dialog.status,
@@ -10614,13 +10890,13 @@ async function requestPracticeReopen(module) {
   state.message = '';
   try {
     if (isPracticeExecutionPanel(panel)) {
-      await requestPracticeExecutionModification(module, {
+      await requestPracticeExecutionModification(practiceRequestModuleType(module, state.dialog.row.module_type), {
         execution: practiceExecutionType(panel),
         id: state.dialog.row.id,
         opinion: state.dialog.reason,
       });
     } else {
-      await requestPracticeModification(module, {
+      await requestPracticeModification(practiceRequestModuleType(module, state.dialog.row.module_type), {
         entity: state.dialog.entity,
         id: state.dialog.row.id,
         opinion: state.dialog.reason,
@@ -10846,7 +11122,7 @@ function statAcademicOptions() {
   if (!isPracticeScoreSheetReport()) {
     return internshipState.options;
   }
-  return practiceModuleState(statState.filters.module_type || 'training').options;
+  return practiceModuleState('practice').options;
 }
 
 function statGradeOptions() {
@@ -10868,7 +11144,8 @@ function statClassOptions() {
 async function handleStatFilterChange(key) {
   if (key === 'module_type') {
     statState.filters.plan_id = '';
-    await loadPracticeFoundation(statState.filters.module_type || 'training');
+    practiceModuleState('practice').module_type = statState.filters.module_type || 'all';
+    await loadPracticeFoundation('practice');
     applyAcademicDefaults(statState.filters, organizationScopeDefaults(statAcademicOptions()));
   }
 

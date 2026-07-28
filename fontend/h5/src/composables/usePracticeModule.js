@@ -17,6 +17,7 @@ const practicePanelKeys = [
 
 export function emptyPracticeFilters() {
   return {
+    module_type: 'all',
     grade_id: '',
     dep_id: '',
     profession_id: '',
@@ -57,6 +58,12 @@ export function createPracticeState() {
     },
     filters: Object.fromEntries(practicePanelKeys.map(key => [key, emptyPracticeFilters()])),
     lists: Object.fromEntries(practicePanelKeys.map(key => [key, emptyPagedList()])),
+    schedule: {
+      week_start: '',
+      week_end: '',
+      periods: [],
+      items: [],
+    },
   };
 }
 
@@ -64,7 +71,7 @@ function createReviewDialog() {
   return {
     visible: false,
     mode: 'review',
-    module: 'training',
+    module: 'all',
     panel: 'plans',
     entity: 'plan',
     status: 'accept',
@@ -76,7 +83,7 @@ function createReviewDialog() {
 function createExecutionDialog() {
   return {
     visible: false,
-    module: 'training',
+    module: 'all',
     panel: 'journals',
     execution: 'journal',
     row: null,
@@ -111,17 +118,13 @@ function createTimelineDialog() {
 }
 
 export function usePracticeModule() {
-  const practice = reactive({
-    training: createPracticeState(),
-    lab: createPracticeState(),
-  });
+  const practice = reactive(createPracticeState());
   const reviewDialog = reactive(createReviewDialog());
   const executionDialog = reactive(createExecutionDialog());
   const timelineDialog = reactive(createTimelineDialog());
 
   function reset() {
-    practice.training = createPracticeState();
-    practice.lab = createPracticeState();
+    Object.assign(practice, createPracticeState());
     Object.assign(reviewDialog, createReviewDialog());
     Object.assign(executionDialog, createExecutionDialog());
     Object.assign(timelineDialog, createTimelineDialog());
