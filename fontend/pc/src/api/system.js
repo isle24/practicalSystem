@@ -306,6 +306,10 @@ export function clearTestData(payload) {
   });
 }
 
+export function fetchDataEnvironment() {
+  return request('/admin/data-environment');
+}
+
 export function generateAdminLoginPasskey(payload) {
   return request('/admin/login-passkey', {
     method: 'POST',

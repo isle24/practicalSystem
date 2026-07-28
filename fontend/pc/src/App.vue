@@ -3230,14 +3230,22 @@
                         <strong>清除测试数据</strong>
                         <span>清空除超级管理员外的账号、用户业务数据、消息、文件记录和操作日志，保留角色、菜单、基础档案、流程配置和系统配置。</span>
                       </div>
-                      <el-tag type="danger">危险操作</el-tag>
+                      <el-tag :type="dataManageState.isTest ? 'warning' : 'danger'">
+                        {{ dataManageState.isTest ? '测试环境' : '正式环境保护' }}
+                      </el-tag>
                     </header>
-                    <p>该功能用于测试库重新验收。执行前会要求输入确认文本，执行后无法从页面撤销。</p>
+                    <p v-if="dataManageState.environmentLoading">正在读取运行模式...</p>
+                    <p v-else-if="dataManageState.isTest">
+                      当前 APP_MODE={{ dataManageState.mode }}，允许超级管理员执行。执行前需输入确认文本，执行后无法从页面撤销。
+                    </p>
+                    <p v-else>
+                      当前 APP_MODE={{ dataManageState.mode }}，服务端已禁止执行测试数据清理。
+                    </p>
                     <footer>
                       <el-button
                         type="danger"
                         :icon="Trash2"
-                        :disabled="permissionState.context.role_type !== 'super_admin'"
+                        :disabled="!dataManageState.clearAllowed || dataManageState.environmentLoading"
                         :loading="dataManageState.clearLoading"
                         @click="clearCurrentTestData"
                       >
@@ -3808,6 +3816,7 @@ import {
   fetchAdminRoles,
   fetchArchiveList,
   fetchDesktopShortcuts,
+  fetchDataEnvironment,
   fetchFavorites,
   fetchFileList,
   fetchSwitchableAccounts,
@@ -4765,6 +4774,10 @@ const favoriteState = reactive({
 
 const dataManageState = reactive({
   clearLoading: false,
+  environmentLoading: false,
+  mode: 'production',
+  isTest: false,
+  clearAllowed: false,
   message: '',
 });
 
@@ -7535,6 +7548,9 @@ function activateWindowPanel(win, panel) {
   if (win.module.id === 'dataManage') {
     loadAdminFoundation();
   }
+  if (win.module.id === 'dataManage' || (win.module.id === 'config' && panel === 'dataManage')) {
+    loadDataEnvironment();
+  }
   if (win.module.id === 'file' && panel === 'fileManage') {
     loadFiles();
   }
@@ -8195,6 +8211,10 @@ async function clearCurrentTestData() {
   if (permissionState.context.role_type !== 'super_admin' || dataManageState.clearLoading) {
     return;
   }
+  if (!dataManageState.clearAllowed) {
+    dataManageState.message = '当前不是测试环境，禁止清除测试数据';
+    return;
+  }
   const confirmation = window.prompt('该操作会清除测试数据。请输入 CLEAR_TEST_DATA 确认：');
   if (confirmation !== 'CLEAR_TEST_DATA') {
     dataManageState.message = '已取消或确认文本不正确';
@@ -8216,6 +8236,28 @@ async function clearCurrentTestData() {
     dataManageState.message = error.message;
   } finally {
     dataManageState.clearLoading = false;
+  }
+}
+
+async function loadDataEnvironment() {
+  if (!['super_admin', 'school_admin'].includes(permissionState.context.role_type) || dataManageState.environmentLoading) {
+    return;
+  }
+
+  dataManageState.environmentLoading = true;
+  dataManageState.message = '';
+  try {
+    const data = await fetchDataEnvironment();
+    dataManageState.mode = data.mode || 'production';
+    dataManageState.isTest = data.is_test === true;
+    dataManageState.clearAllowed = data.clear_allowed === true;
+  } catch (error) {
+    dataManageState.mode = 'production';
+    dataManageState.isTest = false;
+    dataManageState.clearAllowed = false;
+    dataManageState.message = error.message;
+  } finally {
+    dataManageState.environmentLoading = false;
   }
 }
 
@@ -13590,6 +13632,10 @@ function resetAdminState() {
   fileState.pagination.total = 0;
   resetFavoriteState();
   dataManageState.clearLoading = false;
+  dataManageState.environmentLoading = false;
+  dataManageState.mode = 'production';
+  dataManageState.isTest = false;
+  dataManageState.clearAllowed = false;
   dataManageState.message = '';
   resetInternshipState();
 }

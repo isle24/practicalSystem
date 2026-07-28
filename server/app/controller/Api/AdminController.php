@@ -17,6 +17,7 @@ use app\server\auth\AuthService;
 use app\server\CurrentContext;
 use app\server\file\FileService;
 use app\server\rbac\RbacService;
+use app\server\RuntimeEnvironment;
 use support\Request;
 use support\Response;
 use Throwable;
@@ -435,6 +436,25 @@ class AdminController
     }
 
     /**
+     * 查询数据清理环境
+     */
+    #[OperationLog('查询数据清理环境')]
+    public function dataEnvironment(Request $request): Response
+    {
+        if (!$this->isAdmin()) {
+            return $this->fail(40300, '无操作权限', 403);
+        }
+
+        $isTest = RuntimeEnvironment::isTest();
+
+        return $this->ok([
+            'mode' => RuntimeEnvironment::mode(),
+            'is_test' => $isTest,
+            'clear_allowed' => $isTest && CurrentContext::roleType() === 'super_admin',
+        ]);
+    }
+
+    /**
      * 清除测试数据
      */
     #[OperationLog('清除测试数据')]
@@ -442,6 +462,9 @@ class AdminController
     {
         if (CurrentContext::roleType() !== 'super_admin') {
             return $this->fail(40300, '仅超级管理员可清除测试数据', 403);
+        }
+        if (!RuntimeEnvironment::isTest()) {
+            return $this->fail(40300, '当前不是测试环境，禁止清除测试数据', 403);
         }
 
         try {
