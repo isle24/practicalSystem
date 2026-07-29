@@ -777,8 +777,8 @@ class InternshipService
             ])['id'];
             $this->syncJoinTeachers($id, $studentId, $arrangementId, InternshipRecord::activePairTeacherIds($studentId, $arrangementId));
             if ($status === 'wait') {
-                $this->recordWorkflow('application_recording', 'application', $id, 'submit', $fromStatus, 'wait', $values['remark'] ?: '提交特殊申请', 'wait');
-                $this->notifyWorkflowSubmitted('application', $id, (int) CurrentContext::accountId(), InternshipRecord::activePairTeacherIds($studentId, $arrangementId), '特殊申请', $values['remark'] ?: '提交特殊申请');
+                $this->recordWorkflow('application_recording', 'application', $id, 'submit', $fromStatus, 'wait', $values['remark'] ?: '提交实习方式申请', 'wait');
+                $this->notifyWorkflowSubmitted('application', $id, (int) CurrentContext::accountId(), InternshipRecord::activePairTeacherIds($studentId, $arrangementId), '实习方式申请', $values['remark'] ?: '提交实习方式申请');
             }
 
             return ['id' => $id, 'item' => $this->application($id)];
@@ -796,7 +796,7 @@ class InternshipService
         return $this->workflowLock('internship', 'application', $id, function () use ($id): array {
             $row = InternshipRecord::lockActiveRowById('application', $id);
             if (!$row) {
-                throw new RuntimeException('特殊申请不存在');
+                throw new RuntimeException('实习方式申请不存在');
             }
             $this->assertStudentVisible((int) $row->student_id);
             $this->assertTaskBindingVisible((int) $row->student_id, (int) $row->arrangement_id);
@@ -811,8 +811,8 @@ class InternshipService
                 'updated_at' => $this->now(),
             ]);
             $this->syncJoinTeachers($id, (int) $row->student_id, (int) $row->arrangement_id, InternshipRecord::activePairTeacherIds((int) $row->student_id, (int) $row->arrangement_id));
-            $this->recordWorkflow('application_recording', 'application', $id, 'submit', (string) $row->status, 'wait', (string) ($row->remark ?: '提交特殊申请'), 'wait');
-            $this->notifyWorkflowSubmitted('application', $id, (int) CurrentContext::accountId(), InternshipRecord::activePairTeacherIds((int) $row->student_id, (int) $row->arrangement_id), '特殊申请', (string) ($row->remark ?: '提交特殊申请'));
+            $this->recordWorkflow('application_recording', 'application', $id, 'submit', (string) $row->status, 'wait', (string) ($row->remark ?: '提交实习方式申请'), 'wait');
+            $this->notifyWorkflowSubmitted('application', $id, (int) CurrentContext::accountId(), InternshipRecord::activePairTeacherIds((int) $row->student_id, (int) $row->arrangement_id), '实习方式申请', (string) ($row->remark ?: '提交实习方式申请'));
 
             return ['id' => $id, 'item' => $this->application($id)];
         });
@@ -830,7 +830,7 @@ class InternshipService
             return $this->connection()->transaction(function () use ($id, $status, $opinion): array {
             $row = InternshipRecord::lockActiveRowById('application', $id);
             if (!$row) {
-                throw new RuntimeException('特殊申请不存在');
+                throw new RuntimeException('实习方式申请不存在');
             }
             $this->assertApplicationVisible((int) $row->id);
             $this->assertTaskBindingVisible((int) $row->student_id, (int) $row->arrangement_id);
@@ -865,7 +865,7 @@ class InternshipService
             $finalStatus = $this->refreshApplicationFinalStatus($fresh);
             $this->recordWorkflow('application_recording', 'application', $id, $action, (string) $row->status, $finalStatus, $opinion ?: '审核处理', $status);
             InternshipRecord::clearReviewOpinionDraft('application', $id, $this->accountId(), $this->now());
-            $this->notifyWorkflowReviewed('application', $id, InternshipRecord::studentAccountId((int) $row->student_id), '特殊申请', $finalStatus, $opinion ?: '审核处理');
+            $this->notifyWorkflowReviewed('application', $id, InternshipRecord::studentAccountId((int) $row->student_id), '实习方式申请', $finalStatus, $opinion ?: '审核处理');
 
             return ['id' => $id, 'item' => $this->application($id)];
             });
@@ -3308,7 +3308,7 @@ class InternshipService
     {
         $item = InternshipRecord::applicationWithTeachers($id);
         if (!$item) {
-            throw new RuntimeException('特殊申请不存在');
+            throw new RuntimeException('实习方式申请不存在');
         }
 
         return $item;
@@ -3911,7 +3911,7 @@ class InternshipService
     private function entityDisplayName(string $entity): string
     {
         return [
-            'application' => '特殊申请',
+            'application' => '实习方式申请',
             'journal' => '实习日志',
             'report' => '实习报告',
             'delay' => '延期申请',

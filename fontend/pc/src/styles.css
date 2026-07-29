@@ -909,6 +909,38 @@ a {
   background: var(--primary-soft);
 }
 
+.internship-request-panel {
+  min-height: 0;
+  height: 100%;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 12px;
+}
+
+.internship-request-head {
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 0 2px;
+}
+
+.internship-request-head > div:first-child {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.internship-request-head strong {
+  font-size: 15px;
+}
+
+.internship-request-head small {
+  color: var(--muted);
+}
+
 .side-item.active span {
   background: var(--primary);
 }

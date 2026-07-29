@@ -177,36 +177,36 @@ class InternshipController
     }
 
     /**
-     * 查询实习申请
+     * 查询实习方式申请
      */
-    #[OperationLog('查询实习申请')]
+    #[OperationLog('查询实习方式申请')]
     public function applications(Request $request): Response
     {
         return $this->handle(fn (): array => $this->service()->applications($request));
     }
 
     /**
-     * 保存实习申请
+     * 保存实习方式申请
      */
-    #[OperationLog('保存实习申请')]
+    #[OperationLog('保存实习方式申请')]
     public function saveApplication(Request $request): Response
     {
         return $this->handle(fn (): array => $this->service()->saveApplication($request));
     }
 
     /**
-     * 提交实习申请
+     * 提交实习方式申请
      */
-    #[OperationLog('提交实习申请')]
+    #[OperationLog('提交实习方式申请')]
     public function submitApplication(Request $request): Response
     {
         return $this->handle(fn (): array => $this->service()->submitApplication($request));
     }
 
     /**
-     * 审核实习申请
+     * 审核实习方式申请
      */
-    #[OperationLog('审核实习申请')]
+    #[OperationLog('审核实习方式申请')]
     public function reviewApplication(Request $request): Response
     {
         return $this->handle(fn (): array => $this->service()->reviewApplication($request));

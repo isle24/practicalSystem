@@ -2129,6 +2129,14 @@ function seedMessageTemplates(PDO $pdo): void
          SET `link_url_tpl` = REPLACE(`link_url_tpl`, '#panel=lab:', '#panel=practice:')
          WHERE `code` LIKE 'lab\\_%' ESCAPE '\\\\' AND `link_url_tpl` LIKE '#panel=lab:%'"
     );
+    $pdo->exec(
+        "UPDATE `message_template`
+         SET `name` = REPLACE(`name`, '特殊申请', '实习方式申请'),
+             `title_tpl` = REPLACE(`title_tpl`, '特殊申请', '实习方式申请'),
+             `content_tpl` = REPLACE(`content_tpl`, '特殊申请', '实习方式申请'),
+             `description` = REPLACE(`description`, '特殊申请', '实习方式申请')
+         WHERE `code` LIKE 'internship\\_application\\_%' ESCAPE '\\\\'"
+    );
 }
 
 function seedRoles(PDO $pdo): void
@@ -2511,8 +2519,8 @@ function seedMenus(PDO $pdo): void
         [111, 11, '列表', 'internship:view', '/internship', 'both', 'list', 111, 'List'],
         [101, 111, '新增', 'internship:manage', null, 'both', 'button', 101, null],
         [1112, 111, '删除', 'internship:arrangement:delete', null, 'pc', 'button', 112, null],
-        [12, 1, '补充申请', null, null, 'both', 'menu', 12, 'ClipboardList'],
-        [121, 12, '列表', 'internship:application:list', '/internship/applications', 'both', 'list', 121, 'List'],
+        [12, 1, '申请管理', null, null, 'both', 'menu', 12, 'ClipboardList'],
+        [121, 12, '实习方式申请', 'internship:application:list', '/internship/requests?tab=applications', 'both', 'list', 121, 'List'],
         [103, 121, '提交', 'internship:apply', null, 'both', 'button', 103, null],
         [104, 121, '审核', 'internship:approve', null, 'both', 'button', 104, null],
         [1213, 121, '通过后修改', 'internship:application:reopen', null, 'pc', 'button', 123, null],
@@ -2540,8 +2548,8 @@ function seedMenus(PDO $pdo): void
         [19, 1, '实习计划', null, null, 'pc', 'menu', 19, 'FileText'],
         [191, 19, '列表', 'internship:plan:list', '/internship/plans', 'pc', 'list', 191, 'List'],
         [110, 191, '维护', 'internship:plan', null, 'pc', 'button', 110, null],
-        [195, 1, '延期申请', null, null, 'both', 'menu', 195, 'FileClock'],
-        [1951, 195, '列表', 'internship:delay:list', '/internship/delays', 'both', 'list', 1951, 'List'],
+        [195, 12, '延期申请', null, null, 'both', 'menu', 195, 'FileClock'],
+        [1951, 195, '列表', 'internship:delay:list', '/internship/requests?tab=delays', 'both', 'list', 1951, 'List'],
         [19511, 1951, '提交', 'internship:apply', null, 'both', 'button', 1951, null],
         [19512, 1951, '审核', 'internship:approve', null, 'both', 'button', 1952, null],
         [2, 0, '实验实训管理', null, null, 'both', 'directory', 20, 'FlaskConical'],
@@ -2674,6 +2682,27 @@ function seedMenus(PDO $pdo): void
     foreach ($menus as $menu) {
         $stmt->execute($menu);
     }
+
+    $pdo->exec(
+        "UPDATE `menu`
+         SET `name` = '申请管理', `icon` = 'ClipboardList'
+         WHERE `id` = 12 AND `name` IN ('补充申请', '特殊申请', '申请管理')"
+    );
+    $pdo->exec(
+        "UPDATE `menu`
+         SET `name` = '实习方式申请', `path` = '/internship/requests?tab=applications'
+         WHERE `id` = 121"
+    );
+    $pdo->exec(
+        "UPDATE `menu`
+         SET `parent_id` = 12, `name` = '延期申请', `icon` = 'FileClock'
+         WHERE `id` = 195"
+    );
+    $pdo->exec(
+        "UPDATE `menu`
+         SET `path` = '/internship/requests?tab=delays'
+         WHERE `id` = 1951"
+    );
 
     $practiceMenuIds = [
         2, 21, 211, 201, 202, 22, 221, 2211, 222, 2221, 22211,
@@ -2859,14 +2888,14 @@ function seedDocCenterData(PDO $pdo): void
             '00000000-0000-0000-0000-000000220001',
             1,
             '高校实习实践基础流程',
-            '<h3>流程</h3><p>管理员维护届次、学院、专业、班级、基地、实习计划、实习任务和任务绑定；学生按已绑定任务提交补充申请、签到、日志、报告和延期申请；任务老师按任务处理审核、评阅和成绩；学校管理员查看统计、归档材料和审计日志。</p><h3>注意</h3><p>实习主链路以计划、任务、班级学生绑定为边界，补充申请不生成任务绑定。</p>',
+            '<h3>流程</h3><p>管理员维护届次、学院、专业、班级、基地、实习计划、实习任务和任务绑定；学生按已绑定任务提交实习方式申请、签到、日志、报告和延期申请；任务老师按任务处理审核、评阅和成绩；学校管理员查看统计、归档材料和审计日志。</p><h3>注意</h3><p>实习主链路以计划、任务、班级学生绑定为边界，实习方式申请不生成任务绑定。</p>',
         ],
         [
             2,
             '00000000-0000-0000-0000-000000220002',
             2,
             '学生端提交说明',
-            '<h3>学生流程</h3><p>学生端主要完成自己已绑定任务下的补充申请、签到、日志、报告、延期申请和流程记录查看。状态为需修改时，应进入对应记录重新编辑并提交。</p><h3>常见问题</h3><p>看不到列表筛选属于正常体验，学生仅查看本人的数据。</p>',
+            '<h3>学生流程</h3><p>学生端主要完成自己已绑定任务下的实习方式申请、签到、日志、报告、延期申请和流程记录查看。状态为需修改时，应进入对应记录重新编辑并提交。</p><h3>常见问题</h3><p>看不到列表筛选属于正常体验，学生仅查看本人的数据。</p>',
         ],
         [
             3,
@@ -3035,7 +3064,7 @@ function seedArchiveTemplateFile(PDO $pdo, string $fileName, string $downloadNam
 function seedOperationGuides(PDO $pdo): void
 {
     $guides = [
-        ['internship', '实习管理操作说明', '实习管理围绕实习计划、实习任务、任务绑定、补充申请、签到、日志、报告、成绩和归档材料进行全过程留痕。', '管理员按计划拆分任务并绑定班级，系统展开学生生成任务绑定；学生按任务完成过程材料，任务老师按任务审核评阅，学校管理员按学院、专业、届次查看整体进度。', '学生看不到列表筛选时，先确认当前账号是否为学生角色；教师看不到学生时，检查任务绑定和组织范围；审核退回后学生重新提交会形成新的记录。', 10],
+        ['internship', '实习管理操作说明', '实习管理围绕实习计划、实习任务、任务绑定、实习方式申请、延期申请、签到、日志、报告、成绩和归档材料进行全过程留痕。', '管理员按计划拆分任务并绑定班级，系统展开学生生成任务绑定；学生按任务完成过程材料，任务老师按任务审核评阅，学校管理员按学院、专业、届次查看整体进度。', '学生看不到列表筛选时，先确认当前账号是否为学生角色；教师看不到学生时，检查任务绑定和组织范围；审核退回后学生重新提交会形成新的记录。', 10],
         ['practice', '实验实训管理操作说明', '实验实训管理统一维护教学计划、专业课表、项目、大纲、教案、成绩和反思报告，并通过类别区分实验与实训。', '管理员先维护届次、学院、专业和十二节通用课节，再按专业安排二维周课表；每条课表明确实验或实训类别、教师、日期、起止课节和场地，项目发布后按届次与专业绑定学生。', '课表必须先选择届次、学院和专业；同专业、教师或场地在重叠课节内不能重复排课；历史课表仍按保存时的时间快照显示。', 20],
         ['stat', '统计报表操作说明', '统计报表按当前角色的数据范围展示实习总览、学院统计、专业统计、任务老师统计、学生过程统计和归档材料统计。', '选择左侧报表菜单后，通过届次、学院、专业和关键词筛选数据；切换报表菜单可查看不同统计口径的数据明细。', '如果统计值与列表不一致，优先确认当前角色的数据范围、筛选条件和业务数据是否已刷新。', 40],
         ['log', '日志审计操作说明', '日志审计读取当前学校业务库下所有 operation_log 按月分表，支持关键词、动作、IP 和日期范围查询。', '管理员进入日志审计后先设置查询条件，再查看来源分表、操作账号、动作、IP 和日志内容。', '如果日志为空，检查当前月份日志分表是否存在，以及账号是否具备日志查看权限。', 50],

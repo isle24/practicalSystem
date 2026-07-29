@@ -938,7 +938,7 @@
                       </section>
                       <section v-else class="internship-card overview-card-single">
                         <header>
-                          <strong>特殊申请</strong>
+                          <strong>实习方式申请</strong>
                           <small>{{ internshipState.overview.applications_waiting || 0 }} 条</small>
                         </header>
                         <el-table :data="internshipState.lists.applications.items" height="100%" stripe>
@@ -1148,34 +1148,86 @@
                     </DataListPanel>
                   </template>
 
-                  <template v-else-if="win.panel === 'applications'">
-                    <DataListPanel
-                      :columns="internshipListConfigs.applications.columns"
-                      :filters="internshipListConfigs.applications.filters"
-                      :filter-values="internshipState.filters.applications"
-                      :loading="internshipState.loading"
-                      :pagination="internshipState.lists.applications.pagination"
-                      :rows="internshipState.lists.applications.items"
-                      @filter-change="setInternshipFilter('applications', $event)"
-                      @page-change="page => loadInternshipPanel('applications', page)"
-                      @reset="resetInternshipFilters('applications')"
-                      @search="loadInternshipPanel('applications', 1)"
-                    >
-                      <template #actions="{ row }">
-                        <el-button v-if="canReviewRow(row, 'application')" link type="primary" @click="openReviewDialog('application', row, 'accept')">
-                          通过
-                        </el-button>
-                        <el-button v-if="canReviewRow(row, 'application')" link type="warning" @click="openReviewDialog('application', row, 'modify')">
-                          退回
-                        </el-button>
-                        <el-button v-if="canRequestModification(row, 'application')" link type="danger" @click="openReopenDialog('application', row)">
-                          通过后修改
-                        </el-button>
-                        <el-button size="small" type="primary" plain @click="openTimelineDialog('application', row)">
-                          记录
-                        </el-button>
-                      </template>
-                    </DataListPanel>
+                  <template v-else-if="win.panel === 'requests'">
+                    <section class="internship-request-panel">
+                      <header class="internship-request-head">
+                        <div>
+                          <strong>申请管理</strong>
+                          <small>实习方式申请与延期申请分别审核，记录和结果独立留存。</small>
+                        </div>
+                        <el-segmented
+                          :model-value="activeInternshipRequestTab"
+                          :options="internshipRequestTabs"
+                          @change="changeInternshipRequestTab"
+                        />
+                      </header>
+
+                      <StudentOwnPanel
+                        v-if="isStudentRole"
+                        :description="studentPanelMeta(activeInternshipRequestTab).description"
+                        :empty-text="studentPanelMeta(activeInternshipRequestTab).emptyText"
+                        :fields="studentPanelFields(activeInternshipRequestTab)"
+                        :loading="internshipState.loading"
+                        :pagination="studentPanelList(activeInternshipRequestTab).pagination"
+                        :rows="studentPanelList(activeInternshipRequestTab).items"
+                        :status-formatter="statusText"
+                        :status-tag-type="statusTagType"
+                        :timeline-entity="studentTimelineEntity(activeInternshipRequestTab)"
+                        :title="studentPanelMeta(activeInternshipRequestTab).title"
+                        @page-change="page => loadInternshipPanel(activeInternshipRequestTab, page)"
+                        @refresh="loadInternshipPanel(activeInternshipRequestTab)"
+                        @timeline="row => openTimelineDialog(studentTimelineEntity(activeInternshipRequestTab), row)"
+                      />
+
+                      <DataListPanel
+                        v-else
+                        :columns="internshipListConfigs[activeInternshipRequestTab].columns"
+                        :filters="internshipListConfigs[activeInternshipRequestTab].filters"
+                        :filter-values="internshipState.filters[activeInternshipRequestTab]"
+                        :loading="internshipState.loading"
+                        :pagination="internshipState.lists[activeInternshipRequestTab].pagination"
+                        :rows="internshipState.lists[activeInternshipRequestTab].items"
+                        @filter-change="setInternshipFilter(activeInternshipRequestTab, $event)"
+                        @page-change="page => loadInternshipPanel(activeInternshipRequestTab, page)"
+                        @reset="resetInternshipFilters(activeInternshipRequestTab)"
+                        @search="loadInternshipPanel(activeInternshipRequestTab, 1)"
+                      >
+                        <template #actions="{ row }">
+                          <el-button
+                            v-if="canReviewRow(row, internshipRequestEntity(activeInternshipRequestTab))"
+                            link
+                            type="primary"
+                            @click="openReviewDialog(internshipRequestEntity(activeInternshipRequestTab), row, 'accept')"
+                          >
+                            通过
+                          </el-button>
+                          <el-button
+                            v-if="canReviewRow(row, internshipRequestEntity(activeInternshipRequestTab))"
+                            link
+                            type="warning"
+                            @click="openReviewDialog(internshipRequestEntity(activeInternshipRequestTab), row, internshipRequestRejectStatus(activeInternshipRequestTab))"
+                          >
+                            退回
+                          </el-button>
+                          <el-button
+                            v-if="canRequestModification(row, internshipRequestEntity(activeInternshipRequestTab))"
+                            link
+                            type="danger"
+                            @click="openReopenDialog(internshipRequestEntity(activeInternshipRequestTab), row)"
+                          >
+                            通过后修改
+                          </el-button>
+                          <el-button
+                            size="small"
+                            type="primary"
+                            plain
+                            @click="openTimelineDialog(internshipRequestEntity(activeInternshipRequestTab), row)"
+                          >
+                            记录
+                          </el-button>
+                        </template>
+                      </DataListPanel>
+                    </section>
                   </template>
 
                   <template v-else-if="win.panel === 'pairs'">
@@ -1278,36 +1330,6 @@
                           通过后修改
                         </el-button>
                         <el-button size="small" type="primary" plain @click="openTimelineDialog('report', row)">
-                          记录
-                        </el-button>
-                      </template>
-                    </DataListPanel>
-                  </template>
-
-                  <template v-else-if="win.panel === 'delays'">
-                    <DataListPanel
-                      :columns="internshipListConfigs.delays.columns"
-                      :filters="internshipListConfigs.delays.filters"
-                      :filter-values="internshipState.filters.delays"
-                      :loading="internshipState.loading"
-                      :pagination="internshipState.lists.delays.pagination"
-                      :rows="internshipState.lists.delays.items"
-                      @filter-change="setInternshipFilter('delays', $event)"
-                      @page-change="page => loadInternshipPanel('delays', page)"
-                      @reset="resetInternshipFilters('delays')"
-                      @search="loadInternshipPanel('delays', 1)"
-                    >
-                      <template #actions="{ row }">
-                        <el-button v-if="canReviewRow(row, 'delay')" link type="primary" @click="openReviewDialog('delay', row, 'accept')">
-                          通过
-                        </el-button>
-                        <el-button v-if="canReviewRow(row, 'delay')" link type="warning" @click="openReviewDialog('delay', row, 'refuse')">
-                          退回
-                        </el-button>
-                        <el-button v-if="canRequestModification(row, 'delay')" link type="danger" @click="openReopenDialog('delay', row)">
-                          通过后修改
-                        </el-button>
-                        <el-button size="small" type="primary" plain @click="openTimelineDialog('delay', row)">
                           记录
                         </el-button>
                       </template>
@@ -4831,9 +4853,8 @@ const internshipSidebarItems = [
   { key: 'signIns', name: '签到记录', icon: MapPin },
   { key: 'journals', name: '实习日志', icon: FileClock },
   { key: 'reports', name: '实习报告', icon: FileText },
-  { key: 'applications', name: '特殊申请', icon: ClipboardList },
+  { key: 'requests', name: '申请管理', icon: ClipboardList },
   { key: 'teacherWorkReports', name: '教师工作报告', icon: FileText },
-  { key: 'delays', name: '延期申请', icon: FileClock },
   { key: 'scores', name: '成绩管理', icon: GraduationCap },
   { key: 'courseScores', name: '课程成绩', icon: GraduationCap },
   { key: 'inspections', name: '巡查记录', icon: Search, permission: 'internship:archive' },
@@ -4850,6 +4871,7 @@ const internshipState = reactive({
   reviewOpinion: '',
   importing: false,
   overviewTab: 'metrics',
+  requestTab: 'applications',
   dialog: emptyOperationDialog(),
   overview: emptyInternshipOverview(),
   options: emptyInternshipOptions(),
@@ -4915,7 +4937,7 @@ const practiceState = reactive({
 const openWindows = reactive([]);
 
 const moduleSearchKeywords = {
-  internship: '学生 教师 学院 专业 企业 任务 绑定 特殊申请 审核 签到 日志 报告 延期 成绩 归档 实习任务 实习计划',
+  internship: '学生 教师 学院 专业 企业 任务 绑定 申请管理 实习方式申请 审核 签到 日志 报告 延期 成绩 归档 实习任务 实习计划',
   practice: '实验 实训 教学计划 课表 项目 过程记录 成绩 审核 课节',
   stat: '统计 报表 数据 概览 分析 学院 专业 学生 成绩',
   log: '日志 审计 操作 接口 账号 IP 登录 工作台 基础档案 流程配置',
@@ -5038,7 +5060,7 @@ const statCards = computed(() => {
     { name: '实习任务', value: internshipState.overview.arrangements || 0, desc: '可见数据内任务数量' },
     { name: '任务绑定', value: internshipState.overview.active_pairs || 0, desc: '有效任务级师生绑定' },
     { name: '待评日志', value: internshipState.overview.journals_waiting || 0, desc: '待评阅实习日志' },
-    { name: '特殊申请', value: internshipState.overview.applications_waiting || 0, desc: '分散、自主等场景待审申请' },
+    { name: '实习方式申请', value: internshipState.overview.applications_waiting || 0, desc: '集中、分散、自主实习待审申请' },
   ];
   return cards.map((item, index) => ({
     ...item,
@@ -5088,6 +5110,15 @@ const visibleInternshipSidebarItems = computed(() => internshipSidebarItems
     ...item,
     name: internshipRolePanelName(item.key),
   })));
+const internshipRequestTabs = computed(() => [
+  { label: '实习方式申请', value: 'applications' },
+  { label: '延期申请', value: 'delays' },
+]);
+const activeInternshipRequestTab = computed(() => (
+  internshipRequestTabs.value.some(item => item.value === internshipState.requestTab)
+    ? internshipState.requestTab
+    : internshipRequestTabs.value[0].value
+));
 const parentMenuTreeOptions = computed(() => [
   {
     id: 0,
@@ -5227,7 +5258,7 @@ const internshipOverviewCards = computed(() => [
   { name: '待评日志', value: internshipState.overview.journals_waiting || 0, theme: 'teal', icon: FileClock },
   { name: '待评报告', value: internshipState.overview.reports_waiting || 0, theme: 'primary', icon: FileText },
   { name: '今日签到', value: internshipState.overview.today_sign_ins || 0, theme: 'green', icon: MapPin },
-  { name: '特殊申请', value: internshipState.overview.applications_waiting || 0, theme: 'amber', icon: ClipboardList },
+  { name: '实习方式申请', value: internshipState.overview.applications_waiting || 0, theme: 'amber', icon: ClipboardList },
 ]);
 const internshipOverviewTabs = computed(() => {
   const tabs = [
@@ -5241,7 +5272,7 @@ const internshipOverviewTabs = computed(() => {
       },
       {
         key: 'applications',
-        name: '特殊申请',
+        name: '实习方式申请',
         count: studentPanelList('applications').pagination.total || 0,
       },
     );
@@ -5256,7 +5287,7 @@ const internshipOverviewTabs = computed(() => {
     },
     {
       key: 'applications',
-      name: '特殊申请',
+      name: '实习方式申请',
       count: internshipState.overview.applications_waiting || 0,
     },
   );
@@ -5334,7 +5365,7 @@ const internshipListConfigs = computed(() => ({
   },
   applications: {
     listKey: 'applications',
-    filename: '特殊申请',
+    filename: '实习方式申请',
     filters: internshipListFilters('applications', ['grade_id', 'dep_id', 'profession_id', 'class_id', 'status', 'keyword']),
     columns: [
       { prop: 'student_name', label: '学生', width: 110 },
@@ -5610,12 +5641,13 @@ function internshipRolePanelName(key) {
   const names = {
     overview: '总览',
     arrangements: '我的任务',
-    applications: '特殊申请',
+    requests: '申请管理',
+    applications: '实习方式申请',
     pairs: '任务老师',
     signIns: '我的签到',
     journals: '我的日志',
     reports: '我的报告',
-    delays: '我的延期',
+    delays: '延期申请',
     scores: '我的成绩',
     courseScores: '课程成绩',
     documents: '我的材料',
@@ -5630,7 +5662,7 @@ function internshipSidebarItemVisible(item) {
   if (!isStudentRole.value) {
     return !item.studentOnly;
   }
-  return ['overview', 'arrangements', 'applications', 'signIns', 'journals', 'reports', 'delays', 'scores', 'courseScores', 'documents'].includes(item.key);
+  return ['overview', 'arrangements', 'requests', 'signIns', 'journals', 'reports', 'scores', 'courseScores', 'documents'].includes(item.key);
 }
 
 function isInternshipReadOnlyListPanel(panel) {
@@ -5777,9 +5809,9 @@ function studentPanelMeta(panel) {
       emptyText: '暂无实习任务',
     },
     applications: {
-      title: '特殊申请',
-      description: '只展示分散、自主等特殊场景下当前学生本人的申请。',
-      emptyText: '暂无特殊申请',
+      title: '实习方式申请',
+      description: '只展示当前学生本人的集中、分散或自主实习方式申请。',
+      emptyText: '暂无实习方式申请',
     },
     pairs: {
       title: '任务老师',
@@ -7310,10 +7342,27 @@ function normalizeConfigPanel(panel) {
 }
 
 function normalizeInternshipPanel(panel) {
+  if (panel === 'applications' || panel === 'delays') {
+    internshipState.requestTab = panel;
+    return 'requests';
+  }
   if (!isStudentRole.value && ['arrangements', 'pairs', 'arrangementChanges'].includes(panel)) {
     return 'implementationSheets';
   }
   return panel;
+}
+
+function internshipRequestEntity(tab) {
+  return tab === 'delays' ? 'delay' : 'application';
+}
+
+function internshipRequestRejectStatus(tab) {
+  return tab === 'delays' ? 'refuse' : 'modify';
+}
+
+async function changeInternshipRequestTab(tab) {
+  internshipState.requestTab = tab === 'delays' ? 'delays' : 'applications';
+  await loadInternshipPanel(internshipState.requestTab, 1);
 }
 
 function defaultPanelForModule(module) {
@@ -12702,7 +12751,7 @@ function reviewRuleMaxText(entity, status) {
 
 function reviewEntityName(entity) {
   const names = {
-    application: '特殊申请',
+    application: '实习方式申请',
     sign_in: '实习签到',
     journal: '实习日志',
     report: '实习报告',
@@ -12876,6 +12925,7 @@ function isGenericSubmitContent(value) {
   return [
     '提交特殊申请',
     '提交补充申请',
+    '提交实习方式申请',
     '提交实习签到',
     '提交实习日志',
     '提交实习报告',
@@ -13052,6 +13102,13 @@ async function loadInternshipPanel(panel = 'overview', page = 1) {
       setPagedList('syllabusGuides', await fetchInternshipSyllabusGuides(params('syllabusGuides')));
     } else if (panel === 'implementationSheets') {
       setPagedList('implementationSheets', await fetchInternshipArrangements(params('implementationSheets')));
+    } else if (panel === 'requests') {
+      const requestTab = activeInternshipRequestTab.value;
+      if (requestTab === 'delays') {
+        setPagedList('delays', await fetchInternshipDelays(params('delays')));
+      } else {
+        setPagedList('applications', await fetchInternshipApplications(params('applications')));
+      }
     } else if (panel === 'applications') {
       setPagedList('applications', await fetchInternshipApplications(params('applications')));
     } else if (panel === 'pairs') {

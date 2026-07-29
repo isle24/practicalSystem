@@ -625,13 +625,13 @@ const mobileListConfigs = computed(() => ({
   applications: {
     key: 'applications',
     entity: 'application',
-    title: '特殊申请',
-    shortTitle: '特申',
+    title: '实习方式申请',
+    shortTitle: '方式',
     icon: ClipboardList,
     keywordPlaceholder: '学生、学号、实习任务、教师',
     gradeFilter: true,
     statusOptions: reviewStatusOptions,
-    emptyText: '暂无特殊申请',
+    emptyText: '暂无实习方式申请',
   },
   pairs: {
     key: 'pairs',
@@ -866,20 +866,20 @@ const internshipWorkbenchCells = computed(() => {
     return [
       { title: '我的任务', label: '已绑定的实习任务', value: internship.options.arrangements.length || '-' },
       { title: '已评分任务', label: '按任务记录成绩', value: internship.lists.scores.pagination.total || 0 },
-      { title: '特殊申请', label: '分散、自主等场景', value: internship.lists.applications.pagination.total || 0 },
+      { title: '实习方式申请', label: '集中、分散、自主实习', value: internship.lists.applications.pagination.total || 0 },
     ];
   }
   if (isTeacherRole.value) {
     return [
       { title: '待评日志', label: '学生提交的实习日志', value: internship.overview.journals_waiting || 0 },
       { title: '待评报告', label: '学生提交的实习报告', value: internship.overview.reports_waiting || 0 },
-      { title: '特殊申请', label: '分散、自主等场景', value: internship.lists.applications.pagination.total || 0 },
+      { title: '实习方式申请', label: '集中、分散、自主实习', value: internship.lists.applications.pagination.total || 0 },
     ];
   }
   return [
     { title: '实习任务', label: '全校实习任务', value: internship.overview.arrangements || 0 },
     { title: '任务绑定', label: '学生与任务老师绑定', value: internship.overview.active_pairs || 0 },
-    { title: '特殊申请', label: '分散、自主等场景待审', value: internship.overview.applications_waiting || 0 },
+    { title: '实习方式申请', label: '集中、分散、自主实习待审', value: internship.overview.applications_waiting || 0 },
   ];
 });
 
@@ -3423,7 +3423,7 @@ function reviewEntityName(entity) {
   const names = {
     arrangement: '实习任务',
     arrangement_change: '任务变更',
-    application: '特殊申请',
+    application: '实习方式申请',
     sign_in: '实习签到',
     journal: '实习日志',
     report: '实习报告',
@@ -3749,6 +3749,7 @@ function isGenericSubmitContent(value) {
   return [
     '提交特殊申请',
     '提交补充申请',
+    '提交实习方式申请',
     '提交实习日志',
     '提交实习报告',
     '提交延期申请',
