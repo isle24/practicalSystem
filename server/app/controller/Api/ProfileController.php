@@ -4,6 +4,7 @@ namespace app\controller\Api;
 
 use app\attribute\OperationLog;
 use app\controller\Api\Concerns\Responds;
+use app\model\channel\Account;
 use app\model\channel\TableRecord as ChannelTable;
 use app\model\channel\User;
 use app\server\auth\AuthService;
@@ -81,6 +82,63 @@ class ProfileController
             });
 
             return $this->ok($this->profileData(), '已保存');
+        } catch (Throwable $exception) {
+            return $this->fail(40001, $exception->getMessage(), 400);
+        }
+    }
+
+    /**
+     * 修改当前管理员密码。
+     */
+    #[OperationLog('修改个人密码')]
+    public function changePassword(Request $request): Response
+    {
+        $accountId = CurrentContext::accountId();
+        if (!$accountId) {
+            return $this->fail(40100, '请先登录', 401);
+        }
+        if (!in_array(CurrentContext::roleType(), ['super_admin', 'school_admin', 'college_admin', 'profession_admin'], true)) {
+            return $this->fail(40300, '仅管理员可修改管理员密码', 403);
+        }
+
+        $currentPassword = (string) $request->input('current_password', '');
+        $newPassword = (string) $request->input('new_password', '');
+        $confirmPassword = (string) $request->input('confirm_password', '');
+        if ($currentPassword === '') {
+            return $this->fail(40001, '请输入当前密码', 400);
+        }
+        if (strlen($newPassword) < 6 || strlen($newPassword) > 120) {
+            return $this->fail(40001, '新密码长度应为 6 至 120 位', 400);
+        }
+        if ($newPassword !== $confirmPassword) {
+            return $this->fail(40001, '两次输入的新密码不一致', 400);
+        }
+
+        try {
+            $account = Account::activeById((int) $accountId, ['id', 'password']);
+            if (!$account || !password_verify($currentPassword, (string) $account->password)) {
+                return $this->fail(40001, '当前密码不正确', 400);
+            }
+            if (password_verify($newPassword, (string) $account->password)) {
+                return $this->fail(40001, '新密码不能与当前密码相同', 400);
+            }
+
+            $now = date('Y-m-d H:i:s');
+            $revokedJtis = Account::connection()->transaction(function () use ($accountId, $newPassword, $now): array {
+                Account::updateAdminAccount((int) $accountId, [
+                    'password' => password_hash($newPassword, PASSWORD_BCRYPT),
+                    'updated_at' => $now,
+                ]);
+
+                return ChannelTable::revokeOtherDevices((int) $accountId, CurrentContext::deviceJti(), $now);
+            });
+
+            $ttl = (new AuthService())->refreshExpiresIn();
+            foreach ($revokedJtis as $jti) {
+                DeviceBlacklist::revoke($jti, $ttl);
+            }
+
+            return $this->ok([], '密码已修改，其他设备已下线');
         } catch (Throwable $exception) {
             return $this->fail(40001, $exception->getMessage(), 400);
         }

@@ -86,7 +86,7 @@
       </div>
       <div class="top-actions">
         <el-button text :icon="Bell" title="消息中心" @click="openMessageCenter" />
-        <el-button v-if="isLoggedIn" text class="operator-button" @click="openProfile">
+        <el-button v-if="isLoggedIn" text class="operator-button" :title="isAdminRole ? '修改密码' : '个人设置'" @click="handleOperatorClick">
           <span class="top-avatar" :style="topAvatarStyle">
             <UserRound v-if="!profileState.form.avatar" :size="14" />
           </span>
@@ -3653,6 +3653,38 @@
       </section>
     </div>
 
+    <div v-if="passwordState.visible" class="operation-mask" @click.self="closePasswordDialog">
+      <section class="operation-dialog password-dialog">
+        <header>
+          <div class="password-dialog-title">
+            <ShieldCheck :size="19" />
+            <span>修改密码</span>
+          </div>
+          <button type="button" :disabled="passwordState.loading" @click="closePasswordDialog">关闭</button>
+        </header>
+        <form class="operation-form single password-form" @submit.prevent="submitOwnPassword">
+          <el-alert v-if="passwordState.message" type="warning" :closable="false" show-icon :title="passwordState.message" />
+          <label>
+            <span>当前密码</span>
+            <input v-model="passwordState.form.current_password" type="password" autocomplete="current-password" maxlength="120" placeholder="请输入当前密码">
+          </label>
+          <label>
+            <span>新密码</span>
+            <input v-model="passwordState.form.new_password" type="password" autocomplete="new-password" maxlength="120" placeholder="6 至 120 位">
+          </label>
+          <label>
+            <span>确认新密码</span>
+            <input v-model="passwordState.form.confirm_password" type="password" autocomplete="new-password" maxlength="120" placeholder="请再次输入新密码">
+          </label>
+          <small>修改成功后保留当前登录，其他已登录设备将被下线。</small>
+        </form>
+        <footer>
+          <el-button :disabled="passwordState.loading" @click="closePasswordDialog">取消</el-button>
+          <el-button type="primary" :loading="passwordState.loading" @click="submitOwnPassword">确认修改</el-button>
+        </footer>
+      </section>
+    </div>
+
     <DesktopLauncher
       v-model:keyword="desktopLauncherState.keyword"
       :visible="desktopLauncherState.visible"
@@ -3737,6 +3769,7 @@
 
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
+import { ElMessage } from 'element-plus';
 import {
   Bell,
   BookOpen,
@@ -3803,6 +3836,7 @@ import { usePermissions } from './composables/usePermissions';
 import { buildLaunchableMenuModules, mergeLaunchableModules as mergeMenuModules } from './utils/menuModules';
 import { backendUrl } from './api/client';
 import {
+  changeOwnPassword,
   changeAdminAccountStatus,
   clearTestData,
   deleteArchiveItem,
@@ -4149,6 +4183,12 @@ const profileState = reactive({
   saved: false,
   focus: '',
   form: emptyProfile(),
+});
+const passwordState = reactive({
+  visible: false,
+  loading: false,
+  message: '',
+  form: emptyPasswordForm(),
 });
 const desktopContextMenu = reactive({
   visible: false,
@@ -7377,6 +7417,64 @@ function openProfile(section = '') {
   }
 }
 
+function handleOperatorClick() {
+  if (isAdminRole.value) {
+    passwordState.form = emptyPasswordForm();
+    passwordState.message = '';
+    passwordState.visible = true;
+    return;
+  }
+
+  openProfile();
+}
+
+function closePasswordDialog() {
+  if (passwordState.loading) {
+    return;
+  }
+  passwordState.visible = false;
+  passwordState.message = '';
+  passwordState.form = emptyPasswordForm();
+}
+
+async function submitOwnPassword() {
+  if (passwordState.loading) {
+    return;
+  }
+
+  const currentPassword = String(passwordState.form.current_password || '');
+  const newPassword = String(passwordState.form.new_password || '');
+  if (!currentPassword) {
+    passwordState.message = '请输入当前密码';
+    return;
+  }
+  if (newPassword.length < 6 || newPassword.length > 120) {
+    passwordState.message = '新密码长度应为 6 至 120 位';
+    return;
+  }
+  if (newPassword !== passwordState.form.confirm_password) {
+    passwordState.message = '两次输入的新密码不一致';
+    return;
+  }
+
+  passwordState.loading = true;
+  passwordState.message = '';
+  try {
+    await changeOwnPassword({
+      current_password: currentPassword,
+      new_password: newPassword,
+      confirm_password: passwordState.form.confirm_password,
+    });
+    passwordState.visible = false;
+    passwordState.form = emptyPasswordForm();
+    ElMessage.success('密码已修改，其他设备已下线');
+  } catch (error) {
+    passwordState.message = error.message;
+  } finally {
+    passwordState.loading = false;
+  }
+}
+
 function openDesktopContextMenu(event) {
   const target = event.target instanceof Element ? event.target : event.target?.parentElement;
   if (!isLoggedIn.value || target?.closest('.desktop-window, .topbar, .taskbar, .login-layer, .desktop-context-menu')) {
@@ -7808,6 +7906,14 @@ function emptyProfile() {
       wechat: true,
       email: false,
     },
+  };
+}
+
+function emptyPasswordForm() {
+  return {
+    current_password: '',
+    new_password: '',
+    confirm_password: '',
   };
 }
 

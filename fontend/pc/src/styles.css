@@ -2690,6 +2690,29 @@ a {
   width: min(720px, calc(100vw - 48px));
 }
 
+.operation-dialog.password-dialog {
+  width: min(440px, calc(100vw - 48px));
+}
+
+.password-dialog-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text);
+}
+
+.password-dialog-title svg {
+  color: var(--primary);
+}
+
+.password-form {
+  gap: 14px;
+}
+
+.password-form .el-alert {
+  width: 100%;
+}
+
 .operation-dialog.user-detail-dialog {
   width: min(960px, calc(100vw - 48px));
 }

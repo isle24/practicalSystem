@@ -837,6 +837,43 @@ class TableRecord extends BaseModel
         return (string) $row->jti;
     }
 
+    /**
+     * 下线当前设备之外的所有登录设备。
+     *
+     * @return string[]
+     */
+    public static function revokeOtherDevices(int $accountId, ?string $currentJti, string $now): array
+    {
+        $currentJti = trim((string) $currentJti);
+        $query = self::queryTable('user_device')
+            ->where('account_id', $accountId)
+            ->whereNull('deleted_at');
+
+        if ($currentJti !== '') {
+            $query->where('jti', '<>', $currentJti);
+        }
+
+        $rows = $query->get(['id', 'jti']);
+        $ids = $rows->pluck('id')->map(static fn ($id): int => (int) $id)->all();
+        if (!$ids) {
+            return [];
+        }
+
+        self::queryTable('user_device')
+            ->whereIn('id', $ids)
+            ->update([
+                'status' => 'disabled',
+                'deleted_at' => $now,
+                'updated_at' => $now,
+            ]);
+
+        return $rows->pluck('jti')
+            ->map(static fn ($jti): string => trim((string) $jti))
+            ->filter()
+            ->values()
+            ->all();
+    }
+
     public static function desktopShortcuts(int $accountId): array
     {
         $items = self::queryTable('user_desktop_shortcut')

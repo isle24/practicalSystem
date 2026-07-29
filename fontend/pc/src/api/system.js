@@ -368,6 +368,13 @@ export function saveProfileSettings(payload) {
   });
 }
 
+export function changeOwnPassword(payload) {
+  return request('/profile/change-password', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
 export function uploadProfileAsset(type, file) {
   const body = new FormData();
   body.append('type', type);
