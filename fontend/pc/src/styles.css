@@ -3081,6 +3081,10 @@ a {
   grid-template-rows: auto minmax(0, 1fr) auto;
 }
 
+.base-form-component {
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
+
 .implementation-tabs {
   min-height: 54px;
   display: flex;
@@ -3124,6 +3128,40 @@ a {
 
 .implementation-tab-body {
   height: 100%;
+}
+
+.base-tab-body {
+  height: 100%;
+}
+
+.base-profile-summary strong {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.base-long-text-list {
+  display: grid;
+  gap: 10px;
+}
+
+.base-long-text-list article {
+  min-width: 0;
+  display: grid;
+  gap: 5px;
+}
+
+.base-long-text-list span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.base-long-text-list p {
+  margin: 0;
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
 }
 
 .implementation-tab-body > .el-table {

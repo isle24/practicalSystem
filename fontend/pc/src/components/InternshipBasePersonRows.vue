@@ -4,7 +4,16 @@
       <div><strong>{{ title }}</strong><small>支持维护多名人员</small></div>
       <el-button v-if="!readonly" :icon="Plus" size="small" @click="addRow">新增</el-button>
     </header>
-    <div v-if="model.length" class="dynamic-row-list">
+    <el-table v-if="readonly && model.length" :data="model" stripe size="small">
+      <el-table-column prop="name" label="姓名" width="110" />
+      <el-table-column prop="gender" label="性别" width="72" />
+      <el-table-column prop="birth_date" label="出生日期" width="112" />
+      <el-table-column prop="title" label="职务/职称" min-width="130" show-overflow-tooltip />
+      <el-table-column prop="education" label="学历" width="100" />
+      <el-table-column prop="phone" label="联系电话" width="130" />
+      <el-table-column prop="duties" label="主要职责" min-width="220" show-overflow-tooltip />
+    </el-table>
+    <div v-else-if="model.length" class="dynamic-row-list">
       <div v-for="(item, index) in model" :key="`${title}-${index}`" class="dynamic-form-row person-row">
         <label><span>姓名</span><input v-model="item.name" :disabled="readonly"></label>
         <label>
