@@ -227,7 +227,7 @@ class Account extends BaseModel
                 'role.name as role_name',
                 'role.role_type',
             ])
-            ->map(static fn ($row): array => (array) $row)
+            ->map(static fn ($row): array => $row->getAttributes())
             ->all();
     }
 
@@ -708,7 +708,7 @@ class Account extends BaseModel
                 ->where('user_id', $userId)
                 ->whereNull('deleted_at')
                 ->orderByDesc('student_id')
-                ->first(['student_id', 'student_num', 'grade_id', 'dep_id', 'profession_id', 'class_id', 'class_num']);
+                ->first(['student_id', 'student_num', 'grade_id', 'graduation_cohort_id', 'dep_id', 'profession_id', 'class_id', 'class_num']);
 
             return $student ? [
                 'student_id' => (int) $student->student_id,
@@ -716,6 +716,7 @@ class Account extends BaseModel
                 'teacher_id' => null,
                 'teacher_num' => null,
                 'grade_id' => $student->grade_id === null ? null : (int) $student->grade_id,
+                'graduation_cohort_id' => $student->graduation_cohort_id === null ? null : (int) $student->graduation_cohort_id,
                 'dep_id' => $student->dep_id === null ? null : (int) $student->dep_id,
                 'profession_id' => $student->profession_id === null ? null : (int) $student->profession_id,
                 'class_id' => $student->class_id === null ? null : (int) $student->class_id,
@@ -736,6 +737,7 @@ class Account extends BaseModel
                 'teacher_id' => (int) $teacher->teacher_id,
                 'teacher_num' => $teacher->teacher_num,
                 'grade_id' => null,
+                'graduation_cohort_id' => null,
                 'dep_id' => $teacher->dep_id === null ? null : (int) $teacher->dep_id,
                 'profession_id' => $teacher->profession_id === null ? null : (int) $teacher->profession_id,
                 'class_id' => null,
@@ -754,6 +756,7 @@ class Account extends BaseModel
             'teacher_id' => null,
             'teacher_num' => null,
             'grade_id' => null,
+            'graduation_cohort_id' => null,
             'dep_id' => null,
             'profession_id' => null,
             'class_id' => null,
@@ -833,6 +836,7 @@ class Account extends BaseModel
             'name' => $name,
             'student_num' => $values['student_num'] ?? null,
             'grade_id' => $values['grade_id'] ?? null,
+            'graduation_cohort_id' => $values['graduation_cohort_id'] ?? null,
             'dep_id' => $values['dep_id'] ?? null,
             'profession_id' => $values['profession_id'] ?? null,
             'class_id' => $values['class_id'] ?? null,

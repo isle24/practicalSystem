@@ -1930,13 +1930,24 @@
                         <label v-if="userEditingRoleType === 'student'"><span>学号</span><input v-model="userAdminState.editing.student_num"></label>
                         <label v-if="userEditingRoleType === 'teacher'"><span>工号</span><input v-model="userAdminState.editing.teacher_num"></label>
                         <label v-if="userEditingRoleType === 'student'">
-                          <span>届次</span>
+                          <span>年级</span>
                           <el-select v-model="userAdminState.editing.grade_id" clearable filterable @change="handleUserAcademicChange('grade_id')">
                             <el-option
                               v-for="grade in adminState.options.grades"
                               :key="grade.grade_id"
                               :label="grade.grade_name"
                               :value="grade.grade_id"
+                            />
+                          </el-select>
+                        </label>
+                        <label v-if="userEditingRoleType === 'student'">
+                          <span>毕业届次</span>
+                          <el-select v-model="userAdminState.editing.graduation_cohort_id" clearable filterable>
+                            <el-option
+                              v-for="cohort in adminState.options.graduationCohorts"
+                              :key="cohort.cohort_id"
+                              :label="cohort.cohort_name"
+                              :value="cohort.cohort_id"
                             />
                           </el-select>
                         </label>
@@ -3798,6 +3809,7 @@ import {
   BriefcaseBusiness,
   Building2,
   CalendarCheck,
+  CalendarRange,
   ChartColumn,
   CheckCircle2,
   ClipboardList,
@@ -3829,6 +3841,7 @@ import {
   SlidersHorizontal,
   Star,
   Table2,
+  Tags,
   Trash2,
   Upload,
   UsersRound,
@@ -4009,6 +4022,7 @@ const iconRegistry = {
   BriefcaseBusiness,
   Building2,
   CalendarCheck,
+  CalendarRange,
   ChartColumn,
   CheckCircle2,
   ClipboardList,
@@ -4038,6 +4052,7 @@ const iconRegistry = {
   SlidersHorizontal,
   Star,
   Table2,
+  Tags,
   Trash2,
   Upload,
   UsersRound,
@@ -4268,6 +4283,8 @@ const adminState = reactive({
     accounts: [],
     departments: [],
     grades: [],
+    graduationCohorts: [],
+    internshipCategories: [],
     professions: [],
     classes: [],
     companies: [],
@@ -4416,13 +4433,35 @@ const modules = [
   },
   {
     id: 'gradeManage',
-    name: '届次管理',
+    name: '年级管理',
     icon: GraduationCap,
     color: 'amber',
-    scope: '届次基础档案',
+    scope: '入学年级基础档案',
     viewPermission: 'config:grade',
     managePermission: 'config:manage',
     defaultPanel: 'gradeManage',
+    adminOnly: true,
+  },
+  {
+    id: 'graduationCohortManage',
+    name: '毕业届次管理',
+    icon: CalendarRange,
+    color: 'blue',
+    scope: '毕业实习届次档案',
+    viewPermission: 'config:graduation-cohort',
+    managePermission: 'config:manage',
+    defaultPanel: 'graduationCohortManage',
+    adminOnly: true,
+  },
+  {
+    id: 'internshipCategoryManage',
+    name: '实习类别管理',
+    icon: Tags,
+    color: 'teal',
+    scope: '实习类别及归属维度',
+    viewPermission: 'config:internship-category',
+    managePermission: 'config:manage',
+    defaultPanel: 'internshipCategoryManage',
     adminOnly: true,
   },
   {
@@ -4623,13 +4662,37 @@ const archiveDefinitions = [
   },
   {
     type: 'grade',
-    name: '届次',
+    name: '年级',
     idField: 'grade_id',
     fields: [
-      { key: 'grade_name', label: '届次名称', required: true },
+      { key: 'grade_name', label: '年级名称', required: true },
+      { key: 'is_current', label: '当前年级', options: 'boolean' },
+      { key: 'sort', label: '排序', inputType: 'number' },
+      { key: 'flag', label: '状态', options: 'flag' },
+    ],
+  },
+  {
+    type: 'graduation_cohort',
+    name: '毕业届次',
+    idField: 'cohort_id',
+    fields: [
+      { key: 'cohort_name', label: '届次名称', required: true },
+      { key: 'cohort_year', label: '毕业年份', inputType: 'number', required: true },
       { key: 'is_current', label: '当前届次', options: 'boolean' },
       { key: 'sort', label: '排序', inputType: 'number' },
       { key: 'flag', label: '状态', options: 'flag' },
+    ],
+  },
+  {
+    type: 'internship_category',
+    name: '实习类别',
+    idField: 'id',
+    fields: [
+      { key: 'name', label: '类别名称', required: true },
+      { key: 'code', label: '类别代码', required: true },
+      { key: 'scope_type', label: '归属维度', options: 'scopeType' },
+      { key: 'sort', label: '排序', inputType: 'number' },
+      { key: 'status', label: '状态', options: 'status' },
     ],
   },
   {
@@ -4637,7 +4700,7 @@ const archiveDefinitions = [
     name: '专业',
     idField: 'profession_id',
     fields: [
-      { key: 'grade_id', label: '所属届次', options: 'grades' },
+      { key: 'grade_id', label: '所属年级', options: 'grades' },
       { key: 'dep_id', label: '所属学院', options: 'departments' },
       { key: 'profession_name', label: '专业名称', required: true },
       { key: 'profession_short_name', label: '专业简称' },
@@ -4651,7 +4714,7 @@ const archiveDefinitions = [
     name: '班级',
     idField: 'class_id',
     fields: [
-      { key: 'grade_id', label: '所属届次', options: 'grades' },
+      { key: 'grade_id', label: '所属年级', options: 'grades' },
       { key: 'dep_id', label: '所属学院', options: 'departments' },
       { key: 'profession_id', label: '所属专业', options: 'professions' },
       { key: 'class_name', label: '班级名称', required: true },
@@ -4671,6 +4734,8 @@ const archiveDefinitions = [
       { key: 'contact_name', label: '联系人' },
       { key: 'contact_mobile', label: '联系电话' },
       { key: 'address', label: '地址' },
+      { key: 'unit_type', label: '单位类型' },
+      { key: 'enterprise_level', label: '企业等级' },
       { key: 'flag', label: '状态', options: 'flag' },
     ],
   },
@@ -4679,6 +4744,8 @@ const archiveManagePanels = {
   archive: 'department',
   departmentManage: 'department',
   gradeManage: 'grade',
+  graduationCohortManage: 'graduation_cohort',
+  internshipCategoryManage: 'internship_category',
   professionManage: 'profession',
   classManage: 'class',
   companyManage: 'company',
@@ -4686,6 +4753,8 @@ const archiveManagePanels = {
 const archiveManageModules = {
   departmentManage: 'department',
   gradeManage: 'grade',
+  graduationCohortManage: 'graduation_cohort',
+  internshipCategoryManage: 'internship_category',
   professionManage: 'profession',
   classManage: 'class',
   companyManage: 'company',
@@ -4947,7 +5016,9 @@ const moduleSearchKeywords = {
   exportTask: '导出 下载 队列 任务',
   favorite: '收藏 收藏夹 网址 常用 网站 快捷方式 桌面',
   userManage: '用户 账号 角色 学生 老师 管理员 绑定 日志',
-  gradeManage: '届次 当前届次 年级',
+  gradeManage: '年级 当前年级 入学年级',
+  graduationCohortManage: '毕业届次 当前届次 毕业实习',
+  internshipCategoryManage: '实习类别 归属维度 年级 届次',
   departmentManage: '学院 院系 部门',
   professionManage: '专业',
   classManage: '班级',
@@ -4962,7 +5033,9 @@ const launcherModuleIds = modules.map(module => module.id);
 const launcherModuleIdSet = new Set(launcherModuleIds);
 const configSidebarDefinitions = [
   { key: 'userManage', name: '用户管理', permission: 'config:user' },
-  { key: 'gradeManage', name: '届次管理', permission: 'config:grade' },
+  { key: 'gradeManage', name: '年级管理', permission: 'config:grade' },
+  { key: 'graduationCohortManage', name: '毕业届次管理', permission: 'config:graduation-cohort' },
+  { key: 'internshipCategoryManage', name: '实习类别管理', permission: 'config:internship-category' },
   { key: 'departmentManage', name: '学院管理', permission: 'config:department' },
   { key: 'professionManage', name: '专业管理', permission: 'config:profession' },
   { key: 'classManage', name: '班级管理', permission: 'config:class' },
@@ -4979,8 +5052,8 @@ const currentRoleType = computed(() => permissionState.context.role_type || '');
 const isStudentRole = computed(() => currentRoleType.value === 'student');
 const isTeacherRole = computed(() => currentRoleType.value === 'teacher');
 const isAdminRole = computed(() => ['super_admin', 'school_admin', 'college_admin', 'profession_admin'].includes(currentRoleType.value));
-const configChildModuleIds = new Set(['userManage', 'gradeManage', 'departmentManage', 'professionManage', 'classManage', 'companyManage']);
-const schoolConfigModuleIds = new Set(['gradeManage', 'departmentManage', 'professionManage', 'classManage', 'companyManage', 'dataManage']);
+const configChildModuleIds = new Set(['userManage', 'gradeManage', 'graduationCohortManage', 'internshipCategoryManage', 'departmentManage', 'professionManage', 'classManage', 'companyManage']);
+const schoolConfigModuleIds = new Set(['gradeManage', 'graduationCohortManage', 'internshipCategoryManage', 'departmentManage', 'professionManage', 'classManage', 'companyManage', 'dataManage']);
 const visibleModules = computed(() => modules.map(decorateModule).filter(canShowModule));
 const menuModuleItems = computed(() => buildLaunchableMenuModules(permissionState.menus, modules, resolveMenuIcon));
 const allLaunchableModules = computed(() => mergeMenuModules(visibleModules.value, menuModuleItems.value));
@@ -8152,6 +8225,7 @@ function emptyUserForm(row = {}) {
     student_num: row.student_num || '',
     teacher_num: row.teacher_num || '',
     grade_id: row.grade_id || null,
+    graduation_cohort_id: row.graduation_cohort_id || null,
     dep_id: row.dep_id || null,
     profession_id: row.profession_id || null,
     class_id: row.class_id || null,
@@ -8184,6 +8258,7 @@ function handleUserRoleChange() {
   if (userAdminState.editing.role_type !== 'student') {
     userAdminState.editing.student_num = '';
     userAdminState.editing.grade_id = null;
+    userAdminState.editing.graduation_cohort_id = null;
     userAdminState.editing.class_id = null;
     userAdminState.editing.class_num = '';
   }
@@ -8729,6 +8804,8 @@ async function loadAdminFoundation() {
     adminState.options.accounts = optionsData.accounts || [];
     adminState.options.departments = optionsData.departments || [];
     adminState.options.grades = optionsData.grades || [];
+    adminState.options.graduationCohorts = optionsData.graduation_cohorts || [];
+    adminState.options.internshipCategories = optionsData.internship_categories || [];
     adminState.options.professions = optionsData.professions || [];
     adminState.options.classes = optionsData.classes || [];
     adminState.options.companies = optionsData.companies || [];
@@ -8960,7 +9037,9 @@ function applyArchivePage(type, data = {}) {
 function archiveKeywordPlaceholder(type) {
   return {
     department: '学院名称、简称、代码',
-    grade: '届次名称',
+    grade: '年级名称',
+    graduation_cohort: '毕业届次名称、年份',
+    internship_category: '实习类别名称、代码',
     profession: '专业名称、简称、代码',
     class: '班级名称、简称、班号',
     company: '基地名称、信用代码、联系人',
@@ -8987,8 +9066,16 @@ function emptyArchiveItem(type = 'department') {
       item[field.key] = 'on';
       return;
     }
+    if (field.key === 'status') {
+      item[field.key] = 'enabled';
+      return;
+    }
     if (field.key === 'is_current') {
       item[field.key] = 'false';
+      return;
+    }
+    if (field.key === 'scope_type') {
+      item[field.key] = 'grade';
       return;
     }
     item[field.key] = '';
@@ -9182,6 +9269,18 @@ function archiveFieldOptions(field) {
       { label: '否', value: 'false' },
     ];
   }
+  if (field.options === 'scopeType') {
+    return [
+      { label: '年级', value: 'grade' },
+      { label: '毕业届次', value: 'cohort' },
+    ];
+  }
+  if (field.options === 'status') {
+    return [
+      { label: '启用', value: 'enabled' },
+      { label: '停用', value: 'disabled' },
+    ];
+  }
   if (field.options === 'departments') {
     return adminState.options.departments.map(item => ({ label: item.dep_name, value: String(item.dep_id) }));
   }
@@ -9195,15 +9294,21 @@ function archiveFieldOptions(field) {
 }
 
 function archiveFieldUsesSwitch(field) {
-  return ['flag', 'boolean'].includes(field.options);
+  return ['flag', 'boolean', 'status'].includes(field.options);
 }
 
 function archiveSwitchActiveValue(field) {
-  return field.options === 'boolean' ? 'true' : 'on';
+  if (field.options === 'boolean') {
+    return 'true';
+  }
+  return field.options === 'status' ? 'enabled' : 'on';
 }
 
 function archiveSwitchInactiveValue(field) {
-  return field.options === 'boolean' ? 'false' : 'off';
+  if (field.options === 'boolean') {
+    return 'false';
+  }
+  return field.options === 'status' ? 'disabled' : 'off';
 }
 
 function archiveSwitchActiveText(field) {

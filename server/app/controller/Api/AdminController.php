@@ -5,6 +5,7 @@ namespace app\controller\Api;
 use app\attribute\OperationLog;
 use app\controller\Api\Concerns\Responds;
 use app\model\channel\Account;
+use app\model\channel\AcademicArchiveRecord;
 use app\model\channel\Menu;
 use app\model\channel\Role;
 use app\model\channel\RoleMenu;
@@ -494,6 +495,8 @@ class AdminController
                 'accounts' => $this->accountsData(),
                 'departments' => ChannelTable::enabledOptionRows('department', ['dep_id', 'dep_name', 'dep_short_name', 'dep_code'], ['sort']),
                 'grades' => ChannelTable::enabledOptionRows('grade_list', ['grade_id', 'grade_name', 'is_current'], ['sort']),
+                'graduation_cohorts' => AcademicArchiveRecord::enabledGraduationCohorts(),
+                'internship_categories' => AcademicArchiveRecord::enabledInternshipCategories(),
                 'professions' => ChannelTable::enabledOptionRows('profession', ['profession_id', 'profession_name', 'profession_short_name', 'profession_code', 'dep_id', 'grade_id'], ['sort']),
                 'classes' => ChannelTable::enabledOptionRows('class', ['class_id', 'class_name', 'class_short_name', 'class_num', 'dep_id', 'profession_id', 'grade_id'], ['sort']),
                 'companies' => ChannelTable::enabledOptionRows('companies', ['company_id', 'company_name', 'credit_code'], ['company_id']),
@@ -597,7 +600,7 @@ class AdminController
         $keys = [
             'name', 'login_name', 'password', 'mobile', 'email', 'role_id', 'status',
             'student_num', 'teacher_num', 'grade_id', 'dep_id', 'profession_id',
-            'class_id', 'class_num',
+            'graduation_cohort_id', 'class_id', 'class_num',
         ];
         $payload = [];
         foreach ($keys as $key) {
