@@ -1,12 +1,6 @@
 <template>
   <section class="internship-dialog-component base-form-component">
-    <div class="implementation-tabs base-detail-tabs">
-      <button v-for="item in tabs" :key="item.key" type="button" :class="{ active: activeTab === item.key }" @click="activeTab = item.key">
-        <component :is="item.icon" :size="16" />
-        <span>{{ item.label }}</span>
-        <small v-if="item.count !== null">{{ item.count }}</small>
-      </button>
-    </div>
+    <TextTabs v-model="activeTab" :items="tabs" class="base-detail-tabs" />
 
     <div class="internship-detail-scroll base-tab-body">
       <template v-if="activeTab === 'profile'">
@@ -155,6 +149,57 @@
         </section>
       </template>
 
+      <template v-else-if="activeTab === 'declarations'">
+        <div v-if="local.declarations.length" class="base-declaration-list">
+          <section v-for="declaration in local.declarations" :key="declaration.id" class="internship-edit-section base-declaration-item">
+            <header>
+              <div>
+                <strong>{{ declaration.declaration_year }} 年度申报</strong>
+                <small>{{ valueText(declaration.base_category) }} · {{ valueText(declaration.base_level) }}</small>
+              </div>
+              <el-tag :type="declaration.project_status === '是' ? 'success' : 'info'">
+                {{ declaration.project_status === '是' ? '已立项' : valueText(declaration.project_status) }}
+              </el-tag>
+            </header>
+            <div class="detail-summary-grid base-declaration-summary">
+              <article><span>立项经费</span><strong>{{ moneyValueText(declaration.approved_amount) }}</strong></article>
+              <article><span>服务专业数</span><strong>{{ valueText(declaration.service_profession_count, ' 个') }}</strong></article>
+              <article><span>指导教师总数</span><strong>{{ valueText(declaration.teacher_count, ' 人') }}</strong></article>
+              <article><span>校外教师数</span><strong>{{ valueText(declaration.external_teacher_count, ' 人') }}</strong></article>
+              <article><span>预计接纳人次</span><strong>{{ valueText(declaration.expected_student_visits, ' 人次') }}</strong></article>
+              <article><span>预计接纳生天数</span><strong>{{ valueText(declaration.expected_student_days, ' 生天') }}</strong></article>
+              <article><span>行业企业共建</span><strong>{{ valueText(declaration.industry_cobuilt) }}</strong></article>
+              <article><span>课程纳入培养方案</span><strong>{{ valueText(declaration.curriculum_in_plan) }}</strong></article>
+              <article><span>是否挂牌</span><strong>{{ valueText(declaration.has_signboard) }}</strong></article>
+              <article><span>是否签订协议</span><strong>{{ valueText(declaration.has_agreement) }}</strong></article>
+            </div>
+            <div class="base-long-text-list">
+              <article><span>计划实习内容</span><p>{{ valueText(declaration.planned_content) }}</p></article>
+              <article v-if="declaration.remark"><span>备注</span><p>{{ declaration.remark }}</p></article>
+            </div>
+            <div class="base-declaration-data-grid">
+              <section>
+                <header><strong>经费预算</strong><small>合计 {{ declarationBudgetTotal(declaration) }}</small></header>
+                <el-table v-if="declaration.budgets.length" :data="declaration.budgets" stripe size="small">
+                  <el-table-column prop="item_name" label="项目" min-width="180" />
+                  <el-table-column label="金额" width="130"><template #default="{ row }">{{ moneyValueText(row.amount) }}</template></el-table-column>
+                </el-table>
+                <el-empty v-else description="暂无预算" :image-size="44" />
+              </section>
+              <section>
+                <header><strong>历年接纳人数</strong><small>年度申报快照</small></header>
+                <el-table v-if="declaration.reception_stats.length" :data="declaration.reception_stats" stripe size="small">
+                  <el-table-column prop="stat_year" label="年份" min-width="100" />
+                  <el-table-column prop="student_count" label="接纳人数" min-width="110" />
+                </el-table>
+                <el-empty v-else description="暂无接纳记录" :image-size="44" />
+              </section>
+            </div>
+          </section>
+        </div>
+        <el-empty v-else description="暂无年度申报资料" :image-size="64" />
+      </template>
+
       <template v-else-if="activeTab === 'construction'">
         <section class="internship-edit-section">
           <header><div><strong>基地建设方案</strong><small>填写建设目标、实施内容和保障措施</small></div></header>
@@ -198,8 +243,9 @@
 
 <script setup>
 import { computed, reactive, ref, watch } from 'vue';
-import { Building2, ClipboardList, Handshake, Plus, Save, Trash2, UsersRound } from '@lucide/vue';
+import { Building2, CalendarRange, ClipboardList, Handshake, Plus, Save, Trash2, UsersRound } from '@lucide/vue';
 import BasePersonRows from './InternshipBasePersonRows.vue';
+import TextTabs from './TextTabs.vue';
 
 const props = defineProps({
   detail: { type: Object, default: () => ({}) },
@@ -226,6 +272,7 @@ const tabs = computed(() => {
     items.push(
       { key: 'people', label: '指导人员', icon: UsersRound, count: local.teachers.length + local.mentors.length },
       { key: 'cooperation', label: '合作单位', icon: Handshake, count: local.existing_sites.length },
+      { key: 'declarations', label: '年度申报', icon: CalendarRange, count: local.declarations.length },
       { key: 'construction', label: '建设与预算', icon: ClipboardList, count: local.budgets.length },
     );
   }
@@ -315,6 +362,11 @@ function emptyForm(detail = {}) {
       senior_title_count: detail.company_profile?.senior_title_count ?? 0,
     },
     construction_content: detail.construction?.content || '',
+    declarations: (detail.declarations || []).map(declaration => ({
+      ...declaration,
+      budgets: [...(declaration.budgets || [])],
+      reception_stats: [...(declaration.reception_stats || [])],
+    })),
     budgets: (detail.budgets || []).map(budget => ({
       item_name: budget.item_name || '',
       content: budget.content || '',
@@ -356,6 +408,17 @@ function valueText(value, suffix = '') {
 
 function moneyText(value) {
   return `${(Number(value) || 0).toFixed(2)} 元`;
+}
+
+/** 格式化可空金额 */
+function moneyValueText(value) {
+  return value === null || value === undefined || value === '' ? '-' : moneyText(value);
+}
+
+/** 计算年度申报预算合计 */
+function declarationBudgetTotal(declaration) {
+  const total = (declaration.budgets || []).reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+  return moneyText(total);
 }
 
 function submit() {

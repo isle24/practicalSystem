@@ -319,23 +319,14 @@
         </div>
 
         <div v-else class="app-body" :class="{ 'no-sidebar': !sidebarItems(win).length }">
-          <aside v-if="sidebarItems(win).length" class="module-sidebar">
-            <section>
-              <p>{{ win.module.id === 'config' ? '设置' : '模块' }}</p>
-              <a
-                v-for="item in sidebarItems(win)"
-                :key="item.key"
-                :href="panelHref(win, item.key)"
-                :data-window-panel="item.key"
-                class="side-item"
-                :class="{ active: win.panel === item.key }"
-                @click.prevent.stop="activateWindowPanel(win, item.key)"
-              >
-                <span />
-                {{ item.name }}
-              </a>
-            </section>
-          </aside>
+          <ModuleSidebar
+            v-if="sidebarItems(win).length"
+            :items="sidebarItems(win)"
+            :active-key="win.panel"
+            :label="win.module.id === 'config' ? '设置' : '模块'"
+            :storage-key="moduleSidebarStorageKey(win)"
+            @select="panel => activateWindowPanel(win, panel)"
+          />
 
           <section class="content">
             <div class="content-head">
@@ -399,19 +390,16 @@
                     @close="internshipState.savedMessage = ''"
                   />
 
-                  <Teleport to="body">
-                  <div v-if="internshipState.dialog.type" class="operation-mask" @click.self="closeInternshipDialog">
-                    <section
-                      class="operation-dialog"
-                      :class="{
+                  <OperationDialog
+                    :visible="Boolean(internshipState.dialog.type)"
+                    :title="internshipState.dialog.title"
+                    :busy="internshipState.loading"
+                    :dialog-class="{
                         'task-detail-dialog': ['arrangementDetail', 'planDetail', 'implementationDetail', 'base', 'contentDetail', 'planImport', 'baseImport'].includes(internshipState.dialog.type),
                         'internship-complex-dialog': ['planDetail', 'implementationDetail', 'base', 'planImport', 'baseImport'].includes(internshipState.dialog.type),
-                      }"
-                    >
-                      <header>
-                        <strong>{{ internshipState.dialog.title }}</strong>
-                        <button type="button" @click="closeInternshipDialog">关闭</button>
-                      </header>
+                    }"
+                    @close="closeInternshipDialog"
+                  >
 
                       <InternshipBaseForm
                         v-if="internshipState.dialog.type === 'base'"
@@ -929,9 +917,7 @@
                           确认
                         </el-button>
                       </footer>
-                    </section>
-                  </div>
-                  </Teleport>
+                  </OperationDialog>
 
                   <template v-if="win.panel === 'overview'">
                     <div class="internship-overview-work">
@@ -1037,6 +1023,7 @@
                       :loading="internshipState.loading"
                       :pagination="internshipState.lists.baseFlows.pagination"
                       :rows="internshipState.lists.baseFlows.items"
+                      :storage-key="dataListStorageKey(win, 'baseFlows')"
                       @filter-change="setInternshipFilter('baseFlows', $event)"
                       @page-change="page => loadInternshipPanel('baseFlows', page)"
                       @reset="resetInternshipFilters('baseFlows')"
@@ -1065,6 +1052,7 @@
                         :loading="internshipState.loading"
                         :pagination="internshipState.lists.arrangements.pagination"
                         :rows="internshipState.lists.arrangements.items"
+                        :storage-key="dataListStorageKey(win, 'arrangements')"
                         @filter-change="setInternshipFilter('arrangements', $event)"
                         @page-change="page => loadInternshipPanel('arrangements', page)"
                         @reset="resetInternshipFilters('arrangements')"
@@ -1093,6 +1081,7 @@
                       :loading="internshipState.loading"
                       :pagination="internshipState.lists.arrangementChanges.pagination"
                       :rows="internshipState.lists.arrangementChanges.items"
+                      :storage-key="dataListStorageKey(win, 'arrangementChanges')"
                       @filter-change="setInternshipFilter('arrangementChanges', $event)"
                       @page-change="page => loadInternshipPanel('arrangementChanges', page)"
                       @reset="resetInternshipFilters('arrangementChanges')"
@@ -1129,6 +1118,7 @@
                       :loading="internshipState.loading"
                       :pagination="internshipState.lists.plans.pagination"
                       :rows="internshipState.lists.plans.items"
+                      :storage-key="dataListStorageKey(win, 'plans')"
                       @filter-change="setInternshipFilter('plans', $event)"
                       @page-change="page => loadInternshipPanel('plans', page)"
                       @reset="resetInternshipFilters('plans')"
@@ -1165,6 +1155,7 @@
                       :loading="internshipState.loading"
                       :pagination="internshipState.lists.implementationSheets.pagination"
                       :rows="internshipState.lists.implementationSheets.items"
+                      :storage-key="dataListStorageKey(win, 'implementationSheets')"
                       @filter-change="setInternshipFilter('implementationSheets', $event)"
                       @page-change="page => loadInternshipPanel('implementationSheets', page)"
                       @reset="resetInternshipFilters('implementationSheets')"
@@ -1189,6 +1180,7 @@
                       :loading="internshipState.loading"
                       :pagination="internshipState.lists[win.panel].pagination"
                       :rows="internshipState.lists[win.panel].items"
+                      :storage-key="dataListStorageKey(win, win.panel)"
                       @filter-change="setInternshipFilter(win.panel, $event)"
                       @page-change="page => loadInternshipPanel(win.panel, page)"
                       @reset="resetInternshipFilters(win.panel)"
@@ -1244,6 +1236,7 @@
                         :loading="internshipState.loading"
                         :pagination="internshipState.lists[activeInternshipRequestTab].pagination"
                         :rows="internshipState.lists[activeInternshipRequestTab].items"
+                        :storage-key="dataListStorageKey(win, activeInternshipRequestTab)"
                         @filter-change="setInternshipFilter(activeInternshipRequestTab, $event)"
                         @page-change="page => loadInternshipPanel(activeInternshipRequestTab, page)"
                         @reset="resetInternshipFilters(activeInternshipRequestTab)"
@@ -1295,6 +1288,7 @@
                       :loading="internshipState.loading"
                       :pagination="internshipState.lists.pairs.pagination"
                       :rows="internshipState.lists.pairs.items"
+                      :storage-key="dataListStorageKey(win, 'pairs')"
                       @filter-change="setInternshipFilter('pairs', $event)"
                       @page-change="page => loadInternshipPanel('pairs', page)"
                       @reset="resetInternshipFilters('pairs')"
@@ -1314,6 +1308,7 @@
                       :loading="internshipState.loading"
                       :pagination="internshipState.lists.signIns.pagination"
                       :rows="internshipState.lists.signIns.items"
+                      :storage-key="dataListStorageKey(win, 'signIns')"
                       @filter-change="setInternshipFilter('signIns', $event)"
                       @page-change="page => loadInternshipPanel('signIns', page)"
                       @reset="resetInternshipFilters('signIns')"
@@ -1335,6 +1330,7 @@
                       :loading="internshipState.loading"
                       :pagination="internshipState.lists.journals.pagination"
                       :rows="internshipState.lists.journals.items"
+                      :storage-key="dataListStorageKey(win, 'journals')"
                       @filter-change="setInternshipFilter('journals', $event)"
                       @page-change="page => loadInternshipPanel('journals', page)"
                       @reset="resetInternshipFilters('journals')"
@@ -1368,6 +1364,7 @@
                       :loading="internshipState.loading"
                       :pagination="internshipState.lists.reports.pagination"
                       :rows="internshipState.lists.reports.items"
+                      :storage-key="dataListStorageKey(win, 'reports')"
                       @filter-change="setInternshipFilter('reports', $event)"
                       @page-change="page => loadInternshipPanel('reports', page)"
                       @reset="resetInternshipFilters('reports')"
@@ -1402,6 +1399,7 @@
                         :loading="internshipState.loading"
                         :pagination="internshipState.lists.scores.pagination"
                         :rows="internshipState.lists.scores.items"
+                        :storage-key="dataListStorageKey(win, 'scores')"
                         @filter-change="setInternshipFilter('scores', $event)"
                         @page-change="page => loadInternshipPanel('scores', page)"
                         @reset="resetInternshipFilters('scores')"
@@ -1428,6 +1426,7 @@
                           :loading="internshipState.loading"
                           :pagination="internshipState.lists.courseScores.pagination"
                           :rows="internshipState.lists.courseScores.items"
+                          :storage-key="dataListStorageKey(win, 'courseScores')"
                           @filter-change="setInternshipFilter('courseScores', $event)"
                           @page-change="page => loadInternshipPanel('courseScores', page)"
                           @reset="resetInternshipFilters('courseScores')"
@@ -1451,6 +1450,7 @@
                       :loading="internshipState.loading"
                       :pagination="internshipState.lists.courseScores.pagination"
                       :rows="internshipState.lists.courseScores.items"
+                      :storage-key="dataListStorageKey(win, 'courseScores')"
                       @filter-change="setInternshipFilter('courseScores', $event)"
                       @page-change="page => loadInternshipPanel('courseScores', page)"
                       @reset="resetInternshipFilters('courseScores')"
@@ -1491,6 +1491,7 @@
                       :loading="internshipState.loading"
                       :pagination="internshipState.lists.archiveMaterials.pagination"
                       :rows="internshipState.lists.archiveMaterials.items"
+                      :storage-key="dataListStorageKey(win, 'archiveMaterials')"
                       @filter-change="setInternshipFilter('archiveMaterials', $event)"
                       @page-change="page => loadInternshipPanel('documents', page)"
                       @reset="resetInternshipFilters('archiveMaterials')"
@@ -1556,12 +1557,12 @@
                     :title="practiceModuleState(win.module.id).message"
                   />
 
-                  <div v-if="practiceModuleState(win.module.id).dialog.type" class="operation-mask" @click.self="closePracticeDialog(win.module.id)">
-                    <section class="operation-dialog">
-                      <header>
-                        <strong>{{ practiceModuleState(win.module.id).dialog.title }}</strong>
-                        <button type="button" @click="closePracticeDialog(win.module.id)">关闭</button>
-                      </header>
+                  <OperationDialog
+                    :visible="Boolean(practiceModuleState(win.module.id).dialog.type)"
+                    :title="practiceModuleState(win.module.id).dialog.title"
+                    :busy="practiceModuleState(win.module.id).loading"
+                    @close="closePracticeDialog(win.module.id)"
+                  >
 
                       <div v-if="practiceModuleState(win.module.id).dialog.type === 'execution'" class="operation-form">
                         <label>
@@ -1815,8 +1816,7 @@
                           确认
                         </el-button>
                       </footer>
-                    </section>
-                  </div>
+                  </OperationDialog>
 
                   <div v-if="win.panel === 'overview'" class="practice-overview-work">
                     <div class="internship-overview">
@@ -1883,6 +1883,7 @@
                     :loading="practiceModuleState(win.module.id).loading"
                     :pagination="practiceModuleState(win.module.id).lists[win.panel].pagination"
                     :rows="practiceModuleState(win.module.id).lists[win.panel].items"
+                    :storage-key="dataListStorageKey(win, win.panel)"
                     @filter-change="event => setPracticeFilter(win.module.id, win.panel, event)"
                     @page-change="page => loadPracticePanel(win.module.id, win.panel, page)"
                     @reset="resetPracticeFilters(win.module.id, win.panel)"
@@ -1924,6 +1925,7 @@
                     :loading="userAdminState.loading"
                     :pagination="userAdminState.pagination"
                     :rows="userAdminState.items"
+                    :storage-key="dataListStorageKey(win, 'users')"
                     @filter-change="setUserFilter"
                     @page-change="page => loadUserAccounts(page)"
                     @reset="resetUserFilters"
@@ -1962,12 +1964,13 @@
                       </el-button>
                     </template>
                   </DataListPanel>
-                  <div v-if="userAdminState.dialogVisible" class="operation-mask" @click.self="closeUserDialog">
-                    <section class="operation-dialog menu-dialog">
-                      <header>
-                        <strong>{{ userAdminState.editing.id ? '编辑用户' : '新增用户' }}</strong>
-                        <button type="button" @click="closeUserDialog">关闭</button>
-                      </header>
+                  <OperationDialog
+                    :visible="userAdminState.dialogVisible"
+                    :title="userAdminState.editing.id ? '编辑用户' : '新增用户'"
+                    dialog-class="menu-dialog"
+                    :busy="userAdminState.loading"
+                    @close="closeUserDialog"
+                  >
                       <div class="operation-form menu-dialog-form">
                         <label><span>姓名</span><input v-model="userAdminState.editing.name"></label>
                         <label><span>登录账号</span><input v-model="userAdminState.editing.login_name"></label>
@@ -2063,14 +2066,14 @@
                           保存
                         </el-button>
                       </footer>
-                    </section>
-                  </div>
-                  <div v-if="userAdminState.passwordDialogVisible" class="operation-mask" @click.self="closeResetPasswordDialog">
-                    <section class="operation-dialog menu-dialog">
-                      <header>
-                        <strong>重置密码</strong>
-                        <button type="button" @click="closeResetPasswordDialog">关闭</button>
-                      </header>
+                  </OperationDialog>
+                  <OperationDialog
+                    :visible="userAdminState.passwordDialogVisible"
+                    title="重置密码"
+                    dialog-class="menu-dialog"
+                    :busy="userAdminState.loading"
+                    @close="closeResetPasswordDialog"
+                  >
                       <div class="operation-form menu-dialog-form">
                         <label><span>用户</span><input :value="userAdminState.passwordForm.name" disabled></label>
                         <label><span>新密码</span><input v-model="userAdminState.passwordForm.password" type="password" placeholder="请输入新密码" maxlength="120"></label>
@@ -2081,14 +2084,14 @@
                           保存
                         </el-button>
                       </footer>
-                    </section>
-                  </div>
-                  <div v-if="userAdminState.detailDialogVisible" class="operation-mask" @click.self="closeUserDetailDialog">
-                    <section class="operation-dialog user-detail-dialog">
-                      <header>
-                        <strong>{{ userDetailTitle }}</strong>
-                        <button type="button" @click="closeUserDetailDialog">关闭</button>
-                      </header>
+                  </OperationDialog>
+                  <OperationDialog
+                    :visible="userAdminState.detailDialogVisible"
+                    :title="userDetailTitle"
+                    dialog-class="user-detail-dialog"
+                    :busy="userAdminState.detailLoading"
+                    @close="closeUserDetailDialog"
+                  >
                       <div class="user-detail-body">
                         <section class="user-detail-summary">
                           <strong>{{ userAdminState.detail.account?.name || '-' }}</strong>
@@ -2158,8 +2161,7 @@
                           </section>
                         </template>
                       </div>
-                    </section>
-                  </div>
+                  </OperationDialog>
                   <small v-if="userAdminState.message">{{ userAdminState.message }}</small>
                 </div>
 
@@ -2249,12 +2251,13 @@
                       @current-change="page => loadArchiveItems(archiveTypeForWindow(win), page)"
                     />
                   </div>
-                  <div v-if="archiveStateForWindow(win).dialogVisible" class="operation-mask" @click.self="closeArchiveDialog(archiveTypeForWindow(win))">
-                    <section class="operation-dialog menu-dialog">
-                      <header>
-                        <strong>{{ archiveStateForWindow(win).editing.id ? `编辑${archiveDefinitionForWindow(win).name}` : `新增${archiveDefinitionForWindow(win).name}` }}</strong>
-                        <button type="button" @click="closeArchiveDialog(archiveTypeForWindow(win))">关闭</button>
-                      </header>
+                  <OperationDialog
+                    :visible="archiveStateForWindow(win).dialogVisible"
+                    :title="archiveStateForWindow(win).editing.id ? `编辑${archiveDefinitionForWindow(win).name}` : `新增${archiveDefinitionForWindow(win).name}`"
+                    dialog-class="menu-dialog"
+                    :busy="archiveStateForWindow(win).loading"
+                    @close="closeArchiveDialog(archiveTypeForWindow(win))"
+                  >
                       <div class="operation-form menu-dialog-form">
                       <label
                         v-for="field in archiveFieldsForWindow(win)"
@@ -2296,8 +2299,7 @@
                           保存
                         </el-button>
                       </footer>
-                    </section>
-                  </div>
+                  </OperationDialog>
                   <small v-if="archiveStateForWindow(win).message">{{ archiveStateForWindow(win).message }}</small>
                 </div>
 
@@ -2339,12 +2341,13 @@
                   </section>
                   <small v-if="guideAdminState.message">{{ guideAdminState.message }}</small>
 
-                  <div v-if="guideAdminState.dialogVisible" class="operation-mask" @click.self="closeGuideAdminDialog">
-                    <section class="operation-dialog guide-edit-dialog">
-                      <header>
-                        <strong>{{ guideAdminState.dialogMode === 'edit' ? '编辑操作说明' : '新增操作说明' }}</strong>
-                        <button type="button" @click="closeGuideAdminDialog">关闭</button>
-                      </header>
+                  <OperationDialog
+                    :visible="guideAdminState.dialogVisible"
+                    :title="guideAdminState.dialogMode === 'edit' ? '编辑操作说明' : '新增操作说明'"
+                    dialog-class="guide-edit-dialog"
+                    :busy="guideAdminState.loading"
+                    @close="closeGuideAdminDialog"
+                  >
                       <div class="guide-admin-fields">
                         <label>
                           <span>模块</span>
@@ -2390,8 +2393,7 @@
                           保存
                         </el-button>
                       </footer>
-                    </section>
-                  </div>
+                  </OperationDialog>
                 </div>
 
                 <div v-else-if="win.module.id === 'doc'" class="module-content-panel">
@@ -2479,12 +2481,13 @@
                     />
                   </div>
 
-                  <div v-if="favoriteState.dialogVisible" class="operation-mask" @click.self="closeFavoriteDialog">
-                    <section class="operation-dialog favorite-dialog">
-                      <header>
-                        <strong>{{ favoriteState.editing.id ? '编辑收藏' : '新增收藏' }}</strong>
-                        <button type="button" @click="closeFavoriteDialog">关闭</button>
-                      </header>
+                  <OperationDialog
+                    :visible="favoriteState.dialogVisible"
+                    :title="favoriteState.editing.id ? '编辑收藏' : '新增收藏'"
+                    dialog-class="favorite-dialog"
+                    :busy="favoriteState.loading || favoriteState.iconUploading"
+                    @close="closeFavoriteDialog"
+                  >
                       <div class="favorite-editor">
                         <div class="favorite-preview-card" :class="favoriteCardClass(favoriteState.editing, 0)">
                           <AppIcon class="favorite-card-icon" :icon="Globe2" :icon-url="favoriteState.editing.icon_url" label="收藏图标" color="" :size="24" :backend-url="backendUrl" />
@@ -2522,8 +2525,7 @@
                           保存
                         </el-button>
                       </footer>
-                    </section>
-                  </div>
+                  </OperationDialog>
                 </div>
 
                 <div v-else-if="win.module.source === 'menu'" class="module-content-panel menu-module-panel">
@@ -2686,12 +2688,13 @@
                     />
                   </div>
 
-                  <div v-if="messageState.sendDialog.visible" class="operation-mask" @click.self="closeMessageSendDialog">
-                    <section class="operation-dialog message-send-dialog">
-                      <header>
-                        <strong>发送消息</strong>
-                        <button type="button" @click="closeMessageSendDialog">关闭</button>
-                      </header>
+                  <OperationDialog
+                    :visible="messageState.sendDialog.visible"
+                    title="发送消息"
+                    dialog-class="message-send-dialog"
+                    :busy="messageState.sendDialog.sending"
+                    @close="closeMessageSendDialog"
+                  >
                       <div class="message-send-body">
                         <div class="message-send-grid">
                           <label class="message-send-field">
@@ -2856,15 +2859,15 @@
                           发送
                         </el-button>
                       </footer>
-                    </section>
-                  </div>
+                  </OperationDialog>
 
-                  <div v-if="messageState.templateManager.visible" class="operation-mask" @click.self="closeMessageTemplateManager">
-                    <section class="operation-dialog message-template-dialog">
-                      <header>
-                        <strong>流程审核待办/消息模板管理</strong>
-                        <button type="button" @click="closeMessageTemplateManager">关闭</button>
-                      </header>
+                  <OperationDialog
+                    :visible="messageState.templateManager.visible"
+                    title="流程审核待办/消息模板管理"
+                    dialog-class="message-template-dialog"
+                    :busy="messageState.templateLoading || messageState.templateSyncing"
+                    @close="closeMessageTemplateManager"
+                  >
                       <div class="message-template-toolbar">
                         <el-select v-model="messageState.templateFilters.type" @change="loadMessageTemplates(1)">
                           <el-option
@@ -2944,15 +2947,15 @@
                           @current-change="loadMessageTemplates"
                         />
                       </footer>
-                    </section>
-                  </div>
+                  </OperationDialog>
 
-                  <div v-if="messageState.templateEdit.visible" class="operation-mask" @click.self="closeMessageTemplateEdit">
-                    <section class="operation-dialog message-template-edit-dialog">
-                      <header>
-                        <strong>{{ messageState.templateEdit.form.id ? '编辑消息模板' : '新增消息模板' }}</strong>
-                        <button type="button" @click="closeMessageTemplateEdit">关闭</button>
-                      </header>
+                  <OperationDialog
+                    :visible="messageState.templateEdit.visible"
+                    :title="messageState.templateEdit.form.id ? '编辑消息模板' : '新增消息模板'"
+                    dialog-class="message-template-edit-dialog"
+                    :busy="messageState.templateEdit.saving"
+                    @close="closeMessageTemplateEdit"
+                  >
                       <div class="message-template-edit-body">
                         <label><span>模板名称</span><el-input v-model="messageState.templateEdit.form.name" maxlength="180" /></label>
                         <label><span>模板编码</span><el-input v-model="messageState.templateEdit.form.code" :disabled="messageState.templateEdit.form.is_system" maxlength="120" /></label>
@@ -2970,8 +2973,7 @@
                         <el-button @click="closeMessageTemplateEdit">取消</el-button>
                         <el-button type="primary" :loading="messageState.templateEdit.saving" @click="submitMessageTemplate">保存</el-button>
                       </footer>
-                    </section>
-                  </div>
+                  </OperationDialog>
                 </div>
 
                 <div v-else-if="win.module.id === 'file' && win.panel === 'fileManage'" class="admin-panel file-admin">
@@ -3734,12 +3736,13 @@
       </button>
     </div>
 
-    <div v-if="guideState.visible" class="operation-mask" @click.self="closeGuide">
-      <section class="operation-dialog guide-dialog">
-        <header>
-          <strong>{{ guideState.title }}</strong>
-          <button type="button" @click="closeGuide">关闭</button>
-        </header>
+    <OperationDialog
+      :visible="guideState.visible"
+      :title="guideState.title"
+      dialog-class="guide-dialog"
+      :busy="guideState.loading"
+      @close="closeGuide"
+    >
         <div class="guide-content rich-content">
           <el-alert v-if="guideState.message" type="warning" :closable="false" :title="guideState.message" />
           <div v-if="guideState.loading" class="guide-loading">正在读取操作说明...</div>
@@ -3748,18 +3751,16 @@
         <footer>
           <el-button type="primary" @click="closeGuide">知道了</el-button>
         </footer>
-      </section>
-    </div>
+    </OperationDialog>
 
-    <div v-if="passwordState.visible" class="operation-mask" @click.self="closePasswordDialog">
-      <section class="operation-dialog password-dialog">
-        <header>
-          <div class="password-dialog-title">
-            <ShieldCheck :size="19" />
-            <span>修改密码</span>
-          </div>
-          <button type="button" :disabled="passwordState.loading" @click="closePasswordDialog">关闭</button>
-        </header>
+    <OperationDialog
+      :visible="passwordState.visible"
+      title="修改密码"
+      dialog-class="password-dialog"
+      :busy="passwordState.loading"
+      :resizable="false"
+      @close="closePasswordDialog"
+    >
         <form class="operation-form single password-form" @submit.prevent="submitOwnPassword">
           <el-alert v-if="passwordState.message" type="warning" :closable="false" show-icon :title="passwordState.message" />
           <label>
@@ -3780,8 +3781,7 @@
           <el-button :disabled="passwordState.loading" @click="closePasswordDialog">取消</el-button>
           <el-button type="primary" :loading="passwordState.loading" @click="submitOwnPassword">确认修改</el-button>
         </footer>
-      </section>
-    </div>
+    </OperationDialog>
 
     <DesktopLauncher
       v-model:keyword="desktopLauncherState.keyword"
@@ -3934,6 +3934,7 @@ import InternshipBaseForm from './components/InternshipBaseForm.vue';
 import InternshipImplementationDetail from './components/InternshipImplementationDetail.vue';
 import InternshipPlanDetail from './components/InternshipPlanDetail.vue';
 import MenuEditDialog from './components/MenuEditDialog.vue';
+import ModuleSidebar from './components/ModuleSidebar.vue';
 import OperationDialog from './components/OperationDialog.vue';
 import ShortcutTile from './components/ShortcutTile.vue';
 import StudentOwnPanel from './components/StudentOwnPanel.vue';
@@ -6169,6 +6170,16 @@ function sidebarItems(win) {
   }
 
   return [];
+}
+
+/** 返回当前账号的模块侧栏缓存键 */
+function moduleSidebarStorageKey(win) {
+  return `practical:pc:sidebar:${Number(permissionState.context.account_id || 0)}:${win.module.id}`;
+}
+
+/** 返回当前账号的列表字段缓存键 */
+function dataListStorageKey(win, listKey) {
+  return `practical:pc:columns:${Number(permissionState.context.account_id || 0)}:${win.module.id}:${listKey}`;
 }
 
 function openMessageCenter() {

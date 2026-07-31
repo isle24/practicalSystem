@@ -88,12 +88,13 @@
 
     <small v-if="message">{{ message }}</small>
 
-    <div v-if="articleDialog.visible" class="operation-mask" @click.self="closeArticleDialog">
-      <section class="operation-dialog doc-edit-dialog">
-        <header>
-          <strong>{{ articleDialog.form.id ? '编辑文档' : '新增文档' }}</strong>
-          <button type="button" @click="closeArticleDialog">关闭</button>
-        </header>
+    <OperationDialog
+      :visible="articleDialog.visible"
+      :title="articleDialog.form.id ? '编辑文档' : '新增文档'"
+      dialog-class="doc-edit-dialog"
+      :busy="saving"
+      @close="closeArticleDialog"
+    >
         <div class="operation-form">
           <label>
             <span>标题</span>
@@ -147,19 +148,19 @@
             />
           </section>
         </div>
-        <footer>
+        <template #footer>
           <el-button @click="closeArticleDialog">取消</el-button>
           <el-button type="primary" :icon="Save" :loading="saving" @click="saveArticle">保存</el-button>
-        </footer>
-      </section>
-    </div>
+        </template>
+    </OperationDialog>
 
-    <div v-if="categoryDialog.visible" class="operation-mask" @click.self="closeCategoryDialog">
-      <section class="operation-dialog category-edit-dialog">
-        <header>
-          <strong>文档分类</strong>
-          <button type="button" @click="closeCategoryDialog">关闭</button>
-        </header>
+    <OperationDialog
+      :visible="categoryDialog.visible"
+      title="文档分类"
+      dialog-class="category-edit-dialog"
+      :busy="saving"
+      @close="closeCategoryDialog"
+    >
         <div class="operation-form">
           <label>
             <span>分类名称</span>
@@ -180,19 +181,13 @@
             <input v-model="categoryDialog.form.sort" type="number">
           </label>
         </div>
-        <footer>
+        <template #footer>
           <el-button @click="closeCategoryDialog">取消</el-button>
           <el-button type="primary" :icon="Save" :loading="saving" @click="saveCategory">保存分类</el-button>
-        </footer>
-      </section>
-    </div>
+        </template>
+    </OperationDialog>
 
-    <div v-if="historyDialog.visible" class="operation-mask" @click.self="historyDialog.visible = false">
-      <section class="operation-dialog history-dialog">
-        <header>
-          <strong>版本记录</strong>
-          <button type="button" @click="historyDialog.visible = false">关闭</button>
-        </header>
+    <OperationDialog :visible="historyDialog.visible" title="版本记录" dialog-class="history-dialog" @close="historyDialog.visible = false">
         <el-table :data="historyDialog.items" height="100%" stripe>
           <el-table-column prop="version" label="版本" width="90" />
           <el-table-column prop="title" label="标题" min-width="180" />
@@ -200,8 +195,7 @@
           <el-table-column prop="editor_name" label="维护人" width="120" />
           <el-table-column prop="created_at" label="时间" width="168" />
         </el-table>
-      </section>
-    </div>
+    </OperationDialog>
   </section>
 </template>
 
@@ -217,6 +211,7 @@ import {
   saveDocArticle,
   saveDocCategory,
 } from '../api/system';
+import OperationDialog from './OperationDialog.vue';
 
 defineProps({
   canManage: {

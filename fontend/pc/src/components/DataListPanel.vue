@@ -39,6 +39,37 @@
         </label>
       </div>
       <div class="data-list-actions">
+        <div ref="columnMenuRef" class="data-list-column-selector">
+          <button type="button" class="el-button" @click="toggleColumnMenu">
+            <Columns3 :size="15" />
+            <span>显示字段</span>
+          </button>
+        </div>
+        <Teleport to="body">
+          <div
+            v-if="columnMenuOpen"
+            ref="columnMenuPanelRef"
+            class="data-list-column-menu"
+            :style="columnMenuStyle"
+          >
+            <header>
+              <strong>显示字段</strong>
+              <el-button link type="primary" @click="resetVisibleColumns">恢复默认</el-button>
+            </header>
+            <label
+              v-for="column in selectableColumns"
+              :key="columnKey(column)"
+            >
+              <input
+                type="checkbox"
+                :checked="isColumnVisible(column)"
+                :disabled="isRequiredColumn(column)"
+                @change="event => setColumnVisible(column, event.target.checked)"
+              >
+              <span>{{ column.label }}</span>
+            </label>
+          </div>
+        </Teleport>
         <el-button
           v-if="filterCollapsible"
           text
@@ -58,7 +89,7 @@
 
     <el-table :data="rows" height="100%" size="small" stripe v-loading="loading">
       <el-table-column
-        v-for="column in columns"
+        v-for="column in visibleColumns"
         :key="column.key || column.prop"
         :prop="column.prop"
         :label="column.label"
@@ -112,7 +143,7 @@
 
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
-import { ChevronDown, ChevronUp, RefreshCw } from '@lucide/vue';
+import { ChevronDown, ChevronUp, Columns3, RefreshCw } from '@lucide/vue';
 
 const props = defineProps({
   actions: {
@@ -147,13 +178,22 @@ const props = defineProps({
     type: Array,
     default: () => [],
   },
+  storageKey: {
+    type: String,
+    default: '',
+  },
 });
 
 const emit = defineEmits(['filter-change', 'page-change', 'reset', 'row-action', 'search']);
 const localFilterValues = reactive({});
 const filtersRef = ref(null);
+const columnMenuRef = ref(null);
+const columnMenuPanelRef = ref(null);
 const filtersExpanded = ref(false);
 const filterCollapsible = ref(false);
+const columnMenuOpen = ref(false);
+const columnMenuPosition = reactive({ top: 0, left: 0 });
+const visibleColumnKeys = ref([]);
 let filterResizeObserver = null;
 let lastActionAt = 0;
 const actionColumnWidth = computed(() => {
@@ -162,6 +202,12 @@ const actionColumnWidth = computed(() => {
   }
   return Math.min(320, Math.max(128, props.actions.length * 72 + 20));
 });
+const selectableColumns = computed(() => props.columns.filter(column => column.label));
+const visibleColumns = computed(() => props.columns.filter(column => isColumnVisible(column)));
+const columnMenuStyle = computed(() => ({
+  top: `${columnMenuPosition.top}px`,
+  left: `${columnMenuPosition.left}px`,
+}));
 
 watch(
   () => props.filterValues,
@@ -188,8 +234,15 @@ watch(
   { deep: true },
 );
 
+watch(
+  [() => props.columns, () => props.storageKey],
+  () => loadVisibleColumns(),
+  { immediate: true, deep: true },
+);
+
 onMounted(() => {
   updateFilterOverflow();
+  document.addEventListener('pointerdown', closeColumnMenuOutside);
   if (typeof ResizeObserver !== 'undefined' && filtersRef.value) {
     filterResizeObserver = new ResizeObserver(updateFilterOverflow);
     filterResizeObserver.observe(filtersRef.value);
@@ -198,6 +251,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   filterResizeObserver?.disconnect();
+  document.removeEventListener('pointerdown', closeColumnMenuOutside);
 });
 
 function updateFilterOverflow() {
@@ -213,6 +267,95 @@ function updateFilterOverflow() {
   if (!filterCollapsible.value && wasExpanded) {
     filtersExpanded.value = false;
   }
+}
+
+/** 点击列表外部时关闭字段菜单 */
+function closeColumnMenuOutside(event) {
+  if (columnMenuOpen.value
+    && !columnMenuRef.value?.contains(event.target)
+    && !columnMenuPanelRef.value?.contains(event.target)) {
+    columnMenuOpen.value = false;
+  }
+}
+
+/** 切换字段菜单并计算视口位置 */
+async function toggleColumnMenu() {
+  columnMenuOpen.value = !columnMenuOpen.value;
+  if (!columnMenuOpen.value) {
+    return;
+  }
+  await nextTick();
+  const rect = columnMenuRef.value?.getBoundingClientRect();
+  if (!rect) {
+    return;
+  }
+  const width = 250;
+  const panelHeight = columnMenuPanelRef.value?.offsetHeight || 360;
+  columnMenuPosition.left = Math.max(12, Math.min(window.innerWidth - width - 12, rect.right - width));
+  columnMenuPosition.top = rect.bottom + 6 + panelHeight > window.innerHeight - 12
+    ? Math.max(12, rect.top - panelHeight - 6)
+    : rect.bottom + 6;
+}
+
+/** 返回稳定的列表字段标识 */
+function columnKey(column) {
+  return String(column.key || column.prop || column.label || '');
+}
+
+/** 判断字段是否不可隐藏 */
+function isRequiredColumn(column) {
+  return Boolean(column.required) || props.columns.indexOf(column) === 0;
+}
+
+/** 判断字段当前是否显示 */
+function isColumnVisible(column) {
+  return isRequiredColumn(column) || visibleColumnKeys.value.includes(columnKey(column));
+}
+
+/** 更新字段显示状态 */
+function setColumnVisible(column, visible) {
+  const key = columnKey(column);
+  const keys = new Set(visibleColumnKeys.value);
+  visible ? keys.add(key) : keys.delete(key);
+  visibleColumnKeys.value = [...keys];
+  persistVisibleColumns();
+}
+
+/** 恢复字段默认显示配置 */
+function resetVisibleColumns() {
+  visibleColumnKeys.value = defaultVisibleColumnKeys();
+  persistVisibleColumns();
+}
+
+/** 读取字段显示配置 */
+function loadVisibleColumns() {
+  const available = new Set(props.columns.map(columnKey));
+  if (props.storageKey) {
+    try {
+      const stored = JSON.parse(localStorage.getItem(props.storageKey) || '[]');
+      if (Array.isArray(stored) && stored.length) {
+        visibleColumnKeys.value = stored.filter(key => available.has(String(key))).map(String);
+        return;
+      }
+    } catch {
+      localStorage.removeItem(props.storageKey);
+    }
+  }
+  visibleColumnKeys.value = defaultVisibleColumnKeys();
+}
+
+/** 保存字段显示配置 */
+function persistVisibleColumns() {
+  if (props.storageKey) {
+    localStorage.setItem(props.storageKey, JSON.stringify(visibleColumnKeys.value));
+  }
+}
+
+/** 返回默认显示字段 */
+function defaultVisibleColumnKeys() {
+  return props.columns
+    .filter(column => column.defaultVisible !== false || isRequiredColumn(column))
+    .map(columnKey);
 }
 
 function filterValue(key) {

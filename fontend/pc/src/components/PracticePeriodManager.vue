@@ -18,9 +18,13 @@
         <template #default="{ row }"><el-button link type="primary" @click="openDialog(row)">编辑</el-button></template>
       </el-table-column>
     </el-table>
-    <div v-if="state.visible" class="operation-mask" @click.self="closeDialog">
-      <section class="operation-dialog period-edit-dialog">
-        <header><strong>{{ state.form.id ? '编辑课节' : '新增课节' }}</strong><button type="button" @click="closeDialog">关闭</button></header>
+    <OperationDialog
+      :visible="state.visible"
+      :title="state.form.id ? '编辑课节' : '新增课节'"
+      dialog-class="period-edit-dialog"
+      :busy="state.saving"
+      @close="closeDialog"
+    >
         <div class="operation-form">
           <label><span>课节名称</span><input v-model="state.form.name"></label>
           <label><span>排序</span><input v-model.number="state.form.sort" type="number" min="0"></label>
@@ -28,9 +32,8 @@
           <label><span>结束时间</span><input v-model="state.form.end_time" type="time"></label>
           <label><span>状态</span><el-switch v-model="state.form.status" active-value="enabled" inactive-value="disabled" active-text="启用" inactive-text="停用" /></label>
         </div>
-        <footer><el-button @click="closeDialog">取消</el-button><el-button type="primary" :loading="state.saving" @click="save">保存</el-button></footer>
-      </section>
-    </div>
+        <template #footer><el-button @click="closeDialog">取消</el-button><el-button type="primary" :loading="state.saving" @click="save">保存</el-button></template>
+    </OperationDialog>
   </section>
 </template>
 
@@ -38,6 +41,7 @@
 import { onMounted, reactive } from 'vue';
 import { Plus, RefreshCw } from '@lucide/vue';
 import { fetchPracticePeriods, savePracticePeriod } from '../api/system';
+import OperationDialog from './OperationDialog.vue';
 
 defineProps({ canManage: { type: Boolean, default: false } });
 

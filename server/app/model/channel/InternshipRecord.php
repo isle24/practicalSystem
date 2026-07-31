@@ -273,8 +273,37 @@ class InternshipRecord extends TableRecord
             ->orderBy('sort')
             ->orderBy('id')
             ->get();
+        $declarations = self::queryTable('base_declaration')
+            ->where('base_id', $baseId)
+            ->whereNull('deleted_at')
+            ->orderByDesc('declaration_year')
+            ->orderByDesc('id')
+            ->get();
+        $declarationIds = array_map(
+            static fn ($row): int => (int) $row->id,
+            $declarations->all()
+        );
+        $receptionStats = self::queryTable('base_reception_stat')
+            ->whereIn('declaration_id', $declarationIds ?: [0])
+            ->whereNull('deleted_at')
+            ->orderByDesc('stat_year')
+            ->get();
 
         $people = self::rows($people);
+        $budgetRows = self::rows($budgets);
+        $receptionRows = self::rows($receptionStats);
+        $declarationRows = array_map(static function (array $declaration) use ($budgetRows, $receptionRows): array {
+            $declarationId = (int) ($declaration['id'] ?? 0);
+            $declaration['budgets'] = array_values(array_filter(
+                $budgetRows,
+                static fn (array $budget): bool => (int) ($budget['declaration_id'] ?? 0) === $declarationId
+            ));
+            $declaration['reception_stats'] = array_values(array_filter(
+                $receptionRows,
+                static fn (array $stat): bool => (int) ($stat['declaration_id'] ?? 0) === $declarationId
+            ));
+            return $declaration;
+        }, self::rows($declarations));
         return [
             'item' => self::rows([$item])[0],
             'profession_ids' => array_values(array_map(static fn ($row): int => (int) $row->profession_id, $professions->all())),
@@ -285,7 +314,11 @@ class InternshipRecord extends TableRecord
             'existing_sites' => self::rows($existingSites),
             'company_profile' => $companyProfile ? self::rows([$companyProfile])[0] : null,
             'construction' => $construction ? self::rows([$construction])[0] : null,
-            'budgets' => self::rows($budgets),
+            'budgets' => array_values(array_filter(
+                $budgetRows,
+                static fn (array $budget): bool => (int) ($budget['declaration_id'] ?? 0) === 0
+            )),
+            'declarations' => $declarationRows,
         ];
     }
 
@@ -314,13 +347,18 @@ class InternshipRecord extends TableRecord
     /** 保存基地关联快照 */
     public static function saveBaseRelations(int $baseId, array $relations, string $now): void
     {
-        $relationTables = ['base_person', 'base_existing_site', 'base_budget'];
+        $relationTables = ['base_person', 'base_existing_site'];
         foreach ($relationTables as $table) {
             self::queryTable($table)
                 ->where('base_id', $baseId)
                 ->whereNull('deleted_at')
                 ->update(['deleted_at' => $now, 'updated_at' => $now]);
         }
+        self::queryTable('base_budget')
+            ->where('base_id', $baseId)
+            ->whereNull('declaration_id')
+            ->whereNull('deleted_at')
+            ->update(['deleted_at' => $now, 'updated_at' => $now]);
 
         foreach (self::ids($relations['profession_ids'] ?? []) as $professionId) {
             $existing = self::queryTable('base_profession')

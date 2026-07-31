@@ -1,18 +1,11 @@
 <template>
   <section class="support-panel template-library-panel">
-    <div class="template-library-tabs">
-      <button
-        v-if="canViewMessageTemplates"
-        type="button"
-        :class="{ active: activeTab === 'message' }"
-        @click="setActiveTab('message')"
-      >
-        流程审核待办/消息模板
-      </button>
-      <button type="button" :class="{ active: activeTab === 'file' }" @click="setActiveTab('file')">
-        材料文件模板
-      </button>
-    </div>
+    <TextTabs
+      :model-value="activeTab"
+      :items="templateTabs"
+      class="template-library-tabs"
+      @update:model-value="setActiveTab"
+    />
     <div class="template-library-hint">
       <span v-if="activeTab === 'message'">
         学生提交、教师审核、通过后修改等流程都会按这里的模板发送待办和消息；默认模板已写入学校业务库，管理员只需要按需编辑。
@@ -210,12 +203,13 @@
 
     <small v-if="message">{{ message }}</small>
 
-    <div v-if="messageTemplateDialog.visible" class="operation-mask" @click.self="closeMessageTemplateDialog">
-      <section class="operation-dialog message-template-edit-dialog">
-        <header>
-          <strong>编辑流程消息模板</strong>
-          <button type="button" @click="closeMessageTemplateDialog">关闭</button>
-        </header>
+    <OperationDialog
+      :visible="messageTemplateDialog.visible"
+      title="编辑流程消息模板"
+      dialog-class="message-template-edit-dialog"
+      :busy="messageSaving"
+      @close="closeMessageTemplateDialog"
+    >
         <div class="message-template-edit-body">
           <label>
             <span>模板名称</span>
@@ -279,19 +273,19 @@
             <el-input v-model="messageTemplateDialog.form.description" type="textarea" :rows="2" maxlength="500" show-word-limit />
           </label>
         </div>
-        <footer>
+        <template #footer>
           <el-button @click="closeMessageTemplateDialog">取消</el-button>
           <el-button type="primary" :icon="Save" :loading="messageSaving" @click="saveMessageTemplateDialog">保存</el-button>
-        </footer>
-      </section>
-    </div>
+        </template>
+    </OperationDialog>
 
-    <div v-if="templateDialog.visible" class="operation-mask" @click.self="closeTemplateDialog">
-      <section class="operation-dialog template-edit-dialog">
-        <header>
-          <strong>{{ templateDialog.form.id ? '编辑模板' : '上传模板' }}</strong>
-          <button type="button" @click="closeTemplateDialog">关闭</button>
-        </header>
+    <OperationDialog
+      :visible="templateDialog.visible"
+      :title="templateDialog.form.id ? '编辑模板' : '上传模板'"
+      dialog-class="template-edit-dialog"
+      :busy="saving"
+      @close="closeTemplateDialog"
+    >
         <div class="operation-form">
           <label>
             <span>模板名称</span>
@@ -355,19 +349,19 @@
             <input ref="fileInputRef" type="file" hidden @change="handleFileSelected">
           </div>
         </div>
-        <footer>
+        <template #footer>
           <el-button @click="closeTemplateDialog">取消</el-button>
           <el-button type="primary" :icon="Save" :loading="saving" @click="saveTemplate">保存</el-button>
-        </footer>
-      </section>
-    </div>
+        </template>
+    </OperationDialog>
 
-    <div v-if="categoryDialog.visible" class="operation-mask" @click.self="categoryDialog.visible = false">
-      <section class="operation-dialog category-edit-dialog">
-        <header>
-          <strong>模板分类</strong>
-          <button type="button" @click="categoryDialog.visible = false">关闭</button>
-        </header>
+    <OperationDialog
+      :visible="categoryDialog.visible"
+      title="模板分类"
+      dialog-class="category-edit-dialog"
+      :busy="saving"
+      @close="categoryDialog.visible = false"
+    >
         <div class="operation-form">
           <label>
             <span>分类名称</span>
@@ -396,12 +390,11 @@
             <textarea v-model="categoryDialog.form.description" rows="3" />
           </label>
         </div>
-        <footer>
+        <template #footer>
           <el-button @click="categoryDialog.visible = false">取消</el-button>
           <el-button type="primary" :icon="Save" :loading="saving" @click="saveCategory">保存分类</el-button>
-        </footer>
-      </section>
-    </div>
+        </template>
+    </OperationDialog>
   </section>
 </template>
 
@@ -420,6 +413,8 @@ import {
   syncMessageTemplates,
   uploadTemplateFile,
 } from '../api/system';
+import TextTabs from './TextTabs.vue';
+import OperationDialog from './OperationDialog.vue';
 
 const props = defineProps({
   canManage: {
@@ -437,6 +432,10 @@ const props = defineProps({
 });
 
 const activeTab = ref(props.canViewMessageTemplates ? 'message' : 'file');
+const templateTabs = computed(() => [
+  ...(props.canViewMessageTemplates ? [{ key: 'message', label: '流程审核待办/消息模板' }] : []),
+  { key: 'file', label: '材料文件模板' },
+]);
 const loading = ref(false);
 const saving = ref(false);
 const messageLoading = ref(false);

@@ -60,12 +60,13 @@
 
     <small v-if="message">{{ message }}</small>
 
-    <div v-if="createDialog.visible" class="operation-mask" @click.self="createDialog.visible = false">
-      <section class="operation-dialog export-create-dialog">
-        <header>
-          <strong>创建导出任务</strong>
-          <button type="button" @click="createDialog.visible = false">关闭</button>
-        </header>
+    <OperationDialog
+      :visible="createDialog.visible"
+      title="创建导出任务"
+      dialog-class="export-create-dialog"
+      :busy="saving"
+      @close="createDialog.visible = false"
+    >
         <div class="operation-form">
           <label>
             <span>导出类型</span>
@@ -80,12 +81,11 @@
             <textarea v-model="createDialog.paramsText" rows="7" placeholder='{"grade_id":1}' />
           </label>
         </div>
-        <footer>
+        <template #footer>
           <el-button @click="createDialog.visible = false">取消</el-button>
           <el-button type="primary" :icon="Save" :loading="saving" @click="createTask">创建</el-button>
-        </footer>
-      </section>
-    </div>
+        </template>
+    </OperationDialog>
   </section>
 </template>
 
@@ -93,6 +93,7 @@
 import { onMounted, reactive, ref } from 'vue';
 import { Plus, RefreshCw, Save, Search } from '@lucide/vue';
 import { createExportTask, fetchExportTasks, retryExportTask } from '../api/system';
+import OperationDialog from './OperationDialog.vue';
 
 const loading = ref(false);
 const saving = ref(false);
