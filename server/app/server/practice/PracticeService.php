@@ -158,7 +158,7 @@ class PracticeService
         }
         $weekEnd = date('Y-m-d', strtotime($weekStart . ' +6 days'));
         $filters = $this->requestFilters($request);
-        foreach (['grade_id' => '届次', 'dep_id' => '学院', 'profession_id' => '专业'] as $key => $label) {
+        foreach (['grade_id' => '年级', 'dep_id' => '学院', 'profession_id' => '专业'] as $key => $label) {
             if (empty($filters[$key])) {
                 throw new InvalidArgumentException("请选择{$label}");
             }
@@ -1014,7 +1014,7 @@ class PracticeService
             throw new InvalidArgumentException('请选择任课教师');
         }
         if (empty($values['grade_id']) || empty($values['dep_id']) || empty($values['profession_id'])) {
-            throw new InvalidArgumentException('请选择完整的届次、学院和专业');
+            throw new InvalidArgumentException('请选择完整的年级、学院和专业');
         }
         if (empty($values['schedule_date'])) {
             throw new InvalidArgumentException('请选择课表日期');
@@ -1029,7 +1029,7 @@ class PracticeService
 
         $studentCount = PracticeRecord::enabledStudentCountByProfession((int) $values['grade_id'], (int) $values['profession_id']);
         if ($studentCount <= 0) {
-            throw new InvalidArgumentException('所选届次和专业暂无可参与学生');
+            throw new InvalidArgumentException('所选年级和专业暂无可参与学生');
         }
         $values['student_count'] = $studentCount;
 
@@ -1088,7 +1088,7 @@ class PracticeService
             throw new InvalidArgumentException('请选择项目负责人');
         }
         if (empty($values['grade_id']) || empty($values['profession_id'])) {
-            throw new InvalidArgumentException('课表缺少届次或专业，无法发布项目');
+            throw new InvalidArgumentException('课表缺少年级或专业，无法发布项目');
         }
         if (!empty($values['start_date']) && !empty($values['end_date']) && strcmp((string) $values['end_date'], (string) $values['start_date']) < 0) {
             throw new InvalidArgumentException('项目结束日期不能早于开始日期');

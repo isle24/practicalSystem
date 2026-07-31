@@ -951,7 +951,7 @@ const practiceReviewTargetDetails = computed(() => {
     detailItem('类别', practiceTypeName(practiceReviewDialog.module)),
     detailItem('业务', practiceEntityName(practiceReviewDialog.entity)),
     detailItem('标题', row.title || row.name),
-    detailItem('届次', row.grade_name),
+    detailItem('年级', row.grade_name),
     detailItem('学院专业', joinFact([row.dep_name, row.profession_name])),
     detailItem('当前状态', statusText(row.status)),
   ].filter(Boolean);
@@ -1710,7 +1710,7 @@ function practiceFilters(module) {
         { value: 'training', label: '实训' },
       ],
     },
-    { key: 'grade_id', label: '届次', placeholder: '全部届次', options: selectFilterItems(options.grades, 'grade_id', 'grade_name') },
+    { key: 'grade_id', label: '年级', placeholder: '全部年级', options: selectFilterItems(options.grades, 'grade_id', 'grade_name') },
   ];
   if (isAdminRole.value) {
     common.push(
@@ -2088,7 +2088,7 @@ function practiceRowFacts(module, row) {
     namedFact('日期', row.schedule_date || row.start_date || row.date),
     namedFact('课节', joinFact([row.period_start_name, row.period_end_name]) || joinFact([row.start_time, row.end_time])),
     namedFact('场地', row.room_name || row.base_name || row.location),
-    namedFact('届次', row.grade_name),
+    namedFact('年级', row.grade_name),
     namedFact('学院专业', joinFact([row.dep_name, row.profession_name])),
     namedFact('教师', row.teacher_name),
   ];

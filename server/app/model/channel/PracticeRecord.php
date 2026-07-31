@@ -452,7 +452,7 @@ class PracticeRecord extends TableRecord
             ->get(['student_id', 'grade_id', 'dep_id', 'profession_id', 'class_id']));
     }
 
-    /** 统计届次专业下的启用学生 */
+    /** 统计年级专业下的启用学生 */
     public static function enabledStudentCountByProfession(int $gradeId, int $professionId): int
     {
         if ($gradeId <= 0 || $professionId <= 0) {
@@ -467,7 +467,7 @@ class PracticeRecord extends TableRecord
             ->count();
     }
 
-    /** 查询届次专业下的启用学生 */
+    /** 查询年级专业下的启用学生 */
     public static function enabledStudentsByProfession(int $gradeId, int $professionId): array
     {
         if ($gradeId <= 0 || $professionId <= 0) {
@@ -866,7 +866,6 @@ class PracticeRecord extends TableRecord
         return [
             'module_type' => $moduleType,
             'module_name' => $moduleType === 'lab' ? '实验' : '实训',
-            'academic_year' => (string) ($filters['academic_year'] ?? ''),
             'semester' => (string) ($filters['semester'] ?? ''),
             'course_number' => (string) ($plan['code'] ?? ''),
             'course_name' => (string) (($plan['course_name'] ?? '') ?: ($plan['title'] ?? '')),

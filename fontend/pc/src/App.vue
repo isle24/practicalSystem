@@ -1463,7 +1463,7 @@
                   <header class="practice-module-head">
                     <div>
                       <strong>实验实训管理</strong>
-                      <small>按类别、届次、学院和专业处理教学与执行记录。</small>
+                      <small>按类别、年级、学院和专业处理教学与执行记录。</small>
                     </div>
                     <el-select
                       :model-value="practiceModuleState(win.module.id).module_type"
@@ -1585,7 +1585,7 @@
                           <input v-model="practiceModuleState(win.module.id).form.title">
                         </label>
                         <label>
-                          <span>届次</span>
+                          <span>年级</span>
                           <el-select v-model="practiceModuleState(win.module.id).form.grade_id" clearable filterable :disabled="win.panel === 'projects'" @change="normalizePracticeCascade(win.module.id)">
                             <el-option v-for="grade in practiceModuleState(win.module.id).options.grades" :key="grade.grade_id" :label="grade.grade_name" :value="grade.grade_id" />
                           </el-select>
@@ -1663,7 +1663,7 @@
                         <label v-if="win.panel === 'schedules'"><span>学生数</span><input v-model="practiceModuleState(win.module.id).form.student_count" type="number" disabled placeholder="保存时按专业自动计算"></label>
                         <label v-if="win.panel === 'projects'"><span>开始日期</span><input v-model="practiceModuleState(win.module.id).form.start_date" type="date"></label>
                         <label v-if="win.panel === 'projects'"><span>结束日期</span><input v-model="practiceModuleState(win.module.id).form.end_date" type="date"></label>
-                        <label v-if="win.panel === 'projects'"><span>学生范围</span><input v-model="practiceModuleState(win.module.id).form.student_count" type="number" disabled placeholder="保存时按届次和专业自动生成"></label>
+                        <label v-if="win.panel === 'projects'"><span>学生范围</span><input v-model="practiceModuleState(win.module.id).form.student_count" type="number" disabled placeholder="保存时按年级和专业自动生成"></label>
                         <label v-if="win.panel === 'rooms'"><span>名称</span><input v-model="practiceModuleState(win.module.id).form.name"></label>
                         <label v-if="win.panel === 'rooms'"><span>编号</span><input v-model="practiceModuleState(win.module.id).form.code"></label>
                         <label v-if="win.panel === 'rooms'"><span>容量</span><input v-model="practiceModuleState(win.module.id).form.capacity" type="number"></label>
@@ -1808,7 +1808,7 @@
                   </div>
                   <div v-else-if="win.panel === 'schedules' && practiceModuleState(win.module.id).schedule.view === 'board'" class="practice-schedule-workspace">
                     <div class="practice-schedule-filters">
-                      <el-select v-model="practiceModuleState(win.module.id).filters.schedules.grade_id" clearable filterable placeholder="届次" @change="refreshPracticeScheduleBoard(win.module.id)">
+                      <el-select v-model="practiceModuleState(win.module.id).filters.schedules.grade_id" clearable filterable placeholder="年级" @change="refreshPracticeScheduleBoard(win.module.id)">
                         <el-option v-for="grade in practiceModuleState(win.module.id).options.grades" :key="grade.grade_id" :label="grade.grade_name" :value="grade.grade_id" />
                       </el-select>
                       <el-select v-model="practiceModuleState(win.module.id).filters.schedules.dep_id" clearable filterable placeholder="学院" @change="refreshPracticeScheduleBoard(win.module.id)">
@@ -3462,10 +3462,6 @@
                           <el-option v-for="item in practiceScoreSheetPlanOptions()" :key="item.value" :label="item.label" :value="item.value" />
                         </el-select>
                       </label>
-                      <label v-if="isPracticeScoreSheetReport()" :class="{ 'filter-active': hasFilterValue(statState.filters.academic_year) }">
-                        <span>学年</span>
-                        <input v-model="statState.filters.academic_year" placeholder="如 2025-2026">
-                      </label>
                       <label :class="{ 'filter-active': hasFilterValue(statState.filters.keyword) }">
                         <span>关键词</span>
                         <input v-model="statState.filters.keyword" placeholder="学生、学号、基地、教师">
@@ -4225,7 +4221,6 @@ const statState = reactive({
     class_id: '',
     module_type: 'all',
     plan_id: '',
-    academic_year: '',
     keyword: '',
   },
   cards: [],
@@ -5171,7 +5166,6 @@ const currentStatColumns = computed(() => statState.columns || []);
 const courseScoreSheetMetaItems = computed(() => {
   const meta = statState.sheet_meta || {};
   return [
-    { key: 'academic_year', label: '学年', value: meta.academic_year || statState.filters.academic_year },
     { key: 'course_number', label: '选课课号', value: meta.course_number },
     { key: 'course_name', label: '名称', value: meta.course_name },
     { key: 'teacher_name', label: '教师姓名', value: meta.teacher_name },
@@ -7280,7 +7274,7 @@ function stripHtml(content) {
 function guideTemplateHtml(title = '操作说明') {
   return [
     `<section><h3>${escapeHtml(title)}操作流程</h3><ol><li>进入对应模块，按角色查看可处理事项。</li><li>根据页面提示完成提交、审核、退回或查看记录。</li><li>审核类操作会写入流程记录和审核意见。</li></ol></section>`,
-    '<section><h3>流程规则</h3><p>学生仅处理本人任务，教师按任务绑定处理学生，管理员按届次、学院、专业和班级范围处理。</p></section>',
+    '<section><h3>流程规则</h3><p>学生仅处理本人任务，教师按任务绑定处理学生，管理员按业务归属、学院、专业和班级范围处理。</p></section>',
     '<section><h3>常见问题</h3><ul><li>看不到数据时，先确认当前角色和组织范围是否正确。</li><li>材料或记录异常时，可通过记录查看追溯每次提交和审核。</li></ul></section>',
   ].join('');
 }
@@ -9577,7 +9571,6 @@ function resetStatFilters() {
     class_id: '',
     module_type: 'all',
     plan_id: '',
-    academic_year: '',
     keyword: '',
   });
   applyAcademicDefaults(statState.filters, organizationScopeDefaults(statAcademicOptions()));
@@ -10071,7 +10064,7 @@ async function loadPracticeScheduleWeek(module) {
   if (!filters.grade_id || !filters.dep_id || !filters.profession_id) {
     state.schedule.rows = [];
     state.schedule.periods = state.options.periods || [];
-    state.message = '请先选择届次、学院和专业';
+    state.message = '请先选择年级、学院和专业';
     return;
   }
   const data = await fetchPracticeScheduleWeek(practiceRequestModuleType(module, filters.module_type), {
@@ -10299,7 +10292,7 @@ function practiceListConfig(module, panel) {
   const columns = {
     plans: [
       { prop: 'title', label: '计划标题', minWidth: 180 },
-      { prop: 'grade_name', label: '届次', width: 100 },
+      { prop: 'grade_name', label: '年级', width: 100 },
       { prop: 'dep_name', label: '学院', minWidth: 140 },
       { prop: 'profession_name', label: '专业', minWidth: 140 },
       { prop: 'teacher_name', label: '任课教师', width: 120 },
@@ -10320,7 +10313,7 @@ function practiceListConfig(module, panel) {
       { prop: 'title', label: '项目名称', minWidth: 180 },
       { prop: 'plan_title', label: '教学计划', minWidth: 160 },
       { prop: 'schedule_title', label: '关联课表', minWidth: 160 },
-      { prop: 'grade_name', label: '届次', width: 100 },
+      { prop: 'grade_name', label: '年级', width: 100 },
       { prop: 'dep_name', label: '学院', minWidth: 130 },
       { prop: 'profession_name', label: '专业', minWidth: 140 },
       { prop: 'teacher_name', label: '负责人', width: 120 },
@@ -10369,7 +10362,7 @@ function practiceListConfig(module, panel) {
     scores: [
       { prop: 'student_name', label: '学生', width: 110 },
       { prop: 'student_num', label: '学号', width: 130 },
-      { prop: 'grade_name', label: '届次', width: 100 },
+      { prop: 'grade_name', label: '年级', width: 100 },
       { prop: 'plan_title', label: '关联计划', minWidth: 160 },
       { prop: 'score_value', label: '成绩', width: 90 },
       { prop: 'teacher_name', label: '评分教师', width: 120 },
@@ -10406,7 +10399,7 @@ function practiceDocumentColumns(label) {
   return [
     { prop: 'title', label: `${label}标题`, minWidth: 180 },
     { prop: 'plan_title', label: '关联计划', minWidth: 160 },
-    { prop: 'grade_name', label: '届次', width: 100 },
+    { prop: 'grade_name', label: '年级', width: 100 },
     { prop: 'dep_name', label: '学院', minWidth: 130 },
     { prop: 'teacher_name', label: '任课教师', width: 120 },
     { prop: 'status', label: '状态', width: 90, tag: true, tagType: row => statusTagType(row.status), formatter: row => statusText(row.status) },
@@ -10431,7 +10424,7 @@ function practiceFilterDefinitions(module, panel, keys) {
   const definitions = {
     module_type: { key: 'module_type', label: '类别', type: 'select', options: practiceReadModuleTypeOptions() },
     keyword: { key: 'keyword', label: '关键词', placeholder: '标题、课程、学生、内容' },
-    grade_id: { key: 'grade_id', label: '届次', type: 'select', options: optionItems(options.grades, 'grade_id', 'grade_name') },
+    grade_id: { key: 'grade_id', label: '年级', type: 'select', options: optionItems(options.grades, 'grade_id', 'grade_name') },
     dep_id: { key: 'dep_id', label: '学院', type: 'select', options: optionItems(filterAcademicDepartments(options, values), 'dep_id', 'dep_name') },
     profession_id: { key: 'profession_id', label: '专业', type: 'select', options: optionItems(filterAcademicItems(options.professions, values, ['grade_id', 'dep_id']), 'profession_id', 'profession_name') },
     class_id: { key: 'class_id', label: '班级', type: 'select', options: optionItems(filterAcademicItems(options.classes, values, ['grade_id', 'dep_id', 'profession_id']), 'class_id', 'class_name') },
@@ -10637,7 +10630,7 @@ function validatePracticeForm(module, panel, form) {
       return '请填写教学计划标题或课程名称';
     }
     if (!form.grade_id) {
-      return '请选择届次';
+      return '请选择年级';
     }
     if (!form.dep_id) {
       return '请选择学院';
@@ -10673,7 +10666,7 @@ function validatePracticeForm(module, panel, form) {
     return '请选择任课教师';
   }
   if (!form.grade_id || !form.dep_id || !form.profession_id) {
-    return '请选择完整的届次、学院和专业';
+    return '请选择完整的年级、学院和专业';
   }
   if (!form.schedule_date || !form.period_start_id || !form.period_end_id) {
     return '请选择日期和起止课节';

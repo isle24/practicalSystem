@@ -1492,7 +1492,7 @@ class InternshipService
             'report', 'page', 'page_size', 'per_page', 'keyword',
             'dep_id', 'profession_id', 'category_id', 'grade_id',
             'graduation_cohort_id', 'class_id', 'semester',
-            'module_type', 'plan_id', 'status', 'academic_year',
+            'module_type', 'plan_id', 'status',
         ]);
         $report = trim((string) ($filters['report'] ?? 'overview'));
         $filters['report'] = in_array($report, self::STAT_REPORTS, true) ? $report : 'overview';
