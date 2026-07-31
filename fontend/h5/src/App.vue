@@ -590,7 +590,7 @@ const mobileListConfigs = computed(() => ({
     title: '实习计划',
     shortTitle: '计划',
     icon: FileText,
-    keywordPlaceholder: '学院、提交人',
+    keywordPlaceholder: '课程、类别、年级或毕业届次、学院、专业',
     statusOptions: reviewStatusOptions,
     emptyText: '暂无实习计划',
   },
@@ -1133,7 +1133,7 @@ function mobileListTitle(key, row) {
     arrangements: row.title || row.name || `任务ID ${row.id}`,
     arrangementChanges: changePayload.title || row.arrangement_title || `变更ID ${row.id}`,
     // 暂时隐藏学期展示，后续需要时恢复 row.semester。
-    plans: row.dep_name || `计划ID ${row.id}`,
+    plans: row.course_name || row.course_code || `计划ID ${row.id}`,
     syllabusGuides: row.title || row.arrangement_title || `大纲ID ${row.id}`,
     implementationSheets: row.arrangement_title || `实施表ID ${row.id}`,
     applications: student || arrangement || `申请ID ${row.id}`,
@@ -1195,7 +1195,7 @@ function mobileListFacts(key, row) {
       namedFact('学生数', row.student_count),
       namedFact('绑定人数', row.task_binding_count),
       namedFact('任务评分', row.task_score_progress_text),
-      namedFact('范围', joinFact([row.dep_name || '全校', row.profession_name || '全部专业', row.grade_name])),
+      namedFact('范围', joinFact([row.dep_name || '全校', row.profession_name || '全部专业', internshipPlanScopeName(row)])),
     ],
     arrangementChanges: [
       namedFact('原任务', arrangement),
@@ -1211,6 +1211,8 @@ function mobileListFacts(key, row) {
     plans: [
       // 暂时隐藏学期字段，后续需要时恢复。
       // namedFact('学期', row.semester),
+      namedFact('实习类别', row.category_name),
+      namedFact(internshipPlanScopeLabel(row), internshipPlanScopeName(row)),
       namedFact('学院', row.dep_name),
       namedFact('专业', row.profession_name),
       namedFact('任务数', row.task_count),
@@ -1456,12 +1458,6 @@ function sameFilterValue(left, right) {
   return String(left ?? '') === String(right ?? '');
 }
 
-function currentInternshipGradeId() {
-  const currentGrade = (internship.options.grades || [])
-    .find(item => sameFilterValue(item.is_current, 'true') || sameFilterValue(item.is_current, 1));
-  return currentGrade?.grade_id || internship.options.grades?.[0]?.grade_id || '';
-}
-
 function scopeIds(field) {
   const ids = [];
   (state.context.organization_scopes || []).forEach((scope) => {
@@ -1491,7 +1487,7 @@ function firstScopedOption(items = [], key, ids = []) {
 
 function internshipScopeDefaults() {
   const defaults = {
-    grade_id: currentInternshipGradeId(),
+    grade_id: '',
     dep_id: '',
     profession_id: '',
     class_id: '',
@@ -1507,12 +1503,10 @@ function internshipScopeDefaults() {
     defaults.class_id = scopedClass.class_id || '';
     defaults.profession_id = scopedClass.profession_id || defaults.profession_id;
     defaults.dep_id = scopedClass.dep_id || defaults.dep_id;
-    defaults.grade_id = defaults.grade_id || scopedClass.grade_id || '';
   }
   if (scopedProfession) {
     defaults.profession_id = scopedProfession.profession_id || defaults.profession_id;
     defaults.dep_id = scopedProfession.dep_id || defaults.dep_id;
-    defaults.grade_id = defaults.grade_id || scopedProfession.grade_id || '';
   }
   if (scopedDepartment) {
     defaults.dep_id = scopedDepartment.dep_id || defaults.dep_id;
@@ -1527,7 +1521,6 @@ function internshipScopeDefaults() {
     if (fallback) {
       defaults.profession_id = fallback.profession_id || '';
       defaults.dep_id = fallback.dep_id || defaults.dep_id;
-      defaults.grade_id = defaults.grade_id || fallback.grade_id || '';
     }
   }
 
@@ -3522,6 +3515,16 @@ function detailItem(label, value) {
   return text && text !== '-' ? { label, value: text } : null;
 }
 
+function internshipPlanScopeLabel(row) {
+  return row?.scope_type === 'cohort' || row?.graduation_cohort_id || row?.cohort_name ? '毕业届次' : '年级';
+}
+
+function internshipPlanScopeName(row) {
+  return internshipPlanScopeLabel(row) === '毕业届次'
+    ? (row?.cohort_name || row?.scope_name || '')
+    : (row?.grade_name || row?.scope_name || '');
+}
+
 function reviewTargetDetails(entity, row) {
   if (!row) {
     return [];
@@ -3569,6 +3572,8 @@ function reviewTargetDetails(entity, row) {
     plan: [
       // 暂时隐藏学期字段，后续需要时恢复。
       // detailItem('学期', row.semester),
+      detailItem('实习类别', row.category_name),
+      detailItem(internshipPlanScopeLabel(row), internshipPlanScopeName(row)),
       detailItem('学院', row.dep_name),
       detailItem('提交人', row.submitter_name),
       detailItem('审核进度', row.approval_progress_text),

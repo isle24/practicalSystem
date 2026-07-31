@@ -45,9 +45,13 @@ class InternshipArchiveRecord extends TableRecord
         $query = self::visiblePlanQuery($scope)
             ->leftJoin('department', 'internship_plan.dep_id', '=', 'department.dep_id')
             ->leftJoin('profession', 'internship_plan.profession_id', '=', 'profession.profession_id')
-            ->leftJoin('grade_list', 'internship_plan.grade_id', '=', 'grade_list.grade_id');
+            ->leftJoin('grade_list', 'internship_plan.grade_id', '=', 'grade_list.grade_id')
+            ->leftJoin('graduation_cohort', 'internship_plan.graduation_cohort_id', '=', 'graduation_cohort.cohort_id')
+            ->leftJoin('internship_category', 'internship_plan.category_id', '=', 'internship_category.id');
 
         self::filterValue($query, $filters, 'internship_plan.grade_id', 'grade_id');
+        self::filterValue($query, $filters, 'internship_plan.graduation_cohort_id', 'graduation_cohort_id');
+        self::filterValue($query, $filters, 'internship_plan.category_id', 'category_id');
         self::filterValue($query, $filters, 'internship_plan.dep_id', 'dep_id');
         self::filterValue($query, $filters, 'internship_plan.profession_id', 'profession_id');
         $archiveStatus = trim((string) ($filters['archive_status'] ?? ''));
@@ -59,7 +63,9 @@ class InternshipArchiveRecord extends TableRecord
                     ->orWhere('internship_plan.course_name', 'like', $like)
                     ->orWhere('department.dep_name', 'like', $like)
                     ->orWhere('profession.profession_name', 'like', $like)
-                    ->orWhere('grade_list.grade_name', 'like', $like);
+                    ->orWhere('grade_list.grade_name', 'like', $like)
+                    ->orWhere('graduation_cohort.cohort_name', 'like', $like)
+                    ->orWhere('internship_category.name', 'like', $like);
             });
         }
 
@@ -72,9 +78,12 @@ class InternshipArchiveRecord extends TableRecord
             ->get([
                 'internship_plan.id', 'internship_plan.uuid', 'internship_plan.course_code',
                 'internship_plan.course_name', 'internship_plan.course_category',
-                'internship_plan.grade_id', 'internship_plan.dep_id', 'internship_plan.profession_id',
+                'internship_plan.category_id', 'internship_plan.grade_id', 'internship_plan.graduation_cohort_id',
+                'internship_plan.dep_id', 'internship_plan.profession_id',
                 'internship_plan.business_type', 'internship_plan.status', 'internship_plan.created_at',
                 'grade_list.grade_name', 'department.dep_name', 'profession.profession_name',
+                'graduation_cohort.cohort_name', 'internship_category.name as category_name',
+                'internship_category.scope_type',
             ]));
 
         $items = self::appendPlanProgress($items, $scope);
@@ -109,11 +118,15 @@ class InternshipArchiveRecord extends TableRecord
             ->leftJoin('department', 'internship_plan.dep_id', '=', 'department.dep_id')
             ->leftJoin('profession', 'internship_plan.profession_id', '=', 'profession.profession_id')
             ->leftJoin('grade_list', 'internship_plan.grade_id', '=', 'grade_list.grade_id')
+            ->leftJoin('graduation_cohort', 'internship_plan.graduation_cohort_id', '=', 'graduation_cohort.cohort_id')
+            ->leftJoin('internship_category', 'internship_plan.category_id', '=', 'internship_category.id')
             ->where('arrangement.status', '<>', 'changed')
             ->whereNull('arrangement.deleted_at')
             ->whereNull('internship_plan.deleted_at');
 
         self::filterValue($query, $filters, 'internship_plan.grade_id', 'grade_id');
+        self::filterValue($query, $filters, 'internship_plan.graduation_cohort_id', 'graduation_cohort_id');
+        self::filterValue($query, $filters, 'internship_plan.category_id', 'category_id');
         self::filterValue($query, $filters, 'internship_plan.dep_id', 'dep_id');
         self::filterValue($query, $filters, 'internship_plan.profession_id', 'profession_id');
         self::filterValue($query, $filters, 'pair.arrangement_id', 'arrangement_id');
@@ -143,7 +156,9 @@ class InternshipArchiveRecord extends TableRecord
                 'arrangement.required_journal_count',
                 'internship_plan.course_code', 'internship_plan.course_name',
                 'students.name as student_name', 'students.student_num', 'students.class_id', 'class.class_name',
-                'grade_list.grade_name', 'department.dep_name', 'profession.profession_name',
+                'grade_list.grade_name', 'graduation_cohort.cohort_name',
+                'internship_category.name as category_name', 'internship_category.scope_type',
+                'department.dep_name', 'profession.profession_name',
             ]));
 
         $planGroups = [];
@@ -193,9 +208,13 @@ class InternshipArchiveRecord extends TableRecord
             ->leftJoin('department', 'internship_plan.dep_id', '=', 'department.dep_id')
             ->leftJoin('profession', 'internship_plan.profession_id', '=', 'profession.profession_id')
             ->leftJoin('grade_list', 'internship_plan.grade_id', '=', 'grade_list.grade_id')
+            ->leftJoin('graduation_cohort', 'internship_plan.graduation_cohort_id', '=', 'graduation_cohort.cohort_id')
+            ->leftJoin('internship_category', 'internship_plan.category_id', '=', 'internship_category.id')
             ->where('internship_plan.id', $planId)
             ->first([
                 'internship_plan.*', 'grade_list.grade_name',
+                'graduation_cohort.cohort_name', 'internship_category.name as category_name',
+                'internship_category.scope_type',
                 'department.dep_name', 'profession.profession_name',
             ]);
         if (!$plan) {
@@ -579,10 +598,14 @@ class InternshipArchiveRecord extends TableRecord
             ->leftJoin('department', 'internship_plan.dep_id', '=', 'department.dep_id')
             ->leftJoin('profession', 'internship_plan.profession_id', '=', 'profession.profession_id')
             ->leftJoin('grade_list', 'internship_plan.grade_id', '=', 'grade_list.grade_id')
+            ->leftJoin('graduation_cohort', 'internship_plan.graduation_cohort_id', '=', 'graduation_cohort.cohort_id')
+            ->leftJoin('internship_category', 'internship_plan.category_id', '=', 'internship_category.id')
             ->where('internship_plan.id', $planId)
             ->whereNull('internship_plan.deleted_at')
             ->first([
                 'internship_plan.*', 'department.dep_name', 'profession.profession_name', 'grade_list.grade_name',
+                'graduation_cohort.cohort_name', 'internship_category.name as category_name',
+                'internship_category.scope_type',
             ]);
         if (!$plan) {
             return [];

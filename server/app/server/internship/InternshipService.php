@@ -3,6 +3,7 @@
 namespace app\server\internship;
 
 use app\model\channel\Account;
+use app\model\channel\AcademicArchiveRecord;
 use app\model\channel\InternshipArchiveRecord;
 use app\model\channel\InternshipRecord;
 use app\model\channel\PracticeRecord;
@@ -1013,7 +1014,7 @@ class InternshipService
             throw new RuntimeException('实习任务未设置负责老师', 42201);
         }
         if (!InternshipRecord::taskClassStudentVisible($this->scopeContext(), $studentId, $arrangementId)) {
-            throw new RuntimeException('学生不属于该实习任务绑定班级', 42201);
+            throw new RuntimeException('学生不属于该实习任务绑定班级或计划归属范围', 42201);
         }
 
         $values = [
@@ -1489,7 +1490,8 @@ class InternshipService
         $this->requirePermission('stat:view');
         $filters = $this->requestFilters($request, [
             'report', 'page', 'page_size', 'per_page', 'keyword',
-            'dep_id', 'profession_id', 'grade_id', 'class_id', 'semester',
+            'dep_id', 'profession_id', 'category_id', 'grade_id',
+            'graduation_cohort_id', 'class_id', 'semester',
             'module_type', 'plan_id', 'status', 'academic_year',
         ]);
         $report = trim((string) ($filters['report'] ?? 'overview'));
@@ -1507,7 +1509,8 @@ class InternshipService
 
         $filters = $this->requestFilters($request, [
             'page', 'page_size', 'per_page', 'keyword', 'archive_status',
-            'dep_id', 'profession_id', 'grade_id', 'arrangement_id',
+            'category_id', 'dep_id', 'profession_id', 'grade_id',
+            'graduation_cohort_id', 'arrangement_id',
         ]);
         if ($this->isStudent()) {
             return InternshipArchiveRecord::studentMaterialPage($this->scopeContext(), $filters);
@@ -1903,7 +1906,8 @@ class InternshipService
         $this->requirePermission('internship:plan');
 
         return InternshipRecord::planTablePage($this->scopeContext(), $this->requestFilters($request, [
-            'page', 'page_size', 'per_page', 'status', 'grade_id', 'dep_id', 'profession_id', 'keyword',
+            'page', 'page_size', 'per_page', 'status', 'category_id', 'grade_id',
+            'graduation_cohort_id', 'dep_id', 'profession_id', 'keyword',
         ]), self::PLAN_APPROVAL_LEVELS);
     }
 
@@ -1916,22 +1920,32 @@ class InternshipService
         if ($existingId && !in_array($fromStatus, ['draft', 'modify'], true)) {
             throw new InvalidArgumentException('数据已变更，请刷新后重试', 409);
         }
-        $gradeId = $this->requiredInt($request, 'grade_id');
+        $scopeValues = $this->validatePlanScope([
+            'category_id' => $this->requiredInt($request, 'category_id'),
+            'grade_id' => $this->optionalInt($request, 'grade_id'),
+            'graduation_cohort_id' => $this->optionalInt($request, 'graduation_cohort_id'),
+        ]);
+        $scopeType = (string) $scopeValues['scope_type'];
+        unset($scopeValues['scope_type']);
         $depId = $this->requiredInt($request, 'dep_id');
         $professionId = $this->requiredInt($request, 'profession_id');
         $this->assertDepartmentVisible($depId);
         if (!InternshipRecord::professionVisible($this->scopeContext(), $professionId)) {
             throw new RuntimeException('专业不存在或无权限', 40301);
         }
-        if (!InternshipRecord::professionBelongsTo($professionId, $gradeId, $depId)) {
-            throw new InvalidArgumentException('专业必须属于所选届次和学院');
+        $professionValid = $scopeType === 'grade'
+            ? InternshipRecord::professionBelongsTo($professionId, (int) $scopeValues['grade_id'], $depId)
+            : InternshipRecord::professionBelongsToDepartment($professionId, $depId);
+        if (!$professionValid) {
+            throw new InvalidArgumentException($scopeType === 'grade'
+                ? '专业必须属于所选年级和学院'
+                : '专业必须属于所选学院');
         }
 
-        $values = [
+        $values = array_merge($scopeValues, [
             'source_type' => $this->enum($request, 'source_type', ['edu_system', 'manual'], 'edu_system'),
             'course_code' => $this->nullableString($request, 'course_code', 120),
             'course_name' => $this->requiredString($request, 'course_name', 180),
-            'grade_id' => $gradeId,
             'dep_id' => $depId,
             'profession_id' => $professionId,
             'semester' => $this->nullableString($request, 'semester', 80),
@@ -1943,7 +1957,7 @@ class InternshipService
             'status' => $this->enum($request, 'status', ['draft', 'wait'], 'draft'),
             'updated_at' => $this->now(),
             'deleted_at' => null,
-        ];
+        ]);
 
         $save = function () use ($request, $values, $existingId): array {
             $currentStatus = $existingId ? InternshipRecord::statusById('internship_plan', $existingId) : 'draft';
@@ -1962,6 +1976,40 @@ class InternshipService
         return $existingId
             ? $this->workflowLock('internship', 'plan', $existingId, $save)
             : $save();
+    }
+
+    /** 校验并规范化实习计划归属维度。 */
+    public function validatePlanScope(array $values): array
+    {
+        $categoryId = (int) ($values['category_id'] ?? 0);
+        $category = InternshipRecord::internshipCategory($categoryId);
+        if (!$category) {
+            throw new InvalidArgumentException('实习类别不存在或已停用');
+        }
+
+        $gradeId = (int) ($values['grade_id'] ?? 0);
+        $cohortId = (int) ($values['graduation_cohort_id'] ?? 0);
+        if ((string) $category['scope_type'] === 'cohort') {
+            if ($cohortId <= 0 || !InternshipRecord::graduationCohortEnabled($cohortId)) {
+                throw new InvalidArgumentException('请选择有效的毕业届次');
+            }
+            return [
+                'category_id' => $categoryId,
+                'scope_type' => 'cohort',
+                'grade_id' => null,
+                'graduation_cohort_id' => $cohortId,
+            ];
+        }
+
+        if ($gradeId <= 0 || !InternshipRecord::gradeEnabled($gradeId)) {
+            throw new InvalidArgumentException('请选择有效的年级');
+        }
+        return [
+            'category_id' => $categoryId,
+            'scope_type' => 'grade',
+            'grade_id' => $gradeId,
+            'graduation_cohort_id' => null,
+        ];
     }
 
     /** 返回实习计划 Excel 导入模板 */
@@ -2670,6 +2718,10 @@ class InternshipService
         if (!in_array((string) ($plan->status ?? ''), ['accept', 'enabled'], true)) {
             throw new InvalidArgumentException('实习计划审核通过后才可拆分任务');
         }
+        $planScope = InternshipRecord::planScope($planId);
+        if (!$planScope || !in_array((string) ($planScope['scope_type'] ?? ''), ['grade', 'cohort'], true)) {
+            throw new InvalidArgumentException('实习计划归属维度不完整');
+        }
         if ($existingId > 0) {
             $this->assertArrangementVisible($existingId);
         }
@@ -2682,10 +2734,13 @@ class InternshipService
             throw new RuntimeException('任务班级不存在或无权限', 40301);
         }
         foreach ($classRows as $classRow) {
-            if ((int) ($classRow['grade_id'] ?? 0) !== (int) ($plan->grade_id ?? 0)
-                || (int) ($classRow['dep_id'] ?? 0) !== (int) ($plan->dep_id ?? 0)
+            if ((int) ($classRow['dep_id'] ?? 0) !== (int) ($plan->dep_id ?? 0)
                 || (int) ($classRow['profession_id'] ?? 0) !== (int) ($plan->profession_id ?? 0)) {
-                throw new InvalidArgumentException('任务班级必须属于所选计划的届次、学院和专业');
+                throw new InvalidArgumentException('任务班级必须属于所选计划的学院和专业');
+            }
+            if ((string) $planScope['scope_type'] === 'grade'
+                && (int) ($classRow['grade_id'] ?? 0) !== (int) ($planScope['grade_id'] ?? 0)) {
+                throw new InvalidArgumentException('任务班级必须属于所选计划的年级');
             }
         }
         if (InternshipRecord::teacherTaskTimeConflictExists($teacherId, $startDate, $endDate, $existingId ?: null)) {
@@ -2696,7 +2751,7 @@ class InternshipService
         }
         $this->ensureRecordingTable('arrangement_recording');
 
-        $result = $this->connection()->transaction(function () use ($classRows, $endDate, $existingId, $input, $plan, $planId, $source, $startDate, $taskNo, $teacherId, $title): array {
+        $result = $this->connection()->transaction(function () use ($classRows, $endDate, $existingId, $input, $plan, $planId, $planScope, $source, $startDate, $taskNo, $teacherId, $title): array {
             $now = $this->now();
             if ($existingId > 0 && !InternshipRecord::lockCurrentArrangement($existingId)) {
                 throw new InvalidArgumentException('实习任务已变更，请刷新后重试', 409);
@@ -2704,6 +2759,13 @@ class InternshipService
             $studentRows = InternshipRecord::studentRowsByClassIds(array_column($classRows, 'class_id'));
             if (!$studentRows) {
                 throw new InvalidArgumentException('所选任务班级暂无可绑定学生');
+            }
+            if ((string) $planScope['scope_type'] === 'cohort') {
+                $mismatch = array_filter($studentRows, static fn (array $student): bool =>
+                    (int) ($student['graduation_cohort_id'] ?? 0) !== (int) ($planScope['graduation_cohort_id'] ?? 0));
+                if ($mismatch) {
+                    throw new InvalidArgumentException('所选班级存在不属于该毕业届次的学生，请先完善学生届次');
+                }
             }
             $studentCounts = [];
             foreach ($studentRows as $studentRow) {
@@ -4012,8 +4074,22 @@ class InternshipService
 
     private function applyDefaultScopeFilters(array &$filters, array $keys): void
     {
-        if (in_array('grade_id', $keys, true) && !$this->hasFilterValue($filters, 'grade_id')) {
-            $filters['grade_id'] = InternshipRecord::currentGradeId();
+        $usesPlanScope = in_array('category_id', $keys, true)
+            && in_array('grade_id', $keys, true)
+            && in_array('graduation_cohort_id', $keys, true);
+        $categoryId = $usesPlanScope ? (int) ($filters['category_id'] ?? 0) : 0;
+        $category = $categoryId > 0 ? InternshipRecord::internshipCategory($categoryId) : null;
+
+        if ($category && (string) $category['scope_type'] === 'cohort') {
+            $filters['grade_id'] = null;
+            if (!$this->hasFilterValue($filters, 'graduation_cohort_id')) {
+                $filters['graduation_cohort_id'] = AcademicArchiveRecord::currentGraduationCohortId();
+            }
+        } elseif ($category) {
+            $filters['graduation_cohort_id'] = null;
+            if (!$this->hasFilterValue($filters, 'grade_id')) {
+                $filters['grade_id'] = InternshipRecord::currentGradeId();
+            }
         }
 
         $roleType = CurrentContext::roleType();

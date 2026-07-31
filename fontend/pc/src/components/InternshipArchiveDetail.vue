@@ -18,7 +18,8 @@
       <el-alert v-if="message" :title="message" type="error" :closable="false" show-icon />
       <template v-if="detail.plan">
         <section class="archive-plan-summary">
-          <div><span>届次</span><strong>{{ detail.plan.grade_name || '-' }}</strong></div>
+          <div><span>实习类别</span><strong>{{ detail.plan.category_name || '-' }}</strong></div>
+          <div><span>{{ planScopeLabel }}</span><strong>{{ planScopeName || '-' }}</strong></div>
           <div><span>学院</span><strong>{{ detail.plan.dep_name || '-' }}</strong></div>
           <div><span>专业</span><strong>{{ detail.plan.profession_name || '-' }}</strong></div>
           <div><span>课程</span><strong>{{ detail.plan.course_name || detail.plan.course_code || '-' }}</strong></div>
@@ -234,6 +235,10 @@ const appraisalTarget = ref({});
 const templateMap = computed(() => Object.fromEntries(templates.value
   .filter(item => item.material_type)
   .map(item => [item.material_type, item])));
+const planScopeLabel = computed(() => detail.value.plan?.scope_type === 'cohort' || detail.value.plan?.graduation_cohort_id ? '毕业届次' : '年级');
+const planScopeName = computed(() => planScopeLabel.value === '毕业届次'
+  ? detail.value.plan?.cohort_name
+  : detail.value.plan?.grade_name);
 
 watch(() => [props.modelValue, props.planId], ([visible, planId]) => {
   if (visible && planId) {

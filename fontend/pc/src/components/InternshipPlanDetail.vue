@@ -4,7 +4,8 @@
       <div class="detail-summary-grid plan-summary-grid">
         <article><span>课程名称</span><strong>{{ plan.course_name || '-' }}</strong></article>
         <article><span>课程代码</span><strong>{{ plan.course_code || '-' }}</strong></article>
-        <article><span>届次</span><strong>{{ plan.grade_name || '-' }}</strong></article>
+        <article><span>实习类别</span><strong>{{ plan.category_name || '-' }}</strong></article>
+        <article><span>{{ scopeLabel }}</span><strong>{{ scopeName || '-' }}</strong></article>
         <article><span>学院</span><strong>{{ plan.dep_name || '-' }}</strong></article>
         <article><span>专业</span><strong>{{ plan.profession_name || '-' }}</strong></article>
         <article><span>学分</span><strong>{{ plan.credit ?? '-' }}</strong></article>
@@ -80,6 +81,8 @@ const props = defineProps({
 const emit = defineEmits(['add-task', 'close', 'edit-plan', 'edit-task', 'implementation']);
 const tasks = computed(() => Array.isArray(props.plan.tasks) ? props.plan.tasks : []);
 const canEdit = computed(() => props.canManage && ['draft', 'modify'].includes(String(props.plan.status || '')));
+const scopeLabel = computed(() => props.plan.scope_type === 'cohort' || props.plan.graduation_cohort_id ? '毕业届次' : '年级');
+const scopeName = computed(() => scopeLabel.value === '毕业届次' ? props.plan.cohort_name : props.plan.grade_name);
 
 function scoreRuleText(value) {
   return {

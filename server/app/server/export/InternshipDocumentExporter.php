@@ -148,10 +148,11 @@ class InternshipDocumentExporter
         $tasks = (array) ($data['tasks'] ?? []);
         $spreadsheet = SpreadsheetIOFactory::load($template);
         $sheet = $spreadsheet->getSheet(0);
-        $gradeName = (string) ($plan['grade_name'] ?? '');
+        [$scopeLabel, $scopeName] = $this->planScope($plan);
         $depName = (string) ($plan['dep_name'] ?? '');
-        $sheet->setCellValue('A1', trim($depName . ' ' . $gradeName . '届实习计划表'));
-        $sheet->setCellValue('G2', '届次');
+        $categoryName = (string) ($plan['category_name'] ?? '实习');
+        $sheet->setCellValue('A1', trim($depName . ' ' . $scopeName . $categoryName . '计划表'));
+        $sheet->setCellValue('G2', $scopeLabel);
         $sheet->getColumnDimension('H')->setVisible(false);
         for ($row = 3; $row <= 24; $row++) {
             foreach (range('A', 'P') as $column) {
@@ -178,7 +179,7 @@ class InternshipDocumentExporter
             'D3' => $plan['course_category'] ?? '',
             'E3' => $depName,
             'F3' => $plan['profession_name'] ?? '',
-            'G3' => $gradeName,
+            'G3' => $scopeName,
             'I3' => $plan['total_credit'] ?? $plan['credit'] ?? '',
             'J3' => $plan['internship_credit'] ?? $plan['credit'] ?? '',
             'K3' => $plan['total_hours'] ?? '',
@@ -320,6 +321,7 @@ class InternshipDocumentExporter
         $task = (array) ($data['task'] ?? []);
         $class = (array) ($data['class'] ?? []);
         $scores = (array) ($data['scores'] ?? []);
+        [$scopeLabel, $scopeName] = $this->planScope($plan);
         $rows = '';
         foreach ($scores as $index => $score) {
             $rows .= '<tr><td>' . ($index + 1) . '</td><td>' . $this->h($score['student_name'] ?? '')
@@ -335,7 +337,7 @@ class InternshipDocumentExporter
             . '.meta{margin:12px 0}.meta span{display:inline-block;margin-right:28px}table{width:100%;border-collapse:collapse}'
             . 'th,td{border:1px solid #222;padding:6px;text-align:center}th{background:#f2f2f2}</style>'
             . '<h1>' . $this->h(CurrentContext::get('school_name') ?: '成都锦城学院') . '实习成绩登记表</h1>'
-            . '<div class="meta"><span>届次：' . $this->h($plan['grade_name'] ?? '') . '</span><span>课程：' . $this->h($plan['course_name'] ?? '')
+            . '<div class="meta"><span>' . $this->h($scopeLabel) . '：' . $this->h($scopeName) . '</span><span>课程：' . $this->h($plan['course_name'] ?? '')
             . '</span><span>任务：' . $this->h($task['title'] ?? '') . '</span><span>班级：' . $this->h($class['class_name'] ?? '') . '</span></div>'
             . '<table><thead><tr><th>序号</th><th>姓名</th><th>学号</th><th>签到</th><th>日志</th><th>报告</th><th>企业</th><th>总评</th><th>评语</th></tr></thead><tbody>'
             . $rows . '</tbody></table>';
@@ -358,8 +360,9 @@ class InternshipDocumentExporter
         $plan = (array) ($data['plan'] ?? []);
         $task = (array) ($data['task'] ?? []);
         $student = (array) ($data['student'] ?? []);
+        [$scopeLabel, $scopeName] = $this->planScope($plan);
         $rows = array_filter([
-            ['届次', $plan['grade_name'] ?? $student['grade_name'] ?? ''],
+            [$scopeLabel, $scopeName ?: ($student['grade_name'] ?? '')],
             ['学院', $student['dep_name'] ?? $plan['dep_name'] ?? ''],
             ['专业', $student['profession_name'] ?? $plan['profession_name'] ?? ''],
             ['班级', $student['class_name'] ?? ''],
@@ -525,6 +528,7 @@ class InternshipDocumentExporter
     private function implementationValues(array $detail, array $sheet, array $schedules, array $expenses): array
     {
         $task = (array) ($detail['task'] ?? []);
+        [$scopeLabel, $scopeName] = $this->planScope($task);
         $totalAmount = round(array_sum(array_map(
             static fn (array $row): float => (float) ($row['amount'] ?? 0),
             $expenses
@@ -539,7 +543,9 @@ class InternshipDocumentExporter
             '{{submitted_at}}' => $this->h($this->dateTime($sheet['submitted_at'] ?? null)),
             '{{status_text}}' => $this->h($this->statusText((string) ($sheet['status'] ?? ''))),
             '{{department_name}}' => $this->h($task['dep_name'] ?? $sheet['applicant_department'] ?? ''),
-            '{{grade_name}}' => $this->h($sheet['grade_name'] ?? $task['grade_name'] ?? ''),
+            '{{scope_label}}' => $this->h($scopeLabel),
+            '{{scope_name}}' => $this->h($scopeName ?: ($sheet['grade_name'] ?? '')),
+            '{{grade_name}}' => $this->h($scopeName ?: ($sheet['grade_name'] ?? '')),
             '{{course_name}}' => $this->h($sheet['course_name'] ?? $task['course_name'] ?? ''),
             '{{course_type}}' => $this->h($sheet['course_type'] ?? ''),
             '{{detail_content}}' => $this->htmlText($sheet['detail_content'] ?? ''),
@@ -555,6 +561,16 @@ class InternshipDocumentExporter
             '{{attachments}}' => $this->h($attachmentNames ? implode('、', $attachmentNames) : '无'),
             '{{remark}}' => $this->htmlText($sheet['remark'] ?? ''),
         ];
+    }
+
+    /** 返回计划归属字段名称和值 */
+    private function planScope(array $plan): array
+    {
+        if (($plan['scope_type'] ?? '') === 'cohort') {
+            return ['毕业届次', (string) ($plan['cohort_name'] ?? '')];
+        }
+
+        return ['年级', (string) ($plan['grade_name'] ?? '')];
     }
 
     private function scheduleRowsHtml(array $rows): string

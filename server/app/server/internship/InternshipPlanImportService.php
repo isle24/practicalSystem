@@ -23,14 +23,15 @@ class InternshipPlanImportService
     private const EXCEL_MAX_SIZE = 10485760;
     private const EXCEL_MAX_ROWS = 5000;
     private const BUSINESS_TYPES = ['internship', 'training', 'lab', 'social_practice', 'ignore'];
-    private const REQUIRED_FIELDS = ['course_name', 'dep_name', 'grade_name', 'profession_name'];
+    private const REQUIRED_FIELDS = ['course_name', 'category_name', 'scope_name', 'dep_name', 'profession_name'];
     private const HEADERS = [
         'sequence' => ['序号', '编号', 'sequence'],
         'course_code' => ['课程代码', '课程编号', 'course_code'],
         'course_name' => ['课程名称', '课程', 'course_name'],
         'course_category' => ['课程类别', '课程性质', 'course_category'],
+        'category_name' => ['实习类别', '实习类型', 'internship_category', 'category_name'],
         'dep_name' => ['开课院系', '学院', '学院名称', '院系', 'dep_name'],
-        'grade_name' => ['届次', '届次名称', '授课对象年级', '年级', 'grade_name'],
+        'scope_name' => ['归属年级/毕业届次', '归属年级毕业届次', '归属范围', '届次', '届次名称', '授课对象年级', '年级', 'grade_name', 'scope_name'],
         'profession_name' => ['授课对象专业', '专业', '专业名称', 'profession_name'],
         'total_credit' => ['总学分', '课程总学分', 'total_credit'],
         'internship_credit' => ['实习学分', '实践学分', 'internship_credit'],
@@ -42,14 +43,14 @@ class InternshipPlanImportService
         'remark' => ['备注', '说明', 'remark'],
     ];
 
-    /** 生成并返回届次版实习计划导入模板 */
+    /** 生成并返回实习类别归属版导入模板。 */
     public function template(): array
     {
         $directory = rtrim(public_path(), DIRECTORY_SEPARATOR) . '/templates/internship';
         if (!is_dir($directory) && !mkdir($directory, 0775, true) && !is_dir($directory)) {
             throw new RuntimeException('模板目录创建失败');
         }
-        $fileName = 'internship-plan-import-template.xlsx';
+        $fileName = 'internship-plan-import-template-v2.xlsx';
         $path = $directory . '/' . $fileName;
         if (!is_file($path)) {
             $temporaryPath = $path . '.tmp';
@@ -63,7 +64,7 @@ class InternshipPlanImportService
         return [
             'url' => '/templates/internship/' . $fileName,
             'download_name' => '实习计划导入模板.xlsx',
-            'version' => '2026.07',
+            'version' => '2026.08',
         ];
     }
 
@@ -191,7 +192,9 @@ class InternshipPlanImportService
         }
         $values = $resolved['values'];
         $identity = implode('|', [
-            $values['grade_id'],
+            $values['category_id'],
+            $values['scope_type'],
+            $values['scope_type'] === 'cohort' ? $values['graduation_cohort_id'] : $values['grade_id'],
             $values['dep_id'],
             $values['profession_id'],
             $values['course_code'] !== '' ? $values['course_code'] : $values['course_name'],
@@ -258,6 +261,9 @@ class InternshipPlanImportService
     {
         $content = [
             'course_category' => $values['course_category'],
+            'category_name' => $values['category_name'],
+            'scope_type' => $values['scope_type'],
+            'scope_name' => $values['scope_name'],
             'total_credit' => $values['total_credit'],
             'internship_credit' => $values['internship_credit'],
             'total_hours' => $values['total_hours'],
@@ -275,7 +281,9 @@ class InternshipPlanImportService
             'course_code' => $values['course_code'] !== '' ? $values['course_code'] : null,
             'course_name' => $values['course_name'],
             'course_category' => $values['course_category'],
+            'category_id' => $values['category_id'],
             'grade_id' => $values['grade_id'],
+            'graduation_cohort_id' => $values['graduation_cohort_id'],
             'dep_id' => $values['dep_id'],
             'profession_id' => $values['profession_id'],
             'semester' => null,
@@ -327,11 +335,24 @@ class InternshipPlanImportService
                 $errors[] = $this->fieldLabel($field) . '不能为空';
             }
         }
-        $grade = trim((string) ($row['grade_name'] ?? '')) !== ''
-            ? InternshipRecord::gradeRowByName(trim((string) $row['grade_name']))
+        $category = trim((string) ($row['category_name'] ?? '')) !== ''
+            ? InternshipRecord::internshipCategoryRow(trim((string) $row['category_name']))
             : null;
-        if (!$grade && trim((string) ($row['grade_name'] ?? '')) !== '') {
-            $errors[] = '届次不存在';
+        if (!$category && trim((string) ($row['category_name'] ?? '')) !== '') {
+            $errors[] = '实习类别不存在或已停用';
+        }
+        $scopeName = trim((string) ($row['scope_name'] ?? ''));
+        $grade = $category && (string) $category['scope_type'] === 'grade' && $scopeName !== ''
+            ? InternshipRecord::gradeRowByName($scopeName)
+            : null;
+        $cohort = $category && (string) $category['scope_type'] === 'cohort' && $scopeName !== ''
+            ? InternshipRecord::graduationCohortRowByName($scopeName)
+            : null;
+        if ($category && (string) $category['scope_type'] === 'grade' && !$grade && $scopeName !== '') {
+            $errors[] = '年级不存在';
+        }
+        if ($category && (string) $category['scope_type'] === 'cohort' && !$cohort && $scopeName !== '') {
+            $errors[] = '毕业届次不存在';
         }
         $department = trim((string) ($row['dep_name'] ?? '')) !== ''
             ? InternshipRecord::departmentRowByName(trim((string) $row['dep_name']), $scope)
@@ -340,15 +361,21 @@ class InternshipPlanImportService
             $errors[] = '学院不存在或无权限';
         }
         $profession = null;
-        if ($grade && $department && trim((string) ($row['profession_name'] ?? '')) !== '') {
-            $profession = InternshipRecord::professionRowByName(
-                trim((string) $row['profession_name']),
-                (int) $grade['grade_id'],
-                (int) $department['dep_id'],
-                $scope
-            );
+        if (($grade || $cohort) && $department && trim((string) ($row['profession_name'] ?? '')) !== '') {
+            $profession = $grade
+                ? InternshipRecord::professionRowByName(
+                    trim((string) $row['profession_name']),
+                    (int) $grade['grade_id'],
+                    (int) $department['dep_id'],
+                    $scope
+                )
+                : InternshipRecord::professionRowByDepartment(
+                    trim((string) $row['profession_name']),
+                    (int) $department['dep_id'],
+                    $scope
+                );
             if (!$profession) {
-                $errors[] = '专业不存在或不属于所选届次学院';
+                $errors[] = $grade ? '专业不存在或不属于所选年级学院' : '专业不存在或不属于所选学院';
             }
         }
 
@@ -367,7 +394,12 @@ class InternshipPlanImportService
                 'course_code' => $this->text($row['course_code'] ?? null, 120),
                 'course_name' => $this->text($row['course_name'] ?? null, 180),
                 'course_category' => $this->text($row['course_category'] ?? null, 80) ?: null,
+                'category_id' => (int) ($category['id'] ?? 0),
+                'category_name' => (string) ($category['name'] ?? ''),
+                'scope_type' => (string) ($category['scope_type'] ?? ''),
+                'scope_name' => $scopeName,
                 'grade_id' => (int) ($grade['grade_id'] ?? 0),
+                'graduation_cohort_id' => (int) ($cohort['cohort_id'] ?? 0),
                 'dep_id' => (int) ($department['dep_id'] ?? 0),
                 'profession_id' => (int) ($profession['profession_id'] ?? 0),
                 'total_credit' => $totalCredit,
@@ -387,14 +419,16 @@ class InternshipPlanImportService
         $professionText = trim((string) ($row['profession_name'] ?? ''));
         $professionNames = $this->splitList($professionText);
         if (in_array($professionText, ['所有专业', '全部专业'], true)) {
-            $grade = InternshipRecord::gradeRowByName(trim((string) ($row['grade_name'] ?? '')));
+            $category = InternshipRecord::internshipCategoryRow(trim((string) ($row['category_name'] ?? '')));
+            $grade = $category && (string) $category['scope_type'] === 'grade'
+                ? InternshipRecord::gradeRowByName(trim((string) ($row['scope_name'] ?? '')))
+                : null;
             $department = InternshipRecord::departmentRowByName(trim((string) ($row['dep_name'] ?? '')), $scope);
-            if ($grade && $department) {
-                $professionNames = array_column(InternshipRecord::professionRowsForImport(
-                    (int) $grade['grade_id'],
-                    (int) $department['dep_id'],
-                    $scope
-                ), 'profession_name');
+            if ($category && $department) {
+                $professionRows = $grade
+                    ? InternshipRecord::professionRowsForImport((int) $grade['grade_id'], (int) $department['dep_id'], $scope)
+                    : InternshipRecord::professionRowsForDepartmentImport((int) $department['dep_id'], $scope);
+                $professionNames = array_column($professionRows, 'profession_name');
             }
         }
         if (!$professionNames) {
@@ -486,22 +520,22 @@ class InternshipPlanImportService
             $sheet = $spreadsheet->getActiveSheet();
             $sheet->setTitle('计划导入');
             $headers = [
-                '序号', '课程代码', '课程名称', '课程类别', '开课院系', '届次', '授课对象专业',
+                '序号', '课程代码', '课程名称', '课程类别', '实习类别', '开课院系', '归属年级/毕业届次', '授课对象专业',
                 '总学分', '实习学分', '总学时', '实习学时', '授课教师', '实习时间', '实习地点', '备注',
             ];
             $sheet->fromArray($headers, null, 'A1');
             $sheet->fromArray([
-                1, 'B00000001', '专业实习', '必修', '示例学院', '2026级', '示例专业',
+                1, 'B00000001', '专业实习', '必修', '其他实习', '示例学院', '2026级', '示例专业',
                 2, 2, 32, 32, '张老师', '第1-8周', '校外实习基地', '',
             ], null, 'A2');
             $sheet->freezePane('A2');
-            $sheet->setAutoFilter('A1:O1');
-            $sheet->getStyle('A1:O1')->applyFromArray([
+            $sheet->setAutoFilter('A1:P1');
+            $sheet->getStyle('A1:P1')->applyFromArray([
                 'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
                 'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '2563EB']],
                 'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER],
             ]);
-            $widths = [8, 16, 24, 12, 18, 14, 24, 12, 12, 12, 12, 20, 28, 24, 28];
+            $widths = [8, 16, 24, 12, 14, 18, 24, 24, 12, 12, 12, 12, 20, 28, 24, 28];
             foreach ($widths as $index => $width) {
                 $sheet->getColumnDimension(chr(65 + $index))->setWidth($width);
             }
@@ -511,7 +545,8 @@ class InternshipPlanImportService
             $guide->setTitle('字段说明');
             $guide->fromArray([
                 ['模板字段名', '填写要求'],
-                ['届次', '填写系统中已维护的届次名称，例如 2026级。'],
+                ['实习类别', '填写系统中已启用的实习类别名称。'],
+                ['归属年级/毕业届次', '普通实习填年级，例如 2026级；毕业实习填毕业届次，例如 2030届。'],
                 ['授课对象专业', '一个单元格可填写多个专业，以中文逗号、顿号或分号分隔；预览时自动拆分。'],
                 ['授课教师/实习时间/实习地点', '保留原始内容，不自动推断教师与时间地点的对应关系。'],
                 ['业务归属', '上传后在预览页逐行确认为实习、实训、实验、社会实践或忽略。'],
@@ -594,8 +629,9 @@ class InternshipPlanImportService
     {
         return [
             'course_name' => '课程名称',
+            'category_name' => '实习类别',
             'dep_name' => '学院',
-            'grade_name' => '届次',
+            'scope_name' => '归属年级/毕业届次',
             'profession_name' => '专业',
         ][$field] ?? $field;
     }
