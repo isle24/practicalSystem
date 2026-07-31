@@ -365,6 +365,9 @@
                       <el-button v-if="win.panel === 'baseFlows' && canManageInternship" :icon="Plus" @click="openBaseDialog()">
                         新增基地
                       </el-button>
+                      <el-button v-if="win.panel === 'baseFlows' && canManageInternship" :icon="Upload" :loading="internshipState.importing" @click="chooseBaseImportExcel">
+                        导入基地
+                      </el-button>
                       <el-button v-if="win.panel === 'plans' && canManageInternshipPlan" :icon="FileText" @click="openPlanDialog">
                         新增计划
                       </el-button>
@@ -401,8 +404,8 @@
                     <section
                       class="operation-dialog"
                       :class="{
-                        'task-detail-dialog': ['arrangementDetail', 'planDetail', 'implementationDetail', 'base', 'contentDetail', 'planImport'].includes(internshipState.dialog.type),
-                        'internship-complex-dialog': ['planDetail', 'implementationDetail', 'base', 'planImport'].includes(internshipState.dialog.type),
+                        'task-detail-dialog': ['arrangementDetail', 'planDetail', 'implementationDetail', 'base', 'contentDetail', 'planImport', 'baseImport'].includes(internshipState.dialog.type),
+                        'internship-complex-dialog': ['planDetail', 'implementationDetail', 'base', 'planImport', 'baseImport'].includes(internshipState.dialog.type),
                       }"
                     >
                       <header>
@@ -491,6 +494,43 @@
                             <template #default="{ row }">
                               <span v-if="row.errors?.length" class="import-error-text">{{ row.errors.join('；') }}</span>
                               <span v-else-if="row.duplicate">重复：{{ statusText(row.duplicate.status) }}</span>
+                              <span v-else class="import-ok-text">可导入</span>
+                            </template>
+                          </el-table-column>
+                        </el-table>
+                      </div>
+
+                      <div v-else-if="internshipState.dialog.type === 'baseImport'" class="plan-import-preview">
+                        <div class="plan-import-summary">
+                          <article><span>基地资料</span><strong>{{ internshipState.baseImport.summary.source_rows }}</strong></article>
+                          <article><span>错误行</span><strong>{{ internshipState.baseImport.summary.error_rows }}</strong></article>
+                          <article><span>警告行</span><strong>{{ internshipState.baseImport.summary.warning_rows }}</strong></article>
+                          <article><span>重复申报</span><strong>{{ internshipState.baseImport.summary.duplicate_rows }}</strong></article>
+                        </div>
+                        <el-alert
+                          v-if="!internshipState.baseImport.can_confirm"
+                          type="error"
+                          :closable="false"
+                          show-icon
+                          title="存在学院、专业或必填字段错误，必须全部修正后才能确认导入"
+                        />
+                        <el-table :data="internshipState.baseImport.items" height="100%" stripe size="small">
+                          <el-table-column prop="row_number" label="行" width="62" fixed="left" />
+                          <el-table-column prop="base_name" label="基地名称" min-width="210" fixed="left" />
+                          <el-table-column prop="declaration_year" label="申报年份" width="92" />
+                          <el-table-column prop="dep_name" label="学院" min-width="130" />
+                          <el-table-column label="服务专业" min-width="220">
+                            <template #default="{ row }">{{ (row.profession_names || []).join('、') || '-' }}</template>
+                          </el-table-column>
+                          <el-table-column prop="company_name" label="合作或依托单位" min-width="210" />
+                          <el-table-column prop="base_category" label="基地类别" min-width="150" />
+                          <el-table-column prop="base_level" label="基地等级" width="100" />
+                          <el-table-column label="校验结果" min-width="260">
+                            <template #default="{ row }">
+                              <span v-if="row.errors?.length" class="import-error-text">{{ row.errors.join('；') }}</span>
+                              <span v-else-if="row.warnings?.length" class="import-warning-text">{{ row.warnings.join('；') }}</span>
+                              <span v-else-if="row.duplicate?.declaration_exists">重复申报，将跳过</span>
+                              <span v-else-if="row.duplicate?.base_exists">复用基地，新增年度申报</span>
                               <span v-else class="import-ok-text">可导入</span>
                             </template>
                           </el-table-column>
@@ -880,6 +920,9 @@
                           <el-button type="primary" :disabled="internshipState.loading" :loading="internshipState.loading" @click="confirmInternshipDialog">提交审核</el-button>
                         </template>
                         <el-button v-else-if="internshipState.dialog.type === 'planImport'" type="primary" :disabled="internshipState.loading" :loading="internshipState.loading" @click="confirmPlanImportPreview">
+                          确认导入
+                        </el-button>
+                        <el-button v-else-if="internshipState.dialog.type === 'baseImport'" type="primary" :disabled="internshipState.loading || !internshipState.baseImport.can_confirm" :loading="internshipState.loading" @click="confirmBaseImportPreview">
                           确认导入
                         </el-button>
                         <el-button v-else-if="!['timeline', 'contentDetail'].includes(internshipState.dialog.type)" type="primary" :disabled="internshipState.loading" :loading="internshipState.loading" @click="confirmInternshipDialog">
@@ -3819,6 +3862,13 @@
       hidden
       @change="handlePlanImportFile"
     >
+    <input
+      ref="baseImportInputRef"
+      type="file"
+      accept=".xls,.xlsx"
+      hidden
+      @change="handleBaseImportFile"
+    >
   </main>
 </template>
 
@@ -3965,6 +4015,8 @@ import {
   importInternshipArrangementAssignments,
   previewInternshipPlanImport,
   confirmInternshipPlanImport,
+  previewInternshipBaseImport,
+  confirmInternshipBaseImport,
   deleteMenu as deleteMenuApi,
   deleteOperationGuide,
   login as loginApi,
@@ -4033,6 +4085,7 @@ const archiveImportInputRef = ref(null);
 const archiveImportType = ref('');
 const arrangementImportInputRef = ref(null);
 const planImportInputRef = ref(null);
+const baseImportInputRef = ref(null);
 const focusedWindowId = ref(null);
 const zIndexSeed = ref(20);
 const wallpaperCacheKey = 'practical_pc_wallpaper';
@@ -4311,6 +4364,9 @@ const adminState = reactive({
     professions: [],
     classes: [],
     companies: [],
+    base_categories: [],
+    base_levels: [],
+    base_declaration_years: [],
   },
   scope: {
     account_id: null,
@@ -4971,6 +5027,7 @@ const internshipState = reactive({
   planDetail: {},
   implementationDetail: emptyImplementationDetail(),
   planImport: emptyPlanImportState(),
+  baseImport: emptyBaseImportState(),
   arrangementDetail: emptyArrangementDetail(),
   arrangementForm: emptyArrangementForm(),
   planForm: emptyPlanForm(),
@@ -5396,12 +5453,19 @@ const internshipListConfigs = computed(() => ({
   baseFlows: {
     listKey: 'baseFlows',
     filename: '基地建设',
-    filters: internshipFilters(['keyword'], internshipState.filters.baseFlows),
+    filters: internshipListFilters('baseFlows', [
+      'dep_id', 'profession_id', 'base_type', 'status', 'base_category',
+      'base_level', 'company_id', 'declaration_year', 'keyword',
+    ]),
     columns: [
       { prop: 'name', label: '基地名称', minWidth: 180 },
       { key: 'base_type', label: '基地类型', width: 100, tag: true, tagType: row => row.base_type === 'temporary' ? 'warning' : 'success', formatter: row => row.base_type === 'temporary' ? '临时基地' : '长期基地' },
       { prop: 'dep_name', label: '学院', minWidth: 130 },
+      { prop: 'profession_names', label: '服务专业', minWidth: 180 },
       { prop: 'company_name', label: '合作单位', minWidth: 170 },
+      { prop: 'declaration_year', label: '申报年份', width: 92 },
+      { prop: 'base_category', label: '基地类别', minWidth: 150 },
+      { prop: 'base_level', label: '基地等级', width: 100 },
       { prop: 'address', label: '基地位置', minWidth: 200 },
       { prop: 'service_courses', label: '服务课程', minWidth: 180, formatter: row => contentSummary(row.service_courses) },
       { prop: 'manager_name', label: '负责人', width: 110 },
@@ -9720,12 +9784,31 @@ function emptyPlanImportState() {
   };
 }
 
+function emptyBaseImportState() {
+  return {
+    file: null,
+    items: [],
+    can_confirm: false,
+    summary: {
+      source_rows: 0,
+      error_rows: 0,
+      warning_rows: 0,
+      duplicate_rows: 0,
+    },
+  };
+}
+
 function emptyInternshipFilters() {
   return {
     keyword: '',
     semester: '',
     dep_id: '',
     base_id: '',
+    base_type: '',
+    base_category: '',
+    base_level: '',
+    company_id: '',
+    declaration_year: '',
     profession_id: '',
     grade_id: '',
     graduation_cohort_id: '',
@@ -11279,6 +11362,11 @@ function internshipFilters(keys, values = {}, options = internshipState.options)
     keyword: { key: 'keyword', label: '关键词', placeholder: '学生、学号、教师、标题' },
     student_keyword: { key: 'keyword', label: '学生', placeholder: '姓名或学号' },
     base_id: { key: 'base_id', label: '实习基地', type: 'select', options: optionItems(internshipState.options.bases, 'id', 'name') },
+    base_type: { key: 'base_type', label: '基地性质', type: 'select', options: [{ value: 'long_term', label: '长期基地' }, { value: 'temporary', label: '临时基地' }] },
+    base_category: { key: 'base_category', label: '基地类别', type: 'select', options: valueOptions(options.base_categories) },
+    base_level: { key: 'base_level', label: '基地等级', type: 'select', options: valueOptions(options.base_levels) },
+    company_id: { key: 'company_id', label: '合作单位', type: 'select', options: optionItems(options.companies, 'company_id', 'company_name') },
+    declaration_year: { key: 'declaration_year', label: '申报年份', type: 'select', options: valueOptions(options.base_declaration_years) },
     category_id: { key: 'category_id', label: '实习类别', type: 'select', options: optionItems(options.internship_categories, 'id', 'name') },
     grade_id: { key: 'grade_id', label: '年级', type: 'select', options: optionItems(options.grades, 'grade_id', 'grade_name') },
     graduation_cohort_id: { key: 'graduation_cohort_id', label: '毕业届次', type: 'select', options: optionItems(options.graduation_cohorts, 'cohort_id', 'cohort_name') },
@@ -11312,6 +11400,10 @@ function optionItems(items, valueKey, labelKey) {
     value: item[valueKey],
     label: item[labelKey] || item[valueKey],
   }));
+}
+
+function valueOptions(items = []) {
+  return (items || []).map(value => ({ value, label: String(value) }));
 }
 
 function professionFilterKeys(values = {}) {
@@ -12696,7 +12788,7 @@ async function confirmPlanImportPreview() {
     internshipState.message = `还有 ${unconfirmed.length} 行未确认业务归属`;
     return;
   }
-  const fileId = internshipState.planImport.file?.id;
+  const fileId = internshipState.planImport.file?.id || internshipState.planImport.file?.file_id;
   if (!fileId) {
     internshipState.message = '导入文件信息已失效，请重新选择文件';
     return;
@@ -12713,6 +12805,66 @@ async function confirmPlanImportPreview() {
     closeInternshipDialog();
     await loadInternshipPanel('plans', 1);
     internshipState.savedMessage = `计划表导入完成：新增 ${result.created || 0}，更新 ${result.updated || 0}，分类 ${result.classified || 0}，跳过 ${result.skipped || 0}，失败 ${result.failed || 0}`;
+  } catch (error) {
+    internshipState.message = error.message;
+  } finally {
+    internshipState.loading = false;
+  }
+}
+
+function chooseBaseImportExcel() {
+  if (!canManageInternship.value || internshipState.importing) {
+    return;
+  }
+  baseImportInputRef.value?.click();
+}
+
+async function handleBaseImportFile(event) {
+  const file = event.target.files?.[0];
+  event.target.value = '';
+  if (!file) {
+    return;
+  }
+  internshipState.importing = true;
+  internshipState.loading = true;
+  internshipState.message = '';
+  internshipState.savedMessage = '';
+  try {
+    internshipState.baseImport = {
+      ...emptyBaseImportState(),
+      ...(await previewInternshipBaseImport(file)),
+    };
+    internshipState.dialog = {
+      ...emptyOperationDialog(),
+      type: 'baseImport',
+      title: '实习基地导入预览',
+    };
+  } catch (error) {
+    internshipState.message = error.message;
+  } finally {
+    internshipState.importing = false;
+    internshipState.loading = false;
+  }
+}
+
+async function confirmBaseImportPreview() {
+  if (internshipState.loading || !internshipState.baseImport.can_confirm) {
+    return;
+  }
+  const fileId = internshipState.baseImport.file?.id || internshipState.baseImport.file?.file_id;
+  if (!fileId) {
+    internshipState.message = '导入文件信息已失效，请重新选择文件';
+    return;
+  }
+
+  internshipState.loading = true;
+  internshipState.message = '';
+  internshipState.savedMessage = '';
+  try {
+    const result = await confirmInternshipBaseImport({ import_file_id: fileId });
+    closeInternshipDialog();
+    await loadInternshipPanel('baseFlows', 1);
+    internshipState.savedMessage = `基地导入完成：新增基地 ${result.created_bases || 0}，新增年度申报 ${result.created_declarations || 0}，复用基地 ${result.reused_bases || 0}，跳过重复申报 ${result.skipped_declarations || 0}`;
   } catch (error) {
     internshipState.message = error.message;
   } finally {
@@ -12940,6 +13092,7 @@ function closeInternshipDialog() {
   internshipState.planDetail = {};
   internshipState.implementationDetail = emptyImplementationDetail();
   internshipState.planImport = emptyPlanImportState();
+  internshipState.baseImport = emptyBaseImportState();
   internshipState.arrangementDetail = emptyArrangementDetail();
   internshipState.courseScoreForm = emptyCourseScoreForm();
 }

@@ -67,6 +67,7 @@ class InternshipRecord extends TableRecord
             self::whereInOrDeny($teachers, 'teacher_id', [(int) ($scope['teacher_id'] ?? 0)]);
         }
         $students = self::applyStudentScope(self::queryTable('students')->where('status', 'enabled')->whereNull('deleted_at'), $scope, 'students.student_id');
+        $baseDeclarationOptions = self::baseDeclarationOptions($scope);
 
         return [
             'departments' => self::rows($departments->orderBy('sort')->get(['dep_id', 'dep_name', 'dep_code'])),
@@ -79,6 +80,9 @@ class InternshipRecord extends TableRecord
             'teachers' => self::rows($teachers->orderBy('teacher_id')->get(['teacher_id', 'teacher_name', 'teacher_num', 'dep_id', 'profession_id'])),
             'students' => self::rows($students->orderBy('student_id')->get(['student_id', 'name', 'student_num', 'grade_id', 'graduation_cohort_id', 'dep_id', 'profession_id', 'class_id'])),
             'bases' => self::rows(self::applyBaseScope(self::queryTable('base')->where('base.status', 'enabled')->whereNull('base.deleted_at'), $scope)->orderBy('base.id')->get(['base.id', 'base.name', 'base.company_id', 'base.dep_id'])),
+            'base_categories' => $baseDeclarationOptions['categories'],
+            'base_levels' => $baseDeclarationOptions['levels'],
+            'base_declaration_years' => $baseDeclarationOptions['years'],
             'plans' => self::rows(self::planOptionQuery($scope)
                 ->orderByDesc('internship_plan.id')
                 ->get([
@@ -118,11 +122,51 @@ class InternshipRecord extends TableRecord
 
     public static function basePage(array $scope, array $filters): array
     {
+        $declarationIds = self::queryTable('base_declaration')
+            ->whereNull('deleted_at');
+        foreach (['base_category', 'base_level', 'declaration_year'] as $field) {
+            $value = $filters[$field] ?? null;
+            if ($value !== null && $value !== '') {
+                $declarationIds->where($field, $value);
+            }
+        }
+        $declarationIds->selectRaw('base_id, MAX(id) as declaration_id')->groupBy('base_id');
+        $professionNames = self::queryTable('base_profession')
+            ->join('profession', 'base_profession.profession_id', '=', 'profession.profession_id')
+            ->whereNull('base_profession.deleted_at')
+            ->whereNull('profession.deleted_at')
+            ->selectRaw("base_profession.base_id, GROUP_CONCAT(DISTINCT profession.profession_name ORDER BY profession.profession_name SEPARATOR '、') as profession_names")
+            ->groupBy('base_profession.base_id');
         $query = self::applyBaseScope(self::queryTable('base')
             ->leftJoin('companies', 'base.company_id', '=', 'companies.company_id')
             ->leftJoin('department', 'base.dep_id', '=', 'department.dep_id')
+            ->leftJoinSub($declarationIds, 'base_declaration_ref', 'base.id', '=', 'base_declaration_ref.base_id')
+            ->leftJoin('base_declaration as latest_declaration', 'base_declaration_ref.declaration_id', '=', 'latest_declaration.id')
+            ->leftJoinSub($professionNames, 'base_profession_names', 'base.id', '=', 'base_profession_names.base_id')
             ->whereNull('base.deleted_at'), $scope);
-        self::keyword($query, $filters, ['base.name', 'base.code', 'companies.company_name']);
+        self::keyword($query, $filters, [
+            'base.name', 'base.code', 'companies.company_name', 'base.manager_name',
+            'base.manager_phone', 'base.address', 'base_profession_names.profession_names',
+        ]);
+        self::filter($query, $filters, 'base.dep_id', 'dep_id');
+        self::filter($query, $filters, 'base.company_id', 'company_id');
+        self::filter($query, $filters, 'base.base_type', 'base_type');
+        self::filter($query, $filters, 'base.status', 'status');
+        if (($filters['profession_id'] ?? '') !== '') {
+            $professionId = (int) $filters['profession_id'];
+            $query->whereExists(function ($subQuery) use ($professionId): void {
+                $subQuery->selectRaw('1')
+                    ->from('base_profession as filtered_base_profession')
+                    ->whereColumn('filtered_base_profession.base_id', 'base.id')
+                    ->where('filtered_base_profession.profession_id', $professionId)
+                    ->whereNull('filtered_base_profession.deleted_at');
+            });
+        }
+        if (($filters['base_category'] ?? '') !== ''
+            || ($filters['base_level'] ?? '') !== ''
+            || ($filters['declaration_year'] ?? '') !== '') {
+            $query->whereNotNull('base_declaration_ref.declaration_id');
+        }
 
         return self::paginate($query->orderByDesc('base.id'), $filters, [
             'base.id', 'base.uuid', 'base.name', 'base.code', 'base.company_id', 'base.dep_id',
@@ -130,8 +174,40 @@ class InternshipRecord extends TableRecord
             'base.current_student_count', 'base.service_courses', 'base.category',
             'base.manager_name', 'base.manager_phone', 'base.capacity', 'base.used_count',
             'base.status', 'base.created_at',
-            'companies.company_name', 'department.dep_name',
+            'companies.company_name', 'department.dep_name', 'base_profession_names.profession_names',
+            'latest_declaration.declaration_year', 'latest_declaration.base_category',
+            'latest_declaration.base_level', 'latest_declaration.project_status',
+            'latest_declaration.approved_amount',
         ]);
+    }
+
+    /** 查询当前数据范围内的基地申报筛选选项 */
+    private static function baseDeclarationOptions(array $scope): array
+    {
+        $query = self::applyBaseScope(self::queryTable('base')
+            ->join('base_declaration', 'base.id', '=', 'base_declaration.base_id')
+            ->whereNull('base.deleted_at')
+            ->whereNull('base_declaration.deleted_at'), $scope);
+        $rows = self::rows($query->get([
+            'base_declaration.base_category',
+            'base_declaration.base_level',
+            'base_declaration.declaration_year',
+        ]));
+
+        $values = static function (array $rows, string $key, bool $descending = false): array {
+            $items = array_values(array_unique(array_filter(array_map(
+                static fn (array $row): string => trim((string) ($row[$key] ?? '')),
+                $rows
+            ))));
+            $descending ? rsort($items, SORT_NATURAL) : sort($items, SORT_NATURAL);
+            return $items;
+        };
+
+        return [
+            'categories' => $values($rows, 'base_category'),
+            'levels' => $values($rows, 'base_level'),
+            'years' => $values($rows, 'declaration_year', true),
+        ];
     }
 
     /** 查询基地及其结构化申报资料 */

@@ -564,6 +564,20 @@ export function saveInternshipBase(payload) {
   return internshipPost('save-base', payload);
 }
 
+export function previewInternshipBaseImport(file) {
+  const body = new FormData();
+  body.append('file', file);
+  return request('/internship/preview-base-import', {
+    method: 'POST',
+    body,
+    timeoutMs: 150000,
+  });
+}
+
+export function confirmInternshipBaseImport(payload) {
+  return internshipPost('confirm-base-import', payload);
+}
+
 export function fetchInternshipBaseDetail(params = {}) {
   return internshipList('base-detail', params);
 }

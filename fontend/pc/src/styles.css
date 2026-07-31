@@ -3279,6 +3279,10 @@ a {
   color: var(--danger);
 }
 
+.import-warning-text {
+  color: #b45309;
+}
+
 .import-ok-text {
   color: var(--green);
 }

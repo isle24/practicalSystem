@@ -69,6 +69,24 @@ class InternshipController
     }
 
     /**
+     * 预览实习基地 Excel 导入
+     */
+    #[OperationLog('预览实习基地Excel导入')]
+    public function previewBaseImport(Request $request): Response
+    {
+        return $this->handle(fn (): array => $this->service()->previewBaseImport($request));
+    }
+
+    /**
+     * 确认实习基地 Excel 导入
+     */
+    #[OperationLog('确认实习基地Excel导入')]
+    public function confirmBaseImport(Request $request): Response
+    {
+        return $this->handle(fn (): array => $this->service()->confirmBaseImport($request));
+    }
+
+    /**
      * 查询基地流程记录
      */
     #[OperationLog('查询基地流程记录')]

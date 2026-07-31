@@ -234,7 +234,10 @@ class InternshipService
     {
         $this->requirePermission('internship:view');
 
-        return InternshipRecord::basePage($this->scopeContext(), $this->requestFilters($request, ['page', 'page_size', 'per_page', 'keyword']));
+        return InternshipRecord::basePage($this->scopeContext(), $this->requestFilters($request, [
+            'page', 'page_size', 'per_page', 'keyword', 'dep_id', 'profession_id', 'base_type',
+            'status', 'base_category', 'base_level', 'company_id', 'declaration_year',
+        ]));
     }
 
     /** 返回当前账号可见的基地完整资料 */
@@ -370,6 +373,24 @@ class InternshipService
             InternshipRecord::saveBaseRelations((int) $result['id'], $relations, $now);
             return InternshipRecord::baseDetail($scope, (int) $result['id']) ?: $result;
         });
+    }
+
+    /** 预览实习基地汇总表 */
+    public function previewBaseImport(Request $request): array
+    {
+        $this->requirePermission('internship:manage');
+        $this->requireAdminRole();
+
+        return (new InternshipBaseImportService())->preview($request, $this->scopeContext());
+    }
+
+    /** 确认导入实习基地汇总表 */
+    public function confirmBaseImport(Request $request): array
+    {
+        $this->requirePermission('internship:manage');
+        $this->requireAdminRole();
+
+        return (new InternshipBaseImportService())->confirm($request, $this->scopeContext(), CurrentContext::accountId());
     }
 
     public function baseFlows(Request $request): array
