@@ -416,6 +416,7 @@
                         :loading="internshipState.loading"
                         :options="internshipState.options"
                         :readonly="internshipState.dialog.readonly"
+                        :can-sync-teachers="['super_admin', 'school_admin'].includes(currentRoleType)"
                         @cancel="closeInternshipDialog"
                         @submit="submitInternshipBase"
                       />

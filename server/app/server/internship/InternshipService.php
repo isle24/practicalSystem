@@ -7,6 +7,7 @@ use app\model\channel\AcademicArchiveRecord;
 use app\model\channel\InternshipArchiveRecord;
 use app\model\channel\InternshipRecord;
 use app\model\channel\PracticeRecord;
+use app\model\channel\TeacherSyncRecord;
 use app\server\CurrentContext;
 use app\server\WorkflowLock;
 use app\server\config\ConfigService;
@@ -312,6 +313,9 @@ class InternshipService
                 'phone' => $this->stringInput($request, 'manager_phone', 40),
             ]);
         }
+        if ($manager) {
+            $manager['teacher_id'] = null;
+        }
         $address = $this->nullableString($request, 'address', 255);
         $managerName = (string) ($manager['name'] ?? '');
         if ($baseType === 'temporary' && $this->stringInput($request, 'name', 180) === '') {
@@ -327,7 +331,7 @@ class InternshipService
         $relations = [
             'profession_ids' => $professionIds,
             'manager' => $manager,
-            'teachers' => $this->basePeopleInput($this->requestArray($request, 'teachers')),
+            'teachers' => $this->basePeopleInput($this->requestArray($request, 'teachers'), true, $scope),
             'mentors' => $this->basePeopleInput($this->requestArray($request, 'mentors')),
             'existing_sites' => $this->baseExistingSitesInput($this->requestArray($request, 'existing_sites')),
             'company_profile' => $this->baseCompanyProfileInput($this->requestArray($request, 'company_profile')),
@@ -4960,6 +4964,7 @@ class InternshipService
         return is_array($value) ? $value : [];
     }
 
+    /** 规范化单个基地人员输入 */
     private function basePersonInput(mixed $value): array
     {
         if (!is_array($value)) {
@@ -4968,6 +4973,7 @@ class InternshipService
 
         $person = [
             'user_id' => is_numeric($value['user_id'] ?? null) ? (int) $value['user_id'] : null,
+            'teacher_id' => is_numeric($value['teacher_id'] ?? null) ? (int) $value['teacher_id'] : null,
             'name' => $this->stringValue($value['name'] ?? null, 80),
             'gender' => $this->stringValue($value['gender'] ?? null, 20),
             'birth_date' => $this->stringValue($value['birth_date'] ?? null, 40),
@@ -4976,24 +4982,58 @@ class InternshipService
             'phone' => $this->stringValue($value['phone'] ?? ($value['mobile'] ?? null), 40),
             'duties' => $this->stringValue($value['duties'] ?? ($value['responsibility'] ?? null), 10000),
         ];
-        if ($person['name'] === '' && !$person['user_id']) {
+        if ($person['name'] === '' && !$person['user_id'] && !$person['teacher_id']) {
             return [];
         }
 
         return $person;
     }
 
-    private function basePeopleInput(array $values): array
+    /** 规范化基地人员列表并应用教师档案快照 */
+    private function basePeopleInput(array $values, bool $teacherDirectory = false, array $scope = []): array
     {
         $items = [];
         foreach ($values as $value) {
             $person = $this->basePersonInput($value);
-            if ($person) {
-                $items[] = $person;
+            if (!$person) {
+                continue;
             }
+            if (!$teacherDirectory) {
+                $person['teacher_id'] = null;
+                $items[] = $person;
+                continue;
+            }
+            if (!$person['teacher_id']) {
+                $items[] = $person;
+                continue;
+            }
+
+            $teacher = TeacherSyncRecord::teacherById($scope, (int) $person['teacher_id']);
+            if (!$teacher) {
+                throw new RuntimeException('所选校内指导教师不存在或不在当前账号数据范围内', 403);
+            }
+            $items[] = array_merge($person, [
+                'user_id' => is_numeric($teacher['user_id'] ?? null) ? (int) $teacher['user_id'] : null,
+                'name' => (string) ($teacher['teacher_name'] ?? ''),
+                'gender' => $this->teacherGenderText((string) ($teacher['gender'] ?? '')),
+                'birth_date' => (string) ($teacher['birth_date'] ?? ''),
+                'title' => (string) ($teacher['title'] ?? ''),
+                'education' => (string) ($teacher['education'] ?? ''),
+                'phone' => (string) ($teacher['phone'] ?? ''),
+            ]);
         }
 
         return $items;
+    }
+
+    /** 转换教师档案性别为基地快照显示值 */
+    private function teacherGenderText(string $gender): string
+    {
+        return match (strtolower(trim($gender))) {
+            'male', 'm', '1', '男' => '男',
+            'female', 'f', '2', '女' => '女',
+            default => trim($gender),
+        };
     }
 
     private function baseExistingSitesInput(array $values): array

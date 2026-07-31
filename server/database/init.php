@@ -51,10 +51,58 @@ seedMaster($master, [
     'appDomain' => appDomain($appUrl),
 ]);
 
-foreach ([$templateDb, $defaultSchoolDb] as $schoolDb) {
-    $school = databasePdo($host, $port, $user, $pass, $schoolDb, $charset);
-    createSchoolSchema($school);
-    seedSchool($school, $wechatProxyUrl);
+$schoolTargets = [[
+    'database_id' => null,
+    'database_host' => $host,
+    'database_port' => $port,
+    'database_user' => $user,
+    'database_pwd' => $pass,
+    'database_db' => $templateDb,
+    'database_charset' => $charset,
+    'database_prefix' => '',
+    'is_default_business_db' => 'false',
+]];
+$schoolTargets = array_merge($schoolTargets, enabledSchoolDatabaseTargets($master));
+$upgradedTargets = [];
+foreach ($schoolTargets as $target) {
+    $targetId = isset($target['database_id']) ? (int) $target['database_id'] : null;
+    $targetHost = trim((string) ($target['database_host'] ?? ''));
+    $targetPort = (int) ($target['database_port'] ?? 3306);
+    $targetUser = (string) ($target['database_user'] ?? '');
+    $targetPass = (string) ($target['database_pwd'] ?? '');
+    $targetDb = trim((string) ($target['database_db'] ?? ''));
+    $targetCharset = trim((string) ($target['database_charset'] ?? 'utf8mb4')) ?: 'utf8mb4';
+    $targetPrefix = trim((string) ($target['database_prefix'] ?? ''));
+    $isDefaultBusinessDb = (string) ($target['is_default_business_db'] ?? 'false') === 'true';
+    $label = $targetId === null
+        ? "模板库升级失败：database_db={$targetDb}"
+        : "学校业务库升级失败：database_id={$targetId}, database_db={$targetDb}";
+    if ($targetHost === '' || $targetPort < 1 || $targetPort > 65535 || $targetUser === '' || $targetDb === '') {
+        throw new RuntimeException($label . '：连接配置不完整');
+    }
+    if (!preg_match('/^[A-Za-z0-9_]+$/', $targetCharset)) {
+        throw new RuntimeException($label . '：database_charset 格式无效');
+    }
+    if ($targetPrefix !== '') {
+        throw new RuntimeException($label . "：当前初始化程序不支持带表前缀的学校业务库（database_prefix={$targetPrefix}）");
+    }
+    $targetKey = hash('sha256', strtolower($targetHost) . "\0" . $targetPort . "\0" . $targetDb);
+    if (isset($upgradedTargets[$targetKey])) {
+        continue;
+    }
+
+    try {
+        $school = databasePdo($targetHost, $targetPort, $targetUser, $targetPass, $targetDb, $targetCharset);
+        createSchoolSchema($school);
+        if ($targetId === null || $isDefaultBusinessDb || $targetDb === $defaultSchoolDb) {
+            seedSchool($school, $wechatProxyUrl);
+        }
+    } catch (Throwable $exception) {
+        $detail = sanitizeDatabaseError($exception->getMessage(), $targetPass);
+        throw new RuntimeException($detail === '' ? $label : $label . '：' . $detail);
+    }
+
+    $upgradedTargets[$targetKey] = true;
 }
 
 echo "database initialized\n";
@@ -73,6 +121,25 @@ function databasePdo(string $host, int $port, string $user, string $pass, string
             PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
         ]
     );
+}
+
+/** 查询主库登记的全部启用学校业务库 */
+function enabledSchoolDatabaseTargets(PDO $master): array
+{
+    return $master->query(
+        "SELECT `database_id`, `database_host`, `database_port`, `database_user`, `database_pwd`,
+                `database_db`, `database_charset`, `database_prefix`, `is_default_business_db`
+         FROM `databases`
+         WHERE `status` = 'enabled'
+         ORDER BY `database_id`"
+    )->fetchAll(PDO::FETCH_ASSOC);
+}
+
+/** 清理数据库升级错误中的连接密码 */
+function sanitizeDatabaseError(string $message, string $password): string
+{
+    $message = trim($message);
+    return $password === '' ? $message : str_replace($password, '******', $message);
 }
 
 function quoteIdentifier(string $identifier): string
@@ -169,6 +236,44 @@ function ensureIndex(PDO $pdo, string $table, string $index, string $ddl): void
     if ((int) $stmt->fetchColumn() === 0) {
         $pdo->exec($ddl);
     }
+}
+
+/** 检测重复值后创建单列唯一索引 */
+function ensureUniqueIndex(PDO $pdo, string $table, string $index, string $column, string $ddl): void
+{
+    $stmt = $pdo->prepare(
+        'SELECT NON_UNIQUE, COLUMN_NAME FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND INDEX_NAME = ? ORDER BY SEQ_IN_INDEX'
+    );
+    $stmt->execute([$table, $index]);
+    $existing = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    if ($existing) {
+        if (array_filter($existing, static fn (array $row): bool => (int) $row['NON_UNIQUE'] !== 0)) {
+            throw new RuntimeException("索引 {$index} 已存在但不是唯一索引");
+        }
+        $columns = array_map(static fn (array $row): string => (string) $row['COLUMN_NAME'], $existing);
+        if ($columns !== [$column]) {
+            throw new RuntimeException("唯一索引 {$index} 已存在但字段不匹配，请检查数据库结构");
+        }
+        return;
+    }
+
+    $tableName = quoteIdentifier($table);
+    $columnName = quoteIdentifier($column);
+    $duplicate = $pdo->query(
+        "SELECT {$columnName} AS duplicate_value, COUNT(*) AS duplicate_count
+         FROM {$tableName}
+         WHERE {$columnName} IS NOT NULL
+         GROUP BY {$columnName}
+         HAVING COUNT(*) > 1
+         LIMIT 1"
+    )->fetch();
+    if ($duplicate) {
+        $value = (string) ($duplicate['duplicate_value'] ?? '');
+        $count = (int) ($duplicate['duplicate_count'] ?? 0);
+        throw new RuntimeException("无法创建唯一索引 {$index}：{$table}.{$column} 值 '{$value}' 重复 {$count} 次，请先清理重复教师档案");
+    }
+
+    $pdo->exec($ddl);
 }
 
 function ensureIndexColumns(PDO $pdo, string $table, string $index, array $columns, string $ddl): void
@@ -343,6 +448,8 @@ function ensureArchiveSchema(PDO $pdo): void
     }
     ensureIndex($pdo, 'teacher_list', 'idx_teacher_external', "ALTER TABLE `teacher_list` ADD KEY `idx_teacher_external` (`external_id`, `status`)");
     ensureIndex($pdo, 'teacher_list', 'idx_teacher_number', "ALTER TABLE `teacher_list` ADD KEY `idx_teacher_number` (`teacher_num`, `status`)");
+    ensureUniqueIndex($pdo, 'teacher_list', 'uk_teacher_external_id', 'external_id', "ALTER TABLE `teacher_list` ADD UNIQUE KEY `uk_teacher_external_id` (`external_id`)");
+    ensureUniqueIndex($pdo, 'teacher_list', 'uk_teacher_number', 'teacher_num', "ALTER TABLE `teacher_list` ADD UNIQUE KEY `uk_teacher_number` (`teacher_num`)");
 
     ensureColumn($pdo, 'companies', 'unit_type', "ALTER TABLE `companies` ADD COLUMN `unit_type` VARCHAR(80) DEFAULT NULL AFTER `address`");
     ensureColumn($pdo, 'companies', 'enterprise_level', "ALTER TABLE `companies` ADD COLUMN `enterprise_level` VARCHAR(120) DEFAULT NULL AFTER `unit_type`");
@@ -612,7 +719,9 @@ function schoolCoreStatements(): array
             KEY `idx_user_id` (`user_id`),
             KEY `idx_dep_id` (`dep_id`),
             KEY `idx_teacher_external` (`external_id`, `status`),
-            KEY `idx_teacher_number` (`teacher_num`, `status`)
+            KEY `idx_teacher_number` (`teacher_num`, `status`),
+            UNIQUE KEY `uk_teacher_external_id` (`external_id`),
+            UNIQUE KEY `uk_teacher_number` (`teacher_num`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
         "CREATE TABLE IF NOT EXISTS `grade_teacher_guide` (
             `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,

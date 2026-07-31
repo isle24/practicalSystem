@@ -102,7 +102,13 @@
       </template>
 
       <template v-else-if="activeTab === 'people'">
-        <BasePersonRows v-model="local.teachers" title="校内指导教师" :readonly="readonly" />
+        <BasePersonRows
+          v-model="local.teachers"
+          title="校内指导教师"
+          :readonly="readonly"
+          directory
+          :can-sync="canSyncTeachers"
+        />
         <BasePersonRows v-model="local.mentors" title="企业指导教师" :readonly="readonly" />
       </template>
 
@@ -200,6 +206,7 @@ const props = defineProps({
   loading: { type: Boolean, default: false },
   options: { type: Object, default: () => ({}) },
   readonly: { type: Boolean, default: false },
+  canSyncTeachers: { type: Boolean, default: false },
 });
 
 const emit = defineEmits(['cancel', 'submit']);
@@ -319,8 +326,13 @@ function emptyForm(detail = {}) {
 
 function person(value = {}) {
   return {
-    user_id: value.user_id || null,
+    user_id: value.user_id ? Number(value.user_id) : null,
+    teacher_id: value.teacher_id ? Number(value.teacher_id) : null,
+    teacher_num: value.teacher_num || '',
     name: value.name || '',
+    dep_name: value.dep_name || '',
+    profession_name: value.profession_name || '',
+    email: value.email || '',
     gender: value.gender || '',
     birth_date: value.birth_date || '',
     title: value.title || '',

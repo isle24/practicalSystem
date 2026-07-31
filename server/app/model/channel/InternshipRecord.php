@@ -162,12 +162,21 @@ class InternshipRecord extends TableRecord
                 'profession.profession_name',
             ]);
         $people = self::queryTable('base_person')
+            ->leftJoin('teacher_list', 'base_person.teacher_id', '=', 'teacher_list.teacher_id')
+            ->leftJoin('department as teacher_department', 'teacher_list.dep_id', '=', 'teacher_department.dep_id')
+            ->leftJoin('profession as teacher_profession', 'teacher_list.profession_id', '=', 'teacher_profession.profession_id')
             ->where('base_person.base_id', $baseId)
             ->whereNull('base_person.deleted_at')
             ->orderBy('base_person.person_type')
             ->orderBy('base_person.sort')
             ->orderBy('base_person.id')
-            ->get();
+            ->get([
+                'base_person.*',
+                'teacher_list.teacher_num',
+                'teacher_list.email',
+                'teacher_department.dep_name',
+                'teacher_profession.profession_name',
+            ]);
         $existingSites = self::queryTable('base_existing_site')
             ->where('base_id', $baseId)
             ->whereNull('deleted_at')
@@ -284,6 +293,7 @@ class InternshipRecord extends TableRecord
                 'base_id' => $baseId,
                 'person_type' => (string) ($person['person_type'] ?? 'mentor'),
                 'user_id' => self::nullableRelationInt($person['user_id'] ?? null),
+                'teacher_id' => self::nullableRelationInt($person['teacher_id'] ?? null),
                 'name' => self::relationText($person['name'] ?? null, 80),
                 'gender' => self::relationText($person['gender'] ?? null, 20),
                 'birth_date' => self::relationText($person['birth_date'] ?? null, 40),

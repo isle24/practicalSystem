@@ -529,6 +529,37 @@ export function fetchInternshipBases(params = {}) {
   return internshipList('bases', params);
 }
 
+export function fetchTeacherSyncTeachers(params = {}) {
+  const query = new URLSearchParams(params).toString();
+  return request(`/teacher-sync/teachers${query ? `?${query}` : ''}`);
+}
+
+export function pullTeacherSync(payload = {}) {
+  return request('/teacher-sync/pull', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+    timeoutMs: 1500000,
+  });
+}
+
+export function fetchTeacherSyncConfig() {
+  return request('/teacher-sync/config');
+}
+
+export function saveTeacherSyncConfig(payload) {
+  return request('/teacher-sync/save-config', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function saveTeacherSyncApplication(payload) {
+  return request('/teacher-sync/save-application', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
 export function saveInternshipBase(payload) {
   return internshipPost('save-base', payload);
 }

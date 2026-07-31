@@ -92,6 +92,10 @@ class ConfigController
         if (!$this->canManageSchoolConfig()) {
             return $this->fail(40300, '无操作权限', 403);
         }
+        $groupInput = $request->input('group');
+        if (is_string($groupInput) && trim($groupInput) === 'teacher_sync') {
+            return $this->fail(40001, '教师同步配置请使用 /api/teacher-sync/save-config', 400);
+        }
 
         try {
             $group = (string) $request->input('group');
