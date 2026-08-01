@@ -99,6 +99,7 @@ class InternshipRecord extends TableRecord
                 ->leftJoin('internship_plan', 'arrangement.plan_id', '=', 'internship_plan.id')
                 ->leftJoin('profession', 'arrangement.profession_id', '=', 'profession.profession_id')
                 ->leftJoin('teacher_list', 'arrangement.teacher_id', '=', 'teacher_list.teacher_id')
+                ->leftJoin('grade_list', 'internship_plan.grade_id', '=', 'grade_list.grade_id')
                 ->leftJoin('graduation_cohort', 'internship_plan.graduation_cohort_id', '=', 'graduation_cohort.cohort_id')
                 ->leftJoin('internship_category', 'internship_plan.category_id', '=', 'internship_category.id')
                 ->where('arrangement.status', '<>', self::HISTORY_ARRANGEMENT_STATUS)
@@ -114,7 +115,7 @@ class InternshipRecord extends TableRecord
                     'arrangement.start_date', 'arrangement.end_date', 'arrangement.status',
                     'internship_plan.course_code', 'internship_plan.course_name',
                     'teacher_list.teacher_name', 'internship_category.name as category_name',
-                    'internship_category.scope_type', 'graduation_cohort.cohort_name',
+                    'internship_category.scope_type', 'grade_list.grade_name', 'graduation_cohort.cohort_name',
                 ])),
             'report_templates' => self::rows(self::queryTable('report_template')->where('status', 'enabled')->whereNull('deleted_at')->orderBy('id')->get(['id', 'uuid', 'name', 'code', 'version', 'online_enabled'])),
         ];

@@ -692,7 +692,12 @@ class InternshipController
         try {
             return $this->ok($callback());
         } catch (Throwable $exception) {
-            $status = (int) $exception->getCode();
+            $exceptionCode = (int) $exception->getCode();
+            if (in_array($exceptionCode, [40100, 40300, 40301, 40400, 40900, 42900], true)) {
+                return $this->fail($exceptionCode, $exception->getMessage(), intdiv($exceptionCode, 100));
+            }
+
+            $status = $exceptionCode;
             if (!in_array($status, [401, 403, 404, 409, 422, 429], true)) {
                 $status = $exception->getMessage() === '请先登录' ? 401 : 400;
             }
@@ -705,8 +710,8 @@ class InternshipController
                 429 => 42900,
                 default => 40001,
             };
-            if ((int) $exception->getCode() >= 42201 && (int) $exception->getCode() <= 42299) {
-                $code = (int) $exception->getCode();
+            if ($exceptionCode >= 42201 && $exceptionCode <= 42299) {
+                $code = $exceptionCode;
                 $status = 422;
             }
 

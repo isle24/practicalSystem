@@ -9,8 +9,8 @@
         v-for="row in internship.options.arrangements"
         :key="row.id"
         :title="row.title"
-        :subtitle="joinFact([row.course_name, row.teacher_name])"
-        :meta="[dateRangeText(row.start_date, row.end_date)].filter(Boolean)"
+        :subtitle="joinFact([row.course_name, row.category_name, row.teacher_name])"
+        :meta="[internshipPlanScopeText(row), dateRangeText(row.start_date, row.end_date)].filter(Boolean)"
         :footer-text="row.student_count ? `${row.student_count} 人` : ''"
         clickable
         @open="openTimelineDialog('arrangement', row)"
@@ -100,6 +100,7 @@ const {
   canLoadMore,
   dateRangeText,
   internship,
+  internshipPlanScopeText,
   joinFact,
   loadMoreInternshipList,
   openTimelineDialog,

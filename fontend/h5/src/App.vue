@@ -3525,6 +3525,11 @@ function internshipPlanScopeName(row) {
     : (row?.grade_name || row?.scope_name || '');
 }
 
+function internshipPlanScopeText(row) {
+  const name = internshipPlanScopeName(row);
+  return name ? `${internshipPlanScopeLabel(row)}：${name}` : '';
+}
+
 function reviewTargetDetails(entity, row) {
   if (!row) {
     return [];
@@ -4226,6 +4231,7 @@ provideInternshipContext({
   getMobileListConfig,
   handleMobileListAction,
   internship,
+  internshipPlanScopeText,
   internshipPanels,
   internshipReviewStatusOptions,
   internshipSummaries,
