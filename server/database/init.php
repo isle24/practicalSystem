@@ -2918,11 +2918,22 @@ function seedMenus(PDO $pdo): void
         [60911, 6091, '新增', 'config:class:save', null, 'pc', 'button', 641, null],
         [60912, 6091, '编辑', 'config:class:update', null, 'pc', 'button', 642, null],
         [60913, 6091, '删除', 'config:class:delete', null, 'pc', 'button', 643, null],
-        [610, 6, '基地管理', null, null, 'pc', 'menu', 65, 'Building2'],
-        [6101, 610, '列表', 'config:company', '/config/companies', 'pc', 'list', 651, 'List'],
-        [61011, 6101, '新增', 'config:company:save', null, 'pc', 'button', 651, null],
-        [61012, 6101, '编辑', 'config:company:update', null, 'pc', 'button', 652, null],
-        [61013, 6101, '删除', 'config:company:delete', null, 'pc', 'button', 653, null],
+        [610, 0, '基地管理', 'internship:view', null, 'pc', 'directory', 30, 'Building2'],
+        [6101, 610, '基地建设', null, null, 'pc', 'menu', 301, 'Building2'],
+        [61011, 6101, '列表', 'internship:view', '/base-management/construction', 'pc', 'list', 3011, 'List'],
+        [61012, 61011, '维护', 'internship:manage', null, 'pc', 'button', 3012, null],
+        [61013, 61011, '导入', 'internship:manage', null, 'pc', 'button', 3013, null],
+        [61014, 61011, '导出', 'internship:manage', null, 'pc', 'button', 3014, null],
+        [6102, 610, '基地申报', null, null, 'pc', 'menu', 302, 'FileText'],
+        [61021, 6102, '列表', 'internship:view', '/base-management/applications', 'pc', 'list', 3021, 'List'],
+        [610211, 61021, '提交', 'internship:manage', null, 'pc', 'button', 30211, null],
+        [610212, 61021, '审核', 'internship:approve', null, 'pc', 'button', 30212, null],
+        [610213, 61021, '通过后修改', 'internship:approve', null, 'pc', 'button', 30213, null],
+        [6103, 610, '基地使用', null, null, 'pc', 'menu', 303, 'ClipboardList'],
+        [61031, 6103, '列表', 'internship:view', '/base-management/usage', 'pc', 'list', 3031, 'List'],
+        [610311, 61031, '提交', 'internship:manage', null, 'pc', 'button', 30311, null],
+        [610312, 61031, '审核', 'internship:approve', null, 'pc', 'button', 30312, null],
+        [610313, 61031, '通过后修改', 'internship:approve', null, 'pc', 'button', 30313, null],
         [61, 6, '菜单管理', null, null, 'pc', 'menu', 70, 'ListTree'],
         [611, 61, '列表', 'config:menu', '/config/menus', 'pc', 'list', 701, 'List'],
         [601, 611, '新增', 'config:manage', null, 'pc', 'button', 601, null],
@@ -2975,6 +2986,28 @@ function seedMenus(PDO $pdo): void
 
     foreach ($menus as $menu) {
         $stmt->execute($menu);
+    }
+
+    $baseManagementMenuIds = [
+        610, 6101, 61011, 61012, 61013, 61014,
+        6102, 61021, 610211, 610212, 610213,
+        6103, 61031, 610311, 610312, 610313,
+    ];
+    $menuById = [];
+    foreach ($menus as $menu) {
+        $menuById[(int) $menu[0]] = $menu;
+    }
+    $baseMenuStmt = $pdo->prepare(
+        "UPDATE `menu`
+         SET `parent_id` = ?, `name` = ?, `code` = ?, `path` = ?, `platform` = ?, `type` = ?,
+             `sort` = ?, `icon` = ?, `visible` = 'true', `status` = 'enabled', `deleted_at` = NULL
+         WHERE `id` = ?"
+    );
+    foreach ($baseManagementMenuIds as $menuId) {
+        $menu = $menuById[$menuId];
+        $baseMenuStmt->execute([
+            $menu[1], $menu[2], $menu[3], $menu[4], $menu[5], $menu[6], $menu[7], $menu[8], $menu[0],
+        ]);
     }
 
     $pdo->exec("UPDATE `menu` SET `name` = '年级管理' WHERE `id` = 607");
@@ -3112,6 +3145,11 @@ function seedMenus(PDO $pdo): void
         14, 141, 105, 15, 151, 106, 1512, 16, 161, 107, 1612, 17, 171, 108,
         18, 181, 109, 19, 191, 110, 195, 1951, 19511, 19512,
     ];
+    $baseManagementMenus = [
+        610, 6101, 61011, 61012, 61013, 61014,
+        6102, 61021, 610211, 610212, 610213,
+        6103, 61031, 610311, 610312, 610313,
+    ];
     $practiceMenus = [2, 21, 211, 201, 202, 22, 221, 2211, 222, 2221, 22211, 23, 231, 2311, 2312, 24, 241, 2411, 2412, 25, 251, 2511, 26, 261, 2611, 2612, 27, 271, 2711];
     $practiceReadonlyMenus = [2, 21, 211, 22, 221, 222, 2221, 25, 251];
     $statMenus = [4, 41, 411, 402, 42, 421, 43, 431, 44, 441, 45, 451, 46, 461, 47, 471];
@@ -3120,8 +3158,8 @@ function seedMenus(PDO $pdo): void
     $roleMenuIds = [
         1 => $allMenuIds,
         2 => $allMenuIds,
-        3 => array_merge($internshipAdminMenus, $practiceMenus, $statMenus, $commonViewMenus),
-        4 => array_merge($internshipAdminMenus, $practiceMenus, $statMenus, $commonViewMenus),
+        3 => array_merge($internshipAdminMenus, $baseManagementMenus, $practiceMenus, $statMenus, $commonViewMenus),
+        4 => array_merge($internshipAdminMenus, $baseManagementMenus, $practiceMenus, $statMenus, $commonViewMenus),
         5 => array_merge([1, 11, 111, 12, 121, 104, 1213, 13, 131, 14, 141, 105, 15, 151, 106, 1512, 16, 161, 107, 1612, 17, 171, 108, 195, 1951, 19512, 201, 202, 2311, 2312, 2411, 2412, 2511, 2611, 2612], $practiceReadonlyMenus, $commonViewMenus),
         6 => array_merge([1, 11, 111, 12, 121, 103, 14, 141, 105, 15, 151, 106, 16, 161, 107, 195, 1951, 19511], $practiceReadonlyMenus, $commonViewMenus),
         7 => array_merge([1, 17, 171, 108], $commonViewMenus),
@@ -3363,6 +3401,7 @@ function seedOperationGuides(PDO $pdo): void
 {
     $guides = [
         ['internship', '实习管理操作说明', '实习管理围绕实习计划、实习任务、任务绑定、实习方式申请、延期申请、签到、日志、报告、成绩和归档材料进行全过程留痕。', '管理员按计划拆分任务并绑定班级，系统展开学生生成任务绑定；学生按任务完成过程材料，任务老师按任务审核评阅，学校管理员按学院、专业、届次查看整体进度。', '学生看不到列表筛选时，先确认当前账号是否为学生角色；教师看不到学生时，检查任务绑定和组织范围；审核退回后学生重新提交会形成新的记录。', 10],
+        ['companyManage', '基地管理操作说明', '基地管理统一维护基地建设资料、基地申报和基地使用记录。', '管理员先维护长期或临时基地资料，再按实际业务提交基地申报或基地使用记录；提交审核后由具备审核权限的管理员处理，全部流程保留提交和审核记录。', '学院管理员和专业管理员仅能查看本组织范围内的基地数据；基地申报和基地使用保存草稿后不会进入审核待办。', 15],
         ['practice', '实验实训管理操作说明', '实验实训管理统一维护教学计划、专业课表、项目、大纲、教案、成绩和反思报告，并通过类别区分实验与实训。', '管理员先维护届次、学院、专业和十二节通用课节，再按专业安排二维周课表；每条课表明确实验或实训类别、教师、日期、起止课节和场地，项目发布后按届次与专业绑定学生。', '课表必须先选择届次、学院和专业；同专业、教师或场地在重叠课节内不能重复排课；历史课表仍按保存时的时间快照显示。', 20],
         ['stat', '统计报表操作说明', '统计报表按当前角色的数据范围展示实习总览、学院统计、专业统计、任务老师统计、学生过程统计和归档材料统计。', '选择左侧报表菜单后，通过届次、学院、专业和关键词筛选数据；切换报表菜单可查看不同统计口径的数据明细。', '如果统计值与列表不一致，优先确认当前角色的数据范围、筛选条件和业务数据是否已刷新。', 40],
         ['log', '日志审计操作说明', '日志审计读取当前学校业务库下所有 operation_log 按月分表，支持关键词、动作、IP 和日期范围查询。', '管理员进入日志审计后先设置查询条件，再查看来源分表、操作账号、动作、IP 和日志内容。', '如果日志为空，检查当前月份日志分表是否存在，以及账号是否具备日志查看权限。', 50],

@@ -59,31 +59,6 @@
         <span class="brand-mark">实</span>
         <span>实践管理系统</span>
       </div>
-      <div class="global-search-wrap">
-        <label class="global-search">
-          <Search :size="15" />
-          <input
-            v-model="keyword"
-            type="search"
-            placeholder="搜索模块、基地或消息"
-            @keyup.enter="submitGlobalSearch"
-          >
-        </label>
-        <div v-if="showGlobalSearchResults" class="global-search-results">
-          <button
-            v-for="module in globalSearchResults"
-            :key="module.id"
-            type="button"
-            @mousedown.prevent="openGlobalSearchModule(module)"
-          >
-            <AppIcon class="search-result-glyph" :icon="module.icon" :icon-url="module.iconUrl" :label="module.name" :color="module.color" :size="15" :backend-url="backendUrl" />
-            <span>
-              <strong>{{ module.name }}</strong>
-              <small>{{ module.scope }}</small>
-            </span>
-          </button>
-        </div>
-      </div>
       <div class="top-actions">
         <el-button text :icon="Bell" title="消息中心" @click="openMessageCenter" />
         <el-button v-if="isLoggedIn" text class="operator-button" :title="isAdminRole ? '修改密码' : '个人设置'" @click="handleOperatorClick">
@@ -150,6 +125,13 @@
         @minimize="minimizeWindow(win.id)"
         @close="closeWindow(win.id)"
       >
+        <template v-if="win.module.id !== 'profile'" #actions>
+          <button type="button" class="window-guide-button" title="操作说明" @click="openGuide(win)">
+            <BookOpen :size="14" />
+            <span>操作说明</span>
+          </button>
+        </template>
+
         <div v-if="win.module.id === 'profile'" class="profile-app">
           <section class="profile-content">
             <div class="content-head">
@@ -329,17 +311,6 @@
           />
 
           <section class="content">
-            <div class="content-head">
-              <div>
-                <h1>{{ win.module.name }}</h1>
-              </div>
-              <div class="head-actions">
-                <el-button :icon="BookOpen" @click="openGuide(win)">
-                  操作说明
-                </el-button>
-              </div>
-            </div>
-
             <el-alert
               v-if="permissionState.error"
               type="warning"
@@ -350,7 +321,7 @@
 
             <div class="module-workspace">
               <section class="module-content-panel">
-                <div v-if="win.module.id === 'internship'" class="internship-panel">
+                <div v-if="['internship', 'companyManage'].includes(win.module.id)" class="internship-panel">
                   <div v-if="hasInternshipToolbarActions(win.panel)" class="internship-toolbar action-only">
                     <div class="data-list-actions">
                       <el-button v-if="win.panel === 'baseFlows' && canManageInternship" :icon="Plus" @click="openBaseDialog()">
@@ -358,6 +329,12 @@
                       </el-button>
                       <el-button v-if="win.panel === 'baseFlows' && canManageInternship" :icon="Upload" :loading="internshipState.importing" @click="chooseBaseImportExcel">
                         导入基地
+                      </el-button>
+                      <el-button v-if="win.panel === 'baseApplications' && canManageInternship" :icon="Plus" @click="openBaseFlowDialog(null, 'application')">
+                        新增申报
+                      </el-button>
+                      <el-button v-if="win.panel === 'baseUsage' && canManageInternship" :icon="Plus" @click="openBaseFlowDialog(null, 'usage')">
+                        新增使用记录
                       </el-button>
                       <el-button v-if="win.panel === 'plans' && canManageInternshipPlan" :icon="FileText" @click="openPlanDialog">
                         新增计划
@@ -391,6 +368,7 @@
                   />
 
                   <OperationDialog
+                    v-if="focusedWindowId === win.id"
                     :visible="Boolean(internshipState.dialog.type)"
                     :title="internshipState.dialog.title"
                     :busy="internshipState.loading"
@@ -709,7 +687,7 @@
                       <div v-else-if="internshipState.dialog.type === 'baseFlow'" class="operation-form">
                         <label>
                           <span>流程类型</span>
-                          <el-select v-model="internshipState.baseFlowForm.type">
+                          <el-select v-model="internshipState.baseFlowForm.type" disabled>
                             <el-option v-for="item in baseFlowTypes" :key="item.value" :label="item.label" :value="item.value" />
                           </el-select>
                         </label>
@@ -1038,6 +1016,43 @@
                         </el-button>
                         <el-button v-if="canManageInternship && row.base_type === 'long_term'" link type="success" @click="exportBaseDocument(row)">
                           导出 Word
+                        </el-button>
+                      </template>
+                    </DataListPanel>
+                  </template>
+
+                  <template v-else-if="isBaseManagementFlowPanel(win.panel)">
+                    <DataListPanel
+                      :columns="internshipListConfigs[win.panel].columns"
+                      :filters="internshipListConfigs[win.panel].filters"
+                      :filter-values="internshipState.filters[win.panel]"
+                      :loading="internshipState.loading"
+                      :pagination="internshipState.lists[win.panel].pagination"
+                      :rows="internshipState.lists[win.panel].items"
+                      :storage-key="dataListStorageKey(win, win.panel)"
+                      @filter-change="setInternshipFilter(win.panel, $event)"
+                      @page-change="page => loadInternshipPanel(win.panel, page)"
+                      @reset="resetInternshipFilters(win.panel)"
+                      @search="loadInternshipPanel(win.panel, 1)"
+                    >
+                      <template #actions="{ row }">
+                        <el-button size="small" type="primary" plain @click="openInternshipContentDetail(win.panel, row)">
+                          查看
+                        </el-button>
+                        <el-button v-if="canManageInternship && ['draft', 'modify'].includes(row.status)" link type="primary" @click="openBaseFlowDialog(row, baseManagementFlowType(win.panel))">
+                          编辑
+                        </el-button>
+                        <el-button v-if="canReviewRow(row, baseFlowEntity(row))" link type="success" @click="openReviewDialog(baseFlowEntity(row), row, 'accept')">
+                          通过
+                        </el-button>
+                        <el-button v-if="canReviewRow(row, baseFlowEntity(row))" link type="warning" @click="openReviewDialog(baseFlowEntity(row), row, 'modify')">
+                          退回
+                        </el-button>
+                        <el-button v-if="canRequestModification(row, baseFlowEntity(row))" link type="danger" @click="openReopenDialog(baseFlowEntity(row), row)">
+                          通过后修改
+                        </el-button>
+                        <el-button link type="primary" @click="openTimelineDialog(baseFlowEntity(row), row)">
+                          记录
                         </el-button>
                       </template>
                     </DataListPanel>
@@ -3819,6 +3834,31 @@
         <button class="taskbar-icon-button taskbar-launcher-button" title="启动台" aria-label="启动台" @click="openDesktopLauncher">
           <LayoutGrid :size="20" />
         </button>
+        <div class="global-search-wrap">
+          <label class="global-search" title="搜索模块、基地或消息">
+            <Search :size="16" />
+            <input
+              v-model="keyword"
+              type="search"
+              placeholder="搜索模块、基地或消息"
+              @keyup.enter="submitGlobalSearch"
+            >
+          </label>
+          <div v-if="showGlobalSearchResults" class="global-search-results">
+            <button
+              v-for="module in globalSearchResults"
+              :key="module.id"
+              type="button"
+              @mousedown.prevent="openGlobalSearchModule(module)"
+            >
+              <AppIcon class="search-result-glyph" :icon="module.icon" :icon-url="module.iconUrl" :label="module.name" :color="module.color" :size="15" :backend-url="backendUrl" />
+              <span>
+                <strong>{{ module.name }}</strong>
+                <small>{{ module.scope }}</small>
+              </span>
+            </button>
+          </div>
+        </div>
         <div class="taskbar-apps">
           <a
             v-for="win in taskbarWindows"
@@ -4589,10 +4629,10 @@ const modules = [
     name: '基地管理',
     icon: Building2,
     color: 'amber',
-    scope: '基地相关单位档案',
-    viewPermission: 'config:company',
-    managePermission: 'config:manage',
-    defaultPanel: 'companyManage',
+    scope: '基地建设 / 基地申报 / 基地使用',
+    viewPermission: 'internship:view',
+    managePermission: 'internship:manage',
+    defaultPanel: 'baseFlows',
     adminOnly: true,
   },
   {
@@ -4835,7 +4875,6 @@ const archiveManagePanels = {
   internshipCategoryManage: 'internship_category',
   professionManage: 'profession',
   classManage: 'class',
-  companyManage: 'company',
 };
 const archiveManageModules = {
   departmentManage: 'department',
@@ -4844,7 +4883,6 @@ const archiveManageModules = {
   internshipCategoryManage: 'internship_category',
   professionManage: 'profession',
   classManage: 'class',
-  companyManage: 'company',
 };
 const archiveStatusFilterOptions = [
   { label: '全部', value: 'all' },
@@ -4949,8 +4987,6 @@ const defaultInternshipReviewRules = {
 const baseFlowTypes = [
   { value: 'application', label: '基地申报' },
   { value: 'usage', label: '基地使用' },
-  { value: 'result', label: '基地成果' },
-  { value: 'expense', label: '基地费用' },
 ];
 
 const archiveStates = reactive(Object.fromEntries(
@@ -5001,7 +5037,6 @@ const dataManageState = reactive({
 
 const internshipSidebarItems = [
   { key: 'overview', name: '总览', icon: ChartColumn },
-  { key: 'baseFlows', name: '基地建设', icon: Building2, permission: 'internship:manage' },
   { key: 'plans', name: '计划表', icon: FileText, permission: 'internship:plan' },
   { key: 'implementationSheets', name: '实习实施', icon: ClipboardList },
   { key: 'arrangements', name: '我的任务', icon: CalendarCheck, studentOnly: true },
@@ -5015,6 +5050,11 @@ const internshipSidebarItems = [
   { key: 'courseScores', name: '课程成绩', icon: GraduationCap },
   { key: 'inspections', name: '巡查记录', icon: Search, permission: 'internship:archive' },
   { key: 'documents', name: '归档材料', icon: FolderOpen },
+];
+const baseManagementSidebarItems = [
+  { key: 'baseFlows', name: '基地建设', icon: Building2 },
+  { key: 'baseApplications', name: '基地申报', icon: FileText },
+  { key: 'baseUsage', name: '基地使用', icon: ClipboardList },
 ];
 
 const archiveDetailVisible = ref(false);
@@ -5061,6 +5101,8 @@ const internshipState = reactive({
     inspections: emptyInternshipFilters(),
     archiveMaterials: emptyInternshipFilters(),
     baseFlows: emptyInternshipFilters(),
+    baseApplications: { ...emptyInternshipFilters(), type: 'application' },
+    baseUsage: { ...emptyInternshipFilters(), type: 'usage' },
     insurances: emptyInternshipFilters(),
     safetyLetters: emptyInternshipFilters(),
   },
@@ -5082,6 +5124,8 @@ const internshipState = reactive({
     inspections: emptyPagedList(),
     archiveMaterials: emptyPagedList(),
     baseFlows: emptyPagedList(),
+    baseApplications: emptyPagedList(),
+    baseUsage: emptyPagedList(),
     insurances: emptyPagedList(),
     safetyLetters: emptyPagedList(),
   },
@@ -5110,7 +5154,7 @@ const moduleSearchKeywords = {
   departmentManage: '学院 院系 部门',
   professionManage: '专业',
   classManage: '班级',
-  companyManage: '基地 合作单位 单位 企业',
+  companyManage: '基地管理 基地建设 基地申报 基地使用 合作单位 企业',
   dataManage: '数据 管理 清理 测试数据 初始化',
   config: '设置 配置 菜单 权限 角色 企业微信 操作说明 学校',
   profile: '个人设置 头像 壁纸 背景 消息接收 密码 资料',
@@ -5140,8 +5184,8 @@ const currentRoleType = computed(() => permissionState.context.role_type || '');
 const isStudentRole = computed(() => currentRoleType.value === 'student');
 const isTeacherRole = computed(() => currentRoleType.value === 'teacher');
 const isAdminRole = computed(() => ['super_admin', 'school_admin', 'college_admin', 'profession_admin'].includes(currentRoleType.value));
-const configChildModuleIds = new Set(['userManage', 'gradeManage', 'graduationCohortManage', 'internshipCategoryManage', 'departmentManage', 'professionManage', 'classManage', 'companyManage']);
-const schoolConfigModuleIds = new Set(['gradeManage', 'graduationCohortManage', 'internshipCategoryManage', 'departmentManage', 'professionManage', 'classManage', 'companyManage', 'dataManage']);
+const configChildModuleIds = new Set(['userManage', 'gradeManage', 'graduationCohortManage', 'internshipCategoryManage', 'departmentManage', 'professionManage', 'classManage']);
+const schoolConfigModuleIds = new Set(['gradeManage', 'graduationCohortManage', 'internshipCategoryManage', 'departmentManage', 'professionManage', 'classManage', 'dataManage']);
 const visibleModules = computed(() => modules.map(decorateModule).filter(canShowModule));
 const menuModuleItems = computed(() => buildLaunchableMenuModules(permissionState.menus, modules, resolveMenuIcon));
 const allLaunchableModules = computed(() => mergeMenuModules(visibleModules.value, menuModuleItems.value));
@@ -5369,6 +5413,9 @@ function canShowModule(module) {
   if (module.id === 'userManage') {
     return canViewUserAdmin.value;
   }
+  if (module.id === 'companyManage') {
+    return isAdminRole.value && hasPermission('internship:view');
+  }
   if (schoolConfigModuleIds.has(module.id)) {
     return canShowSchoolConfigModule(module);
   }
@@ -5483,6 +5530,8 @@ const internshipListConfigs = computed(() => ({
       { prop: 'created_at', label: '创建时间', width: 168 },
     ],
   },
+  baseApplications: baseManagementFlowConfig('baseApplications', 'application', '基地申报'),
+  baseUsage: baseManagementFlowConfig('baseUsage', 'usage', '基地使用'),
   arrangements: {
     listKey: 'arrangements',
     filename: '实习任务',
@@ -5843,6 +5892,30 @@ function hasInternshipContentDetail(panel) {
 
 function openInternshipContentDetail(panel, row) {
   const definitions = {
+    baseApplications: {
+      title: row.title || '基地申报',
+      fields: [
+        { label: '实习基地', value: row.base_name },
+        { label: '所属学院', value: row.dep_name },
+        { label: '基地类型', value: baseFlowDetailText(row) },
+        { label: '提交人', value: row.submitter_name },
+        { label: '状态', value: statusText(row.status) },
+        { label: '申报内容', value: row.content, rich: true },
+        { label: '创建时间', value: row.created_at },
+      ],
+    },
+    baseUsage: {
+      title: row.title || '基地使用',
+      fields: [
+        { label: '实习基地', value: row.base_name },
+        { label: '所属学院', value: row.dep_name },
+        { label: '使用类型', value: baseFlowDetailText(row) },
+        { label: '提交人', value: row.submitter_name },
+        { label: '状态', value: statusText(row.status) },
+        { label: '使用内容', value: row.content, rich: true },
+        { label: '创建时间', value: row.created_at },
+      ],
+    },
     journals: {
       title: row.title || '实习日志',
       fields: [
@@ -5947,7 +6020,7 @@ function internshipPlanFilters() {
 }
 
 function hasInternshipToolbarActions(panel) {
-  if (panel === 'baseFlows') {
+  if (['baseFlows', 'baseApplications', 'baseUsage'].includes(panel)) {
     return canManageInternship.value;
   }
   if (panel === 'plans') {
@@ -6156,6 +6229,9 @@ function sidebarItems(win) {
   }
   if (['message', 'doc', 'templateLib', 'exportTask', 'favorite'].includes(win.module.id)) {
     return [];
+  }
+  if (win.module.id === 'companyManage') {
+    return baseManagementSidebarItems;
   }
   if (win.module.id === 'userManage' || archiveManageModules[win.module.id] || win.module.id === 'dataManage') {
     return [];
@@ -7545,6 +7621,10 @@ function normalizeInternshipPanel(panel) {
   return panel;
 }
 
+function normalizeBaseManagementPanel(panel) {
+  return baseManagementSidebarItems.some(item => item.key === panel) ? panel : 'baseFlows';
+}
+
 function internshipRequestEntity(tab) {
   return tab === 'delays' ? 'delay' : 'application';
 }
@@ -7580,6 +7660,10 @@ function openModuleWindow(module, options = {}) {
     if (module.id === 'message') {
       loadMessages(messageState.pagination.page || 1);
     }
+    if (module.id === 'companyManage') {
+      existing.panel = normalizeBaseManagementPanel(existing.panel);
+      loadInternshipPanel(existing.panel, internshipState.lists[existing.panel]?.pagination.page || 1);
+    }
     if (module.id === 'favorite') {
       loadFavorites(favoriteState.pagination.page || 1);
     }
@@ -7605,6 +7689,10 @@ function openModuleWindow(module, options = {}) {
   openWindows.push(win);
   focusedWindowId.value = win.id;
   if (module.id === 'internship') {
+    loadInternshipPanel(win.panel);
+  }
+  if (module.id === 'companyManage') {
+    win.panel = normalizeBaseManagementPanel(win.panel);
     loadInternshipPanel(win.panel);
   }
   if (isPracticeModule(module.id)) {
@@ -7820,8 +7908,12 @@ async function handleHashNavigation() {
     const value = hash.slice(6);
     const separator = value.indexOf(':');
     if (separator > 0) {
-      const moduleId = decodeURIComponent(value.slice(0, separator));
-      const panel = decodeURIComponent(value.slice(separator + 1));
+      let moduleId = decodeURIComponent(value.slice(0, separator));
+      let panel = decodeURIComponent(value.slice(separator + 1));
+      if (moduleId === 'internship' && panel === 'baseFlows') {
+        moduleId = 'companyManage';
+        panel = 'baseFlows';
+      }
       let win = openWindows.find(item => item.module.id === moduleId);
       if (!win) {
         const module = allLaunchableModules.value.find(item => item.id === moduleId);
@@ -7874,6 +7966,9 @@ function activateWindowPanel(win, panel) {
   if (win.module.id === 'internship') {
     panel = normalizeInternshipPanel(panel);
   }
+  if (win.module.id === 'companyManage') {
+    panel = normalizeBaseManagementPanel(panel);
+  }
   win.panel = panel;
   focusWindow(win.id);
 
@@ -7905,6 +8000,9 @@ function activateWindowPanel(win, panel) {
     loadStats(1);
   }
   if (win.module.id === 'internship') {
+    loadInternshipPanel(panel);
+  }
+  if (win.module.id === 'companyManage') {
     loadInternshipPanel(panel);
   }
   if (isPracticeModule(win.module.id)) {
@@ -11403,14 +11501,34 @@ function internshipFilters(keys, values = {}, options = internshipState.options)
   return visibleKeys.map(key => definitions[key]).filter(Boolean);
 }
 
-function baseFlowFilters() {
+function baseFlowFilters(listKey) {
   if (isStudentRole.value || isTeacherRole.value) {
     return [];
   }
-  return [
-    { key: 'type', label: '流程类型', type: 'select', options: baseFlowTypes },
-    ...internshipFilters(['dep_id', 'base_id', 'status', 'keyword'], internshipState.filters.baseFlows),
-  ];
+  return internshipFilters(['dep_id', 'base_id', 'status', 'keyword'], internshipState.filters[listKey]);
+}
+
+function baseManagementFlowConfig(listKey, flowType, filename) {
+  return {
+    listKey,
+    filename,
+    filters: baseFlowFilters(listKey),
+    columns: [
+      { prop: 'title', label: filename, minWidth: 190 },
+      { prop: 'base_name', label: '实习基地', minWidth: 180 },
+      { prop: 'dep_name', label: '学院', minWidth: 130 },
+      {
+        key: 'flow_detail',
+        label: flowType === 'application' ? '基地类型' : '使用类型',
+        minWidth: 130,
+        formatter: row => baseFlowDetailText(row),
+      },
+      { prop: 'content', label: '内容摘要', minWidth: 220, formatter: row => contentSummary(row.content) },
+      { prop: 'submitter_name', label: '提交人', width: 110 },
+      { prop: 'status', label: '状态', width: 92, tag: true, tagType: row => statusTagType(row.status), formatter: row => statusText(row.status) },
+      { prop: 'created_at', label: '创建时间', width: 168 },
+    ],
+  };
 }
 
 function optionItems(items, valueKey, labelKey) {
@@ -12096,7 +12214,25 @@ function delayConfigText(value) {
 }
 
 function baseFlowTypeText(value) {
-  return baseFlowTypes.find(item => item.value === value)?.label || value || '基地流程';
+  const names = {
+    application: '基地申报',
+    usage: '基地使用',
+    result: '基地成果',
+    expense: '基地费用',
+  };
+  return names[value] || value || '基地流程';
+}
+
+function baseManagementFlowType(panel) {
+  return panel === 'baseUsage' ? 'usage' : 'application';
+}
+
+function baseManagementFlowPanel(type) {
+  return type === 'usage' || type === 'base_usage' ? 'baseUsage' : 'baseApplications';
+}
+
+function isBaseManagementFlowPanel(panel) {
+  return ['baseApplications', 'baseUsage'].includes(panel);
 }
 
 function baseFlowEntity(row = {}) {
@@ -12105,7 +12241,7 @@ function baseFlowEntity(row = {}) {
     usage: 'base_usage',
     result: 'base_result',
     expense: 'base_expense',
-  }[row.flow_type || row.type || internshipState.filters.baseFlows.type] || 'base_application';
+  }[row.flow_type || row.type || 'application'] || 'base_application';
 }
 
 function isBaseFlowEntity(entity) {
@@ -12117,7 +12253,7 @@ function internshipReviewPanel(entity) {
     return 'applications';
   }
   if (isBaseFlowEntity(entity)) {
-    return 'baseFlows';
+    return baseManagementFlowPanel(entity);
   }
   return `${entity}s`;
 }
@@ -12359,6 +12495,9 @@ function setInternshipFilter(listKey, event) {
 
 function resetInternshipFilters(listKey) {
   internshipState.filters[listKey] = defaultScopedFilters();
+  if (isBaseManagementFlowPanel(listKey)) {
+    internshipState.filters[listKey].type = baseManagementFlowType(listKey);
+  }
   if (listKey === 'plans') {
     normalizePlanScopeFilters(internshipState.filters[listKey]);
   }
@@ -12600,12 +12739,14 @@ function openCourseScoreDialog(row) {
   };
 }
 
-function openBaseFlowDialog(row = null) {
+function openBaseFlowDialog(row = null, flowType = '') {
   const form = emptyBaseFlowForm(row || {});
   if (!row) {
     form.base_id = internshipState.options.bases[0]?.id || null;
     form.dep_id = defaultScopedFilters().dep_id || internshipState.options.departments[0]?.dep_id || null;
-    form.type = internshipState.filters.baseFlows.type || 'application';
+    form.type = flowType || 'application';
+  } else if (flowType) {
+    form.type = flowType;
   }
   internshipState.baseFlowForm = form;
   internshipState.dialog = {
@@ -13562,6 +13703,13 @@ async function loadInternshipPanel(panel = 'overview', page = 1) {
       setPagedList('arrangementChanges', await fetchInternshipArrangementChanges(params('arrangementChanges')));
     } else if (panel === 'baseFlows') {
       setPagedList('baseFlows', await fetchInternshipBases(params('baseFlows')));
+    } else if (isBaseManagementFlowPanel(panel)) {
+      const flowType = baseManagementFlowType(panel);
+      const data = await fetchInternshipBaseFlows({
+        ...params(panel),
+        type: flowType,
+      });
+      setPagedList(panel, markBaseFlowItems(data, flowType));
     } else if (panel === 'plans') {
       setPagedList('plans', await fetchInternshipPlans(params('plans')));
     } else if (panel === 'syllabusGuides') {
@@ -13650,10 +13798,11 @@ async function saveBaseFlow() {
       status: ['draft', 'wait'].includes(internshipState.baseFlowForm.status) ? internshipState.baseFlowForm.status : 'draft',
       amount: numericOrNull(internshipState.baseFlowForm.amount),
     });
-    internshipState.filters.baseFlows.type = internshipState.baseFlowForm.type;
+    const panel = baseManagementFlowPanel(internshipState.baseFlowForm.type);
+    internshipState.filters[panel].type = internshipState.baseFlowForm.type;
     internshipState.baseFlowForm = emptyBaseFlowForm();
     closeInternshipDialog();
-    await loadInternshipPanel('baseFlows');
+    await loadInternshipPanel(panel);
   } catch (error) {
     internshipState.message = error.message;
   } finally {
@@ -13948,13 +14097,13 @@ async function reviewBaseFlow(row, status, opinion = '') {
   try {
     await reviewInternshipBaseFlow({
       entity,
-      type: row.flow_type || internshipState.filters.baseFlows.type || 'application',
+      type: row.flow_type || row.type || 'application',
       id: row.id,
       status,
       opinion: opinion || (status === 'accept' ? '同意' : '请修改后重新提交'),
     });
     closeInternshipDialog();
-    await loadInternshipPanel('baseFlows');
+    await loadInternshipPanel(internshipReviewPanel(entity));
   } catch (error) {
     internshipState.message = error.message;
   } finally {
