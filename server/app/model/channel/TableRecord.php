@@ -343,6 +343,7 @@ class TableRecord extends BaseModel
             'login_name' => $row->login_name,
             'user_name' => $row->user_name,
             'action' => $row->action,
+            'operation' => $payloadData['operation'] ?? $row->action,
             'ip' => $row->ip,
             'method' => $payloadData['method'] ?? null,
             'path' => $payloadData['path'] ?? null,

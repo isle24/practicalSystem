@@ -2105,7 +2105,11 @@
                             v-loading="userAdminState.detailLoading"
                           >
                             <el-table-column prop="id" label="ID" width="76" />
-                            <el-table-column prop="action" label="操作" min-width="180" />
+                            <el-table-column label="操作" min-width="180">
+                              <template #default="{ row }">
+                                {{ row.operation || row.action || row.path || '-' }}
+                              </template>
+                            </el-table-column>
                             <el-table-column prop="ip" label="IP" width="130" />
                             <el-table-column label="内容" min-width="240">
                               <template #default="{ row }">
@@ -3384,11 +3388,14 @@
                         {{ row.user_name || row.login_name || row.account_id || '-' }}
                       </template>
                     </el-table-column>
-                    <el-table-column label="接口" min-width="240">
+                    <el-table-column label="操作 / 接口" min-width="280">
                       <template #default="{ row }">
                         <span class="log-endpoint">
                           <em>{{ row.method || logMethodText(row.action) }}</em>
-                          <strong :title="row.path || row.action">{{ row.path || row.action || '-' }}</strong>
+                          <span class="log-operation">
+                            <strong :title="row.operation || row.action || row.path">{{ row.operation || row.action || '未命名操作' }}</strong>
+                            <small v-if="row.path" :title="row.path">{{ row.path }}</small>
+                          </span>
                         </span>
                       </template>
                     </el-table-column>
