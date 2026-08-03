@@ -54,48 +54,6 @@
   </main>
 
   <main v-else class="desktop-shell" :style="desktopStyle" @click.left="closeDesktopContextMenu" @contextmenu.prevent="openDesktopContextMenu">
-    <header class="topbar">
-      <div class="brand">
-        <span class="brand-mark">实</span>
-        <span>实践管理系统</span>
-      </div>
-      <div class="top-actions">
-        <el-button text :icon="Bell" title="消息中心" @click="openMessageCenter" />
-        <el-button v-if="isLoggedIn" text class="operator-button" :title="isAdminRole ? '修改密码' : '个人设置'" @click="handleOperatorClick">
-          <span class="top-avatar" :style="topAvatarStyle">
-            <UserRound v-if="!profileState.form.avatar" :size="14" />
-          </span>
-          <span>{{ operatorName }}</span>
-        </el-button>
-        <div v-if="isLoggedIn && switchableLoginAccounts.length > 0" class="switch-account-wrap">
-          <el-button class="switch-account-button" :loading="switchAccountState.loading" @click="toggleSwitchAccountMenu">
-            <UsersRound :size="15" />
-            切换身份
-          </el-button>
-          <div v-if="switchAccountState.open" class="switch-account-menu">
-            <button
-              v-for="account in switchableLoginAccounts"
-              :key="account.id"
-              type="button"
-              class="switch-account-item"
-              @click="switchLoginAccount(account.id)"
-            >
-              <strong>{{ switchAccountName(account) }}</strong>
-              <small>{{ switchAccountMeta(account) }}</small>
-            </button>
-          </div>
-        </div>
-        <div v-if="switchAccountState.open && switchableLoginAccounts.length > 0" class="switch-account-backdrop" @click="switchAccountState.open = false" />
-        <span v-if="!isLoggedIn">{{ operatorName }}</span>
-        <el-button v-if="!isLoggedIn" text :icon="LogIn" @click="focusLogin">
-          登录
-        </el-button>
-        <el-button v-else text :icon="LogOut" :loading="loginState.loading" @click="submitLogout">
-          退出
-        </el-button>
-      </div>
-    </header>
-
     <section class="workspace">
       <AdaptiveDesktopGrid
         :modules="visibleDesktopModules"
@@ -326,35 +284,6 @@
             <div class="module-workspace">
               <section class="module-content-panel">
                 <div v-if="['internship', 'companyManage'].includes(win.module.id)" class="internship-panel">
-                  <div v-if="hasInternshipToolbarActions(win.panel)" class="internship-toolbar action-only">
-                    <div class="data-list-actions">
-                      <el-button v-if="win.panel === 'baseFlows' && canManageInternship" :icon="Plus" @click="openBaseDialog()">
-                        新增基地
-                      </el-button>
-                      <el-button v-if="win.panel === 'baseFlows' && canManageInternship" :icon="Upload" :loading="internshipState.importing" @click="chooseBaseImportExcel">
-                        导入基地
-                      </el-button>
-                      <el-button v-if="win.panel === 'baseApplications' && canManageInternship" :icon="Plus" @click="openBaseFlowDialog(null, 'application')">
-                        新增申报
-                      </el-button>
-                      <el-button v-if="win.panel === 'baseUsage' && canManageInternship" :icon="Plus" @click="openBaseFlowDialog(null, 'usage')">
-                        新增使用记录
-                      </el-button>
-                      <el-button v-if="win.panel === 'plans' && canManageInternshipPlan" :icon="FileText" @click="openPlanDialog">
-                        新增计划
-                      </el-button>
-                      <el-button v-if="win.panel === 'plans' && canManageInternshipPlan" :icon="Download" @click="downloadPlanImportTemplate">
-                        下载模板
-                      </el-button>
-                      <el-button v-if="win.panel === 'plans' && canManageInternshipPlan" :icon="Upload" :loading="internshipState.importing" @click="choosePlanImportExcel">
-                        导入计划表
-                      </el-button>
-                      <el-button v-if="win.panel === 'scores' && canSaveInternshipScore" :icon="GraduationCap" @click="openScoreDialog">
-                        录入成绩
-                      </el-button>
-                    </div>
-                  </div>
-
                   <el-alert
                     v-if="internshipState.message"
                     type="warning"
@@ -1011,6 +940,14 @@
                       @reset="resetInternshipFilters('baseFlows')"
                       @search="loadInternshipPanel('baseFlows', 1)"
                     >
+                      <template #toolbar>
+                        <el-button v-if="canManageInternship" :icon="Plus" @click="openBaseDialog()">
+                          新增基地
+                        </el-button>
+                        <el-button v-if="canManageInternship" :icon="Upload" :loading="internshipState.importing" @click="chooseBaseImportExcel">
+                          导入基地
+                        </el-button>
+                      </template>
                       <template #actions="{ row }">
                         <el-button size="small" type="primary" plain @click="openBaseDialog(row, true)">
                           查看
@@ -1039,6 +976,14 @@
                       @reset="resetInternshipFilters(win.panel)"
                       @search="loadInternshipPanel(win.panel, 1)"
                     >
+                      <template #toolbar>
+                        <el-button v-if="win.panel === 'baseApplications' && canManageInternship" :icon="Plus" @click="openBaseFlowDialog(null, 'application')">
+                          新增申报
+                        </el-button>
+                        <el-button v-if="win.panel === 'baseUsage' && canManageInternship" :icon="Plus" @click="openBaseFlowDialog(null, 'usage')">
+                          新增使用记录
+                        </el-button>
+                      </template>
                       <template #actions="{ row }">
                         <el-button size="small" type="primary" plain @click="openInternshipContentDetail(win.panel, row)">
                           查看
@@ -1143,6 +1088,17 @@
                       @reset="resetInternshipFilters('plans')"
                       @search="loadInternshipPanel('plans', 1)"
                     >
+                      <template #toolbar>
+                        <el-button v-if="canManageInternshipPlan" :icon="FileText" @click="openPlanDialog">
+                          新增计划
+                        </el-button>
+                        <el-button v-if="canManageInternshipPlan" :icon="Download" @click="downloadPlanImportTemplate">
+                          下载模板
+                        </el-button>
+                        <el-button v-if="canManageInternshipPlan" :icon="Upload" :loading="internshipState.importing" @click="choosePlanImportExcel">
+                          导入计划表
+                        </el-button>
+                      </template>
                       <template #actions="{ row }">
                         <el-button size="small" type="primary" plain @click="openPlanDetail(row)">
                           查看
@@ -1424,6 +1380,11 @@
                         @reset="resetInternshipFilters('scores')"
                         @search="loadInternshipPanel('scores', 1)"
                       >
+                        <template #toolbar>
+                          <el-button v-if="canSaveInternshipScore" :icon="GraduationCap" @click="openScoreDialog">
+                            录入成绩
+                          </el-button>
+                        </template>
                         <template #actions="{ row }">
                           <el-button v-if="canSaveInternshipScore" link type="primary" @click="openScoreDialog(row)">
                             {{ row.id ? '修改' : '录入' }}
@@ -1524,50 +1485,6 @@
                 </div>
 
                 <div v-else-if="isPracticeModule(win.module.id)" class="internship-panel practice-panel">
-                  <header class="practice-module-head">
-                    <div>
-                      <strong>实验实训管理</strong>
-                      <small>按类别、年级、学院和专业处理教学与执行记录。</small>
-                    </div>
-                    <el-select
-                      :model-value="practiceModuleState(win.module.id).module_type"
-                      class="practice-module-type"
-                      @update:model-value="value => changePracticeModuleType(win.module.id, value, win.panel)"
-                    >
-                      <el-option label="全部类别" value="all" />
-                      <el-option label="实验" value="lab" />
-                      <el-option label="实训" value="training" />
-                    </el-select>
-                  </header>
-                  <div v-if="canManagePractice(win.module.id) || showPracticeAddButton(win.module.id, win.panel) || win.panel === 'schedules'" class="internship-toolbar action-only">
-                    <div class="data-list-actions">
-                      <el-button
-                        v-if="showPracticeAddButton(win.module.id, win.panel)"
-                        :icon="Plus"
-                        @click="openPracticeDialog(win.module.id, win.panel)"
-                      >
-                        新增{{ practicePanelLabel(win.panel) }}
-                      </el-button>
-                      <el-button :icon="RefreshCw" :loading="practiceModuleState(win.module.id).loading" @click="loadPracticePanel(win.module.id, win.panel)">
-                        刷新
-                      </el-button>
-                      <el-segmented
-                        v-if="win.panel === 'schedules'"
-                        v-model="practiceModuleState(win.module.id).schedule.view"
-                        :options="practiceScheduleViewOptions"
-                        @change="loadPracticePanel(win.module.id, 'schedules', 1)"
-                      />
-                      <el-button
-                        v-if="win.panel === 'schedules' && practiceModuleState(win.module.id).schedule.view === 'list'"
-                        :icon="Download"
-                        :loading="practiceModuleState(win.module.id).loading"
-                        @click="exportPracticeScheduleList(win.module.id)"
-                      >
-                        导出
-                      </el-button>
-                    </div>
-                  </div>
-
                   <el-alert
                     v-if="practiceModuleState(win.module.id).message"
                     type="warning"
@@ -1870,16 +1787,48 @@
                     </section>
                   </div>
                   <div v-else-if="win.panel === 'schedules' && practiceModuleState(win.module.id).schedule.view === 'board'" class="practice-schedule-workspace">
-                    <div class="practice-schedule-filters">
-                      <el-select v-model="practiceModuleState(win.module.id).filters.schedules.grade_id" clearable filterable placeholder="年级" @change="refreshPracticeScheduleBoard(win.module.id)">
-                        <el-option v-for="grade in practiceModuleState(win.module.id).options.grades" :key="grade.grade_id" :label="grade.grade_name" :value="grade.grade_id" />
-                      </el-select>
-                      <el-select v-model="practiceModuleState(win.module.id).filters.schedules.dep_id" clearable filterable placeholder="学院" @change="refreshPracticeScheduleBoard(win.module.id)">
-                        <el-option v-for="dep in practiceModuleState(win.module.id).options.departments" :key="dep.dep_id" :label="dep.dep_name" :value="dep.dep_id" />
-                      </el-select>
-                      <el-select v-model="practiceModuleState(win.module.id).filters.schedules.profession_id" clearable filterable placeholder="专业" @change="refreshPracticeScheduleBoard(win.module.id)">
-                        <el-option v-for="profession in practiceScheduleProfessionOptions(win.module.id)" :key="profession.profession_id" :label="profession.profession_name" :value="profession.profession_id" />
-                      </el-select>
+                    <div class="practice-schedule-toolbar">
+                      <div class="practice-schedule-filters data-list-filters">
+                        <label class="data-list-filter-field">
+                          <el-select
+                            :model-value="practiceModuleState(win.module.id).module_type"
+                            class="filter-select"
+                            @update:model-value="value => changePracticeModuleType(win.module.id, value, 'schedules')"
+                          >
+                            <el-option label="全部类别" value="all" />
+                            <el-option label="实验" value="lab" />
+                            <el-option label="实训" value="training" />
+                          </el-select>
+                        </label>
+                        <label class="data-list-filter-field">
+                          <el-select v-model="practiceModuleState(win.module.id).filters.schedules.grade_id" class="filter-select" clearable filterable placeholder="请选择年级" @change="refreshPracticeScheduleBoard(win.module.id)">
+                            <el-option v-for="grade in practiceModuleState(win.module.id).options.grades" :key="grade.grade_id" :label="grade.grade_name" :value="grade.grade_id" />
+                          </el-select>
+                        </label>
+                        <label class="data-list-filter-field">
+                          <el-select v-model="practiceModuleState(win.module.id).filters.schedules.dep_id" class="filter-select" clearable filterable placeholder="请选择学院" @change="refreshPracticeScheduleBoard(win.module.id)">
+                            <el-option v-for="dep in practiceModuleState(win.module.id).options.departments" :key="dep.dep_id" :label="dep.dep_name" :value="dep.dep_id" />
+                          </el-select>
+                        </label>
+                        <label class="data-list-filter-field">
+                          <el-select v-model="practiceModuleState(win.module.id).filters.schedules.profession_id" class="filter-select" clearable filterable placeholder="请选择专业" @change="refreshPracticeScheduleBoard(win.module.id)">
+                            <el-option v-for="profession in practiceScheduleProfessionOptions(win.module.id)" :key="profession.profession_id" :label="profession.profession_name" :value="profession.profession_id" />
+                          </el-select>
+                        </label>
+                      </div>
+                      <div class="data-list-actions">
+                        <el-button v-if="showPracticeAddButton(win.module.id, win.panel)" :icon="Plus" @click="openPracticeDialog(win.module.id, win.panel)">
+                          新增{{ practicePanelLabel(win.panel) }}
+                        </el-button>
+                        <el-button :icon="RefreshCw" :loading="practiceModuleState(win.module.id).loading" @click="loadPracticePanel(win.module.id, win.panel)">
+                          刷新
+                        </el-button>
+                        <el-segmented
+                          v-model="practiceModuleState(win.module.id).schedule.view"
+                          :options="practiceScheduleViewOptions"
+                          @change="loadPracticePanel(win.module.id, 'schedules', 1)"
+                        />
+                      </div>
                     </div>
                     <PracticeScheduleBoard
                       :week-start="practiceModuleState(win.module.id).schedule.week_start"
@@ -1908,6 +1857,32 @@
                     @reset="resetPracticeFilters(win.module.id, win.panel)"
                     @search="loadPracticePanel(win.module.id, win.panel, 1)"
                   >
+                    <template #toolbar>
+                      <el-button
+                        v-if="showPracticeAddButton(win.module.id, win.panel)"
+                        :icon="Plus"
+                        @click="openPracticeDialog(win.module.id, win.panel)"
+                      >
+                        新增{{ practicePanelLabel(win.panel) }}
+                      </el-button>
+                      <el-button :icon="RefreshCw" :loading="practiceModuleState(win.module.id).loading" @click="loadPracticePanel(win.module.id, win.panel)">
+                        刷新
+                      </el-button>
+                      <el-segmented
+                        v-if="win.panel === 'schedules'"
+                        v-model="practiceModuleState(win.module.id).schedule.view"
+                        :options="practiceScheduleViewOptions"
+                        @change="loadPracticePanel(win.module.id, 'schedules', 1)"
+                      />
+                      <el-button
+                        v-if="win.panel === 'schedules'"
+                        :icon="Download"
+                        :loading="practiceModuleState(win.module.id).loading"
+                        @click="exportPracticeScheduleList(win.module.id)"
+                      >
+                        导出
+                      </el-button>
+                    </template>
                     <template #actions="{ row }">
                       <el-button v-if="showPracticeRowEdit(win.module.id, win.panel, row)" link type="primary" @click="openPracticeDialog(win.module.id, win.panel, row)">
                         编辑
@@ -1929,14 +1904,6 @@
                 </div>
 
                 <div v-else-if="isUserManageWindow(win)" class="admin-panel user-admin-panel">
-                  <div class="admin-toolbar">
-                    <el-button v-if="canManageConfig" type="primary" :icon="Plus" @click="openUserDialog()">
-                      新增用户
-                    </el-button>
-                    <el-button :icon="RefreshCw" :loading="userAdminState.loading" @click="loadUserAccounts(userAdminState.pagination.page || 1)">
-                      刷新
-                    </el-button>
-                  </div>
                   <DataListPanel
                     :columns="userListColumns"
                     :filters="userListFilters"
@@ -1950,6 +1917,14 @@
                     @reset="resetUserFilters"
                     @search="loadUserAccounts(1)"
                   >
+                    <template #toolbar>
+                      <el-button v-if="canManageConfig" type="primary" :icon="Plus" @click="openUserDialog()">
+                        新增用户
+                      </el-button>
+                      <el-button :icon="RefreshCw" :loading="userAdminState.loading" @click="loadUserAccounts(userAdminState.pagination.page || 1)">
+                        刷新
+                      </el-button>
+                    </template>
                     <template #actions="{ row }">
                       <el-button v-if="canManageConfig" link type="primary" :disabled="!canMaintainUser(row)" @click="openUserDialog(row)">
                         编辑
@@ -3834,6 +3809,10 @@
     />
 
     <footer class="taskbar">
+      <div class="taskbar-brand">
+        <span class="brand-mark">实</span>
+        <strong>实践管理系统</strong>
+      </div>
       <div class="taskbar-center">
         <button class="taskbar-icon-button taskbar-launcher-button" title="启动台" aria-label="启动台" @click="openDesktopLauncher">
           <LayoutGrid :size="20" />
@@ -3889,6 +3868,33 @@
       </div>
       <div class="taskbar-status" aria-label="系统状态">
         <span class="taskbar-online"><i />在线</span>
+        <el-button text class="taskbar-operator-button" :title="isAdminRole ? '修改密码' : '个人设置'" @click="handleOperatorClick">
+          <span class="top-avatar" :style="topAvatarStyle">
+            <UserRound v-if="!profileState.form.avatar" :size="14" />
+          </span>
+          <span class="taskbar-operator-name">{{ operatorName }}</span>
+        </el-button>
+        <div v-if="switchableLoginAccounts.length > 0" class="switch-account-wrap taskbar-switch-account">
+          <el-button class="switch-account-button" :loading="switchAccountState.loading" title="切换身份" @click="toggleSwitchAccountMenu">
+            <UsersRound :size="15" />
+          </el-button>
+          <div v-if="switchAccountState.open" class="switch-account-menu">
+            <button
+              v-for="account in switchableLoginAccounts"
+              :key="account.id"
+              type="button"
+              class="switch-account-item"
+              @click="switchLoginAccount(account.id)"
+            >
+              <strong>{{ switchAccountName(account) }}</strong>
+              <small>{{ switchAccountMeta(account) }}</small>
+            </button>
+          </div>
+        </div>
+        <div v-if="switchAccountState.open && switchableLoginAccounts.length > 0" class="switch-account-backdrop" @click="switchAccountState.open = false" />
+        <el-button text class="taskbar-logout-button" :icon="LogOut" :loading="loginState.loading" title="退出登录" @click="submitLogout">
+          <span>退出</span>
+        </el-button>
         <span class="taskbar-clock">{{ clock }}</span>
       </div>
     </footer>
@@ -6116,19 +6122,6 @@ function internshipPlanFilters() {
     ? ['category_id', scopeKey, 'keyword'].filter(Boolean)
     : ['category_id', scopeKey, 'dep_id', 'profession_id', 'status', 'keyword'].filter(Boolean);
   return internshipFilters(keys, values);
-}
-
-function hasInternshipToolbarActions(panel) {
-  if (['baseFlows', 'baseApplications', 'baseUsage'].includes(panel)) {
-    return canManageInternship.value;
-  }
-  if (panel === 'plans') {
-    return canManageInternshipPlan.value;
-  }
-  if (panel === 'scores') {
-    return canSaveInternshipScore.value;
-  }
-  return false;
 }
 
 function canSaveManualCourseScore(row) {

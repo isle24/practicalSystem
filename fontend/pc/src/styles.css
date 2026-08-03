@@ -67,7 +67,7 @@ a {
   height: 100dvh;
   min-height: 0;
   display: grid;
-  grid-template-rows: 48px minmax(0, 1fr) 50px;
+  grid-template-rows: minmax(0, 1fr) 50px;
   background-position: center;
   background-size: cover;
   overflow: hidden;
@@ -328,7 +328,7 @@ a {
   position: relative;
   min-height: 0;
   padding: 18px;
-  overflow: hidden;
+  overflow: clip;
 }
 
 .desktop-icons {
@@ -445,8 +445,8 @@ a {
 
 .desktop-window {
   position: absolute;
-  min-width: min(860px, 100%);
-  min-height: min(560px, 100%);
+  min-width: min(680px, 100%);
+  min-height: min(500px, 100%);
   max-width: 100%;
   max-height: 100%;
   display: grid;
@@ -1262,6 +1262,10 @@ a {
   overflow: hidden;
 }
 
+.user-admin-panel {
+  grid-template-rows: minmax(0, 1fr);
+}
+
 .admin-toolbar {
   display: flex;
   align-items: center;
@@ -1610,10 +1614,6 @@ a {
 
 .el-select__wrapper .el-select__selected-item.el-select__placeholder {
   color: var(--text) !important;
-}
-
-.el-select__wrapper .el-select__placeholder.is-transparent {
-  opacity: 0 !important;
 }
 
 .el-select__wrapper.is-focused {
@@ -2279,35 +2279,6 @@ a {
   gap: 12px;
 }
 
-.practice-module-head {
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 2px 2px 4px;
-}
-
-.practice-module-head > div {
-  min-width: 0;
-  display: grid;
-  gap: 3px;
-}
-
-.practice-module-head strong {
-  font-size: 15px;
-}
-
-.practice-module-head small {
-  color: var(--muted);
-  font-size: 12px;
-}
-
-.practice-module-type {
-  width: 126px;
-  flex: 0 0 auto;
-}
-
 .practice-schedule-workspace {
   min-height: 0;
   display: grid;
@@ -2315,16 +2286,25 @@ a {
   gap: 8px;
 }
 
-.practice-schedule-filters {
+.practice-schedule-toolbar {
   min-width: 0;
   display: flex;
-  align-items: center;
-  gap: 8px;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.practice-schedule-filters {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
   overflow-x: auto;
 }
 
-.practice-schedule-filters .el-select {
-  width: 150px;
+.practice-schedule-filters .data-list-filter-field {
+  width: 142px;
   flex: 0 0 auto;
 }
 
@@ -2776,26 +2756,28 @@ a {
   grid-template-rows: auto 1fr auto;
   gap: 8px;
   overflow: hidden;
+  container-type: inline-size;
 }
 
 .data-list-toolbar {
   min-width: 0;
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   justify-content: space-between;
   gap: 10px;
 }
 
 .data-list-filters {
+  flex: 1 1 560px;
   min-width: 0;
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   gap: 6px;
   flex-wrap: wrap;
 }
 
 .data-list-filters.is-collapsed {
-  max-height: 50px;
+  max-height: 38px;
   overflow: hidden;
 }
 
@@ -2803,19 +2785,30 @@ a {
   max-height: none !important;
 }
 
-.data-list-filters label {
+.data-list-filter-field {
   width: 142px;
-  display: grid;
-  gap: 4px;
+  min-width: 0;
+  min-height: 38px;
+  display: block;
   color: var(--muted);
   font-size: 12px;
 }
 
+.data-list-filter-field > .el-select,
+.data-list-filter-field > input:not(.el-select__input) {
+  width: 100%;
+}
+
+.data-list-filter-field .el-select__wrapper {
+  min-height: 38px;
+  padding: 4px 11px;
+}
+
 .data-list-filters input:not(.el-select__input) {
-  height: 30px;
+  height: 38px;
   border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 0 9px;
+  border-radius: 6px;
+  padding: 0 11px;
   color: var(--text);
   outline: none;
   background: #fff;
@@ -2826,9 +2819,26 @@ a {
 }
 
 .data-list-actions {
+  flex: 0 0 auto;
+  max-width: 62%;
+  min-width: 0;
+  min-height: 38px;
   display: flex;
   align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
   gap: 6px;
+}
+
+.data-list-toolbar-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.data-list-toolbar-actions .el-button + .el-button {
+  margin-left: 0;
 }
 
 .data-list-column-selector {
@@ -2888,6 +2898,157 @@ a {
   font-size: 12px;
 }
 
+.table-operation-trigger {
+  min-width: 58px;
+  height: 28px;
+  border: 1px solid rgba(37, 99, 235, .24);
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 0 7px;
+  color: var(--primary);
+  background: var(--primary-soft);
+  font-size: 12px;
+  transition: border-color .14s ease, background .14s ease;
+}
+
+.table-operation-trigger:hover {
+  border-color: rgba(37, 99, 235, .48);
+  background: #e5f0fd;
+}
+
+.data-list-action-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 9400;
+  background: rgba(22, 31, 42, .14);
+}
+
+.data-list-action-drawer {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: min(340px, calc(100vw - 24px));
+  height: 100dvh;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  border-left: 1px solid rgba(190, 201, 213, .86);
+  background: rgba(250, 252, 254, .98);
+  box-shadow: -18px 0 44px rgba(24, 33, 43, .18);
+  backdrop-filter: blur(22px) saturate(130%);
+}
+
+.data-list-action-drawer > header {
+  min-height: 62px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 11px 12px 11px 18px;
+  border-bottom: 1px solid var(--line);
+}
+
+.data-list-action-drawer > header > div {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.data-list-action-drawer > header span {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.data-list-action-drawer > header strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+}
+
+.data-list-action-drawer > header > button {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  border-radius: 6px;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  background: transparent;
+}
+
+.data-list-action-drawer > header > button:hover {
+  color: var(--text);
+  background: #edf1f5;
+}
+
+.data-list-action-content {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 7px;
+  padding: 14px;
+  overflow-y: auto;
+}
+
+.data-list-action-content > .el-button,
+.data-list-drawer-action {
+  width: 100%;
+  min-height: 38px;
+  margin: 0 !important;
+  justify-content: flex-start;
+}
+
+.data-list-action-content > .el-button {
+  border: 1px solid var(--line);
+  padding: 0 12px;
+  background: #fff;
+}
+
+.data-list-action-content > .el-button:hover {
+  border-color: rgba(37, 99, 235, .34);
+  background: #f4f8fd;
+}
+
+.data-list-drawer-action {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px;
+  color: var(--text);
+  background: #fff;
+}
+
+.data-list-drawer-action:disabled {
+  cursor: not-allowed;
+  opacity: .5;
+}
+
+.data-list-drawer-enter-active,
+.data-list-drawer-leave-active {
+  transition: opacity .18s ease;
+}
+
+.data-list-drawer-enter-active .data-list-action-drawer,
+.data-list-drawer-leave-active .data-list-action-drawer {
+  transition: transform .2s cubic-bezier(.22, 1, .36, 1);
+}
+
+.data-list-drawer-enter-from,
+.data-list-drawer-leave-to {
+  opacity: 0;
+}
+
+.data-list-drawer-enter-from .data-list-action-drawer,
+.data-list-drawer-leave-to .data-list-action-drawer {
+  transform: translateX(100%);
+}
+
 .desktop-window .el-table {
   --el-table-border-color: #e2e8ef;
   --el-table-header-bg-color: #f5f7fa;
@@ -2922,6 +3083,25 @@ a {
 .operation-dialog .el-select__wrapper {
   min-height: 30px;
   border-radius: 6px;
+}
+
+.desktop-window .data-list-filter-field .el-select__wrapper {
+  min-height: 38px;
+  padding: 4px 11px;
+}
+
+@container (max-width: 980px) {
+  .data-list-toolbar,
+  .practice-schedule-toolbar {
+    flex-wrap: wrap;
+  }
+
+  .data-list-filters,
+  .data-list-actions {
+    width: 100%;
+    max-width: none;
+    flex-basis: 100%;
+  }
 }
 
 .desktop-window .el-pagination button,
@@ -4973,13 +5153,40 @@ a {
   backdrop-filter: blur(24px) saturate(140%);
 }
 
+.taskbar-brand {
+  grid-column: 1;
+  justify-self: start;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.taskbar-brand .brand-mark {
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  border-radius: 7px;
+  color: #fff;
+  font-size: 13px;
+}
+
+.taskbar-brand strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+}
+
 .taskbar-center {
   grid-column: 2;
+  width: min(680px, calc(100vw - 720px));
   min-width: 0;
-  max-width: calc(100vw - 24px);
+  max-width: 100%;
   display: flex;
   align-items: center;
   gap: 6px;
+  overflow: hidden;
 }
 
 .taskbar .global-search-wrap {
@@ -5118,8 +5325,55 @@ a {
   justify-self: end;
   display: flex;
   align-items: center;
-  gap: 14px;
-  min-width: 118px;
+  gap: 6px;
+  min-width: 0;
+}
+
+.taskbar .taskbar-operator-button,
+.taskbar .taskbar-logout-button,
+.taskbar .switch-account-button {
+  width: auto;
+  flex-basis: auto;
+  padding: 0 8px;
+}
+
+.taskbar .taskbar-operator-button {
+  max-width: 150px;
+}
+
+.taskbar .taskbar-operator-button .top-avatar {
+  flex: 0 0 26px;
+}
+
+.taskbar .taskbar-switch-account .switch-account-button {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+}
+
+.taskbar .switch-account-menu {
+  top: auto;
+  right: 0;
+  bottom: calc(100% + 8px);
+  z-index: 3201;
+}
+
+.taskbar .switch-account-item {
+  width: 100%;
+  height: auto;
+  min-height: 50px;
+  display: grid;
+  justify-content: stretch;
+  padding: 9px 10px;
+  border: 0;
+  background: transparent;
+  transform: none;
+}
+
+.taskbar .switch-account-item:hover {
+  border-color: transparent;
+  background: #eef5fb;
+  transform: none;
 }
 
 .taskbar-online {
@@ -5140,6 +5394,26 @@ a {
   min-width: 42px;
   text-align: right;
   font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 1200px) {
+  .taskbar-brand strong,
+  .taskbar-operator-name,
+  .taskbar-logout-button span,
+  .taskbar-online {
+    display: none;
+  }
+
+  .taskbar-center {
+    width: min(720px, calc(100vw - 300px));
+  }
+
+  .taskbar .taskbar-operator-button,
+  .taskbar .taskbar-logout-button {
+    width: 36px;
+    flex-basis: 36px;
+    padding: 0;
+  }
 }
 
 @keyframes desktop-window-enter {
@@ -5970,15 +6244,18 @@ a {
     min-height: 0;
   }
 
-  .topbar {
-    grid-template-columns: auto minmax(0, 1fr);
-    gap: 8px;
-    padding: 0 10px;
+  .taskbar-brand strong,
+  .taskbar-operator-name,
+  .taskbar-logout-button span,
+  .taskbar-online {
+    display: none;
   }
 
-  .brand span:last-child,
-  .top-actions .operator-button span:last-child {
-    display: none;
+  .taskbar .taskbar-operator-button,
+  .taskbar .taskbar-logout-button {
+    width: 36px;
+    flex-basis: 36px;
+    padding: 0;
   }
 
   .taskbar .global-search-wrap {
@@ -6013,7 +6290,7 @@ a {
 
   .workspace {
     padding: 12px;
-    overflow: hidden;
+    overflow: clip;
   }
 
   .desktop-icons {

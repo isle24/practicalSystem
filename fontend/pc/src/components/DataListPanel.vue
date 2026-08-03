@@ -9,17 +9,15 @@
         <label
           v-for="filter in filters"
           :key="filter.key"
-          :class="{ 'filter-active': hasFilterValue(filterValue(filter.key)) }"
+          class="data-list-filter-field"
         >
-          <span>{{ filter.label }}</span>
           <el-select
             v-if="filter.type === 'select'"
             class="filter-select"
-            :class="{ 'is-filter-active': hasFilterValue(filterValue(filter.key)) }"
             :model-value="filterValue(filter.key)"
             clearable
             filterable
-            :placeholder="filter.placeholder || '全部'"
+            :placeholder="filterPlaceholder(filter)"
             @update:model-value="value => updateFilter(filter.key, value)"
           >
             <el-option
@@ -32,13 +30,16 @@
           <input
             v-else
             :value="filterValue(filter.key)"
-            :placeholder="filter.placeholder || ''"
+            :placeholder="filterPlaceholder(filter)"
             @input="event => updateFilter(filter.key, event.target.value)"
             @keyup.enter="emit('search')"
           >
         </label>
       </div>
       <div class="data-list-actions">
+        <div v-if="$slots.toolbar" class="data-list-toolbar-actions">
+          <slot name="toolbar" />
+        </div>
         <div ref="columnMenuRef" class="data-list-column-selector">
           <button type="button" class="el-button" @click="toggleColumnMenu">
             <Columns3 :size="15" />
@@ -105,24 +106,12 @@
           <span v-else>{{ columnText(column, row) }}</span>
         </template>
       </el-table-column>
-      <el-table-column v-if="actions.length || $slots.actions" label="操作" :width="actionColumnWidth" fixed="right">
+      <el-table-column v-if="actions.length || $slots.actions" label="操作" width="82" fixed="right" align="center">
         <template #default="{ row }">
-          <template v-if="actions.length">
-            <button
-              v-for="action in actions"
-              :key="action.key"
-              type="button"
-              class="table-action"
-              :class="action.theme"
-              :disabled="isActionDisabled(action, row)"
-              @pointerdown.stop.prevent="handleAction($event, action, row)"
-              @mousedown.stop.prevent="handleAction($event, action, row)"
-              @click.stop.prevent="handleAction($event, action, row)"
-            >
-              {{ action.label }}
-            </button>
-          </template>
-          <slot v-else name="actions" :row="row" />
+          <button type="button" class="table-operation-trigger" @click.stop="openActionDrawer(row)">
+            <Ellipsis :size="16" />
+            <span>操作</span>
+          </button>
         </template>
       </el-table-column>
     </el-table>
@@ -138,12 +127,47 @@
         @current-change="page => emit('page-change', page)"
       />
     </div>
+
+    <Teleport to="body">
+      <Transition name="data-list-drawer">
+        <div v-if="actionDrawerOpen" class="data-list-action-layer" @pointerdown.self="closeActionDrawer">
+          <aside class="data-list-action-drawer" role="dialog" aria-modal="true" aria-label="记录操作">
+            <header>
+              <div>
+                <span>当前记录</span>
+                <strong>{{ actionRowTitle }}</strong>
+              </div>
+              <button type="button" title="关闭" aria-label="关闭" @click="closeActionDrawer">
+                <X :size="18" />
+              </button>
+            </header>
+            <div class="data-list-action-content" @click="handleDrawerContentClick">
+              <template v-if="actions.length">
+                <button
+                  v-for="action in actions"
+                  :key="action.key"
+                  type="button"
+                  class="data-list-drawer-action"
+                  :class="action.theme"
+                  :disabled="isActionDisabled(action, actionRow)"
+                  @click="handleAction($event, action, actionRow)"
+                >
+                  <span>{{ action.label }}</span>
+                  <ChevronRight :size="16" />
+                </button>
+              </template>
+              <slot v-else name="actions" :row="actionRow" />
+            </div>
+          </aside>
+        </div>
+      </Transition>
+    </Teleport>
   </section>
 </template>
 
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
-import { ChevronDown, ChevronUp, Columns3, RefreshCw } from '@lucide/vue';
+import { ChevronDown, ChevronRight, ChevronUp, Columns3, Ellipsis, RefreshCw, X } from '@lucide/vue';
 
 const props = defineProps({
   actions: {
@@ -192,18 +216,25 @@ const columnMenuPanelRef = ref(null);
 const filtersExpanded = ref(false);
 const filterCollapsible = ref(false);
 const columnMenuOpen = ref(false);
+const actionDrawerOpen = ref(false);
+const actionRow = ref(null);
 const columnMenuPosition = reactive({ top: 0, left: 0 });
 const visibleColumnKeys = ref([]);
 let filterResizeObserver = null;
 let lastActionAt = 0;
-const actionColumnWidth = computed(() => {
-  if (!props.actions.length) {
-    return 280;
-  }
-  return Math.min(320, Math.max(128, props.actions.length * 72 + 20));
-});
 const selectableColumns = computed(() => props.columns.filter(column => column.label));
 const visibleColumns = computed(() => props.columns.filter(column => isColumnVisible(column)));
+const actionRowTitle = computed(() => {
+  if (!actionRow.value) {
+    return '-';
+  }
+  const titleKeys = ['title', 'name', 'plan_title', 'course_name', 'student_name', 'teacher_name', 'login_name'];
+  const column = visibleColumns.value.find(item => titleKeys.includes(String(item.prop || item.key)))
+    || visibleColumns.value[1]
+    || visibleColumns.value[0]
+    || props.columns[0];
+  return column ? columnText(column, actionRow.value) : `记录 ${actionRow.value.id || ''}`.trim();
+});
 const columnMenuStyle = computed(() => ({
   top: `${columnMenuPosition.top}px`,
   left: `${columnMenuPosition.left}px`,
@@ -236,13 +267,17 @@ watch(
 
 watch(
   [() => props.columns, () => props.storageKey],
-  () => loadVisibleColumns(),
+  () => {
+    loadVisibleColumns();
+    closeActionDrawer();
+  },
   { immediate: true, deep: true },
 );
 
 onMounted(() => {
   updateFilterOverflow();
   document.addEventListener('pointerdown', closeColumnMenuOutside);
+  document.addEventListener('keydown', handleDocumentKeydown);
   if (typeof ResizeObserver !== 'undefined' && filtersRef.value) {
     filterResizeObserver = new ResizeObserver(updateFilterOverflow);
     filterResizeObserver.observe(filtersRef.value);
@@ -252,6 +287,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
   filterResizeObserver?.disconnect();
   document.removeEventListener('pointerdown', closeColumnMenuOutside);
+  document.removeEventListener('keydown', handleDocumentKeydown);
 });
 
 function updateFilterOverflow() {
@@ -262,7 +298,7 @@ function updateFilterOverflow() {
   }
   const wasExpanded = filtersExpanded.value;
   element.classList.add('is-measuring');
-  filterCollapsible.value = element.scrollHeight > 52;
+  filterCollapsible.value = element.scrollHeight > 40;
   element.classList.remove('is-measuring');
   if (!filterCollapsible.value && wasExpanded) {
     filtersExpanded.value = false;
@@ -369,8 +405,17 @@ function updateFilter(key, value) {
   emit('filter-change', { key, value });
 }
 
-function hasFilterValue(value) {
-  return value !== '' && value !== null && value !== undefined;
+/** 返回筛选控件占位提示 */
+function filterPlaceholder(filter) {
+  if (filter.type === 'select') {
+    return filter.placeholder || `请选择${filter.label}`;
+  }
+  if (!filter.placeholder) {
+    return `请输入${filter.label}`;
+  }
+  return String(filter.placeholder).startsWith('请输入')
+    ? filter.placeholder
+    : `请输入${filter.placeholder}`;
 }
 
 function columnText(column, row) {
@@ -398,9 +443,38 @@ function handleAction(event, action, row) {
   if (props.actionHandler) {
     event.preventDefault();
     props.actionHandler({ action: action.key, row });
+    closeActionDrawer();
     return;
   }
   emit('row-action', { action: action.key, row });
+  closeActionDrawer();
+}
+
+/** 打开当前记录的操作面板 */
+function openActionDrawer(row) {
+  actionRow.value = row;
+  actionDrawerOpen.value = true;
+  columnMenuOpen.value = false;
+}
+
+/** 关闭记录操作面板 */
+function closeActionDrawer() {
+  actionDrawerOpen.value = false;
+}
+
+/** 执行插槽按钮后关闭操作面板 */
+function handleDrawerContentClick(event) {
+  const button = event.target.closest('button, a');
+  if (button && !button.disabled && button.getAttribute('aria-disabled') !== 'true') {
+    closeActionDrawer();
+  }
+}
+
+/** 响应操作面板键盘关闭 */
+function handleDocumentKeydown(event) {
+  if (event.key === 'Escape' && actionDrawerOpen.value) {
+    closeActionDrawer();
+  }
 }
 
 </script>

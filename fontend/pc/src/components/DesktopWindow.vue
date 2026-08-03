@@ -198,6 +198,8 @@ function toggleMaximize() {
     return;
   }
 
+  parent.scrollLeft = 0;
+  parent.scrollTop = 0;
   emit('focus');
   if (!maximized.value) {
     restoreFrame.value = { ...frame };
@@ -225,6 +227,8 @@ function fitToWorkspace() {
   if (!parent) {
     return;
   }
+  parent.scrollLeft = 0;
+  parent.scrollTop = 0;
   const minFrame = effectiveMinFrame();
 
   if (maximized.value) {
