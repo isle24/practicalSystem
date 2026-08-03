@@ -20,9 +20,16 @@
         class="side-item"
         :class="{ active: activeKey === item.key }"
         :title="collapsed ? item.name : ''"
+        :aria-label="item.name"
         @click.prevent.stop="emit('select', item.key)"
       >
-        <span class="side-item-marker" />
+        <component
+          :is="item.icon || LayoutGrid"
+          class="side-item-icon"
+          :size="17"
+          :stroke-width="1.9"
+          aria-hidden="true"
+        />
         <span class="side-item-label">{{ item.name }}</span>
       </a>
     </nav>
@@ -31,7 +38,7 @@
 
 <script setup>
 import { ref, watch } from 'vue';
-import { PanelLeftClose, PanelLeftOpen } from '@lucide/vue';
+import { LayoutGrid, PanelLeftClose, PanelLeftOpen } from '@lucide/vue';
 
 const props = defineProps({
   items: { type: Array, default: () => [] },

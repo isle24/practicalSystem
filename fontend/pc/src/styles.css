@@ -972,12 +972,12 @@ a {
   font-size: 13px;
 }
 
-.side-item .side-item-marker {
-  width: 8px;
-  height: 8px;
-  flex: 0 0 8px;
-  border-radius: 999px;
-  background: var(--line-strong);
+.side-item-icon {
+  width: 17px;
+  height: 17px;
+  flex: 0 0 17px;
+  color: var(--muted);
+  transition: color .14s ease, transform .14s ease;
 }
 
 .side-item-label {
@@ -996,6 +996,15 @@ a {
 .side-item:hover {
   color: var(--primary);
   background: var(--primary-soft);
+}
+
+.side-item.active .side-item-icon,
+.side-item:hover .side-item-icon {
+  color: var(--primary);
+}
+
+.side-item:hover .side-item-icon {
+  transform: translateX(1px);
 }
 
 .internship-request-panel {
@@ -1028,10 +1037,6 @@ a {
 
 .internship-request-head small {
   color: var(--muted);
-}
-
-.side-item.active .side-item-marker {
-  background: var(--primary);
 }
 
 .content {

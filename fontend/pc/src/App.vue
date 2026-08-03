@@ -5164,19 +5164,19 @@ const defaultDesktopModuleIds = DEFAULT_DESKTOP_MODULE_IDS;
 const launcherModuleIds = modules.map(module => module.id);
 const launcherModuleIdSet = new Set(launcherModuleIds);
 const configSidebarDefinitions = [
-  { key: 'userManage', name: '用户管理', permission: 'config:user' },
-  { key: 'gradeManage', name: '年级管理', permission: 'config:grade' },
-  { key: 'graduationCohortManage', name: '毕业届次管理', permission: 'config:graduation-cohort' },
-  { key: 'internshipCategoryManage', name: '实习类别管理', permission: 'config:internship-category' },
-  { key: 'departmentManage', name: '学院管理', permission: 'config:department' },
-  { key: 'professionManage', name: '专业管理', permission: 'config:profession' },
-  { key: 'classManage', name: '班级管理', permission: 'config:class' },
-  { key: 'practicePeriods', name: '课节配置', permission: 'practice:period:manage', schoolConfig: true },
-  { key: 'menuManage', name: '菜单管理', permission: 'config:view', schoolConfig: true },
-  { key: 'roleMenus', name: '角色权限', permission: 'config:view', schoolConfig: true },
-  { key: 'organizationScope', name: '组织范围', permission: 'config:view', schoolConfig: true },
-  { key: 'operationGuides', name: '操作说明', permission: 'config:view', schoolConfig: true },
-  { key: 'wechatProxy', name: '企业微信应用', permission: 'config:view', schoolConfig: true },
+  { key: 'userManage', name: '用户管理', permission: 'config:user', icon: UsersRound },
+  { key: 'gradeManage', name: '年级管理', permission: 'config:grade', icon: GraduationCap },
+  { key: 'graduationCohortManage', name: '毕业届次管理', permission: 'config:graduation-cohort', icon: CalendarRange },
+  { key: 'internshipCategoryManage', name: '实习类别管理', permission: 'config:internship-category', icon: Tags },
+  { key: 'departmentManage', name: '学院管理', permission: 'config:department', icon: Building2 },
+  { key: 'professionManage', name: '专业管理', permission: 'config:profession', icon: GraduationCap },
+  { key: 'classManage', name: '班级管理', permission: 'config:class', icon: UsersRound },
+  { key: 'practicePeriods', name: '课节配置', permission: 'practice:period:manage', schoolConfig: true, icon: CalendarCheck },
+  { key: 'menuManage', name: '菜单管理', permission: 'config:view', schoolConfig: true, icon: ListTree },
+  { key: 'roleMenus', name: '角色权限', permission: 'config:view', schoolConfig: true, icon: ShieldCheck },
+  { key: 'organizationScope', name: '组织范围', permission: 'config:view', schoolConfig: true, icon: Network },
+  { key: 'operationGuides', name: '操作说明', permission: 'config:view', schoolConfig: true, icon: BookOpen },
+  { key: 'wechatProxy', name: '企业微信应用', permission: 'config:view', schoolConfig: true, icon: Globe2 },
 ];
 
 const isLoggedIn = computed(() => Boolean(permissionState.context.account_id));
@@ -6237,7 +6237,7 @@ function sidebarItems(win) {
     return [];
   }
   if (win.module.id === 'file') {
-    return [{ key: 'fileManage', name: '文件列表' }];
+    return [{ key: 'fileManage', name: '文件列表', icon: FolderOpen }];
   }
   if (win.module.id === 'internship') {
     return visibleInternshipSidebarItems.value;
@@ -10297,19 +10297,19 @@ function dateText(date) {
 
 function practiceSidebarItems() {
   const items = [
-    { key: 'overview', name: '总览' },
-    { key: 'plans', name: '教学计划' },
-    { key: 'schedules', name: '课表安排' },
-    { key: 'projects', name: '项目发布' },
-    { key: 'signIns', name: '签到记录' },
-    { key: 'journals', name: '过程日志' },
-    { key: 'reports', name: '总结报告' },
-    { key: 'syllabus', name: '大纲编写' },
-    { key: 'lessonPlans', name: '教案编写' },
-    { key: 'gradeRules', name: '成绩比例' },
-    { key: 'scores', name: '成绩评定' },
-    { key: 'reflections', name: '反思报告' },
-    { key: 'rooms', name: '场地管理' },
+    { key: 'overview', name: '总览', icon: ChartColumn },
+    { key: 'plans', name: '教学计划', icon: FileText },
+    { key: 'schedules', name: '课表安排', icon: CalendarCheck },
+    { key: 'projects', name: '项目发布', icon: Workflow },
+    { key: 'signIns', name: '签到记录', icon: MapPin },
+    { key: 'journals', name: '过程日志', icon: FileClock },
+    { key: 'reports', name: '总结报告', icon: FileText },
+    { key: 'syllabus', name: '大纲编写', icon: BookOpen },
+    { key: 'lessonPlans', name: '教案编写', icon: FileText },
+    { key: 'gradeRules', name: '成绩比例', icon: SlidersHorizontal },
+    { key: 'scores', name: '成绩评定', icon: GraduationCap },
+    { key: 'reflections', name: '反思报告', icon: FileClock },
+    { key: 'rooms', name: '场地管理', icon: Building2 },
   ];
   if (isStudentRole.value) {
     return items.filter(item => ['overview', 'projects', 'signIns', 'journals', 'reports', 'scores'].includes(item.key));
