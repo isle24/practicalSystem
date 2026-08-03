@@ -56,11 +56,14 @@ export const internshipReviewStatusLabels = {
 
 export function emptyInternshipFilters() {
   return {
+    category_id: '',
     grade_id: '',
+    graduation_cohort_id: '',
     dep_id: '',
     profession_id: '',
     class_id: '',
     arrangement_id: '',
+    base_type: '',
     status: '',
     result: '',
     keyword: '',
@@ -83,10 +86,18 @@ export function emptyInternshipOptions() {
     plans: [],
     arrangements: [],
     grades: [],
+    graduation_cohorts: [],
+    internship_categories: [],
     departments: [],
     professions: [],
     classes: [],
+    bases: [],
+    companies: [],
     teachers: [],
+    students: [],
+    base_categories: [],
+    base_levels: [],
+    base_declaration_years: [],
     report_templates: [],
     archive_templates: [],
     review_rules: defaultInternshipReviewRules,
@@ -96,6 +107,7 @@ export function emptyInternshipOptions() {
 
 export function createInternshipState() {
   const listKeys = [
+    'bases',
     'arrangements',
     'arrangementChanges',
     'plans',
@@ -122,7 +134,7 @@ export function createInternshipState() {
     panel: 'workbench',
     submitSection: '',
     reviewList: 'applications',
-    manageList: 'arrangements',
+    manageList: 'plans',
     overview: emptyInternshipOverview(),
     options: emptyInternshipOptions(),
     lists: Object.fromEntries(listKeys.map(key => [key, emptyPagedList()])),
@@ -181,6 +193,16 @@ export function createInternshipState() {
       subtitle: '',
       items: [],
       cycles: [],
+      message: '',
+    },
+    detailSheet: {
+      visible: false,
+      loading: false,
+      type: '',
+      title: '',
+      subtitle: '',
+      sections: [],
+      primaryAction: null,
       message: '',
     },
   };

@@ -23,11 +23,13 @@
     <InternshipManageList v-else-if="isAdminRole && internship.panel === 'manage'" />
   </section>
 
+  <InternshipDetailSheet />
   <InternshipTimeline />
 </template>
 
 <script>
 import AppSegmented from '../../components/ui/AppSegmented.vue';
+import InternshipDetailSheet from './InternshipDetailSheet.vue';
 import InternshipManageList from './InternshipManageList.vue';
 import InternshipOverview from './InternshipOverview.vue';
 import InternshipReviewList from './InternshipReviewList.vue';
@@ -41,6 +43,7 @@ export default {
   name: 'InternshipPage',
   components: {
     AppSegmented,
+    InternshipDetailSheet,
     InternshipManageList,
     InternshipOverview,
     InternshipReviewList,
