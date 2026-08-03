@@ -119,20 +119,17 @@ const groupDefinitions = [
   {
     key: 'teaching',
     title: '教学业务',
-    ids: new Set(['internship', 'practice', 'stat']),
+    ids: new Set(['internship', 'practice']),
   },
   {
     key: 'data',
-    title: '数据与配置',
-    ids: new Set([
-      'log', 'file', 'exportTask', 'userManage', 'gradeManage', 'departmentManage',
-      'professionManage', 'classManage', 'companyManage', 'dataManage', 'config',
-    ]),
+    title: '管理工具',
+    ids: new Set(['dataCenter', 'auditCenter', 'resourceCenter', 'config']),
   },
   {
     key: 'personal',
     title: '个人工具',
-    ids: new Set(['doc', 'templateLib', 'favorite', 'profile']),
+    ids: new Set(['profile']),
   },
 ];
 

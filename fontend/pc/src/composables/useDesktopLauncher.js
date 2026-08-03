@@ -14,15 +14,17 @@ export function useDesktopLauncher(options) {
 
   const defaultModuleIds = options.defaultModuleIds || DEFAULT_DESKTOP_MODULE_IDS;
   const defaultModuleIdSet = new Set(defaultModuleIds);
+  const moduleAliases = options.moduleAliases || {};
 
   const customShortcutItems = computed(() => state.items.filter(item => item?.type === 'module' || item?.type === 'favorite'));
   const launchableModuleIds = computed(() => new Set(options.allModules.value
     .filter(module => module?.type !== 'favoriteLink')
     .map(module => module.id)));
-  const customModuleKeys = computed(() => customShortcutItems.value
+  const customModuleKeys = computed(() => Array.from(new Set(customShortcutItems.value
     .filter(item => item.type === 'module')
     .map(item => String(item.key || item.item_key || ''))
-    .filter(key => key && !defaultModuleIdSet.has(key) && launchableModuleIds.value.has(key)));
+    .map(key => moduleAliases[key] || key)
+    .filter(key => key && !defaultModuleIdSet.has(key) && launchableModuleIds.value.has(key)))));
   const moduleShortcutKeys = computed(() => {
     const defaults = defaultModuleIds.filter(key => launchableModuleIds.value.has(key));
     return Array.from(new Set([...defaults, ...customModuleKeys.value]));

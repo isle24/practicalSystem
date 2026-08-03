@@ -97,18 +97,13 @@
     </header>
 
     <section class="workspace">
-      <nav class="desktop-icons" aria-label="应用模块">
-        <ShortcutTile
-          v-for="module in visibleDesktopModules"
-          :key="module.id"
-          :item="module"
-          mode="desktop"
-          :href="moduleHref(module)"
-          :active="isModuleFocused(module.id)"
-          :backend-url="backendUrl"
-          @open="openModule(module)"
-        />
-      </nav>
+      <AdaptiveDesktopGrid
+        :modules="visibleDesktopModules"
+        :module-href="moduleHref"
+        :is-focused="isModuleFocused"
+        :backend-url="backendUrl"
+        @open="openModule"
+      />
 
       <DesktopWindow
         v-for="win in visibleWindows"
@@ -125,7 +120,7 @@
         @minimize="minimizeWindow(win.id)"
         @close="closeWindow(win.id)"
       >
-        <template v-if="win.module.id !== 'profile'" #actions>
+        <template v-if="win.module.id !== 'profile' && !isModuleCollection(win.module.id)" #actions>
           <button type="button" class="window-guide-button" title="操作说明" @click="openGuide(win)">
             <BookOpen :size="14" />
             <span>操作说明</span>
@@ -299,6 +294,15 @@
             </div>
           </section>
         </div>
+
+        <ModuleCollection
+          v-else-if="isModuleCollection(win.module.id)"
+          :title="win.module.name"
+          :description="win.module.scope"
+          :items="collectionModuleItems(win.module.id)"
+          :backend-url="backendUrl"
+          @open="openModule"
+        />
 
         <div v-else class="app-body" :class="{ 'no-sidebar': !sidebarItems(win).length }">
           <ModuleSidebar
@@ -914,8 +918,8 @@
                       <div v-if="activeOverviewTab === 'metrics'" class="internship-overview">
                         <section v-for="item in internshipOverviewCards" :key="item.name" class="internship-stat" :class="item.theme">
                           <component :is="item.icon" :size="21" />
-                          <strong>{{ item.value }}</strong>
                           <span>{{ item.name }}</span>
+                          <strong>{{ item.value }}</strong>
                         </section>
                       </div>
                       <StudentOwnPanel
@@ -3969,6 +3973,7 @@ import {
 } from '@lucide/vue';
 import DesktopWindow from './components/DesktopWindow.vue';
 import DesktopLauncher from './components/DesktopLauncher.vue';
+import AdaptiveDesktopGrid from './components/AdaptiveDesktopGrid.vue';
 import AppIcon from './components/AppIcon.vue';
 import DataListPanel from './components/DataListPanel.vue';
 import PracticePeriodManager from './components/PracticePeriodManager.vue';
@@ -3981,6 +3986,7 @@ import InternshipBaseForm from './components/InternshipBaseForm.vue';
 import InternshipImplementationDetail from './components/InternshipImplementationDetail.vue';
 import InternshipPlanDetail from './components/InternshipPlanDetail.vue';
 import MenuEditDialog from './components/MenuEditDialog.vue';
+import ModuleCollection from './components/ModuleCollection.vue';
 import ModuleSidebar from './components/ModuleSidebar.vue';
 import OperationDialog from './components/OperationDialog.vue';
 import ShortcutTile from './components/ShortcutTile.vue';
@@ -4213,10 +4219,27 @@ const switchAccountState = reactive({
   items: [],
   message: '',
 });
+const desktopShortcutModuleAliases = {
+  stat: 'dataCenter',
+  userManage: 'dataCenter',
+  gradeManage: 'dataCenter',
+  departmentManage: 'dataCenter',
+  professionManage: 'dataCenter',
+  classManage: 'dataCenter',
+  companyManage: 'dataCenter',
+  dataManage: 'dataCenter',
+  log: 'auditCenter',
+  exportTask: 'auditCenter',
+  file: 'resourceCenter',
+  doc: 'resourceCenter',
+  templateLib: 'resourceCenter',
+  favorite: 'resourceCenter',
+};
 const desktopLauncher = useDesktopLauncher({
-  allModules: computed(() => allLaunchableModules.value),
+  allModules: computed(() => desktopEntryModules.value),
   favoriteItems: computed(() => favoriteState.items),
   defaultModuleIds: DEFAULT_DESKTOP_MODULE_IDS,
+  moduleAliases: desktopShortcutModuleAliases,
   searchText: moduleSearchText,
 });
 const desktopLauncherState = desktopLauncher.state;
@@ -4480,6 +4503,36 @@ const modules = [
     defaultPanel: 'overview',
   },
   {
+    id: 'dataCenter',
+    name: '数据管理',
+    icon: HardDrive,
+    color: 'red',
+    scope: '统计报表与学校基础数据',
+    collection: true,
+    childIds: ['stat', 'userManage', 'gradeManage', 'departmentManage', 'professionManage', 'classManage', 'companyManage', 'dataManage'],
+    adminOnly: true,
+  },
+  {
+    id: 'auditCenter',
+    name: '日志审计',
+    icon: FileClock,
+    color: 'amber',
+    scope: '操作日志与导出任务',
+    collection: true,
+    childIds: ['log', 'exportTask'],
+    childNames: { log: '操作日志' },
+  },
+  {
+    id: 'resourceCenter',
+    name: '资源中心',
+    icon: FolderOpen,
+    color: 'blue',
+    scope: '文件、文档、模板与收藏',
+    collection: true,
+    childIds: ['file', 'doc', 'templateLib', 'favorite'],
+    childNames: { templateLib: '模板库' },
+  },
+  {
     id: 'stat',
     name: '统计报表',
     icon: ChartColumn,
@@ -4487,15 +4540,17 @@ const modules = [
     scope: '按数据范围聚合',
     viewPermission: 'stat:view',
     managePermission: 'stat:manage',
+    collectionParent: 'dataCenter',
   },
   {
     id: 'log',
-    name: '日志审计',
+    name: '操作日志',
     icon: FileClock,
     color: 'red',
     scope: '学校日志',
     viewPermission: 'log:view',
     managePermission: 'log:manage',
+    collectionParent: 'auditCenter',
   },
   {
     id: 'file',
@@ -4506,6 +4561,7 @@ const modules = [
     viewPermission: 'file:view',
     managePermission: 'file:manage',
     defaultPanel: 'fileManage',
+    collectionParent: 'resourceCenter',
   },
   {
     id: 'doc',
@@ -4516,16 +4572,18 @@ const modules = [
     viewPermission: 'doc:view',
     managePermission: 'doc:manage',
     defaultPanel: 'docList',
+    collectionParent: 'resourceCenter',
   },
   {
     id: 'templateLib',
-    name: '模板管理',
+    name: '模板库',
     icon: FileText,
     color: 'teal',
     scope: '流程审核待办/消息模板 / 材料文件模板',
     viewPermission: 'template:view',
     managePermission: 'template:manage',
     defaultPanel: 'templateList',
+    collectionParent: 'resourceCenter',
   },
   {
     id: 'exportTask',
@@ -4536,6 +4594,7 @@ const modules = [
     viewPermission: 'export:view',
     managePermission: 'export:create',
     defaultPanel: 'taskList',
+    collectionParent: 'auditCenter',
   },
   {
     id: 'favorite',
@@ -4546,6 +4605,7 @@ const modules = [
     viewPermission: '',
     managePermission: '',
     defaultPanel: 'favoriteList',
+    collectionParent: 'resourceCenter',
   },
   {
     id: 'userManage',
@@ -4557,6 +4617,7 @@ const modules = [
     managePermission: 'config:manage',
     defaultPanel: 'userManage',
     adminOnly: true,
+    collectionParent: 'dataCenter',
   },
   {
     id: 'gradeManage',
@@ -4568,6 +4629,7 @@ const modules = [
     managePermission: 'config:manage',
     defaultPanel: 'gradeManage',
     adminOnly: true,
+    collectionParent: 'dataCenter',
   },
   {
     id: 'graduationCohortManage',
@@ -4579,6 +4641,7 @@ const modules = [
     managePermission: 'config:manage',
     defaultPanel: 'graduationCohortManage',
     adminOnly: true,
+    launcherHidden: true,
   },
   {
     id: 'internshipCategoryManage',
@@ -4590,6 +4653,7 @@ const modules = [
     managePermission: 'config:manage',
     defaultPanel: 'internshipCategoryManage',
     adminOnly: true,
+    launcherHidden: true,
   },
   {
     id: 'departmentManage',
@@ -4601,6 +4665,7 @@ const modules = [
     managePermission: 'config:manage',
     defaultPanel: 'departmentManage',
     adminOnly: true,
+    collectionParent: 'dataCenter',
   },
   {
     id: 'professionManage',
@@ -4612,6 +4677,7 @@ const modules = [
     managePermission: 'config:manage',
     defaultPanel: 'professionManage',
     adminOnly: true,
+    collectionParent: 'dataCenter',
   },
   {
     id: 'classManage',
@@ -4623,6 +4689,7 @@ const modules = [
     managePermission: 'config:manage',
     defaultPanel: 'classManage',
     adminOnly: true,
+    collectionParent: 'dataCenter',
   },
   {
     id: 'companyManage',
@@ -4634,10 +4701,11 @@ const modules = [
     managePermission: 'internship:manage',
     defaultPanel: 'baseFlows',
     adminOnly: true,
+    collectionParent: 'dataCenter',
   },
   {
     id: 'dataManage',
-    name: '数据管理',
+    name: '测试数据清理',
     icon: HardDrive,
     color: 'red',
     scope: '测试数据清理',
@@ -4645,6 +4713,7 @@ const modules = [
     managePermission: 'config:manage',
     defaultPanel: 'dataManage',
     adminOnly: true,
+    collectionParent: 'dataCenter',
   },
   {
     id: 'config',
@@ -5140,6 +5209,9 @@ const openWindows = reactive([]);
 const moduleSearchKeywords = {
   internship: '学生 教师 学院 专业 企业 任务 绑定 申请管理 实习方式申请 审核 签到 日志 报告 延期 成绩 归档 实习任务 实习计划',
   practice: '实验 实训 教学计划 课表 项目 过程记录 成绩 审核 课节',
+  dataCenter: '数据管理 统计 用户 年级 学院 专业 班级 基地 测试数据',
+  auditCenter: '日志审计 操作日志 导出任务',
+  resourceCenter: '资源中心 文件 文档 模板 收藏夹',
   stat: '统计 报表 数据 概览 分析 学院 专业 学生 成绩',
   log: '日志 审计 操作 接口 账号 IP 登录 工作台 基础档案 流程配置',
   file: '文件 附件 上传 下载 预览 头像 壁纸 材料',
@@ -5161,7 +5233,7 @@ const moduleSearchKeywords = {
   message: '消息 通知 待办 审核结果 站内信',
 };
 const defaultDesktopModuleIds = DEFAULT_DESKTOP_MODULE_IDS;
-const launcherModuleIds = modules.map(module => module.id);
+const launcherModuleIds = modules.filter(module => !module.collectionParent && !module.launcherHidden).map(module => module.id);
 const launcherModuleIdSet = new Set(launcherModuleIds);
 const configSidebarDefinitions = [
   { key: 'userManage', name: '用户管理', permission: 'config:user', icon: UsersRound },
@@ -5189,7 +5261,13 @@ const schoolConfigModuleIds = new Set(['gradeManage', 'graduationCohortManage', 
 const visibleModules = computed(() => modules.map(decorateModule).filter(canShowModule));
 const menuModuleItems = computed(() => buildLaunchableMenuModules(permissionState.menus, modules, resolveMenuIcon));
 const allLaunchableModules = computed(() => mergeMenuModules(visibleModules.value, menuModuleItems.value));
-const mainEntryModules = computed(() => allLaunchableModules.value.filter(module => launcherModuleIdSet.has(module.id) || module.source === 'menu'));
+const desktopEntryModules = computed(() => allLaunchableModules.value.filter((module) => {
+  if (module.collectionParent || module.launcherHidden) {
+    return false;
+  }
+  return !module.collection || collectionModuleItems(module.id).length > 0;
+}));
+const mainEntryModules = computed(() => desktopEntryModules.value.filter(module => launcherModuleIdSet.has(module.id) || module.source === 'menu'));
 const globalSearchKeyword = computed(() => keyword.value.trim().toLowerCase());
 const searchCandidateModules = computed(() => {
   const items = [...allLaunchableModules.value, ...favoriteDesktopShortcuts.value];
@@ -5397,9 +5475,30 @@ function resolveMenuIcon(iconName) {
   return iconRegistry[iconName.trim()] || LayoutGrid;
 }
 
+function isModuleCollection(moduleId) {
+  return Boolean(modules.find(module => module.id === moduleId)?.collection);
+}
+
+function collectionModuleItems(moduleId) {
+  const collection = modules.find(module => module.id === moduleId && module.collection);
+  if (!collection) {
+    return [];
+  }
+  const available = new Map(allLaunchableModules.value.map(module => [module.id, module]));
+  return collection.childIds
+    .map((id) => {
+      const item = available.get(id);
+      return item && collection.childNames?.[id] ? { ...item, name: collection.childNames[id] } : item;
+    })
+    .filter(Boolean);
+}
+
 function canShowModule(module) {
   if (module.source === 'menu') {
     return isLoggedIn.value && module.menu?.visible !== 'false';
+  }
+  if (module.collection) {
+    return isLoggedIn.value && (!module.adminOnly || isAdminRole.value);
   }
   if (module.id === 'profile') {
     return isLoggedIn.value;
