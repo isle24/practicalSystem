@@ -896,6 +896,8 @@ a {
 }
 
 .module-sidebar-head button {
+  position: relative;
+  z-index: 1;
   width: 28px;
   height: 28px;
   flex: 0 0 28px;
@@ -994,7 +996,7 @@ a {
   color: var(--muted);
 }
 
-.side-item.active span {
+.side-item.active .side-item-marker {
   background: var(--primary);
 }
 
