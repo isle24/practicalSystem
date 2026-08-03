@@ -37,6 +37,7 @@
 
       <section class="support-table">
         <el-table :data="articles" height="100%" stripe v-loading="loading" @row-click="openDetail">
+          <el-table-column type="index" label="序号" width="66" align="center" :index="index => tableSequence(index, pagination)" />
           <el-table-column prop="title" label="标题" min-width="220" />
           <el-table-column prop="category_name" label="分类" width="130" />
           <el-table-column prop="version" label="版本" width="90" />
@@ -189,6 +190,7 @@
 
     <OperationDialog :visible="historyDialog.visible" title="版本记录" dialog-class="history-dialog" @close="historyDialog.visible = false">
         <el-table :data="historyDialog.items" height="100%" stripe>
+          <el-table-column type="index" label="序号" width="66" align="center" />
           <el-table-column prop="version" label="版本" width="90" />
           <el-table-column prop="title" label="标题" min-width="180" />
           <el-table-column prop="change_note" label="说明" min-width="220" />
@@ -212,6 +214,7 @@ import {
   saveDocCategory,
 } from '../api/system';
 import OperationDialog from './OperationDialog.vue';
+import { tableSequence } from '../utils/table';
 
 defineProps({
   canManage: {

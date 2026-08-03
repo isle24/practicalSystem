@@ -6,6 +6,7 @@
     </div>
     <el-alert v-if="state.message" type="warning" :closable="false" show-icon :title="state.message" />
     <el-table :data="state.rows" height="100%" stripe v-loading="state.loading">
+      <el-table-column type="index" label="序号" width="66" align="center" />
       <el-table-column prop="name" label="课节名称" min-width="180" />
       <el-table-column label="上课时间" min-width="180">
         <template #default="{ row }">{{ timeText(row.start_time) }} - {{ timeText(row.end_time) }}</template>

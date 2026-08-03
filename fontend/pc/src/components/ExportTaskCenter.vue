@@ -17,6 +17,7 @@
 
     <section class="support-table">
       <el-table :data="tasks" height="100%" stripe v-loading="loading">
+        <el-table-column type="index" label="序号" width="66" align="center" :index="index => tableSequence(index, pagination)" />
         <el-table-column prop="file_name" label="文件名" min-width="220" />
         <el-table-column prop="type" label="类型" width="140" />
         <el-table-column label="状态" width="100">
@@ -93,6 +94,7 @@
 import { onMounted, reactive, ref } from 'vue';
 import { Plus, RefreshCw, Save, Search } from '@lucide/vue';
 import { createExportTask, fetchExportTasks, retryExportTask } from '../api/system';
+import { tableSequence } from '../utils/table';
 import OperationDialog from './OperationDialog.vue';
 
 const loading = ref(false);

@@ -113,6 +113,7 @@
             <el-button v-if="!readonly" :icon="Plus" size="small" @click="addExistingSite">新增</el-button>
           </header>
           <el-table v-if="readonly && local.existing_sites.length" :data="local.existing_sites" stripe size="small">
+            <el-table-column type="index" label="序号" width="66" align="center" />
             <el-table-column prop="site_name" label="基地名称" min-width="200" />
             <el-table-column prop="cooperation" label="合作内容" min-width="320" show-overflow-tooltip />
           </el-table>
@@ -181,6 +182,7 @@
               <section>
                 <header><strong>经费预算</strong><small>合计 {{ declarationBudgetTotal(declaration) }}</small></header>
                 <el-table v-if="declaration.budgets.length" :data="declaration.budgets" stripe size="small">
+                  <el-table-column type="index" label="序号" width="66" align="center" />
                   <el-table-column prop="item_name" label="项目" min-width="180" />
                   <el-table-column label="金额" width="130"><template #default="{ row }">{{ moneyValueText(row.amount) }}</template></el-table-column>
                 </el-table>
@@ -189,6 +191,7 @@
               <section>
                 <header><strong>历年接纳人数</strong><small>年度申报快照</small></header>
                 <el-table v-if="declaration.reception_stats.length" :data="declaration.reception_stats" stripe size="small">
+                  <el-table-column type="index" label="序号" width="66" align="center" />
                   <el-table-column prop="stat_year" label="年份" min-width="100" />
                   <el-table-column prop="student_count" label="接纳人数" min-width="110" />
                 </el-table>
@@ -213,6 +216,7 @@
             <el-button v-if="!readonly" :icon="Plus" size="small" @click="addBudget">新增</el-button>
           </header>
           <el-table v-if="readonly && local.budgets.length" :data="local.budgets" stripe size="small">
+            <el-table-column type="index" label="序号" width="66" align="center" />
             <el-table-column prop="item_name" label="项目" min-width="160" />
             <el-table-column prop="content" label="内容" min-width="260" show-overflow-tooltip />
             <el-table-column label="金额" width="120"><template #default="{ row }">{{ moneyText(row.amount) }}</template></el-table-column>

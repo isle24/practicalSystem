@@ -1374,6 +1374,7 @@ class InternshipRecord extends TableRecord
         };
     }
 
+    /** 查询实习大纲和指导书分页数据 */
     public static function syllabusGuidePage(array $scope, array $filters): array
     {
         $query = self::applyArrangementScope(self::queryTable('syllabus_guide')
@@ -1383,6 +1384,7 @@ class InternshipRecord extends TableRecord
             ->leftJoin('grade_list', 'profession.grade_id', '=', 'grade_list.grade_id')
             ->leftJoin('account', 'syllabus_guide.created_by', '=', 'account.id')
             ->leftJoin('users', 'account.user_id', '=', 'users.id')
+            ->leftJoin('file', 'syllabus_guide.file_id', '=', 'file.id')
             ->whereNull('syllabus_guide.deleted_at'), $scope);
         self::filter($query, $filters, 'syllabus_guide.arrangement_id', 'arrangement_id');
         self::filter($query, $filters, 'syllabus_guide.status', 'status');
@@ -1404,6 +1406,9 @@ class InternshipRecord extends TableRecord
             'profession.grade_id',
             'grade_list.grade_name',
             'users.name as creator_name',
+            'file.name as file_name',
+            'file.download_name',
+            'file.url as file_url',
         ]);
     }
 

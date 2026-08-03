@@ -15,6 +15,7 @@
       </div>
     </header>
     <el-table v-if="readonly && model.length" :data="model" stripe size="small">
+      <el-table-column type="index" label="序号" width="66" align="center" />
       <el-table-column prop="name" label="姓名" width="110" />
       <el-table-column v-if="directory" prop="teacher_num" label="教师编号" width="110" />
       <el-table-column v-if="directory" prop="dep_name" label="学院" min-width="140" show-overflow-tooltip />

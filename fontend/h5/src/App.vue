@@ -554,6 +554,26 @@ const delayStatusOptions = [
   { value: 'accept', label: '已通过' },
   { value: 'refuse', label: '已退回' },
 ];
+
+/** 返回实习大纲或指导书移动端配置 */
+function mobileSyllabusGuideConfig(key, documentType, title, shortTitle) {
+  return {
+    key,
+    entity: 'syllabus_guide',
+    documentType,
+    title,
+    shortTitle,
+    icon: documentType === 'guide' ? FileText : BookOpen,
+    keywordPlaceholder: `搜索${title}标题、任务、学院或专业`,
+    gradeFilter: true,
+    statusOptions: [
+      { value: 'draft', label: '草稿' },
+      { value: 'published', label: '已发布' },
+    ],
+    emptyText: `暂无${title}`,
+  };
+}
+
 const mobileListConfigs = computed(() => ({
   bases: {
     key: 'bases',
@@ -614,20 +634,8 @@ const mobileListConfigs = computed(() => ({
     statusOptions: reviewStatusOptions,
     emptyText: '暂无实习计划',
   },
-  syllabusGuides: {
-    key: 'syllabusGuides',
-    entity: 'syllabus_guide',
-    title: '大纲指导书',
-    shortTitle: '大纲',
-    icon: BookOpen,
-    keywordPlaceholder: '标题、安排、学院、专业',
-    gradeFilter: true,
-    statusOptions: [
-      { value: 'draft', label: '草稿' },
-      { value: 'published', label: '已发布' },
-    ],
-    emptyText: '暂无大纲指导书',
-  },
+  syllabuses: mobileSyllabusGuideConfig('syllabuses', 'syllabus', '实习大纲', '大纲'),
+  guides: mobileSyllabusGuideConfig('guides', 'guide', '实习指导书', '指导书'),
   implementationSheets: {
     key: 'implementationSheets',
     entity: 'arrangement',
@@ -820,7 +828,8 @@ const manageListTabs = computed(() => {
     'bases',
     'plans',
     'implementationSheets',
-    'syllabusGuides',
+    'syllabuses',
+    'guides',
     'signIns',
     'journals',
     'reports',
@@ -1017,7 +1026,8 @@ const organizationScopedListKeys = new Set([
   'arrangements',
   'arrangementChanges',
   'plans',
-  'syllabusGuides',
+  'syllabuses',
+  'guides',
   'implementationSheets',
   'teacherWorkReports',
   'inspections',
@@ -1258,7 +1268,8 @@ function mobileListTitle(key, row) {
     arrangementChanges: changePayload.title || row.arrangement_title || `变更ID ${row.id}`,
     // 暂时隐藏学期展示，后续需要时恢复 row.semester。
     plans: row.course_name || row.course_code || `计划ID ${row.id}`,
-    syllabusGuides: row.title || row.arrangement_title || `大纲ID ${row.id}`,
+    syllabuses: row.title || row.arrangement_title || `大纲ID ${row.id}`,
+    guides: row.title || row.arrangement_title || `指导书ID ${row.id}`,
     implementationSheets: row.title || row.arrangement_title || `任务ID ${row.id}`,
     applications: student || arrangement || `申请ID ${row.id}`,
     pairs: student || `关系ID ${row.id}`,
@@ -1359,7 +1370,14 @@ function mobileListFacts(key, row) {
       namedFact('当前节点', row.current_approval_name),
       namedFact('内容', planContentText(row.plan_content, 48)),
     ],
-    syllabusGuides: [
+    syllabuses: [
+      internshipAcademicScopeFact(row),
+      namedFact('任务', arrangement),
+      namedFact('学院专业', joinFact([row.dep_name, row.profession_name])),
+      namedFact('录入人', row.creator_name),
+      namedFact('内容', previewText(row.content, 42)),
+    ],
+    guides: [
       internshipAcademicScopeFact(row),
       namedFact('任务', arrangement),
       namedFact('学院专业', joinFact([row.dep_name, row.profession_name])),
@@ -1482,7 +1500,7 @@ function mobileListActions(key, row, context) {
   }
 
   const actions = [];
-  if (config.detailType || ['applications', 'syllabusGuides', 'journals', 'reports', 'teacherWorkReports', 'delays', 'inspections', 'archiveMaterials'].includes(key)) {
+  if (config.detailType || ['applications', 'syllabuses', 'guides', 'journals', 'reports', 'teacherWorkReports', 'delays', 'inspections', 'archiveMaterials'].includes(key)) {
     actions.push({ key: 'detail', label: '查看', type: 'detail', listKey: key });
   }
   if (!config.entity) {
@@ -1630,7 +1648,8 @@ function recordDetailSections(key, row) {
   });
   const blockDefinitions = {
     applications: [detailBlock('申请说明', row.remark)],
-    syllabusGuides: [detailBlock('文档内容', row.content)],
+    syllabuses: [detailBlock('大纲内容', row.content)],
+    guides: [detailBlock('指导书内容', row.content)],
     journals: [
       detailBlock('工作内容', row.work_content || row.content),
       detailBlock('收获体会', row.gains),
@@ -2083,6 +2102,10 @@ function internshipQueryParams(key, page = 1) {
       params[filterKey] = value;
     }
   });
+  const config = getMobileListConfig(key);
+  if (config?.documentType) {
+    params.document_type = config.documentType;
+  }
   return params;
 }
 
@@ -2100,7 +2123,8 @@ function internshipFetcher(key) {
     delays: fetchInternshipDelays,
     scores: fetchInternshipScores,
     courseScores: fetchInternshipCourseScores,
-    syllabusGuides: fetchInternshipSyllabusGuides,
+    syllabuses: fetchInternshipSyllabusGuides,
+    guides: fetchInternshipSyllabusGuides,
     implementationSheets: fetchInternshipArrangements,
     teacherWorkReports: fetchInternshipTeacherWorkReports,
     inspections: fetchInternshipInspections,
@@ -3935,7 +3959,7 @@ function reviewEntityName(entity) {
     delay: '延期申请',
     insurance: '保险记录',
     safety_letter: '安全承诺',
-    syllabus_guide: '大纲指导书',
+    syllabus_guide: '实习大纲/指导书',
     implementation_sheet: '实施表',
     teacher_work_report: '教师工作报告',
     inspection: '巡查记录',

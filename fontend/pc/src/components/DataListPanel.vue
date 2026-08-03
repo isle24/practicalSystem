@@ -89,6 +89,7 @@
     </div>
 
     <el-table :data="rows" height="100%" size="small" stripe v-loading="loading">
+      <el-table-column type="index" label="序号" width="66" fixed="left" align="center" :index="index => tableSequence(index, pagination)" />
       <el-table-column
         v-for="column in visibleColumns"
         :key="column.key || column.prop"
@@ -168,6 +169,7 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { ChevronDown, ChevronRight, ChevronUp, Columns3, Ellipsis, RefreshCw, X } from '@lucide/vue';
+import { tableSequence } from '../utils/table';
 
 const props = defineProps({
   actions: {

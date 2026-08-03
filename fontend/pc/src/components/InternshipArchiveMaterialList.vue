@@ -1,5 +1,6 @@
 <template>
   <el-table :data="materials" border stripe class="archive-material-table" empty-text="暂无材料">
+    <el-table-column type="index" label="序号" width="66" align="center" />
     <el-table-column prop="label" label="材料" min-width="180" />
     <el-table-column label="业务来源" min-width="150">
       <template #default="{ row }">

@@ -38,6 +38,7 @@
           <el-button type="primary" :icon="UserPlus" :disabled="!newStudentId || loading" :loading="loading" @click="addStudent">绑定学生</el-button>
         </section>
         <el-table :data="students" height="100%" stripe size="small">
+          <el-table-column type="index" label="序号" width="66" align="center" />
           <el-table-column prop="student_name" label="学生" width="110" />
           <el-table-column prop="student_num" label="学号" width="130" />
           <el-table-column prop="class_name" label="班级" min-width="140" />
@@ -56,6 +57,7 @@
 
       <template v-else-if="activeTab === 'changes'">
         <el-table :data="changes" height="100%" stripe size="small">
+          <el-table-column type="index" label="序号" width="66" align="center" />
           <el-table-column prop="reason" label="变更原因" min-width="220" />
           <el-table-column prop="submitter_name" label="提交人" width="110" />
           <el-table-column prop="submitted_at" label="提交时间" width="168" />

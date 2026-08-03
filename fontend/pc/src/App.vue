@@ -440,8 +440,85 @@
                         <section v-for="field in internshipState.dialog.fields || []" :key="field.label">
                           <span>{{ field.label }}</span>
                           <div v-if="field.rich" class="rich-content-view" v-html="safeRichHtml(field.value)" />
+                          <div v-else-if="field.file" class="material-detail-file">
+                            <el-button
+                              v-if="field.value?.url"
+                              :icon="FileText"
+                              type="primary"
+                              plain
+                              @click="openFileUrl(field.value)"
+                            >
+                              {{ field.value.name || '查看附件' }}
+                            </el-button>
+                            <span v-else>{{ field.value?.name || '未上传附件' }}</span>
+                          </div>
                           <pre v-else>{{ detailFieldText(field.value) }}</pre>
                         </section>
+                      </div>
+
+                      <div v-else-if="internshipState.dialog.type === 'syllabusGuide'" class="operation-form single syllabus-guide-form">
+                        <label>
+                          <span>实习任务</span>
+                          <el-select
+                            v-model="internshipState.syllabusGuideForm.arrangement_id"
+                            filterable
+                            placeholder="请选择实习任务"
+                            @change="handleSyllabusGuideArrangementChange"
+                          >
+                            <el-option
+                              v-for="arrangement in internshipState.options.arrangements"
+                              :key="arrangement.id"
+                              :label="internshipArrangementLabel(arrangement)"
+                              :value="arrangement.id"
+                            />
+                          </el-select>
+                        </label>
+                        <label>
+                          <span>材料名称</span>
+                          <input
+                            v-model="internshipState.syllabusGuideForm.title"
+                            :placeholder="`请输入${syllabusGuideTypeName(internshipState.syllabusGuideForm.document_type)}名称`"
+                            maxlength="180"
+                          >
+                        </label>
+                        <label class="span-2">
+                          <span>材料内容</span>
+                          <textarea
+                            v-model="internshipState.syllabusGuideForm.content"
+                            rows="10"
+                            maxlength="20000"
+                            :placeholder="`请输入${syllabusGuideTypeName(internshipState.syllabusGuideForm.document_type)}内容`"
+                          />
+                          <small class="material-content-counter">{{ textLength(internshipState.syllabusGuideForm.content) }}/20000</small>
+                        </label>
+                        <label class="span-2">
+                          <span>材料附件</span>
+                          <div class="material-file-row">
+                            <button
+                              v-if="internshipState.syllabusGuideForm.file"
+                              type="button"
+                              class="material-file-link"
+                              :disabled="!internshipState.syllabusGuideForm.file.url"
+                              @click="openFileUrl(internshipState.syllabusGuideForm.file)"
+                            >
+                              <FileText :size="17" />
+                              <span>{{ internshipState.syllabusGuideForm.file.name }}</span>
+                            </button>
+                            <span v-else>支持 Word、PDF 等常用材料格式</span>
+                            <div>
+                              <el-button
+                                v-if="internshipState.syllabusGuideForm.file_id"
+                                text
+                                @click="clearSyllabusGuideFile"
+                              >
+                                移除
+                              </el-button>
+                              <el-button :icon="Upload" :loading="internshipState.syllabusGuideUploading" @click="chooseSyllabusGuideFile">
+                                {{ internshipState.syllabusGuideForm.file_id ? '更换附件' : '上传附件' }}
+                              </el-button>
+                            </div>
+                          </div>
+                        </label>
                       </div>
 
                       <div v-else-if="internshipState.dialog.type === 'arrangement'" class="operation-form">
@@ -707,6 +784,7 @@
                               <small>{{ internshipState.arrangementDetail.classes.length }} 个</small>
                             </header>
                             <el-table :data="internshipState.arrangementDetail.classes" max-height="220" stripe>
+                              <el-table-column type="index" label="序号" width="66" align="center" />
                               <el-table-column prop="class_name" label="班级" min-width="150" />
                               <el-table-column prop="class_num" label="班号" width="120" />
                               <el-table-column prop="student_count_snapshot" label="学生数" width="90" />
@@ -718,6 +796,7 @@
                               <small>{{ internshipState.arrangementDetail.students.length }} 人</small>
                             </header>
                             <el-table :data="internshipState.arrangementDetail.students" max-height="280" stripe>
+                              <el-table-column type="index" label="序号" width="66" align="center" />
                               <el-table-column prop="student_name" label="学生" width="120" />
                               <el-table-column prop="student_num" label="学号" width="130" />
                               <el-table-column prop="class_name" label="班级" min-width="150" />
@@ -814,6 +893,10 @@
                           <el-button :disabled="internshipState.loading" :loading="internshipState.loading" @click="submitBaseFlow('draft')">保存草稿</el-button>
                           <el-button type="primary" :disabled="internshipState.loading" :loading="internshipState.loading" @click="submitBaseFlow('wait')">提交审核</el-button>
                         </template>
+                        <template v-else-if="internshipState.dialog.type === 'syllabusGuide'">
+                          <el-button :disabled="internshipState.loading || internshipState.syllabusGuideUploading" :loading="internshipState.loading" @click="submitSyllabusGuide('draft')">保存草稿</el-button>
+                          <el-button type="primary" :disabled="internshipState.loading || internshipState.syllabusGuideUploading" :loading="internshipState.loading" @click="submitSyllabusGuide('published')">发布材料</el-button>
+                        </template>
                         <template v-else-if="internshipState.dialog.type === 'review'">
                           <el-button :disabled="internshipState.loading" :loading="internshipState.loading" @click="saveInternshipDialogReviewDraft">保存草稿</el-button>
                           <el-button type="primary" :disabled="internshipState.loading" :loading="internshipState.loading" @click="confirmInternshipDialog">提交审核</el-button>
@@ -873,6 +956,7 @@
                           <small>{{ internshipState.lists.arrangements.pagination.total || 0 }} 条</small>
                         </header>
                         <el-table :data="internshipState.lists.arrangements.items" height="100%" stripe>
+                          <el-table-column type="index" label="序号" width="66" align="center" />
                           <el-table-column prop="title" label="任务" min-width="170" />
                           <!-- 暂时隐藏学期列，后续需要时恢复。 -->
                           <!--
@@ -896,6 +980,7 @@
                           <small>{{ internshipState.overview.applications_waiting || 0 }} 条</small>
                         </header>
                         <el-table :data="internshipState.lists.applications.items" height="100%" stripe>
+                          <el-table-column type="index" label="序号" width="66" align="center" />
                           <el-table-column prop="student_name" label="学生" width="110" />
                           <el-table-column prop="arrangement_title" label="实习任务" min-width="170" />
                           <el-table-column label="状态" width="90">
@@ -1142,6 +1227,39 @@
                         </el-button>
                         <el-button v-if="canManageInternship" link type="primary" @click="openArrangementDialog(row)">
                           任务变更
+                        </el-button>
+                      </template>
+                    </DataListPanel>
+                  </template>
+
+                  <template v-else-if="isSyllabusGuidePanel(win.panel)">
+                    <DataListPanel
+                      :columns="internshipListConfigs[win.panel].columns"
+                      :filters="internshipListConfigs[win.panel].filters"
+                      :filter-values="internshipState.filters[win.panel]"
+                      :loading="internshipState.loading"
+                      :pagination="internshipState.lists[win.panel].pagination"
+                      :rows="internshipState.lists[win.panel].items"
+                      :storage-key="dataListStorageKey(win, win.panel)"
+                      @filter-change="setInternshipFilter(win.panel, $event)"
+                      @page-change="page => loadInternshipPanel(win.panel, page)"
+                      @reset="resetInternshipFilters(win.panel)"
+                      @search="loadInternshipPanel(win.panel, 1)"
+                    >
+                      <template #toolbar>
+                        <el-button v-if="canManageInternship" :icon="Plus" @click="openSyllabusGuideDialog(win.panel)">
+                          新增{{ syllabusGuidePanelName(win.panel) }}
+                        </el-button>
+                      </template>
+                      <template #actions="{ row }">
+                        <el-button size="small" type="primary" plain @click="openInternshipContentDetail(win.panel, row)">
+                          查看
+                        </el-button>
+                        <el-button v-if="canManageInternship" link type="primary" @click="openSyllabusGuideDialog(win.panel, row)">
+                          编辑
+                        </el-button>
+                        <el-button size="small" type="primary" plain @click="openTimelineDialog('syllabus_guide', row)">
+                          记录
                         </el-button>
                       </template>
                     </DataListPanel>
@@ -2098,6 +2216,7 @@
                             stripe
                             v-loading="userAdminState.detailLoading"
                           >
+                            <el-table-column type="index" label="序号" width="66" align="center" :index="index => tableSequence(index, userAdminState.detailPagination)" />
                             <el-table-column prop="id" label="ID" width="76" />
                             <el-table-column label="操作" min-width="180">
                               <template #default="{ row }">
@@ -2131,6 +2250,7 @@
                               <small>{{ userAdminState.detail.boundAccounts.length }} 个</small>
                             </header>
                             <el-table :data="userAdminState.detail.boundAccounts" height="190" stripe v-loading="userAdminState.detailLoading">
+                              <el-table-column type="index" label="序号" width="66" align="center" />
                               <el-table-column prop="id" label="ID" width="76" />
                               <el-table-column prop="login_name" label="登录账号" min-width="140" />
                               <el-table-column prop="role_name" label="角色" min-width="130" />
@@ -2150,6 +2270,7 @@
                               <small>{{ userAdminState.detail.wechatAccounts.length }} 个</small>
                             </header>
                             <el-table :data="userAdminState.detail.wechatAccounts" height="190" stripe v-loading="userAdminState.detailLoading">
+                              <el-table-column type="index" label="序号" width="66" align="center" />
                               <el-table-column prop="wechat_userid" label="企业微信账号" min-width="150" />
                               <el-table-column prop="wechat_name" label="姓名" min-width="120" />
                               <el-table-column prop="mobile" label="手机" min-width="130" />
@@ -2225,6 +2346,7 @@
                     </div>
                   </div>
                   <el-table :data="archiveStateForWindow(win).items" height="100%" stripe highlight-current-row @row-click="row => selectArchiveItem(archiveTypeForWindow(win), row)">
+                    <el-table-column type="index" label="序号" width="66" align="center" :index="index => tableSequence(index, archiveStateForWindow(win).pagination)" />
                     <el-table-column :prop="archiveIdFieldForWindow(win)" label="ID" width="76" />
                     <el-table-column
                       v-for="field in archiveTableFieldsForWindow(win)"
@@ -2312,6 +2434,7 @@
                   </div>
                   <section class="guide-admin-list">
                     <el-table :data="guideAdminState.items" height="100%" stripe>
+                      <el-table-column type="index" label="序号" width="66" align="center" />
                       <el-table-column label="模块" width="150">
                         <template #default="{ row }">
                           {{ guideModuleName(row.module_key) }}
@@ -2894,6 +3017,7 @@
                       </div>
                       <div class="message-template-table">
                         <el-table :data="messageState.templates" height="100%" stripe v-loading="messageState.templateLoading">
+                          <el-table-column type="index" label="序号" width="66" align="center" :index="index => tableSequence(index, messageState.templatePagination)" />
                           <template #empty>
                             <div class="template-empty-state">
                               <strong>{{ messageTemplateEmptyTitle }}</strong>
@@ -2997,6 +3121,7 @@
                     </el-button>
                   </div>
                   <el-table :data="fileState.items" height="100%" stripe>
+                    <el-table-column type="index" label="序号" width="66" align="center" :index="index => tableSequence(index, fileState.pagination)" />
                     <el-table-column label="文件" min-width="220">
                       <template #default="{ row }">
                         <div class="file-cell">
@@ -3254,6 +3379,7 @@
                     </el-button>
                   </div>
                   <el-table :data="adminState.scope.scopes" height="100%" stripe>
+                    <el-table-column type="index" label="序号" width="66" align="center" />
                     <el-table-column label="学院" min-width="150">
                       <template #default="{ row }">
                         <el-select v-model="row.dep_id" clearable filterable placeholder="不限">
@@ -3376,6 +3502,7 @@
                     </el-button>
                   </div>
                   <el-table :data="logState.items" height="100%" stripe>
+                    <el-table-column type="index" label="序号" width="66" align="center" :index="index => tableSequence(index, logState.pagination)" />
                     <el-table-column prop="created_at" label="时间" width="168" />
                     <el-table-column label="账号" min-width="150">
                       <template #default="{ row }">
@@ -3592,6 +3719,7 @@
                         </footer>
                       </section>
                       <el-table v-else :data="statState.rows" height="100%" stripe v-loading="statState.loading">
+                        <el-table-column type="index" label="序号" width="66" align="center" :index="index => tableSequence(index, statState.pagination)" />
                         <el-table-column
                           v-for="column in currentStatColumns"
                           :key="column.key"
@@ -3926,6 +4054,13 @@
       hidden
       @change="handleBaseImportFile"
     >
+    <input
+      ref="syllabusGuideFileInputRef"
+      type="file"
+      accept=".doc,.docx,.pdf,.xls,.xlsx,.ppt,.pptx,.zip,.txt"
+      hidden
+      @change="handleSyllabusGuideFile"
+    >
   </main>
 </template>
 
@@ -4001,6 +4136,7 @@ import TemplateLibrary from './components/TemplateLibrary.vue';
 import { DEFAULT_DESKTOP_MODULE_IDS, useDesktopLauncher } from './composables/useDesktopLauncher';
 import { usePermissions } from './composables/usePermissions';
 import { buildLaunchableMenuModules, mergeLaunchableModules as mergeMenuModules } from './utils/menuModules';
+import { tableSequence } from './utils/table';
 import { backendUrl } from './api/client';
 import {
   changeOwnPassword,
@@ -4110,6 +4246,7 @@ import {
   saveInternshipImplementationSheet,
   saveInternshipPair,
   saveInternshipReviewDraft,
+  saveInternshipSyllabusGuide,
   saveInternshipScore,
   savePracticeExecution,
   savePracticeItem,
@@ -4132,6 +4269,7 @@ import {
   uploadLoginBackground,
   uploadMenuIcon,
   uploadProfileAsset,
+  uploadFile,
   deleteMessageTemplate,
 } from './api/system';
 
@@ -4146,6 +4284,7 @@ const archiveImportType = ref('');
 const arrangementImportInputRef = ref(null);
 const planImportInputRef = ref(null);
 const baseImportInputRef = ref(null);
+const syllabusGuideFileInputRef = ref(null);
 const focusedWindowId = ref(null);
 const zIndexSeed = ref(20);
 const wallpaperCacheKey = 'practical_pc_wallpaper';
@@ -5115,7 +5254,8 @@ const internshipSidebarItems = [
   { key: 'plans', name: '计划表', icon: FileText, permission: 'internship:plan' },
   { key: 'implementationSheets', name: '实习实施', icon: ClipboardList },
   { key: 'arrangements', name: '我的任务', icon: CalendarCheck, studentOnly: true },
-  { key: 'syllabusGuides', name: '大纲指导书', icon: BookOpen },
+  { key: 'syllabuses', name: '实习大纲', icon: BookOpen },
+  { key: 'guides', name: '实习指导书', icon: FileText },
   { key: 'signIns', name: '签到记录', icon: MapPin },
   { key: 'journals', name: '实习日志', icon: FileClock },
   { key: 'reports', name: '实习报告', icon: FileText },
@@ -5126,6 +5266,7 @@ const internshipSidebarItems = [
   { key: 'inspections', name: '巡查记录', icon: Search, permission: 'internship:archive' },
   { key: 'documents', name: '归档材料', icon: FolderOpen },
 ];
+const syllabusGuidePanels = ['syllabuses', 'guides'];
 const baseManagementSidebarItems = [
   { key: 'baseFlows', name: '基地建设', icon: Building2 },
   { key: 'baseApplications', name: '基地申报', icon: FileText },
@@ -5158,11 +5299,14 @@ const internshipState = reactive({
   scorePairLoading: false,
   courseScoreForm: emptyCourseScoreForm(),
   baseFlowForm: emptyBaseFlowForm(),
+  syllabusGuideForm: emptySyllabusGuideForm(),
+  syllabusGuideUploading: false,
   filters: {
     arrangements: emptyInternshipFilters(),
     arrangementChanges: emptyInternshipFilters(),
     plans: emptyInternshipFilters(),
-    syllabusGuides: emptyInternshipFilters(),
+    syllabuses: { ...emptyInternshipFilters(), document_type: 'syllabus' },
+    guides: { ...emptyInternshipFilters(), document_type: 'guide' },
     implementationSheets: emptyInternshipFilters(),
     applications: emptyInternshipFilters(),
     pairs: emptyInternshipFilters(),
@@ -5185,7 +5329,8 @@ const internshipState = reactive({
     arrangements: emptyPagedList(),
     arrangementChanges: emptyPagedList(),
     plans: emptyPagedList(),
-    syllabusGuides: emptyPagedList(),
+    syllabuses: emptyPagedList(),
+    guides: emptyPagedList(),
     implementationSheets: emptyPagedList(),
     applications: emptyPagedList(),
     pairs: emptyPagedList(),
@@ -5609,6 +5754,27 @@ const activeOverviewTab = computed(() => {
   const keys = new Set(internshipOverviewTabs.value.map(item => item.key));
   return keys.has(internshipState.overviewTab) ? internshipState.overviewTab : internshipOverviewTabs.value[0]?.key || 'metrics';
 });
+
+/** 返回实习大纲或指导书的列表配置 */
+function syllabusGuideListConfig(listKey, filename) {
+  return {
+    listKey,
+    filename,
+    filters: internshipListFilters(listKey, ['grade_id', 'dep_id', 'profession_id', 'arrangement_id', 'status', 'keyword']),
+    columns: [
+      { prop: 'title', label: '标题', minWidth: 180 },
+      { prop: 'grade_name', label: '届次', width: 100 },
+      { prop: 'arrangement_title', label: '实习任务', minWidth: 190 },
+      { prop: 'dep_name', label: '学院', minWidth: 130 },
+      { prop: 'profession_name', label: '专业', minWidth: 130 },
+      { prop: 'creator_name', label: '录入人', width: 110 },
+      { prop: 'status', label: '状态', width: 90, tag: true, tagType: row => statusTagType(row.status), formatter: row => statusText(row.status) },
+      { prop: 'created_at', label: '创建时间', width: 168 },
+      { prop: 'content', label: '内容摘要', minWidth: 240, formatter: row => contentSummary(row.content) },
+    ],
+  };
+}
+
 const internshipListConfigs = computed(() => ({
   baseFlows: {
     listKey: 'baseFlows',
@@ -5886,22 +6052,8 @@ const internshipListConfigs = computed(() => ({
       { key: 'status', label: '状态', width: 90, formatter: row => statusText(row.status) },
     ],
   },
-  syllabusGuides: {
-    listKey: 'syllabusGuides',
-    filename: '实习大纲及指导书',
-    filters: internshipListFilters('syllabusGuides', ['grade_id', 'dep_id', 'profession_id', 'arrangement_id', 'status', 'keyword']),
-    columns: [
-      { prop: 'title', label: '标题', minWidth: 180 },
-      { prop: 'grade_name', label: '届次', width: 100 },
-      { prop: 'arrangement_title', label: '实习任务', minWidth: 190 },
-      { prop: 'dep_name', label: '学院', minWidth: 130 },
-      { prop: 'profession_name', label: '专业', minWidth: 130 },
-      { prop: 'creator_name', label: '录入人', width: 110 },
-      { prop: 'status', label: '状态', width: 90, tag: true, tagType: row => statusTagType(row.status), formatter: row => statusText(row.status) },
-      { prop: 'created_at', label: '创建时间', width: 168 },
-      { prop: 'content', label: '内容摘要', minWidth: 240, formatter: row => contentSummary(row.content) },
-    ],
-  },
+  syllabuses: syllabusGuideListConfig('syllabuses', '实习大纲'),
+  guides: syllabusGuideListConfig('guides', '实习指导书'),
   implementationSheets: {
     listKey: 'implementationSheets',
     filename: '实习实施',
@@ -5988,11 +6140,31 @@ function internshipSidebarItemVisible(item) {
 }
 
 function isInternshipReadOnlyListPanel(panel) {
-  return ['syllabusGuides', 'teacherWorkReports', 'inspections'].includes(panel);
+  return ['teacherWorkReports', 'inspections'].includes(panel);
+}
+
+/** 判断是否为实习大纲或指导书列表 */
+function isSyllabusGuidePanel(panel) {
+  return syllabusGuidePanels.includes(panel);
+}
+
+/** 返回材料列表对应的文档类型 */
+function syllabusGuideDocumentType(panel) {
+  return panel === 'guides' ? 'guide' : 'syllabus';
+}
+
+/** 返回材料类型名称 */
+function syllabusGuideTypeName(documentType) {
+  return documentType === 'guide' ? '实习指导书' : '实习大纲';
+}
+
+/** 返回材料列表名称 */
+function syllabusGuidePanelName(panel) {
+  return syllabusGuideTypeName(syllabusGuideDocumentType(panel));
 }
 
 function hasInternshipContentDetail(panel) {
-  return ['syllabusGuides', 'teacherWorkReports', 'inspections'].includes(panel);
+  return [...syllabusGuidePanels, 'teacherWorkReports', 'inspections'].includes(panel);
 }
 
 function openInternshipContentDetail(panel, row) {
@@ -6041,15 +6213,6 @@ function openInternshipContentDetail(panel, row) {
         { label: '附件', value: row.attachment_ids || row.file_ids },
       ],
     },
-    syllabusGuides: {
-      title: row.title || '实习大纲指导书',
-      fields: [
-        { label: '实习任务', value: row.arrangement_title },
-        { label: '录入人', value: row.creator_name },
-        { label: '大纲内容', value: row.content, rich: true },
-        { label: '附件', value: row.file_id },
-      ],
-    },
     teacherWorkReports: {
       title: `${row.teacher_name || '指导教师'}工作报告`,
       fields: [
@@ -6071,7 +6234,28 @@ function openInternshipContentDetail(panel, row) {
       ],
     },
   };
-  const definition = definitions[panel];
+  const definition = isSyllabusGuidePanel(panel)
+    ? {
+        title: row.title || syllabusGuidePanelName(panel),
+        fields: [
+          { label: '材料类型', value: syllabusGuidePanelName(panel) },
+          { label: '实习任务', value: row.arrangement_title },
+          { label: '所属学院', value: row.dep_name },
+          { label: '适用专业', value: row.profession_name },
+          { label: '录入人', value: row.creator_name },
+          { label: `${syllabusGuidePanelName(panel)}内容`, value: row.content, rich: true },
+          {
+            label: '附件',
+            file: true,
+            value: row.file_id ? {
+              id: row.file_id,
+              name: row.download_name || row.file_name || `附件 #${row.file_id}`,
+              url: row.file_url || '',
+            } : null,
+          },
+        ],
+      }
+    : definitions[panel];
   if (!definition) {
     return;
   }
@@ -6089,7 +6273,8 @@ function isInternshipDocumentReviewEntity(entity) {
 
 function internshipTimelineEntity(panel) {
   const map = {
-    syllabusGuides: 'syllabus_guide',
+    syllabuses: 'syllabus_guide',
+    guides: 'syllabus_guide',
     implementationSheets: 'implementation_sheet',
     teacherWorkReports: 'teacher_work_report',
     inspections: 'inspection',
@@ -10030,6 +10215,23 @@ function emptyInternshipFilters() {
     result: '',
     type: '',
     organize_mode: '',
+    document_type: '',
+  };
+}
+
+function emptySyllabusGuideForm(documentType = 'syllabus') {
+  return {
+    id: null,
+    uuid: '',
+    arrangement_id: null,
+    dep_id: null,
+    profession_id: null,
+    document_type: documentType,
+    title: '',
+    content: '',
+    file_id: null,
+    file: null,
+    status: 'draft',
   };
 }
 
@@ -11907,6 +12109,16 @@ function internshipPlanLabel(plan) {
   return [plan.course_name, plan.course_code, plan.category_name, planScopeName(plan), plan.profession_name].filter(Boolean).join(' / ') || `计划 ${plan.id}`;
 }
 
+/** 返回实习任务选择项名称 */
+function internshipArrangementLabel(arrangement) {
+  return [
+    arrangement.title || arrangement.name,
+    arrangement.task_no,
+    arrangement.course_name,
+    planScopeName(arrangement),
+  ].filter(Boolean).join(' / ') || `任务 ${arrangement.id}`;
+}
+
 function arrangementPlanOptions() {
   return internshipState.options.plans;
 }
@@ -12587,6 +12799,9 @@ function setInternshipFilter(listKey, event) {
 
 function resetInternshipFilters(listKey) {
   internshipState.filters[listKey] = defaultScopedFilters();
+  if (isSyllabusGuidePanel(listKey)) {
+    internshipState.filters[listKey].document_type = syllabusGuideDocumentType(listKey);
+  }
   if (isBaseManagementFlowPanel(listKey)) {
     internshipState.filters[listKey].type = baseManagementFlowType(listKey);
   }
@@ -12741,6 +12956,127 @@ async function openArrangementDetail(row) {
       type: 'arrangementDetail',
       title: '实习任务详情',
     };
+  } catch (error) {
+    internshipState.message = error.message;
+  } finally {
+    internshipState.loading = false;
+  }
+}
+
+/** 打开实习大纲或指导书编辑窗口 */
+function openSyllabusGuideDialog(panel, row = null) {
+  const documentType = row?.document_type || syllabusGuideDocumentType(panel);
+  const arrangement = row?.arrangement_id
+    ? internshipState.options.arrangements.find(item => Number(item.id) === Number(row.arrangement_id))
+    : internshipState.options.arrangements[0] || null;
+  internshipState.syllabusGuideForm = {
+    ...emptySyllabusGuideForm(documentType),
+    id: row?.id || null,
+    uuid: row?.uuid || '',
+    arrangement_id: row?.arrangement_id || arrangement?.id || null,
+    dep_id: row?.dep_id || arrangement?.dep_id || null,
+    profession_id: row?.profession_id || arrangement?.profession_id || null,
+    title: row?.title || '',
+    content: row?.content || '',
+    file_id: row?.file_id || null,
+    file: row?.file_id ? {
+      id: row.file_id,
+      name: row.download_name || row.file_name || `附件 #${row.file_id}`,
+      url: row.file_url || '',
+    } : null,
+    status: row?.status || 'draft',
+  };
+  internshipState.dialog = {
+    ...emptyOperationDialog(),
+    type: 'syllabusGuide',
+    title: `${row ? '编辑' : '新增'}${syllabusGuideTypeName(documentType)}`,
+    row,
+  };
+}
+
+/** 同步材料所属任务的学院和专业 */
+function handleSyllabusGuideArrangementChange(arrangementId) {
+  const arrangement = internshipState.options.arrangements.find(item => Number(item.id) === Number(arrangementId || 0));
+  internshipState.syllabusGuideForm.dep_id = arrangement?.dep_id || null;
+  internshipState.syllabusGuideForm.profession_id = arrangement?.profession_id || null;
+}
+
+/** 打开材料附件选择 */
+function chooseSyllabusGuideFile() {
+  if (internshipState.syllabusGuideUploading || !syllabusGuideFileInputRef.value) {
+    return;
+  }
+  syllabusGuideFileInputRef.value.value = '';
+  syllabusGuideFileInputRef.value.click();
+}
+
+/** 上传实习大纲或指导书附件 */
+async function handleSyllabusGuideFile(event) {
+  const file = event.target.files?.[0];
+  if (!file || internshipState.syllabusGuideUploading) {
+    return;
+  }
+  internshipState.syllabusGuideUploading = true;
+  internshipState.message = '';
+  try {
+    const uploaded = await uploadFile(file, {
+      category: 'internship_syllabus_guide',
+      is_temporary: 'false',
+    });
+    internshipState.syllabusGuideForm.file_id = uploaded.file_id;
+    internshipState.syllabusGuideForm.file = {
+      id: uploaded.file_id,
+      name: uploaded.name || file.name,
+      url: uploaded.url || '',
+    };
+  } catch (error) {
+    internshipState.message = error.message;
+  } finally {
+    internshipState.syllabusGuideUploading = false;
+  }
+}
+
+/** 移除当前表单中的材料附件 */
+function clearSyllabusGuideFile() {
+  internshipState.syllabusGuideForm.file_id = null;
+  internshipState.syllabusGuideForm.file = null;
+}
+
+/** 保存实习大纲或指导书 */
+async function submitSyllabusGuide(status) {
+  if (!canManageInternship.value || internshipState.loading || internshipState.syllabusGuideUploading) {
+    return;
+  }
+  const form = internshipState.syllabusGuideForm;
+  const materialName = syllabusGuideTypeName(form.document_type);
+  if (!form.arrangement_id) {
+    internshipState.message = '请选择实习任务';
+    return;
+  }
+  if (!String(form.title || '').trim()) {
+    internshipState.message = `请填写${materialName}名称`;
+    return;
+  }
+
+  internshipState.loading = true;
+  internshipState.message = '';
+  try {
+    await saveInternshipSyllabusGuide({
+      id: form.id || undefined,
+      uuid: form.uuid || undefined,
+      arrangement_id: form.arrangement_id,
+      dep_id: form.dep_id || undefined,
+      profession_id: form.profession_id || undefined,
+      document_type: form.document_type,
+      title: String(form.title).trim(),
+      content: form.content || '',
+      file_id: form.file_id || undefined,
+      status,
+    });
+    const panel = form.document_type === 'guide' ? 'guides' : 'syllabuses';
+    internshipState.savedMessage = `${materialName}${status === 'published' ? '已发布' : '草稿已保存'}`;
+    closeInternshipDialog();
+    await loadInternshipPanel(panel, 1);
   } catch (error) {
     internshipState.message = error.message;
   } finally {
@@ -13346,6 +13682,8 @@ function closeInternshipDialog() {
   internshipState.baseImport = emptyBaseImportState();
   internshipState.arrangementDetail = emptyArrangementDetail();
   internshipState.courseScoreForm = emptyCourseScoreForm();
+  internshipState.syllabusGuideForm = emptySyllabusGuideForm();
+  internshipState.syllabusGuideUploading = false;
 }
 
 async function confirmInternshipDialog() {
@@ -13804,8 +14142,11 @@ async function loadInternshipPanel(panel = 'overview', page = 1) {
       setPagedList(panel, markBaseFlowItems(data, flowType));
     } else if (panel === 'plans') {
       setPagedList('plans', await fetchInternshipPlans(params('plans')));
-    } else if (panel === 'syllabusGuides') {
-      setPagedList('syllabusGuides', await fetchInternshipSyllabusGuides(params('syllabusGuides')));
+    } else if (isSyllabusGuidePanel(panel)) {
+      setPagedList(panel, await fetchInternshipSyllabusGuides({
+        ...params(panel),
+        document_type: syllabusGuideDocumentType(panel),
+      }));
     } else if (panel === 'implementationSheets') {
       setPagedList('implementationSheets', await fetchInternshipArrangements(params('implementationSheets')));
     } else if (panel === 'requests') {

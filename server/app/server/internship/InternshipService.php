@@ -2233,6 +2233,7 @@ class InternshipService
         return $result;
     }
 
+    /** 查询实习大纲和指导书列表 */
     public function syllabusGuides(Request $request): array
     {
         $this->requirePermission('internship:view');
@@ -2242,6 +2243,7 @@ class InternshipService
         ]));
     }
 
+    /** 保存实习大纲或指导书 */
     public function saveSyllabusGuide(Request $request): array
     {
         $this->requirePermission('internship:manage');
@@ -2268,11 +2270,16 @@ class InternshipService
             'deleted_at' => null,
         ];
 
-        return $this->saveWorkflowRow('syllabus_guide', 'syllabus_guide', 'syllabus_guide_recording', $request, $values, $this->workflowContent($documentType === 'guide' ? '保存实习指导书' : '保存实习教学大纲', $values, [
+        $result = $this->saveWorkflowRow('syllabus_guide', 'syllabus_guide', 'syllabus_guide_recording', $request, $values, $this->workflowContent($documentType === 'guide' ? '保存实习指导书' : '保存实习教学大纲', $values, [
             'title' => '标题',
             'document_type' => '文档类型',
             'status' => '状态',
         ]));
+        if ($values['file_id']) {
+            (new FileService())->attach((int) $values['file_id'], 'syllabus_guide', (int) $result['id'], $documentType);
+        }
+
+        return $result;
     }
 
     public function implementationSheets(Request $request): array

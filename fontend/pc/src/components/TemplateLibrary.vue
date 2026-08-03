@@ -50,6 +50,7 @@
 
     <section v-if="activeTab === 'file'" class="support-table">
       <el-table :data="templates" height="100%" stripe v-loading="loading">
+        <el-table-column type="index" label="序号" width="66" align="center" :index="index => tableSequence(index, pagination)" />
         <template #empty>
           <div class="template-empty-state">
             <strong>暂无材料文件模板</strong>
@@ -147,6 +148,7 @@
       </div>
 
       <el-table :data="messageTemplates" height="100%" stripe v-loading="messageLoading">
+        <el-table-column type="index" label="序号" width="66" align="center" :index="index => tableSequence(index, messagePagination)" />
         <template #empty>
           <div class="template-empty-state">
             <strong>{{ messageTemplateEmptyTitle }}</strong>
@@ -401,6 +403,7 @@
 <script setup>
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { FileText, Plus, RefreshCw, Save, Search, Upload } from '@lucide/vue';
+import { tableSequence } from '../utils/table';
 import {
   deleteTemplateItem,
   downloadTemplateItem,
@@ -507,6 +510,7 @@ const messagePagination = reactive({
   page_size: 100,
   total: 0,
 });
+
 const messageTemplateEmptyTitle = computed(() => (
   hasMessageTemplateFilters() ? '当前筛选无流程模板' : '暂无启用流程审核待办/消息模板'
 ));
