@@ -1,4 +1,5 @@
 <template>
+  <el-config-provider :z-index="10000">
   <main v-if="!isLoggedIn" class="login-shell" :style="loginPageStyle">
     <section class="login-panel">
       <header>
@@ -4070,6 +4071,7 @@
       @change="handleSyllabusGuideFile"
     >
   </main>
+  </el-config-provider>
 </template>
 
 <script setup>
