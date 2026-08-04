@@ -13,6 +13,7 @@
     :internship-visible="isMobileModuleVisible('internship')"
     :training-visible="isMobileModuleVisible('practice')"
     :lab-visible="false"
+    :social-visible="isMobileModuleVisible('socialPractice')"
     @back="goMobileBack"
     @message="openMobileMessages"
     @refresh="handleMobilePullRefresh"
@@ -106,6 +107,12 @@
 
       <PracticePage v-else-if="isPracticeTab(activeTab)" module-type="all" />
 
+      <SocialPracticePage
+        v-else-if="activeTab === 'socialPractice'"
+        :role-type="roleType"
+        :has-permission="hasPermission"
+      />
+
       <template v-else>
         <section class="mobile-empty-card">
           <strong>暂无可用内容</strong>
@@ -152,6 +159,7 @@ import InternshipPage from './features/internship/InternshipPage.vue';
 import { provideInternshipContext } from './features/internship/internshipContext';
 import PracticePage from './features/practice/PracticePage.vue';
 import { providePracticeContext } from './features/practice/practiceContext';
+import SocialPracticePage from './features/social-practice/SocialPracticePage.vue';
 import MobileAppShell from './layouts/MobileAppShell.vue';
 import DocumentPage from './pages/DocumentPage.vue';
 import HomePage from './pages/HomePage.vue';
@@ -288,7 +296,7 @@ const {
     internship.manageList = snapshot.internshipManageList || 'plans';
     practice.panel = snapshot.practicePanel || practice.panel;
   },
-  rootTabs: ['home', 'internship', 'practice', 'mine'],
+  rootTabs: ['home', 'internship', 'practice', 'socialPractice', 'mine'],
 });
 
 const {
@@ -362,6 +370,15 @@ const modules = [
     theme: 'teal',
     permission: 'practice:view',
     flow: '-',
+  },
+  {
+    key: 'socialPractice',
+    title: '社会实践',
+    desc: '申报、材料、签到和成绩',
+    icon: Workflow,
+    theme: 'green',
+    permission: 'social_practice:view',
+    flow: '按社会实践流程执行',
   },
   {
     key: 'doc',
@@ -455,6 +472,9 @@ function canShowMobileModule(module) {
     return ['student', 'teacher', 'super_admin', 'school_admin', 'college_admin', 'profession_admin'].includes(roleType.value);
   }
   if (module.key === 'internship') {
+    return ['student', 'teacher', 'super_admin', 'school_admin', 'college_admin', 'profession_admin'].includes(roleType.value);
+  }
+  if (module.key === 'socialPractice') {
     return ['student', 'teacher', 'super_admin', 'school_admin', 'college_admin', 'profession_admin'].includes(roleType.value);
   }
   return true;

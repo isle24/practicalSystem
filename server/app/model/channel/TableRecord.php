@@ -200,6 +200,9 @@ class TableRecord extends BaseModel
         if (isset($ensured[$key])) {
             return;
         }
+        if (method_exists($connection, 'transactionLevel') && $connection->transactionLevel() > 0) {
+            return;
+        }
 
         $connection->statement("CREATE TABLE IF NOT EXISTS `review_opinion_draft` (
             `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,

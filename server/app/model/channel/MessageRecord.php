@@ -999,10 +999,38 @@ class MessageRecord extends TableRecord
             ['seq' => 310, 'prefix' => 'lab_reflection', 'name' => '实验反思报告', 'panel' => '#panel=practice:reflections'],
             ['seq' => 313, 'prefix' => 'lab_journal', 'name' => '实验日志', 'panel' => '#panel=practice:journals'],
             ['seq' => 316, 'prefix' => 'lab_report', 'name' => '实验报告', 'panel' => '#panel=practice:reports'],
+            ['seq' => 401, 'prefix' => 'social_practice_plan', 'name' => '社会实践计划', 'panel' => '#panel=socialPractice:plans'],
+            ['seq' => 404, 'prefix' => 'social_practice_project', 'name' => '社会实践项目', 'panel' => '#panel=socialPractice:centralized'],
+            ['seq' => 407, 'prefix' => 'social_practice_implementation', 'name' => '集中实践实施申请', 'panel' => '#panel=socialPractice:centralized'],
+            ['seq' => 410, 'prefix' => 'social_practice_declaration', 'name' => '分散实践申报', 'panel' => '#panel=socialPractice:distributed'],
+            ['seq' => 413, 'prefix' => 'social_practice_material', 'name' => '社会实践材料', 'panel' => '#panel=socialPractice:materials'],
+            ['seq' => 416, 'prefix' => 'social_practice_patch_sign', 'name' => '社会实践补签', 'panel' => '#panel=socialPractice:attendance'],
+            ['seq' => 419, 'prefix' => 'social_practice_score', 'name' => '社会实践成绩', 'panel' => '#panel=socialPractice:scores'],
         ];
 
         $templates = [
             self::resultTemplate(190, '实习成绩核定结果', 'internship_score_result', '实习成绩已核定：{entity_title}', '你的实习成绩已核定，{score_text}。{opinion_text}', '#panel=internship:scores', 190),
+            self::systemTemplate(430, '社会实践计划发布', 'social_practice_plan_published', '社会实践计划已发布：{entity_title}', '{entity_title}已发布，实践时间：{date_text}。', 'todo', 'important', '社会实践计划发布后通知适用学生和相关教师。', [
+                'entity_title' => '计划标题',
+                'date_text' => '实践起止时间',
+            ], '#panel=socialPractice:plans', 430),
+            self::systemTemplate(431, '社会实践教师确认提醒', 'social_practice_teacher_confirm_pending', '待确认社会实践申报', '{student_name}选择你指导社会实践项目「{entity_title}」，请在{deadline_text}前处理。', 'todo', 'important', '分散实践申报提交后通知指导教师。', [
+                'student_name' => '学生或团队负责人',
+                'entity_title' => '申报标题',
+                'deadline_text' => '教师确认截止时间',
+            ], '#panel=socialPractice:distributed', 431),
+            self::systemTemplate(432, '社会实践安全材料提醒', 'social_practice_safety_incomplete', '社会实践安全材料待完善', '计划「{entity_title}」仍有必交安全材料未完成：{missing_text}。', 'todo', 'urgent', '实践开始前提醒学生和管理人员完善安全条件。', [
+                'entity_title' => '计划或项目标题',
+                'missing_text' => '缺失材料',
+            ], '#panel=socialPractice:safety', 432),
+            self::systemTemplate(433, '社会实践成果截止提醒', 'social_practice_result_due', '社会实践成果即将截止', '计划「{entity_title}」的成果材料将于{deadline_text}截止，请及时提交。', 'todo', 'important', '成果截止前通知未完成学生。', [
+                'entity_title' => '计划标题',
+                'deadline_text' => '成果截止时间',
+            ], '#panel=socialPractice:materials', 433),
+            self::systemTemplate(434, '社会实践归档通知', 'social_practice_archived', '社会实践已归档：{entity_title}', '社会实践「{entity_title}」已完成归档，归档版本：{version_text}。', 'result', 'normal', '社会实践归档完成后通知相关人员。', [
+                'entity_title' => '归档对象',
+                'version_text' => '归档版本',
+            ], '#panel=socialPractice:archives', 434),
         ];
         foreach ($definitions as $definition) {
             $templates[] = self::submitTemplate($definition['seq'], $definition['name'], $definition['prefix'], $definition['panel']);

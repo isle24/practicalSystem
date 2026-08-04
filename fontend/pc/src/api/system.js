@@ -960,3 +960,133 @@ export function fetchPracticeScheduleWeek(moduleType, params = {}) {
   const query = new URLSearchParams({ ...params, module_type: moduleType }).toString();
   return request(`/practice/schedule-week?${query}`);
 }
+
+function socialPracticeQuery(path, params = {}) {
+  const query = new URLSearchParams(params).toString();
+  return request(`/social-practice/${path}${query ? `?${query}` : ''}`);
+}
+
+function socialPracticePost(path, payload = {}) {
+  return request(`/social-practice/${path}`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function fetchSocialPracticeOverview() {
+  return socialPracticeQuery('overview');
+}
+
+export function fetchSocialPracticeStatistics(params = {}) {
+  return socialPracticeQuery('statistics', params);
+}
+
+export function exportSocialPracticeStatistics(payload = {}) {
+  return socialPracticePost('export-statistics', payload);
+}
+
+export function fetchSocialPracticePlanImportTemplate() {
+  return socialPracticeQuery('plan-import-template');
+}
+
+export function previewSocialPracticePlanImport(file) {
+  const form = new FormData();
+  form.append('file', file);
+  return request('/social-practice/preview-plan-import', { method: 'POST', body: form });
+}
+
+export function confirmSocialPracticePlanImport(payload) {
+  return socialPracticePost('confirm-plan-import', payload);
+}
+
+export function fetchSocialPracticeOptions() {
+  return socialPracticeQuery('options');
+}
+
+export function fetchSocialPracticeEligibleStudents(planId) {
+  return socialPracticeQuery('eligible-students', { plan_id: planId });
+}
+
+export function fetchSocialPracticeList(resource, params = {}) {
+  return socialPracticeQuery('list', { ...params, resource });
+}
+
+export function fetchSocialPracticeDetail(resource, id) {
+  return socialPracticeQuery('detail', { resource, id });
+}
+
+export function fetchSocialPracticeTimeline(resource, id) {
+  return socialPracticeQuery('timeline', { resource, id });
+}
+
+export function saveSocialPractice(payload) {
+  return socialPracticePost('save', payload);
+}
+
+export function submitSocialPractice(payload) {
+  return socialPracticePost('submit', payload);
+}
+
+export function reviewSocialPractice(payload) {
+  return socialPracticePost('review', payload);
+}
+
+export function publishSocialPractice(payload) {
+  return socialPracticePost('publish', payload);
+}
+
+export function requestSocialPracticeModification(payload) {
+  return socialPracticePost('request-modification', payload);
+}
+
+export function assignSocialPracticeTeachers(payload) {
+  return socialPracticePost('assign-teachers', payload);
+}
+
+export function assignSocialPracticeStudents(payload) {
+  return socialPracticePost('assign-students', payload);
+}
+
+export function assignSocialPracticeDeclarationTeacher(payload) {
+  return socialPracticePost('assign-declaration-teacher', payload);
+}
+
+export function confirmSocialPracticeMember(payload) {
+  return socialPracticePost('confirm-member', payload);
+}
+
+export function confirmSocialPracticeTeacher(payload) {
+  return socialPracticePost('confirm-teacher', payload);
+}
+
+export function reselectSocialPracticeTeacher(payload) {
+  return socialPracticePost('reselect-teacher', payload);
+}
+
+export function saveSocialPracticeMaterial(payload) {
+  return socialPracticePost('save-material', payload);
+}
+
+export function saveSocialPracticeSignIn(payload) {
+  return socialPracticePost('save-sign-in', payload);
+}
+
+export function saveSocialPracticePatchSign(payload) {
+  return socialPracticePost('save-patch-sign', payload);
+}
+
+export function saveSocialPracticeScore(payload) {
+  return socialPracticePost('save-score', payload);
+}
+
+export function archiveSocialPractice(payload) {
+  return socialPracticePost('archive', payload);
+}
+
+export function fetchSocialPracticeReviewDraft(resource, id) {
+  return socialPracticeQuery('review-draft', { resource, id });
+}
+
+export function saveSocialPracticeReviewDraft(payload) {
+  return socialPracticePost('save-review-draft', payload);
+}

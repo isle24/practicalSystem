@@ -1602,6 +1602,14 @@
                   </template>
                 </div>
 
+                <SocialPracticePanel
+                  v-else-if="win.module.id === 'socialPractice'"
+                  :panel="win.panel"
+                  :role-type="currentRoleType"
+                  :account-id="permissionState.context.account_id"
+                  :has-permission="hasPermission"
+                />
+
                 <div v-else-if="isPracticeModule(win.module.id)" class="internship-panel practice-panel">
                   <el-alert
                     v-if="practiceModuleState(win.module.id).message"
@@ -4131,6 +4139,7 @@ import ModuleCollection from './components/ModuleCollection.vue';
 import ModuleSidebar from './components/ModuleSidebar.vue';
 import OperationDialog from './components/OperationDialog.vue';
 import ShortcutTile from './components/ShortcutTile.vue';
+import SocialPracticePanel from './components/SocialPracticePanel.vue';
 import StudentOwnPanel from './components/StudentOwnPanel.vue';
 import TemplateLibrary from './components/TemplateLibrary.vue';
 import { DEFAULT_DESKTOP_MODULE_IDS, useDesktopLauncher } from './composables/useDesktopLauncher';
@@ -4645,6 +4654,16 @@ const modules = [
     scope: '实验与实训统一管理',
     viewPermission: 'practice:view',
     managePermission: 'practice:manage',
+    defaultPanel: 'overview',
+  },
+  {
+    id: 'socialPractice',
+    name: '社会实践管理',
+    icon: Workflow,
+    color: 'green',
+    scope: '集中实践 / 分散实践 / 成果归档',
+    viewPermission: 'social_practice:view',
+    managePermission: 'social_practice:plan:manage',
     defaultPanel: 'overview',
   },
   {
@@ -5265,6 +5284,22 @@ const internshipSidebarItems = [
   { key: 'courseScores', name: '课程成绩', icon: GraduationCap },
   { key: 'inspections', name: '巡查记录', icon: Search, permission: 'internship:archive' },
   { key: 'documents', name: '归档材料', icon: FolderOpen },
+];
+const socialPracticeSidebarItems = [
+  { key: 'overview', name: '总览', icon: ChartColumn },
+  { key: 'plans', name: '计划管理', icon: FileText },
+  { key: 'centralized', name: '集中实践', icon: UsersRound },
+  { key: 'implementations', name: '实施申请', icon: ClipboardList },
+  { key: 'distributed', name: '分散实践', icon: Workflow },
+  { key: 'participants', name: '参与学生', icon: UsersRound },
+  { key: 'teachers', name: '指导教师', icon: GraduationCap },
+  { key: 'safety', name: '安全材料', icon: ShieldCheck },
+  { key: 'attendance', name: '签到记录', icon: MapPin },
+  { key: 'patchSigns', name: '补签申请', icon: CalendarCheck },
+  { key: 'materials', name: '成果材料', icon: FileText },
+  { key: 'scores', name: '成绩管理', icon: CheckCircle2 },
+  { key: 'archives', name: '归档管理', icon: FolderOpen, adminOnly: true },
+  { key: 'statistics', name: '统计分析', icon: ChartColumn, adminOnly: true },
 ];
 const syllabusGuidePanels = ['syllabuses', 'guides'];
 const baseManagementSidebarItems = [
@@ -6518,6 +6553,9 @@ function sidebarItems(win) {
   }
   if (win.module.id === 'internship') {
     return visibleInternshipSidebarItems.value;
+  }
+  if (win.module.id === 'socialPractice') {
+    return socialPracticeSidebarItems.filter(item => !item.adminOnly || isAdminRole.value);
   }
   if (isPracticeModule(win.module.id)) {
     return practiceSidebarItems();

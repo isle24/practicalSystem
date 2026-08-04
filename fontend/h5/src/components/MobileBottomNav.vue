@@ -17,6 +17,10 @@
       <template #icon><Workflow :size="21" /></template>
       实验实训
     </van-tabbar-item>
+    <van-tabbar-item v-if="socialVisible" name="socialPractice">
+      <template #icon><Workflow :size="21" /></template>
+      社会实践
+    </van-tabbar-item>
     <van-tabbar-item name="mine">
       <template #icon><UserRound :size="21" /></template>
       我的
@@ -32,6 +36,7 @@ defineProps({
   internshipVisible: { type: Boolean, default: false },
   trainingVisible: { type: Boolean, default: false },
   labVisible: { type: Boolean, default: false },
+  socialVisible: { type: Boolean, default: false },
 });
 
 const emit = defineEmits(['update:modelValue']);

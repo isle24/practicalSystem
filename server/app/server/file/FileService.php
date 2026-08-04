@@ -110,7 +110,7 @@ class FileService
         $category = $this->category((string) ($options['category'] ?? $request->input('category', 'general')));
         $downloadName = $this->fileName((string) ($options['download_name'] ?? $request->input('download_name', $name)));
         $isTemporary = $this->boolInput($options['is_temporary'] ?? false);
-        $requireMd5 = (bool) ($options['require_md5'] ?? true);
+        $requireMd5 = $this->boolInput($options['require_md5'] ?? $request->input('require_md5', true));
         $declaredMd5 = $this->optionalMd5((string) ($options['md5'] ?? $request->header('x-file-md5', $request->input('md5', ''))));
         $device = $this->deviceInfo($request);
 
@@ -327,6 +327,37 @@ class FileService
                 'entity_id' => $entityId,
                 'tag' => $tag,
             ];
+        });
+    }
+
+    /** 替换实体的文件关联。 */
+    public function replaceRelations(array $fileIds, string $entityType, int $entityId, string $tag = ''): array
+    {
+        $this->accountId();
+        $entityType = $this->entityType($entityType);
+        $tag = $tag === '' ? '' : $this->tag($tag);
+        if ($entityId <= 0) {
+            throw new InvalidArgumentException('关联参数无效');
+        }
+
+        $fileIds = array_values(array_unique(array_filter(array_map('intval', $fileIds), static fn (int $id): bool => $id > 0)));
+        return $this->connection()->transaction(function () use ($fileIds, $entityType, $entityId, $tag): array {
+            $current = FileRelation::rowsForEntity($entityType, $entityId, $tag);
+            $currentIds = $current->map(fn ($row): int => (int) $row->id)->all();
+
+            foreach ($current as $row) {
+                if (!in_array((int) $row->id, $fileIds, true)) {
+                    FileRelation::softDeleteById((int) $row->relation_id, $this->now());
+                }
+            }
+            foreach (array_diff($fileIds, $currentIds) as $fileId) {
+                if (!FileRecord::activeId((int) $fileId)) {
+                    throw new RuntimeException('文件不存在');
+                }
+                FileRelation::createRelation((int) $fileId, $entityType, $entityId, $tag, $this->now());
+            }
+
+            return $this->relations($entityType, $entityId, $tag);
         });
     }
 

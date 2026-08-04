@@ -471,3 +471,99 @@ export function savePracticeProjectScore(moduleType, payload) {
 export function fetchPracticeExecutionTimeline(moduleType = 'all', params = {}) {
   return practiceQuery('execution-timeline', moduleType, params);
 }
+
+function socialPracticeQuery(path, params = {}) {
+  const query = new URLSearchParams(params).toString();
+  return request(`/social-practice/${path}${query ? `?${query}` : ''}`);
+}
+
+function socialPracticePost(path, payload = {}) {
+  return request(`/social-practice/${path}`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function fetchSocialPracticeOverview() {
+  return socialPracticeQuery('overview');
+}
+
+export function fetchSocialPracticeStatistics(params = {}) {
+  return socialPracticeQuery('statistics', params);
+}
+
+export function fetchSocialPracticeOptions() {
+  return socialPracticeQuery('options');
+}
+
+export function fetchSocialPracticeEligibleStudents(planId) {
+  return socialPracticeQuery('eligible-students', { plan_id: planId });
+}
+
+export function fetchSocialPracticeList(resource, params = {}) {
+  return socialPracticeQuery('list', { ...params, resource });
+}
+
+export function fetchSocialPracticeDetail(resource, id) {
+  return socialPracticeQuery('detail', { resource, id });
+}
+
+export function fetchSocialPracticeTimeline(resource, id) {
+  return socialPracticeQuery('timeline', { resource, id });
+}
+
+export function saveSocialPractice(payload) {
+  return socialPracticePost('save', payload);
+}
+
+export function submitSocialPractice(payload) {
+  return socialPracticePost('submit', payload);
+}
+
+export function reviewSocialPractice(payload) {
+  return socialPracticePost('review', payload);
+}
+
+export function requestSocialPracticeModification(payload) {
+  return socialPracticePost('request-modification', payload);
+}
+
+export function confirmSocialPracticeMember(payload) {
+  return socialPracticePost('confirm-member', payload);
+}
+
+export function confirmSocialPracticeTeacher(payload) {
+  return socialPracticePost('confirm-teacher', payload);
+}
+
+export function reselectSocialPracticeTeacher(payload) {
+  return socialPracticePost('reselect-teacher', payload);
+}
+
+export function assignSocialPracticeDeclarationTeacher(payload) {
+  return socialPracticePost('assign-declaration-teacher', payload);
+}
+
+export function saveSocialPracticeMaterial(payload) {
+  return socialPracticePost('save-material', payload);
+}
+
+export function saveSocialPracticeSignIn(payload) {
+  return socialPracticePost('save-sign-in', payload);
+}
+
+export function saveSocialPracticePatchSign(payload) {
+  return socialPracticePost('save-patch-sign', payload);
+}
+
+export function saveSocialPracticeScore(payload) {
+  return socialPracticePost('save-score', payload);
+}
+
+export function fetchSocialPracticeReviewDraft(resource, id) {
+  return socialPracticeQuery('review-draft', { resource, id });
+}
+
+export function saveSocialPracticeReviewDraft(payload) {
+  return socialPracticePost('save-review-draft', payload);
+}
