@@ -54,13 +54,13 @@
           <label v-if="local.base_type === 'long_term'"><span>基地编号</span><input v-model="local.code"></label>
           <label>
             <span>所属学院</span>
-            <el-select v-model="local.dep_id" clearable filterable>
+            <el-select v-model="local.dep_id" clearable filterable placeholder="请选择所属学院">
               <el-option v-for="item in options.departments || []" :key="item.dep_id" :label="item.dep_name" :value="item.dep_id" />
             </el-select>
           </label>
           <label>
             <span>服务专业</span>
-            <el-select v-model="local.profession_ids" multiple collapse-tags collapse-tags-tooltip filterable>
+            <el-select v-model="local.profession_ids" multiple collapse-tags collapse-tags-tooltip filterable placeholder="请选择服务专业">
               <el-option v-for="item in professionOptions" :key="item.profession_id" :label="item.profession_name" :value="item.profession_id" />
             </el-select>
           </label>
@@ -71,7 +71,7 @@
           <template v-if="local.base_type === 'long_term'">
             <label>
               <span>合作单位</span>
-              <el-select v-model="local.company_id" clearable filterable>
+              <el-select v-model="local.company_id" clearable filterable placeholder="请选择合作单位">
                 <el-option v-for="item in options.companies || []" :key="item.company_id" :label="item.company_name" :value="item.company_id" />
               </el-select>
             </label>
@@ -82,7 +82,7 @@
             <label><span>当前接收人数</span><input v-model="local.current_student_count" type="number" min="0"></label>
             <label>
               <span>负责人性别</span>
-              <el-select v-model="local.manager.gender" clearable>
+              <el-select v-model="local.manager.gender" clearable placeholder="请选择负责人性别">
                 <el-option label="男" value="男" />
                 <el-option label="女" value="女" />
               </el-select>

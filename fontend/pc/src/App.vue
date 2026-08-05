@@ -1,5 +1,5 @@
 <template>
-  <el-config-provider :z-index="10000">
+  <el-config-provider :locale="zhCn" :z-index="10000">
   <main v-if="!isLoggedIn" class="login-shell" :style="loginPageStyle">
     <section class="login-panel">
       <header>
@@ -373,7 +373,7 @@
                           <el-table-column prop="internship_credit" label="实习学分" width="90" />
                           <el-table-column label="业务归属" width="150">
                             <template #default="{ row }">
-                              <el-select v-model="row.business_type" size="small" :disabled="Boolean(row.errors?.length)">
+                              <el-select v-model="row.business_type" size="small" :disabled="Boolean(row.errors?.length)" placeholder="请选择业务归属">
                                 <el-option v-for="item in internshipState.planImport.business_types" :key="item.value" :label="item.label" :value="item.value" />
                               </el-select>
                             </template>
@@ -383,7 +383,7 @@
                           </el-table-column>
                           <el-table-column label="重复处理" width="120">
                             <template #default="{ row }">
-                              <el-select v-if="row.duplicate" v-model="row.duplicate_action" size="small">
+                              <el-select v-if="row.duplicate" v-model="row.duplicate_action" size="small" placeholder="请选择重复处理方式">
                                 <el-option label="跳过" value="skip" />
                                 <el-option v-if="['draft', 'modify'].includes(row.duplicate.status)" label="更新草稿" value="update" />
                               </el-select>
@@ -525,7 +525,7 @@
                       <div v-else-if="internshipState.dialog.type === 'arrangement'" class="operation-form">
                         <label>
                           <span>实习计划</span>
-                          <el-select v-model="internshipState.arrangementForm.plan_id" clearable filterable @change="handleArrangementPlanChange">
+                          <el-select v-model="internshipState.arrangementForm.plan_id" clearable filterable placeholder="请选择实习计划" @change="handleArrangementPlanChange">
                             <el-option v-for="plan in arrangementPlanOptions()" :key="plan.id" :label="internshipPlanLabel(plan)" :value="plan.id" />
                           </el-select>
                         </label>
@@ -542,44 +542,44 @@
                         </label>
                         <label>
                           <span>学院</span>
-                          <el-select v-model="internshipState.arrangementForm.dep_id" filterable disabled>
+                          <el-select v-model="internshipState.arrangementForm.dep_id" filterable disabled placeholder="选择计划后自动带出学院">
                             <el-option v-for="dep in arrangementDepartmentOptions()" :key="dep.dep_id" :label="dep.dep_name" :value="dep.dep_id" />
                           </el-select>
                         </label>
                         <label>
                           <span>专业</span>
-                          <el-select v-model="internshipState.arrangementForm.profession_id" filterable disabled>
+                          <el-select v-model="internshipState.arrangementForm.profession_id" filterable disabled placeholder="选择计划后自动带出专业">
                             <el-option v-for="profession in arrangementProfessionOptions()" :key="profession.profession_id" :label="profession.profession_name" :value="profession.profession_id" />
                           </el-select>
                         </label>
                         <label>
                           <span>负责老师</span>
-                          <el-select v-model="internshipState.arrangementForm.teacher_id" clearable filterable>
+                          <el-select v-model="internshipState.arrangementForm.teacher_id" clearable filterable placeholder="请选择负责老师">
                             <el-option v-for="teacher in arrangementTeacherOptions()" :key="teacher.teacher_id" :label="teacher.teacher_name" :value="teacher.teacher_id" />
                           </el-select>
                         </label>
                         <label>
                           <span>任务班级</span>
-                          <el-select v-model="internshipState.arrangementForm.class_ids" multiple collapse-tags collapse-tags-tooltip filterable>
+                          <el-select v-model="internshipState.arrangementForm.class_ids" multiple collapse-tags collapse-tags-tooltip filterable placeholder="请选择任务班级">
                             <el-option v-for="classItem in arrangementClassOptions()" :key="classItem.class_id" :label="classItem.class_name" :value="classItem.class_id" />
                           </el-select>
                         </label>
                         <label><span>学分</span><input v-model="internshipState.arrangementForm.credit" type="number" min="0" step="0.5"></label>
                         <label>
                           <span>基地</span>
-                          <el-select v-model="internshipState.arrangementForm.base_id" clearable filterable>
+                          <el-select v-model="internshipState.arrangementForm.base_id" clearable filterable placeholder="请选择实习基地">
                             <el-option v-for="base in internshipState.options.bases" :key="base.id" :label="base.name" :value="base.id" />
                           </el-select>
                         </label>
                         <label>
                           <span>类型</span>
-                          <el-select v-model="internshipState.arrangementForm.type">
+                          <el-select v-model="internshipState.arrangementForm.type" placeholder="请选择实习类型">
                             <el-option v-for="type in internshipState.options.types" :key="type" :label="arrangementTypeText(type)" :value="type" />
                           </el-select>
                         </label>
                         <label>
                           <span>组织方式</span>
-                          <el-select v-model="internshipState.arrangementForm.organize_mode">
+                          <el-select v-model="internshipState.arrangementForm.organize_mode" placeholder="请选择组织方式">
                             <el-option v-for="mode in internshipState.options.organize_modes" :key="mode" :label="organizeModeText(mode)" :value="mode" />
                           </el-select>
                         </label>
@@ -606,7 +606,7 @@
                         -->
                         <label>
                           <span>实习类别</span>
-                          <el-select v-model="internshipState.planForm.category_id" filterable @change="handlePlanCategoryChange">
+                          <el-select v-model="internshipState.planForm.category_id" filterable placeholder="请选择实习类别" @change="handlePlanCategoryChange">
                             <el-option v-for="category in internshipState.options.internship_categories" :key="category.id" :label="category.name" :value="category.id" />
                           </el-select>
                         </label>
@@ -620,32 +620,32 @@
                         </label>
                         <label v-if="selectedPlanCategory()?.scope_type !== 'cohort'">
                           <span>年级</span>
-                          <el-select v-model="internshipState.planForm.grade_id" filterable @change="handlePlanGradeChange">
+                          <el-select v-model="internshipState.planForm.grade_id" filterable placeholder="请选择年级" @change="handlePlanGradeChange">
                             <el-option v-for="grade in internshipState.options.grades" :key="grade.grade_id" :label="grade.grade_name" :value="grade.grade_id" />
                           </el-select>
                         </label>
                         <label v-else>
                           <span>毕业届次</span>
-                          <el-select v-model="internshipState.planForm.graduation_cohort_id" filterable>
+                          <el-select v-model="internshipState.planForm.graduation_cohort_id" filterable placeholder="请选择毕业届次">
                             <el-option v-for="cohort in internshipState.options.graduation_cohorts" :key="cohort.cohort_id" :label="cohort.cohort_name" :value="cohort.cohort_id" />
                           </el-select>
                         </label>
                         <label>
                           <span>学院</span>
-                          <el-select v-model="internshipState.planForm.dep_id" filterable @change="handlePlanDepartmentChange">
+                          <el-select v-model="internshipState.planForm.dep_id" filterable placeholder="请选择学院" @change="handlePlanDepartmentChange">
                             <el-option v-for="dep in internshipState.options.departments" :key="dep.dep_id" :label="dep.dep_name" :value="dep.dep_id" />
                           </el-select>
                         </label>
                         <label>
                           <span>专业</span>
-                          <el-select v-model="internshipState.planForm.profession_id" filterable>
+                          <el-select v-model="internshipState.planForm.profession_id" filterable placeholder="请选择专业">
                             <el-option v-for="profession in planProfessionOptions()" :key="profession.profession_id" :label="profession.profession_name" :value="profession.profession_id" />
                           </el-select>
                         </label>
                         <label><span>学分</span><input v-model="internshipState.planForm.credit" type="number" min="0" step="0.5"></label>
                         <label>
                           <span>成绩规则</span>
-                          <el-select v-model="internshipState.planForm.score_rule">
+                          <el-select v-model="internshipState.planForm.score_rule" placeholder="请选择成绩规则">
                             <el-option label="按任务平均" value="average" />
                             <el-option label="按任务累计" value="sum" />
                             <el-option label="按权重核定" value="weighted" />
@@ -698,19 +698,19 @@
                       <div v-else-if="internshipState.dialog.type === 'baseFlow'" class="operation-form">
                         <label>
                           <span>流程类型</span>
-                          <el-select v-model="internshipState.baseFlowForm.type" disabled>
+                          <el-select v-model="internshipState.baseFlowForm.type" disabled placeholder="请选择流程类型">
                             <el-option v-for="item in baseFlowTypes" :key="item.value" :label="item.label" :value="item.value" />
                           </el-select>
                         </label>
                         <label>
                           <span>实习基地</span>
-                          <el-select v-model="internshipState.baseFlowForm.base_id" clearable filterable>
+                          <el-select v-model="internshipState.baseFlowForm.base_id" clearable filterable placeholder="请选择实习基地">
                             <el-option v-for="base in internshipState.options.bases" :key="base.id" :label="base.name" :value="base.id" />
                           </el-select>
                         </label>
                         <label>
                           <span>学院</span>
-                          <el-select v-model="internshipState.baseFlowForm.dep_id" clearable filterable>
+                          <el-select v-model="internshipState.baseFlowForm.dep_id" clearable filterable placeholder="请选择学院">
                             <el-option v-for="dep in internshipState.options.departments" :key="dep.dep_id" :label="dep.dep_name" :value="dep.dep_id" />
                           </el-select>
                         </label>
@@ -720,7 +720,7 @@
                         </label>
                         <label v-if="internshipState.baseFlowForm.type === 'application'">
                           <span>基地类型</span>
-                          <el-select v-model="internshipState.baseFlowForm.base_type">
+                          <el-select v-model="internshipState.baseFlowForm.base_type" placeholder="请选择基地类型">
                             <el-option label="固定基地" value="fixed" />
                             <el-option label="实习点" value="spot" />
                           </el-select>
@@ -1634,13 +1634,13 @@
                         </label>
                         <label>
                           <span>项目</span>
-                          <el-select v-model="practiceModuleState(win.module.id).form.project_id" clearable filterable>
+                          <el-select v-model="practiceModuleState(win.module.id).form.project_id" clearable filterable placeholder="请选择项目">
                             <el-option v-for="project in practiceProjectOptions(win.module.id)" :key="project.id" :label="project.title || project.course_name" :value="project.id" />
                           </el-select>
                         </label>
                         <label v-if="!isStudentRole">
                           <span>学生</span>
-                          <el-select v-model="practiceModuleState(win.module.id).form.student_id" clearable filterable>
+                          <el-select v-model="practiceModuleState(win.module.id).form.student_id" clearable filterable placeholder="请选择学生">
                             <el-option v-for="student in practiceModuleState(win.module.id).options.students" :key="student.student_id" :label="`${student.name} / ${student.student_num}`" :value="student.student_id" />
                           </el-select>
                         </label>
@@ -1667,13 +1667,13 @@
                         </label>
                         <label>
                           <span>项目</span>
-                          <el-select v-model="practiceModuleState(win.module.id).form.project_id" clearable filterable>
+                          <el-select v-model="practiceModuleState(win.module.id).form.project_id" clearable filterable placeholder="请选择项目">
                             <el-option v-for="project in practiceProjectOptions(win.module.id)" :key="project.id" :label="project.title || project.course_name" :value="project.id" />
                           </el-select>
                         </label>
                         <label>
                           <span>学生</span>
-                          <el-select v-model="practiceModuleState(win.module.id).form.student_id" clearable filterable>
+                          <el-select v-model="practiceModuleState(win.module.id).form.student_id" clearable filterable placeholder="请选择学生">
                             <el-option v-for="student in practiceModuleState(win.module.id).options.students" :key="student.student_id" :label="`${student.name} / ${student.student_num}`" :value="student.student_id" />
                           </el-select>
                         </label>
@@ -1694,76 +1694,82 @@
                         </label>
                         <label>
                           <span>年级</span>
-                          <el-select v-model="practiceModuleState(win.module.id).form.grade_id" clearable filterable :disabled="win.panel === 'projects'" @change="normalizePracticeCascade(win.module.id)">
+                          <el-select v-model="practiceModuleState(win.module.id).form.grade_id" clearable filterable placeholder="请选择年级" @change="normalizePracticeCascade(win.module.id)">
                             <el-option v-for="grade in practiceModuleState(win.module.id).options.grades" :key="grade.grade_id" :label="grade.grade_name" :value="grade.grade_id" />
                           </el-select>
                         </label>
                         <label>
                           <span>学院</span>
-                          <el-select v-model="practiceModuleState(win.module.id).form.dep_id" clearable filterable :disabled="win.panel === 'projects'" @change="normalizePracticeCascade(win.module.id)">
+                          <el-select v-model="practiceModuleState(win.module.id).form.dep_id" clearable filterable placeholder="请选择学院" @change="normalizePracticeCascade(win.module.id)">
                             <el-option v-for="dep in practiceModuleState(win.module.id).options.departments" :key="dep.dep_id" :label="dep.dep_name" :value="dep.dep_id" />
                           </el-select>
                         </label>
                         <label>
                           <span>专业</span>
-                          <el-select v-model="practiceModuleState(win.module.id).form.profession_id" clearable filterable :disabled="win.panel === 'projects'" @change="handlePracticeProfessionChange(win.module.id)">
+                          <el-select v-model="practiceModuleState(win.module.id).form.profession_id" clearable filterable placeholder="请选择专业" @change="handlePracticeProfessionChange(win.module.id)">
                             <el-option v-for="profession in practiceProfessionOptions(win.module.id)" :key="profession.profession_id" :label="profession.profession_name" :value="profession.profession_id" />
                           </el-select>
                         </label>
                         <label>
                           <span>任课教师</span>
-                          <el-select v-model="practiceModuleState(win.module.id).form.teacher_id" clearable filterable :disabled="win.panel === 'projects'">
+                          <el-select
+                            v-model="practiceModuleState(win.module.id).form.teacher_id"
+                            clearable
+                            filterable
+                            :disabled="win.panel === 'projects'"
+                            :placeholder="win.panel === 'projects' ? '选择课表后自动带出' : '请选择任课教师'"
+                          >
                             <el-option v-for="teacher in practiceModuleState(win.module.id).options.teachers" :key="teacher.teacher_id" :label="teacher.teacher_name" :value="teacher.teacher_id" />
                           </el-select>
                         </label>
                         <label v-if="practiceNeedsPlan(win.panel)">
                           <span>关联计划</span>
-                          <el-select v-model="practiceModuleState(win.module.id).form.plan_id" clearable filterable @change="handlePracticePlanChange(win.module.id)">
+                          <el-select v-model="practiceModuleState(win.module.id).form.plan_id" clearable filterable placeholder="请选择关联计划" @change="handlePracticePlanChange(win.module.id)">
                             <el-option v-for="plan in practicePlanOptions(win.module.id, win.panel)" :key="plan.id" :label="plan.title || plan.course_name" :value="plan.id" />
                           </el-select>
                         </label>
                         <label v-if="win.panel === 'projects'">
                           <span>关联课表</span>
-                          <el-select v-model="practiceModuleState(win.module.id).form.schedule_id" clearable filterable @change="handlePracticeScheduleChange(win.module.id)">
+                          <el-select v-model="practiceModuleState(win.module.id).form.schedule_id" clearable filterable placeholder="请选择关联课表" @change="handlePracticeScheduleChange(win.module.id)">
                             <el-option v-for="schedule in practiceScheduleOptions(win.module.id)" :key="schedule.id" :label="practiceScheduleLabel(schedule)" :value="schedule.id" />
                           </el-select>
                         </label>
                         <label v-if="win.panel === 'plans'">
                           <span>来源</span>
-                          <el-select v-model="practiceModuleState(win.module.id).form.source_type">
+                          <el-select v-model="practiceModuleState(win.module.id).form.source_type" placeholder="请选择来源">
                             <el-option label="教务拉取" value="jw" />
                             <el-option label="手动填报" value="manual" />
                           </el-select>
                         </label>
                         <label v-if="win.panel === 'schedules'">
                           <span>地点类型</span>
-                          <el-select v-model="practiceModuleState(win.module.id).form.place_type" @change="handlePracticePlaceTypeChange(win.module.id)">
+                          <el-select v-model="practiceModuleState(win.module.id).form.place_type" placeholder="请选择地点类型" @change="handlePracticePlaceTypeChange(win.module.id)">
                             <el-option label="校内" value="inside" />
                             <el-option label="校外" value="outside" />
                           </el-select>
                         </label>
                         <label v-if="win.panel === 'schedules' && practiceModuleState(win.module.id).form.place_type === 'inside'">
                           <span>场地</span>
-                          <el-select v-model="practiceModuleState(win.module.id).form.room_id" clearable filterable>
+                          <el-select v-model="practiceModuleState(win.module.id).form.room_id" clearable filterable placeholder="请选择场地">
                             <el-option v-for="room in practiceRoomOptions(win.module.id)" :key="room.id" :label="room.name" :value="room.id" />
                           </el-select>
                         </label>
                         <label v-if="win.panel === 'schedules' && practiceModuleState(win.module.id).form.place_type === 'outside'">
                           <span>校外基地</span>
-                          <el-select v-model="practiceModuleState(win.module.id).form.base_id" clearable filterable>
+                          <el-select v-model="practiceModuleState(win.module.id).form.base_id" clearable filterable placeholder="请选择校外基地">
                             <el-option v-for="base in practiceBaseOptions(win.module.id)" :key="base.id" :label="base.name" :value="base.id" />
                           </el-select>
                         </label>
                         <label v-if="win.panel === 'schedules'"><span>日期</span><input v-model="practiceModuleState(win.module.id).form.schedule_date" type="date"></label>
                         <label v-if="win.panel === 'schedules'">
                           <span>起始课节</span>
-                          <el-select v-model="practiceModuleState(win.module.id).form.period_start_id" filterable>
+                          <el-select v-model="practiceModuleState(win.module.id).form.period_start_id" filterable placeholder="请选择起始课节">
                             <el-option v-for="period in practiceModuleState(win.module.id).options.periods" :key="period.id" :label="practicePeriodLabel(period)" :value="period.id" />
                           </el-select>
                         </label>
                         <label v-if="win.panel === 'schedules'">
                           <span>结束课节</span>
-                          <el-select v-model="practiceModuleState(win.module.id).form.period_end_id" filterable>
+                          <el-select v-model="practiceModuleState(win.module.id).form.period_end_id" filterable placeholder="请选择结束课节">
                             <el-option v-for="period in practicePeriodEndOptions(win.module.id)" :key="period.id" :label="practicePeriodLabel(period)" :value="period.id" />
                           </el-select>
                         </label>
@@ -1778,7 +1784,7 @@
                         <label v-if="win.panel === 'rooms'"><span>位置</span><input v-model="practiceModuleState(win.module.id).form.location"></label>
                         <label v-if="win.panel === 'scores'">
                           <span>学生</span>
-                          <el-select v-model="practiceModuleState(win.module.id).form.student_id" clearable filterable>
+                          <el-select v-model="practiceModuleState(win.module.id).form.student_id" clearable filterable placeholder="请选择学生">
                             <el-option v-for="student in practiceModuleState(win.module.id).options.students" :key="student.student_id" :label="`${student.name} / ${student.student_num}`" :value="student.student_id" />
                           </el-select>
                         </label>
@@ -1920,6 +1926,7 @@
                           <el-select
                             :model-value="practiceModuleState(win.module.id).module_type"
                             class="filter-select"
+                            placeholder="请选择类别"
                             @update:model-value="value => changePracticeModuleType(win.module.id, value, 'schedules')"
                           >
                             <el-option label="全部类别" value="all" />
@@ -2097,7 +2104,7 @@
                         <label><span>登录账号</span><input v-model="userAdminState.editing.login_name"></label>
                         <label>
                           <span>角色</span>
-                          <el-select v-model="userAdminState.editing.role_id" filterable @change="handleUserRoleChange">
+                          <el-select v-model="userAdminState.editing.role_id" filterable placeholder="请选择角色" @change="handleUserRoleChange">
                             <el-option
                               v-for="role in manageableUserRoles()"
                               :key="role.id"
@@ -2112,7 +2119,7 @@
                         <label v-if="userEditingRoleType === 'teacher'"><span>工号</span><input v-model="userAdminState.editing.teacher_num"></label>
                         <label v-if="userEditingRoleType === 'student'">
                           <span>年级</span>
-                          <el-select v-model="userAdminState.editing.grade_id" clearable filterable @change="handleUserAcademicChange('grade_id')">
+                          <el-select v-model="userAdminState.editing.grade_id" clearable filterable placeholder="请选择年级" @change="handleUserAcademicChange('grade_id')">
                             <el-option
                               v-for="grade in adminState.options.grades"
                               :key="grade.grade_id"
@@ -2123,7 +2130,7 @@
                         </label>
                         <label v-if="userEditingRoleType === 'student'">
                           <span>毕业届次</span>
-                          <el-select v-model="userAdminState.editing.graduation_cohort_id" clearable filterable>
+                          <el-select v-model="userAdminState.editing.graduation_cohort_id" clearable filterable placeholder="请选择毕业届次">
                             <el-option
                               v-for="cohort in adminState.options.graduationCohorts"
                               :key="cohort.cohort_id"
@@ -2134,7 +2141,7 @@
                         </label>
                         <label v-if="['student', 'teacher'].includes(userEditingRoleType)">
                           <span>所属学院</span>
-                          <el-select v-model="userAdminState.editing.dep_id" clearable filterable @change="handleUserAcademicChange('dep_id')">
+                          <el-select v-model="userAdminState.editing.dep_id" clearable filterable placeholder="请选择所属学院" @change="handleUserAcademicChange('dep_id')">
                             <el-option
                               v-for="department in userEditDepartmentOptions()"
                               :key="department.dep_id"
@@ -2145,7 +2152,7 @@
                         </label>
                         <label v-if="['student', 'teacher'].includes(userEditingRoleType)">
                           <span>所属专业</span>
-                          <el-select v-model="userAdminState.editing.profession_id" clearable filterable @change="handleUserAcademicChange('profession_id')">
+                          <el-select v-model="userAdminState.editing.profession_id" clearable filterable placeholder="请选择所属专业" @change="handleUserAcademicChange('profession_id')">
                             <el-option
                               v-for="profession in userEditProfessionOptions()"
                               :key="profession.profession_id"
@@ -2156,7 +2163,7 @@
                         </label>
                         <label v-if="userEditingRoleType === 'student'">
                           <span>所在班级</span>
-                          <el-select v-model="userAdminState.editing.class_id" clearable filterable @change="handleUserAcademicChange('class_id')">
+                          <el-select v-model="userAdminState.editing.class_id" clearable filterable placeholder="请选择所在班级" @change="handleUserAcademicChange('class_id')">
                             <el-option
                               v-for="classItem in userEditClassOptions()"
                               :key="classItem.class_id"
@@ -2339,6 +2346,7 @@
                           class="filter-select"
                           :class="{ 'is-filter-active': archiveStateForWindow(win).filters.filter_flag !== 'all' }"
                           filterable
+                          placeholder="请选择状态"
                           @change="loadArchiveItems(archiveTypeForWindow(win), 1)"
                         >
                           <el-option v-for="option in archiveStatusFilterOptions" :key="option.value" :label="option.label" :value="option.value" />
@@ -2406,6 +2414,7 @@
                           v-model="archiveStateForWindow(win).editing[field.key]"
                           clearable
                           filterable
+                          :placeholder="`请选择${field.label}`"
                           @change="handleArchiveFieldChange(archiveTypeForWindow(win), field.key)"
                         >
                           <el-option
@@ -2687,7 +2696,7 @@
 
                 <div v-else-if="win.module.id === 'message'" class="message-center-panel">
                   <div class="message-toolbar">
-                    <el-select v-model="messageState.filters.type" @change="loadMessages(1)">
+                    <el-select v-model="messageState.filters.type" placeholder="请选择消息类型" @change="loadMessages(1)">
                       <el-option
                         v-for="item in messageTypeOptions"
                         :key="item.value"
@@ -2695,7 +2704,7 @@
                         :value="item.value"
                       />
                     </el-select>
-                    <el-select v-model="messageState.filters.status" @change="loadMessages(1)">
+                    <el-select v-model="messageState.filters.status" placeholder="请选择消息状态" @change="loadMessages(1)">
                       <el-option
                         v-for="item in messageStatusOptions"
                         :key="item.value"
@@ -2829,7 +2838,7 @@
                         <div class="message-send-grid">
                           <label class="message-send-field">
                             <span>发送方式</span>
-                            <el-select v-model="messageState.sendDialog.form.send_mode" @change="handleMessageSendModeChange">
+                            <el-select v-model="messageState.sendDialog.form.send_mode" placeholder="请选择发送方式" @change="handleMessageSendModeChange">
                               <el-option label="直接填写" value="manual" />
                               <el-option label="使用模板" value="template" />
                             </el-select>
@@ -2847,7 +2856,7 @@
                           </label>
                           <label v-else class="message-send-field">
                             <span>消息级别</span>
-                            <el-select v-model="messageState.sendDialog.form.level">
+                            <el-select v-model="messageState.sendDialog.form.level" placeholder="请选择消息级别">
                               <el-option
                                 v-for="item in messageLevelOptions"
                                 :key="item.value"
@@ -2858,7 +2867,7 @@
                           </label>
                           <label class="message-send-field">
                             <span>发送范围</span>
-                            <el-select v-model="messageState.sendDialog.form.send_scope" @change="handleMessageSendScopeChange">
+                            <el-select v-model="messageState.sendDialog.form.send_scope" placeholder="请选择发送范围" @change="handleMessageSendScopeChange">
                               <el-option label="指定人员" value="custom" />
                               <el-option label="按角色发送" value="role" />
                               <el-option label="全部账号" value="all" />
@@ -2924,7 +2933,7 @@
                         <div v-if="messageState.sendDialog.form.send_mode === 'manual'" class="message-send-grid message-send-grid-compact">
                           <label class="message-send-field">
                             <span>消息类型</span>
-                            <el-select v-model="messageState.sendDialog.form.type">
+                            <el-select v-model="messageState.sendDialog.form.type" placeholder="请选择消息类型">
                               <el-option
                                 v-for="item in messageTypeOptions.filter(option => option.value !== 'all')"
                                 :key="item.value"
@@ -2935,7 +2944,7 @@
                           </label>
                           <label class="message-send-field">
                             <span>消息级别</span>
-                            <el-select v-model="messageState.sendDialog.form.level">
+                            <el-select v-model="messageState.sendDialog.form.level" placeholder="请选择消息级别">
                               <el-option
                                 v-for="item in messageLevelOptions"
                                 :key="item.value"
@@ -2999,7 +3008,7 @@
                     @close="closeMessageTemplateManager"
                   >
                       <div class="message-template-toolbar">
-                        <el-select v-model="messageState.templateFilters.type" @change="loadMessageTemplates(1)">
+                        <el-select v-model="messageState.templateFilters.type" placeholder="请选择消息类型" @change="loadMessageTemplates(1)">
                           <el-option
                             v-for="item in messageTemplateTypeOptions"
                             :key="item.value"
@@ -3007,7 +3016,7 @@
                             :value="item.value"
                           />
                         </el-select>
-                        <el-select v-model="messageState.templateFilters.status" @change="loadMessageTemplates(1)">
+                        <el-select v-model="messageState.templateFilters.status" placeholder="请选择状态" @change="loadMessageTemplates(1)">
                           <el-option label="全部状态" value="all" />
                           <el-option label="启用" value="enabled" />
                           <el-option label="停用" value="disabled" />
@@ -3090,8 +3099,8 @@
                       <div class="message-template-edit-body">
                         <label><span>模板名称</span><el-input v-model="messageState.templateEdit.form.name" maxlength="180" /></label>
                         <label><span>模板编码</span><el-input v-model="messageState.templateEdit.form.code" :disabled="messageState.templateEdit.form.is_system" maxlength="120" /></label>
-                        <label><span>消息类型</span><el-select v-model="messageState.templateEdit.form.type"><el-option v-for="item in messageTemplateTypeOptions.filter(option => option.value !== 'all')" :key="item.value" :label="item.label" :value="item.value" /></el-select></label>
-                        <label><span>消息级别</span><el-select v-model="messageState.templateEdit.form.level"><el-option v-for="item in messageLevelOptions" :key="item.value" :label="item.label" :value="item.value" /></el-select></label>
+                        <label><span>消息类型</span><el-select v-model="messageState.templateEdit.form.type" placeholder="请选择消息类型"><el-option v-for="item in messageTemplateTypeOptions.filter(option => option.value !== 'all')" :key="item.value" :label="item.label" :value="item.value" /></el-select></label>
+                        <label><span>消息级别</span><el-select v-model="messageState.templateEdit.form.level" placeholder="请选择消息级别"><el-option v-for="item in messageLevelOptions" :key="item.value" :label="item.label" :value="item.value" /></el-select></label>
                         <label><span>状态</span><el-switch v-model="messageState.templateEdit.form.status" active-value="enabled" inactive-value="disabled" active-text="启用" inactive-text="停用" /></label>
                         <label><span>排序</span><el-input v-model.number="messageState.templateEdit.form.sort" type="number" /></label>
                         <label class="wide"><span>标题模板</span><el-input v-model="messageState.templateEdit.form.title_tpl" maxlength="255" show-word-limit /></label>
@@ -3115,7 +3124,7 @@
                       placeholder="搜索文件名、上传人、MD5"
                       @keyup.enter="loadFiles(1)"
                     />
-                    <el-select v-model="fileState.filters.status" @change="loadFiles(1)">
+                    <el-select v-model="fileState.filters.status" placeholder="请选择文件状态" @change="loadFiles(1)">
                       <el-option label="全部文件" value="all" />
                       <el-option label="正常文件" value="active" />
                       <el-option label="已删除" value="deleted" />
@@ -3828,7 +3837,7 @@
                         <label><span>菜单名称</span><input v-model="selectedWechatMenu.name"></label>
                         <label>
                           <span>菜单类型</span>
-                          <el-select v-model="selectedWechatMenu.type">
+                          <el-select v-model="selectedWechatMenu.type" placeholder="请选择菜单类型">
                             <el-option label="跳转网页" value="view" />
                             <el-option label="点击事件" value="click" />
                             <el-option label="小程序" value="miniprogram" />
@@ -4077,6 +4086,7 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { ElMessage } from 'element-plus';
+import zhCn from 'element-plus/es/locale/lang/zh-cn';
 import {
   Bell,
   BookOpen,
@@ -11019,17 +11029,30 @@ function normalizePracticeCascade(module) {
   }
   normalizePracticeClass(module);
   normalizePracticePlan(module);
+  normalizePracticeSchedule(module);
+}
+
+function normalizePracticeSchedule(module) {
+  const state = practiceModuleState(module);
+  const current = Number(state.form.schedule_id || 0);
+  if (!current || practiceScheduleOptions(module).some(item => Number(item.id) === current)) {
+    return;
+  }
+  state.form.schedule_id = null;
+  state.form.teacher_id = null;
 }
 
 function handlePracticeProfessionChange(module) {
   const state = practiceModuleState(module);
   const profession = state.options.professions.find(item => Number(item.profession_id) === Number(state.form.profession_id || 0));
   if (!profession) {
+    normalizePracticeSchedule(module);
     return;
   }
   state.form.grade_id = profession.grade_id || state.form.grade_id;
   state.form.dep_id = profession.dep_id || state.form.dep_id;
   normalizePracticeClass(module);
+  normalizePracticeSchedule(module);
 }
 
 function handlePracticePlanChange(module) {

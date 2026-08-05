@@ -75,7 +75,7 @@
           <label><span>申请部门</span><input v-model="sheet.applicant_department" :disabled="!canManage"></label>
           <label><span>审批编号</span><input v-model="sheet.approval_no" :disabled="!canManage"></label>
           <label><span>届次</span>
-            <el-select v-model="sheet.grade_id" filterable :disabled="!canManage">
+        <el-select v-model="sheet.grade_id" filterable :disabled="!canManage" placeholder="请选择年级">
               <el-option v-for="item in options.grades || []" :key="item.grade_id" :label="item.grade_name" :value="item.grade_id" />
             </el-select>
           </label>
@@ -100,12 +100,12 @@
           <div v-if="schedules.length" class="dynamic-row-list">
             <div v-for="(item, index) in schedules" :key="`schedule-${index}`" class="dynamic-form-row schedule-row">
               <label><span>专业</span>
-                <el-select v-model="item.profession_id" filterable clearable :disabled="!canManage" @change="syncProfession(item)">
+            <el-select v-model="item.profession_id" filterable clearable :disabled="!canManage" placeholder="请选择专业" @change="syncProfession(item)">
                   <el-option v-for="option in options.professions || []" :key="option.profession_id" :label="option.profession_name" :value="option.profession_id" />
                 </el-select>
               </label>
               <label><span>届次</span>
-                <el-select v-model="item.grade_id" filterable clearable :disabled="!canManage" @change="syncGrade(item)">
+            <el-select v-model="item.grade_id" filterable clearable :disabled="!canManage" placeholder="请选择年级" @change="syncGrade(item)">
                   <el-option v-for="option in options.grades || []" :key="option.grade_id" :label="option.grade_name" :value="option.grade_id" />
                 </el-select>
               </label>
@@ -115,7 +115,7 @@
               <label><span>地点</span><input v-model="item.location" :disabled="!canManage"></label>
               <label><span>时间</span><input v-model="item.time_text" :disabled="!canManage"></label>
               <label><span>带队教师</span>
-                <el-select v-model="item.teacher_id" filterable clearable :disabled="!canManage" @change="syncTeacher(item)">
+            <el-select v-model="item.teacher_id" filterable clearable :disabled="!canManage" placeholder="请选择指导教师" @change="syncTeacher(item)">
                   <el-option v-for="option in options.teachers || []" :key="option.teacher_id" :label="option.teacher_name" :value="option.teacher_id" />
                 </el-select>
               </label>

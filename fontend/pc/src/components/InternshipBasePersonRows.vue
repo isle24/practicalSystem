@@ -57,7 +57,7 @@
         <label><span>姓名</span><input v-model="item.name" :disabled="readonly"></label>
         <label>
           <span>性别</span>
-          <el-select v-model="item.gender" clearable :disabled="readonly">
+          <el-select v-model="item.gender" clearable :disabled="readonly" placeholder="请选择性别">
             <el-option label="男" value="男" />
             <el-option label="女" value="女" />
           </el-select>

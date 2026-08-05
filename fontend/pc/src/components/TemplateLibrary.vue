@@ -122,7 +122,7 @@
 
     <section v-else class="support-table message-template-support">
       <div class="message-template-library-toolbar">
-        <el-select v-model="messageFilters.type" @change="loadMessageTemplates(1)">
+        <el-select v-model="messageFilters.type" placeholder="请选择消息类型" @change="loadMessageTemplates(1)">
           <el-option
             v-for="item in messageTemplateTypeOptions"
             :key="item.value"
@@ -130,7 +130,7 @@
             :value="item.value"
           />
         </el-select>
-        <el-select v-model="messageFilters.status" @change="loadMessageTemplates(1)">
+        <el-select v-model="messageFilters.status" placeholder="请选择状态" @change="loadMessageTemplates(1)">
           <el-option label="全部状态" value="all" />
           <el-option label="启用" value="enabled" />
           <el-option label="停用" value="disabled" />
@@ -223,7 +223,7 @@
           </label>
           <label>
             <span>消息类型</span>
-            <el-select v-model="messageTemplateDialog.form.type">
+            <el-select v-model="messageTemplateDialog.form.type" placeholder="请选择消息类型">
               <el-option
                 v-for="item in messageTemplateTypeOptions.filter(option => option.value !== 'all')"
                 :key="item.value"
@@ -234,7 +234,7 @@
           </label>
           <label>
             <span>消息级别</span>
-            <el-select v-model="messageTemplateDialog.form.level">
+            <el-select v-model="messageTemplateDialog.form.level" placeholder="请选择消息级别">
               <el-option label="普通" value="normal" />
               <el-option label="重要" value="important" />
               <el-option label="紧急" value="urgent" />

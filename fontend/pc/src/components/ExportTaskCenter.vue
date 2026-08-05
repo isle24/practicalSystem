@@ -1,7 +1,7 @@
 <template>
   <section class="support-panel export-task-panel">
     <div class="support-toolbar">
-      <el-select v-model="filters.status" @change="loadTasks(1)">
+      <el-select v-model="filters.status" placeholder="请选择任务状态" @change="loadTasks(1)">
         <el-option label="全部状态" value="all" />
         <el-option label="待处理" value="pending" />
         <el-option label="处理中" value="processing" />

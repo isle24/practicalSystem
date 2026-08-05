@@ -4,7 +4,7 @@
       <el-select v-model="filters.category_id" clearable filterable placeholder="全部分类" @change="loadArticles(1)">
         <el-option v-for="item in flatCategories" :key="item.id" :label="item.name" :value="item.id" />
       </el-select>
-      <el-select v-if="canManage" v-model="filters.status" @change="loadArticles(1)">
+      <el-select v-if="canManage" v-model="filters.status" placeholder="请选择文档状态" @change="loadArticles(1)">
         <el-option label="全部状态" value="all" />
         <el-option label="草稿" value="draft" />
         <el-option label="已发布" value="published" />
@@ -113,7 +113,7 @@
           </label>
           <label>
             <span>状态</span>
-            <el-select v-model="articleDialog.form.status">
+            <el-select v-model="articleDialog.form.status" placeholder="请选择文档状态">
               <el-option label="草稿" value="draft" />
               <el-option label="发布" value="published" />
               <el-option label="归档" value="archived" />
@@ -121,7 +121,7 @@
           </label>
           <label>
             <span>适用角色</span>
-            <el-select v-model="articleDialog.form.visible_roles" multiple collapse-tags collapse-tags-tooltip>
+            <el-select v-model="articleDialog.form.visible_roles" multiple collapse-tags collapse-tags-tooltip placeholder="请选择适用角色">
               <el-option v-for="item in roleOptions" :key="item.value" :label="item.label" :value="item.value" />
             </el-select>
           </label>
