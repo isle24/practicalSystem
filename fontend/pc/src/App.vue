@@ -890,6 +890,10 @@
                           <el-button :disabled="internshipState.loading" :loading="internshipState.loading" @click="submitInternshipPlan('draft')">保存草稿</el-button>
                           <el-button type="primary" :disabled="internshipState.loading" :loading="internshipState.loading" @click="submitInternshipPlan('wait')">提交审核</el-button>
                         </template>
+                        <template v-else-if="internshipState.dialog.type === 'arrangement'">
+                          <el-button :disabled="internshipState.loading" :loading="internshipState.loading" @click="submitArrangement('draft')">保存草稿</el-button>
+                          <el-button type="primary" :disabled="internshipState.loading" :loading="internshipState.loading" @click="submitArrangement('wait')">提交审核</el-button>
+                        </template>
                         <template v-else-if="internshipState.dialog.type === 'baseFlow'">
                           <el-button :disabled="internshipState.loading" :loading="internshipState.loading" @click="submitBaseFlow('draft')">保存草稿</el-button>
                           <el-button type="primary" :disabled="internshipState.loading" :loading="internshipState.loading" @click="submitBaseFlow('wait')">提交审核</el-button>
@@ -914,7 +918,12 @@
                       </footer>
                   </OperationDialog>
 
-                  <template v-if="win.panel === 'overview'">
+                  <EducationPlanSyncPanel
+                    v-if="win.panel === 'educationPlanSync'"
+                    :can-configure="['super_admin', 'school_admin'].includes(currentRoleType)"
+                  />
+
+                  <template v-else-if="win.panel === 'overview'">
                     <div class="internship-overview-work">
                       <div class="overview-switch">
                         <button
@@ -1108,6 +1117,14 @@
                         @reset="resetInternshipFilters('arrangements')"
                         @search="loadInternshipPanel('arrangements', 1)"
                       >
+                        <template #toolbar>
+                          <el-button v-if="canManageInternship" :icon="Plus" @click="openArrangementDialog()">
+                            新增任务
+                          </el-button>
+                          <el-button v-if="canManageInternship" :icon="Upload" :loading="internshipState.importing" @click="chooseArrangementImportExcel">
+                            导入任务分配
+                          </el-button>
+                        </template>
                         <template #actions="{ row }">
                           <el-button size="small" type="primary" plain @click="openArrangementDetail(row)">
                             详情
@@ -1115,7 +1132,16 @@
                           <el-button size="small" type="success" plain @click="openTimelineDialog('arrangement', row)">
                             记录
                           </el-button>
-                          <el-button v-if="canManageInternship" size="small" type="primary" link @click="openArrangementDialog(row)">
+                          <el-button v-if="canReviewRow(row, 'arrangement')" size="small" type="success" link @click="openReviewDialog('arrangement', row, 'accept')">
+                            通过
+                          </el-button>
+                          <el-button v-if="canReviewRow(row, 'arrangement')" size="small" type="warning" link @click="openReviewDialog('arrangement', row, 'modify')">
+                            退回
+                          </el-button>
+                          <el-button v-if="canRequestModification(row, 'arrangement')" size="small" type="danger" link @click="openReopenDialog('arrangement', row)">
+                            通过后修改
+                          </el-button>
+                          <el-button v-if="canEditArrangementRow(row)" size="small" type="primary" link @click="openArrangementDialog(row)">
                             编辑
                           </el-button>
                         </template>
@@ -1226,8 +1252,14 @@
                         <el-button size="small" type="primary" plain @click="openImplementationDetail(row)">
                           查看实施
                         </el-button>
-                        <el-button v-if="canManageInternship" link type="primary" @click="openArrangementDialog(row)">
-                          任务变更
+                        <el-button v-if="canReviewRow(row, 'implementation_sheet')" link type="success" @click="openReviewDialog('implementation_sheet', row, 'accept')">
+                          通过
+                        </el-button>
+                        <el-button v-if="canReviewRow(row, 'implementation_sheet')" link type="warning" @click="openReviewDialog('implementation_sheet', row, 'modify')">
+                          退回
+                        </el-button>
+                        <el-button v-if="canRequestModification(row, 'implementation_sheet')" link type="danger" @click="openReopenDialog('implementation_sheet', row)">
+                          通过后修改
                         </el-button>
                       </template>
                     </DataListPanel>
@@ -4140,6 +4172,7 @@ import DataListPanel from './components/DataListPanel.vue';
 import PracticePeriodManager from './components/PracticePeriodManager.vue';
 import PracticeScheduleBoard from './components/PracticeScheduleBoard.vue';
 import DocCenter from './components/DocCenter.vue';
+import EducationPlanSyncPanel from './components/EducationPlanSyncPanel.vue';
 import ExportTaskCenter from './components/ExportTaskCenter.vue';
 import IconUpload from './components/IconUpload.vue';
 import InternshipArchiveDetail from './components/InternshipArchiveDetail.vue';
@@ -4244,6 +4277,7 @@ import {
   registerAccount,
   reviewInternshipBaseFlow,
   reviewInternshipApplication,
+  reviewInternshipArrangement,
   reviewInternshipArrangementChange,
   reviewInternshipDelay,
   reviewInternshipDocument,
@@ -4465,7 +4499,7 @@ const messageState = reactive({
   templates: [],
   templateFilters: {
     type: 'all',
-    status: 'enabled',
+    status: 'draft',
     keyword: '',
   },
   templatePagination: {
@@ -5037,6 +5071,7 @@ const archiveDefinitions = [
     name: '年级',
     idField: 'grade_id',
     fields: [
+      { key: 'grade_code', label: '年级代码' },
       { key: 'grade_name', label: '年级名称', required: true },
       { key: 'is_current', label: '当前年级', options: 'boolean' },
       { key: 'sort', label: '排序', inputType: 'number' },
@@ -5168,6 +5203,10 @@ const userListFilters = computed(() => [
 ]);
 
 const defaultInternshipReviewRules = {
+  arrangement: {
+    accept: { min: 0, max: 300 },
+    modify: { min: 5, max: 500 },
+  },
   arrangement_change: {
     accept: { min: 0, max: 300 },
     modify: { min: 5, max: 500 },
@@ -5283,8 +5322,9 @@ const dataManageState = reactive({
 const internshipSidebarItems = [
   { key: 'overview', name: '总览', icon: ChartColumn },
   { key: 'plans', name: '计划表', icon: FileText, permission: 'internship:plan' },
+  { key: 'educationPlanSync', name: '教务计划同步', icon: RefreshCw, permission: 'internship:plan', adminOnly: true },
   { key: 'implementationSheets', name: '实习实施', icon: ClipboardList },
-  { key: 'arrangements', name: '我的任务', icon: CalendarCheck, studentOnly: true },
+  { key: 'arrangements', name: '实习任务', icon: CalendarCheck },
   { key: 'syllabuses', name: '实习大纲', icon: BookOpen },
   { key: 'guides', name: '实习指导书', icon: FileText },
   { key: 'signIns', name: '签到记录', icon: MapPin },
@@ -5516,6 +5556,9 @@ const canManageInternshipArchive = computed(() => hasPermission('internship:arch
 const canSaveInternshipScore = computed(() => hasPermission('internship:score') || canManageInternship.value);
 const canManageInternshipPlan = computed(() => hasPermission('internship:plan') && isAdminRole.value);
 const canApproveInternship = computed(() => hasPermission('internship:approve') && !isStudentRole.value);
+const canReviewArrangement = computed(() => (
+  isAdminRole.value && (canManageInternship.value || canApproveInternship.value)
+));
 const canManagePractice = () => hasPermission('practice:manage') && !isStudentRole.value;
 const canApprovePractice = () => hasPermission('practice:approve') && !isStudentRole.value;
 const canManagePracticePeriods = computed(() => hasPermission('practice:period:manage'));
@@ -6107,13 +6150,14 @@ const internshipListConfigs = computed(() => ({
     filters: internshipListFilters('implementationSheets', ['grade_id', 'dep_id', 'profession_id', 'plan_id', 'type', 'organize_mode', 'status', 'keyword']),
     columns: [
       { prop: 'grade_name', label: '届次', width: 100 },
-      { prop: 'title', label: '实习任务', minWidth: 190 },
+      { prop: 'arrangement_title', label: '实习任务', minWidth: 190 },
       { prop: 'course_name', label: '课程计划', minWidth: 170 },
+      { prop: 'task_no', label: '任务编号', width: 120 },
       { prop: 'dep_name', label: '学院', minWidth: 130 },
       { prop: 'profession_name', label: '专业', minWidth: 130 },
       { prop: 'teacher_name', label: '负责老师', width: 120 },
-      { prop: 'class_names', label: '任务班级', minWidth: 170 },
-      { prop: 'task_binding_count', label: '绑定学生', width: 90 },
+      { prop: 'total_people', label: '人数', width: 80 },
+      { prop: 'total_amount', label: '经费', width: 100 },
       { key: 'date', label: '实施时间', minWidth: 180, formatter: row => dateRangeText(row.start_date, row.end_date) },
       { prop: 'location', label: '实施地点', minWidth: 150 },
       { prop: 'status', label: '状态', width: 90, tag: true, tagType: row => statusTagType(row.status), formatter: row => statusText(row.status) },
@@ -6178,6 +6222,9 @@ function internshipRolePanelName(key) {
 
 function internshipSidebarItemVisible(item) {
   if (item.permission && !hasPermission(item.permission)) {
+    return false;
+  }
+  if (item.adminOnly && !isAdminRole.value) {
     return false;
   }
   if (!isStudentRole.value) {
@@ -7942,7 +7989,7 @@ function normalizeInternshipPanel(panel) {
     internshipState.requestTab = panel;
     return 'requests';
   }
-  if (!isStudentRole.value && ['arrangements', 'pairs', 'arrangementChanges'].includes(panel)) {
+  if (!isStudentRole.value && ['pairs', 'arrangementChanges'].includes(panel)) {
     return 'implementationSheets';
   }
   return panel;
@@ -10310,7 +10357,7 @@ function emptyArrangementForm() {
     description: '',
     change_reason: '',
     change_id: null,
-    status: 'enabled',
+    status: 'draft',
   };
 }
 
@@ -12619,6 +12666,16 @@ function internshipReviewPanel(entity) {
   if (entity === 'application') {
     return 'applications';
   }
+  const panels = {
+    arrangement: 'arrangements',
+    arrangement_change: 'arrangementChanges',
+    syllabus_guide: 'syllabuses',
+    implementation_sheet: 'implementationSheets',
+    teacher_work_report: 'teacherWorkReports',
+  };
+  if (panels[entity]) {
+    return panels[entity];
+  }
   if (isBaseFlowEntity(entity)) {
     return baseManagementFlowPanel(entity);
   }
@@ -12910,7 +12967,7 @@ function fillArrangementFormFromDetail(detail) {
     location: item.location || '',
     description: item.description || '',
     change_reason: '',
-    status: item.status || 'enabled',
+    status: item.status || 'draft',
   };
   normalizeArrangementCascade();
 }
@@ -13606,7 +13663,7 @@ async function submitImplementationSheet(payload) {
       ...emptyImplementationDetail(),
       ...(result.detail || await fetchInternshipImplementationDetail({ arrangement_id: payload.arrangement_id })),
     };
-    internshipState.savedMessage = payload.status === 'confirmed' ? '实习实施表已确认' : '实习实施表草稿已保存';
+    internshipState.savedMessage = payload.status === 'wait' ? '实习实施表已提交审核' : '实习实施表草稿已保存';
   } catch (error) {
     internshipState.message = error.message;
   } finally {
@@ -13787,6 +13844,10 @@ async function confirmInternshipDialog() {
       await reviewArrangementChange(internshipState.dialog.row, internshipState.dialog.status, internshipState.dialog.reason);
       return;
     }
+    if (internshipState.dialog.entity === 'arrangement') {
+      await reviewArrangement(internshipState.dialog.row, internshipState.dialog.status, internshipState.dialog.reason);
+      return;
+    }
     if (internshipState.dialog.entity === 'plan') {
       await reviewPlan(internshipState.dialog.row, internshipState.dialog.status, internshipState.dialog.reason);
       return;
@@ -13817,6 +13878,14 @@ async function submitInternshipPlan(status) {
   }
   internshipState.planForm.status = status;
   await savePlan();
+}
+
+async function submitArrangement(status) {
+  if (internshipState.loading) {
+    return;
+  }
+  internshipState.arrangementForm.status = status;
+  await saveArrangement();
 }
 
 function reviewRule(entity, status) {
@@ -14057,8 +14126,8 @@ function canReviewRow(row, entity) {
   if (entity === 'plan') {
     return canManageInternshipPlan.value && canReviewPlanLevel(row);
   }
-  if (entity === 'arrangement_change') {
-    return canManageInternship.value || canApproveInternship.value;
+  if (['arrangement', 'arrangement_change'].includes(entity)) {
+    return canReviewArrangement.value;
   }
   if (entity === 'application') {
     if (!canApproveInternship.value) {
@@ -14073,6 +14142,10 @@ function canReviewRow(row, entity) {
     return false;
   }
   return canApproveInternship.value;
+}
+
+function canEditArrangementRow(row) {
+  return canManageInternship.value && ['draft', 'modify'].includes(String(row?.status || ''));
 }
 
 function canEditInternshipPlan(row) {
@@ -14093,6 +14166,7 @@ function canRequestModification(row, entity) {
   }
   if (![
     'application',
+    'arrangement',
     'journal',
     'report',
     'plan',
@@ -14110,6 +14184,9 @@ function canRequestModification(row, entity) {
   }
   if (entity === 'plan') {
     return canManageInternshipPlan.value;
+  }
+  if (entity === 'arrangement') {
+    return canReviewArrangement.value;
   }
   return canApproveInternship.value;
 }
@@ -14211,7 +14288,7 @@ async function loadInternshipPanel(panel = 'overview', page = 1) {
         document_type: syllabusGuideDocumentType(panel),
       }));
     } else if (panel === 'implementationSheets') {
-      setPagedList('implementationSheets', await fetchInternshipArrangements(params('implementationSheets')));
+      setPagedList('implementationSheets', await fetchInternshipImplementationSheets(params('implementationSheets')));
     } else if (panel === 'requests') {
       const requestTab = activeInternshipRequestTab.value;
       if (requestTab === 'delays') {
@@ -14327,7 +14404,8 @@ async function saveArrangement() {
     internshipState.message = '请选择任务班级';
     return;
   }
-  if (form.id && !String(form.change_reason || '').trim()) {
+  const directSubmit = !form.id || ['draft', 'modify', 'wait'].includes(String(form.status || ''));
+  if (form.id && !directSubmit && !String(form.change_reason || '').trim()) {
     internshipState.message = '请填写任务变更申请原因';
     return;
   }
@@ -14345,7 +14423,7 @@ async function saveArrangement() {
       teacher_id: form.teacher_id || null,
       class_ids: form.class_ids,
     };
-    if (form.id) {
+    if (form.id && !directSubmit) {
       await saveInternshipArrangementChange({
         ...payload,
         arrangement_id: form.id,
@@ -14357,8 +14435,11 @@ async function saveArrangement() {
       });
       internshipState.savedMessage = '变更申请已提交，审核通过后生效';
     } else {
-      await saveInternshipArrangement(payload);
-      internshipState.savedMessage = '已保存';
+      await saveInternshipArrangement({
+        ...payload,
+        status: ['draft', 'wait'].includes(form.status) ? form.status : 'draft',
+      });
+      internshipState.savedMessage = form.status === 'wait' ? '任务已提交审核' : '任务草稿已保存';
     }
     internshipState.arrangementForm = {
       ...emptyArrangementForm(),
@@ -14401,6 +14482,31 @@ async function reviewArrangementChange(row, status, opinion = '') {
       loadInternshipPanel('arrangementChanges'),
       loadInternshipPanel('arrangements'),
       loadInternshipPanel('pairs'),
+      loadInternshipOptions(),
+    ]);
+  } catch (error) {
+    internshipState.message = error.message;
+  } finally {
+    internshipState.loading = false;
+  }
+}
+
+async function reviewArrangement(row, status, opinion = '') {
+  if (internshipState.loading) {
+    return;
+  }
+  internshipState.loading = true;
+  internshipState.message = '';
+  try {
+    await reviewInternshipArrangement({
+      id: row.id,
+      status,
+      opinion: opinion || (status === 'accept' ? '同意任务安排' : '任务信息需要修改后重新提交'),
+    });
+    closeInternshipDialog();
+    await Promise.all([
+      loadInternshipPanel('arrangements'),
+      loadInternshipPanel('implementationSheets'),
       loadInternshipOptions(),
     ]);
   } catch (error) {

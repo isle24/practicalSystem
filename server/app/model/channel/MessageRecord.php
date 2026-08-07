@@ -971,6 +971,7 @@ class MessageRecord extends TableRecord
     {
         $definitions = [
             ['seq' => 101, 'prefix' => 'internship_plan', 'name' => '实习计划', 'panel' => '#panel=internship:plans'],
+            ['seq' => 102, 'prefix' => 'internship_arrangement', 'name' => '实习任务', 'panel' => '#panel=internship:arrangements'],
             ['seq' => 104, 'prefix' => 'internship_arrangement_change', 'name' => '实习任务变更', 'panel' => '#panel=internship:arrangementChanges'],
             ['seq' => 107, 'prefix' => 'internship_application', 'name' => '实习方式申请', 'panel' => '#panel=internship:applications'],
             ['seq' => 110, 'prefix' => 'internship_journal', 'name' => '实习日志', 'panel' => '#panel=internship:journals'],

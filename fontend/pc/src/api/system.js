@@ -505,6 +505,48 @@ export function saveOrganizationScopes(payload) {
   });
 }
 
+export function fetchEducationPlanSyncConfig() {
+  return request('/education-plan-sync/config');
+}
+
+export function saveEducationPlanSyncConfig(payload) {
+  return request('/education-plan-sync/save-config', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function pullEducationPlans(payload = {}) {
+  return request('/education-plan-sync/pull', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function fetchEducationPlanSyncInbox(params = {}) {
+  const query = new URLSearchParams(params).toString();
+  return request(`/education-plan-sync/inbox${query ? `?${query}` : ''}`);
+}
+
+export function fetchEducationPlanSyncDetail(id) {
+  const query = new URLSearchParams({ id }).toString();
+  return request(`/education-plan-sync/detail?${query}`);
+}
+
+export function confirmEducationPlanSync(payload) {
+  return request('/education-plan-sync/confirm', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function ignoreEducationPlanSync(payload) {
+  return request('/education-plan-sync/ignore', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
 function internshipList(path, params = {}) {
   const query = new URLSearchParams(params).toString();
   return request(`/internship/${path}${query ? `?${query}` : ''}`);
@@ -637,6 +679,10 @@ export function fetchInternshipArrangementChanges(params = {}) {
 
 export function saveInternshipArrangement(payload) {
   return internshipPost('save-arrangement', payload);
+}
+
+export function reviewInternshipArrangement(payload) {
+  return internshipPost('review-arrangement', payload);
 }
 
 export function saveInternshipArrangementChange(payload) {

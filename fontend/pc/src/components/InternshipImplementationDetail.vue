@@ -153,7 +153,7 @@
         <el-button @click="emit('close')">关闭</el-button>
         <template v-if="canManage && activeTab === 'sheet'">
           <el-button :loading="loading" :disabled="loading" @click="save('draft')">保存草稿</el-button>
-          <el-button type="primary" :loading="loading" :disabled="loading" @click="save('confirmed')">确认实施</el-button>
+          <el-button type="primary" :loading="loading" :disabled="loading" @click="save('wait')">提交审核</el-button>
         </template>
       </div>
     </footer>

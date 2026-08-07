@@ -57,6 +57,10 @@ class InternshipService
         'base_expense' => 'expense',
     ];
     private const REVIEW_OPINION_RULES = [
+        'arrangement' => [
+            'accept' => ['min' => 0, 'max' => 300],
+            'modify' => ['min' => 5, 'max' => 500],
+        ],
         'arrangement_change' => [
             'accept' => ['min' => 0, 'max' => 300],
             'modify' => ['min' => 5, 'max' => 500],
@@ -149,6 +153,7 @@ class InternshipService
     ];
     private const DOCUMENT_REVIEW_ENTITIES = ['syllabus_guide', 'implementation_sheet', 'teacher_work_report', 'inspection', 'graduation_appraisal'];
     private const REQUEST_MODIFICATION_ENTITIES = [
+        'arrangement',
         'application',
         'journal',
         'report',
@@ -568,8 +573,54 @@ class InternshipService
             'location' => $this->nullableString($request, 'location', 255),
             'description' => $this->nullableString($request, 'description', 2000),
             'change_reason' => $this->nullableString($request, 'change_reason', 1000),
-            'status' => $this->enum($request, 'status', ['enabled', 'disabled', 'draft', 'wait', 'accept', 'modify'], 'enabled'),
+            'status' => $this->enum($request, 'status', ['draft', 'wait'], 'draft'),
         ], '手工维护实习任务');
+    }
+
+    /** 审核实习任务并在通过后发布给任课老师和学生。 */
+    public function reviewArrangement(Request $request): array
+    {
+        $this->requireReviewPermission('arrangement');
+
+        $id = $this->requiredRowId($request, 'arrangement');
+        $status = $this->enum($request, 'status', ['accept', 'modify'], 'accept');
+        $opinion = $this->reviewOpinionInput($request, 'arrangement', $status);
+        $this->ensureRecordingTable('arrangement_recording');
+
+        return $this->workflowLock('internship', 'arrangement', $id, function () use ($id, $status, $opinion): array {
+            return $this->connection()->transaction(function () use ($id, $status, $opinion): array {
+                $row = InternshipRecord::lockActiveRowById('arrangement', $id);
+                if (!$row) {
+                    throw new RuntimeException('实习任务不存在');
+                }
+                $this->assertReviewEntityWritable('arrangement', $row);
+                if ((string) $row->status !== 'wait') {
+                    throw new InvalidArgumentException('只有待审核任务可以审核', 409);
+                }
+
+                $now = $this->now();
+                InternshipRecord::updateById('arrangement', $id, [
+                    'status' => $status,
+                    'updated_at' => $now,
+                ]);
+                $content = $opinion ?: ($status === 'accept' ? '任务审核通过' : '请修改任务信息');
+                $this->recordWorkflow('arrangement_recording', 'arrangement', $id, 'review', 'wait', $status, $content, $status);
+                InternshipRecord::clearReviewOpinionDraft('arrangement', $id, $this->accountId(), $now);
+                $this->notifyWorkflowReviewed(
+                    'arrangement',
+                    $id,
+                    $this->reviewEntitySubmitterAccountId('arrangement', $row),
+                    $this->entityDisplayName('arrangement'),
+                    $status,
+                    $content
+                );
+                if ($status === 'accept') {
+                    $this->notifyArrangementPublished($id, (array) $row, false);
+                }
+
+                return ['id' => $id, 'status' => $status];
+            });
+        });
     }
 
     public function saveArrangementChange(Request $request): array
@@ -634,7 +685,7 @@ class InternshipService
                 'change_reason' => (string) $change->reason,
                 'approved_change' => true,
                 'suppress_notify' => true,
-                'status' => 'enabled',
+                'status' => 'accept',
             ]), '审核通过任务变更');
             $newArrangementId = (int) ($arrangementResult['id'] ?? 0);
             $toStatus = 'accept';
@@ -922,8 +973,8 @@ class InternshipService
 
     public function requestModification(Request $request): array
     {
-        $this->requirePermission('internship:approve');
         $entity = $this->reviewEntity($request);
+        $this->requireReviewPermission($entity);
         if (!in_array($entity, self::REQUEST_MODIFICATION_ENTITIES, true)) {
             throw new InvalidArgumentException('该业务不支持通过后修改', 42202);
         }
@@ -973,7 +1024,7 @@ class InternshipService
 
     public function reviewDraft(Request $request): array
     {
-        $this->requirePermission('internship:approve');
+        $this->requireReviewPermission($this->reviewEntity($request));
         $target = $this->reviewDraftTarget($request);
         $draft = InternshipRecord::reviewOpinionDraftRow($target['entity_type'], $target['id'], $this->accountId());
 
@@ -986,7 +1037,7 @@ class InternshipService
 
     public function saveReviewDraft(Request $request): array
     {
-        $this->requirePermission('internship:approve');
+        $this->requireReviewPermission($this->reviewEntity($request));
         $target = $this->reviewDraftTarget($request);
         $status = $this->enum($request, 'status', $this->reviewStatuses($target['entity']), 'accept');
         $opinion = $this->reviewDraftOpinionInput($request, $target['entity'], $status);
@@ -2419,16 +2470,21 @@ class InternshipService
 
                 $totalPeople = array_sum(array_column($schedules, 'people_count'));
                 $totalAmount = round(array_sum(array_map(static fn (array $item): float => (float) ($item['amount'] ?? 0), $expenses)), 2);
-                $status = $has('status')
-                    ? $this->enum($request, 'status', ['draft', 'confirmed'], 'draft')
-                    : (string) ($current['status'] ?? 'draft');
+                $statusInput = $has('status') ? trim((string) $input['status']) : (string) ($current['status'] ?? 'draft');
+                if ($statusInput === 'confirmed') {
+                    $statusInput = 'wait';
+                }
+                if (!in_array($statusInput, ['draft', 'wait'], true)) {
+                    throw new InvalidArgumentException('实施表只能保存草稿或提交审核');
+                }
+                $status = $statusInput;
 
                 $now = $this->now();
                 $submittedAt = $has('submitted_at') ? $this->dateTimeInput($request, 'submitted_at') : ($current['submitted_at'] ?? null);
                 $confirmedAt = $has('confirmed_at') ? $this->dateTimeInput($request, 'confirmed_at') : ($current['confirmed_at'] ?? null);
-                if ($status === 'confirmed' && ($has('status') || !$locked)) {
+                if ($status === 'wait' && ($has('status') || !$locked)) {
                     $submittedAt ??= $now;
-                    $confirmedAt ??= $now;
+                    $confirmedAt = null;
                 }
 
                 if ($has('fee_detail')) {
@@ -2479,7 +2535,7 @@ class InternshipService
                     'insurance_verified' => $has('insurance_verified') ? $this->enum($request, 'insurance_verified', ['false', 'true'], 'false') : (string) ($current['insurance_verified'] ?? 'false'),
                     'fee_detail' => $this->jsonValue($feeDetail),
                     'sheet_json' => $this->jsonValue($sheetJsonValues),
-                    'confirmed_at' => $confirmedAt,
+                    'confirmed_at' => null,
                     'status' => $status,
                     'updated_at' => $now,
                     'deleted_at' => null,
@@ -2525,6 +2581,13 @@ class InternshipService
                     $fromStatus,
                     $status,
                     $content,
+                    $status
+                );
+                $this->notifyWorkflowSubmittedOnWait(
+                    'implementation_sheet',
+                    (int) $result['id'],
+                    $values,
+                    $fromStatus,
                     $status
                 );
 
@@ -2719,6 +2782,7 @@ class InternshipService
         $endDate = (string) ($input['end_date'] ?? '');
         $taskNo = trim((string) ($input['task_no'] ?? ''));
         $existingId = (int) ($input['id'] ?? 0);
+        $status = trim((string) ($input['status'] ?? 'draft'));
 
         if ($planId <= 0) {
             throw new InvalidArgumentException('请选择实习计划');
@@ -2740,6 +2804,12 @@ class InternshipService
         }
         if (strtotime($endDate) < strtotime($startDate)) {
             throw new InvalidArgumentException('结束日期不能早于开始日期');
+        }
+        if (!in_array($status, ['draft', 'wait', 'accept'], true)) {
+            throw new InvalidArgumentException('实习任务状态无效');
+        }
+        if ($status === 'accept' && empty($input['approved_change'])) {
+            throw new InvalidArgumentException('实习任务只能通过审核后发布');
         }
 
         $scope = $this->scopeContext();
@@ -2783,7 +2853,7 @@ class InternshipService
         }
         $this->ensureRecordingTable('arrangement_recording');
 
-        $result = $this->connection()->transaction(function () use ($classRows, $endDate, $existingId, $input, $plan, $planId, $planScope, $source, $startDate, $taskNo, $teacherId, $title): array {
+        $result = $this->connection()->transaction(function () use ($classRows, $endDate, $existingId, $input, $plan, $planId, $planScope, $source, $startDate, $status, $taskNo, $teacherId, $title): array {
             $now = $this->now();
             if ($existingId > 0 && !InternshipRecord::lockCurrentArrangement($existingId)) {
                 throw new InvalidArgumentException('实习任务已变更，请刷新后重试', 409);
@@ -2829,7 +2899,7 @@ class InternshipService
                 'location' => $input['location'] ?? null,
                 'description' => $input['description'] ?? null,
                 'created_by' => CurrentContext::accountId(),
-                'status' => $input['status'] ?? 'enabled',
+                'status' => $status,
                 'updated_at' => $now,
                 'deleted_at' => null,
             ];
@@ -2839,8 +2909,15 @@ class InternshipService
                 : false;
             $actualChange = $existingId > 0 && $this->arrangementValuesChanged($before['item'] ?? [], $values, $bindingRowsChanged);
             $previousStatus = (string) ($before['item']['status'] ?? 'draft');
-            $requiresVersion = in_array($previousStatus, ['enabled', 'accept', 'wait', 'modify', 'changing'], true)
-                || ($existingId > 0 && InternshipRecord::arrangementHasProcessData($existingId));
+            $submitterId = (int) ($before['item']['submitter_id'] ?? 0);
+            if ($existingId <= 0 || !$submitterId || ($status === 'wait' && in_array($previousStatus, ['draft', 'modify'], true))) {
+                $submitterId = (int) CurrentContext::accountId();
+            }
+            $values['submitter_id'] = $submitterId > 0 ? $submitterId : null;
+            $requiresVersion = in_array($previousStatus, ['enabled', 'accept', 'changing'], true)
+                || ($existingId > 0
+                    && !in_array($previousStatus, ['draft', 'wait', 'modify'], true)
+                    && InternshipRecord::arrangementHasProcessData($existingId));
             $versionedChange = $actualChange && $requiresVersion;
             if ($versionedChange && trim((string) ($input['change_reason'] ?? '')) === '') {
                 throw new InvalidArgumentException('已发布或已有过程数据的任务变更必须填写变更原因');
@@ -2898,7 +2975,7 @@ class InternshipService
                 $versionedChange ? 'draft' : ($before['item']['status'] ?? 'draft'),
                 (string) $values['status'],
                 $this->arrangementWorkflowContent($source, $before, $after, (string) ($input['change_reason'] ?? '')),
-                'accept'
+                (string) $values['status']
             );
             return [
                 'id' => $arrangementId,
@@ -2909,11 +2986,21 @@ class InternshipService
                 'class_count' => count($classRows),
                 'pair_count' => count($pairResult['pair_ids']),
                 'student_count' => count($pairResult['student_ids']),
+                'from_status' => $previousStatus,
                 'item' => InternshipRecord::activeRowById('arrangement', $arrangementId),
             ];
         });
 
-        if (empty($input['suppress_notify'])) {
+        if ($status === 'wait') {
+            $this->notifyWorkflowSubmittedOnWait(
+                'arrangement',
+                (int) $result['id'],
+                $result['item'] ? (array) $result['item'] : [],
+                (string) ($result['from_status'] ?? 'draft'),
+                $status
+            );
+        }
+        if ($status === 'accept' && empty($input['suppress_notify'])) {
             $this->notifyArrangementPublished((int) $result['id'], $result['item'] ? (array) $result['item'] : [], (bool) $result['versioned_change']);
         }
 
@@ -3011,7 +3098,7 @@ class InternshipService
             'location' => $this->requiredImportValue($row, 'location', '地点'),
             'description' => 'Excel 导入任务分配',
             'change_reason' => trim((string) ($row['change_reason'] ?? '')),
-            'status' => 'enabled',
+            'status' => 'wait',
         ];
         if ($existingArrangementId <= 0) {
             return $this->persistArrangement($payload, 'Excel导入任务分配');
@@ -3394,7 +3481,7 @@ class InternshipService
         $this->requirePermission('internship:view');
         return InternshipRecord::documentPage($table, $columns, $this->scopeContext(), $this->requestFilters($request, [
             'page', 'page_size', 'per_page', 'keyword', 'arrangement_id', 'status',
-            'dep_id', 'profession_id', 'grade_id', 'class_id', 'semester',
+            'plan_id', 'type', 'organize_mode', 'dep_id', 'profession_id', 'grade_id', 'class_id', 'semester',
         ]));
     }
 
@@ -3840,7 +3927,7 @@ class InternshipService
             }
         }
 
-        if (!$accountIds || in_array($entity, ['plan', 'syllabus_guide', 'implementation_sheet', 'teacher_work_report', 'inspection', 'graduation_appraisal'], true)) {
+        if (!$accountIds || in_array($entity, ['arrangement', 'plan', 'syllabus_guide', 'implementation_sheet', 'teacher_work_report', 'inspection', 'graduation_appraisal'], true)) {
             $accountIds = array_merge(
                 $accountIds,
                 Account::messageTargetIds(['role_type' => 'school_admin']),
@@ -3956,6 +4043,7 @@ class InternshipService
     {
         $map = [
             'application' => 'internship_application',
+            'arrangement' => 'internship_arrangement',
             'journal' => 'internship_journal',
             'report' => 'internship_report',
             'delay' => 'internship_delay',
@@ -3998,6 +4086,12 @@ class InternshipService
         if (isset($row->submitter_id)) {
             return (int) $row->submitter_id ?: null;
         }
+        if (isset($row->applicant_id)) {
+            return (int) $row->applicant_id ?: null;
+        }
+        if (isset($row->created_by)) {
+            return (int) $row->created_by ?: null;
+        }
 
         return null;
     }
@@ -4005,6 +4099,7 @@ class InternshipService
     private function entityDisplayName(string $entity): string
     {
         return [
+            'arrangement' => '实习任务',
             'application' => '实习方式申请',
             'journal' => '实习日志',
             'report' => '实习报告',
@@ -4027,6 +4122,7 @@ class InternshipService
     private function entityPanelKey(string $entity): string
     {
         return [
+            'arrangement' => 'arrangements',
             'application' => 'applications',
             'journal' => 'journals',
             'report' => 'reports',
@@ -4363,6 +4459,18 @@ class InternshipService
         }
 
         throw new RuntimeException('无操作权限', 40300);
+    }
+
+    /** 校验审核实体所需权限 */
+    private function requireReviewPermission(string $entity): void
+    {
+        if (in_array($entity, ['arrangement', 'arrangement_change'], true)) {
+            $this->requireAnyPermission(['internship:approve', 'internship:manage']);
+            $this->requireAdminRole();
+            return;
+        }
+
+        $this->requirePermission('internship:approve');
     }
 
     private function requireAdminRole(): void

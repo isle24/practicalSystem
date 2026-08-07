@@ -201,6 +201,7 @@ import {
   fetchInternshipSignIns,
   fetchInternshipSyllabusGuides,
   fetchInternshipImplementationDetail,
+  fetchInternshipImplementationSheets,
   fetchInternshipTeacherWorkReports,
   fetchInternshipInspections,
   fetchInternshipTimeline,
@@ -217,6 +218,7 @@ import {
   requestPracticeExecutionModification,
   requestPracticeModification,
   reviewInternshipApplication,
+  reviewInternshipArrangement,
   reviewInternshipArrangementChange,
   reviewInternshipDelay,
   reviewInternshipDocument,
@@ -427,6 +429,10 @@ const isAdminRole = computed(() => ['super_admin', 'school_admin', 'college_admi
 const visibleMobileModules = computed(() => modules.filter(canShowMobileModule));
 const supportHomeModules = computed(() => visibleMobileModules.value.filter(module => ['doc', 'templateLib'].includes(module.key)));
 const canReviewInternship = computed(() => hasPermission('internship:approve'));
+const canReviewArrangement = computed(() => (
+  isAdminRole.value
+  && (hasPermission('internship:manage') || hasPermission('internship:approve'))
+));
 const canReviewInternshipPlan = computed(() => hasPermission('internship:plan') && isAdminRole.value);
 const signGpsReady = computed(() => hasCoordinateValue(internship.forms.sign.longitude) && hasCoordinateValue(internship.forms.sign.latitude));
 const signGpsTitle = computed(() => (signGpsReady.value ? '已获取 GPS 定位' : '等待 GPS 定位'));
@@ -560,6 +566,7 @@ const internshipPanels = computed(() => {
   return [{ key: 'workbench', name: '概况', icon: Home }];
 });
 const reviewStatusOptions = [
+  { value: 'draft', label: '草稿' },
   { value: 'wait', label: '待审核' },
   { value: 'accept', label: '已通过' },
   { value: 'modify', label: '需修改' },
@@ -617,13 +624,7 @@ const mobileListConfigs = computed(() => ({
     icon: CalendarCheck,
     keywordPlaceholder: '任务、课程、年级或届次、学院、专业',
     gradeFilter: true,
-    statusOptions: [
-      { value: 'enabled', label: '启用' },
-      { value: 'completed', label: '已完成' },
-      { value: 'changing', label: '变更中' },
-      { value: 'changed', label: '已变更' },
-      { value: 'disabled', label: '停用' },
-    ],
+    statusOptions: reviewStatusOptions,
     emptyText: '暂无实习任务',
   },
   arrangementChanges: {
@@ -658,20 +659,14 @@ const mobileListConfigs = computed(() => ({
   guides: mobileSyllabusGuideConfig('guides', 'guide', '实习指导书', '指导书'),
   implementationSheets: {
     key: 'implementationSheets',
-    entity: 'arrangement',
+    entity: 'implementation_sheet',
     detailType: 'implementation',
     title: '实习实施',
     shortTitle: '实施',
     icon: ClipboardList,
-    keywordPlaceholder: '安排、学院、专业、教师',
+    keywordPlaceholder: '任务、学院、专业、教师',
     gradeFilter: true,
-    statusOptions: [
-      { value: 'enabled', label: '启用' },
-      { value: 'completed', label: '已完成' },
-      { value: 'changing', label: '变更中' },
-      { value: 'changed', label: '已变更' },
-      { value: 'disabled', label: '停用' },
-    ],
+    statusOptions: reviewStatusOptions,
     emptyText: '暂无实习实施任务',
   },
   applications: {
@@ -834,7 +829,7 @@ const mobileListConfigs = computed(() => ({
 const reviewListTabs = computed(() => {
   const keys = isTeacherRole.value
     ? ['journals', 'reports', 'delays', 'applications']
-    : ['arrangementChanges', 'plans', 'delays', 'applications'];
+    : ['arrangements', 'implementationSheets', 'arrangementChanges', 'plans', 'delays', 'applications'];
   if (!canReviewInternshipPlan.value) {
     const planIndex = keys.indexOf('plans');
     if (planIndex >= 0) {
@@ -1547,8 +1542,8 @@ function canReviewEntity(entity) {
   if (entity === 'plan') {
     return canReviewInternshipPlan.value;
   }
-  if (entity === 'arrangement_change') {
-    return isAdminRole.value && (hasPermission('internship:manage') || hasPermission('internship:approve'));
+  if (['arrangement', 'arrangement_change'].includes(entity)) {
+    return canReviewArrangement.value;
   }
   return canReviewInternship.value;
 }
@@ -2145,7 +2140,7 @@ function internshipFetcher(key) {
     courseScores: fetchInternshipCourseScores,
     syllabuses: fetchInternshipSyllabusGuides,
     guides: fetchInternshipSyllabusGuides,
-    implementationSheets: fetchInternshipArrangements,
+    implementationSheets: fetchInternshipImplementationSheets,
     teacherWorkReports: fetchInternshipTeacherWorkReports,
     inspections: fetchInternshipInspections,
     archiveMaterials: fetchInternshipArchiveMaterials,
@@ -3734,6 +3729,10 @@ async function confirmReviewDialog() {
     await reviewApplication(row, status, internship.reviewDialog.reason);
     return;
   }
+  if (entity === 'arrangement') {
+    await reviewArrangement(row, status, internship.reviewDialog.reason);
+    return;
+  }
   if (entity === 'arrangement_change') {
     await reviewArrangementChange(row, status, internship.reviewDialog.reason);
     return;
@@ -3776,6 +3775,25 @@ async function reviewArrangementChange(row, status, opinion) {
       id: row.id,
       status,
       opinion: opinion || defaultReviewOpinion('arrangement_change', status),
+    });
+    closeReviewDialog();
+    await loadInternship();
+  } catch (error) {
+    internship.message = error.message;
+    showToast(error.message);
+  } finally {
+    internship.loading = false;
+  }
+}
+
+async function reviewArrangement(row, status, opinion) {
+  internship.loading = true;
+  internship.message = '';
+  try {
+    await reviewInternshipArrangement({
+      id: row.id,
+      status,
+      opinion: opinion || defaultReviewOpinion('arrangement', status),
     });
     closeReviewDialog();
     await loadInternship();
@@ -4015,8 +4033,8 @@ function canReviewRow(row, entity) {
   if (entity === 'plan') {
     return canReviewInternshipPlan.value && canReviewPlanLevel(row);
   }
-  if (entity === 'arrangement_change') {
-    return isAdminRole.value && (hasPermission('internship:manage') || hasPermission('internship:approve'));
+  if (['arrangement', 'arrangement_change'].includes(entity)) {
+    return canReviewArrangement.value;
   }
   if (entity === 'application') {
     if (!canReviewInternship.value) {
@@ -4047,6 +4065,7 @@ function canRequestModification(row, entity) {
   }
   if (![
     'application',
+    'arrangement',
     'journal',
     'report',
     'plan',
@@ -4060,6 +4079,9 @@ function canRequestModification(row, entity) {
   }
   if (entity === 'plan') {
     return canReviewInternshipPlan.value;
+  }
+  if (entity === 'arrangement') {
+    return canReviewArrangement.value;
   }
   return canReviewInternship.value;
 }

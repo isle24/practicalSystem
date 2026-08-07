@@ -177,6 +177,10 @@ export function saveInternshipArrangement(payload) {
   return internshipPost('save-arrangement', payload);
 }
 
+export function reviewInternshipArrangement(payload) {
+  return internshipPost('review-arrangement', payload);
+}
+
 export function saveInternshipArrangementChange(payload) {
   return internshipPost('save-arrangement-change', payload);
 }

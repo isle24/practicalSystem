@@ -112,7 +112,7 @@ class AcademicArchiveRecord extends BaseModel
     /** 查询启用年级选项。 */
     public static function enabledGrades(): array
     {
-        return self::enabledRows('grade_list', ['grade_id', 'grade_name', 'is_current'], 'flag', ['sort', 'grade_id']);
+        return self::enabledRows('grade_list', ['grade_id', 'grade_code', 'grade_name', 'is_current'], 'flag', ['sort', 'grade_id']);
     }
 
     /** 查询启用毕业届次选项。 */

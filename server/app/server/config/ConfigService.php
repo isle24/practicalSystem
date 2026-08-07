@@ -112,6 +112,7 @@ class ConfigService
         return [
             'system' => '系统配置',
             'internship' => '实习配置',
+            'education_plan_sync' => '教务计划同步配置',
             'training' => '实训配置',
             'lab' => '实验配置',
             'file' => '文件配置',
@@ -122,7 +123,7 @@ class ConfigService
     /** 判断配置项是否需要加密和脱敏 */
     private function isEncryptedSecret(string $groupCode, string $key): bool
     {
-        return $groupCode === 'teacher_sync' && $key === 'pull_app_secret';
+        return in_array($groupCode, ['teacher_sync', 'education_plan_sync'], true) && $key === 'pull_app_secret';
     }
 
     /** 校验配置键格式 */

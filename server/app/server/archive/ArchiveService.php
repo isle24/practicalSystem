@@ -34,9 +34,9 @@ class ArchiveService
         ],
         'grade' => [
             'type' => 'grade', 'table' => 'grade_list', 'id' => 'grade_id', 'uuid' => 'grade_uuid',
-            'columns' => ['grade_id', 'grade_name', 'is_current', 'sort', 'flag'],
-            'fields' => ['grade_name', 'is_current', 'sort', 'flag'],
-            'required' => 'grade_name', 'order' => ['sort', 'grade_id'], 'keyword' => ['grade_name'],
+            'columns' => ['grade_id', 'grade_code', 'grade_name', 'is_current', 'sort', 'flag'],
+            'fields' => ['grade_code', 'grade_name', 'is_current', 'sort', 'flag'],
+            'required' => 'grade_name', 'order' => ['sort', 'grade_id'], 'keyword' => ['grade_code', 'grade_name'],
             'flag_field' => 'flag', 'disabled_value' => 'off',
         ],
         'graduation_cohort' => [

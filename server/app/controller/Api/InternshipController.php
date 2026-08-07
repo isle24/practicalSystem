@@ -168,6 +168,16 @@ class InternshipController
     }
 
     /**
+     * 审核实习任务
+     */
+    #[OperationLog('审核实习任务')]
+    public function reviewArrangement(Request $request): Response
+    {
+        OperationLogContext::setName('审核实习任务');
+        return $this->handle(fn (): array => $this->service()->reviewArrangement($request));
+    }
+
+    /**
      * 提交实习任务变更
      */
     #[OperationLog('提交实习任务变更')]

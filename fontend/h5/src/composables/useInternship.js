@@ -2,6 +2,10 @@ import { reactive } from 'vue';
 import { emptyPagedList } from '../utils/pagination';
 
 export const defaultInternshipReviewRules = {
+  arrangement: {
+    accept: { min: 0, max: 300 },
+    modify: { min: 5, max: 500 },
+  },
   arrangement_change: {
     accept: { min: 0, max: 300 },
     modify: { min: 5, max: 500 },
