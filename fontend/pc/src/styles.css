@@ -19,6 +19,9 @@
   --shadow: 0 22px 60px rgba(24, 33, 43, .18), 0 3px 12px rgba(24, 33, 43, .08);
   --shadow-active: 0 28px 72px rgba(24, 33, 43, .24), 0 5px 18px rgba(24, 33, 43, .12);
   --glass: rgba(248, 250, 252, .78);
+  --control-height: 34px;
+  --toolbar-control-height: 38px;
+  --control-radius: 6px;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
 }
 
@@ -1282,9 +1285,9 @@ a {
 }
 
 .admin-toolbar input[type="date"] {
-  height: 32px;
+  height: var(--control-height);
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--control-radius);
   padding: 0 9px;
   color: var(--text);
   outline: none;
@@ -1578,10 +1581,10 @@ a {
   font-size: 12px;
 }
 
-.stat-filter-bar input:not(.el-select__input) {
-  height: 32px;
+.stat-filter-bar input:not(.el-select__input):not(.el-input__inner) {
+  height: var(--control-height);
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--control-radius);
   padding: 0 9px;
   color: var(--text);
   outline: none;
@@ -1627,8 +1630,8 @@ a {
   white-space: nowrap;
 }
 
-.stat-filter-bar label.filter-active input:not(.el-select__input),
-.data-list-filters label.filter-active input:not(.el-select__input) {
+.stat-filter-bar label.filter-active input:not(.el-select__input):not(.el-input__inner),
+.data-list-filters label.filter-active input:not(.el-select__input):not(.el-input__inner) {
   border-color: #2f7ed8;
   background: #f0f7ff;
   box-shadow: 0 0 0 3px rgba(47, 126, 216, 0.12);
@@ -1650,9 +1653,9 @@ a {
 }
 
 .date-range-filter {
-  height: 32px;
+  height: var(--control-height);
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--control-radius);
   display: inline-flex;
   align-items: center;
   gap: 7px;
@@ -1670,7 +1673,7 @@ a {
 
 .date-range-filter input[type="date"] {
   width: 126px;
-  height: 28px;
+  height: 30px;
   border: 0;
   padding: 0;
   background: transparent;
@@ -2102,17 +2105,17 @@ a {
   font-size: 12px;
 }
 
-.guide-admin-fields input {
-  height: 32px;
+.guide-admin-fields input:not(.el-select__input):not(.el-input__inner) {
+  height: var(--control-height);
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--control-radius);
   padding: 0 9px;
   color: var(--text);
   outline: none;
   background: #fff;
 }
 
-.guide-admin-fields input:disabled {
+.guide-admin-fields input:not(.el-select__input):not(.el-input__inner):disabled {
   color: var(--muted);
   background: #f3f5f8;
 }
@@ -2736,17 +2739,17 @@ a {
   font-size: 12px;
 }
 
-.internship-form input {
-  height: 32px;
+.internship-form input:not(.el-select__input):not(.el-input__inner) {
+  height: var(--control-height);
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--control-radius);
   padding: 0 9px;
   color: var(--text);
   outline: none;
   background: #fff;
 }
 
-.internship-form input:focus {
+.internship-form input:not(.el-select__input):not(.el-input__inner):focus {
   border-color: #8dbdea;
 }
 
@@ -2795,26 +2798,27 @@ a {
 }
 
 .data-list-filter-field > .el-select,
-.data-list-filter-field > input:not(.el-select__input) {
+.data-list-filter-field > input:not(.el-select__input):not(.el-input__inner) {
   width: 100%;
 }
 
 .data-list-filter-field .el-select__wrapper {
-  min-height: 38px;
+  min-height: var(--toolbar-control-height);
+  height: var(--toolbar-control-height);
   padding: 4px 11px;
 }
 
-.data-list-filters input:not(.el-select__input) {
-  height: 38px;
+.data-list-filters input:not(.el-select__input):not(.el-input__inner) {
+  height: var(--toolbar-control-height);
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: var(--control-radius);
   padding: 0 11px;
   color: var(--text);
   outline: none;
   background: #fff;
 }
 
-.data-list-filters input:not(.el-select__input):focus {
+.data-list-filters input:not(.el-select__input):not(.el-input__inner):focus {
   border-color: #8dbdea;
 }
 
@@ -2839,6 +2843,14 @@ a {
 
 .data-list-toolbar-actions .el-button + .el-button {
   margin-left: 0;
+}
+
+.data-list-actions > .el-button,
+.data-list-toolbar-actions > .el-button,
+.data-list-column-selector > .el-button {
+  height: var(--toolbar-control-height);
+  margin: 0;
+  padding: 0 12px;
 }
 
 .data-list-column-selector {
@@ -3078,16 +3090,70 @@ a {
 }
 
 .desktop-window .el-input__wrapper,
-.desktop-window .el-select__wrapper,
-.operation-dialog .el-input__wrapper,
-.operation-dialog .el-select__wrapper {
+.desktop-window .el-select__wrapper {
   min-height: 30px;
   border-radius: 6px;
 }
 
+.operation-dialog .el-input__wrapper,
+.operation-dialog .el-select__wrapper {
+  min-height: var(--control-height);
+  height: var(--control-height);
+  border-radius: var(--control-radius);
+}
+
 .desktop-window .data-list-filter-field .el-select__wrapper {
-  min-height: 38px;
+  min-height: var(--toolbar-control-height);
+  height: var(--toolbar-control-height);
   padding: 4px 11px;
+}
+
+:where(
+  .admin-toolbar,
+  .file-toolbar,
+  .log-toolbar,
+  .message-toolbar,
+  .message-template-toolbar,
+  .message-template-library-toolbar,
+  .support-toolbar,
+  .stat-filter-bar,
+  .social-stat-filters,
+  .education-sync-filter
+) .el-input__wrapper,
+:where(
+  .admin-toolbar,
+  .file-toolbar,
+  .log-toolbar,
+  .message-toolbar,
+  .message-template-toolbar,
+  .message-template-library-toolbar,
+  .support-toolbar,
+  .stat-filter-bar,
+  .social-stat-filters,
+  .education-sync-filter
+) .el-select__wrapper {
+  min-height: var(--control-height);
+  height: var(--control-height);
+  border-radius: var(--control-radius);
+}
+
+:where(
+  .admin-toolbar,
+  .file-toolbar,
+  .log-toolbar,
+  .message-toolbar,
+  .message-template-toolbar,
+  .message-template-library-toolbar,
+  .support-toolbar,
+  .stat-filter-actions,
+  .social-stat-filters,
+  .education-sync-filter,
+  .education-sync-actions
+) > .el-button {
+  height: var(--control-height);
+  margin: 0;
+  padding-top: 0;
+  padding-bottom: 0;
 }
 
 @container (max-width: 980px) {
@@ -3240,6 +3306,19 @@ a {
   justify-content: flex-end;
   border-top: 1px solid var(--line);
   border-bottom: 0;
+}
+
+.operation-dialog footer .el-button {
+  height: var(--control-height);
+  margin-left: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+.operation-dialog .el-button:not(.is-link):not(.is-text):not(.el-button--small) {
+  min-height: var(--control-height);
+  padding-top: 0;
+  padding-bottom: 0;
 }
 
 .operation-dialog header button {
@@ -3470,25 +3549,53 @@ a {
   white-space: nowrap;
 }
 
-.operation-form input:not(.el-select__input),
+.operation-form input:not(.el-select__input):not(.el-input__inner):not([type="checkbox"]):not([type="radio"]):not([type="file"]),
 .operation-form textarea {
   width: 100%;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--control-radius);
   padding: 0 9px;
   color: var(--text);
   outline: none;
   background: #fff;
 }
 
-.operation-form input:not(.el-select__input) {
-  height: 34px;
+.operation-form input:not(.el-select__input):not(.el-input__inner):not([type="checkbox"]):not([type="radio"]):not([type="file"]) {
+  height: var(--control-height);
 }
 
 .operation-form textarea {
   min-height: 96px;
   padding-top: 8px;
   resize: vertical;
+}
+
+.operation-form .el-input__wrapper,
+.operation-form .el-select__wrapper,
+.operation-form .el-input-number {
+  width: 100%;
+  min-height: var(--control-height);
+  height: var(--control-height);
+  border-radius: var(--control-radius);
+}
+
+.operation-form .el-input__inner,
+.internship-form .el-input__inner,
+.guide-admin-fields .el-input__inner,
+.menu-form .el-input__inner,
+.settings-form .el-input__inner,
+.stat-filter-bar .el-input__inner,
+.data-list-filters .el-input__inner {
+  border: 0 !important;
+  border-radius: 0;
+  padding: 0;
+  outline: 0;
+  background: transparent;
+  box-shadow: none !important;
+}
+
+.operation-form .el-button:not(.is-link):not(.is-text) {
+  min-height: var(--control-height);
 }
 
 .task-detail-view {
@@ -3670,7 +3777,7 @@ a {
 .section-textarea {
   width: 100%;
   border: 1px solid var(--line);
-  border-radius: 7px;
+  border-radius: var(--control-radius);
   padding: 0 9px;
   color: var(--text);
   outline: none;
@@ -3678,7 +3785,7 @@ a {
 }
 
 .dynamic-form-row input:not(.el-select__input):not(.el-input__inner) {
-  height: 32px;
+  height: var(--control-height);
 }
 
 .section-textarea {
@@ -4312,17 +4419,24 @@ a {
   font-size: 12px;
 }
 
-.menu-form input {
-  height: 32px;
+.menu-form input:not(.el-select__input):not(.el-input__inner) {
+  height: var(--control-height);
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--control-radius);
   padding: 0 9px;
   color: var(--text);
   outline: none;
 }
 
-.menu-form input:focus {
+.menu-form input:not(.el-select__input):not(.el-input__inner):focus {
   border-color: #8dbdea;
+}
+
+:where(.internship-form, .guide-admin-fields, .menu-form) .el-input__wrapper,
+:where(.internship-form, .guide-admin-fields, .menu-form) .el-select__wrapper {
+  min-height: var(--control-height);
+  height: var(--control-height);
+  border-radius: var(--control-radius);
 }
 
 .settings-form {
@@ -4338,11 +4452,11 @@ a {
   font-size: 13px;
 }
 
-.settings-form input[type="text"],
-.settings-form input:not([type]) {
-  height: 34px;
+.settings-form input[type="text"]:not(.el-input__inner),
+.settings-form input:not([type]):not(.el-input__inner) {
+  height: var(--control-height);
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--control-radius);
   padding: 0 10px;
   color: var(--text);
   outline: none;

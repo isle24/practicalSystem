@@ -408,6 +408,12 @@ onMounted(async () => {
   gap: 8px;
 }
 
+.education-sync-section-title > .el-button {
+  height: var(--control-height);
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
 .education-sync-config,
 .education-sync-inbox {
   min-height: 0;
@@ -449,9 +455,19 @@ onMounted(async () => {
   box-sizing: border-box;
   border: 1px solid var(--line);
   border-radius: 6px;
-  padding: 8px 10px;
+  padding: 0 10px;
   color: var(--text);
   background: var(--surface-2);
+}
+
+.education-sync-form input,
+.education-sync-filter input {
+  height: var(--control-height);
+}
+
+.education-sync-ignore-field textarea {
+  padding-top: 9px;
+  padding-bottom: 9px;
 }
 
 .education-sync-last-time {
