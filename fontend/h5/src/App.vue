@@ -135,7 +135,7 @@
 
 <script setup>
 import { computed, ref, watch } from 'vue';
-import { showToast } from 'vant';
+import { showConfirmDialog, showToast } from 'vant';
 import {
   BriefcaseBusiness,
   BookOpen,
@@ -144,6 +144,7 @@ import {
   ClipboardList,
   FileClock,
   FileText,
+  FolderOpen,
   GraduationCap,
   Home,
   MapPin,
@@ -211,6 +212,10 @@ import {
   fetchPracticeOverview,
   fetchPracticeExecutionList,
   fetchPracticeExecutionTimeline,
+  fetchPracticeArchiveCheck,
+  fetchPracticeArchiveDetail,
+  fetchPracticeArchives,
+  fetchPracticeProjectStudents,
   fetchPracticeReviewDraft,
   fetchPracticeScheduleWeek,
   fetchPracticeTimeline,
@@ -236,8 +241,10 @@ import {
   saveInternshipSignIn,
   saveInternshipSafetyLetter,
   savePracticeExecution,
+  savePracticeItem,
   savePracticeProjectScore,
   savePracticeReviewDraft,
+  createPracticeArchive,
   uploadFile,
 } from './api/system';
 
@@ -273,6 +280,7 @@ const {
   reviewDialog: practiceReviewDialog,
   executionDialog: practiceExecutionDialog,
   timelineDialog: practiceTimelineDialog,
+  materialDialog: practiceMaterialDialog,
   emptyFilters: emptyPracticeFilters,
   reset: resetPracticeState,
 } = usePracticeModule();
@@ -964,23 +972,24 @@ function openHomeFocus(item) {
 }
 
 const practiceFlowSteps = [
-  '教学计划来源于教务拉取或教师填报',
-  '课表明确老师、班级、时间和地点',
-  '课表发布为项目并绑定学生范围',
-  '成绩比例配置后录入成绩并统计',
+  '查看本人参与的课程和项目',
+  '按项目完成签到和课程任务',
+  '提交项目报告并填写反思小结',
+  '教师评阅后查看项目成绩',
 ];
 const practicePanelDefinitions = [
-  { key: 'plans', entity: 'plan', title: '教学计划', shortTitle: '计划', icon: FileText, review: true, emptyText: '暂无教学计划' },
+  { key: 'plans', entity: 'plan', title: '我的开课任务', shortTitle: '课程', icon: FileText, review: true, emptyText: '暂无开课任务' },
   { key: 'schedules', entity: 'schedule', title: '课表安排', shortTitle: '课表', icon: CalendarCheck, review: false, emptyText: '暂无课表安排' },
-  { key: 'projects', entity: 'project', title: '项目发布', shortTitle: '项目', icon: ClipboardList, review: false, emptyText: '暂无项目' },
+  { key: 'projects', entity: 'project', title: '项目与任务', shortTitle: '项目', icon: ClipboardList, review: false, emptyText: '暂无项目' },
   { key: 'signIns', entity: 'sign_in', execution: 'sign_in', title: '签到记录', shortTitle: '签到', icon: MapPin, review: false, emptyText: '暂无签到记录' },
-  { key: 'journals', entity: 'journal', execution: 'journal', title: '过程日志', shortTitle: '日志', icon: FileClock, review: true, emptyText: '暂无日志记录' },
-  { key: 'reports', entity: 'report', execution: 'report', title: '总结报告', shortTitle: '报告', icon: FileText, review: true, emptyText: '暂无报告记录' },
-  { key: 'syllabus', entity: 'syllabus', title: '大纲编写', shortTitle: '大纲', icon: BookOpen, review: true, emptyText: '暂无大纲' },
+  { key: 'journals', entity: 'journal', execution: 'journal', title: '历史过程记录', shortTitle: '历史', icon: FileClock, review: true, emptyText: '暂无历史记录' },
+  { key: 'reports', entity: 'report', execution: 'report', title: '项目报告评阅', shortTitle: '项目报告', icon: FileText, review: true, emptyText: '暂无项目报告' },
+  { key: 'syllabus', entity: 'syllabus', title: '课程大纲', shortTitle: '大纲', icon: BookOpen, review: true, emptyText: '暂无大纲' },
   { key: 'lessonPlans', entity: 'lessonPlan', title: '教案编写', shortTitle: '教案', icon: FileText, review: true, emptyText: '暂无教案' },
-  { key: 'gradeRules', entity: 'gradeRule', title: '成绩比例', shortTitle: '比例', icon: GraduationCap, review: false, emptyText: '暂无成绩比例' },
-  { key: 'scores', entity: 'score', title: '成绩评定', shortTitle: '成绩', icon: GraduationCap, review: false, emptyText: '暂无成绩记录' },
-  { key: 'reflections', entity: 'reflection', title: '反思报告', shortTitle: '反思', icon: FileClock, review: true, emptyText: '暂无反思报告' },
+  { key: 'gradeRules', entity: 'gradeRule', title: '成绩方案', shortTitle: '成绩方案', icon: GraduationCap, review: false, emptyText: '暂无成绩方案' },
+  { key: 'scores', entity: 'score', title: '成绩管理', shortTitle: '成绩', icon: GraduationCap, review: true, emptyText: '暂无成绩记录' },
+  { key: 'reflections', entity: 'reflection', title: '课程教学反思', shortTitle: '课程反思', icon: FileClock, review: true, emptyText: '暂无课程教学反思' },
+  { key: 'archives', entity: '', title: '归档中心', shortTitle: '归档', icon: FolderOpen, review: false, emptyText: '暂无归档版本' },
 ];
 
 const practiceReviewDialogTitle = computed(() => {
@@ -1010,7 +1019,7 @@ const practiceReviewTargetDetails = computed(() => {
   ].filter(Boolean);
 });
 const practiceExecutionDialogTitle = computed(() => {
-  const names = { sign_in: '签到', journal: '提交日志', report: '提交报告' };
+  const names = { sign_in: '签到', journal: '提交历史记录', report: '提交项目报告', score: '录入项目成绩' };
   return `${practiceModuleName(practiceExecutionDialog.module)}${names[practiceExecutionDialog.execution] || '提交'}`;
 });
 const practiceExecutionDialogSubtitle = computed(() => {
@@ -2217,28 +2226,81 @@ function practiceTypeName(moduleType) {
 
 function practicePanels(module) {
   if (isStudentRole.value) {
-    return practicePanelDefinitions.filter(item => ['projects', 'signIns', 'journals', 'reports', 'scores'].includes(item.key));
+    return practicePanelDefinitions.filter(item => ['plans', 'reports', 'signIns', 'scores'].includes(item.key));
   }
   if (isTeacherRole.value) {
-    return practicePanelDefinitions.filter(item => item.key !== 'gradeRules');
+    const keys = ['plans', 'projects', 'reports', 'signIns', 'lessonPlans', 'reflections', 'scores', 'archives'];
+    if (isPracticeCourseLeader(module)) {
+      keys.splice(4, 0, 'syllabus');
+    }
+    return practicePanelDefinitions.filter(item => keys.includes(item.key));
   }
-  return practicePanelDefinitions;
+  return practicePanelDefinitions.filter(item => item.key !== 'gradeRules');
 }
 
 function currentPracticePanel(module) {
   const state = practiceModule(module);
+  if (state.panel === 'scores' && state.scoreView === 'gradeRules') {
+    return practicePanelDefinitions.find(item => item.key === 'gradeRules');
+  }
   const panels = practicePanels(module);
   return panels.find(item => item.key === state.panel) || panels[0] || practicePanelDefinitions[0];
 }
 
+function currentPracticeTeacherId(module) {
+  return Number(practiceModule(module).options.current_teacher_id || 0);
+}
+
+function isPracticeCourseLeader(module) {
+  if (isAdminRole.value) {
+    return true;
+  }
+  const teacherId = currentPracticeTeacherId(module);
+  return teacherId > 0 && (practiceModule(module).options.plans || [])
+    .some(plan => Number(plan.course_leader_id || 0) === teacherId);
+}
+
+function practiceScoreTabs(module) {
+  const tabs = [{ key: 'scores', label: '成绩录入与评定' }];
+  if (isPracticeCourseLeader(module)) {
+    tabs.unshift({ key: 'gradeRules', label: '成绩方案' });
+  }
+  return tabs;
+}
+
+function practiceExecutionProjectOptions() {
+  const state = practiceModule(practiceExecutionDialog.module);
+  const projects = state.options.projects || [];
+  if (practiceExecutionDialog.execution !== 'score' || !isTeacherRole.value) {
+    return projects;
+  }
+
+  const teacherId = currentPracticeTeacherId(practiceExecutionDialog.module);
+  return projects.filter(project => Number(project.teacher_id || 0) === teacherId);
+}
+
+function switchPracticeScoreView(module, view) {
+  const state = practiceModule(module);
+  state.scoreView = view;
+  reloadPracticeList(module);
+}
+
 function practiceSummaries(module) {
   const overview = practiceModule(module).overview;
+  if (isStudentRole.value) {
+    return [
+      { name: '我的课程', value: practiceModule(module).lists.plans.pagination.total || 0 },
+      { name: '项目报告', value: practiceModule(module).lists.reports.pagination.total || 0 },
+      { name: '签到记录', value: practiceModule(module).lists.signIns.pagination.total || 0 },
+      { name: '成绩记录', value: practiceModule(module).lists.scores.pagination.total || 0 },
+    ];
+  }
   return [
-    { name: '待审计划', value: overview.plans_waiting || 0 },
-    { name: '课表', value: overview.schedules || 0 },
-    { name: '项目', value: overview.projects || 0 },
-    { name: '日志', value: practiceModule(module).lists.journals.pagination.total || 0 },
-    { name: '今日课表', value: overview.today_schedules || 0 },
+    { name: '开课任务', value: practiceModule(module).lists.plans.pagination.total || 0 },
+    { name: '项目与任务', value: overview.projects || 0 },
+    { name: '待审报告', value: practiceModule(module).lists.reports.pagination.total || 0 },
+    { name: '成绩记录', value: overview.scores_submitted || 0 },
+    { name: '归档版本', value: practiceModule(module).lists.archives.pagination.total || 0 },
   ];
 }
 
@@ -2505,7 +2567,9 @@ async function loadPracticeList(module, page = 1, append = false) {
     state.lists[panel.key].pagination = { page: 1, page_size: state.schedule.items.length, total: state.schedule.items.length };
     return;
   }
-  const data = panel.execution
+  const data = panel.key === 'archives'
+    ? await fetchPracticeArchives('all', practiceQueryParams(module, page))
+    : panel.execution
     ? await fetchPracticeExecutionList('all', panel.execution, practiceExecutionQueryParams(module, page))
     : await fetchPracticeList('all', practiceQueryParams(module, page));
   const items = data.items || [];
@@ -2585,7 +2649,13 @@ function normalizePracticePanel(module) {
 }
 
 function switchPracticePanel(module, panel) {
-  practiceModule(module).panel = panel;
+  const state = practiceModule(module);
+  state.panel = panel;
+  if (panel !== 'scores') {
+    state.scoreView = 'scores';
+  } else if (!practiceScoreTabs(module).some(item => item.key === state.scoreView)) {
+    state.scoreView = 'scores';
+  }
   reloadPracticeList(module);
 }
 
@@ -2599,6 +2669,9 @@ function practiceRowTitle(module, row) {
   }
   if (panel === 'scores') {
     return row.student_name || row.student_num || row.title || `成绩 ${row.id}`;
+  }
+  if (panel === 'archives') {
+    return row.plan_title || row.course_name || `归档版本 ${row.id}`;
   }
   if (panel === 'projects') {
     return row.title || row.course_name || `项目 ${row.id}`;
@@ -2671,6 +2744,7 @@ function practiceRowFacts(module, row) {
       namedFact('学生', joinFact([row.student_name, row.student_num])),
       namedFact('提交', row.submitted_at || row.created_at),
       namedFact('内容', previewText(row.content, 52)),
+      namedFact('反思小结', previewText(row.reflection_summary, 52)),
     ],
     scores: [
       namedFact('学号', row.student_num),
@@ -2683,7 +2757,14 @@ function practiceRowFacts(module, row) {
     ],
     plans: [
       namedFact('来源', practiceSourceText(row.source_type)),
+      namedFact('课程负责人', row.course_leader_name),
+      namedFact('任课教师', row.related_teacher_count ? `${row.related_teacher_count} 人` : ''),
       namedFact('内容', previewText(row.content, 52)),
+    ],
+    archives: [
+      namedFact('版本', `V${row.version_no || 1}`),
+      namedFact('归档时间', row.created_at),
+      namedFact('状态', row.status === 'archived' ? '已归档' : '已失效'),
     ],
   }[panel] || [
     namedFact('计划', row.plan_title),
@@ -2694,25 +2775,53 @@ function practiceRowFacts(module, row) {
 
 function practiceRowActions(module, row) {
   const panel = currentPracticePanel(module);
-  if (panel.key === 'projects' && isStudentRole.value) {
-    return [
-      { key: 'signIn', label: '签到' },
-      { key: 'journal', label: '日志' },
-      { key: 'report', label: '报告' },
-    ];
+  if (panel.key === 'archives') {
+    return [{ key: 'archiveDetail', label: '查看归档' }];
+  }
+  if (panel.key === 'scores' && !isStudentRole.value) {
+    const actions = [];
+    const canEditScore = !isTeacherRole.value
+      || Number(row.teacher_id || 0) === currentPracticeTeacherId(module);
+    if (canEditScore && ['draft', 'modify'].includes(row.status || '')) {
+      actions.push({ key: 'editScore', label: '编辑成绩' });
+    }
+    actions.push({ key: 'timeline', label: '记录' });
+    if (row.status === 'wait' && canApprovePracticeRow(module, panel, row)) {
+      actions.push({ key: 'accept', label: '通过' }, { key: 'modify', label: '退回' });
+    }
+    if (row.status === 'accept' && canApprovePracticeRow(module, panel, row)) {
+      actions.push({ key: 'reopen', label: '通过后修改' });
+    }
+    return actions;
+  }
+  if (['syllabus', 'lessonPlans', 'reflections', 'gradeRules'].includes(panel.key)) {
+    const actions = [];
+    if (canWritePracticeMaterial(module, panel.key, row)) {
+      actions.push({ key: 'editMaterial', label: '编辑' });
+    }
+    if (panel.review) {
+      actions.push({ key: 'timeline', label: '记录' });
+      if (row.status === 'wait' && canApprovePracticeRow(module, panel, row)) {
+        actions.push({ key: 'accept', label: '通过' }, { key: 'modify', label: '退回' });
+      }
+      if (row.status === 'accept' && canApprovePracticeRow(module, panel, row)) {
+        actions.push({ key: 'reopen', label: '通过后修改' });
+      }
+    }
+    return actions;
   }
   if (panel.execution) {
     const actions = [{ key: 'timeline', label: '记录' }];
     if (isStudentRole.value && ['journals', 'reports'].includes(panel.key) && ['draft', 'modify'].includes(row.status || '')) {
       actions.unshift({ key: 'editExecution', label: '修改' });
     }
-    if (!isStudentRole.value && row.status === 'wait' && hasPermission('practice:approve') && panel.review) {
+    if (row.status === 'wait' && panel.review && canApprovePracticeRow(module, panel, row)) {
       actions.push(
         { key: 'accept', label: '通过' },
         { key: 'modify', label: '退回' },
       );
     }
-    if (!isStudentRole.value && row.status === 'accept' && hasPermission('practice:approve') && panel.review) {
+    if (row.status === 'accept' && panel.review && canApprovePracticeRow(module, panel, row)) {
       actions.push({ key: 'reopen', label: '通过后修改' });
     }
     return actions;
@@ -2721,16 +2830,36 @@ function practiceRowActions(module, row) {
     return [];
   }
   const actions = [{ key: 'timeline', label: '记录' }];
-  if (row.status === 'wait' && hasPermission('practice:approve') && !isStudentRole.value) {
+  if (row.status === 'wait' && canApprovePracticeRow(module, panel, row)) {
     actions.push(
       { key: 'accept', label: '通过' },
       { key: 'modify', label: '退回' },
     );
   }
-  if (row.status === 'accept' && hasPermission('practice:approve') && !isStudentRole.value) {
+  if (row.status === 'accept' && canApprovePracticeRow(module, panel, row)) {
     actions.push({ key: 'reopen', label: '通过后修改' });
   }
   return actions;
+}
+
+function canApprovePracticeRow(module, panel, row) {
+  if (isStudentRole.value || !hasPermission('practice:approve')) {
+    return false;
+  }
+  if (!isTeacherRole.value) {
+    return true;
+  }
+  if (panel.execution) {
+    return true;
+  }
+  if (panel.key !== 'scores') {
+    return false;
+  }
+
+  const teacherId = currentPracticeTeacherId(module);
+  const plan = (practiceModule(module).options.plans || [])
+    .find(item => Number(item.id) === Number(row?.plan_id || 0));
+  return teacherId > 0 && Number(plan?.course_leader_id || 0) === teacherId;
 }
 
 function handlePracticeAction(module, action, row) {
@@ -2747,6 +2876,18 @@ function handlePracticeAction(module, action, row) {
     openPracticeExecutionDialog(module, panel.key, row);
     return;
   }
+  if (action.key === 'editScore') {
+    openPracticeExecutionDialog(module, 'scores', row);
+    return;
+  }
+  if (action.key === 'editMaterial') {
+    openPracticeMaterialDialog(module, panel.key, row);
+    return;
+  }
+  if (action.key === 'archiveDetail') {
+    openPracticeArchiveDetail(module, row);
+    return;
+  }
   if (action.key === 'timeline') {
     openPracticeTimeline(module, panel, row);
     return;
@@ -2756,6 +2897,67 @@ function handlePracticeAction(module, action, row) {
     return;
   }
   openPracticeReview(module, panel, row, action.key, 'review');
+}
+
+function practicePrimaryAction(module) {
+  const panel = currentPracticePanel(module);
+  if (isStudentRole.value && panel.key === 'reports') {
+    return { key: 'report', label: '提交项目报告' };
+  }
+  if (isStudentRole.value && panel.key === 'signIns') {
+    return { key: 'signIn', label: '提交签到' };
+  }
+  if (!isStudentRole.value && panel.key === 'scores') {
+    return { key: 'score', label: '录入成绩' };
+  }
+  if (!isStudentRole.value && ['syllabus', 'lessonPlans', 'reflections', 'gradeRules'].includes(panel.key) && canWritePracticeMaterial(module, panel.key)) {
+    return { key: 'material', label: panel.key === 'gradeRules' ? '维护方案' : '新增' };
+  }
+  if (panel.key === 'archives') {
+    return { key: 'archiveCheck', label: '归档检查' };
+  }
+  return null;
+}
+
+function canWritePracticeMaterial(module, panelKey, row = null) {
+  if (!hasPermission('practice:manage')) {
+    return false;
+  }
+  if (!isTeacherRole.value) {
+    return true;
+  }
+  if (panelKey === 'lessonPlans') {
+    return !row || Number(row.submitter_id || 0) === Number(state.context.account_id || 0);
+  }
+  if (!['syllabus', 'gradeRules', 'reflections'].includes(panelKey)) {
+    return false;
+  }
+
+  const teacherId = currentPracticeTeacherId(module);
+  const planId = Number(row?.plan_id || 0);
+  if (planId > 0) {
+    const plan = (practiceModule(module).options.plans || []).find(item => Number(item.id) === planId);
+    return teacherId > 0 && Number(plan?.course_leader_id || 0) === teacherId;
+  }
+  return isPracticeCourseLeader(module);
+}
+
+function handlePracticePrimaryAction(module) {
+  const action = practicePrimaryAction(module);
+  if (!action) {
+    return;
+  }
+  if (action.key === 'report') {
+    openPracticeExecutionDialog(module, 'reports');
+  } else if (action.key === 'signIn') {
+    openPracticeExecutionDialog(module, 'signIns');
+  } else if (action.key === 'score') {
+    openPracticeExecutionDialog(module, 'scores');
+  } else if (action.key === 'material') {
+    openPracticeMaterialDialog(module, currentPracticePanel(module).key);
+  } else if (action.key === 'archiveCheck') {
+    openPracticeArchiveCheck(module);
+  }
 }
 
 function applyDefaultInternshipSelection() {
@@ -3428,17 +3630,18 @@ function closePracticeTimeline() {
   practiceTimelineDialog.visible = false;
 }
 
-function openPracticeExecutionDialog(module, panelKey, row = null, context = {}) {
+async function openPracticeExecutionDialog(module, panelKey, row = null, context = {}) {
   const panel = practicePanelDefinitions.find(item => item.key === panelKey) || currentPracticePanel(module);
   const projectId = context.projectId
     || (panel.key === 'projects'
       ? row?.id
-      : row?.project_id || row?.entity_id || practiceModule(module).options.projects[0]?.id || null);
+      : row?.project_id || row?.entity_id || null);
   practiceExecutionDialog.visible = true;
   practiceExecutionDialog.module = context.moduleType || row?.module_type || row?.entity_type || module;
   practiceExecutionDialog.panel = panel.key;
-  practiceExecutionDialog.execution = panel.execution || 'journal';
+  practiceExecutionDialog.execution = panel.key === 'scores' ? 'score' : (panel.execution || 'journal');
   practiceExecutionDialog.row = row;
+  const scoreItems = row?.score_items && typeof row.score_items === 'object' ? row.score_items : {};
   practiceExecutionDialog.form = {
     id: context.projectId ? null : (panel.execution && row?.id ? row.id : null),
     project_id: projectId,
@@ -3446,6 +3649,7 @@ function openPracticeExecutionDialog(module, panelKey, row = null, context = {})
     title: panel.execution ? (row?.title || context.projectTitle || '') : '',
     date: row?.date || '',
     content: row?.content || '',
+    reflection_summary: row?.reflection_summary || '',
     location: row?.location || '',
     longitude: row?.longitude || '',
     latitude: row?.latitude || '',
@@ -3454,7 +3658,15 @@ function openPracticeExecutionDialog(module, panelKey, row = null, context = {})
     locating: false,
     gps_error: '',
     remark: row?.remark || '',
+    student_id: row?.student_id || null,
+    attendance_score: scoreItems.attendance_score ?? '',
+    material_score: scoreItems.material_score ?? '',
+    report_score: scoreItems.report_score ?? '',
+    score_value: row?.score_value ?? '',
   };
+  practiceExecutionDialog.students = [];
+  practiceExecutionDialog.form.project_id ||= practiceExecutionProjectOptions()[0]?.id || null;
+  await changePracticeExecutionProject();
   if (practiceExecutionDialog.execution === 'sign_in' && !practiceGpsReady.value) {
     locatePracticePosition();
   }
@@ -3482,7 +3694,19 @@ async function submitPracticeExecution(status = 'wait') {
     return;
   }
   if (execution !== 'sign_in' && !String(practiceExecutionDialog.form.content || '').trim()) {
-    state.message = '请填写内容';
+    if (execution !== 'score') {
+      state.message = '请填写内容';
+      showToast(state.message);
+      return;
+    }
+  }
+  if (execution === 'report' && status === 'wait' && !String(practiceExecutionDialog.form.reflection_summary || '').trim()) {
+    state.message = '提交审核前请填写反思小结';
+    showToast(state.message);
+    return;
+  }
+  if (execution === 'score' && !practiceExecutionDialog.form.student_id) {
+    state.message = '请选择项目学生';
     showToast(state.message);
     return;
   }
@@ -3494,19 +3718,32 @@ async function submitPracticeExecution(status = 'wait') {
   state.loading = true;
   state.message = '';
   try {
-    await savePracticeExecution(practiceExecutionDialog.form.module_type, execution, {
+    const payload = {
       id: practiceExecutionDialog.form.id || undefined,
       project_id: practiceExecutionDialog.form.project_id,
+      student_id: practiceExecutionDialog.form.student_id || undefined,
       title: practiceExecutionDialog.form.title,
       date: practiceExecutionDialog.form.date,
       content: practiceExecutionDialog.form.content,
+      reflection_summary: practiceExecutionDialog.form.reflection_summary,
       location: practiceExecutionDialog.form.location,
       longitude: practiceExecutionDialog.form.longitude,
       latitude: practiceExecutionDialog.form.latitude,
       remark: practiceExecutionDialog.form.remark,
       status: execution === 'sign_in' ? 'signed' : status,
       module_type: practiceExecutionDialog.form.module_type,
-    });
+    };
+    if (execution === 'score') {
+      await savePracticeProjectScore(practiceExecutionDialog.form.module_type, {
+        ...payload,
+        attendance_score: practiceExecutionDialog.form.attendance_score,
+        material_score: practiceExecutionDialog.form.material_score,
+        report_score: practiceExecutionDialog.form.report_score,
+        score_value: practiceExecutionDialog.form.score_value,
+      });
+    } else {
+      await savePracticeExecution(practiceExecutionDialog.form.module_type, execution, payload);
+    }
     if (execution === 'sign_in' || status === 'wait') {
       closePracticeExecutionDialog();
     }
@@ -3519,6 +3756,279 @@ async function submitPracticeExecution(status = 'wait') {
   } finally {
     state.loading = false;
   }
+}
+
+async function changePracticeExecutionProject() {
+  const state = practiceModule(practiceExecutionDialog.module);
+  const projectId = Number(practiceExecutionDialog.form.project_id || 0);
+  const project = practiceExecutionProjectOptions().find(item => Number(item.id) === projectId);
+  if (project) {
+    practiceExecutionDialog.form.module_type = project.module_type;
+  }
+  practiceExecutionDialog.students = [];
+  if (practiceExecutionDialog.execution !== 'score' || !projectId || !['lab', 'training'].includes(practiceExecutionDialog.form.module_type)) {
+    return;
+  }
+  try {
+    const data = await fetchPracticeProjectStudents(practiceExecutionDialog.form.module_type, projectId);
+    practiceExecutionDialog.students = data.items || [];
+    const current = Number(practiceExecutionDialog.form.student_id || 0);
+    if (!practiceExecutionDialog.students.some(item => Number(item.student_id) === current)) {
+      practiceExecutionDialog.form.student_id = practiceExecutionDialog.students[0]?.student_id || null;
+    }
+    applyPracticeStudentScore();
+  } catch (error) {
+    state.message = error.message;
+    showToast(error.message);
+  }
+}
+
+function applyPracticeStudentScore() {
+  if (practiceExecutionDialog.execution !== 'score') {
+    return;
+  }
+  const student = practiceExecutionDialog.students.find(item => Number(item.student_id) === Number(practiceExecutionDialog.form.student_id || 0));
+  const scoreItems = student?.score_items && typeof student.score_items === 'object' ? student.score_items : {};
+  practiceExecutionDialog.form.id = student?.score_id || null;
+  practiceExecutionDialog.form.attendance_score = scoreItems.attendance_score ?? '';
+  practiceExecutionDialog.form.material_score = scoreItems.material_score ?? '';
+  practiceExecutionDialog.form.report_score = scoreItems.report_score ?? '';
+  practiceExecutionDialog.form.score_value = student?.score_value ?? '';
+}
+
+function practiceMaterialEntity(panel) {
+  return {
+    syllabus: 'syllabus',
+    lessonPlans: 'lessonPlan',
+    gradeRules: 'gradeRule',
+    reflections: 'reflection',
+  }[panel] || '';
+}
+
+function practiceMaterialTitle(panel) {
+  return {
+    syllabus: '课程大纲',
+    lessonPlans: '课程教案',
+    gradeRules: '成绩方案',
+    reflections: '课程教学反思',
+  }[panel] || '课程材料';
+}
+
+function practiceMaterialPlans(module, entity) {
+  const plans = practiceModule(module).options.plans || [];
+  if (!isTeacherRole.value || !['syllabus', 'gradeRule', 'reflection'].includes(entity)) {
+    return plans;
+  }
+  const teacherId = currentPracticeTeacherId(module);
+  return plans.filter(plan => Number(plan.course_leader_id || 0) === teacherId);
+}
+
+function openPracticeMaterialDialog(module, panel, row = null) {
+  const entity = practiceMaterialEntity(panel);
+  if (!entity) {
+    return;
+  }
+  const ratio = row?.ratio_json && typeof row.ratio_json === 'object' ? row.ratio_json : {};
+  practiceMaterialDialog.visible = true;
+  practiceMaterialDialog.module = row?.module_type || module;
+  practiceMaterialDialog.panel = panel;
+  practiceMaterialDialog.entity = entity;
+  practiceMaterialDialog.row = row;
+  practiceMaterialDialog.form = {
+    id: row?.id || null,
+    module_type: row?.module_type || '',
+    plan_id: row?.plan_id || practiceMaterialPlans(module, entity)[0]?.id || null,
+    title: row?.title || '',
+    content: row?.content || '',
+    attendance_weight: ratio.attendance_weight ?? 20,
+    operation_weight: ratio.operation_weight ?? 70,
+    report_weight: ratio.report_weight ?? 10,
+    projects: Array.isArray(ratio.projects) ? ratio.projects : [],
+  };
+  changePracticeMaterialPlan();
+}
+
+function closePracticeMaterialDialog() {
+  practiceMaterialDialog.visible = false;
+  practiceMaterialDialog.row = null;
+}
+
+function changePracticeMaterialPlan() {
+  const state = practiceModule(practiceMaterialDialog.module);
+  const plan = state.options.plans.find(item => Number(item.id) === Number(practiceMaterialDialog.form.plan_id || 0));
+  if (plan) {
+    practiceMaterialDialog.form.module_type = plan.module_type;
+    if (!practiceMaterialDialog.form.title) {
+      practiceMaterialDialog.form.title = `${plan.course_name || plan.title || '课程'}${practiceMaterialTitle(practiceMaterialDialog.panel)}`;
+    }
+  }
+}
+
+async function submitPracticeMaterial(status = 'wait') {
+  const state = practiceModule(practiceMaterialDialog.module);
+  const form = practiceMaterialDialog.form;
+  const plan = state.options.plans.find(item => Number(item.id) === Number(form.plan_id || 0));
+  if (!plan || !['lab', 'training'].includes(form.module_type)) {
+    showToast('请选择开课任务');
+    return;
+  }
+  if (!String(form.title || '').trim()) {
+    showToast('请填写标题');
+    return;
+  }
+  if (practiceMaterialDialog.entity !== 'gradeRule' && !String(form.content || '').trim()) {
+    showToast('请填写内容');
+    return;
+  }
+  if (practiceMaterialDialog.entity === 'gradeRule') {
+    const total = Number(form.attendance_weight || 0) + Number(form.operation_weight || 0) + Number(form.report_weight || 0);
+    if (Math.abs(total - 100) > 0.001) {
+      showToast('成绩比例合计必须为 100%');
+      return;
+    }
+  }
+  state.loading = true;
+  try {
+    await savePracticeItem(form.module_type, {
+      id: form.id || undefined,
+      entity: practiceMaterialDialog.entity,
+      plan_id: form.plan_id,
+      grade_id: plan.grade_id,
+      dep_id: plan.dep_id,
+      profession_id: plan.profession_id,
+      class_id: plan.class_id,
+      course_name: plan.course_name,
+      title: form.title,
+      content: form.content,
+      ratio_json: practiceMaterialDialog.entity === 'gradeRule' ? {
+        attendance_weight: Number(form.attendance_weight || 0),
+        operation_weight: Number(form.operation_weight || 0),
+        report_weight: Number(form.report_weight || 0),
+        projects: form.projects,
+      } : undefined,
+      status: practiceMaterialDialog.entity === 'gradeRule' ? 'enabled' : status,
+      module_type: form.module_type,
+    });
+    closePracticeMaterialDialog();
+    await reloadPracticeList(practiceMaterialDialog.module);
+    showToast(practiceMaterialDialog.entity === 'gradeRule' ? '成绩方案已保存' : (status === 'wait' ? '已提交审核' : '草稿已保存'));
+  } catch (error) {
+    state.message = error.message;
+    showToast(error.message);
+  } finally {
+    state.loading = false;
+  }
+}
+
+function practiceArchivePlans(module) {
+  return (practiceModule(module).options.plans || []).filter(plan => ['accept', 'enabled'].includes(String(plan.status || '')));
+}
+
+async function openPracticeArchiveCheck(module) {
+  const state = practiceModule(module);
+  state.archive.detailVisible = false;
+  state.archive.detail = null;
+  state.archive.plan_id ||= practiceArchivePlans(module)[0]?.id || null;
+  if (!state.archive.plan_id) {
+    showToast('暂无可检查的开课任务');
+    return;
+  }
+  await loadPracticeArchiveCheck(module);
+}
+
+async function loadPracticeArchiveCheck(module) {
+  const state = practiceModule(module);
+  const plan = practiceArchivePlans(module).find(item => Number(item.id) === Number(state.archive.plan_id || 0));
+  if (!plan) {
+    showToast('请选择开课任务');
+    return;
+  }
+  state.loading = true;
+  try {
+    state.archive.check = await fetchPracticeArchiveCheck(plan.module_type, plan.id);
+  } catch (error) {
+    state.message = error.message;
+    showToast(error.message);
+  } finally {
+    state.loading = false;
+  }
+}
+
+function closePracticeArchiveCheck(module) {
+  practiceModule(module).archive.check = null;
+}
+
+async function confirmCreatePracticeArchive(module) {
+  const state = practiceModule(module);
+  const check = state.archive.check;
+  if (!check?.ready || !check.plan?.id || state.loading) {
+    return;
+  }
+  try {
+    await showConfirmDialog({
+      title: '确认正式归档',
+      message: `将为「${check.plan.title || check.plan.course_name}」生成只读版本快照。`,
+      confirmButtonText: '确认归档',
+    });
+  } catch {
+    return;
+  }
+  state.loading = true;
+  try {
+    await createPracticeArchive(check.plan.module_type, check.plan.id);
+    state.archive.check = null;
+    await loadPracticeList(module, 1);
+    showToast('归档版本已生成');
+  } catch (error) {
+    state.message = error.message;
+    showToast(error.message);
+  } finally {
+    state.loading = false;
+  }
+}
+
+async function openPracticeArchiveDetail(module, row) {
+  const state = practiceModule(module);
+  state.archive.detailVisible = true;
+  state.archive.detail = row;
+  state.loading = true;
+  try {
+    state.archive.detail = await fetchPracticeArchiveDetail(row.module_type, row.id);
+  } catch (error) {
+    state.archive.detailVisible = false;
+    state.message = error.message;
+    showToast(error.message);
+  } finally {
+    state.loading = false;
+  }
+}
+
+function closePracticeArchiveDetail(module) {
+  const archive = practiceModule(module).archive;
+  archive.detailVisible = false;
+  archive.detail = null;
+}
+
+function practiceArchiveItems(module) {
+  const archive = practiceModule(module).archive;
+  return archive.detail?.snapshot_json?.items || archive.check?.items || [];
+}
+
+function practiceArchiveStatusText(status) {
+  return { accepted: '已完成', pending: '待审核', modify: '需修改', missing: '未提交' }[status] || status || '-';
+}
+
+function canCreatePracticeArchive(module) {
+  if (!hasPermission('practice:manage')) {
+    return false;
+  }
+  if (isAdminRole.value) {
+    return true;
+  }
+  const state = practiceModule(module);
+  const planId = Number(state.archive.check?.plan?.id || state.archive.plan_id || 0);
+  const plan = (state.options.plans || []).find(item => Number(item.id) === planId);
+  return isTeacherRole.value && Number(plan?.course_leader_id || 0) === currentPracticeTeacherId(module);
 }
 
 function closeTimelineDialog() {
@@ -4894,22 +5404,37 @@ provideInternshipContext({
 });
 
 providePracticeContext({
+  applyPracticeStudentScore,
+  canCreatePracticeArchive,
   canLoadMorePractice,
+  changePracticeExecutionProject,
+  changePracticeMaterialPlan,
+  closePracticeArchiveCheck,
+  closePracticeArchiveDetail,
   closePracticeExecutionDialog,
+  closePracticeMaterialDialog,
   closePracticeReviewDialog,
   closePracticeTimeline,
+  confirmCreatePracticeArchive,
   confirmPracticeReview,
   coordinateText,
   currentPracticePanel,
   currentPracticeRows,
   handlePracticeAction,
+  handlePracticePrimaryAction,
   isAdminRole,
   isModifyAfterAcceptBranch,
   isStudentRole,
+  isTeacherRole,
+  loadPracticeArchiveCheck,
   loadMorePracticeList,
   locatePracticePosition,
   practiceAccuracyText,
+  practiceArchiveItems,
+  practiceArchivePlans,
+  practiceArchiveStatusText,
   practiceExecutionDialog,
+  practiceExecutionProjectOptions,
   practiceExecutionDialogSubtitle,
   practiceExecutionDialogTitle,
   practiceFilters,
@@ -4919,10 +5444,15 @@ providePracticeContext({
   practiceGpsTitle,
   practiceListTotal,
   practiceMapUrl,
+  practiceMaterialDialog,
+  practiceMaterialPlans,
+  practiceMaterialTitle,
   practiceModule,
   practiceModuleName,
   practiceScheduleGroups,
   practicePanels,
+  practicePrimaryAction,
+  practiceScoreTabs,
   practiceReviewDialog,
   practiceReviewDialogRuleText,
   practiceReviewDialogTitle,
@@ -4945,7 +5475,9 @@ providePracticeContext({
   setPracticeReviewStatus,
   statusText,
   submitPracticeExecution,
+  submitPracticeMaterial,
   switchPracticePanel,
+  switchPracticeScoreView,
   textLength,
   timelineBranchContent,
   timelineBranchKey,

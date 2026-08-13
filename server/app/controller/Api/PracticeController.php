@@ -31,6 +31,27 @@ class PracticeController
         return $this->handle(fn (): array => $this->service($request)->options($request));
     }
 
+    /** 查询开课任务课程负责人和任课教师。 */
+    #[OperationLog('查询实验实训开课任务教师')]
+    public function planTeachers(Request $request): Response
+    {
+        return $this->handle(fn (): array => $this->service($request)->planTeachers($request));
+    }
+
+    /** 查询实验实训项目绑定学生。 */
+    #[OperationLog('查询实验实训项目绑定学生')]
+    public function projectStudents(Request $request): Response
+    {
+        return $this->handle(fn (): array => $this->service($request)->projectStudents($request));
+    }
+
+    /** 保存开课任务课程负责人和任课教师。 */
+    #[OperationLog('保存实验实训开课任务教师')]
+    public function savePlanTeachers(Request $request): Response
+    {
+        return $this->handle(fn (): array => $this->service($request)->savePlanTeachers($request));
+    }
+
     /** 查询课节配置。 */
     #[OperationLog('查询实验实训课节配置')]
     public function periods(Request $request): Response
@@ -167,6 +188,34 @@ class PracticeController
     public function requestExecutionModification(Request $request): Response
     {
         return $this->handle(fn (): array => $this->service($request)->requestExecutionModification($request));
+    }
+
+    /** 查询实验实训课程归档条件。 */
+    #[OperationLog('查询实验实训课程归档条件')]
+    public function archiveCheck(Request $request): Response
+    {
+        return $this->handle(fn (): array => $this->service($request)->archiveCheck($request));
+    }
+
+    /** 生成实验实训课程归档版本。 */
+    #[OperationLog('生成实验实训课程归档版本')]
+    public function archive(Request $request): Response
+    {
+        return $this->handle(fn (): array => $this->service($request)->archive($request));
+    }
+
+    /** 查询实验实训课程归档版本。 */
+    #[OperationLog('查询实验实训课程归档版本')]
+    public function archiveList(Request $request): Response
+    {
+        return $this->handle(fn (): array => $this->service($request)->archiveList($request));
+    }
+
+    /** 查看实验实训课程归档详情。 */
+    #[OperationLog('查看实验实训课程归档详情')]
+    public function archiveDetail(Request $request): Response
+    {
+        return $this->handle(fn (): array => $this->service($request)->archiveDetail($request));
     }
 
     /** 保存实验实训成绩。 */

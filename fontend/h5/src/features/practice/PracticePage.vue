@@ -24,7 +24,19 @@
     </div>
   </section>
 
+  <section v-if="isTeacherRole" class="practice-teacher-navigation">
+    <div v-for="group in teacherPanelGroups" :key="group.title">
+      <small>{{ group.title }}</small>
+      <AppScrollTabs
+        class="practice-switch"
+        :model-value="moduleState.panel"
+        :items="group.items"
+        @update:model-value="switchPracticePanel(moduleType, $event)"
+      />
+    </div>
+  </section>
   <AppScrollTabs
+    v-else
     class="practice-switch"
     :model-value="moduleState.panel"
     :items="panels"
@@ -35,12 +47,28 @@
     <header>
       <component :is="currentPanel.icon" :size="20" />
       <strong>{{ currentPanel.title }}</strong>
+      <AppButton
+        v-if="primaryAction"
+        class="practice-primary-action"
+        variant="quiet"
+        size="small"
+        @click="handlePracticePrimaryAction(moduleType)"
+      >
+        {{ primaryAction.label }}
+      </AppButton>
     </header>
+    <AppScrollTabs
+      v-if="moduleState.panel === 'scores' && scoreTabs.length > 1"
+      class="practice-score-tabs"
+      :model-value="moduleState.scoreView"
+      :items="scoreTabs"
+      @update:model-value="switchPracticeScoreView(moduleType, $event)"
+    />
     <MobileFilterSheet
       v-if="!isStudentRole"
       :select-filters="filters.filter(filter => filter.key !== 'status')"
       :status-options="filters.find(filter => filter.key === 'status')?.options || []"
-      :values="moduleState.filters[moduleState.panel]"
+      :values="moduleState.filters[currentPanel.key]"
       keyword-placeholder="标题、课程、学生、内容"
       :loading="moduleState.loading"
       @update-filter="payload => updatePracticeListFilter(moduleType, payload)"
@@ -99,6 +127,8 @@
 
   <PracticeReviewPage />
   <PracticeExecutionPage />
+  <PracticeMaterialPage />
+  <PracticeArchivePage :module-type="moduleType" />
   <PracticeTimeline />
 </template>
 
@@ -110,6 +140,8 @@ import AppButton from '../../components/ui/AppButton.vue';
 import AppListCard from '../../components/ui/AppListCard.vue';
 import AppScrollTabs from '../../components/ui/AppScrollTabs.vue';
 import PracticeExecutionPage from './PracticeExecutionPage.vue';
+import PracticeArchivePage from './PracticeArchivePage.vue';
+import PracticeMaterialPage from './PracticeMaterialPage.vue';
 import PracticeReviewPage from './PracticeReviewPage.vue';
 import PracticeTimeline from './PracticeTimeline.vue';
 import { usePracticeContext } from './practiceContext';
@@ -124,6 +156,7 @@ const {
   currentPracticeRows,
   handlePracticeAction,
   isStudentRole,
+  isTeacherRole,
   isAdminRole,
   loadMorePracticeList,
   practiceFilters,
@@ -133,6 +166,8 @@ const {
   practiceModuleName,
   practiceScheduleGroups,
   practicePanels,
+  practicePrimaryAction,
+  practiceScoreTabs,
   practiceRowActions,
   practiceRowFacts,
   practiceRowTitle,
@@ -143,6 +178,8 @@ const {
   resetPracticeListFilters,
   statusText,
   switchPracticePanel,
+  switchPracticeScoreView,
+  handlePracticePrimaryAction,
   updatePracticeListFilter,
 } = usePracticeContext();
 
@@ -154,6 +191,15 @@ const filters = computed(() => practiceFilters(props.moduleType));
 const rows = computed(() => currentPracticeRows(props.moduleType));
 const isScheduleBoard = computed(() => isAdminRole.value && currentPanel.value.key === 'schedules');
 const scheduleGroups = computed(() => practiceScheduleGroups(props.moduleType));
+const primaryAction = computed(() => practicePrimaryAction(props.moduleType));
+const scoreTabs = computed(() => practiceScoreTabs(props.moduleType));
+const teacherPanelGroups = computed(() => {
+  const preparationKeys = new Set(['plans', 'syllabus', 'lessonPlans', 'reflections', 'scores']);
+  return [
+    { title: '教学准备与提交', items: panels.value.filter(item => preparationKeys.has(item.key)) },
+    { title: '教学实施与评阅', items: panels.value.filter(item => !preparationKeys.has(item.key)) },
+  ].filter(group => group.items.length);
+});
 
 function rowSubtitle(row) {
   const value = practiceRowValue(props.moduleType, row);
@@ -166,6 +212,36 @@ function rowSubtitle(row) {
   display: grid;
   gap: 10px;
   margin-top: 12px;
+}
+
+.practice-teacher-navigation {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.practice-teacher-navigation > div {
+  min-width: 0;
+}
+
+.practice-teacher-navigation small {
+  display: block;
+  margin: 0 2px 6px;
+  color: var(--app-text-secondary);
+  font-size: 12px;
+}
+
+.practice-teacher-navigation :deep(.app-scroll-tabs),
+.practice-score-tabs {
+  margin-bottom: 0;
+}
+
+.practice-score-tabs {
+  padding: 10px 12px 0;
+}
+
+.practice-primary-action {
+  margin-left: auto;
 }
 
 .practice-schedule-groups {

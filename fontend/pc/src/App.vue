@@ -1666,14 +1666,8 @@
                         </label>
                         <label>
                           <span>项目</span>
-                          <el-select v-model="practiceModuleState(win.module.id).form.project_id" clearable filterable placeholder="请选择项目">
+                          <el-select v-model="practiceModuleState(win.module.id).form.project_id" clearable filterable placeholder="请选择项目" @change="changePracticeExecutionProject(win.module.id)">
                             <el-option v-for="project in practiceProjectOptions(win.module.id)" :key="project.id" :label="project.title || project.course_name" :value="project.id" />
-                          </el-select>
-                        </label>
-                        <label v-if="!isStudentRole">
-                          <span>学生</span>
-                          <el-select v-model="practiceModuleState(win.module.id).form.student_id" clearable filterable placeholder="请选择学生">
-                            <el-option v-for="student in practiceModuleState(win.module.id).options.students" :key="student.student_id" :label="`${student.name} / ${student.student_num}`" :value="student.student_id" />
                           </el-select>
                         </label>
                         <label v-if="win.panel === 'signIns'"><span>日期</span><input v-model="practiceModuleState(win.module.id).form.date" type="date"></label>
@@ -1686,6 +1680,10 @@
                           <span>内容</span>
                           <textarea v-model="practiceModuleState(win.module.id).form.content" rows="7" />
                         </label>
+                        <label v-if="win.panel === 'reports'" class="span-2">
+                          <span>反思小结</span>
+                          <textarea v-model="practiceModuleState(win.module.id).form.reflection_summary" rows="4" maxlength="5000" placeholder="请总结本项目的收获、问题和改进方向" />
+                        </label>
                         <label class="span-2">
                           <span>备注</span>
                           <textarea v-model="practiceModuleState(win.module.id).form.remark" rows="3" />
@@ -1695,24 +1693,73 @@
                       <div v-else-if="practiceModuleState(win.module.id).dialog.type === 'scoreProject'" class="operation-form">
                         <label>
                           <span>类别</span>
-                          <el-segmented v-model="practiceModuleState(win.module.id).form.module_type" :options="practiceWriteModuleTypeOptions" @change="handlePracticeWriteModuleTypeChange(win.module.id)" />
+                          <el-segmented v-model="practiceModuleState(win.module.id).form.module_type" :options="practiceWriteModuleTypeOptions" @change="handlePracticeScoreModuleTypeChange(win.module.id)" />
                         </label>
                         <label>
                           <span>项目</span>
-                          <el-select v-model="practiceModuleState(win.module.id).form.project_id" clearable filterable placeholder="请选择项目">
-                            <el-option v-for="project in practiceProjectOptions(win.module.id)" :key="project.id" :label="project.title || project.course_name" :value="project.id" />
+                          <el-select v-model="practiceModuleState(win.module.id).form.project_id" clearable filterable placeholder="请选择项目" @change="changePracticeScoreProject(win.module.id)">
+                            <el-option v-for="project in practiceScoreProjectOptions(win.module.id)" :key="project.id" :label="project.title || project.course_name" :value="project.id" />
                           </el-select>
                         </label>
                         <label>
                           <span>学生</span>
-                          <el-select v-model="practiceModuleState(win.module.id).form.student_id" clearable filterable placeholder="请选择学生">
-                            <el-option v-for="student in practiceModuleState(win.module.id).options.students" :key="student.student_id" :label="`${student.name} / ${student.student_num}`" :value="student.student_id" />
+                          <el-select v-model="practiceModuleState(win.module.id).form.student_id" clearable filterable placeholder="请选择学生" @change="applyPracticeScoreStudent(win.module.id)">
+                            <el-option v-for="student in practiceModuleState(win.module.id).scoreStudents" :key="student.student_id" :label="`${student.student_name} / ${student.student_num}`" :value="student.student_id" />
                           </el-select>
                         </label>
                         <label><span>考勤成绩</span><input v-model="practiceModuleState(win.module.id).form.attendance_score" type="number"></label>
                         <label><span>过程成绩</span><input v-model="practiceModuleState(win.module.id).form.material_score" type="number"></label>
                         <label><span>报告成绩</span><input v-model="practiceModuleState(win.module.id).form.report_score" type="number"></label>
                         <label><span>总评成绩</span><input v-model="practiceModuleState(win.module.id).form.score_value" type="number" placeholder="不填则按分项平均"></label>
+                      </div>
+
+                      <div v-else-if="practiceModuleState(win.module.id).dialog.type === 'planTeachers'" class="operation-form single">
+                        <p>{{ practiceModuleState(win.module.id).dialog.description }}</p>
+                        <label>
+                          <span>课程负责人</span>
+                          <el-select v-model="practiceModuleState(win.module.id).dialog.course_leader_id" filterable placeholder="请选择课程负责人">
+                            <el-option v-for="teacher in practiceModuleState(win.module.id).options.teachers" :key="teacher.teacher_id" :label="teacher.teacher_name" :value="teacher.teacher_id" />
+                          </el-select>
+                        </label>
+                        <label>
+                          <span>任课教师</span>
+                          <el-select v-model="practiceModuleState(win.module.id).dialog.teacher_ids" multiple collapse-tags collapse-tags-tooltip filterable placeholder="请选择任课教师">
+                            <el-option
+                              v-for="teacher in practiceModuleState(win.module.id).options.teachers"
+                              :key="teacher.teacher_id"
+                              :label="teacher.teacher_name"
+                              :value="teacher.teacher_id"
+                              :disabled="Number(teacher.teacher_id) === Number(practiceModuleState(win.module.id).dialog.course_leader_id)"
+                            />
+                          </el-select>
+                        </label>
+                        <small>课程负责人自动属于本课程教师，无需在任课教师中重复选择。</small>
+                      </div>
+
+                      <div v-else-if="practiceModuleState(win.module.id).dialog.type === 'archivePlan'" class="operation-form single">
+                        <p>请选择需要检查归档条件的开课任务。</p>
+                        <label>
+                          <span>开课任务</span>
+                          <el-select v-model="practiceModuleState(win.module.id).dialog.plan_id" filterable placeholder="请选择开课任务">
+                            <el-option v-for="plan in practiceArchivePlanOptions(win.module.id)" :key="plan.id" :label="plan.title || plan.course_name" :value="plan.id" />
+                          </el-select>
+                        </label>
+                      </div>
+
+                      <div v-else-if="practiceModuleState(win.module.id).dialog.type === 'archiveDetail'" class="practice-archive-detail">
+                        <section class="practice-archive-summary">
+                          <div><span>开课任务</span><strong>{{ practiceModuleState(win.module.id).dialog.archive?.plan_title || '-' }}</strong></div>
+                          <div><span>归档版本</span><strong>V{{ practiceModuleState(win.module.id).dialog.archive?.version_no || 1 }}</strong></div>
+                          <div><span>归档状态</span><strong>{{ practiceModuleState(win.module.id).dialog.archive?.status === 'archived' ? '已归档' : '已失效' }}</strong></div>
+                          <div><span>归档时间</span><strong>{{ practiceModuleState(win.module.id).dialog.archive?.created_at || '-' }}</strong></div>
+                        </section>
+                        <div class="practice-archive-materials">
+                          <article v-for="item in practiceArchiveDetailItems(win.module.id)" :key="item.key" :class="`is-${item.status}`">
+                            <span>{{ practiceArchiveStatusText(item.status) }}</span>
+                            <strong>{{ item.name }}</strong>
+                            <small>{{ item.count || 0 }} / {{ item.required_count || 0 }}</small>
+                          </article>
+                        </div>
                       </div>
 
                       <div v-else-if="practiceModuleState(win.module.id).dialog.type === 'edit'" class="operation-form">
@@ -1814,17 +1861,12 @@
                         <label v-if="win.panel === 'rooms'"><span>编号</span><input v-model="practiceModuleState(win.module.id).form.code"></label>
                         <label v-if="win.panel === 'rooms'"><span>容量</span><input v-model="practiceModuleState(win.module.id).form.capacity" type="number"></label>
                         <label v-if="win.panel === 'rooms'"><span>位置</span><input v-model="practiceModuleState(win.module.id).form.location"></label>
-                        <label v-if="win.panel === 'scores'">
-                          <span>学生</span>
-                          <el-select v-model="practiceModuleState(win.module.id).form.student_id" clearable filterable placeholder="请选择学生">
-                            <el-option v-for="student in practiceModuleState(win.module.id).options.students" :key="student.student_id" :label="`${student.name} / ${student.student_num}`" :value="student.student_id" />
-                          </el-select>
-                        </label>
-                        <label v-if="win.panel === 'scores'"><span>成绩</span><input v-model="practiceModuleState(win.module.id).form.score_value" type="number"></label>
-                        <label v-if="win.panel === 'gradeRules'" class="span-2">
-                          <span>比例配置</span>
-                          <textarea v-model="practiceModuleState(win.module.id).form.ratio_text" rows="4" placeholder="平时成绩40%，报告60%" />
-                        </label>
+                        <template v-if="win.panel === 'gradeRules'">
+                          <label><span>考勤与课堂表现（%）</span><input v-model="practiceModuleState(win.module.id).form.attendance_weight" type="number" min="0" max="100"></label>
+                          <label><span>项目实操（%）</span><input v-model="practiceModuleState(win.module.id).form.operation_weight" type="number" min="0" max="100"></label>
+                          <label><span>课程报告（%）</span><input v-model="practiceModuleState(win.module.id).form.report_weight" type="number" min="0" max="100"></label>
+                          <label><span>比例合计</span><input :value="practiceGradeRuleTotal(win.module.id) + '%'" disabled></label>
+                        </template>
                         <label v-if="practiceTextPanel(win.panel)" class="span-2">
                           <span>内容</span>
                           <textarea v-model="practiceModuleState(win.module.id).form.content" rows="8" />
@@ -1913,7 +1955,7 @@
                           <el-button :disabled="practiceModuleState(win.module.id).loading" :loading="practiceModuleState(win.module.id).loading" @click="savePracticeDialogReviewDraft(win.module.id)">保存草稿</el-button>
                           <el-button type="primary" :disabled="practiceModuleState(win.module.id).loading" :loading="practiceModuleState(win.module.id).loading" @click="confirmPracticeDialog(win.module.id)">提交审核</el-button>
                         </template>
-                        <el-button v-else-if="practiceModuleState(win.module.id).dialog.type !== 'timeline'" type="primary" :disabled="practiceModuleState(win.module.id).loading" :loading="practiceModuleState(win.module.id).loading" @click="confirmPracticeDialog(win.module.id)">
+                        <el-button v-else-if="!['timeline', 'archiveDetail'].includes(practiceModuleState(win.module.id).dialog.type)" type="primary" :disabled="practiceModuleState(win.module.id).loading" :loading="practiceModuleState(win.module.id).loading" @click="confirmPracticeDialog(win.module.id)">
                           确认
                         </el-button>
                       </footer>
@@ -1937,7 +1979,7 @@
                     <section class="practice-flow-card">
                       <header>
                         <strong>{{ win.module.name }}流程</strong>
-                        <small>按教学计划、课表、大纲、教案、成绩、反思闭环处理。</small>
+                        <small>按开课任务、教学准备、项目实施、成绩和归档闭环处理。</small>
                       </header>
                       <div>
                         <button
@@ -1950,6 +1992,37 @@
                         </button>
                       </div>
                     </section>
+                  </div>
+                  <div v-else-if="['gradeRules', 'scores'].includes(win.panel)" class="practice-score-workspace">
+                    <nav class="text-tabs practice-score-tabs" aria-label="成绩管理">
+                      <button v-if="canManagePracticeGradeRules(win.module.id)" type="button" :class="{ active: win.panel === 'gradeRules' }" @click="activateWindowPanel(win, 'gradeRules')">成绩方案</button>
+                      <button type="button" :class="{ active: win.panel === 'scores' }" @click="activateWindowPanel(win, 'scores')">成绩录入与评定</button>
+                    </nav>
+                    <DataListPanel
+                      :columns="practiceListConfig(win.module.id, win.panel).columns"
+                      :filters="practiceListConfig(win.module.id, win.panel).filters"
+                      :filter-values="practiceModuleState(win.module.id).filters[win.panel]"
+                      :loading="practiceModuleState(win.module.id).loading"
+                      :pagination="practiceModuleState(win.module.id).lists[win.panel].pagination"
+                      :rows="practiceModuleState(win.module.id).lists[win.panel].items"
+                      :storage-key="dataListStorageKey(win, win.panel)"
+                      @filter-change="event => setPracticeFilter(win.module.id, win.panel, event)"
+                      @page-change="page => loadPracticePanel(win.module.id, win.panel, page)"
+                      @reset="resetPracticeFilters(win.module.id, win.panel)"
+                      @search="loadPracticePanel(win.module.id, win.panel, 1)"
+                    >
+                      <template #toolbar>
+                        <el-button v-if="showPracticeAddButton(win.module.id, win.panel)" :icon="Plus" @click="openPracticeDialog(win.module.id, win.panel)">新增{{ win.panel === 'scores' ? '成绩' : '成绩方案' }}</el-button>
+                        <el-button :icon="RefreshCw" :loading="practiceModuleState(win.module.id).loading" @click="loadPracticePanel(win.module.id, win.panel)">刷新</el-button>
+                      </template>
+                      <template #actions="{ row }">
+                        <el-button v-if="showPracticeRowEdit(win.module.id, win.panel, row)" link type="primary" @click="openPracticeDialog(win.module.id, win.panel, row)">编辑</el-button>
+                        <el-button v-if="canReviewPracticeRow(win.module.id, win.panel, row)" link type="primary" @click="openPracticeReviewDialog(win.module.id, win.panel, row, 'accept')">通过</el-button>
+                        <el-button v-if="canReviewPracticeRow(win.module.id, win.panel, row)" link type="warning" @click="openPracticeReviewDialog(win.module.id, win.panel, row, 'modify')">退回</el-button>
+                        <el-button v-if="canReopenPracticeRow(win.module.id, win.panel, row)" link type="danger" @click="openPracticeReopenDialog(win.module.id, win.panel, row)">通过后修改</el-button>
+                        <el-button v-if="practiceReviewEntity(win.panel)" size="small" type="primary" plain @click="openPracticeTimelineDialog(win.module.id, win.panel, row)">记录</el-button>
+                      </template>
+                    </DataListPanel>
                   </div>
                   <div v-else-if="win.panel === 'schedules' && practiceModuleState(win.module.id).schedule.view === 'board'" class="practice-schedule-workspace">
                     <div class="practice-schedule-toolbar">
@@ -2009,6 +2082,25 @@
                       @today="resetPracticeScheduleWeek(win.module.id)"
                     />
                   </div>
+                  <section v-else-if="win.panel === 'archives' && practiceModuleState(win.module.id).archiveCheck" class="practice-archive-check">
+                    <header>
+                      <div>
+                        <strong>{{ practiceModuleState(win.module.id).archiveCheck.plan?.title || '归档检查' }}</strong>
+                        <small>{{ practiceArchiveCheckSummary(win.module.id) }}</small>
+                      </div>
+                      <div class="data-list-actions">
+                        <el-button @click="closePracticeArchiveCheck(win.module.id)">返回版本列表</el-button>
+                        <el-button v-if="canCreatePracticeArchive(win.module.id)" type="primary" :disabled="!practiceModuleState(win.module.id).archiveCheck.ready" :loading="practiceModuleState(win.module.id).loading" @click="confirmCreatePracticeArchive(win.module.id)">正式归档</el-button>
+                      </div>
+                    </header>
+                    <div class="practice-archive-materials">
+                      <article v-for="item in practiceModuleState(win.module.id).archiveCheck.items || []" :key="item.key" :class="`is-${item.status}`">
+                        <span>{{ practiceArchiveStatusText(item.status) }}</span>
+                        <strong>{{ item.name }}</strong>
+                        <small>{{ item.count || 0 }} / {{ item.required_count || 0 }}</small>
+                      </article>
+                    </div>
+                  </section>
                   <DataListPanel
                     v-else
                     :columns="practiceListConfig(win.module.id, win.panel).columns"
@@ -2031,6 +2123,9 @@
                       >
                         新增{{ practicePanelLabel(win.panel) }}
                       </el-button>
+                      <el-button v-if="win.panel === 'archives'" :icon="FolderOpen" @click="openPracticeArchiveCheck(win.module.id)">
+                        归档检查
+                      </el-button>
                       <el-button :icon="RefreshCw" :loading="practiceModuleState(win.module.id).loading" @click="loadPracticePanel(win.module.id, win.panel)">
                         刷新
                       </el-button>
@@ -2050,6 +2145,9 @@
                       </el-button>
                     </template>
                     <template #actions="{ row }">
+                      <el-button v-if="win.panel === 'plans' && isAdminRole" link type="primary" @click="openPracticePlanTeachers(win.module.id, row)">
+                        任课教师
+                      </el-button>
                       <el-button v-if="showPracticeRowEdit(win.module.id, win.panel, row)" link type="primary" @click="openPracticeDialog(win.module.id, win.panel, row)">
                         编辑
                       </el-button>
@@ -2064,6 +2162,9 @@
                       </el-button>
                       <el-button v-if="practiceReviewEntity(win.panel)" size="small" type="primary" plain @click="openPracticeTimelineDialog(win.module.id, win.panel, row)">
                         记录
+                      </el-button>
+                      <el-button v-if="win.panel === 'archives'" link type="primary" @click="openPracticeArchiveDetail(win.module.id, row)">
+                        查看归档
                       </el-button>
                     </template>
                   </DataListPanel>
@@ -4254,6 +4355,11 @@ import {
   fetchPracticeOverview,
   fetchPracticeExecutionList,
   fetchPracticeExecutionTimeline,
+  fetchPracticeArchiveCheck,
+  fetchPracticeArchiveDetail,
+  fetchPracticeArchives,
+  fetchPracticePlanTeachers,
+  fetchPracticeProjectStudents,
   fetchPracticeScheduleWeek,
   fetchPracticeReviewDraft,
   fetchPracticeTimeline,
@@ -4287,7 +4393,9 @@ import {
   requestInternshipModification,
   requestPracticeExecutionModification,
   requestPracticeModification,
+  createPracticeArchive,
   reviewPracticeExecution,
+  savePracticePlanTeachers,
   resetAdminAccountPassword,
   reviewPracticeItem,
   saveArchiveItem,
@@ -10450,11 +10558,15 @@ function emptyOperationDialog() {
     fields: [],
     timeline: [],
     cycles: [],
+    course_leader_id: null,
+    teacher_ids: [],
+    plan_id: null,
+    archive: null,
   };
 }
 
 function createPracticeModuleState() {
-  const panels = ['plans', 'schedules', 'projects', 'signIns', 'journals', 'reports', 'syllabus', 'lessonPlans', 'gradeRules', 'scores', 'reflections', 'rooms'];
+  const panels = ['plans', 'schedules', 'projects', 'signIns', 'journals', 'reports', 'syllabus', 'lessonPlans', 'gradeRules', 'scores', 'reflections', 'archives', 'rooms'];
   return {
     loading: false,
     message: '',
@@ -10469,6 +10581,8 @@ function createPracticeModuleState() {
       periods: [],
     },
     dialog: emptyOperationDialog(),
+    archiveCheck: null,
+    scoreStudents: [],
     filters: Object.fromEntries(panels.map(panel => [panel, emptyPracticeFilters()])),
     lists: Object.fromEntries(panels.map(panel => [panel, emptyPagedList()])),
   };
@@ -10501,6 +10615,8 @@ function emptyPracticeOptions() {
     schedules: [],
     review_rules: {},
     periods: [],
+    current_teacher_id: null,
+    current_student_id: null,
   };
 }
 
@@ -10522,6 +10638,7 @@ function emptyPracticeFilters() {
 }
 
 function emptyPracticeForm(row = {}) {
+  const ratio = row.ratio_json && typeof row.ratio_json === 'object' && !Array.isArray(row.ratio_json) ? row.ratio_json : {};
   return {
     module_type: row.module_type || 'training',
     id: row.id || null,
@@ -10554,6 +10671,10 @@ function emptyPracticeForm(row = {}) {
     student_id: row.student_id || null,
     score_value: row.score_value || '',
     ratio_text: practiceRatioText(row.ratio_json),
+    attendance_weight: ratio.attendance_weight ?? 20,
+    operation_weight: ratio.operation_weight ?? 70,
+    report_weight: ratio.report_weight ?? 10,
+    ratio_projects: Array.isArray(ratio.projects) ? ratio.projects : [],
     content: row.content || '',
     remark: row.remark || '',
     status: row.status || 'wait',
@@ -10568,6 +10689,7 @@ function emptyPracticeExecutionForm(row = {}) {
     title: row.title || '',
     date: row.date || '',
     content: row.content || '',
+    reflection_summary: row.reflection_summary || '',
     location: row.location || '',
     longitude: row.longitude || '',
     latitude: row.latitude || '',
@@ -10689,24 +10811,28 @@ function dateText(date) {
 function practiceSidebarItems() {
   const items = [
     { key: 'overview', name: '总览', icon: ChartColumn },
-    { key: 'plans', name: '教学计划', icon: FileText },
+    { key: 'plans', name: isStudentRole.value ? '我的课程' : '开课任务', icon: FileText, group: '教学准备与提交' },
     { key: 'schedules', name: '课表安排', icon: CalendarCheck },
-    { key: 'projects', name: '项目发布', icon: Workflow },
-    { key: 'signIns', name: '签到记录', icon: MapPin },
-    { key: 'journals', name: '过程日志', icon: FileClock },
-    { key: 'reports', name: '总结报告', icon: FileText },
-    { key: 'syllabus', name: '大纲编写', icon: BookOpen },
-    { key: 'lessonPlans', name: '教案编写', icon: FileText },
-    { key: 'gradeRules', name: '成绩比例', icon: SlidersHorizontal },
-    { key: 'scores', name: '成绩评定', icon: GraduationCap },
-    { key: 'reflections', name: '反思报告', icon: FileClock },
+    { key: 'projects', name: isStudentRole.value ? '我的项目' : '项目与任务', icon: Workflow, group: '教学实施与评阅' },
+    { key: 'signIns', name: '签到记录', icon: MapPin, group: '教学实施与评阅' },
+    { key: 'journals', name: '历史过程记录', icon: FileClock, group: '教学实施与评阅' },
+    { key: 'reports', name: isStudentRole.value ? '项目报告' : '项目报告评阅', icon: FileText, group: '教学实施与评阅' },
+    { key: 'syllabus', name: '课程大纲', icon: BookOpen, group: '教学准备与提交' },
+    { key: 'lessonPlans', name: '教案编写', icon: FileText, group: '教学准备与提交' },
+    { key: 'scores', name: '成绩管理', icon: GraduationCap, group: '教学实施与评阅' },
+    { key: 'reflections', name: '课程教学反思', icon: FileClock, group: '教学准备与提交' },
+    { key: 'archives', name: '归档中心', icon: FolderOpen, group: '教学实施与评阅' },
     { key: 'rooms', name: '场地管理', icon: Building2 },
   ];
   if (isStudentRole.value) {
-    return items.filter(item => ['overview', 'projects', 'signIns', 'journals', 'reports', 'scores'].includes(item.key));
+    return items.filter(item => ['plans', 'reports', 'signIns', 'scores'].includes(item.key));
   }
   if (isTeacherRole.value) {
-    return items.filter(item => item.key !== 'rooms');
+    const hidden = ['journals', 'schedules', 'rooms'];
+    if (!canManagePracticeGradeRules('practice')) {
+      hidden.push('syllabus');
+    }
+    return items.filter(item => !hidden.includes(item.key));
   }
   return items;
 }
@@ -10732,7 +10858,7 @@ function practicePanelEntity(panel) {
     scores: 'score',
     reflections: 'reflection',
     rooms: 'room',
-  }[panel] || 'plan';
+  }[panel] || '';
 }
 
 function practiceExecutionType(panel) {
@@ -10751,6 +10877,7 @@ function practiceReviewEntity(panel) {
     syllabus: 'syllabus',
     lessonPlans: 'lessonPlan',
     reflections: 'reflection',
+    scores: 'score',
   }[panel] || '';
 }
 
@@ -10786,7 +10913,28 @@ function isPracticeExecutionPanel(panel) {
 }
 
 function practicePanelLabel(panel) {
+  if (panel === 'gradeRules') {
+    return '成绩方案';
+  }
   return practiceSidebarItems().find(item => item.key === panel)?.name || '数据';
+}
+
+function currentPracticeTeacherId(module) {
+  return Number(practiceModuleState(module).options.current_teacher_id || 0);
+}
+
+function canManagePracticeGradeRules(module) {
+  if (isAdminRole.value) {
+    return true;
+  }
+  const teacherId = currentPracticeTeacherId(module);
+  return isTeacherRole.value && teacherId > 0 && (practiceModuleState(module).options.plans || [])
+    .some(plan => Number(plan.course_leader_id || 0) === teacherId);
+}
+
+function practiceGradeRuleTotal(module) {
+  const form = practiceModuleState(module).form;
+  return Number(form.attendance_weight || 0) + Number(form.operation_weight || 0) + Number(form.report_weight || 0);
 }
 
 function practiceNeedsPlan(panel) {
@@ -10798,11 +10946,24 @@ function practiceTextPanel(panel) {
 }
 
 function showPracticeAddButton(module, panel) {
-  if (panel === 'overview') {
+  if (['overview', 'archives'].includes(panel)) {
     return false;
   }
   if (panel === 'scores') {
     return canManagePractice(module) || canApprovePractice(module);
+  }
+  if (panel === 'gradeRules' || panel === 'syllabus') {
+    return canManagePracticeGradeRules(module) && canManagePractice(module);
+  }
+  if (isTeacherRole.value && ['plans', 'schedules', 'rooms'].includes(panel)) {
+    return false;
+  }
+  if (isTeacherRole.value && panel === 'lessonPlans') {
+    return Number(row?.submitter_id || 0) === Number(permissionState.context.account_id || 0)
+      && ['draft', 'modify'].includes(row?.status || '');
+  }
+  if (isTeacherRole.value && ['projects', 'reflections'].includes(panel)) {
+    return canManagePracticeGradeRules(module) && canManagePractice(module);
   }
   if (panel === 'signIns') {
     return isStudentRole.value;
@@ -10820,6 +10981,21 @@ function showPracticeRowEdit(module, panel, row) {
   if (['journals', 'reports'].includes(panel)) {
     return isStudentRole.value && ['draft', 'modify'].includes(row?.status || '');
   }
+  if (isTeacherRole.value && panel === 'scores') {
+    return Number(row?.teacher_id || 0) === currentPracticeTeacherId(module)
+      && ['draft', 'modify'].includes(row?.status || '');
+  }
+  if (isTeacherRole.value && ['plans', 'schedules', 'rooms'].includes(panel)) {
+    return false;
+  }
+  if (isTeacherRole.value && ['projects', 'syllabus', 'gradeRules', 'reflections'].includes(panel)) {
+    const teacherId = currentPracticeTeacherId(module);
+    const plan = (practiceModuleState(module).options.plans || [])
+      .find(item => Number(item.id) === Number(panel === 'plans' ? row?.id : row?.plan_id || 0));
+    return teacherId > 0
+      && Number(plan?.course_leader_id || 0) === teacherId
+      && (!practiceReviewEntity(panel) || ['draft', 'modify'].includes(row?.status || ''));
+  }
   if (practiceReviewEntity(panel)) {
     return canManagePractice(module) && ['draft', 'modify'].includes(row?.status || '');
   }
@@ -10829,16 +11005,16 @@ function showPracticeRowEdit(module, panel, row) {
 function practiceOverviewCards(module) {
   const overview = practiceModuleState(module).overview;
   return [
-    { name: '待审计划', value: overview.plans_waiting || 0, theme: 'primary', icon: FileText, panel: 'plans' },
+    { name: '待审开课任务', value: overview.plans_waiting || 0, theme: 'primary', icon: FileText, panel: 'plans' },
     { name: '课表安排', value: overview.schedules || 0, theme: 'green', icon: CalendarCheck, panel: 'schedules' },
-    { name: '项目发布', value: overview.projects || 0, theme: 'primary', icon: Workflow, panel: 'projects' },
+    { name: '项目与任务', value: overview.projects || 0, theme: 'primary', icon: Workflow, panel: 'projects' },
     { name: '签到记录', value: practiceModuleState(module).lists.signIns.pagination.total || 0, theme: 'green', icon: MapPin, panel: 'signIns' },
-    { name: '过程日志', value: practiceModuleState(module).lists.journals.pagination.total || 0, theme: 'teal', icon: FileClock, panel: 'journals' },
-    { name: '总结报告', value: practiceModuleState(module).lists.reports.pagination.total || 0, theme: 'primary', icon: FileText, panel: 'reports' },
+    { name: '项目报告', value: practiceModuleState(module).lists.reports.pagination.total || 0, theme: 'primary', icon: FileText, panel: 'reports' },
     { name: '待审大纲', value: overview.syllabus_waiting || 0, theme: 'teal', icon: BookOpen, panel: 'syllabus' },
     { name: '待审教案', value: overview.lesson_plans_waiting || 0, theme: 'amber', icon: FileText, panel: 'lessonPlans' },
     { name: '成绩记录', value: overview.scores_submitted || 0, theme: 'primary', icon: GraduationCap, panel: 'scores' },
-    { name: '待审反思', value: overview.reflections_waiting || 0, theme: 'teal', icon: FileClock, panel: 'reflections' },
+    { name: '待审课程反思', value: overview.reflections_waiting || 0, theme: 'teal', icon: FileClock, panel: 'reflections' },
+    { name: '归档版本', value: practiceModuleState(module).lists.archives.pagination.total || 0, theme: 'amber', icon: FolderOpen, panel: 'archives' },
     { name: '今日课表', value: overview.today_schedules || 0, theme: 'green', icon: MapPin, panel: 'schedules' },
   ];
 }
@@ -10850,9 +11026,6 @@ function practiceStatusUsesSwitch(panel) {
 function practiceDefaultStatus(panel) {
   if (practiceReviewEntity(panel)) {
     return 'draft';
-  }
-  if (panel === 'scores') {
-    return 'accept';
   }
   return 'enabled';
 }
@@ -10879,14 +11052,17 @@ function practiceListConfig(module, panel) {
       ? ['module_type', 'grade_id', 'dep_id', 'profession_id', 'class_id', 'plan_id', 'project_id', 'status', 'date', 'keyword']
       : panel === 'scores'
         ? ['module_type', 'grade_id', 'dep_id', 'profession_id', 'plan_id', 'keyword']
+        : panel === 'archives'
+          ? ['module_type', 'grade_id', 'dep_id', 'profession_id', 'plan_id', 'status', 'keyword']
         : commonFilters);
   const columns = {
     plans: [
-      { prop: 'title', label: '计划标题', minWidth: 180 },
+      { prop: 'title', label: '开课任务', minWidth: 180 },
       { prop: 'grade_name', label: '年级', width: 100 },
       { prop: 'dep_name', label: '学院', minWidth: 140 },
       { prop: 'profession_name', label: '专业', minWidth: 140 },
-      { prop: 'teacher_name', label: '任课教师', width: 120 },
+      { prop: 'course_leader_name', label: '课程负责人', width: 120 },
+      { prop: 'related_teacher_count', label: '任课教师数', width: 105 },
       { key: 'source_type', label: '来源', width: 100, formatter: row => practiceSourceText(row.source_type) },
       { prop: 'status', label: '状态', width: 90, tag: true, tagType: row => statusTagType(row.status), formatter: row => statusText(row.status) },
       { prop: 'created_at', label: '创建时间', width: 168 },
@@ -10933,11 +11109,12 @@ function practiceListConfig(module, panel) {
       { prop: 'created_at', label: '提交时间', width: 168 },
     ],
     reports: [
-      { prop: 'title', label: '报告标题', minWidth: 180 },
+      { prop: 'title', label: '项目报告', minWidth: 180 },
       { prop: 'student_name', label: '学生', width: 110 },
       { prop: 'student_num', label: '学号', width: 130 },
       { prop: 'project_title', label: '项目', minWidth: 180 },
       { prop: 'content', label: '内容', minWidth: 240 },
+      { prop: 'reflection_summary', label: '反思小结', minWidth: 220 },
       { prop: 'submitted_at', label: '提交时间', width: 168 },
       { prop: 'status', label: '状态', width: 90, tag: true, tagType: row => statusTagType(row.status), formatter: row => statusText(row.status) },
     ],
@@ -10959,7 +11136,16 @@ function practiceListConfig(module, panel) {
       { prop: 'teacher_name', label: '评分教师', width: 120 },
       { prop: 'status', label: '状态', width: 90, tag: true, tagType: row => statusTagType(row.status), formatter: row => statusText(row.status) },
     ],
-    reflections: practiceDocumentColumns('反思报告'),
+    reflections: practiceDocumentColumns('课程教学反思'),
+    archives: [
+      { prop: 'plan_title', label: '开课任务', minWidth: 180 },
+      { prop: 'version_no', label: '版本', width: 82, formatter: row => `V${row.version_no || 1}` },
+      { prop: 'grade_name', label: '年级', width: 100 },
+      { prop: 'dep_name', label: '学院', minWidth: 130 },
+      { prop: 'profession_name', label: '专业', minWidth: 140 },
+      { prop: 'status', label: '状态', width: 100, tag: true, tagType: row => statusTagType(row.status), formatter: row => row.status === 'archived' ? '已归档' : '已失效' },
+      { prop: 'created_at', label: '归档时间', width: 168 },
+    ],
     rooms: [
       { prop: 'name', label: '场地名称', minWidth: 180 },
       { prop: 'code', label: '编号', width: 120 },
@@ -11150,7 +11336,11 @@ function practiceClassOptions(module) {
 function practicePlanOptions(module, panel) {
   const state = practiceModuleState(module);
   const planKeys = panel === 'schedules' ? ['grade_id', 'dep_id', 'profession_id'] : ['grade_id', 'dep_id', 'profession_id', 'class_id'];
-  const plans = filterAcademicItems(practiceItemsByModuleType(state.options.plans, state.form.module_type), state.form, planKeys);
+  let plans = filterAcademicItems(practiceItemsByModuleType(state.options.plans, state.form.module_type), state.form, planKeys);
+  if (isTeacherRole.value && ['projects', 'syllabus', 'gradeRules', 'reflections'].includes(panel)) {
+    const teacherId = currentPracticeTeacherId(module);
+    plans = plans.filter(item => Number(item.course_leader_id || 0) === teacherId);
+  }
   if (panel === 'schedules') {
     return plans.filter(item => ['accept', 'enabled'].includes(String(item.status || '')));
   }
@@ -11178,6 +11368,73 @@ function practiceProjectOptions(module) {
   return practiceItemsByModuleType(state.options.projects || [], state.form.module_type);
 }
 
+function practiceScoreProjectOptions(module) {
+  const state = practiceModuleState(module);
+  const projects = practiceProjectOptions(module);
+  if (!isTeacherRole.value) {
+    return projects;
+  }
+  const teacherId = currentPracticeTeacherId(module);
+  return projects.filter(project => Number(project.teacher_id || 0) === teacherId);
+}
+
+function changePracticeExecutionProject(module) {
+  const state = practiceModuleState(module);
+  const project = practiceProjectOptions(module).find(item => Number(item.id) === Number(state.form.project_id || 0));
+  if (project?.module_type) {
+    state.form.module_type = project.module_type;
+  }
+}
+
+async function changePracticeScoreProject(module) {
+  const state = practiceModuleState(module);
+  const project = practiceScoreProjectOptions(module).find(item => Number(item.id) === Number(state.form.project_id || 0));
+  state.scoreStudents = [];
+  if (!project) {
+    state.form.student_id = null;
+    return;
+  }
+  state.form.module_type = project.module_type;
+  try {
+    const data = await fetchPracticeProjectStudents(project.module_type, project.id);
+    state.scoreStudents = data.items || [];
+    if (!state.scoreStudents.some(item => Number(item.student_id) === Number(state.form.student_id || 0))) {
+      state.form.student_id = state.scoreStudents[0]?.student_id || null;
+    }
+    applyPracticeScoreStudent(module);
+  } catch (error) {
+    state.message = error.message;
+  }
+}
+
+function applyPracticeScoreStudent(module) {
+  const state = practiceModuleState(module);
+  const student = state.scoreStudents.find(item => Number(item.student_id) === Number(state.form.student_id || 0));
+  const items = student?.score_items && typeof student.score_items === 'object' ? student.score_items : {};
+  state.form.id = student?.score_id || null;
+  state.form.attendance_score = items.attendance_score ?? '';
+  state.form.material_score = items.material_score ?? '';
+  state.form.report_score = items.report_score ?? '';
+  state.form.score_value = student?.score_value ?? '';
+}
+
+function practiceArchivePlanOptions(module) {
+  const state = practiceModuleState(module);
+  const filters = state.filters.archives || {};
+  return (state.options.plans || []).filter((plan) => {
+    const matchesModule = !filters.module_type || filters.module_type === 'all' || plan.module_type === filters.module_type;
+    const matchesGrade = !filters.grade_id || sameFilterValue(plan.grade_id, filters.grade_id);
+    const matchesDepartment = !filters.dep_id || sameFilterValue(plan.dep_id, filters.dep_id);
+    const matchesProfession = !filters.profession_id || sameFilterValue(plan.profession_id, filters.profession_id);
+    return matchesModule && matchesGrade && matchesDepartment && matchesProfession
+      && ['accept', 'enabled'].includes(String(plan.status || ''));
+  });
+}
+
+function practiceArchiveDetailItems(module) {
+  return practiceModuleState(module).dialog.archive?.snapshot_json?.items || [];
+}
+
 function practiceItemsByModuleType(items, moduleType) {
   return (items || []).filter(item => !item.module_type || item.module_type === moduleType);
 }
@@ -11196,6 +11453,15 @@ function handlePracticeWriteModuleTypeChange(module) {
   if (!practiceProjectOptions(module).some(item => Number(item.id) === Number(state.form.project_id || 0))) {
     state.form.project_id = null;
   }
+}
+
+async function handlePracticeScoreModuleTypeChange(module) {
+  const state = practiceModuleState(module);
+  handlePracticeWriteModuleTypeChange(module);
+  state.scoreStudents = [];
+  state.form.student_id = null;
+  state.form.project_id = practiceScoreProjectOptions(module)[0]?.id || null;
+  await changePracticeScoreProject(module);
 }
 
 function practiceScheduleLabel(schedule) {
@@ -11242,6 +11508,9 @@ function validatePracticeForm(module, panel, form) {
     if (!form.profession_id) {
       return '请选择专业';
     }
+  }
+  if (panel === 'gradeRules' && practiceGradeRuleTotal(module) !== 100) {
+    return '成绩比例合计必须为 100%';
   }
   if (panel !== 'schedules') {
     if (panel === 'projects') {
@@ -11291,10 +11560,13 @@ function practiceQueryParams(module, panel, page = 1) {
   const state = practiceModuleState(module);
   const filters = state.filters[panel] || {};
   const params = {
-    entity: practicePanelEntity(panel),
     page,
     page_size: state.lists[panel]?.pagination.page_size || 20,
   };
+  const entity = practicePanelEntity(panel);
+  if (entity) {
+    params.entity = entity;
+  }
   Object.entries(filters).forEach(([key, value]) => {
     if (value !== '' && value !== null && value !== undefined) {
       params[key] = value;
@@ -11361,7 +11633,9 @@ async function loadPracticePanel(module, panel = 'overview', page = 1) {
     if (panel === 'schedules' && state.schedule.view === 'board') {
       await loadPracticeScheduleWeek(module);
     } else if (panel !== 'overview') {
-      const data = isPracticeExecutionPanel(panel)
+      const data = panel === 'archives'
+        ? await fetchPracticeArchives(practiceRequestModuleType(module, state.filters[panel].module_type), practiceQueryParams(module, panel, page))
+        : isPracticeExecutionPanel(panel)
         ? await fetchPracticeExecutionList(practiceRequestModuleType(module, state.filters[panel].module_type), practiceExecutionType(panel), practiceExecutionQueryParams(module, panel, page))
         : await fetchPracticeList(practiceRequestModuleType(module, state.filters[panel].module_type), practiceQueryParams(module, panel, page));
       state.lists[panel].items = data.items || [];
@@ -11398,27 +11672,27 @@ async function exportPracticeScheduleList(module) {
   }
 }
 
-function openPracticeDialog(module, panel, row = null) {
+async function openPracticeDialog(module, panel, row = null) {
   const state = practiceModuleState(module);
   state.form = panel === 'scores'
     ? emptyPracticeExecutionForm(row || {})
     : isPracticeExecutionPanel(panel)
     ? emptyPracticeExecutionForm(row || {})
     : emptyPracticeForm(row || {});
+  state.form.module_type = row?.module_type || row?.entity_type || practiceWriteModuleType(state.module_type);
   if (!row) {
     if (isPracticeExecutionPanel(panel) || panel === 'scores') {
-      state.form.project_id = state.options.projects[0]?.id || null;
+      state.form.project_id = (panel === 'scores' ? practiceScoreProjectOptions(module) : practiceProjectOptions(module))[0]?.id || null;
     } else {
       const defaults = organizationScopeDefaults(state.options);
       state.form.grade_id = defaults.grade_id || currentGradeId(state.options) || null;
       state.form.dep_id = defaults.dep_id || state.options.departments[0]?.dep_id || null;
       state.form.profession_id = defaults.profession_id || null;
       state.form.class_id = defaults.class_id || null;
-      state.form.plan_id = practiceNeedsPlan(panel) ? state.options.plans[0]?.id || null : null;
+      state.form.plan_id = practiceNeedsPlan(panel) ? practicePlanOptions(module, panel)[0]?.id || null : null;
       state.form.status = practiceDefaultStatus(panel);
     }
   }
-  state.form.module_type = row?.module_type || practiceWriteModuleType(state.module_type);
   state.dialog = {
     ...emptyOperationDialog(),
     type: panel === 'scores' ? 'scoreProject' : (isPracticeExecutionPanel(panel) ? 'execution' : 'edit'),
@@ -11427,6 +11701,9 @@ function openPracticeDialog(module, panel, row = null) {
     panel,
     row,
   };
+  if (panel === 'scores') {
+    await changePracticeScoreProject(module);
+  }
 }
 
 function closePracticeDialog(module) {
@@ -11443,7 +11720,15 @@ async function confirmPracticeDialog(module) {
     return;
   }
   if (state.dialog.type === 'scoreProject') {
-    await savePracticeProjectScoreDialog(module);
+    await savePracticeProjectScoreDialog(module, 'wait');
+    return;
+  }
+  if (state.dialog.type === 'planTeachers') {
+    await savePracticePlanTeacherDialog(module);
+    return;
+  }
+  if (state.dialog.type === 'archivePlan') {
+    await loadPracticeArchiveCheck(module);
     return;
   }
   if (state.dialog.type === 'edit') {
@@ -11471,6 +11756,9 @@ async function confirmPracticeDialog(module) {
 
 function practiceDialogUsesWorkflowButtons(module) {
   const state = practiceModuleState(module);
+  if (state.dialog.type === 'scoreProject') {
+    return true;
+  }
   if (state.dialog.type === 'execution') {
     return Boolean(practiceReviewEntity(state.dialog.panel));
   }
@@ -11487,6 +11775,10 @@ async function submitPracticeWorkflowDialog(module, status) {
   }
   if (state.dialog.type === 'execution') {
     await savePracticeExecutionDialog(module, status);
+    return;
+  }
+  if (state.dialog.type === 'scoreProject') {
+    await savePracticeProjectScoreDialog(module, status);
     return;
   }
   state.form.status = status;
@@ -11527,6 +11819,10 @@ async function savePracticeExecutionDialog(module, workflowStatus = 'wait') {
     state.message = '请填写内容';
     return;
   }
+  if (execution === 'report' && workflowStatus === 'wait' && !String(state.form.reflection_summary || '').trim()) {
+    state.message = '提交审核前请填写反思小结';
+    return;
+  }
   state.loading = true;
   state.message = '';
   try {
@@ -11537,6 +11833,7 @@ async function savePracticeExecutionDialog(module, workflowStatus = 'wait') {
       title: state.form.title,
       date: state.form.date,
       content: state.form.content,
+      reflection_summary: state.form.reflection_summary,
       location: state.form.location,
       longitude: state.form.longitude,
       latitude: state.form.latitude,
@@ -11552,7 +11849,7 @@ async function savePracticeExecutionDialog(module, workflowStatus = 'wait') {
   }
 }
 
-async function savePracticeProjectScoreDialog(module) {
+async function savePracticeProjectScoreDialog(module, workflowStatus = 'wait') {
   const state = practiceModuleState(module);
   if (!state.form.project_id || !state.form.student_id) {
     state.message = '请选择项目和学生';
@@ -11572,7 +11869,7 @@ async function savePracticeProjectScoreDialog(module) {
       material_score: state.form.material_score,
       report_score: state.form.report_score,
       score_value: state.form.score_value,
-      status: 'accept',
+      status: workflowStatus,
     });
     closePracticeDialog(module);
     await loadPracticePanel(module, 'scores', state.lists.scores?.pagination.page || 1);
@@ -11591,12 +11888,185 @@ function currentPracticeDialogPanel(module) {
   return Object.keys(state.lists).find(panel => practicePanelEntity(panel) === state.dialog.entity) || 'plans';
 }
 
+async function openPracticePlanTeachers(module, row) {
+  const state = practiceModuleState(module);
+  if (!row?.id || state.loading) {
+    return;
+  }
+  state.dialog = {
+    ...emptyOperationDialog(),
+    type: 'planTeachers',
+    title: '维护课程教师',
+    description: row.title || row.course_name || `开课任务 ${row.id}`,
+    row,
+    plan_id: row.id,
+  };
+  state.loading = true;
+  state.message = '';
+  try {
+    const data = await fetchPracticePlanTeachers(practiceWriteModuleType(row.module_type), row.id);
+    const teachers = data.teachers || [];
+    const leader = teachers.find(item => item.teacher_role === 'leader');
+    state.dialog.course_leader_id = leader?.teacher_id || row.course_leader_id || null;
+    state.dialog.teacher_ids = teachers
+      .filter(item => item.teacher_role !== 'leader')
+      .map(item => item.teacher_id);
+  } catch (error) {
+    state.message = error.message;
+    closePracticeDialog(module);
+  } finally {
+    state.loading = false;
+  }
+}
+
+async function savePracticePlanTeacherDialog(module) {
+  const state = practiceModuleState(module);
+  const { row, plan_id: planId, course_leader_id: leaderId } = state.dialog;
+  if (!planId || !leaderId) {
+    state.message = '请选择课程负责人';
+    return;
+  }
+  const teacherIds = [...new Set((state.dialog.teacher_ids || [])
+    .map(Number)
+    .filter(teacherId => teacherId > 0 && teacherId !== Number(leaderId)))];
+  state.loading = true;
+  state.message = '';
+  try {
+    await savePracticePlanTeachers(practiceWriteModuleType(row?.module_type), {
+      plan_id: planId,
+      course_leader_id: leaderId,
+      teacher_ids: teacherIds,
+    });
+    closePracticeDialog(module);
+    await loadPracticePanel(module, 'plans', state.lists.plans.pagination.page || 1);
+    ElMessage.success('课程教师已更新');
+  } catch (error) {
+    state.message = error.message;
+  } finally {
+    state.loading = false;
+  }
+}
+
+function openPracticeArchiveCheck(module) {
+  const state = practiceModuleState(module);
+  state.archiveCheck = null;
+  state.dialog = {
+    ...emptyOperationDialog(),
+    type: 'archivePlan',
+    title: '归档检查',
+    plan_id: practiceArchivePlanOptions(module)[0]?.id || null,
+  };
+}
+
+async function loadPracticeArchiveCheck(module) {
+  const state = practiceModuleState(module);
+  const planId = Number(state.dialog.plan_id || 0);
+  const plan = practiceArchivePlanOptions(module).find(item => Number(item.id) === planId);
+  if (!plan) {
+    state.message = '请选择可归档的开课任务';
+    return;
+  }
+  state.loading = true;
+  state.message = '';
+  try {
+    state.archiveCheck = await fetchPracticeArchiveCheck(practiceWriteModuleType(plan.module_type), planId);
+    closePracticeDialog(module);
+  } catch (error) {
+    state.message = error.message;
+  } finally {
+    state.loading = false;
+  }
+}
+
+function closePracticeArchiveCheck(module) {
+  practiceModuleState(module).archiveCheck = null;
+}
+
+function practiceArchiveStatusText(status) {
+  return {
+    accepted: '已完成',
+    pending: '待审核',
+    modify: '需修改',
+    missing: '未提交',
+  }[status] || '未知';
+}
+
+function practiceArchiveCheckSummary(module) {
+  const check = practiceModuleState(module).archiveCheck;
+  if (!check) {
+    return '';
+  }
+  if (check.ready) {
+    return '必交材料已齐全且审核通过，可以正式归档';
+  }
+  return `缺少 ${check.missing_items?.length || 0} 项，待处理 ${check.pending_items?.length || 0} 项`;
+}
+
+function canCreatePracticeArchive(module) {
+  if (!canManagePractice(module)) {
+    return false;
+  }
+  if (isAdminRole.value) {
+    return true;
+  }
+  const planId = Number(practiceModuleState(module).archiveCheck?.plan?.id || 0);
+  const plan = (practiceModuleState(module).options.plans || []).find(item => Number(item.id) === planId);
+  return isTeacherRole.value && Number(plan?.course_leader_id || 0) === currentPracticeTeacherId(module);
+}
+
+async function confirmCreatePracticeArchive(module) {
+  const state = practiceModuleState(module);
+  const check = state.archiveCheck;
+  const planId = Number(check?.plan?.id || 0);
+  if (!check?.ready || !planId || state.loading) {
+    return;
+  }
+  if (!window.confirm(`确认归档开课任务「${check.plan.title || check.plan.course_name || planId}」？归档后将生成只读版本快照。`)) {
+    return;
+  }
+  state.loading = true;
+  state.message = '';
+  try {
+    await createPracticeArchive(practiceWriteModuleType(check.plan.module_type), planId);
+    state.archiveCheck = null;
+    await loadPracticePanel(module, 'archives', 1);
+    ElMessage.success('归档版本已生成');
+  } catch (error) {
+    state.message = error.message;
+  } finally {
+    state.loading = false;
+  }
+}
+
+async function openPracticeArchiveDetail(module, row) {
+  const state = practiceModuleState(module);
+  if (!row?.id || state.loading) {
+    return;
+  }
+  state.dialog = {
+    ...emptyOperationDialog(),
+    type: 'archiveDetail',
+    title: '归档版本详情',
+    archive: row,
+  };
+  state.loading = true;
+  state.message = '';
+  try {
+    state.dialog.archive = await fetchPracticeArchiveDetail(practiceWriteModuleType(row.module_type), row.id);
+  } catch (error) {
+    state.message = error.message;
+    closePracticeDialog(module);
+  } finally {
+    state.loading = false;
+  }
+}
+
 async function savePractice(module, workflowStatus = null) {
   const state = practiceModuleState(module);
   if (state.loading) {
     return;
   }
-  const panel = practiceSidebarItems().find(item => practicePanelEntity(item.key) === state.dialog.entity)?.key || 'plans';
+  const panel = currentPracticeDialogPanel(module);
   const error = validatePracticeForm(module, panel, state.form);
   if (error) {
     state.message = error;
@@ -11606,7 +12076,12 @@ async function savePractice(module, workflowStatus = null) {
     ...state.form,
     entity: state.dialog.entity,
     status: workflowStatus || state.form.status,
-    ratio_json: ratioTextToJson(state.form.ratio_text),
+    ratio_json: panel === 'gradeRules' ? {
+      attendance_weight: Number(state.form.attendance_weight || 0),
+      operation_weight: Number(state.form.operation_weight || 0),
+      report_weight: Number(state.form.report_weight || 0),
+      projects: state.form.ratio_projects || [],
+    } : ratioTextToJson(state.form.ratio_text),
   };
   state.loading = true;
   state.message = '';
@@ -11634,11 +12109,31 @@ function ratioTextToJson(value) {
 }
 
 function canReviewPracticeRow(module, panel, row) {
-  return Boolean(row && row.status === 'wait' && practiceReviewEntity(panel) && canApprovePractice(module));
+  return Boolean(row && row.status === 'wait' && practiceReviewEntity(panel) && canApprovePracticeRow(module, panel, row));
 }
 
 function canReopenPracticeRow(module, panel, row) {
-  return Boolean(row && row.status === 'accept' && practiceReviewEntity(panel) && canApprovePractice(module));
+  return Boolean(row && row.status === 'accept' && practiceReviewEntity(panel) && canApprovePracticeRow(module, panel, row));
+}
+
+function canApprovePracticeRow(module, panel, row) {
+  if (!canApprovePractice(module)) {
+    return false;
+  }
+  if (!isTeacherRole.value) {
+    return true;
+  }
+  if (isPracticeExecutionPanel(panel)) {
+    return true;
+  }
+  if (panel !== 'scores') {
+    return false;
+  }
+
+  const teacherId = currentPracticeTeacherId(module);
+  const plan = (practiceModuleState(module).options.plans || [])
+    .find(item => Number(item.id) === Number(row?.plan_id || 0));
+  return teacherId > 0 && Number(plan?.course_leader_id || 0) === teacherId;
 }
 
 async function openPracticeReviewDialog(module, panel, row, status) {

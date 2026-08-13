@@ -926,6 +926,20 @@ export function fetchPracticeOptions(moduleType = 'all') {
   return request(`/practice/options?${new URLSearchParams({ module_type: moduleType })}`);
 }
 
+export function fetchPracticePlanTeachers(moduleType, planId) {
+  const query = new URLSearchParams({ module_type: moduleType, plan_id: planId }).toString();
+  return request(`/practice/plan-teachers?${query}`);
+}
+
+export function fetchPracticeProjectStudents(moduleType, projectId) {
+  const query = new URLSearchParams({ module_type: moduleType, project_id: projectId }).toString();
+  return request(`/practice/project-students?${query}`);
+}
+
+export function savePracticePlanTeachers(moduleType, payload) {
+  return practicePost(moduleType, 'save-plan-teachers', payload);
+}
+
 export function fetchPracticeList(moduleType, params = {}) {
   return practiceList(moduleType, params);
 }
@@ -991,6 +1005,25 @@ export function savePracticeProjectScore(module, payload) {
 export function fetchPracticeExecutionTimeline(module, params = {}) {
   const query = new URLSearchParams({ ...params, module_type: module }).toString();
   return request(`/practice/execution-timeline?${query}`);
+}
+
+export function fetchPracticeArchiveCheck(moduleType, planId) {
+  const query = new URLSearchParams({ module_type: moduleType, plan_id: planId }).toString();
+  return request(`/practice/archive-check?${query}`);
+}
+
+export function createPracticeArchive(moduleType, planId) {
+  return practicePost(moduleType, 'archive', { plan_id: planId });
+}
+
+export function fetchPracticeArchives(moduleType, params = {}) {
+  const query = new URLSearchParams({ ...params, module_type: moduleType }).toString();
+  return request(`/practice/archive-list?${query}`);
+}
+
+export function fetchPracticeArchiveDetail(moduleType, id) {
+  const query = new URLSearchParams({ module_type: moduleType, id }).toString();
+  return request(`/practice/archive-detail?${query}`);
 }
 
 export function fetchPracticePeriods(params = {}) {

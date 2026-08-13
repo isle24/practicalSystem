@@ -409,6 +409,18 @@ export function fetchPracticeOptions(moduleType = 'all') {
   return practiceQuery('options', moduleType);
 }
 
+export function fetchPracticePlanTeachers(moduleType, planId) {
+  return practiceQuery('plan-teachers', moduleType, { plan_id: planId });
+}
+
+export function fetchPracticeProjectStudents(moduleType, projectId) {
+  return practiceQuery('project-students', moduleType, { project_id: projectId });
+}
+
+export function savePracticePlanTeachers(moduleType, payload) {
+  return practicePost('save-plan-teachers', moduleType, payload);
+}
+
 export function fetchPracticeList(moduleType = 'all', params = {}) {
   return practiceQuery('list', moduleType, params);
 }
@@ -474,6 +486,22 @@ export function savePracticeProjectScore(moduleType, payload) {
 
 export function fetchPracticeExecutionTimeline(moduleType = 'all', params = {}) {
   return practiceQuery('execution-timeline', moduleType, params);
+}
+
+export function fetchPracticeArchiveCheck(moduleType, planId) {
+  return practiceQuery('archive-check', moduleType, { plan_id: planId });
+}
+
+export function createPracticeArchive(moduleType, planId) {
+  return practicePost('archive', moduleType, { plan_id: planId });
+}
+
+export function fetchPracticeArchives(moduleType = 'all', params = {}) {
+  return practiceQuery('archive-list', moduleType, params);
+}
+
+export function fetchPracticeArchiveDetail(moduleType, id) {
+  return practiceQuery('archive-detail', moduleType, { id });
 }
 
 function socialPracticeQuery(path, params = {}) {

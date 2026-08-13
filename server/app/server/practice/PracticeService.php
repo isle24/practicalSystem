@@ -39,7 +39,7 @@ class PracticeService
         'syllabus' => ['permission' => 'manage', 'title' => '大纲', 'review' => true],
         'lessonPlan' => ['permission' => 'manage', 'title' => '教案', 'review' => true],
         'gradeRule' => ['permission' => 'manage', 'title' => '成绩比例', 'review' => false],
-        'score' => ['permission' => 'manage', 'title' => '成绩', 'review' => false],
+        'score' => ['permission' => 'manage', 'title' => '成绩', 'review' => true],
         'reflection' => ['permission' => 'manage', 'title' => '反思报告', 'review' => true],
         'room' => ['permission' => 'manage', 'title' => '实验实训室', 'review' => false],
     ];
@@ -75,6 +75,10 @@ class PracticeService
             'accept' => ['min' => 0, 'max' => 300],
             'modify' => ['min' => 8, 'max' => 800],
         ],
+        'score' => [
+            'accept' => ['min' => 0, 'max' => 300],
+            'modify' => ['min' => 8, 'max' => 800],
+        ],
     ];
 
     public function __construct(private readonly string $moduleType)
@@ -103,6 +107,77 @@ class PracticeService
             'place_types' => ['inside', 'outside'],
             'periods' => PracticePeriod::optionRows(),
         ]);
+    }
+
+    /** 查询开课任务课程负责人和任课教师。 */
+    public function planTeachers(Request $request): array
+    {
+        $this->requirePermission('view');
+        $planId = $this->requiredInt($request, 'plan_id');
+        $this->assertEntityVisible('plan', $planId);
+
+        return [
+            'plan_id' => $planId,
+            'teachers' => PracticeRecord::planTeacherRows($this->scopeContext(), $this->moduleType, $planId),
+        ];
+    }
+
+    /** 查询项目绑定学生及当前成绩。 */
+    public function projectStudents(Request $request): array
+    {
+        $this->requirePermission('view');
+        $projectId = $this->requiredInt($request, 'project_id');
+
+        return [
+            'project_id' => $projectId,
+            'items' => PracticeRecord::projectStudentScoreRows($this->scopeContext(), $this->moduleType, $projectId),
+        ];
+    }
+
+    /** 保存开课任务课程负责人和任课教师。 */
+    public function savePlanTeachers(Request $request): array
+    {
+        $this->assertWritableModule();
+        $this->requirePermission('manage');
+        if ($this->isTeacher() || $this->isStudent()) {
+            throw new RuntimeException('仅管理员可维护开课任务教师关系', 40300);
+        }
+        $planId = $this->requiredInt($request, 'plan_id');
+        $leaderId = $this->requiredInt($request, 'course_leader_id');
+        $teacherIds = $this->intList($request->input('teacher_ids', []));
+        $allTeacherIds = array_values(array_unique(array_merge([$leaderId], $teacherIds)));
+        $visibleIds = PracticeRecord::visibleTeacherIds($this->scopeContext(), $allTeacherIds);
+        sort($allTeacherIds);
+        sort($visibleIds);
+        if ($allTeacherIds !== $visibleIds) {
+            throw new RuntimeException('所选教师不存在或超出数据范围', 40301);
+        }
+        $this->assertEntityVisible('plan', $planId);
+
+        return $this->workflowLock('practice', 'plan_teachers', $planId, function () use ($leaderId, $planId, $teacherIds): array {
+            return PracticeRecord::connection()->transaction(function () use ($leaderId, $planId, $teacherIds): array {
+                $plan = PracticeRecord::lockActiveRowByEntity($this->moduleType, 'plan', $planId);
+                if (!$plan) {
+                    throw new RuntimeException('开课任务不存在');
+                }
+                $leaderAccountIds = $this->teacherAccountIds($leaderId);
+                PracticeRecord::replacePlanTeachers(
+                    $this->moduleType,
+                    $planId,
+                    $leaderId,
+                    $teacherIds,
+                    $leaderAccountIds[0] ?? null,
+                    $this->now()
+                );
+                $this->invalidatePlanArchives($planId, '开课任务教师关系已变更');
+
+                return [
+                    'plan_id' => $planId,
+                    'course_leader_id' => $leaderId,
+                    'teacher_ids' => array_values(array_unique(array_merge([$leaderId], $teacherIds))),
+                ];
+            });
+        });
     }
 
     /** 查询课节配置 */
@@ -193,10 +268,14 @@ class PracticeService
     {
         $this->assertWritableModule();
         $entity = $this->entityInput($request);
+        if ($entity === 'score') {
+            return $this->saveScore($request);
+        }
         $this->requireEntityPermission($entity);
         $existingId = $this->inputEntityId($request, $entity);
         $fromStatus = $existingId ? PracticeRecord::statusById($entity, $existingId) : 'draft';
         $values = $this->entityValues($request, $entity);
+        $this->assertEntityWriter($entity, $values);
         if ($this->entityRequiresReview($entity) && $existingId && !in_array($fromStatus, ['draft', 'modify'], true)) {
             throw new InvalidArgumentException('数据已变更，请刷新后重试', 409);
         }
@@ -214,6 +293,7 @@ class PracticeService
                     if ($this->entityRequiresReview($entity) && !in_array($currentFromStatus, ['draft', 'modify'], true)) {
                         throw new InvalidArgumentException('数据已变更，请刷新后重试', 409);
                     }
+                    $this->assertEntityRowWriter($entity, $row);
                 }
 
                 if ($entity === 'schedule') {
@@ -221,12 +301,22 @@ class PracticeService
                 }
                 if ($entity === 'project') {
                     $values = $this->projectValues($request, $values);
+                    if ($this->isTeacher()) {
+                        $this->assertCourseLeader((int) ($values['plan_id'] ?? 0));
+                    }
                 }
                 $this->assertEntityValuesVisible($entity, $values);
 
                 $id = $this->saveEntity($entity, $request, $values);
                 if ($entity === 'project') {
                     $this->syncProjectStudents($id, $values);
+                    PracticeRecord::syncGradeRuleProjects($this->moduleType, $values, $this->uuid(), $this->now());
+                }
+                if (in_array($entity, ['plan', 'schedule', 'project', 'syllabus', 'lessonPlan', 'gradeRule', 'reflection'], true)) {
+                    $this->invalidatePlanArchives(
+                        $entity === 'plan' ? $id : (int) ($values['plan_id'] ?? 0),
+                        $this->businessName($entity) . '已变更'
+                    );
                 }
                 if (($values['status'] ?? '') === 'wait' && $this->entityRequiresReview($entity)) {
                     $this->recordWorkflow($entity, $id, 'submit', $currentFromStatus, 'wait', $this->workflowContent($entity, $values), 'wait');
@@ -276,6 +366,8 @@ class PracticeService
             if ((string) $row->status !== 'wait') {
                 throw new InvalidArgumentException('数据已变更，请刷新后重试', 409);
             }
+            $this->assertEntityReviewer($entity, $row);
+            $this->assertNotSelfReview($this->entityType($entity), $id, $row);
 
             PracticeRecord::updateEntityById($entity, $id, [
                 'status' => $status,
@@ -356,12 +448,15 @@ class PracticeService
             if ((string) $row->status !== 'accept') {
                 throw new InvalidArgumentException('数据已变更，请刷新后重试', 409);
             }
+            $this->assertEntityReviewer($entity, $row);
+            $this->assertNotSelfReview($this->entityType($entity), $id, $row);
 
             PracticeRecord::updateEntityById($entity, $id, [
                 'status' => 'modify',
                 'updated_at' => $this->now(),
             ]);
             $this->recordWorkflow($entity, $id, 'modify_after_accept', 'accept', 'modify', $opinion ?: '通过后要求修改', 'modify');
+            $this->invalidatePlanArchives(PracticeRecord::entityPlanId($entity, $id), $this->businessName($entity) . '已发起通过后修改');
             $this->notifyWorkflowReopened($entity, $id, $row, $opinion ?: '通过后要求修改');
 
             return ['id' => $id, 'status' => 'modify'];
@@ -462,6 +557,92 @@ class PracticeService
         return PracticeRecord::executionPage($this->scopeContext(), $this->moduleType, 'report', $this->requestFilters($request));
     }
 
+    /** 查询开课任务归档条件。 */
+    public function archiveCheck(Request $request): array
+    {
+        $this->requirePermission('view');
+        $this->assertArchiveAccess();
+        $planId = $this->requiredInt($request, 'plan_id');
+        $result = PracticeRecord::archiveCheckRows($this->scopeContext(), $this->moduleType, $planId);
+        if (!$result) {
+            throw new RuntimeException('开课任务不存在或无权限', 40301);
+        }
+
+        return $result;
+    }
+
+    /** 生成开课任务归档版本。 */
+    public function archive(Request $request): array
+    {
+        $this->assertWritableModule();
+        $this->requirePermission('manage');
+        $this->assertArchiveAccess();
+        $planId = $this->requiredInt($request, 'plan_id');
+        if ($this->isTeacher()) {
+            $this->assertCourseLeader($planId);
+        }
+
+        return $this->workflowLock('practice', 'archive', $planId, function () use ($planId): array {
+            return PracticeRecord::connection()->transaction(function () use ($planId): array {
+                PracticeRecord::lockCurrentArchive($this->moduleType, $planId);
+                $snapshot = PracticeRecord::archiveSnapshotRows($this->scopeContext(), $this->moduleType, $planId);
+                if (!$snapshot) {
+                    throw new RuntimeException('开课任务不存在或无权限', 40301);
+                }
+                if (!$snapshot['ready']) {
+                    throw new InvalidArgumentException('必交材料尚未齐全或仍有材料未通过审核', 42201);
+                }
+
+                PracticeRecord::invalidatePlanArchives(
+                    $this->moduleType,
+                    $planId,
+                    $this->accountId(),
+                    '已生成新的归档版本',
+                    $this->now()
+                );
+                $version = PracticeRecord::nextArchiveVersion($this->moduleType, $planId);
+                $id = PracticeRecord::insertArchive([
+                    'uuid' => $this->uuid(),
+                    'status' => 'archived',
+                    'created_at' => $this->now(),
+                    'updated_at' => $this->now(),
+                    'deleted_at' => null,
+                    'module_type' => $this->moduleType,
+                    'plan_id' => $planId,
+                    'version_no' => $version,
+                    'snapshot_json' => $this->jsonValue($snapshot),
+                    'missing_items_json' => $this->jsonValue([]),
+                    'pending_items_json' => $this->jsonValue([]),
+                    'created_by' => $this->accountId(),
+                ]);
+
+                return ['id' => $id, 'plan_id' => $planId, 'version_no' => $version, 'status' => 'archived'];
+            });
+        });
+    }
+
+    /** 分页查询归档版本。 */
+    public function archiveList(Request $request): array
+    {
+        $this->requirePermission('view');
+        $this->assertArchiveAccess();
+        return PracticeRecord::practiceArchivePage($this->scopeContext(), $this->moduleType, $this->requestFilters($request));
+    }
+
+    /** 查看归档版本详情。 */
+    public function archiveDetail(Request $request): array
+    {
+        $this->requirePermission('view');
+        $this->assertArchiveAccess();
+        $id = $this->requiredInt($request, 'id');
+        $row = PracticeRecord::archiveDetailRow($this->scopeContext(), $this->moduleType, $id);
+        if (!$row) {
+            throw new RuntimeException('归档版本不存在或无权限', 40301);
+        }
+
+        return $row;
+    }
+
     public function saveReport(Request $request): array
     {
         return $this->saveReviewExecution($request, 'report');
@@ -492,12 +673,15 @@ class PracticeService
             if ((string) $row->status !== 'accept') {
                 throw new InvalidArgumentException('数据已变更，请刷新后重试', 409);
             }
+            $this->assertExecutionReviewer();
+            $this->assertNotSelfReview($this->executionEntityType($execution), $id, $row);
 
             PracticeRecord::updateExecution($execution, $id, [
                 'status' => 'modify',
                 'updated_at' => $this->now(),
             ]);
             $this->recordExecutionWorkflow($execution, $id, 'modify_after_accept', 'accept', 'modify', $opinion ?: '通过后要求修改', 'modify');
+            $this->invalidatePlanArchives(PracticeRecord::executionPlanId($execution, $id), $this->businessName($execution) . '已发起通过后修改');
             $this->notifyExecutionReopened($execution, $id, $row, $opinion ?: '通过后要求修改');
 
             return ['id' => $id, 'status' => 'modify'];
@@ -509,6 +693,9 @@ class PracticeService
     {
         $this->assertWritableModule();
         $this->requireEntityPermission('score');
+        if ($this->isStudent()) {
+            throw new RuntimeException('学生无成绩录入权限', 40300);
+        }
         $project = $this->projectForExecution($request);
         $studentId = $this->executionStudentId($request, $project);
         $projectStudent = PracticeRecord::projectStudentRow($this->moduleType, (int) $project['id'], $studentId);
@@ -535,7 +722,9 @@ class PracticeService
             $scoreValue = $scores ? round(array_sum(array_map('floatval', $scores)) / count($scores), 2) : null;
         }
 
-        $id = PracticeRecord::upsertPracticeScore($this->moduleType, [
+        $status = $this->enum($request, 'status', ['draft', 'wait'], 'draft');
+        $existingId = PracticeRecord::currentProjectScoreId($this->moduleType, (int) $project['id'], $studentId);
+        $values = [
             'uuid' => $this->uuid(),
             'module_type' => $this->moduleType,
             'project_id' => (int) $project['id'],
@@ -550,13 +739,45 @@ class PracticeService
             'title' => $this->nullableString($request, 'title', 180) ?: (($project['title'] ?? '') . '成绩'),
             'score_items' => $this->jsonValue($scoreItems),
             'score_value' => $scoreValue,
-            'status' => $this->enum($request, 'status', ['draft', 'wait', 'accept'], 'accept'),
+            'submitter_id' => $this->accountId(),
+            'status' => $status,
             'updated_at' => $this->now(),
             'deleted_at' => null,
             'created_at' => $this->now(),
-        ]);
+        ];
 
-        return ['id' => $id];
+        $lockId = $existingId ?: max(1, (int) sprintf('%u', crc32($this->moduleType . ':' . (int) $project['id'] . ':' . $studentId)));
+        return $this->workflowLock('practice', $this->entityType('score'), $lockId, function () use ($existingId, $status, $values): array {
+            return PracticeRecord::connection()->transaction(function () use ($existingId, $status, $values): array {
+                $id = $existingId;
+                $fromStatus = 'draft';
+                if ($id > 0) {
+                    $row = PracticeRecord::lockActiveRowByEntity($this->moduleType, 'score', $id);
+                    if (!$row) {
+                        throw new RuntimeException('成绩记录不存在或无权限', 40301);
+                    }
+                    $this->assertEntityVisible('score', $id);
+                    $fromStatus = (string) $row->status;
+                    if (!in_array($fromStatus, ['draft', 'modify'], true)) {
+                        throw new InvalidArgumentException('成绩已提交或审核，请刷新后重试', 409);
+                    }
+                    $updates = $values;
+                    unset($updates['uuid'], $updates['created_at']);
+                    PracticeRecord::updateEntityById('score', $id, $updates);
+                } else {
+                    $this->assertEntityValuesVisible('score', $values);
+                    $id = PracticeRecord::insertEntity('score', $values);
+                }
+
+                $this->invalidatePlanArchives((int) ($values['plan_id'] ?? 0), '项目成绩已变更');
+                if ($status === 'wait') {
+                    $this->recordWorkflow('score', $id, 'submit', $fromStatus, 'wait', $this->workflowContent('score', $values), 'wait');
+                    $this->notifyWorkflowSubmitted('score', $id, $values);
+                }
+
+                return ['id' => $id, 'status' => $status];
+            });
+        });
     }
 
     public function executionTimeline(Request $request): array
@@ -595,6 +816,9 @@ class PracticeService
             throw new InvalidArgumentException('该执行记录不需要审核');
         }
         $this->requirePermission('view');
+        if (!$this->isStudent()) {
+            throw new RuntimeException('项目报告由学生本人提交', 40300);
+        }
         $project = $this->projectForExecution($request);
         $studentId = $this->executionStudentId($request, $project);
         $projectStudent = PracticeRecord::projectStudentRow($this->moduleType, (int) $project['id'], $studentId);
@@ -603,6 +827,9 @@ class PracticeService
         }
 
         $id = $this->optionalInt($request, 'id');
+        if (!$id && $execution === 'report') {
+            $id = PracticeRecord::currentProjectReportId($this->moduleType, (int) $project['id'], $studentId) ?: null;
+        }
         $status = $this->enum($request, 'status', ['draft', 'wait'], 'wait');
         $values = $this->executionValues($request, $execution, $project, $projectStudent, $studentId, $status);
 
@@ -663,6 +890,8 @@ class PracticeService
             if ((string) $row->status !== 'wait') {
                 throw new InvalidArgumentException('数据已变更，请刷新后重试', 409);
             }
+            $this->assertExecutionReviewer();
+            $this->assertNotSelfReview($this->executionEntityType($execution), $id, $row);
 
             PracticeRecord::updateExecution($execution, $id, [
                 'status' => $status,
@@ -692,6 +921,8 @@ class PracticeService
             if ((string) $row->status !== 'wait') {
                 throw new InvalidArgumentException('数据已变更，请刷新后重试', 409);
             }
+            $this->assertExecutionReviewer();
+            $this->assertNotSelfReview($this->executionEntityType($execution), $id, $row);
             $moduleType = (string) ($row->entity_type ?? '');
             if (!in_array($moduleType, ['training', 'lab'], true)) {
                 throw new RuntimeException('数据不存在');
@@ -717,6 +948,8 @@ class PracticeService
         if ((string) $row->status !== 'wait') {
             throw new InvalidArgumentException('数据已变更，请刷新后重试', 409);
         }
+        $this->assertEntityReviewer($entity, $row);
+        $this->assertNotSelfReview($this->entityType($entity), $id, $row);
         $moduleType = (string) ($row->module_type ?? '');
         if (!in_array($moduleType, ['training', 'lab'], true)) {
             throw new RuntimeException('数据不存在');
@@ -802,6 +1035,11 @@ class PracticeService
         if ($execution === 'report') {
             $values['template_id'] = $this->optionalInt($request, 'template_id');
             $values['submitted_at'] = $status === 'wait' ? $this->now() : $this->dateTimeInput($request, 'submitted_at');
+            $values['practice_project_id'] = (int) $project['id'];
+            $values['report_type'] = 'project_report';
+            $values['reflection_summary'] = $status === 'wait'
+                ? $this->requiredString($request, 'reflection_summary', 5000)
+                : $this->nullableString($request, 'reflection_summary', 5000);
         }
 
         return $values;
@@ -947,15 +1185,16 @@ class PracticeService
             ]),
             'gradeRule' => array_merge($common, [
                 'title' => $this->requiredTitle($request, '成绩比例'),
-                'ratio_json' => $this->jsonValue($request->input('ratio_json', [])),
+                'ratio_json' => $this->jsonValue($this->gradeRuleRatio($request)),
                 'status' => $this->enum($request, 'status', ['enabled', 'disabled'], 'enabled'),
             ]),
             'score' => array_merge($common, [
+                'submitter_id' => CurrentContext::accountId(),
                 'student_id' => $this->isStudent() ? $this->currentStudentId(true) : $this->requiredInt($request, 'student_id'),
                 'rule_id' => $this->optionalInt($request, 'rule_id'),
                 'score_items' => $this->jsonValue($request->input('score_items', [])),
                 'score_value' => $this->decimalInput($request, 'score_value'),
-                'status' => $this->enum($request, 'status', ['draft', 'wait', 'accept'], 'accept'),
+                'status' => $this->enum($request, 'status', ['draft', 'wait'], 'draft'),
             ]),
             'room' => [
                 'module_type' => $this->moduleType,
@@ -1105,6 +1344,45 @@ class PracticeService
         }
 
         return $values;
+    }
+
+    /** 校验成绩方案比例。 */
+    private function gradeRuleRatio(Request $request): array
+    {
+        $ratio = $request->input('ratio_json', []);
+        if (!is_array($ratio)) {
+            throw new InvalidArgumentException('成绩比例格式无效');
+        }
+
+        $weights = [];
+        foreach (['attendance_weight', 'operation_weight', 'report_weight'] as $key) {
+            $value = $ratio[$key] ?? null;
+            if (!is_numeric($value) || (float) $value < 0 || (float) $value > 100) {
+                throw new InvalidArgumentException('成绩比例必须为 0 至 100 的数字');
+            }
+            $weights[$key] = (float) $value;
+        }
+        if (abs(array_sum($weights) - 100) > 0.001) {
+            throw new InvalidArgumentException('成绩比例合计必须为 100%');
+        }
+
+        $projects = is_array($ratio['projects'] ?? null) ? array_values($ratio['projects']) : [];
+        $activeWeights = [];
+        foreach ($projects as $project) {
+            if (!is_array($project) || ($project['status'] ?? 'enabled') === 'disabled') {
+                continue;
+            }
+            $weight = $project['weight'] ?? null;
+            if (!is_numeric($weight) || (float) $weight < 0 || (float) $weight > 100) {
+                throw new InvalidArgumentException('项目成绩比例必须为 0 至 100 的数字');
+            }
+            $activeWeights[] = (float) $weight;
+        }
+        if ($activeWeights && abs(array_sum($activeWeights) - 100) > 0.001) {
+            throw new InvalidArgumentException('项目成绩比例合计必须为 100%');
+        }
+
+        return array_merge($ratio, $weights, ['projects' => $projects]);
     }
 
     /**
@@ -1335,8 +1613,111 @@ class PracticeService
     /** 校验待写入数据范围 */
     private function assertEntityValuesVisible(string $entity, array $values): void
     {
-        if (!PracticeRecord::entityValuesVisible($this->scopeContext(), $entity, $values)) {
+        if (!PracticeRecord::entityValuesVisible($this->scopeContext(), $this->moduleType, $entity, $values)) {
             throw new RuntimeException('无数据写入权限', 40301);
+        }
+    }
+
+    /** 校验课程业务写入角色。 */
+    private function assertEntityWriter(string $entity, array $values): void
+    {
+        if (!$this->isTeacher()) {
+            return;
+        }
+        if (in_array($entity, ['plan', 'schedule', 'room'], true)) {
+            throw new RuntimeException('该业务由管理员维护', 40300);
+        }
+
+        $planId = (int) ($values['plan_id'] ?? 0);
+        if (in_array($entity, ['project', 'syllabus', 'gradeRule', 'reflection'], true)) {
+            $this->assertCourseLeader($planId);
+            return;
+        }
+        if ($entity === 'lessonPlan' && !PracticeRecord::teacherRelatedToPlan(
+            $this->moduleType,
+            $planId,
+            (int) $this->currentTeacherId(true)
+        )) {
+            throw new RuntimeException('仅开课任务任课教师可维护教案', 40300);
+        }
+    }
+
+    /** 校验教师只能修改本人提交的教案。 */
+    private function assertEntityRowWriter(string $entity, object $row): void
+    {
+        if (!$this->isTeacher() || $entity !== 'lessonPlan') {
+            return;
+        }
+        if ((int) ($row->submitter_id ?? 0) !== $this->accountId()) {
+            throw new RuntimeException('只能修改本人提交的教案', 40300);
+        }
+    }
+
+    /** 失效开课任务已有归档。 */
+    private function invalidatePlanArchives(int $planId, string $reason): void
+    {
+        if ($planId <= 0) {
+            return;
+        }
+
+        PracticeRecord::invalidatePlanArchives(
+            $this->moduleType,
+            $planId,
+            $this->accountId(),
+            $reason,
+            $this->now()
+        );
+    }
+
+    /** 禁止提交账号审核本人提交的材料。 */
+    private function assertNotSelfReview(string $entityType, int $entityId, object $row): void
+    {
+        $submitterId = (int) ($row->submitter_id ?? 0);
+        if ($submitterId <= 0) {
+            $submitterId = PracticeRecord::latestSubmitterAccountId($entityType, $entityId);
+        }
+        if ($submitterId > 0 && $submitterId === $this->accountId()) {
+            throw new RuntimeException('提交人不能审核本人提交的材料', 40300);
+        }
+    }
+
+    /** 校验课程级材料审核角色。 */
+    private function assertEntityReviewer(string $entity, object $row): void
+    {
+        if ($this->isStudent()) {
+            throw new RuntimeException('学生无审核权限', 40300);
+        }
+        if (!$this->isTeacher()) {
+            return;
+        }
+        if ($entity !== 'score') {
+            throw new RuntimeException('课程级材料由管理员审核', 40300);
+        }
+
+        $this->assertCourseLeader((int) ($row->plan_id ?? 0));
+    }
+
+    /** 校验项目执行材料审核角色。 */
+    private function assertExecutionReviewer(): void
+    {
+        if ($this->isStudent()) {
+            throw new RuntimeException('学生无审核权限', 40300);
+        }
+    }
+
+    /** 校验当前教师是否为开课任务课程负责人。 */
+    private function assertCourseLeader(int $planId): void
+    {
+        if ($planId <= 0 || !PracticeRecord::teacherRelatedToPlan($this->moduleType, $planId, (int) $this->currentTeacherId(true), true)) {
+            throw new RuntimeException('仅课程负责人可维护该材料', 40300);
+        }
+    }
+
+    /** 限制归档中心访问角色。 */
+    private function assertArchiveAccess(): void
+    {
+        if ($this->isStudent()) {
+            throw new RuntimeException('无归档中心访问权限', 40300);
         }
     }
 
@@ -1475,6 +1856,7 @@ class PracticeService
             'syllabus' => 'syllabus',
             'lessonPlan' => 'lesson_plan',
             'reflection' => 'reflection',
+            'score' => 'score',
             'journal' => 'journal',
             'report' => 'report',
         ][$key] ?? '';
@@ -1501,8 +1883,15 @@ class PracticeService
     private function workflowSubmitReceiverAccountIds(string $entity, array $values): array
     {
         $accountIds = [];
-        if (in_array($entity, ['plan', 'syllabus', 'lessonPlan', 'reflection'], true)) {
+        if (in_array($entity, ['plan', 'syllabus', 'lessonPlan', 'reflection', 'score'], true)) {
             $accountIds = $this->workflowAdminAccountIds();
+        }
+
+        if ($entity === 'score') {
+            $accountIds = array_merge(
+                $accountIds,
+                $this->teacherAccountIds(PracticeRecord::planCourseLeaderId($this->moduleType, (int) ($values['plan_id'] ?? 0)))
+            );
         }
 
         if (!$accountIds) {
@@ -1556,6 +1945,7 @@ class PracticeService
             'syllabus' => 'syllabus',
             'lessonPlan' => 'lessonPlans',
             'reflection' => 'reflections',
+            'score' => 'scores',
         ][$entity] ?? 'overview';
     }
 
@@ -1711,6 +2101,19 @@ class PracticeService
         }
 
         return (int) $value;
+    }
+
+    /** 读取正整数列表。 */
+    private function intList(mixed $value): array
+    {
+        if (is_string($value)) {
+            $value = array_filter(array_map('trim', explode(',', $value)), static fn (string $item): bool => $item !== '');
+        }
+        if (!is_array($value)) {
+            return [];
+        }
+
+        return array_values(array_unique(array_filter(array_map('intval', $value), static fn (int $id): bool => $id > 0)));
     }
 
     private function optionalInt(Request $request, string $key): ?int

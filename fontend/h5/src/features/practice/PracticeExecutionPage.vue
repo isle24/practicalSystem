@@ -9,9 +9,9 @@
     <section class="practice-execution-content">
       <label class="app-field">
         <span>项目</span>
-        <select v-model.number="practiceExecutionDialog.form.project_id">
+        <select v-model.number="practiceExecutionDialog.form.project_id" @change="changePracticeExecutionProject">
           <option
-            v-for="item in practiceModule(practiceExecutionDialog.module).options.projects"
+            v-for="item in practiceExecutionProjectOptions()"
             :key="item.id"
             :value="item.id"
           >
@@ -50,6 +50,35 @@
           <small v-if="practiceExecutionDialog.form.gps_error" class="gps-error">{{ practiceExecutionDialog.form.gps_error }}</small>
         </div>
       </template>
+      <template v-else-if="practiceExecutionDialog.execution === 'score'">
+        <label class="app-field">
+          <span>学生</span>
+          <select v-model.number="practiceExecutionDialog.form.student_id" @change="applyPracticeStudentScore">
+            <option :value="null" disabled>请选择项目学生</option>
+            <option v-for="student in practiceExecutionDialog.students" :key="student.student_id" :value="student.student_id">
+              {{ student.student_name }} / {{ student.student_num }}
+            </option>
+          </select>
+        </label>
+        <div class="practice-score-fields">
+          <label class="app-field">
+            <span>考勤与课堂表现</span>
+            <input v-model="practiceExecutionDialog.form.attendance_score" type="number" min="0" max="100" inputmode="decimal">
+          </label>
+          <label class="app-field">
+            <span>项目实操</span>
+            <input v-model="practiceExecutionDialog.form.material_score" type="number" min="0" max="100" inputmode="decimal">
+          </label>
+          <label class="app-field">
+            <span>课程报告</span>
+            <input v-model="practiceExecutionDialog.form.report_score" type="number" min="0" max="100" inputmode="decimal">
+          </label>
+          <label class="app-field">
+            <span>总评成绩</span>
+            <input v-model="practiceExecutionDialog.form.score_value" type="number" min="0" max="100" inputmode="decimal" placeholder="不填则按分项平均">
+          </label>
+        </div>
+      </template>
       <template v-else>
         <label class="app-field">
           <span>标题</span>
@@ -63,8 +92,13 @@
           <span>内容</span>
           <textarea v-model="practiceExecutionDialog.form.content" rows="5" />
         </label>
+        <label v-if="practiceExecutionDialog.execution === 'report'" class="app-field">
+          <span>反思小结</span>
+          <textarea v-model="practiceExecutionDialog.form.reflection_summary" rows="4" maxlength="5000" placeholder="总结本项目的收获、问题和改进方向" />
+          <small class="app-field-help">{{ Array.from(practiceExecutionDialog.form.reflection_summary || '').length }} / 5000，提交审核时必填</small>
+        </label>
       </template>
-      <label class="app-field">
+      <label v-if="practiceExecutionDialog.execution !== 'score'" class="app-field">
         <span>备注</span>
         <textarea v-model="practiceExecutionDialog.form.remark" rows="3" />
       </label>
@@ -98,10 +132,13 @@ import { usePracticeContext } from './practiceContext';
 
 const {
   closePracticeExecutionDialog,
+  changePracticeExecutionProject,
   coordinateText,
+  applyPracticeStudentScore,
   locatePracticePosition,
   practiceAccuracyText,
   practiceExecutionDialog,
+  practiceExecutionProjectOptions,
   practiceExecutionDialogSubtitle,
   practiceExecutionDialogTitle,
   practiceGpsHint,
@@ -118,5 +155,17 @@ const {
   display: grid;
   gap: 14px;
   padding: 14px 16px;
+}
+
+.practice-score-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+@media (max-width: 360px) {
+  .practice-score-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 </style>
