@@ -20,7 +20,15 @@
       <strong>{{ practiceModuleName(moduleType) }}流程</strong>
     </header>
     <div class="student-guide-steps">
-      <span v-for="step in practiceFlowSteps" :key="step">{{ step }}</span>
+      <button
+        v-for="step in practiceFlowSteps"
+        :key="step.panel"
+        type="button"
+        :class="{ active: currentPanel.key === step.panel }"
+        @click="switchPracticePanel(moduleType, step.panel)"
+      >
+        {{ step.label }}
+      </button>
     </div>
   </section>
 
@@ -75,6 +83,11 @@
       @search="reloadPracticeList(moduleType)"
       @reset="resetPracticeListFilters(moduleType)"
     />
+    <section v-if="currentPanel.key === 'courseScores' && moduleState.courseScore.summary" class="practice-course-score-summary">
+      <div><strong>{{ moduleState.courseScore.summary.student_count || 0 }}</strong><span>课程学生</span></div>
+      <div><strong>{{ moduleState.courseScore.summary.page_completed_count || 0 }}</strong><span>本页已完成</span></div>
+      <div><strong>{{ moduleState.courseScore.summary.page_average_score ?? '-' }}</strong><span>本页平均分</span></div>
+    </section>
     <div v-if="isScheduleBoard" class="practice-schedule-groups">
       <section v-for="group in scheduleGroups" :key="group.date" class="practice-schedule-day">
         <header>{{ group.date }}</header>
@@ -91,7 +104,7 @@
     <div v-else class="app-practice-list">
       <AppListCard
         v-for="row in rows"
-        :key="row.id"
+        :key="row.id || `${row.plan_id || 0}:${row.student_id || 0}`"
         :title="practiceRowTitle(moduleType, row)"
         :subtitle="rowSubtitle(row)"
         :status="row.status"
@@ -242,6 +255,47 @@ function rowSubtitle(row) {
 
 .practice-primary-action {
   margin-left: auto;
+}
+
+.student-guide-steps button {
+  width: 100%;
+  border: 0;
+  border-radius: var(--app-radius-sm);
+  padding: 8px 10px;
+  color: inherit;
+  text-align: left;
+  background: transparent;
+}
+
+.student-guide-steps button.active {
+  color: var(--app-primary);
+  background: var(--app-primary-soft);
+}
+
+.practice-course-score-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  padding: 12px 12px 0;
+}
+
+.practice-course-score-summary div {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+  padding: 10px 6px;
+  border-radius: var(--app-radius-sm);
+  text-align: center;
+  background: var(--app-surface-muted);
+}
+
+.practice-course-score-summary strong {
+  font-size: 17px;
+}
+
+.practice-course-score-summary span {
+  color: var(--app-text-secondary);
+  font-size: 11px;
 }
 
 .practice-schedule-groups {

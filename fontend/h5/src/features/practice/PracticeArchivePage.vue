@@ -41,6 +41,10 @@
         正式归档
       </AppButton>
     </template>
+    <template v-else #footer>
+      <AppButton variant="secondary" @click="closePracticeArchiveDetail(moduleType)">返回</AppButton>
+      <AppButton :loading="moduleState.loading" @click="downloadPracticeArchive(moduleType)">下载归档包</AppButton>
+    </template>
   </AppSheet>
 </template>
 
@@ -59,6 +63,7 @@ const {
   closePracticeArchiveDetail,
   canCreatePracticeArchive,
   confirmCreatePracticeArchive,
+  downloadPracticeArchive,
   loadPracticeArchiveCheck,
   practiceArchiveItems,
   practiceArchivePlans,

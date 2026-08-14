@@ -45,6 +45,32 @@ class FileRecord extends BaseModel
             ]);
     }
 
+    /** 查询多个有效文件及物理存储信息。 */
+    public static function detailsByIds(array $fileIds): array
+    {
+        $fileIds = array_values(array_unique(array_filter(array_map('intval', $fileIds), static fn (int $id): bool => $id > 0)));
+        if (!$fileIds) {
+            return [];
+        }
+
+        return self::query()
+            ->join('file_blob', 'file.blob_id', '=', 'file_blob.id')
+            ->whereIn('file.id', $fileIds)
+            ->whereNull('file.deleted_at')
+            ->whereNull('file_blob.deleted_at')
+            ->get([
+                'file.id',
+                'file.name',
+                'file.download_name',
+                'file.url',
+                'file_blob.path',
+                'file_blob.ext',
+                'file_blob.size',
+                'file_blob.mime_type',
+            ])
+            ->all();
+    }
+
     public static function pagedRows(array $filters): array
     {
         $page = (int) ($filters['page'] ?? 1);

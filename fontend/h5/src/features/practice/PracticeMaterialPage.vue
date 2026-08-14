@@ -30,11 +30,19 @@
             <input v-model.number="practiceMaterialDialog.form.operation_weight" type="number" min="0" max="100" inputmode="decimal">
           </label>
           <label class="app-field">
-            <span>课程报告（%）</span>
+            <span>项目报告（%）</span>
             <input v-model.number="practiceMaterialDialog.form.report_weight" type="number" min="0" max="100" inputmode="decimal">
           </label>
         </div>
         <small class="ratio-total">合计 {{ ratioTotal }}%</small>
+        <div class="practice-project-ratios">
+          <header><strong>课程项目权重</strong><span>合计 {{ projectRatioTotal }}%</span></header>
+          <small v-if="!practiceMaterialDialog.form.projects.length">当前开课任务暂无已发布项目</small>
+          <label v-for="project in practiceMaterialDialog.form.projects" :key="project.project_id" class="app-field">
+            <span>{{ project.title || `项目 ${project.project_id}` }}</span>
+            <input v-model.number="project.weight" type="number" min="0" max="100" inputmode="decimal">
+          </label>
+        </div>
       </template>
       <label v-else class="app-field">
         <span>内容</span>
@@ -82,6 +90,9 @@ const ratioTotal = computed(() => [
   practiceMaterialDialog.form.operation_weight,
   practiceMaterialDialog.form.report_weight,
 ].reduce((sum, value) => sum + Number(value || 0), 0));
+
+const projectRatioTotal = computed(() => Math.round((practiceMaterialDialog.form.projects || [])
+  .reduce((sum, project) => sum + Number(project.weight || 0), 0) * 100) / 100);
 </script>
 
 <style scoped>
@@ -100,5 +111,26 @@ const ratioTotal = computed(() => [
   margin-top: -6px;
   color: var(--app-text-secondary);
   text-align: right;
+}
+
+.practice-project-ratios {
+  display: grid;
+  gap: 12px;
+  padding-top: 4px;
+}
+
+.practice-project-ratios header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--app-line);
+}
+
+.practice-project-ratios header span,
+.practice-project-ratios > small {
+  color: var(--app-text-secondary);
+  font-size: 12px;
 }
 </style>

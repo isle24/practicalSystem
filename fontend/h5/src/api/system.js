@@ -504,6 +504,14 @@ export function fetchPracticeArchiveDetail(moduleType, id) {
   return practiceQuery('archive-detail', moduleType, { id });
 }
 
+export function fetchPracticeArchiveDownload(moduleType, id) {
+  return practiceQuery('archive-download', moduleType, { id });
+}
+
+export function fetchPracticeCourseScores(moduleType, params = {}) {
+  return practiceQuery('course-scores', moduleType, { ...params, module_type: moduleType });
+}
+
 function socialPracticeQuery(path, params = {}) {
   const query = new URLSearchParams(params).toString();
   return request(`/social-practice/${path}${query ? `?${query}` : ''}`);

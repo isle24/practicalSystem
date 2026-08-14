@@ -7,6 +7,7 @@ use app\model\channel\PracticePeriod;
 use app\model\channel\PracticeRecord;
 use app\server\CurrentContext;
 use app\server\WorkflowLock;
+use app\server\file\FileService;
 use app\server\message\MessageService;
 use InvalidArgumentException;
 use RuntimeException;
@@ -127,9 +128,16 @@ class PracticeService
     {
         $this->requirePermission('view');
         $projectId = $this->requiredInt($request, 'project_id');
+        $project = PracticeRecord::projectExecutionRow($this->scopeContext(), $this->moduleType, $projectId);
+        if (!$project) {
+            throw new RuntimeException('项目不存在或无权限', 40301);
+        }
+        $planId = (int) ($project['plan_id'] ?? 0);
 
         return [
             'project_id' => $projectId,
+            'plan_id' => $planId,
+            'rule' => PracticeRecord::gradeRuleRowByPlan($this->moduleType, $planId),
             'items' => PracticeRecord::projectStudentScoreRows($this->scopeContext(), $this->moduleType, $projectId),
         ];
     }
@@ -583,41 +591,66 @@ class PracticeService
         }
 
         return $this->workflowLock('practice', 'archive', $planId, function () use ($planId): array {
-            return PracticeRecord::connection()->transaction(function () use ($planId): array {
-                PracticeRecord::lockCurrentArchive($this->moduleType, $planId);
-                $snapshot = PracticeRecord::archiveSnapshotRows($this->scopeContext(), $this->moduleType, $planId);
-                if (!$snapshot) {
-                    throw new RuntimeException('开课任务不存在或无权限', 40301);
-                }
-                if (!$snapshot['ready']) {
-                    throw new InvalidArgumentException('必交材料尚未齐全或仍有材料未通过审核', 42201);
-                }
+            $snapshot = PracticeRecord::archiveSnapshotRows($this->scopeContext(), $this->moduleType, $planId);
+            if (!$snapshot) {
+                throw new RuntimeException('开课任务不存在或无权限', 40301);
+            }
+            if (!$snapshot['ready']) {
+                throw new InvalidArgumentException('必交材料尚未齐全或仍有材料未通过审核', 42201);
+            }
+            $version = PracticeRecord::nextArchiveVersion($this->moduleType, $planId);
+            $file = (new PracticeArchivePackageService())->create(
+                $snapshot,
+                $this->moduleType,
+                $planId,
+                $version,
+                $this->accountId()
+            );
+            $fileId = (int) ($file['file_id'] ?? $file['id'] ?? 0);
+            if ($fileId <= 0) {
+                throw new RuntimeException('归档文件登记失败');
+            }
 
-                PracticeRecord::invalidatePlanArchives(
-                    $this->moduleType,
-                    $planId,
-                    $this->accountId(),
-                    '已生成新的归档版本',
-                    $this->now()
-                );
-                $version = PracticeRecord::nextArchiveVersion($this->moduleType, $planId);
-                $id = PracticeRecord::insertArchive([
-                    'uuid' => $this->uuid(),
-                    'status' => 'archived',
-                    'created_at' => $this->now(),
-                    'updated_at' => $this->now(),
-                    'deleted_at' => null,
-                    'module_type' => $this->moduleType,
-                    'plan_id' => $planId,
-                    'version_no' => $version,
-                    'snapshot_json' => $this->jsonValue($snapshot),
-                    'missing_items_json' => $this->jsonValue([]),
-                    'pending_items_json' => $this->jsonValue([]),
-                    'created_by' => $this->accountId(),
-                ]);
+            try {
+                $result = PracticeRecord::connection()->transaction(function () use ($fileId, $planId, $snapshot, $version): array {
+                    PracticeRecord::lockCurrentArchive($this->moduleType, $planId);
+                    if (PracticeRecord::nextArchiveVersion($this->moduleType, $planId) !== $version) {
+                        throw new RuntimeException('归档版本已变更，请重试', 409);
+                    }
+                    PracticeRecord::invalidatePlanArchives(
+                        $this->moduleType,
+                        $planId,
+                        $this->accountId(),
+                        '已生成新的归档版本',
+                        $this->now()
+                    );
+                    $id = PracticeRecord::insertArchive([
+                        'uuid' => $this->uuid(),
+                        'status' => 'archived',
+                        'created_at' => $this->now(),
+                        'updated_at' => $this->now(),
+                        'deleted_at' => null,
+                        'module_type' => $this->moduleType,
+                        'plan_id' => $planId,
+                        'version_no' => $version,
+                        'snapshot_json' => $this->jsonValue($snapshot),
+                        'missing_items_json' => $this->jsonValue([]),
+                        'pending_items_json' => $this->jsonValue([]),
+                        'archive_file_id' => $fileId,
+                        'created_by' => $this->accountId(),
+                    ]);
 
-                return ['id' => $id, 'plan_id' => $planId, 'version_no' => $version, 'status' => 'archived'];
-            });
+                    return ['id' => $id, 'plan_id' => $planId, 'version_no' => $version, 'status' => 'archived'];
+                });
+            } catch (Throwable $exception) {
+                (new FileService())->discardGeneratedFile($fileId);
+                throw $exception;
+            }
+
+            return array_merge($result, [
+                'archive_file_id' => $fileId,
+                'file' => $file,
+            ]);
         });
     }
 
@@ -641,6 +674,42 @@ class PracticeService
         }
 
         return $row;
+    }
+
+    /** 获取归档 ZIP 下载信息。 */
+    public function archiveDownload(Request $request): array
+    {
+        $this->requirePermission('view');
+        $this->assertArchiveAccess();
+        $id = $this->requiredInt($request, 'id');
+        $row = PracticeRecord::archiveDetailRow($this->scopeContext(), $this->moduleType, $id);
+        if (!$row) {
+            throw new RuntimeException('归档版本不存在或无权限', 40301);
+        }
+        $fileId = (int) ($row['archive_file_id'] ?? 0);
+        if ($fileId <= 0) {
+            throw new RuntimeException('归档包尚未生成');
+        }
+
+        return (new FileService())->downloadInfo($fileId);
+    }
+
+    /** 查询开课任务课程汇总成绩。 */
+    public function courseScores(Request $request): array
+    {
+        $this->requirePermission('view');
+        $planId = $this->requiredInt($request, 'plan_id');
+        $result = PracticeRecord::courseScorePage(
+            $this->scopeContext(),
+            $this->moduleType,
+            $planId,
+            $this->requestFilters($request)
+        );
+        if (!$result) {
+            throw new RuntimeException('开课任务不存在或无权限', 40301);
+        }
+
+        return $result;
     }
 
     public function saveReport(Request $request): array
@@ -706,23 +775,8 @@ class PracticeService
             throw new RuntimeException('无数据访问权限', 40301);
         }
 
-        $scoreItems = $request->input('score_items', []);
-        if (!is_array($scoreItems)) {
-            $scoreItems = [];
-        }
-        foreach (['attendance_score', 'material_score', 'report_score'] as $key) {
-            $value = $this->decimalInput($request, $key);
-            if ($value !== null) {
-                $scoreItems[$key] = $value;
-            }
-        }
-        $scoreValue = $this->decimalInput($request, 'score_value');
-        if ($scoreValue === null) {
-            $scores = array_filter($scoreItems, 'is_numeric');
-            $scoreValue = $scores ? round(array_sum(array_map('floatval', $scores)) / count($scores), 2) : null;
-        }
-
         $status = $this->enum($request, 'status', ['draft', 'wait'], 'draft');
+        [$scoreItems, $scoreValue] = $this->projectScoreInput($request, (int) ($project['plan_id'] ?? 0), $status);
         $existingId = PracticeRecord::currentProjectScoreId($this->moduleType, (int) $project['id'], $studentId);
         $values = [
             'uuid' => $this->uuid(),
@@ -775,9 +829,59 @@ class PracticeService
                     $this->notifyWorkflowSubmitted('score', $id, $values);
                 }
 
-                return ['id' => $id, 'status' => $status];
+                return ['id' => $id, 'status' => $status, 'score_value' => $values['score_value']];
             });
         });
+    }
+
+    /** 校验分项成绩并按成绩方案计算项目成绩。 */
+    private function projectScoreInput(Request $request, int $planId, string $status): array
+    {
+        $scoreItems = $request->input('score_items', []);
+        if (!is_array($scoreItems)) {
+            $scoreItems = [];
+        }
+        $values = [];
+        foreach (['attendance_score', 'material_score', 'report_score'] as $key) {
+            $value = $this->decimalInput($request, $key);
+            if ($value === null && isset($scoreItems[$key]) && is_numeric($scoreItems[$key])) {
+                $value = (float) $scoreItems[$key];
+            }
+            if ($value !== null && ($value < 0 || $value > 100)) {
+                throw new InvalidArgumentException('分项成绩必须为 0 至 100');
+            }
+            $values[$key] = $value;
+            if ($value !== null) {
+                $scoreItems[$key] = $value;
+            } else {
+                unset($scoreItems[$key]);
+            }
+        }
+        if ($status === 'wait' && count(array_filter($values, static fn ($value): bool => $value !== null)) !== 3) {
+            throw new InvalidArgumentException('提交审核前请完整填写考勤、项目实操和项目报告成绩');
+        }
+
+        $rule = PracticeRecord::gradeRuleRowByPlan($this->moduleType, $planId);
+        $ratio = is_array($rule['ratio_json'] ?? null) ? $rule['ratio_json'] : [];
+        $weights = [
+            'attendance_score' => (float) ($ratio['attendance_weight'] ?? 20),
+            'material_score' => (float) ($ratio['operation_weight'] ?? 70),
+            'report_score' => (float) ($ratio['report_weight'] ?? 10),
+        ];
+        if (abs(array_sum($weights) - 100) > 0.001) {
+            throw new InvalidArgumentException('成绩方案比例合计必须为 100%');
+        }
+        $scoreItems['weights'] = $weights;
+        $scoreValue = null;
+        if (count(array_filter($values, static fn ($value): bool => $value !== null)) === 3) {
+            $scoreValue = 0.0;
+            foreach ($values as $key => $value) {
+                $scoreValue += (float) $value * $weights[$key] / 100;
+            }
+            $scoreValue = round($scoreValue, 2);
+        }
+
+        return [$scoreItems, $scoreValue];
     }
 
     public function executionTimeline(Request $request): array
@@ -1366,20 +1470,47 @@ class PracticeService
             throw new InvalidArgumentException('成绩比例合计必须为 100%');
         }
 
-        $projects = is_array($ratio['projects'] ?? null) ? array_values($ratio['projects']) : [];
-        $activeWeights = [];
-        foreach ($projects as $project) {
-            if (!is_array($project) || ($project['status'] ?? 'enabled') === 'disabled') {
-                continue;
+        $planId = $this->requiredInt($request, 'plan_id');
+        $activeProjects = array_values(array_filter(
+            PracticeRecord::planProjectRows($this->moduleType, $planId),
+            static fn (array $project): bool => in_array((string) ($project['status'] ?? ''), ['enabled', 'completed'], true)
+        ));
+        $expectedProjectIds = array_map(static fn (array $project): int => (int) $project['id'], $activeProjects);
+        $submittedProjects = is_array($ratio['projects'] ?? null) ? array_values($ratio['projects']) : [];
+        $submittedProjectMap = [];
+        foreach ($submittedProjects as $project) {
+            if (!is_array($project)) {
+                throw new InvalidArgumentException('项目成绩比例格式无效');
+            }
+            $projectId = (int) ($project['project_id'] ?? 0);
+            if ($projectId <= 0 || isset($submittedProjectMap[$projectId])) {
+                throw new InvalidArgumentException('项目成绩比例包含无效或重复项目');
             }
             $weight = $project['weight'] ?? null;
             if (!is_numeric($weight) || (float) $weight < 0 || (float) $weight > 100) {
                 throw new InvalidArgumentException('项目成绩比例必须为 0 至 100 的数字');
             }
-            $activeWeights[] = (float) $weight;
+            $submittedProjectMap[$projectId] = (float) $weight;
         }
-        if ($activeWeights && abs(array_sum($activeWeights) - 100) > 0.001) {
+        $submittedProjectIds = array_keys($submittedProjectMap);
+        sort($expectedProjectIds);
+        sort($submittedProjectIds);
+        if ($expectedProjectIds !== $submittedProjectIds) {
+            throw new InvalidArgumentException('课程项目权重必须覆盖全部有效项目');
+        }
+        if ($submittedProjectMap && abs(array_sum($submittedProjectMap) - 100) > 0.001) {
             throw new InvalidArgumentException('项目成绩比例合计必须为 100%');
+        }
+
+        $projects = [];
+        foreach ($activeProjects as $project) {
+            $projectId = (int) $project['id'];
+            $projects[] = [
+                'project_id' => $projectId,
+                'title' => (string) ($project['title'] ?? ''),
+                'weight' => $submittedProjectMap[$projectId],
+                'status' => (string) ($project['status'] ?? 'enabled'),
+            ];
         }
 
         return array_merge($ratio, $weights, ['projects' => $projects]);

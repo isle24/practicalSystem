@@ -70,13 +70,14 @@
             <input v-model="practiceExecutionDialog.form.material_score" type="number" min="0" max="100" inputmode="decimal">
           </label>
           <label class="app-field">
-            <span>课程报告</span>
+            <span>项目报告</span>
             <input v-model="practiceExecutionDialog.form.report_score" type="number" min="0" max="100" inputmode="decimal">
           </label>
           <label class="app-field">
-            <span>总评成绩</span>
-            <input v-model="practiceExecutionDialog.form.score_value" type="number" min="0" max="100" inputmode="decimal" placeholder="不填则按分项平均">
+            <span>项目成绩</span>
+            <input :value="practiceProjectScorePreview()" disabled placeholder="填写三项成绩后自动计算">
           </label>
+          <small class="practice-score-rule">{{ practiceProjectScoreRuleText() }}</small>
         </div>
       </template>
       <template v-else>
@@ -146,6 +147,8 @@ const {
   practiceGpsTitle,
   practiceMapUrl,
   practiceModule,
+  practiceProjectScorePreview,
+  practiceProjectScoreRuleText,
   submitPracticeExecution,
 } = usePracticeContext();
 </script>
@@ -161,6 +164,13 @@ const {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
+}
+
+.practice-score-rule {
+  grid-column: 1 / -1;
+  color: var(--app-text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 @media (max-width: 360px) {

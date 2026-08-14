@@ -12,6 +12,7 @@ const practicePanelKeys = [
   'lessonPlans',
   'gradeRules',
   'scores',
+  'courseScores',
   'reflections',
   'archives',
 ];
@@ -73,6 +74,11 @@ export function createPracticeState() {
       detail: null,
       detailVisible: false,
     },
+    courseScore: {
+      plan: null,
+      rule: null,
+      summary: null,
+    },
     scoreView: 'scores',
   };
 }
@@ -119,6 +125,7 @@ function createExecutionDialog() {
       score_value: '',
     },
     students: [],
+    rule: null,
   };
 }
 

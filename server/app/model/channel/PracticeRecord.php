@@ -20,6 +20,7 @@ class PracticeRecord extends TableRecord
         'content_json',
         'ratio_json',
         'score_items',
+        'attachment_ids',
         'snapshot_json',
         'missing_items_json',
         'pending_items_json',
@@ -461,6 +462,191 @@ class PracticeRecord extends TableRecord
         return $row ? self::rows([$row])[0] : null;
     }
 
+    /** 查询开课任务课程汇总成绩。 */
+    public static function courseScorePage(array $scope, string $moduleType, int $planId, array $filters): ?array
+    {
+        $plan = self::scoreSheetPlan($scope, $moduleType, $planId);
+        if (!$plan) {
+            return null;
+        }
+
+        $query = self::queryTable('practice_project_student')
+            ->join('practice_project', 'practice_project_student.project_id', '=', 'practice_project.id')
+            ->join('students', 'practice_project_student.student_id', '=', 'students.student_id')
+            ->leftJoin('grade_list', 'students.grade_id', '=', 'grade_list.grade_id')
+            ->leftJoin('department', 'students.dep_id', '=', 'department.dep_id')
+            ->leftJoin('profession', 'students.profession_id', '=', 'profession.profession_id')
+            ->leftJoin('class', 'students.class_id', '=', 'class.class_id')
+            ->where('practice_project_student.module_type', $moduleType)
+            ->where('practice_project_student.plan_id', $planId)
+            ->where('practice_project_student.status', 'active')
+            ->whereNull('practice_project_student.deleted_at')
+            ->whereIn('practice_project.status', ['enabled', 'completed'])
+            ->whereNull('practice_project.deleted_at')
+            ->where('students.status', 'enabled')
+            ->whereNull('students.deleted_at');
+        self::applyStudentOptionScope($query, $scope, 'students');
+
+        $roleType = (string) ($scope['role_type'] ?? '');
+        $teacherId = (int) ($scope['teacher_id'] ?? 0);
+        if ($roleType === 'teacher' && !self::teacherRelatedToPlan($moduleType, $planId, $teacherId, true)) {
+            self::whereInOrDeny($query, 'practice_project_student.teacher_id', [$teacherId]);
+        }
+        foreach (['grade_id', 'dep_id', 'profession_id', 'class_id'] as $key) {
+            $value = self::optionalInt($filters[$key] ?? null);
+            if ($value) {
+                $query->where("students.{$key}", $value);
+            }
+        }
+        self::keyword($query, $filters, ['students.name', 'students.student_num', 'class.class_name']);
+
+        $page = max(1, (int) ($filters['page'] ?? 1));
+        $pageSize = min(100, max(1, (int) ($filters['page_size'] ?? $filters['per_page'] ?? 20)));
+        $total = (int) (clone $query)->distinct()->count('students.student_id');
+        $studentColumns = [
+            'students.student_id',
+            'students.name as student_name',
+            'students.student_num',
+            'students.grade_id',
+            'students.dep_id',
+            'students.profession_id',
+            'students.class_id',
+            'grade_list.grade_name',
+            'department.dep_name',
+            'profession.profession_name',
+            'class.class_name',
+        ];
+        $studentGroupColumns = [
+            'students.student_id',
+            'students.name',
+            'students.student_num',
+            'students.grade_id',
+            'students.dep_id',
+            'students.profession_id',
+            'students.class_id',
+            'grade_list.grade_name',
+            'department.dep_name',
+            'profession.profession_name',
+            'class.class_name',
+        ];
+        $students = self::rows($query
+            ->groupBy($studentGroupColumns)
+            ->orderBy('class.class_name')
+            ->orderBy('students.student_num')
+            ->forPage($page, $pageSize)
+            ->get($studentColumns));
+        $studentIds = array_values(array_filter(array_map(static fn (array $row): int => (int) ($row['student_id'] ?? 0), $students)));
+        if (!$studentIds) {
+            return [
+                'plan' => $plan,
+                'rule' => self::gradeRuleRowByPlan($moduleType, $planId),
+                'items' => [],
+                'pagination' => ['page' => $page, 'page_size' => $pageSize, 'total' => $total],
+                'summary' => ['student_count' => $total, 'page_completed_count' => 0, 'page_average_score' => null],
+            ];
+        }
+
+        $assignments = self::rows(self::queryTable('practice_project_student')
+            ->join('practice_project', 'practice_project_student.project_id', '=', 'practice_project.id')
+            ->where('practice_project_student.module_type', $moduleType)
+            ->where('practice_project_student.plan_id', $planId)
+            ->whereIn('practice_project_student.student_id', $studentIds)
+            ->where('practice_project_student.status', 'active')
+            ->whereNull('practice_project_student.deleted_at')
+            ->whereIn('practice_project.status', ['enabled', 'completed'])
+            ->whereNull('practice_project.deleted_at')
+            ->orderBy('practice_project.id')
+            ->get([
+                'practice_project_student.student_id',
+                'practice_project.id as project_id',
+                'practice_project.title as project_title',
+            ]));
+        $scores = self::rows(self::moduleQuery('practice_score', $moduleType)
+            ->where('practice_score.plan_id', $planId)
+            ->whereIn('practice_score.student_id', $studentIds)
+            ->orderByDesc('practice_score.id')
+            ->get(['id', 'project_id', 'student_id', 'score_items', 'score_value', 'status', 'updated_at']));
+        $rule = self::gradeRuleRowByPlan($moduleType, $planId);
+        $activeProjects = array_values(array_filter(
+            self::planProjectRows($moduleType, $planId),
+            static fn (array $row): bool => in_array((string) ($row['status'] ?? ''), ['enabled', 'completed'], true)
+        ));
+        $projectWeights = self::courseProjectWeightMap($activeProjects, $rule);
+
+        $assignmentsByStudent = [];
+        foreach ($assignments as $assignment) {
+            $assignmentsByStudent[(int) $assignment['student_id']][] = $assignment;
+        }
+        $scoresByPair = [];
+        foreach ($scores as $score) {
+            $key = (int) ($score['student_id'] ?? 0) . ':' . (int) ($score['project_id'] ?? 0);
+            $scoresByPair[$key] ??= $score;
+        }
+
+        $completedCount = 0;
+        $finalScores = [];
+        foreach ($students as &$student) {
+            $studentId = (int) $student['student_id'];
+            $projects = [];
+            $weightedPoints = 0.0;
+            $scoredCount = 0;
+            $acceptedCount = 0;
+            foreach ($assignmentsByStudent[$studentId] ?? [] as $assignment) {
+                $projectId = (int) $assignment['project_id'];
+                $weight = (float) ($projectWeights[$projectId] ?? 0);
+                $score = $scoresByPair["{$studentId}:{$projectId}"] ?? null;
+                $scoreValue = is_numeric($score['score_value'] ?? null) ? (float) $score['score_value'] : null;
+                if ($scoreValue !== null) {
+                    $weightedPoints += $scoreValue * $weight;
+                    $scoredCount++;
+                }
+                if ($scoreValue !== null && ($score['status'] ?? '') === 'accept') {
+                    $acceptedCount++;
+                }
+                $projects[] = [
+                    'project_id' => $projectId,
+                    'project_title' => $assignment['project_title'] ?? '',
+                    'weight' => $weight,
+                    'score_value' => $scoreValue,
+                    'status' => $score['status'] ?? 'missing',
+                ];
+            }
+            $expectedCount = count($projects);
+            $previewScore = $scoredCount > 0
+                ? round($weightedPoints / 100, 2)
+                : null;
+            $completed = $expectedCount > 0 && $acceptedCount === $expectedCount && $scoredCount === $expectedCount;
+            if ($completed) {
+                $completedCount++;
+                $finalScores[] = $previewScore;
+            }
+            $student['expected_project_count'] = $expectedCount;
+            $student['scored_project_count'] = $scoredCount;
+            $student['accepted_project_count'] = $acceptedCount;
+            $student['missing_project_count'] = max(0, $expectedCount - $scoredCount);
+            $student['preview_score'] = $previewScore;
+            $student['final_score'] = $completed ? $previewScore : null;
+            $student['status'] = $completed ? 'completed' : 'pending';
+            $student['projects'] = $projects;
+            $student['module_type'] = $moduleType;
+            $student['plan_id'] = $planId;
+            $student['plan_title'] = (string) (($plan['title'] ?? '') ?: ($plan['course_name'] ?? ''));
+        }
+        unset($student);
+
+        return [
+            'plan' => $plan,
+            'rule' => $rule,
+            'items' => $students,
+            'pagination' => ['page' => $page, 'page_size' => $pageSize, 'total' => $total],
+            'summary' => [
+                'student_count' => $total,
+                'page_completed_count' => $completedCount,
+                'page_average_score' => $finalScores ? round(array_sum($finalScores) / count($finalScores), 2) : null,
+            ],
+        ];
+    }
+
     /** 保存项目变化后的动态成绩方案。 */
     public static function syncGradeRuleProjects(string $moduleType, array $project, string $uuid, string $now): int
     {
@@ -613,6 +799,8 @@ class PracticeRecord extends TableRecord
 
         $projectIds = array_values(array_filter(array_map(static fn (array $row): int => (int) ($row['id'] ?? 0), $check['projects'])));
         $studentRows = [];
+        $scheduleRows = [];
+        $signInRows = [];
         $reportRows = [];
         $scoreRows = [];
         if ($projectIds) {
@@ -632,6 +820,26 @@ class PracticeRecord extends TableRecord
                     'students.student_num',
                     'students.class_id',
                 ]));
+            $signInRows = self::rows(self::queryTable('sign_in')
+                ->leftJoin('students', 'sign_in.student_id', '=', 'students.student_id')
+                ->where('sign_in.entity_type', $moduleType)
+                ->whereIn('sign_in.entity_id', $projectIds)
+                ->whereNull('sign_in.deleted_at')
+                ->orderBy('sign_in.entity_id')
+                ->orderBy('students.student_num')
+                ->get([
+                    'sign_in.id',
+                    'sign_in.entity_id as project_id',
+                    'sign_in.student_id',
+                    'students.name as student_name',
+                    'students.student_num',
+                    'sign_in.date',
+                    'sign_in.location',
+                    'sign_in.longitude',
+                    'sign_in.latitude',
+                    'sign_in.status',
+                    'sign_in.created_at',
+                ]));
             $reportRows = self::rows(self::queryTable('report')
                 ->where('entity_type', $moduleType)
                 ->where(function ($query) use ($projectIds): void {
@@ -648,6 +856,9 @@ class PracticeRecord extends TableRecord
                     self::connection()->raw('COALESCE(practice_project_id, entity_id) as project_id'),
                     'student_id',
                     'title',
+                    'content',
+                    'remark',
+                    'attachment_ids',
                     'status',
                     'submitted_at',
                     'reflection_summary',
@@ -660,10 +871,44 @@ class PracticeRecord extends TableRecord
                 ->get(['id', 'project_id', 'student_id', 'teacher_id', 'score_items', 'score_value', 'status']));
         }
 
+        $scheduleRows = self::rows(self::moduleQuery('practice_schedule', $moduleType)
+            ->where('practice_schedule.plan_id', $planId)
+            ->orderBy('practice_schedule.schedule_date')
+            ->orderBy('practice_schedule.start_time')
+            ->get(['practice_schedule.*']));
+        $syllabusRows = self::rows(self::moduleQuery('practice_syllabus', $moduleType)
+            ->where('practice_syllabus.plan_id', $planId)
+            ->orderBy('practice_syllabus.id')
+            ->get(['practice_syllabus.*']));
+        $lessonPlanRows = self::rows(self::moduleQuery('practice_lesson_plan', $moduleType)
+            ->where('practice_lesson_plan.plan_id', $planId)
+            ->orderBy('practice_lesson_plan.id')
+            ->get(['practice_lesson_plan.*']));
+        $reflectionRows = self::rows(self::moduleQuery('practice_reflection', $moduleType)
+            ->where('practice_reflection.plan_id', $planId)
+            ->orderBy('practice_reflection.id')
+            ->get(['practice_reflection.*']));
+        $courseScoreRows = [];
+        $courseScorePage = 1;
+        do {
+            $courseScores = self::courseScorePage($scope, $moduleType, $planId, [
+                'page' => $courseScorePage,
+                'page_size' => 100,
+            ]);
+            $courseScoreRows = array_merge($courseScoreRows, $courseScores['items'] ?? []);
+            $courseScorePage++;
+        } while ($courseScores && count($courseScoreRows) < (int) ($courseScores['pagination']['total'] ?? 0));
+
         return array_merge($check, [
             'students' => $studentRows,
+            'schedules' => $scheduleRows,
+            'sign_ins' => $signInRows,
             'reports' => $reportRows,
             'scores' => $scoreRows,
+            'course_scores' => $courseScoreRows,
+            'syllabus' => $syllabusRows,
+            'lesson_plans' => $lessonPlanRows,
+            'reflections' => $reflectionRows,
             'grade_rule' => self::gradeRuleRowByPlan($moduleType, $planId),
             'snapshot_at' => date('Y-m-d H:i:s'),
         ]);
@@ -892,7 +1137,7 @@ class PracticeRecord extends TableRecord
 
         $query = self::moduleQuery('practice_plan', $moduleType)
             ->where('practice_plan.id', $planId);
-        self::applyPracticeScope($query, $scope, 'practice_plan');
+        self::applyPracticeScope($query, $scope, 'practice_plan', false, 'plan');
         $row = $query->first([
             'practice_plan.id',
             'practice_plan.status',
@@ -1478,7 +1723,7 @@ class PracticeRecord extends TableRecord
             ->leftJoin('class', 'practice_plan.class_id', '=', 'class.class_id')
             ->leftJoin('teacher_list', 'practice_plan.teacher_id', '=', 'teacher_list.teacher_id')
             ->where('practice_plan.id', $planId);
-        self::applyPracticeScope($query, $scope, 'practice_plan');
+        self::applyPracticeScope($query, $scope, 'practice_plan', false, 'plan');
         $row = $query->first([
             'practice_plan.id',
             'practice_plan.code',
@@ -1663,6 +1908,31 @@ class PracticeRecord extends TableRecord
         $weights = array_fill(0, $count, $base);
         $weights[$count - 1] = round(100 - $base * ($count - 1), 2);
         return $weights;
+    }
+
+    /** 生成课程汇总使用的项目权重。 */
+    private static function courseProjectWeightMap(array $projects, ?array $rule): array
+    {
+        $projectRows = [];
+        foreach ($projects as $project) {
+            $projectId = (int) ($project['id'] ?? 0);
+            if ($projectId > 0) {
+                $projectRows[$projectId] = true;
+            }
+        }
+        $projectIds = array_keys($projectRows);
+        $configured = [];
+        foreach (($rule['ratio_json']['projects'] ?? []) as $item) {
+            $projectId = (int) ($item['project_id'] ?? 0);
+            if ($projectId > 0 && in_array($projectId, $projectIds, true) && ($item['status'] ?? 'enabled') !== 'disabled') {
+                $configured[$projectId] = (float) ($item['weight'] ?? 0);
+            }
+        }
+        if (count($configured) === count($projectIds) && abs(array_sum($configured) - 100) < 0.001) {
+            return $configured;
+        }
+
+        return array_combine($projectIds, self::evenWeights(count($projectIds))) ?: [];
     }
 
     /** 查询有效的项目学生绑定。 */
@@ -2175,6 +2445,15 @@ class PracticeRecord extends TableRecord
                             ->where('practice_plan_teacher.status', 'enabled')
                             ->whereNull('practice_plan_teacher.deleted_at');
                     });
+                    if ($entity === 'plan') {
+                        $builder->orWhereExists(function ($relation) use ($planColumn, $teacherId): void {
+                            $relation->selectRaw('1')
+                                ->from('practice_project')
+                                ->whereColumn('practice_project.plan_id', $planColumn)
+                                ->where('practice_project.teacher_id', $teacherId)
+                                ->whereNull('practice_project.deleted_at');
+                        });
+                    }
                 }
                 if ($entity === 'project') {
                     $builder->orWhereExists(function ($relation) use ($alias, $teacherId): void {

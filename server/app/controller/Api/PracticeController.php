@@ -218,6 +218,20 @@ class PracticeController
         return $this->handle(fn (): array => $this->service($request)->archiveDetail($request));
     }
 
+    /** 获取实验实训归档包下载信息。 */
+    #[OperationLog('下载实验实训归档包')]
+    public function archiveDownload(Request $request): Response
+    {
+        return $this->handle(fn (): array => $this->service($request)->archiveDownload($request));
+    }
+
+    /** 查询实验实训课程汇总成绩。 */
+    #[OperationLog('查询实验实训课程汇总成绩')]
+    public function courseScores(Request $request): Response
+    {
+        return $this->handle(fn (): array => $this->service($request)->courseScores($request));
+    }
+
     /** 保存实验实训成绩。 */
     #[OperationLog('保存实验实训成绩')]
     public function saveScore(Request $request): Response

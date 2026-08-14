@@ -1026,6 +1026,16 @@ export function fetchPracticeArchiveDetail(moduleType, id) {
   return request(`/practice/archive-detail?${query}`);
 }
 
+export function fetchPracticeArchiveDownload(moduleType, id) {
+  const query = new URLSearchParams({ module_type: moduleType, id }).toString();
+  return request(`/practice/archive-download?${query}`);
+}
+
+export function fetchPracticeCourseScores(moduleType, params = {}) {
+  const query = new URLSearchParams({ ...params, module_type: moduleType }).toString();
+  return request(`/practice/course-scores?${query}`);
+}
+
 export function fetchPracticePeriods(params = {}) {
   const query = new URLSearchParams({ ...params, module_type: 'all' }).toString();
   return request(`/practice/periods${query ? `?${query}` : ''}`);

@@ -267,7 +267,7 @@
           <ModuleSidebar
             v-if="sidebarItems(win).length"
             :items="sidebarItems(win)"
-            :active-key="win.panel"
+            :active-key="practiceSidebarActiveKey(win)"
             :label="win.module.id === 'config' ? '设置' : '模块'"
             :storage-key="moduleSidebarStorageKey(win)"
             @select="panel => activateWindowPanel(win, panel)"
@@ -1707,10 +1707,11 @@
                             <el-option v-for="student in practiceModuleState(win.module.id).scoreStudents" :key="student.student_id" :label="`${student.student_name} / ${student.student_num}`" :value="student.student_id" />
                           </el-select>
                         </label>
-                        <label><span>考勤成绩</span><input v-model="practiceModuleState(win.module.id).form.attendance_score" type="number"></label>
-                        <label><span>过程成绩</span><input v-model="practiceModuleState(win.module.id).form.material_score" type="number"></label>
-                        <label><span>报告成绩</span><input v-model="practiceModuleState(win.module.id).form.report_score" type="number"></label>
-                        <label><span>总评成绩</span><input v-model="practiceModuleState(win.module.id).form.score_value" type="number" placeholder="不填则按分项平均"></label>
+                        <label><span>考勤与课堂表现</span><input v-model="practiceModuleState(win.module.id).form.attendance_score" min="0" max="100" type="number"></label>
+                        <label><span>项目实操</span><input v-model="practiceModuleState(win.module.id).form.material_score" min="0" max="100" type="number"></label>
+                        <label><span>项目报告</span><input v-model="practiceModuleState(win.module.id).form.report_score" min="0" max="100" type="number"></label>
+                        <label><span>项目成绩</span><input :value="practiceProjectScorePreview(win.module.id)" disabled placeholder="填写三项成绩后自动计算"></label>
+                        <small class="span-2 practice-score-rule-hint">{{ practiceProjectScoreRuleText(win.module.id) }}</small>
                       </div>
 
                       <div v-else-if="practiceModuleState(win.module.id).dialog.type === 'planTeachers'" class="operation-form single">
@@ -1864,8 +1865,19 @@
                         <template v-if="win.panel === 'gradeRules'">
                           <label><span>考勤与课堂表现（%）</span><input v-model="practiceModuleState(win.module.id).form.attendance_weight" type="number" min="0" max="100"></label>
                           <label><span>项目实操（%）</span><input v-model="practiceModuleState(win.module.id).form.operation_weight" type="number" min="0" max="100"></label>
-                          <label><span>课程报告（%）</span><input v-model="practiceModuleState(win.module.id).form.report_weight" type="number" min="0" max="100"></label>
+                          <label><span>项目报告（%）</span><input v-model="practiceModuleState(win.module.id).form.report_weight" type="number" min="0" max="100"></label>
                           <label><span>比例合计</span><input :value="practiceGradeRuleTotal(win.module.id) + '%'" disabled></label>
+                          <div class="practice-project-weights span-2">
+                            <header>
+                              <strong>课程项目权重</strong>
+                              <span>合计 {{ practiceProjectWeightTotal(win.module.id) }}%</span>
+                            </header>
+                            <small v-if="!practiceModuleState(win.module.id).form.ratio_projects.length">当前开课任务暂无已发布项目</small>
+                            <label v-for="project in practiceModuleState(win.module.id).form.ratio_projects" :key="project.project_id">
+                              <span>{{ project.title || `项目 ${project.project_id}` }}</span>
+                              <input v-model.number="project.weight" type="number" min="0" max="100">
+                            </label>
+                          </div>
                         </template>
                         <label v-if="practiceTextPanel(win.panel)" class="span-2">
                           <span>内容</span>
@@ -1955,6 +1967,9 @@
                           <el-button :disabled="practiceModuleState(win.module.id).loading" :loading="practiceModuleState(win.module.id).loading" @click="savePracticeDialogReviewDraft(win.module.id)">保存草稿</el-button>
                           <el-button type="primary" :disabled="practiceModuleState(win.module.id).loading" :loading="practiceModuleState(win.module.id).loading" @click="confirmPracticeDialog(win.module.id)">提交审核</el-button>
                         </template>
+                        <el-button v-else-if="practiceModuleState(win.module.id).dialog.type === 'archiveDetail'" type="primary" :icon="Download" :disabled="practiceModuleState(win.module.id).loading" :loading="practiceModuleState(win.module.id).loading" @click="downloadPracticeArchive(win.module.id)">
+                          下载归档包
+                        </el-button>
                         <el-button v-else-if="!['timeline', 'archiveDetail'].includes(practiceModuleState(win.module.id).dialog.type)" type="primary" :disabled="practiceModuleState(win.module.id).loading" :loading="practiceModuleState(win.module.id).loading" @click="confirmPracticeDialog(win.module.id)">
                           确认
                         </el-button>
@@ -1993,10 +2008,11 @@
                       </div>
                     </section>
                   </div>
-                  <div v-else-if="['gradeRules', 'scores'].includes(win.panel)" class="practice-score-workspace">
+                  <div v-else-if="['gradeRules', 'scores', 'courseScores'].includes(win.panel)" class="practice-score-workspace">
                     <nav class="text-tabs practice-score-tabs" aria-label="成绩管理">
                       <button v-if="canManagePracticeGradeRules(win.module.id)" type="button" :class="{ active: win.panel === 'gradeRules' }" @click="activateWindowPanel(win, 'gradeRules')">成绩方案</button>
                       <button type="button" :class="{ active: win.panel === 'scores' }" @click="activateWindowPanel(win, 'scores')">成绩录入与评定</button>
+                      <button type="button" :class="{ active: win.panel === 'courseScores' }" @click="activateWindowPanel(win, 'courseScores')">课程汇总</button>
                     </nav>
                     <DataListPanel
                       :columns="practiceListConfig(win.module.id, win.panel).columns"
@@ -2165,6 +2181,9 @@
                       </el-button>
                       <el-button v-if="win.panel === 'archives'" link type="primary" @click="openPracticeArchiveDetail(win.module.id, row)">
                         查看归档
+                      </el-button>
+                      <el-button v-if="win.panel === 'archives'" link type="success" @click="downloadPracticeArchive(win.module.id, row)">
+                        下载
                       </el-button>
                     </template>
                   </DataListPanel>
@@ -4357,7 +4376,9 @@ import {
   fetchPracticeExecutionTimeline,
   fetchPracticeArchiveCheck,
   fetchPracticeArchiveDetail,
+  fetchPracticeArchiveDownload,
   fetchPracticeArchives,
+  fetchPracticeCourseScores,
   fetchPracticePlanTeachers,
   fetchPracticeProjectStudents,
   fetchPracticeScheduleWeek,
@@ -10566,7 +10587,7 @@ function emptyOperationDialog() {
 }
 
 function createPracticeModuleState() {
-  const panels = ['plans', 'schedules', 'projects', 'signIns', 'journals', 'reports', 'syllabus', 'lessonPlans', 'gradeRules', 'scores', 'reflections', 'archives', 'rooms'];
+  const panels = ['plans', 'schedules', 'projects', 'signIns', 'journals', 'reports', 'syllabus', 'lessonPlans', 'gradeRules', 'scores', 'courseScores', 'reflections', 'archives', 'rooms'];
   return {
     loading: false,
     message: '',
@@ -10583,6 +10604,12 @@ function createPracticeModuleState() {
     dialog: emptyOperationDialog(),
     archiveCheck: null,
     scoreStudents: [],
+    scoreRule: null,
+    courseScore: {
+      plan: null,
+      rule: null,
+      summary: null,
+    },
     filters: Object.fromEntries(panels.map(panel => [panel, emptyPracticeFilters()])),
     lists: Object.fromEntries(panels.map(panel => [panel, emptyPagedList()])),
   };
@@ -10630,6 +10657,7 @@ function emptyPracticeFilters() {
     profession_id: '',
     class_id: '',
     plan_id: '',
+    project_id: '',
     teacher_id: '',
     room_id: '',
     place_type: '',
@@ -10694,10 +10722,10 @@ function emptyPracticeExecutionForm(row = {}) {
     longitude: row.longitude || '',
     latitude: row.latitude || '',
     remark: row.remark || '',
-    attendance_score: row.attendance_score || '',
-    material_score: row.material_score || '',
-    report_score: row.report_score || '',
-    score_value: row.score_value || '',
+    attendance_score: row.attendance_score ?? '',
+    material_score: row.material_score ?? '',
+    report_score: row.report_score ?? '',
+    score_value: row.score_value ?? '',
   };
 }
 
@@ -10707,6 +10735,13 @@ function practiceModuleState(module) {
 
 function isPracticeModule(module) {
   return module === 'practice';
+}
+
+function practiceSidebarActiveKey(win) {
+  if (isPracticeModule(win.module.id) && ['gradeRules', 'courseScores'].includes(win.panel)) {
+    return 'scores';
+  }
+  return win.panel;
 }
 
 function practiceWriteModuleType(value) {
@@ -10937,6 +10972,44 @@ function practiceGradeRuleTotal(module) {
   return Number(form.attendance_weight || 0) + Number(form.operation_weight || 0) + Number(form.report_weight || 0);
 }
 
+function practiceProjectWeightTotal(module) {
+  return Math.round((practiceModuleState(module).form.ratio_projects || [])
+    .reduce((sum, project) => sum + Number(project.weight || 0), 0) * 100) / 100;
+}
+
+function evenPracticeProjectWeights(count) {
+  if (count <= 0) {
+    return [];
+  }
+  const base = Math.floor(10000 / count) / 100;
+  return Array.from({ length: count }, (_, index) => index === count - 1
+    ? Math.round((100 - base * (count - 1)) * 100) / 100
+    : base);
+}
+
+function syncPracticeGradeRuleProjects(module) {
+  const state = practiceModuleState(module);
+  const projects = (state.options.projects || []).filter(project => (
+    Number(project.plan_id || 0) === Number(state.form.plan_id || 0)
+      && project.module_type === state.form.module_type
+      && ['enabled', 'completed'].includes(String(project.status || ''))
+  ));
+  const existing = new Map((state.form.ratio_projects || []).map(project => [Number(project.project_id || 0), project]));
+  const sameSet = projects.length > 0
+    && projects.length === existing.size
+    && projects.every(project => existing.has(Number(project.id)));
+  const existingTotal = projects.reduce((sum, project) => sum + Number(existing.get(Number(project.id))?.weight || 0), 0);
+  const weights = sameSet && Math.abs(existingTotal - 100) < 0.001
+    ? projects.map(project => Number(existing.get(Number(project.id)).weight))
+    : evenPracticeProjectWeights(projects.length);
+  state.form.ratio_projects = projects.map((project, index) => ({
+    project_id: Number(project.id),
+    title: project.title || project.course_name || `项目 ${project.id}`,
+    weight: weights[index] ?? 0,
+    status: project.status || 'enabled',
+  }));
+}
+
 function practiceNeedsPlan(panel) {
   return ['schedules', 'syllabus', 'lessonPlans', 'gradeRules', 'scores', 'reflections'].includes(panel);
 }
@@ -10946,7 +11019,7 @@ function practiceTextPanel(panel) {
 }
 
 function showPracticeAddButton(module, panel) {
-  if (['overview', 'archives'].includes(panel)) {
+  if (['overview', 'archives', 'courseScores'].includes(panel)) {
     return false;
   }
   if (panel === 'scores') {
@@ -11050,7 +11123,7 @@ function practiceListConfig(module, panel) {
       ? ['module_type', 'dep_id', 'status', 'keyword']
     : ['signIns', 'journals', 'reports'].includes(panel)
       ? ['module_type', 'grade_id', 'dep_id', 'profession_id', 'class_id', 'plan_id', 'project_id', 'status', 'date', 'keyword']
-      : panel === 'scores'
+    : ['scores', 'courseScores'].includes(panel)
         ? ['module_type', 'grade_id', 'dep_id', 'profession_id', 'plan_id', 'keyword']
         : panel === 'archives'
           ? ['module_type', 'grade_id', 'dep_id', 'profession_id', 'plan_id', 'status', 'keyword']
@@ -11135,6 +11208,17 @@ function practiceListConfig(module, panel) {
       { prop: 'score_value', label: '成绩', width: 90 },
       { prop: 'teacher_name', label: '评分教师', width: 120 },
       { prop: 'status', label: '状态', width: 90, tag: true, tagType: row => statusTagType(row.status), formatter: row => statusText(row.status) },
+    ],
+    courseScores: [
+      { prop: 'student_name', label: '学生', width: 110 },
+      { prop: 'student_num', label: '学号', width: 130 },
+      { prop: 'class_name', label: '班级', minWidth: 140 },
+      { prop: 'expected_project_count', label: '应完成项目', width: 105 },
+      { prop: 'accepted_project_count', label: '已通过项目', width: 105 },
+      { prop: 'missing_project_count', label: '缺失成绩', width: 90 },
+      { prop: 'preview_score', label: '试算成绩', width: 90, formatter: row => row.preview_score ?? '-' },
+      { prop: 'final_score', label: '最终成绩', width: 90, formatter: row => row.final_score ?? '-' },
+      { prop: 'status', label: '完成状态', width: 100, tag: true, tagType: row => row.status === 'completed' ? 'success' : 'warning', formatter: row => row.status === 'completed' ? '已完成' : '待完成' },
     ],
     reflections: practiceDocumentColumns('课程教学反思'),
     archives: [
@@ -11299,6 +11383,9 @@ function handlePracticePlanChange(module) {
       state.form[field] = plan[field];
     }
   });
+  if (state.dialog.panel === 'gradeRules') {
+    syncPracticeGradeRuleProjects(module);
+  }
 }
 
 function handlePracticePlaceTypeChange(module) {
@@ -11390,6 +11477,7 @@ async function changePracticeScoreProject(module) {
   const state = practiceModuleState(module);
   const project = practiceScoreProjectOptions(module).find(item => Number(item.id) === Number(state.form.project_id || 0));
   state.scoreStudents = [];
+  state.scoreRule = null;
   if (!project) {
     state.form.student_id = null;
     return;
@@ -11398,6 +11486,7 @@ async function changePracticeScoreProject(module) {
   try {
     const data = await fetchPracticeProjectStudents(project.module_type, project.id);
     state.scoreStudents = data.items || [];
+    state.scoreRule = data.rule || null;
     if (!state.scoreStudents.some(item => Number(item.student_id) === Number(state.form.student_id || 0))) {
       state.form.student_id = state.scoreStudents[0]?.student_id || null;
     }
@@ -11416,6 +11505,54 @@ function applyPracticeScoreStudent(module) {
   state.form.material_score = items.material_score ?? '';
   state.form.report_score = items.report_score ?? '';
   state.form.score_value = student?.score_value ?? '';
+}
+
+function practiceProjectScoreWeights(module) {
+  const ratio = practiceModuleState(module).scoreRule?.ratio_json;
+  return {
+    attendance_score: Number(ratio?.attendance_weight ?? 20),
+    material_score: Number(ratio?.operation_weight ?? 70),
+    report_score: Number(ratio?.report_weight ?? 10),
+  };
+}
+
+function practiceProjectScorePreview(module) {
+  const form = practiceModuleState(module).form;
+  const values = {
+    attendance_score: form.attendance_score,
+    material_score: form.material_score,
+    report_score: form.report_score,
+  };
+  if (Object.values(values).some(value => value === '' || value === null || value === undefined || !Number.isFinite(Number(value)))) {
+    return '';
+  }
+  const weights = practiceProjectScoreWeights(module);
+  const score = Object.entries(values).reduce((total, [key, value]) => total + Number(value) * weights[key] / 100, 0);
+  return Math.round(score * 100) / 100;
+}
+
+function practiceProjectScoreRuleText(module) {
+  const weights = practiceProjectScoreWeights(module);
+  return `计分规则：考勤与课堂表现 ${weights.attendance_score}% + 项目实操 ${weights.material_score}% + 项目报告 ${weights.report_score}%`;
+}
+
+function practiceCourseScorePlanOptions(module) {
+  const state = practiceModuleState(module);
+  const filters = state.filters.courseScores || {};
+  return filterAcademicItems(state.options.plans || [], filters, ['grade_id', 'dep_id', 'profession_id', 'class_id'])
+    .filter(plan => (!filters.module_type || filters.module_type === 'all' || plan.module_type === filters.module_type)
+      && ['accept', 'enabled'].includes(String(plan.status || '')));
+}
+
+function selectedPracticeCourseScorePlan(module) {
+  const state = practiceModuleState(module);
+  const plans = practiceCourseScorePlanOptions(module);
+  let plan = plans.find(item => Number(item.id) === Number(state.filters.courseScores.plan_id || 0));
+  if (!plan) {
+    plan = plans[0] || null;
+    state.filters.courseScores.plan_id = plan?.id || '';
+  }
+  return plan;
 }
 
 function practiceArchivePlanOptions(module) {
@@ -11459,6 +11596,7 @@ async function handlePracticeScoreModuleTypeChange(module) {
   const state = practiceModuleState(module);
   handlePracticeWriteModuleTypeChange(module);
   state.scoreStudents = [];
+  state.scoreRule = null;
   state.form.student_id = null;
   state.form.project_id = practiceScoreProjectOptions(module)[0]?.id || null;
   await changePracticeScoreProject(module);
@@ -11511,6 +11649,9 @@ function validatePracticeForm(module, panel, form) {
   }
   if (panel === 'gradeRules' && practiceGradeRuleTotal(module) !== 100) {
     return '成绩比例合计必须为 100%';
+  }
+  if (panel === 'gradeRules' && form.ratio_projects.length && Math.abs(practiceProjectWeightTotal(module) - 100) > 0.001) {
+    return '课程项目权重合计必须为 100%';
   }
   if (panel !== 'schedules') {
     if (panel === 'projects') {
@@ -11632,6 +11773,25 @@ async function loadPracticePanel(module, panel = 'overview', page = 1) {
     await loadPracticeFoundation(module);
     if (panel === 'schedules' && state.schedule.view === 'board') {
       await loadPracticeScheduleWeek(module);
+    } else if (panel === 'courseScores') {
+      const plan = selectedPracticeCourseScorePlan(module);
+      if (!plan) {
+        state.courseScore = { plan: null, rule: null, summary: null };
+        state.lists.courseScores.items = [];
+        state.lists.courseScores.pagination = { ...state.lists.courseScores.pagination, page, total: 0 };
+        return;
+      }
+      const data = await fetchPracticeCourseScores(plan.module_type, practiceQueryParams(module, panel, page));
+      state.courseScore = {
+        plan: data.plan || plan,
+        rule: data.rule || null,
+        summary: data.summary || null,
+      };
+      state.lists.courseScores.items = data.items || [];
+      state.lists.courseScores.pagination = {
+        ...state.lists.courseScores.pagination,
+        ...(data.pagination || {}),
+      };
     } else if (panel !== 'overview') {
       const data = panel === 'archives'
         ? await fetchPracticeArchives(practiceRequestModuleType(module, state.filters[panel].module_type), practiceQueryParams(module, panel, page))
@@ -11701,6 +11861,9 @@ async function openPracticeDialog(module, panel, row = null) {
     panel,
     row,
   };
+  if (panel === 'gradeRules') {
+    handlePracticePlanChange(module);
+  }
   if (panel === 'scores') {
     await changePracticeScoreProject(module);
   }
@@ -11868,7 +12031,6 @@ async function savePracticeProjectScoreDialog(module, workflowStatus = 'wait') {
       attendance_score: state.form.attendance_score,
       material_score: state.form.material_score,
       report_score: state.form.report_score,
-      score_value: state.form.score_value,
       status: workflowStatus,
     });
     closePracticeDialog(module);
@@ -12056,6 +12218,31 @@ async function openPracticeArchiveDetail(module, row) {
   } catch (error) {
     state.message = error.message;
     closePracticeDialog(module);
+  } finally {
+    state.loading = false;
+  }
+}
+
+async function downloadPracticeArchive(module, row = null) {
+  const state = practiceModuleState(module);
+  const archive = row || state.dialog.archive;
+  if (!archive?.id || state.loading) {
+    return;
+  }
+  state.loading = true;
+  state.message = '';
+  try {
+    const result = await fetchPracticeArchiveDownload(practiceWriteModuleType(archive.module_type), archive.id);
+    const link = document.createElement('a');
+    link.href = backendUrl(result.url);
+    link.download = result.download_name || '';
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  } catch (error) {
+    state.message = error.message;
   } finally {
     state.loading = false;
   }

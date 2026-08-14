@@ -2322,6 +2322,38 @@ a {
   background: var(--primary);
 }
 
+.practice-score-rule-hint {
+  display: block;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.practice-project-weights {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 14px;
+  padding-top: 4px;
+}
+
+.practice-project-weights > header,
+.practice-project-weights > small {
+  grid-column: 1 / -1;
+}
+
+.practice-project-weights > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 7px;
+  border-bottom: 1px solid var(--line);
+}
+
+.practice-project-weights > header span,
+.practice-project-weights > small {
+  color: var(--muted);
+}
+
 .practice-archive-check,
 .practice-archive-detail {
   min-height: 0;

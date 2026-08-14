@@ -2312,6 +2312,9 @@ function ensurePracticeSchema(PDO $pdo): void
         'practice_reflection' => [
             'submitter_id' => "ALTER TABLE `practice_reflection` ADD COLUMN `submitter_id` BIGINT UNSIGNED DEFAULT NULL AFTER `remark`",
         ],
+        'practice_archive' => [
+            'archive_file_id' => "ALTER TABLE `practice_archive` ADD COLUMN `archive_file_id` BIGINT UNSIGNED DEFAULT NULL AFTER `pending_items_json`",
+        ],
         'practice_room' => [
             'module_type' => "ALTER TABLE `practice_room` ADD COLUMN `module_type` ENUM('training','lab') DEFAULT 'training' AFTER `code`",
             'dep_id' => "ALTER TABLE `practice_room` ADD COLUMN `dep_id` BIGINT UNSIGNED DEFAULT NULL AFTER `module_type`",
