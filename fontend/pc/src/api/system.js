@@ -822,6 +822,10 @@ export function fetchInternshipStats(params = {}) {
   return internshipList('stats', params);
 }
 
+export function exportPracticeScoreSheet(payload = {}) {
+  return internshipPost('export-practice-score-sheet', payload);
+}
+
 export function fetchInternshipArchiveMaterials(params = {}) {
   return internshipList('archive-materials', params);
 }

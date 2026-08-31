@@ -3837,8 +3837,40 @@
                     <section class="stat-detail-panel">
                       <section v-if="isPracticeScoreSheetReport()" class="course-score-sheet" v-loading="statState.loading">
                         <header>
-                          <strong>成都锦城学院{{ statState.sheet_meta.title || currentStatReport.name }}</strong>
-                          <small>{{ statState.sheet_meta.module_name || '实训' }}成绩记载 / 共 {{ statState.pagination.total }} 人</small>
+                          <div class="course-score-heading">
+                            <strong>{{ loginSchoolName }}{{ statState.sheet_meta.title || currentStatReport.name }}</strong>
+                            <small>{{ statState.sheet_meta.module_name || '实训' }}成绩记载 / 共 {{ statState.pagination.total }} 人</small>
+                          </div>
+                          <div class="course-score-actions">
+                            <el-button
+                              size="small"
+                              :icon="Download"
+                              :loading="statState.loading"
+                              :disabled="!statState.filters.plan_id"
+                              @click="exportPracticeScoreSheetFile"
+                            >
+                              导出 Excel
+                            </el-button>
+                            <el-button
+                              size="small"
+                              :icon="Printer"
+                              :loading="statState.loading"
+                              :disabled="!statState.selectedStudentIds.length"
+                              @click="printPracticeScoreSheet('selected')"
+                            >
+                              打印选中
+                            </el-button>
+                            <el-button
+                              size="small"
+                              type="primary"
+                              :icon="Printer"
+                              :loading="statState.loading"
+                              :disabled="!statState.filters.plan_id"
+                              @click="printPracticeScoreSheet('all')"
+                            >
+                              打印全部
+                            </el-button>
+                          </div>
                         </header>
                         <div class="course-score-meta">
                           <span v-for="item in courseScoreSheetMetaItems" :key="item.key">
@@ -3850,6 +3882,15 @@
                           <table class="course-score-table">
                             <thead>
                               <tr>
+                                <th rowspan="2" class="score-select-column">
+                                  <input
+                                    type="checkbox"
+                                    :checked="allVisibleScoreRowsSelected"
+                                    :disabled="!statState.rows.length"
+                                    aria-label="选择当前页全部学生"
+                                    @change="toggleAllVisibleScoreRows"
+                                  >
+                                </th>
                                 <th rowspan="2">序号</th>
                                 <th rowspan="2">学号</th>
                                 <th rowspan="2">姓名</th>
@@ -3867,6 +3908,15 @@
                             </thead>
                             <tbody>
                               <tr v-for="row in statState.rows" :key="row.student_id || row.sequence">
+                                <td class="score-select-column">
+                                  <input
+                                    v-model="statState.selectedStudentIds"
+                                    type="checkbox"
+                                    :value="Number(row.student_id)"
+                                    :disabled="!row.student_id"
+                                    :aria-label="`选择${row.student_name || row.student_num || '学生'}`"
+                                  >
+                                </td>
                                 <td>{{ statCellText(row.sequence) }}</td>
                                 <td>{{ statCellText(row.student_num) }}</td>
                                 <td>{{ statCellText(row.student_name) }}</td>
@@ -3878,7 +3928,7 @@
                                 <td>{{ scoreSheetCell(row, 'total_score') }}</td>
                               </tr>
                               <tr v-if="!statState.rows.length">
-                                <td :colspan="currentStatColumns.length || 35">暂无成绩记载数据</td>
+                                <td :colspan="scoreSheetColumnCount">暂无成绩记载数据</td>
                               </tr>
                             </tbody>
                           </table>
@@ -4269,6 +4319,7 @@ import {
   MoreHorizontal,
   Network,
   Plus,
+  Printer,
   RefreshCw,
   Save,
   Search,
@@ -4353,6 +4404,7 @@ import {
   fetchInternshipScores,
   fetchInternshipSignIns,
   fetchInternshipStats,
+  exportPracticeScoreSheet,
   fetchInternshipSyllabusGuides,
   fetchInternshipImplementationSheets,
   fetchInternshipImplementationDetail,
@@ -4680,6 +4732,7 @@ const statState = reactive({
   cards: [],
   columns: [],
   rows: [],
+  selectedStudentIds: [],
   sheet_meta: {},
   pagination: {
     page: 1,
@@ -5704,6 +5757,11 @@ const currentStatReport = computed(() => statReports.find(item => item.key === s
 const statCardIcons = [UserRound, ClipboardList, CheckCircle2, UsersRound, GraduationCap, MapPin];
 const scoreSheetAttendanceIndexes = Array.from({ length: 16 }, (_, index) => index + 1);
 const scoreSheetProjectIndexes = Array.from({ length: 12 }, (_, index) => index + 1);
+const scoreSheetColumnCount = 36;
+const allVisibleScoreRowsSelected = computed(() => {
+  const ids = statState.rows.map(row => Number(row.student_id)).filter(Boolean);
+  return ids.length > 0 && ids.every(id => statState.selectedStudentIds.includes(id));
+});
 const guideModuleOptions = computed(() => modules.map(item => ({
   label: moduleDisplayName(item),
   value: item.id,
@@ -10210,6 +10268,7 @@ async function loadStats(page = 1) {
     statState.cards = data.cards || [];
     statState.columns = data.columns || [];
     statState.rows = data.rows || [];
+    statState.selectedStudentIds = [];
     statState.sheet_meta = data.sheet_meta || {};
     statState.pagination = {
       page: data.pagination?.page || page,
@@ -10257,6 +10316,7 @@ function resetStatFilters() {
     plan_id: '',
     keyword: '',
   });
+  statState.selectedStudentIds = [];
   applyAcademicDefaults(statState.filters, organizationScopeDefaults(statAcademicOptions()));
   normalizeStatCascade();
   loadStats(1);
@@ -10282,6 +10342,190 @@ function practiceScoreSheetPlanOptions() {
 
 function scoreSheetCell(row, key) {
   return statCellText(row?.[key]);
+}
+
+function toggleAllVisibleScoreRows(event) {
+  const visibleIds = statState.rows.map(row => Number(row.student_id)).filter(Boolean);
+  const selectedIds = new Set(statState.selectedStudentIds);
+  if (event.target.checked) {
+    visibleIds.forEach(id => selectedIds.add(id));
+  } else {
+    visibleIds.forEach(id => selectedIds.delete(id));
+  }
+  statState.selectedStudentIds = Array.from(selectedIds);
+}
+
+async function exportPracticeScoreSheetFile() {
+  if (statState.loading) {
+    return;
+  }
+  if (!statState.filters.plan_id) {
+    statState.message = '请先选择教学计划';
+    return;
+  }
+
+  statState.loading = true;
+  statState.message = '';
+  try {
+    await exportPracticeScoreSheet({
+      ...statState.filters,
+      plan_id: statState.filters.plan_id,
+    });
+    ElMessage.success('导出任务已创建，请在导出任务中下载');
+  } catch (error) {
+    statState.message = error.message;
+  } finally {
+    statState.loading = false;
+  }
+}
+
+async function printPracticeScoreSheet(mode = 'all') {
+  if (statState.loading) {
+    return;
+  }
+  if (!statState.filters.plan_id) {
+    statState.message = '请先选择教学计划';
+    return;
+  }
+
+  let rows = [];
+  let printWindow = null;
+  if (mode === 'selected') {
+    rows = statState.rows.filter(row => statState.selectedStudentIds.includes(Number(row.student_id)));
+    if (!rows.length) {
+      statState.message = '请先选择需要打印的学生';
+      return;
+    }
+    printWindow = openScoreSheetPrintWindow();
+  } else {
+    printWindow = openScoreSheetPrintWindow();
+    if (!printWindow) {
+      return;
+    }
+    writeScoreSheetPrintLoading(printWindow);
+    statState.loading = true;
+    statState.message = '';
+    try {
+      rows = await collectPagedRows(fetchInternshipStats, {
+        report: 'practice_score_sheet',
+        ...statState.filters,
+        page_size: 100,
+      });
+    } catch (error) {
+      printWindow.close();
+      statState.message = error.message;
+    } finally {
+      statState.loading = false;
+    }
+  }
+
+  if (!rows.length) {
+    printWindow?.close();
+    if (!statState.message) {
+      statState.message = '当前筛选条件下没有可打印的学生数据';
+    }
+    return;
+  }
+
+  const printRows = rows.map((row, index) => ({ ...row, sequence: index + 1 }));
+  printScoreSheetDocument(printWindow, statState.sheet_meta, printRows);
+}
+
+function openScoreSheetPrintWindow() {
+  const printWindow = window.open('', '_blank');
+  if (!printWindow) {
+    statState.message = '浏览器阻止了打印窗口，请允许弹出窗口后重试';
+    return null;
+  }
+  return printWindow;
+}
+
+function writeScoreSheetPrintLoading(printWindow) {
+  printWindow.document.open();
+  printWindow.document.write('<!doctype html><html><head><meta charset="utf-8"><title>成绩记载表</title></head><body><p>正在生成打印内容...</p></body></html>');
+  printWindow.document.close();
+}
+
+function printScoreSheetDocument(printWindow, meta, rows) {
+  if (!printWindow) {
+    return;
+  }
+  const schoolName = printHtmlValue(meta?.school_name || loginSchoolName.value || '成都锦城学院');
+  const title = `${schoolName}课程考核及成绩记载表（实验实训）`;
+  const attendanceHeaders = scoreSheetAttendanceIndexes.map(index => `<th>${index}</th>`).join('');
+  const projectHeaders = scoreSheetProjectIndexes.map(index => `<th>${index}</th>`).join('');
+  const body = rows.map((row, index) => {
+    const attendance = scoreSheetAttendanceIndexes.map(item => `<td>${printScoreValue(row[`attendance_${item}`])}</td>`).join('');
+    const projects = scoreSheetProjectIndexes.map(item => `<td>${printScoreValue(row[`project_${item}`])}</td>`).join('');
+    return `<tr><td>${index + 1}</td><td class="text-cell">${printScoreValue(row.student_num)}</td><td class="text-cell">${printScoreValue(row.student_name)}</td><td class="text-cell">${printScoreValue(row.class_name)}</td>${attendance}<td>${printScoreValue(row.attendance_total)}</td>${projects}<td>${printScoreValue(row.report_score)}</td><td>${printScoreValue(row.total_score)}</td></tr>`;
+  }).join('');
+  const html = `<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>${title}</title>
+  <style>
+    @page { size: A4 landscape; margin: 8mm; }
+    * { box-sizing: border-box; }
+    body { margin: 0; color: #111; font-family: Arial, "Microsoft YaHei", sans-serif; }
+    h1 { margin: 0 0 5mm; text-align: center; font-size: 16pt; font-weight: 700; }
+    .meta { display: grid; grid-template-columns: 1fr 1fr 1.25fr 1.5fr; border: 1px solid #111; border-bottom: 0; font-size: 8pt; }
+    .meta-item { min-height: 7mm; display: grid; grid-template-columns: auto 1fr; border-right: 1px solid #111; border-bottom: 1px solid #111; }
+    .meta-item:nth-child(4n) { border-right: 0; }
+    .meta-label, .meta-value { padding: 1.2mm 1.5mm; }
+    .meta-label { font-weight: 700; white-space: nowrap; }
+    .meta-value { min-width: 0; overflow-wrap: anywhere; }
+    table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 6.3pt; }
+    th, td { height: 7mm; border: 1px solid #111; padding: 0.7mm 0.4mm; text-align: center; vertical-align: middle; overflow: hidden; }
+    th { font-weight: 700; white-space: nowrap; }
+    .text-cell { word-break: break-all; }
+    .note { margin-top: 3mm; font-size: 7pt; line-height: 1.5; }
+    @media screen { body { padding: 12px; } table { min-width: 1200px; } .table-wrap { overflow-x: auto; } }
+  </style>
+</head>
+<body>
+  <h1>${title}</h1>
+  <div class="meta">
+    <div class="meta-item"><span class="meta-label">学年</span><span class="meta-value">${printHtmlValue(meta?.academic_year)}</span></div>
+    <div class="meta-item"><span class="meta-label">学期</span><span class="meta-value">${printHtmlValue(meta?.semester)}</span></div>
+    <div class="meta-item"><span class="meta-label">选课课号</span><span class="meta-value">${printHtmlValue(meta?.course_number)}</span></div>
+    <div class="meta-item"><span class="meta-label">名称</span><span class="meta-value">${printHtmlValue(meta?.course_name)}</span></div>
+    <div class="meta-item"><span class="meta-label">教师姓名</span><span class="meta-value">${printHtmlValue(meta?.teacher_name)}</span></div>
+    <div class="meta-item"><span class="meta-label">教师单位</span><span class="meta-value">${printHtmlValue(meta?.teacher_unit)}</span></div>
+    <div class="meta-item"><span class="meta-label">上课时间</span><span class="meta-value">${printHtmlValue(meta?.class_time)}</span></div>
+    <div class="meta-item"><span class="meta-label">地点</span><span class="meta-value">${printHtmlValue(meta?.location)}</span></div>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th rowspan="2">序号</th><th rowspan="2">学号</th><th rowspan="2">姓名</th><th rowspan="2">行政班级</th><th colspan="17">考勤与课堂表现（占20%）</th><th colspan="12">项目（实操）成绩（占70%）</th><th rowspan="2">课程报告<br>10%</th><th rowspan="2">总分</th></tr>
+        <tr>${attendanceHeaders}<th>小计</th>${projectHeaders}</tr>
+      </thead>
+      <tbody>${body}</tbody>
+    </table>
+  </div>
+  <div class="note">注：考勤与课堂表现、项目实操、课程报告按成绩规则记录，空白表示未录入。生成时间：${printHtmlValue(new Date().toLocaleString('zh-CN'))}</div>
+</body>
+</html>`;
+  printWindow.document.open();
+  printWindow.document.write(html);
+  printWindow.document.close();
+  printWindow.focus();
+  printWindow.setTimeout(() => printWindow.print(), 250);
+}
+
+function printScoreValue(value) {
+  return value === null || value === undefined || value === '' ? '' : printHtmlValue(value);
+}
+
+function printHtmlValue(value) {
+  return String(value ?? '').replace(/[&<>"']/g, character => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;',
+  }[character]));
 }
 
 function logMethodText(action) {

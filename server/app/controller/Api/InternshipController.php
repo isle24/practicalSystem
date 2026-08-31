@@ -440,6 +440,13 @@ class InternshipController
         return $this->handle(fn (): array => $this->service()->stats($request));
     }
 
+    /** 导出实验实训成绩记载表。 */
+    #[OperationLog('导出实验实训成绩记载表')]
+    public function exportPracticeScoreSheet(Request $request): Response
+    {
+        return $this->handle(fn (): array => $this->service()->exportPracticeScoreSheet($request));
+    }
+
     /**
      * 查看实习归档材料
      */

@@ -168,6 +168,39 @@ class PracticeRecord extends TableRecord
         ];
     }
 
+    /** 返回成绩记载表导出快照。 */
+    public static function courseScoreSheetExportReport(array $scope, array $filters): array
+    {
+        $moduleType = self::practiceModuleType($filters);
+        $planId = self::optionalInt($filters['plan_id'] ?? null);
+        $meta = self::scoreSheetMeta($scope, $moduleType, $planId, $filters);
+        $rows = $planId
+            ? self::scoreSheetRowsByPlan($scope, $moduleType, $planId, $filters)
+            : self::scoreSheetRowsByScores($scope, $moduleType, $filters);
+        $rows = self::scoreSheetRows($rows);
+
+        $studentIds = self::ids($filters['student_ids'] ?? []);
+        if ($studentIds) {
+            $visibleStudentIds = array_fill_keys($studentIds, true);
+            $rows = array_values(array_filter(
+                $rows,
+                static fn (array $row): bool => isset($visibleStudentIds[(int) ($row['student_id'] ?? 0)])
+            ));
+        }
+        foreach ($rows as $index => &$row) {
+            $row['sequence'] = $index + 1;
+        }
+        unset($row);
+
+        return [
+            'report' => 'practice_score_sheet',
+            'title' => '课程考核及成绩记载表（实验实训）',
+            'generated_at' => date('Y-m-d H:i:s'),
+            'sheet_meta' => $meta,
+            'rows' => $rows,
+        ];
+    }
+
     public static function activeRowByEntity(string $moduleType, string $entity, int $id): ?object
     {
         $table = self::entityTable($entity);
@@ -1610,7 +1643,12 @@ class PracticeRecord extends TableRecord
         self::listScoreSheetFilters($query, $filters, 'students', false);
         self::keyword($query, $filters, ['students.name', 'students.student_num', 'class.class_name', 'practice_score.title']);
 
-        return self::rows($query->orderBy('class.class_name')->orderBy('students.student_num')->get(self::scoreSheetStudentColumns()));
+        return self::rows($query
+            ->orderBy('class.class_name')
+            ->orderBy('students.student_num')
+            ->orderBy('practice_score.project_id')
+            ->orderByDesc('practice_score.id')
+            ->get(self::scoreSheetStudentColumns()));
     }
 
     private static function scoreSheetRowsByScores(array $scope, string $moduleType, array $filters): array
@@ -1628,7 +1666,12 @@ class PracticeRecord extends TableRecord
         self::listScoreSheetFilters($query, $filters, 'practice_score');
         self::keyword($query, $filters, ['students.name', 'students.student_num', 'class.class_name', 'practice_score.title', 'practice_plan.title', 'teacher_list.teacher_name']);
 
-        return self::rows($query->orderByDesc('practice_score.id')->get(self::scoreSheetStudentColumns()));
+        return self::rows($query
+            ->orderBy('practice_score.plan_id')
+            ->orderBy('students.student_num')
+            ->orderBy('practice_score.project_id')
+            ->orderByDesc('practice_score.id')
+            ->get(self::scoreSheetStudentColumns()));
     }
 
     private static function scoreSheetStudentColumns(): array
@@ -1638,6 +1681,7 @@ class PracticeRecord extends TableRecord
             'practice_score.plan_id',
             'practice_score.score_items',
             'practice_score.score_value',
+            'practice_score.project_id',
             'practice_score.status as score_status',
             'practice_score.teacher_id as score_teacher_id',
             'practice_score.title as score_title',
@@ -1661,12 +1705,18 @@ class PracticeRecord extends TableRecord
     private static function scoreSheetRows(array $rows): array
     {
         $items = [];
-        foreach ($rows as $index => $row) {
+        $projectKeys = [];
+        foreach ($rows as $row) {
             $scoreItems = is_array($row['score_items'] ?? null) ? $row['score_items'] : [];
             $attendance = self::scoreItemList($scoreItems, ['attendance', 'attendance_scores', 'class_performance', 'classroom_performance', 'performance'], 16);
             $projects = self::scoreItemList($scoreItems, ['project', 'project_scores', 'operation', 'practice', 'practical_scores'], 12);
+            if (!$projects) {
+                $projectScore = self::scoreItemValue($scoreItems, ['material_score', 'project_score', 'operation_score']);
+                if ($projectScore !== null) {
+                    $projects = [$projectScore];
+                }
+            }
             $item = [
-                'sequence' => $index + 1,
                 'student_id' => $row['student_id'] ?? null,
                 'student_num' => $row['student_num'] ?? null,
                 'student_name' => $row['name'] ?? null,
@@ -1676,6 +1726,7 @@ class PracticeRecord extends TableRecord
                 'profession_name' => $row['profession_name'] ?? null,
                 'score_id' => $row['score_id'] ?? null,
                 'score_status' => $row['score_status'] ?? null,
+                'project_id' => $row['project_id'] ?? null,
             ];
 
             for ($i = 1; $i <= 16; $i++) {
@@ -1690,10 +1741,73 @@ class PracticeRecord extends TableRecord
             $item['project_total'] = self::scoreItemValue($scoreItems, ['project_total', 'operation_total', 'practice_total']);
             $item['report_score'] = self::scoreItemValue($scoreItems, ['report_score', 'report', 'course_report', 'course_report_score']);
             $item['total_score'] = self::scoreItemValue($scoreItems, ['total_score', 'final_score', 'score_value']) ?? ($row['score_value'] ?? null);
-            $items[] = $item;
+            $groupKey = (int) ($item['student_id'] ?? 0) . ':' . (int) ($row['plan_id'] ?? 0);
+            if (!isset($items[$groupKey])) {
+                $items[$groupKey] = $item;
+                $projectKeys[$groupKey] = [];
+                if ($item['project_id'] !== null) {
+                    $projectKeys[$groupKey][(string) $item['project_id']] = true;
+                }
+                continue;
+            }
+
+            self::mergeScoreSheetItem($items[$groupKey], $item, $projectKeys[$groupKey]);
         }
 
+        $items = array_values($items);
+        foreach ($items as $index => &$item) {
+            $item['sequence'] = $index + 1;
+            unset($item['project_id']);
+        }
+        unset($item);
+
         return $items;
+    }
+
+    /** 合并同一教学计划下同一学生的多个项目成绩记录。 */
+    private static function mergeScoreSheetItem(array &$target, array $item, array &$projectKeys): void
+    {
+        $projectId = $item['project_id'];
+        if ($projectId !== null && isset($projectKeys[(string) $projectId])) {
+            return;
+        }
+        if ($projectId !== null) {
+            $projectKeys[(string) $projectId] = true;
+        }
+        if (self::scoreValueMissing($target['score_id'] ?? null) && !self::scoreValueMissing($item['score_id'] ?? null)) {
+            $target['score_id'] = $item['score_id'];
+            $target['score_status'] = $item['score_status'];
+        }
+
+        for ($index = 1; $index <= 16; $index++) {
+            $key = "attendance_{$index}";
+            if (self::scoreValueMissing($target[$key] ?? null) && !self::scoreValueMissing($item[$key] ?? null)) {
+                $target[$key] = $item[$key];
+            }
+        }
+        for ($sourceIndex = 1; $sourceIndex <= 12; $sourceIndex++) {
+            $key = "project_{$sourceIndex}";
+            if (self::scoreValueMissing($item[$key] ?? null)) {
+                continue;
+            }
+            $targetIndex = $sourceIndex;
+            while ($targetIndex <= 12 && !self::scoreValueMissing($target["project_{$targetIndex}"] ?? null)) {
+                $targetIndex++;
+            }
+            if ($targetIndex <= 12) {
+                $target["project_{$targetIndex}"] = $item[$key];
+            }
+        }
+        foreach (['attendance_total', 'project_total', 'report_score', 'total_score'] as $key) {
+            if (self::scoreValueMissing($target[$key] ?? null) && !self::scoreValueMissing($item[$key] ?? null)) {
+                $target[$key] = $item[$key];
+            }
+        }
+    }
+
+    private static function scoreValueMissing(mixed $value): bool
+    {
+        return $value === null || $value === '';
     }
 
     private static function scoreSheetMeta(array $scope, string $moduleType, ?int $planId, array $filters): array
@@ -1702,6 +1816,7 @@ class PracticeRecord extends TableRecord
         $schedule = $planId ? self::scoreSheetScheduleMeta($moduleType, $planId) : ['class_time' => '', 'location' => ''];
 
         return [
+            'school_name' => (string) ($scope['school_name'] ?? '成都锦城学院'),
             'module_type' => $moduleType,
             'module_name' => $moduleType === 'lab' ? '实验' : '实训',
             'semester' => (string) ($filters['semester'] ?? ''),

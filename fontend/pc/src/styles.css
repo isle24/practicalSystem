@@ -1798,6 +1798,19 @@ a {
   padding: 2px 2px 0;
 }
 
+.course-score-heading {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.course-score-actions {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .course-score-sheet > header strong {
   color: var(--text);
   font-size: 16px;
@@ -1887,14 +1900,27 @@ a {
   border-left: 0;
 }
 
+.course-score-table .score-select-column {
+  width: 42px;
+  min-width: 42px;
+  padding: 5px 4px;
+}
+
+.course-score-table .score-select-column input {
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  accent-color: var(--primary);
+}
+
 .course-score-table tbody tr:hover td {
   background: #f7fbff;
 }
 
-.course-score-table td:nth-child(1),
 .course-score-table td:nth-child(2),
 .course-score-table td:nth-child(3),
-.course-score-table td:nth-child(4) {
+.course-score-table td:nth-child(4),
+.course-score-table td:nth-child(5) {
   min-width: 76px;
 }
 
@@ -1904,6 +1930,18 @@ a {
   justify-content: space-between;
   gap: 12px;
   font-size: 12px;
+}
+
+@media (max-width: 900px) {
+  .course-score-sheet > header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .course-score-actions {
+    width: 100%;
+    flex-wrap: wrap;
+  }
 }
 
 .stat-settings {

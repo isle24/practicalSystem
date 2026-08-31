@@ -13,7 +13,7 @@ class ExportTaskService
 {
     private const ADMIN_ROLES = ['super_admin', 'school_admin', 'college_admin', 'profession_admin'];
     private const MANAGE_ALL_ROLES = ['super_admin', 'school_admin'];
-    private const BUSINESS_EXPORT_TYPES = ['internship_base_word', 'internship_implementation_pdf', 'social_practice_statistics'];
+    private const BUSINESS_EXPORT_TYPES = ['internship_base_word', 'internship_implementation_pdf', 'practice_score_sheet', 'social_practice_statistics'];
 
     public const QUEUE = 'export_task';
 

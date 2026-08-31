@@ -1579,6 +1579,41 @@ class InternshipService
         return InternshipRecord::statReport($this->scopeContext(), $filters, date('Y-m-d'));
     }
 
+    /** 创建实验实训成绩记载表 Excel 导出任务。 */
+    public function exportPracticeScoreSheet(Request $request): array
+    {
+        $this->requirePermission('stat:view');
+        $filters = $this->requestFilters($request, [
+            'keyword', 'dep_id', 'profession_id', 'grade_id', 'class_id',
+            'module_type', 'plan_id', 'status', 'semester',
+        ]);
+        $filters['student_ids'] = $this->requestIntList($request->input('student_ids', []));
+        $planId = $this->requiredInt($request, 'plan_id');
+        $filters['plan_id'] = $planId;
+        $filters['module_type'] = in_array((string) ($filters['module_type'] ?? ''), ['training', 'lab'], true)
+            ? $filters['module_type']
+            : 'training';
+
+        $scope = $this->scopeContext();
+        $report = PracticeRecord::courseScoreSheetExportReport($scope, $filters);
+        if (empty($report['rows'])) {
+            throw new InvalidArgumentException('当前筛选条件下没有可导出的学生数据');
+        }
+
+        $sheetMeta = (array) ($report['sheet_meta'] ?? []);
+        $sheetMeta['school_name'] = trim((string) ($sheetMeta['school_name'] ?? ''))
+            ?: (string) ($scope['school_name'] ?? '成都锦城学院');
+        $courseName = (string) (($sheetMeta['course_name'] ?? '') ?: '实验实训成绩');
+        return (new ExportTaskService())->create([
+            'type' => 'practice_score_sheet',
+            'file_name' => $this->exportFileName($courseName, '实验实训成绩记载表.xlsx'),
+            'params' => [
+                'sheet_meta' => $sheetMeta,
+                'rows' => $report['rows'],
+            ],
+        ], true);
+    }
+
     public function archiveMaterials(Request $request): array
     {
         $this->requirePermission('internship:view');
@@ -4166,6 +4201,7 @@ class InternshipService
         $companyIds = $this->scopeIds('company_id');
 
         return [
+            'school_name' => (string) (CurrentContext::get('school_name') ?: '成都锦城学院'),
             'role_type' => $roleType,
             'dep_ids' => $depIds,
             'profession_ids' => $professionIds,
@@ -5002,6 +5038,19 @@ class InternshipService
         }
 
         return (int) $value;
+    }
+
+    private function requestIntList(mixed $value): array
+    {
+        if (is_string($value)) {
+            $decoded = json_decode($value, true);
+            $value = is_array($decoded) ? $decoded : preg_split('/\s*,\s*/', trim($value), -1, PREG_SPLIT_NO_EMPTY);
+        }
+        if (!is_array($value)) {
+            return [];
+        }
+
+        return array_values(array_unique(array_filter(array_map('intval', $value), static fn (int $id): bool => $id > 0)));
     }
 
     private function requiredImportValue(array $row, string $field, string $label): string
