@@ -414,7 +414,7 @@ class FileService
 
         foreach ($ids as $fileId) {
             try {
-                $result = $this->deleteFile($fileId, true, $before);
+                $result = $this->deleteFile($fileId, false, $before);
                 $deleted++;
                 if (!empty($result['physical_deleted'])) {
                     $physicalDeleted++;

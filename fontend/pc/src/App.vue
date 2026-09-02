@@ -682,7 +682,7 @@
                         <label><span>签到成绩</span><input v-model="internshipState.scoreForm.sign_in_score" type="number"></label>
                         <label><span>日志成绩</span><input v-model="internshipState.scoreForm.journal_score" type="number"></label>
                         <label><span>报告成绩</span><input v-model="internshipState.scoreForm.report_score" type="number"></label>
-                        <label><span>企业成绩</span><input v-model="internshipState.scoreForm.enterprise_score" type="number"></label>
+                        <label><span>企业成绩</span><input v-model="internshipState.scoreForm.enterprise_score" type="number" disabled placeholder="毕业实习由企业评价自动写入"></label>
                         <label><span>评语</span><input v-model="internshipState.scoreForm.comment"></label>
                       </div>
 
@@ -920,6 +920,22 @@
 
                   <EducationPlanSyncPanel
                     v-if="win.panel === 'educationPlanSync'"
+                    :can-configure="['super_admin', 'school_admin'].includes(currentRoleType)"
+                  />
+
+                  <InternshipStudentChangePanel
+                    v-else-if="win.panel === 'studentChanges'"
+                    :role-type="currentRoleType"
+                    :options="internshipState.options"
+                    :default-filters="defaultScopedFilters()"
+                    :can-approve="canApproveInternship"
+                  />
+
+                  <EnterpriseEvaluationPanel
+                    v-else-if="win.panel === 'enterpriseEvaluations'"
+                    :options="internshipState.options"
+                    :default-filters="defaultScopedFilters()"
+                    :can-manage="canManageInternship && isAdminRole"
                     :can-configure="['super_admin', 'school_admin'].includes(currentRoleType)"
                   />
 
@@ -1628,6 +1644,9 @@
                       @reset="resetInternshipFilters('archiveMaterials')"
                       @search="loadInternshipPanel('documents', 1)"
                     >
+                      <template v-if="canConfigureInternshipArchive" #toolbar>
+                        <el-button :icon="Settings" @click="archiveRequirementVisible = true">材料要求</el-button>
+                      </template>
                       <template #actions="{ row }">
                         <el-button link type="primary" @click="openArchiveDetail(row)">查看档案</el-button>
                       </template>
@@ -4156,6 +4175,11 @@
       @changed="loadInternshipPanel('documents')"
     />
 
+    <InternshipArchiveRequirementDialog
+      v-model="archiveRequirementVisible"
+      @saved="loadInternshipPanel('documents')"
+    />
+
     <footer class="taskbar">
       <div class="taskbar-brand">
         <span class="brand-mark">实</span>
@@ -4344,12 +4368,15 @@ import PracticePeriodManager from './components/PracticePeriodManager.vue';
 import PracticeScheduleBoard from './components/PracticeScheduleBoard.vue';
 import DocCenter from './components/DocCenter.vue';
 import EducationPlanSyncPanel from './components/EducationPlanSyncPanel.vue';
+import EnterpriseEvaluationPanel from './components/EnterpriseEvaluationPanel.vue';
 import ExportTaskCenter from './components/ExportTaskCenter.vue';
 import IconUpload from './components/IconUpload.vue';
 import InternshipArchiveDetail from './components/InternshipArchiveDetail.vue';
+import InternshipArchiveRequirementDialog from './components/InternshipArchiveRequirementDialog.vue';
 import InternshipBaseForm from './components/InternshipBaseForm.vue';
 import InternshipImplementationDetail from './components/InternshipImplementationDetail.vue';
 import InternshipPlanDetail from './components/InternshipPlanDetail.vue';
+import InternshipStudentChangePanel from './components/InternshipStudentChangePanel.vue';
 import MenuEditDialog from './components/MenuEditDialog.vue';
 import ModuleCollection from './components/ModuleCollection.vue';
 import ModuleSidebar from './components/ModuleSidebar.vue';
@@ -5500,6 +5527,7 @@ const dataManageState = reactive({
   clearAllowed: false,
   message: '',
 });
+const archiveRequirementVisible = ref(false);
 
 const internshipSidebarItems = [
   { key: 'overview', name: '总览', icon: ChartColumn },
@@ -5512,6 +5540,8 @@ const internshipSidebarItems = [
   { key: 'signIns', name: '签到记录', icon: MapPin },
   { key: 'journals', name: '实习日志', icon: FileClock },
   { key: 'reports', name: '实习报告', icon: FileText },
+  { key: 'studentChanges', name: '实习资料变更', icon: Workflow },
+  { key: 'enterpriseEvaluations', name: '企业评价', icon: Building2 },
   { key: 'requests', name: '申请管理', icon: ClipboardList },
   { key: 'teacherWorkReports', name: '教师工作报告', icon: FileText },
   { key: 'scores', name: '成绩管理', icon: GraduationCap },
@@ -5735,6 +5765,10 @@ const messageTemplateEmptyText = computed(() => {
 });
 const canManageInternship = computed(() => hasPermission('internship:manage'));
 const canManageInternshipArchive = computed(() => hasPermission('internship:archive'));
+const canConfigureInternshipArchive = computed(() => (
+  canManageInternshipArchive.value
+  && ['super_admin', 'school_admin'].includes(currentRoleType.value)
+));
 const canSaveInternshipScore = computed(() => hasPermission('internship:score') || canManageInternship.value);
 const canManageInternshipPlan = computed(() => hasPermission('internship:plan') && isAdminRole.value);
 const canApproveInternship = computed(() => hasPermission('internship:approve') && !isStudentRole.value);
@@ -6399,6 +6433,7 @@ function internshipRolePanelName(key) {
     signIns: '我的签到',
     journals: '我的日志',
     reports: '我的报告',
+    studentChanges: '资料变更',
     delays: '延期申请',
     scores: '我的成绩',
     courseScores: '课程成绩',
@@ -6417,7 +6452,7 @@ function internshipSidebarItemVisible(item) {
   if (!isStudentRole.value) {
     return !item.studentOnly;
   }
-  return ['overview', 'arrangements', 'requests', 'signIns', 'journals', 'reports', 'scores', 'courseScores', 'documents'].includes(item.key);
+  return ['overview', 'arrangements', 'requests', 'signIns', 'journals', 'reports', 'studentChanges', 'scores', 'courseScores', 'documents'].includes(item.key);
 }
 
 function isInternshipReadOnlyListPanel(panel) {
@@ -15749,7 +15784,6 @@ async function saveScore() {
       sign_in_score: numericOrNull(internshipState.scoreForm.sign_in_score),
       journal_score: numericOrNull(internshipState.scoreForm.journal_score),
       report_score: numericOrNull(internshipState.scoreForm.report_score),
-      enterprise_score: numericOrNull(internshipState.scoreForm.enterprise_score),
       comment: internshipState.scoreForm.comment,
     });
     internshipState.scoreForm = emptyScoreForm();

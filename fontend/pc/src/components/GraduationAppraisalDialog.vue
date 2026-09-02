@@ -56,7 +56,8 @@
               <el-input-number v-model="form.process_score" :disabled="!editable" :min="0" :max="50" :precision="1" controls-position="right" />
             </el-form-item>
             <el-form-item label="实习单位评分（30分）">
-              <el-input-number v-model="form.enterprise_score" :disabled="!editable" :min="0" :max="30" :precision="1" controls-position="right" />
+              <el-input-number v-model="form.enterprise_score" disabled :min="0" :max="30" :precision="1" controls-position="right" />
+              <small class="enterprise-evaluation-source">来自企业导师独立评价</small>
             </el-form-item>
             <el-form-item label="校内指导教师评分（20分）">
               <el-input-number v-model="form.school_score" :disabled="!editable" :min="0" :max="20" :precision="1" controls-position="right" />
@@ -64,7 +65,8 @@
           </div>
           <div class="appraisal-grid two-columns">
             <el-form-item label="实习单位评语">
-              <el-input v-model="form.enterprise_comment" :disabled="!editable" type="textarea" :rows="4" maxlength="5000" show-word-limit />
+              <el-input v-model="form.enterprise_comment" disabled type="textarea" :rows="4" maxlength="5000" show-word-limit placeholder="等待企业导师提交独立评价" />
+              <small class="enterprise-evaluation-source">来自企业导师独立评价，不可在鉴定表中修改</small>
             </el-form-item>
             <el-form-item label="校内指导教师评语">
               <el-input v-model="form.school_comment" :disabled="!editable" type="textarea" :rows="4" maxlength="5000" show-word-limit />
@@ -498,6 +500,14 @@ function actionLabel(action) {
 
 .appraisal-form :deep(.el-input-number) {
   width: 100%;
+}
+
+.enterprise-evaluation-source {
+  display: block;
+  margin-top: 5px;
+  color: #667085;
+  font-size: 12px;
+  line-height: 1.4;
 }
 
 .appraisal-file-row {

@@ -25,6 +25,10 @@ class AuthMiddleware implements MiddlewareInterface
         '/api/config/login-page',
         '/api/open-teacher-sync/push',
         '/api/open-social-practice-sync/push',
+        '/api/open-enterprise-evaluation/send-code',
+        '/api/open-enterprise-evaluation/verify-code',
+        '/api/open-enterprise-evaluation/context',
+        '/api/open-enterprise-evaluation/submit',
     ];
 
     /**

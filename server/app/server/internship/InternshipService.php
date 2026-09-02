@@ -4,7 +4,9 @@ namespace app\server\internship;
 
 use app\model\channel\Account;
 use app\model\channel\AcademicArchiveRecord;
+use app\model\channel\EnterpriseEvaluationRecord;
 use app\model\channel\InternshipArchiveRecord;
+use app\model\channel\InternshipArchiveRequirementRecord;
 use app\model\channel\InternshipRecord;
 use app\model\channel\PracticeRecord;
 use app\model\channel\TeacherSyncRecord;
@@ -1369,7 +1371,7 @@ class InternshipService
                 $request,
                 'report_type',
                 ['general', 'graduation'],
-                InternshipArchiveRecord::arrangementType($arrangementId) === 'graduation' ? 'graduation' : 'general'
+                InternshipArchiveRecord::arrangementPracticeType($arrangementId) === 'graduation' ? 'graduation' : 'general'
             ),
             'form_data' => $this->jsonValue($request->input('form_data', [])),
             'attachment_ids' => $this->jsonValue($attachmentIds),
@@ -1630,6 +1632,61 @@ class InternshipService
         return InternshipArchiveRecord::planPage($this->scopeContext(), $filters);
     }
 
+    /** 查询指定实践类别的归档材料要求。 */
+    public function archiveRequirements(Request $request): array
+    {
+        $this->requirePermission('internship:view');
+        $practiceType = $this->archivePracticeType($request);
+        return [
+            'practice_type' => $practiceType,
+            'items' => InternshipArchiveRequirementRecord::requirements($practiceType),
+            'materials' => InternshipArchiveRecord::materialDefinitions(),
+        ];
+    }
+
+    /** 保存学校级归档材料要求。 */
+    public function saveArchiveRequirements(Request $request): array
+    {
+        $this->requirePermission('internship:archive');
+        if (!in_array(CurrentContext::roleType(), ['super_admin', 'school_admin'], true)) {
+            throw new RuntimeException('仅超级管理员或学校管理员可以维护归档材料要求', 40300);
+        }
+
+        $definitions = array_fill_keys(array_column(InternshipArchiveRecord::materialDefinitions(), 'material_type'), true);
+        $items = [];
+        $seen = [];
+        foreach ((array) $request->input('items', []) as $index => $item) {
+            if (!is_array($item)) {
+                continue;
+            }
+            $materialType = trim((string) ($item['material_type'] ?? ''));
+            if ($materialType === '' || !isset($definitions[$materialType]) || isset($seen[$materialType])) {
+                throw new InvalidArgumentException('归档材料类型无效或重复');
+            }
+            $seen[$materialType] = true;
+            $items[] = [
+                'material_type' => $materialType,
+                'required' => !empty($item['required']),
+                'sort' => is_numeric($item['sort'] ?? null) ? (int) $item['sort'] : $index,
+            ];
+        }
+        if (!$items) {
+            throw new InvalidArgumentException('至少配置一项归档材料');
+        }
+
+        $practiceType = $this->archivePracticeType($request);
+        InternshipArchiveRequirementRecord::saveRequirements(
+            $practiceType,
+            $items,
+            (int) CurrentContext::accountId(),
+            $this->now()
+        );
+        return [
+            'practice_type' => $practiceType,
+            'items' => InternshipArchiveRequirementRecord::requirements($practiceType),
+        ];
+    }
+
     /** 查看计划的分层档案材料 */
     public function archiveMaterialDetail(Request $request): array
     {
@@ -1818,19 +1875,28 @@ class InternshipService
     /** 保存毕业实习成绩鉴定 */
     public function saveGraduationAppraisal(Request $request): array
     {
+        if ($this->isEnterprise()) {
+            throw new RuntimeException('企业导师评价请使用独立评价入口', 40300);
+        }
         $this->requirePermission($this->canScoreWithoutManage() ? 'internship:score' : 'internship:manage');
         $studentId = $this->requiredInt($request, 'student_id');
         $arrangementId = $this->requiredInt($request, 'arrangement_id');
         $this->assertStudentVisible($studentId);
         $this->assertCurrentArrangementVisible($arrangementId);
         $this->assertTaskBindingVisible($studentId, $arrangementId);
-        if (InternshipArchiveRecord::arrangementType($arrangementId) !== 'graduation') {
+        if (InternshipArchiveRecord::arrangementPracticeType($arrangementId) !== 'graduation') {
             throw new InvalidArgumentException('该任务不是毕业实习任务');
         }
 
         $status = $this->enum($request, 'status', ['draft', 'wait'], 'draft');
         $processScore = $this->archiveScore($request, 'process_score', 50, '过程管理得分');
-        $enterpriseScore = $this->archiveScore($request, 'enterprise_score', 30, '实习单位评分');
+        $enterpriseEvaluation = EnterpriseEvaluationRecord::evaluationByStudentTask($studentId, $arrangementId);
+        $enterpriseScore = $enterpriseEvaluation && (string) $enterpriseEvaluation->status === 'submitted'
+            ? (float) $enterpriseEvaluation->total_score
+            : null;
+        $enterpriseComment = $enterpriseEvaluation && (string) $enterpriseEvaluation->status === 'submitted'
+            ? $this->stringValue($enterpriseEvaluation->comment ?? '', 5000)
+            : null;
         $schoolScore = $this->archiveScore($request, 'school_score', 20, '校内指导教师评分');
         if ($status === 'wait' && ($processScore === null || $enterpriseScore === null || $schoolScore === null)) {
             throw new InvalidArgumentException('提交审核前请填写全部评分');
@@ -1846,6 +1912,7 @@ class InternshipService
         $result = $this->workflowLock('internship', 'graduation_appraisal', $id ?: (int) sprintf('%u', crc32("{$studentId}:{$arrangementId}")), function () use (
             $arrangementId,
             $enterpriseScore,
+            $enterpriseComment,
             $finalScore,
             $id,
             $attachmentId,
@@ -1858,6 +1925,7 @@ class InternshipService
             return $this->connection()->transaction(function () use (
                 $arrangementId,
                 $enterpriseScore,
+                $enterpriseComment,
                 $finalScore,
                 $id,
                 $attachmentId,
@@ -1885,7 +1953,7 @@ class InternshipService
                     'report_score' => null,
                     'final_score' => $finalScore,
                     'grade_level' => $this->archiveGradeLevel($finalScore),
-                    'enterprise_comment' => $this->nullableString($request, 'enterprise_comment', 5000),
+                    'enterprise_comment' => $enterpriseComment,
                     'school_comment' => $this->nullableString($request, 'school_comment', 5000),
                     'form_data' => $this->jsonValue($request->input('form_data', [])),
                     'attachment_id' => $attachmentId,
@@ -1935,6 +2003,9 @@ class InternshipService
 
     public function saveScore(Request $request): array
     {
+        if ($this->isEnterprise()) {
+            throw new RuntimeException('企业导师评价请使用独立评价入口', 40300);
+        }
         $this->requirePermission($this->canScoreWithoutManage() ? 'internship:score' : 'internship:manage');
         $studentId = $this->requiredInt($request, 'student_id');
         $arrangementId = $this->requiredInt($request, 'arrangement_id');
@@ -1951,7 +2022,16 @@ class InternshipService
         $signWeight = $this->decimalInput($request, 'sign_in_weight') ?? 20;
         $journalWeight = $this->decimalInput($request, 'journal_weight') ?? 30;
         $reportWeight = $this->decimalInput($request, 'report_weight') ?? 50;
-        $enterpriseScore = $this->decimalInput($request, 'enterprise_score');
+        $isGraduation = InternshipArchiveRecord::arrangementPracticeType($arrangementId) === 'graduation';
+        $enterpriseEvaluation = $isGraduation
+            ? EnterpriseEvaluationRecord::evaluationByStudentTask($studentId, $arrangementId)
+            : null;
+        $enterpriseScore = $enterpriseEvaluation && (string) $enterpriseEvaluation->status === 'submitted'
+            ? (float) $enterpriseEvaluation->total_score
+            : null;
+        if ($isGraduation && $enterpriseScore === null) {
+            throw new InvalidArgumentException('企业导师完成独立评价后才可核定毕业实习成绩');
+        }
         $this->assertScoreRange([
             '签到成绩' => $signInScore,
             '日志成绩' => $journalScore,
@@ -1963,7 +2043,16 @@ class InternshipService
             '日志权重' => $journalWeight,
             '报告权重' => $reportWeight,
         ]);
-        $final = $this->finalScore($signInScore, $journalScore, $reportScore, $signWeight, $journalWeight, $reportWeight, $enterpriseScore);
+        $final = $this->finalScore(
+            $signInScore,
+            $journalScore,
+            $reportScore,
+            $signWeight,
+            $journalWeight,
+            $reportWeight,
+            $enterpriseScore,
+            $isGraduation
+        );
         if ($final === null) {
             throw new InvalidArgumentException('至少填写一项任务成绩');
         }
@@ -1980,7 +2069,9 @@ class InternshipService
             'journal_weight' => $journalWeight,
             'report_weight' => $reportWeight,
             'enterprise_score' => $enterpriseScore,
-            'enterprise_comment' => $this->nullableString($request, 'enterprise_comment', 2000),
+            'enterprise_comment' => $enterpriseEvaluation && (string) $enterpriseEvaluation->status === 'submitted'
+                ? ($this->stringValue($enterpriseEvaluation->comment ?? '', 2000) ?: null)
+                : null,
             'final_score' => $final,
             'teacher_id' => $this->scoreTeacherId($request, $arrangementId),
             'comment' => $this->nullableString($request, 'comment', 2000),
@@ -4516,9 +4607,17 @@ class InternshipService
         }
     }
 
+    /** 标准化归档材料配置类别。 */
+    private function archivePracticeType(Request $request): string
+    {
+        return trim((string) $request->input('practice_type', 'graduation')) === 'graduation'
+            ? 'graduation'
+            : 'internship';
+    }
+
     private function canScoreWithoutManage(): bool
     {
-        return $this->isTeacher() || $this->isEnterprise();
+        return $this->isTeacher();
     }
 
     private function scoreTeacherId(Request $request, int $arrangementId): ?int
@@ -5006,7 +5105,17 @@ class InternshipService
         ]);
     }
 
-    private function finalScore(?float $sign, ?float $journal, ?float $report, float $signWeight, float $journalWeight, float $reportWeight, ?float $enterprise): ?float
+    /** 按任务类别计算校内过程成绩和企业评价的总评。 */
+    private function finalScore(
+        ?float $sign,
+        ?float $journal,
+        ?float $report,
+        float $signWeight,
+        float $journalWeight,
+        float $reportWeight,
+        ?float $enterprise,
+        bool $enterpriseIsThirtyPoint = false
+    ): ?float
     {
         if ($sign === null && $journal === null && $report === null && $enterprise === null) {
             return null;
@@ -5014,7 +5123,9 @@ class InternshipService
 
         $base = (($sign ?? 0) * $signWeight + ($journal ?? 0) * $journalWeight + ($report ?? 0) * $reportWeight) / max(1, $signWeight + $journalWeight + $reportWeight);
         if ($enterprise !== null) {
-            $base = $base * 0.8 + $enterprise * 0.2;
+            $base = $enterpriseIsThirtyPoint
+                ? $base * 0.7 + $enterprise
+                : $base * 0.8 + $enterprise * 0.2;
         }
 
         return round($base, 2);

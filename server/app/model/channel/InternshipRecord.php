@@ -93,7 +93,7 @@ class InternshipRecord extends TableRecord
                     'internship_plan.score_rule', 'internship_plan.status',
                     'department.dep_name', 'profession.profession_name', 'grade_list.grade_name',
                     'graduation_cohort.cohort_name', 'internship_category.name as category_name',
-                    'internship_category.scope_type',
+                    'internship_category.code as category_code', 'internship_category.scope_type',
                 ])),
             'arrangements' => self::rows(self::applyArrangementScope(self::queryTable('arrangement')
                 ->leftJoin('internship_plan', 'arrangement.plan_id', '=', 'internship_plan.id')
@@ -115,7 +115,8 @@ class InternshipRecord extends TableRecord
                     'arrangement.start_date', 'arrangement.end_date', 'arrangement.status',
                     'internship_plan.course_code', 'internship_plan.course_name',
                     'teacher_list.teacher_name', 'internship_category.name as category_name',
-                    'internship_category.scope_type', 'grade_list.grade_name', 'graduation_cohort.cohort_name',
+                    'internship_category.code as category_code', 'internship_category.scope_type',
+                    'grade_list.grade_name', 'graduation_cohort.cohort_name',
                 ])),
             'report_templates' => self::rows(self::queryTable('report_template')->where('status', 'enabled')->whereNull('deleted_at')->orderBy('id')->get(['id', 'uuid', 'name', 'code', 'version', 'online_enabled'])),
         ];
@@ -612,7 +613,8 @@ class InternshipRecord extends TableRecord
             'base.name as base_name', 'department.dep_name', 'profession.profession_name',
             'internship_plan.category_id', 'internship_plan.grade_id', 'internship_plan.graduation_cohort_id',
             'grade_list.grade_name', 'graduation_cohort.cohort_name',
-            'internship_category.name as category_name', 'internship_category.scope_type',
+            'internship_category.name as category_name', 'internship_category.code as category_code',
+            'internship_category.scope_type',
             'internship_plan.course_code', 'internship_plan.course_name',
             'internship_plan.score_rule', 'teacher_list.teacher_name',
         ]);

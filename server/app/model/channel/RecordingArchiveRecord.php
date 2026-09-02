@@ -25,6 +25,10 @@ class RecordingArchiveRecord extends TableRecord
         'implementation_sheet_recording' => ['parent' => 'implementation_sheet', 'grade_source' => 'arrangement'],
         'teacher_work_report_recording' => ['parent' => 'teacher_work_report', 'grade_source' => 'arrangement'],
         'inspection_recording' => ['parent' => 'inspection_record', 'grade_source' => 'arrangement'],
+        'internship_student_change_recording' => ['parent' => 'internship_student_change', 'grade_source' => 'student'],
+        'internship_enterprise_evaluation_recording' => ['parent' => 'internship_enterprise_evaluation', 'grade_source' => 'student'],
+        'internship_graduation_appraisal_recording' => ['parent' => 'internship_graduation_appraisal', 'grade_source' => 'student'],
+        'internship_archive_material_recording' => ['parent' => 'internship_archive_material', 'grade_source' => 'parent_plan'],
     ];
 
     private const PRACTICE_PARENT_TABLES = [

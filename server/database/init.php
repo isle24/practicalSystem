@@ -293,6 +293,33 @@ function ensureIndexColumns(PDO $pdo, string $table, string $index, array $colum
     $pdo->exec($ddl);
 }
 
+/** 收紧归档要求唯一索引，检测到历史重复配置时中止升级。 */
+function ensureArchiveRequirementIndex(PDO $pdo): void
+{
+    $duplicate = $pdo->query(
+        "SELECT `practice_type`, `material_type`, COUNT(*) AS `total`
+         FROM `internship_archive_requirement`
+         GROUP BY `practice_type`, `material_type`
+         HAVING COUNT(*) > 1
+         LIMIT 1"
+    )->fetch(PDO::FETCH_ASSOC);
+    if ($duplicate) {
+        throw new RuntimeException(
+            '归档材料要求存在重复配置：'
+            . (string) $duplicate['practice_type'] . '/'
+            . (string) $duplicate['material_type']
+        );
+    }
+
+    ensureIndexColumns(
+        $pdo,
+        'internship_archive_requirement',
+        'uk_archive_requirement_type_material',
+        ['practice_type', 'material_type'],
+        "ALTER TABLE `internship_archive_requirement` ADD UNIQUE KEY `uk_archive_requirement_type_material` (`practice_type`, `material_type`)"
+    );
+}
+
 function seedMaster(PDO $pdo, array $config): void
 {
     $pdo->prepare(
@@ -1030,12 +1057,103 @@ function schoolBusinessStatements(): array
         simpleTable('arrangement_recording', recordingColumns()),
         simpleTable('arrangement_change', ['`arrangement_id` BIGINT UNSIGNED DEFAULT NULL', '`payload` JSON DEFAULT NULL', '`reason` TEXT DEFAULT NULL', '`from_status` VARCHAR(40) DEFAULT NULL', '`submitter_id` BIGINT UNSIGNED DEFAULT NULL', '`submitted_at` DATETIME DEFAULT NULL', '`reviewer_id` BIGINT UNSIGNED DEFAULT NULL', '`review_opinion` TEXT DEFAULT NULL', '`reviewed_at` DATETIME DEFAULT NULL', '`new_arrangement_id` BIGINT UNSIGNED DEFAULT NULL']),
         simpleTable('arrangement_change_recording', recordingColumns()),
+        simpleTable('internship_student_profile', [
+            '`student_id` BIGINT UNSIGNED NOT NULL',
+            '`arrangement_id` BIGINT UNSIGNED NOT NULL',
+            '`pair_id` BIGINT UNSIGNED DEFAULT NULL',
+            '`company_id` BIGINT UNSIGNED DEFAULT NULL',
+            '`base_id` BIGINT UNSIGNED DEFAULT NULL',
+            '`enterprise_mentor_id` BIGINT UNSIGNED DEFAULT NULL',
+            '`location` VARCHAR(255) DEFAULT NULL',
+            '`position` VARCHAR(180) DEFAULT NULL',
+            '`start_date` DATE DEFAULT NULL',
+            '`end_date` DATE DEFAULT NULL',
+            '`effective_at` DATETIME DEFAULT NULL',
+            '`terminated_at` DATETIME DEFAULT NULL',
+            '`termination_reason` TEXT DEFAULT NULL',
+            'UNIQUE KEY `uk_student_arrangement` (`student_id`, `arrangement_id`)',
+            'KEY `idx_profile_mentor` (`enterprise_mentor_id`, `status`)',
+            'KEY `idx_profile_dates` (`start_date`, `end_date`, `status`)',
+        ]),
+        simpleTable('internship_student_change', [
+            '`student_id` BIGINT UNSIGNED NOT NULL',
+            '`arrangement_id` BIGINT UNSIGNED NOT NULL',
+            '`profile_id` BIGINT UNSIGNED DEFAULT NULL',
+            '`change_type` VARCHAR(40) NOT NULL',
+            '`before_payload` JSON DEFAULT NULL',
+            '`after_payload` JSON DEFAULT NULL',
+            '`reason` TEXT DEFAULT NULL',
+            '`effective_date` DATE DEFAULT NULL',
+            '`submitter_id` BIGINT UNSIGNED DEFAULT NULL',
+            '`reviewer_id` BIGINT UNSIGNED DEFAULT NULL',
+            '`review_opinion` TEXT DEFAULT NULL',
+            '`submitted_at` DATETIME DEFAULT NULL',
+            '`reviewed_at` DATETIME DEFAULT NULL',
+            'KEY `idx_student_change_task` (`student_id`, `arrangement_id`, `status`)',
+            'KEY `idx_student_change_review` (`status`, `reviewer_id`, `updated_at`)',
+        ]),
+        simpleTable('internship_student_change_recording', recordingColumns()),
         simpleTable('internship_task_class', ['`arrangement_id` BIGINT UNSIGNED NOT NULL', '`grade_id` BIGINT UNSIGNED DEFAULT NULL', '`dep_id` BIGINT UNSIGNED DEFAULT NULL', '`profession_id` BIGINT UNSIGNED DEFAULT NULL', '`class_id` BIGINT UNSIGNED NOT NULL', '`student_count_snapshot` INT DEFAULT 0', 'UNIQUE KEY `uk_task_class` (`arrangement_id`, `class_id`)']),
         simpleTable('application', ['`arrangement_id` BIGINT UNSIGNED DEFAULT NULL', '`student_id` BIGINT UNSIGNED DEFAULT NULL', '`teacher_id` BIGINT UNSIGNED DEFAULT NULL']),
         simpleTable('application_recording', recordingColumns()),
         simpleTable('student_join_teacher', ['`student_id` BIGINT UNSIGNED DEFAULT NULL', '`teacher_id` BIGINT UNSIGNED DEFAULT NULL', '`arrangement_id` BIGINT UNSIGNED DEFAULT NULL']),
         simpleTable('join_recording', recordingColumns()),
         simpleTable('pair', ['`student_id` BIGINT UNSIGNED DEFAULT NULL', '`teacher_id` BIGINT UNSIGNED DEFAULT NULL', '`type` ENUM(\'internship\',\'training\',\'lab\',\'social_practice\') DEFAULT \'internship\'', '`arrangement_id` BIGINT UNSIGNED DEFAULT NULL', '`entity_type` VARCHAR(40) DEFAULT NULL', '`entity_id` BIGINT UNSIGNED DEFAULT NULL', '`active_flag` TINYINT GENERATED ALWAYS AS (CASE WHEN `status` = \'active\' AND `deleted_at` IS NULL THEN 1 ELSE NULL END) STORED', 'UNIQUE KEY `uk_pair_active` (`student_id`, `type`, `arrangement_id`, `active_flag`)']),
+        simpleTable('internship_enterprise_evaluation_invitation', [
+            '`arrangement_id` BIGINT UNSIGNED NOT NULL',
+            '`enterprise_mentor_id` BIGINT UNSIGNED NOT NULL',
+            '`token` VARCHAR(180) NOT NULL',
+            '`mobile` VARCHAR(40) DEFAULT NULL',
+            '`expires_at` DATETIME NOT NULL',
+            '`created_by` BIGINT UNSIGNED DEFAULT NULL',
+            '`revoked_at` DATETIME DEFAULT NULL',
+            'UNIQUE KEY `uk_evaluation_invitation_token` (`token`)',
+            'KEY `idx_evaluation_invitation_target` (`arrangement_id`, `enterprise_mentor_id`, `status`, `expires_at`)',
+        ]),
+        simpleTable('internship_enterprise_evaluation_session', [
+            '`invitation_id` BIGINT UNSIGNED NOT NULL',
+            '`mobile` VARCHAR(40) NOT NULL',
+            '`code_hash` VARCHAR(255) NOT NULL',
+            '`code_sent_at` DATETIME DEFAULT NULL',
+            '`verified_at` DATETIME DEFAULT NULL',
+            '`expires_at` DATETIME NOT NULL',
+            '`session_token` VARCHAR(180) DEFAULT NULL',
+            '`attempts` INT UNSIGNED DEFAULT 0',
+            'UNIQUE KEY `uk_evaluation_session_token` (`session_token`)',
+            'KEY `idx_evaluation_session_invitation` (`invitation_id`, `mobile`, `expires_at`)',
+        ]),
+        simpleTable('internship_enterprise_evaluation', [
+            '`student_id` BIGINT UNSIGNED NOT NULL',
+            '`arrangement_id` BIGINT UNSIGNED NOT NULL',
+            '`pair_id` BIGINT UNSIGNED DEFAULT NULL',
+            '`enterprise_mentor_id` BIGINT UNSIGNED NOT NULL',
+            '`evaluator_name` VARCHAR(80) DEFAULT NULL',
+            '`evaluator_mobile` VARCHAR(40) DEFAULT NULL',
+            '`verification_id` BIGINT UNSIGNED DEFAULT NULL',
+            '`criteria_json` JSON DEFAULT NULL',
+            '`total_score` DECIMAL(5,2) DEFAULT NULL',
+            '`comment` TEXT DEFAULT NULL',
+            '`submitted_at` DATETIME DEFAULT NULL',
+            '`submitted_ip` VARCHAR(80) DEFAULT NULL',
+            'UNIQUE KEY `uk_enterprise_evaluation_student_task` (`student_id`, `arrangement_id`)',
+            'KEY `idx_enterprise_evaluation_mentor` (`enterprise_mentor_id`, `status`)',
+        ]),
+        simpleTable('internship_enterprise_evaluation_recording', recordingColumns()),
+        simpleTable('internship_enterprise_evaluation_rule', [
+            '`practice_type` VARCHAR(40) DEFAULT \'graduation\'',
+            '`criteria_json` JSON DEFAULT NULL',
+            '`total_score` DECIMAL(5,2) DEFAULT 30',
+            '`created_by` BIGINT UNSIGNED DEFAULT NULL',
+            'UNIQUE KEY `uk_enterprise_evaluation_rule_type` (`practice_type`, `status`)',
+        ]),
+        simpleTable('internship_archive_requirement', [
+            '`practice_type` VARCHAR(40) NOT NULL',
+            '`material_type` VARCHAR(60) NOT NULL',
+            '`required` TINYINT(1) DEFAULT 1',
+            '`sort` INT DEFAULT 100',
+            '`created_by` BIGINT UNSIGNED DEFAULT NULL',
+            'UNIQUE KEY `uk_archive_requirement_type_material` (`practice_type`, `material_type`)',
+        ]),
         simpleTable('sign_in', entityColumns(['`student_id` BIGINT UNSIGNED DEFAULT NULL', '`teacher_id` BIGINT UNSIGNED DEFAULT NULL', '`sign_time` DATETIME DEFAULT NULL', '`date` DATE DEFAULT NULL', '`longitude` DECIMAL(10,6) DEFAULT NULL', '`latitude` DECIMAL(10,6) DEFAULT NULL', '`location` VARCHAR(255) DEFAULT NULL', '`sign_type` VARCHAR(40) DEFAULT \'gps\'', '`remark` TEXT DEFAULT NULL'])),
         simpleTable('sign_in_recording', recordingColumns()),
         simpleTable('sign_in_qrcode', entityColumns(['`teacher_id` BIGINT UNSIGNED DEFAULT NULL', '`token` VARCHAR(120) DEFAULT NULL', '`expires_at` DATETIME DEFAULT NULL'])),
@@ -2237,6 +2355,7 @@ function ensureInternshipSchema(PDO $pdo): void
     ensureIndex($pdo, 'insurance', 'idx_insurance_student_task_date', "ALTER TABLE `insurance` ADD KEY `idx_insurance_student_task_date` (`student_id`, `arrangement_id`, `status`, `start_date`, `end_date`)");
     ensureIndex($pdo, 'insurance', 'idx_insurance_expiry', "ALTER TABLE `insurance` ADD KEY `idx_insurance_expiry` (`end_date`, `status`, `deleted_at`)");
     ensureIndex($pdo, 'safety_letter_sign', 'idx_safety_student_task_status', "ALTER TABLE `safety_letter_sign` ADD KEY `idx_safety_student_task_status` (`student_id`, `arrangement_id`, `status`, `signed_at`)");
+    ensureArchiveRequirementIndex($pdo);
 }
 
 function ensurePracticeSchema(PDO $pdo): void
@@ -2765,6 +2884,7 @@ function seedSchool(PDO $pdo, string $wechatProxyUrl): void
     seedRoles($pdo);
     seedPracticePeriods($pdo);
     seedInternshipCategories($pdo);
+    seedArchiveRequirements($pdo);
     seedArchives($pdo);
     seedAdmin($pdo);
     seedPermissionAccounts($pdo);
@@ -2814,6 +2934,29 @@ function seedInternshipCategories(PDO $pdo): void
          SET `status` = 'draft'
          WHERE `category_id` = 1 AND `graduation_cohort_id` IS NULL AND `deleted_at` IS NULL"
     );
+}
+
+function seedArchiveRequirements(PDO $pdo): void
+{
+    $requirements = [
+        'graduation' => ['plan', 'implementation_sheet', 'syllabus', 'guide', 'registration', 'teacher_work_report', 'journal', 'graduation_report', 'graduation_appraisal', 'score_register', 'safety_commitment'],
+        'internship' => ['plan', 'implementation_sheet', 'syllabus', 'guide', 'registration', 'teacher_work_report', 'journal', 'report', 'score_register', 'safety_commitment'],
+    ];
+    $stmt = $pdo->prepare(
+        "INSERT INTO `internship_archive_requirement` (`uuid`, `name`, `practice_type`, `material_type`, `required`, `sort`, `status`, `deleted_at`)
+         VALUES (?, '实习归档材料要求', ?, ?, 1, ?, 'enabled', NULL)
+         ON DUPLICATE KEY UPDATE `practice_type` = VALUES(`practice_type`)"
+    );
+    foreach ($requirements as $practiceType => $materials) {
+        foreach ($materials as $sort => $materialType) {
+            $stmt->execute([
+                '00000000-0000-0000-0000-' . str_pad((string) (($practiceType === 'graduation' ? 500001 : 600001) + $sort), 12, '0', STR_PAD_LEFT),
+                $practiceType,
+                $materialType,
+                $sort,
+            ]);
+        }
+    }
 }
 
 function seedPracticePeriods(PDO $pdo): void

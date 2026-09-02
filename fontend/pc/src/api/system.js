@@ -830,6 +830,14 @@ export function fetchInternshipArchiveMaterials(params = {}) {
   return internshipList('archive-materials', params);
 }
 
+export function fetchInternshipArchiveRequirements(params = {}) {
+  return internshipList('archive-requirements', params);
+}
+
+export function saveInternshipArchiveRequirements(payload) {
+  return internshipPost('save-archive-requirements', payload);
+}
+
 export function fetchInternshipArchiveMaterialDetail(params = {}) {
   return internshipList('archive-material-detail', params);
 }
@@ -856,6 +864,42 @@ export function saveInternshipGraduationAppraisal(payload) {
 
 export function fetchInternshipGraduationAppraisal(params = {}) {
   return internshipList('graduation-appraisal', params);
+}
+
+export function fetchInternshipStudentProfiles(params = {}) {
+  return internshipList('student-profiles', params);
+}
+
+export function fetchInternshipStudentChanges(params = {}) {
+  return internshipList('student-changes', params);
+}
+
+export function fetchInternshipStudentChangeDetail(params = {}) {
+  return internshipList('student-change-detail', params);
+}
+
+export function saveInternshipStudentChange(payload) {
+  return internshipPost('save-student-change', payload);
+}
+
+export function reviewInternshipStudentChange(payload) {
+  return internshipPost('review-student-change', payload);
+}
+
+export function createEnterpriseEvaluationInvitation(payload) {
+  return internshipPost('create-enterprise-evaluation-invitation', payload);
+}
+
+export function fetchEnterpriseEvaluationProgress(params = {}) {
+  return internshipList('enterprise-evaluation-progress', params);
+}
+
+export function fetchEnterpriseEvaluationRule(params = {}) {
+  return internshipList('enterprise-evaluation-rule', params);
+}
+
+export function saveEnterpriseEvaluationRule(payload) {
+  return internshipPost('save-enterprise-evaluation-rule', payload);
 }
 
 export function saveInternshipScore(payload) {

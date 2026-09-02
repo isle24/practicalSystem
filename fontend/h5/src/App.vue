@@ -453,7 +453,12 @@ const practiceGpsTitle = computed(() => (practiceGpsReady.value ? '已获取 GPS
 const practiceGpsHint = computed(() => (practiceGpsReady.value ? '坐标来自当前设备定位' : '签到前请先授权并获取当前位置'));
 const practiceMapUrl = computed(() => coordinateMapUrl(practiceExecutionDialog.form.longitude, practiceExecutionDialog.form.latitude, practiceGpsReady.value));
 const signAccuracyText = computed(() => accuracyDisplayText(internship.forms.sign.accuracy));
-const currentReportIsGraduation = computed(() => currentArrangement()?.type === 'graduation');
+const currentReportIsGraduation = computed(() => {
+  const arrangement = currentArrangement();
+  return arrangement?.type === 'graduation'
+    || arrangement?.category_code === 'graduation'
+    || arrangement?.scope_type === 'cohort';
+});
 const safetyTemplate = computed(() => internship.options.archive_templates.find(item => item.material_type === 'safety_commitment') || null);
 const practiceAccuracyText = computed(() => accuracyDisplayText(practiceExecutionDialog.form.accuracy));
 
@@ -556,6 +561,7 @@ const internshipPanels = computed(() => {
       { key: 'workbench', name: '概况', icon: Home },
       { key: 'apply', name: '任务', icon: ClipboardList },
       { key: 'submit', name: '提交', icon: Send },
+      { key: 'changes', name: '资料', icon: FileText },
       { key: 'score', name: '成绩', icon: GraduationCap },
     ];
   }
@@ -563,6 +569,7 @@ const internshipPanels = computed(() => {
     return [
       { key: 'workbench', name: '概况', icon: Home },
       { key: 'review', name: '审核', icon: CheckCircle2 },
+      { key: 'changes', name: '变更', icon: FileText },
       { key: 'score', name: '成绩', icon: GraduationCap },
     ];
   }
@@ -570,6 +577,7 @@ const internshipPanels = computed(() => {
     return [
       { key: 'workbench', name: '概况', icon: Home },
       { key: 'review', name: '审核', icon: CheckCircle2 },
+      { key: 'changes', name: '变更', icon: FileText },
       { key: 'manage', name: '数据', icon: CalendarCheck },
     ];
   }
@@ -5180,7 +5188,6 @@ async function submitScore() {
       sign_in_score: numericOrNull(internship.forms.score.sign_in_score),
       journal_score: numericOrNull(internship.forms.score.journal_score),
       report_score: numericOrNull(internship.forms.score.report_score),
-      enterprise_score: numericOrNull(internship.forms.score.enterprise_score),
     });
     internship.message = '成绩已保存';
     await loadInternship();

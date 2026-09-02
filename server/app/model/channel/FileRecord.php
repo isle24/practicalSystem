@@ -186,6 +186,12 @@ class FileRecord extends BaseModel
             ->where('is_temporary', 1)
             ->where('created_at', '<=', $before)
             ->whereNull('deleted_at')
+            ->whereNotExists(function ($query): void {
+                $query->selectRaw('1')
+                    ->from('file_relation')
+                    ->whereColumn('file_relation.file_id', 'file.id')
+                    ->whereNull('file_relation.deleted_at');
+            })
             ->orderBy('id')
             ->limit(max(1, $limit))
             ->pluck('id')

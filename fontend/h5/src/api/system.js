@@ -309,12 +309,84 @@ export function fetchInternshipArchiveMaterials(params = {}) {
   return internshipList('archive-materials', params);
 }
 
+export function fetchInternshipArchiveRequirements(params = {}) {
+  return internshipList('archive-requirements', params);
+}
+
+export function saveInternshipArchiveRequirements(payload) {
+  return internshipPost('save-archive-requirements', payload);
+}
+
 export function fetchInternshipArchiveMaterialDetail(params = {}) {
   return internshipList('archive-material-detail', params);
 }
 
 export function fetchInternshipArchiveMaterialHistory(params = {}) {
   return internshipList('archive-material-history', params);
+}
+
+export function fetchInternshipStudentProfiles(params = {}) {
+  return internshipList('student-profiles', params);
+}
+
+export function fetchInternshipStudentChanges(params = {}) {
+  return internshipList('student-changes', params);
+}
+
+export function fetchInternshipStudentChangeDetail(params = {}) {
+  return internshipList('student-change-detail', params);
+}
+
+export function saveInternshipStudentChange(payload) {
+  return internshipPost('save-student-change', payload);
+}
+
+export function reviewInternshipStudentChange(payload) {
+  return internshipPost('review-student-change', payload);
+}
+
+export function createEnterpriseEvaluationInvitation(payload) {
+  return internshipPost('create-enterprise-evaluation-invitation', payload);
+}
+
+export function fetchEnterpriseEvaluationProgress(params = {}) {
+  return internshipList('enterprise-evaluation-progress', params);
+}
+
+export function fetchEnterpriseEvaluationRule(params = {}) {
+  return internshipList('enterprise-evaluation-rule', params);
+}
+
+export function saveEnterpriseEvaluationRule(payload) {
+  return internshipPost('save-enterprise-evaluation-rule', payload);
+}
+
+export function sendEnterpriseEvaluationCode(payload) {
+  return request('/open-enterprise-evaluation/send-code', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function verifyEnterpriseEvaluationCode(payload) {
+  return request('/open-enterprise-evaluation/verify-code', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function fetchEnterpriseEvaluationContext(payload) {
+  return request('/open-enterprise-evaluation/context', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function submitEnterpriseEvaluation(payload) {
+  return request('/open-enterprise-evaluation/submit', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
 }
 
 export function saveInternshipArchiveMaterial(payload) {

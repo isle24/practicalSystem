@@ -83,7 +83,7 @@ class InternshipArchiveRecord extends TableRecord
                 'internship_plan.business_type', 'internship_plan.status', 'internship_plan.created_at',
                 'grade_list.grade_name', 'department.dep_name', 'profession.profession_name',
                 'graduation_cohort.cohort_name', 'internship_category.name as category_name',
-                'internship_category.scope_type',
+                'internship_category.code as category_code', 'internship_category.scope_type',
             ]));
 
         $items = self::appendPlanProgress($items, $scope);
@@ -158,6 +158,7 @@ class InternshipArchiveRecord extends TableRecord
                 'students.name as student_name', 'students.student_num', 'students.class_id', 'class.class_name',
                 'grade_list.grade_name', 'graduation_cohort.cohort_name',
                 'internship_category.name as category_name', 'internship_category.scope_type',
+                'internship_category.code as category_code',
                 'department.dep_name', 'profession.profession_name',
             ]));
 
@@ -214,7 +215,7 @@ class InternshipArchiveRecord extends TableRecord
             ->first([
                 'internship_plan.*', 'grade_list.grade_name',
                 'graduation_cohort.cohort_name', 'internship_category.name as category_name',
-                'internship_category.scope_type',
+                'internship_category.code as category_code', 'internship_category.scope_type',
                 'department.dep_name', 'profession.profession_name',
             ]);
         if (!$plan) {
@@ -247,6 +248,12 @@ class InternshipArchiveRecord extends TableRecord
             self::materialState('syllabus', ['plan_id' => $planId], $materialMap, $sources),
             self::materialState('guide', ['plan_id' => $planId], $materialMap, $sources),
         ];
+        $planPracticeType = self::archivePracticeType(
+            '',
+            (string) ($planRow['category_code'] ?? ''),
+            (string) ($planRow['scope_type'] ?? '')
+        );
+        $planRow['materials'] = self::applyRequirementState($planRow['materials'], $planPracticeType);
 
         $taskRows = [];
         foreach ($arrangements as $arrangement) {
@@ -257,6 +264,10 @@ class InternshipArchiveRecord extends TableRecord
                 self::materialState('registration', ['plan_id' => $planId, 'arrangement_id' => $arrangementId], $materialMap, $sources),
                 self::materialState('teacher_work_report', ['plan_id' => $planId, 'arrangement_id' => $arrangementId], $materialMap, $sources),
             ];
+            $arrangementRow['materials'] = self::applyRequirementState(
+                $arrangementRow['materials'],
+                $planPracticeType
+            );
             $arrangementRow['classes'] = [];
             foreach (($scope['role_type'] ?? '') === 'student' ? [] : ($classes[$arrangementId] ?? []) as $class) {
                 $class['materials'] = [self::materialState('score_register', [
@@ -264,6 +275,7 @@ class InternshipArchiveRecord extends TableRecord
                     'arrangement_id' => $arrangementId,
                     'class_id' => (int) $class['class_id'],
                 ], $materialMap, $sources)];
+                $class['materials'] = self::applyRequirementState($class['materials'], $planPracticeType);
                 $arrangementRow['classes'][] = $class;
             }
             $arrangementRow['students'] = [];
@@ -275,10 +287,10 @@ class InternshipArchiveRecord extends TableRecord
                 ];
                 $student['materials'] = [
                     self::materialState('journal', $target, $materialMap, $sources),
-                    self::materialState((string) $arrangement->type === 'graduation' ? 'graduation_report' : 'report', $target, $materialMap, $sources),
+                    self::materialState($planPracticeType === 'graduation' ? 'graduation_report' : 'report', $target, $materialMap, $sources),
                     self::materialState('safety_commitment', $target, $materialMap, $sources),
                 ];
-                if ((string) $arrangement->type === 'graduation') {
+                if ($planPracticeType === 'graduation') {
                     $student['materials'][] = self::materialState('graduation_appraisal', $target, $materialMap, $sources);
                 }
                 $student['compliance'] = self::studentComplianceState($arrangementId, (int) $student['student_id'], $sources);
@@ -457,10 +469,10 @@ class InternshipArchiveRecord extends TableRecord
     public static function generationReady(string $materialType, array $target): array
     {
         if ($materialType === 'graduation_appraisal') {
-            return self::simpleSourceState('internship_graduation_appraisal', [
-                'student_id' => (int) ($target['student_id'] ?? 0),
-                'arrangement_id' => (int) ($target['arrangement_id'] ?? 0),
-            ], ['accept']);
+            return self::appraisalSourceState(
+                (int) ($target['student_id'] ?? 0),
+                (int) ($target['arrangement_id'] ?? 0)
+            );
         }
 
         return self::sourceReady($materialType, $target);
@@ -530,6 +542,12 @@ class InternshipArchiveRecord extends TableRecord
         }
 
         $item = self::decodeGenerationRow(self::row($row));
+        $evaluation = EnterpriseEvaluationRecord::evaluationByStudentTask($studentId, $arrangementId);
+        if ($evaluation && (string) $evaluation->status === 'submitted') {
+            $item['enterprise_score'] = (float) $evaluation->total_score;
+            $item['enterprise_comment'] = (string) ($evaluation->comment ?? '');
+            $item['enterprise_evaluation_id'] = (int) $evaluation->id;
+        }
         $item['attachment'] = empty($item['attachment_id']) ? null : [
             'id' => (int) $item['attachment_id'],
             'name' => $item['attachment_download_name'] ?: $item['attachment_name'],
@@ -550,6 +568,30 @@ class InternshipArchiveRecord extends TableRecord
             ->where('id', $arrangementId)
             ->whereNull('deleted_at')
             ->value('type') ?: '');
+    }
+
+    /** 返回任务所属的归档实践类别。 */
+    public static function arrangementPracticeType(int $arrangementId): string
+    {
+        $row = self::queryTable('arrangement')
+            ->leftJoin('internship_plan', 'arrangement.plan_id', '=', 'internship_plan.id')
+            ->leftJoin('internship_category', 'internship_plan.category_id', '=', 'internship_category.id')
+            ->where('arrangement.id', $arrangementId)
+            ->whereNull('arrangement.deleted_at')
+            ->first([
+                'arrangement.type as arrangement_type',
+                'internship_category.code as category_code',
+                'internship_category.scope_type',
+            ]);
+        if (!$row) {
+            return '';
+        }
+
+        return self::archivePracticeType(
+            (string) ($row->arrangement_type ?? ''),
+            (string) ($row->category_code ?? ''),
+            (string) ($row->scope_type ?? '')
+        );
     }
 
     public static function insertRecording(string $table, array $values): int
@@ -693,7 +735,14 @@ class InternshipArchiveRecord extends TableRecord
             $row = self::queryTable('internship_graduation_appraisal')->where('student_id', $studentId)
                 ->where('arrangement_id', $arrangementId)->whereNull('deleted_at')->orderByDesc('id')->first();
             $data['document'] = $row ? self::decodeGenerationRow(self::row($row)) : [];
+            $evaluation = EnterpriseEvaluationRecord::evaluationByStudentTask($studentId, $arrangementId);
+            if ($evaluation && (string) $evaluation->status === 'submitted') {
+                $data['document']['enterprise_score'] = (float) $evaluation->total_score;
+                $data['document']['enterprise_comment'] = (string) ($evaluation->comment ?? '');
+                $data['document']['enterprise_evaluation_id'] = (int) $evaluation->id;
+            }
         } elseif ($materialType === 'score_register') {
+            EnterpriseEvaluationRecord::rule('graduation');
             $data['scores'] = self::rows(self::queryTable('pair')
                 ->join('students', 'pair.student_id', '=', 'students.student_id')
                 ->leftJoin('score', function ($join) use ($arrangementId): void {
@@ -701,13 +750,19 @@ class InternshipArchiveRecord extends TableRecord
                         ->where('score.arrangement_id', '=', $arrangementId)
                         ->whereNull('score.deleted_at');
                 })
+                ->leftJoin('internship_enterprise_evaluation as enterprise_evaluation', function ($join) use ($arrangementId): void {
+                    $join->on('pair.student_id', '=', 'enterprise_evaluation.student_id')
+                        ->where('enterprise_evaluation.arrangement_id', '=', $arrangementId)
+                        ->where('enterprise_evaluation.status', '=', 'submitted')
+                        ->whereNull('enterprise_evaluation.deleted_at');
+                })
                 ->where('pair.arrangement_id', $arrangementId)->where('pair.type', 'internship')
                 ->where('pair.status', 'active')->where('students.class_id', $classId)
                 ->whereNull('pair.deleted_at')->whereNull('students.deleted_at')
                 ->orderBy('students.student_num')->get([
                     'students.student_id', 'students.name as student_name', 'students.student_num',
                     'score.sign_in_score', 'score.journal_score', 'score.report_score',
-                    'score.enterprise_score', 'score.final_score', 'score.comment',
+                    'enterprise_evaluation.total_score as enterprise_score', 'score.final_score', 'score.comment',
                 ]));
         }
 
@@ -795,67 +850,115 @@ class InternshipArchiveRecord extends TableRecord
         if (!$planIds) {
             return $items;
         }
+
         $visibleArrangements = self::visibleArrangementQuery($scope)->whereIn('arrangement.plan_id', $planIds);
         $visibleArrangementIds = self::intValues((clone $visibleArrangements)->pluck('arrangement.id'));
-        $taskCounts = self::countMap((clone $visibleArrangements)
-            ->selectRaw('plan_id AS plan_key, COUNT(*) AS total')->groupBy('plan_id')->get());
+        $arrangementRows = self::rows((clone $visibleArrangements)->get([
+            'arrangement.id', 'arrangement.plan_id', 'arrangement.type',
+        ]));
+        $planPracticeTypes = [];
+        foreach ($items as $item) {
+            $planPracticeTypes[(int) ($item['id'] ?? 0)] = self::archivePracticeType(
+                '',
+                (string) ($item['category_code'] ?? ''),
+                (string) ($item['scope_type'] ?? '')
+            );
+        }
+        $arrangementsByPlan = [];
+        foreach ($arrangementRows as $arrangement) {
+            $planId = (int) ($arrangement['plan_id'] ?? 0);
+            $arrangementId = (int) ($arrangement['id'] ?? 0);
+            if ($planId <= 0 || $arrangementId <= 0) {
+                continue;
+            }
+            $practiceType = $planPracticeTypes[$planId]
+                ?? self::archivePracticeType((string) ($arrangement['type'] ?? ''));
+            $arrangementsByPlan[$planId][$arrangementId] = $practiceType;
+        }
+
         $visibleStudents = self::visibleStudentTaskQuery($scope)
             ->join('arrangement', 'pair.arrangement_id', '=', 'arrangement.id')
             ->whereIn('pair.arrangement_id', $visibleArrangementIds)
             ->whereNull('arrangement.deleted_at');
-        $studentCounts = self::countMap((clone $visibleStudents)
-            ->selectRaw('arrangement.plan_id AS plan_key, COUNT(DISTINCT pair.student_id, pair.arrangement_id) AS total')
-            ->groupBy('arrangement.plan_id')->get());
-        $graduationStudentCounts = self::countMap((clone $visibleStudents)->where('arrangement.type', 'graduation')
-            ->selectRaw('arrangement.plan_id AS plan_key, COUNT(DISTINCT pair.student_id, pair.arrangement_id) AS total')
-            ->groupBy('arrangement.plan_id')->get());
-        $classCounts = self::countMap(self::queryTable('internship_task_class')->join('arrangement', 'internship_task_class.arrangement_id', '=', 'arrangement.id')
-            ->whereIn('internship_task_class.arrangement_id', $visibleArrangementIds)->whereIn('internship_task_class.status', ['active', 'enabled'])
-            ->whereNull('internship_task_class.deleted_at')->whereNull('arrangement.deleted_at')
-            ->selectRaw('arrangement.plan_id AS plan_key, COUNT(*) AS total')->groupBy('arrangement.plan_id')->get());
-        $archiveQuery = self::queryTable('internship_archive_material')->whereIn('plan_id', $planIds)
-            ->where('status', 'archived')->whereNull('deleted_at');
-        if (in_array((string) ($scope['role_type'] ?? ''), ['teacher', 'enterprise'], true)) {
-            $archiveQuery->where(function ($builder) use ($visibleArrangementIds): void {
-                $builder->where('scope_type', 'plan');
-                if ($visibleArrangementIds) {
-                    $builder->orWhereIn('arrangement_id', $visibleArrangementIds);
-                }
-            });
-        }
+        $studentCounts = self::countByArrangement((clone $visibleStudents)
+            ->selectRaw('arrangement.id AS arrangement_key, COUNT(DISTINCT pair.student_id) AS total')
+            ->groupBy('arrangement.id')->get());
+        $classCounts = self::countByArrangement(self::queryTable('internship_task_class as task_class')
+            ->join('arrangement', 'task_class.arrangement_id', '=', 'arrangement.id')
+            ->whereIn('task_class.arrangement_id', $visibleArrangementIds)
+            ->whereIn('task_class.status', ['active', 'enabled'])
+            ->whereNull('task_class.deleted_at')->whereNull('arrangement.deleted_at')
+            ->selectRaw('arrangement.id AS arrangement_key, COUNT(*) AS total')
+            ->groupBy('arrangement.id')->get());
+
+        $archiveQuery = self::queryTable('internship_archive_material as archive')
+            ->leftJoin('arrangement as archive_arrangement', 'archive.arrangement_id', '=', 'archive_arrangement.id')
+            ->leftJoin('file as generated_file', 'archive.generated_file_id', '=', 'generated_file.id')
+            ->leftJoin('file as signed_file', 'archive.signed_file_id', '=', 'signed_file.id')
+            ->whereIn('archive.plan_id', $planIds)
+            ->where('archive.status', 'archived')->whereNull('archive.deleted_at');
         $archiveQuery->where(function ($query): void {
             $query->where(function ($builder): void {
-                $builder->whereIn('material_type', ['plan', 'implementation_sheet', 'registration', 'score_register'])
-                    ->whereExists(function ($fileQuery): void {
-                        $fileQuery->selectRaw('1')->from('file')
-                            ->whereColumn('file.id', 'internship_archive_material.generated_file_id')
-                            ->where('file.status', 'enabled')->whereNull('file.deleted_at');
-                    });
+                $builder->whereIn('archive.material_type', self::GENERATED_FILE_REQUIRED_MATERIALS)
+                    ->where('generated_file.status', 'enabled')->whereNull('generated_file.deleted_at');
             })->orWhere(function ($builder): void {
-                $builder->whereNotIn('material_type', ['plan', 'implementation_sheet', 'registration', 'score_register'])
+                $builder->whereNotIn('archive.material_type', self::GENERATED_FILE_REQUIRED_MATERIALS)
                     ->where(function ($fileQuery): void {
-                        $fileQuery->whereExists(function ($generatedQuery): void {
-                            $generatedQuery->selectRaw('1')->from('file')
-                                ->whereColumn('file.id', 'internship_archive_material.generated_file_id')
-                                ->where('file.status', 'enabled')->whereNull('file.deleted_at');
-                        })->orWhereExists(function ($signedQuery): void {
-                            $signedQuery->selectRaw('1')->from('file')
-                                ->whereColumn('file.id', 'internship_archive_material.signed_file_id')
-                                ->where('file.status', 'enabled')->whereNull('file.deleted_at');
+                        $fileQuery->where(function ($generatedQuery): void {
+                            $generatedQuery->where('generated_file.status', 'enabled')->whereNull('generated_file.deleted_at');
+                        })->orWhere(function ($signedQuery): void {
+                            $signedQuery->where('signed_file.status', 'enabled')->whereNull('signed_file.deleted_at');
                         });
                     });
             });
         });
-        $archiveCounts = self::countMap($archiveQuery
-            ->selectRaw('plan_id AS plan_key, COUNT(*) AS total')->groupBy('plan_id')->get());
+        $archiveRows = self::rows($archiveQuery->get([
+            'archive.material_type', 'archive.scope_type', 'archive.plan_id', 'archive.arrangement_id',
+            'archive.student_id', 'archive.class_id', 'archive.archive_version', 'archive.id',
+            'archive_arrangement.type as arrangement_type',
+        ]));
+        $archiveCounts = [];
+        $archivedKeys = [];
+        foreach ($archiveRows as $archive) {
+            $planId = (int) ($archive['plan_id'] ?? 0);
+            $arrangementId = (int) ($archive['arrangement_id'] ?? 0);
+            if ($planId <= 0 || ($arrangementId > 0 && !isset($arrangementsByPlan[$planId][$arrangementId]))) {
+                continue;
+            }
+            $practiceType = $arrangementId > 0
+                ? $arrangementsByPlan[$planId][$arrangementId]
+                : ($planPracticeTypes[$planId] ?? 'internship');
+            $requirements = InternshipArchiveRequirementRecord::requirementMap($practiceType);
+            $materialType = (string) ($archive['material_type'] ?? '');
+            if (empty($requirements[$materialType]['required'])) {
+                continue;
+            }
+            $key = self::materialMapKey($archive);
+            if (isset($archivedKeys[$planId][$key])) {
+                continue;
+            }
+            $archivedKeys[$planId][$key] = true;
+            $archiveCounts[$planId] = (int) ($archiveCounts[$planId] ?? 0) + 1;
+        }
 
         foreach ($items as &$item) {
             $id = (int) $item['id'];
-            $taskCount = (int) ($taskCounts[$id] ?? 0);
-            $studentCount = (int) ($studentCounts[$id] ?? 0);
-            $classCount = (int) ($classCounts[$id] ?? 0);
-            $graduationStudentCount = (int) ($graduationStudentCounts[$id] ?? 0);
-            $required = 3 + $taskCount * 3 + $classCount + $studentCount * 3 + $graduationStudentCount;
+            $practiceType = $planPracticeTypes[$id] ?? 'internship';
+            $required = count(self::requiredMaterialTypes($practiceType, 'plan'));
+            $taskCount = count($arrangementsByPlan[$id] ?? []);
+            $studentCount = 0;
+            $classCount = 0;
+            foreach (($arrangementsByPlan[$id] ?? []) as $arrangementId => $practiceType) {
+                $required += count(self::requiredMaterialTypes($practiceType, 'arrangement'));
+                $studentTotal = (int) ($studentCounts[$arrangementId] ?? 0);
+                $classTotal = (int) ($classCounts[$arrangementId] ?? 0);
+                $studentCount += $studentTotal;
+                $classCount += $classTotal;
+                $required += $studentTotal * count(self::requiredMaterialTypes($practiceType, 'student_task'));
+                if (in_array('score_register', self::requiredMaterialTypes($practiceType, 'plan_class'), true)) {
+                    $required += $classTotal;
+                }
+            }
             $archived = min($required, (int) ($archiveCounts[$id] ?? 0));
             $item['task_count'] = $taskCount;
             $item['student_task_count'] = $studentCount;
@@ -863,12 +966,37 @@ class InternshipArchiveRecord extends TableRecord
             $item['required_count'] = $required;
             $item['archived_count'] = $archived;
             $item['material_progress'] = "{$archived}/{$required}";
-            $item['archive_status'] = $required > 0 && $archived === $required ? 'complete' : 'incomplete';
+            $item['archive_status'] = $archived === $required ? 'complete' : 'incomplete';
             $item['archive_status_text'] = $item['archive_status'] === 'complete' ? '完整' : '待补齐';
         }
         unset($item);
 
         return $items;
+    }
+
+    /** 按实习任务汇总目标数量。 */
+    private static function countByArrangement(iterable $rows): array
+    {
+        $map = [];
+        foreach ($rows as $row) {
+            $map[(int) $row->arrangement_key] = (int) $row->total;
+        }
+
+        return $map;
+    }
+
+    /** 返回指定归档作用域下的必交材料类型。 */
+    private static function requiredMaterialTypes(string $practiceType, string $scopeType): array
+    {
+        $types = [];
+        foreach (InternshipArchiveRequirementRecord::requirementMap($practiceType) as $materialType => $requirement) {
+            $definition = self::materialDefinition($materialType);
+            if ($definition && $definition['scope_type'] === $scopeType && !empty($requirement['required'])) {
+                $types[] = $materialType;
+            }
+        }
+
+        return $types;
     }
 
     private static function taskClasses(array $arrangementIds): array
@@ -944,6 +1072,7 @@ class InternshipArchiveRecord extends TableRecord
     /** 批量读取详情页所需的材料源状态 */
     private static function sourceStateData(int $planId, array $arrangements, array $students, array $classes): array
     {
+        EnterpriseEvaluationRecord::rule('graduation');
         $arrangements = self::normalizeArrangementRows($arrangements);
         $arrangementIds = self::ids(array_column($arrangements, 'id'));
         $studentIds = [];
@@ -982,6 +1111,10 @@ class InternshipArchiveRecord extends TableRecord
             ->whereIn('arrangement_id', $arrangementIds)->whereIn('student_id', $studentIds)
             ->whereNull('deleted_at')->orderByDesc('id')
             ->get(['id', 'arrangement_id', 'student_id', 'status', 'attachment_id']));
+        $enterpriseEvaluationRows = self::rows(self::queryTable('internship_enterprise_evaluation')
+            ->whereIn('arrangement_id', $arrangementIds)->whereIn('student_id', $studentIds)
+            ->where('status', 'submitted')->whereNull('deleted_at')->orderByDesc('id')
+            ->get(['id', 'arrangement_id', 'student_id', 'total_score', 'comment', 'submitted_at']));
         $scoreRows = self::rows(self::queryTable('score')->whereIn('arrangement_id', $arrangementIds)
             ->whereIn('student_id', $studentIds)->whereNull('deleted_at')
             ->get(['arrangement_id', 'student_id', 'final_score']));
@@ -1016,6 +1149,7 @@ class InternshipArchiveRecord extends TableRecord
             'journal_counts' => self::countByPair($journalRows),
             'reports' => self::keyByTriple($reportRows, 'arrangement_id', 'student_id', 'report_type'),
             'appraisals' => self::keyByPair($appraisalRows),
+            'enterprise_evaluations' => self::keyByPair($enterpriseEvaluationRows),
             'scores' => self::keyByPair($scoreRows),
             'safety' => self::keyByPair($safetyRows),
             'insurances' => self::groupByPair($insuranceRows),
@@ -1076,27 +1210,65 @@ class InternshipArchiveRecord extends TableRecord
             self::materialState('registration', $arrangementTarget, $materialMap, $sources),
             self::materialState('teacher_work_report', $arrangementTarget, $materialMap, $sources),
             self::materialState('journal', $target, $materialMap, $sources),
-            self::materialState((string) $row['arrangement_type'] === 'graduation' ? 'graduation_report' : 'report', $target, $materialMap, $sources),
+            self::materialState(self::studentRowPracticeType($row) === 'graduation' ? 'graduation_report' : 'report', $target, $materialMap, $sources),
             self::materialState('safety_commitment', $target, $materialMap, $sources),
         ];
-        if ((string) $row['arrangement_type'] === 'graduation') {
+        if (self::studentRowPracticeType($row) === 'graduation') {
             $materials[] = self::materialState('graduation_appraisal', $target, $materialMap, $sources);
         }
 
-        $archived = array_values(array_filter($materials, static fn (array $item): bool => $item['archive_status'] === 'archived'));
-        $missing = array_values(array_filter($materials, static fn (array $item): bool => $item['archive_status'] !== 'archived'));
+        $materials = self::applyRequirementState($materials, self::studentRowPracticeType($row));
+
+        $requiredMaterials = array_values(array_filter($materials, static fn (array $item): bool => !empty($item['required'])));
+        $archived = array_values(array_filter($requiredMaterials, static fn (array $item): bool => $item['archive_status'] === 'archived'));
+        $missing = array_values(array_filter($requiredMaterials, static fn (array $item): bool => $item['archive_status'] !== 'archived'));
         $row['arrangement_type_text'] = self::arrangementTypeText((string) $row['arrangement_type']);
         $row['materials'] = $materials;
-        $row['required_count'] = count($materials);
+        $row['required_count'] = count($requiredMaterials);
         $row['archived_count'] = count($archived);
-        $row['material_progress'] = count($archived) . '/' . count($materials);
+        $row['material_progress'] = count($archived) . '/' . count($requiredMaterials);
         $row['missing_materials'] = $missing ? implode('、', array_column($missing, 'label')) : '无';
-        $row['archive_status'] = count($archived) === count($materials) ? 'complete' : 'incomplete';
+        $row['archive_status'] = count($archived) === count($requiredMaterials) ? 'complete' : 'incomplete';
         $row['archive_status_text'] = $row['archive_status'] === 'complete' ? '完整' : '待补齐';
         $row['status'] = $row['archive_status'];
         $row['compliance'] = self::studentComplianceState($target['arrangement_id'], $target['student_id'], $sources);
 
         return $row;
+    }
+
+    /** 按实践类别应用学校配置的材料要求。 */
+    private static function applyRequirementState(array $materials, string $practiceType): array
+    {
+        $requirements = InternshipArchiveRequirementRecord::requirementMap($practiceType);
+        foreach ($materials as &$material) {
+            $type = (string) ($material['material_type'] ?? '');
+            $material['required'] = $requirements[$type]['required'] ?? true;
+            if (!$material['required']) {
+                $material['archive_status'] = 'not_applicable';
+                $material['archive_status_text'] = '不适用';
+            }
+        }
+        unset($material);
+
+        return $materials;
+    }
+
+    /** 将计划类别和旧任务类型转换为归档配置类别。 */
+    private static function archivePracticeType(string $arrangementType, string $categoryCode = '', string $scopeType = ''): string
+    {
+        return $arrangementType === 'graduation' || $categoryCode === 'graduation' || $scopeType === 'cohort'
+            ? 'graduation'
+            : 'internship';
+    }
+
+    /** 返回学生归档行对应的实践类别。 */
+    private static function studentRowPracticeType(array $row): string
+    {
+        return self::archivePracticeType(
+            (string) ($row['arrangement_type'] ?? ''),
+            (string) ($row['category_code'] ?? ''),
+            (string) ($row['scope_type'] ?? '')
+        );
     }
 
     /** 返回任务级合规附加材料统计 */
@@ -1208,7 +1380,7 @@ class InternshipArchiveRecord extends TableRecord
             'teacher_work_report' => self::statusSourceState((string) ($sources['teacher_reports'][$arrangementId]['status'] ?? ''), ['accept', 'enabled']),
             'journal' => self::journalStateFromData($arrangementId, $pairKey, $sources),
             'report', 'graduation_report' => self::statusSourceState((string) ($sources['reports'][$pairKey . '|' . ($materialType === 'graduation_report' ? 'graduation' : 'general')]['status'] ?? ''), ['accept'], '待提交'),
-            'graduation_appraisal' => self::fileBackedState($sources['appraisals'][$pairKey] ?? null, 'attachment_id', 'accept', $sources),
+            'graduation_appraisal' => self::appraisalStateFromData($pairKey, $sources),
             'score_register' => self::scoreRegisterStateFromData($arrangementId, $classId, $sources),
             'safety_commitment' => self::fileBackedState($sources['safety'][$pairKey] ?? null, 'signature_file_id', 'signed', $sources),
             default => ['ready' => false, 'text' => '无数据来源'],
@@ -1263,6 +1435,25 @@ class InternshipArchiveRecord extends TableRecord
             'text' => $ready ? ($acceptedStatus === 'signed' ? '已签署并上传定稿' : '已通过') : self::statusText($status),
             'source_id' => (int) ($row['id'] ?? 0),
             'source_status' => $status,
+        ];
+    }
+
+    /** 返回鉴定表与独立企业评价的联合状态。 */
+    private static function appraisalStateFromData(string $pairKey, array $sources): array
+    {
+        $appraisal = self::fileBackedState($sources['appraisals'][$pairKey] ?? null, 'attachment_id', 'accept', $sources);
+        if (empty($appraisal['ready'])) {
+            return $appraisal;
+        }
+        $evaluation = $sources['enterprise_evaluations'][$pairKey] ?? null;
+        if (!$evaluation) {
+            return ['ready' => false, 'text' => '待企业导师提交评价'];
+        }
+        return [
+            'ready' => true,
+            'text' => '鉴定表和企业评价已完成',
+            'enterprise_score' => (float) ($evaluation['total_score'] ?? 0),
+            'enterprise_comment' => (string) ($evaluation['comment'] ?? ''),
         ];
     }
 
@@ -1426,8 +1617,19 @@ class InternshipArchiveRecord extends TableRecord
         $row = self::queryTable('internship_graduation_appraisal')
             ->where('student_id', $studentId)->where('arrangement_id', $arrangementId)
             ->whereNull('deleted_at')->orderByDesc('id')->first(['status', 'attachment_id']);
-        $ready = $row && (string) $row->status === 'accept' && self::fileExists((int) $row->attachment_id);
-        return ['ready' => (bool) $ready, 'text' => $row ? self::statusText((string) $row->status) : '待填写'];
+        $evaluation = EnterpriseEvaluationRecord::evaluationByStudentTask($studentId, $arrangementId);
+        $appraisalReady = $row && (string) $row->status === 'accept' && self::fileExists((int) $row->attachment_id);
+        $evaluationReady = $evaluation && (string) $evaluation->status === 'submitted';
+        if (!$row) {
+            return ['ready' => false, 'text' => '待填写鉴定表'];
+        }
+        if (!$evaluationReady) {
+            return ['ready' => false, 'text' => '待企业导师提交评价'];
+        }
+        if (!$appraisalReady) {
+            return ['ready' => false, 'text' => self::statusText((string) $row->status) . '，待上传定稿'];
+        }
+        return ['ready' => true, 'text' => '鉴定表和企业评价已完成'];
     }
 
     private static function scoreRegisterSourceState(int $arrangementId, int $classId): array

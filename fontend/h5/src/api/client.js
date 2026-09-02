@@ -106,7 +106,8 @@ function isAuthPath(path) {
     || String(path || '').startsWith('/auth/register-options')
     || String(path || '').startsWith('/auth/logout')
     || String(path || '').startsWith('/auth/passkey-login')
-    || String(path || '').startsWith('/auth/refresh');
+    || String(path || '').startsWith('/auth/refresh')
+    || String(path || '').startsWith('/open-enterprise-evaluation/');
 }
 
 async function refreshSession() {
