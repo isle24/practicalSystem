@@ -2,6 +2,10 @@ import { reactive } from 'vue';
 import { emptyPagedList } from '../utils/pagination';
 
 export const defaultInternshipReviewRules = {
+  arrangement: {
+    accept: { min: 0, max: 300 },
+    modify: { min: 5, max: 500 },
+  },
   arrangement_change: {
     accept: { min: 0, max: 300 },
     modify: { min: 5, max: 500 },
@@ -56,11 +60,14 @@ export const internshipReviewStatusLabels = {
 
 export function emptyInternshipFilters() {
   return {
+    category_id: '',
     grade_id: '',
+    graduation_cohort_id: '',
     dep_id: '',
     profession_id: '',
     class_id: '',
     arrangement_id: '',
+    base_type: '',
     status: '',
     result: '',
     keyword: '',
@@ -83,11 +90,20 @@ export function emptyInternshipOptions() {
     plans: [],
     arrangements: [],
     grades: [],
+    graduation_cohorts: [],
+    internship_categories: [],
     departments: [],
     professions: [],
     classes: [],
+    bases: [],
+    companies: [],
     teachers: [],
+    students: [],
+    base_categories: [],
+    base_levels: [],
+    base_declaration_years: [],
     report_templates: [],
+    archive_templates: [],
     review_rules: defaultInternshipReviewRules,
     deadline_configs: {},
   };
@@ -95,10 +111,12 @@ export function emptyInternshipOptions() {
 
 export function createInternshipState() {
   const listKeys = [
+    'bases',
     'arrangements',
     'arrangementChanges',
     'plans',
-    'syllabusGuides',
+    'syllabuses',
+    'guides',
     'implementationSheets',
     'applications',
     'pairs',
@@ -121,7 +139,7 @@ export function createInternshipState() {
     panel: 'workbench',
     submitSection: '',
     reviewList: 'applications',
-    manageList: 'arrangements',
+    manageList: 'plans',
     overview: emptyInternshipOverview(),
     options: emptyInternshipOptions(),
     lists: Object.fromEntries(listKeys.map(key => [key, emptyPagedList()])),
@@ -129,8 +147,29 @@ export function createInternshipState() {
     forms: {
       application: { arrangement_id: null, type: 'distributed', remark: '' },
       sign: { arrangement_id: null, location: '', longitude: null, latitude: null, accuracy: null, located_at: '', locating: false, gps_error: '' },
-      journal: { id: null, arrangement_id: null, title: '', content: '' },
-      report: { id: null, arrangement_id: null, title: '', content: '' },
+      journal: {
+        id: null,
+        arrangement_id: null,
+        date: '',
+        title: '',
+        location: '',
+        work_content: '',
+        gains: '',
+        problems: '',
+        attachments: [],
+      },
+      report: {
+        id: null,
+        arrangement_id: null,
+        title: '',
+        content: '',
+        purpose: '',
+        gains: '',
+        suggestions: '',
+        company_profile: '',
+        attachments: [],
+      },
+      safety: { arrangement_id: null, template_id: null, signature_file_id: null, file_name: '' },
       delay: { id: null, arrangement_id: null, config_key: 'report_deadline', requested_date: '', reason: '' },
       score: {
         pair_id: null,
@@ -159,6 +198,16 @@ export function createInternshipState() {
       subtitle: '',
       items: [],
       cycles: [],
+      message: '',
+    },
+    detailSheet: {
+      visible: false,
+      loading: false,
+      type: '',
+      title: '',
+      subtitle: '',
+      sections: [],
+      primaryAction: null,
       message: '',
     },
   };

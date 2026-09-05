@@ -10,8 +10,7 @@ class Menu extends BaseModel
 
     private const DEFAULT_MODULES = [
         1 => 'internship',
-        2 => 'training',
-        3 => 'lab',
+        2 => 'practice',
         4 => 'stat',
         5 => 'log',
         6 => 'config',

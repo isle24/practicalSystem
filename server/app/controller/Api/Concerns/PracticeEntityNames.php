@@ -12,13 +12,13 @@ trait PracticeEntityNames
     private function practiceEntityName(Request $request): string
     {
         return match ((string) $request->input('entity', '')) {
-            'plan' => '教学计划',
+            'plan' => '开课任务',
             'schedule' => '课表安排',
             'syllabus' => '大纲',
             'lessonPlan' => '教案',
-            'gradeRule' => '成绩比例',
+            'gradeRule' => '成绩方案',
             'score' => '成绩',
-            'reflection' => '反思报告',
+            'reflection' => '课程教学反思',
             'room' => '实验实训室',
             default => '记录',
         };

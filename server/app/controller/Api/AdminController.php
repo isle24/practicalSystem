@@ -5,6 +5,7 @@ namespace app\controller\Api;
 use app\attribute\OperationLog;
 use app\controller\Api\Concerns\Responds;
 use app\model\channel\Account;
+use app\model\channel\AcademicArchiveRecord;
 use app\model\channel\Menu;
 use app\model\channel\Role;
 use app\model\channel\RoleMenu;
@@ -17,6 +18,7 @@ use app\server\auth\AuthService;
 use app\server\CurrentContext;
 use app\server\file\FileService;
 use app\server\rbac\RbacService;
+use app\server\RuntimeEnvironment;
 use support\Request;
 use support\Response;
 use Throwable;
@@ -435,6 +437,25 @@ class AdminController
     }
 
     /**
+     * 查询数据清理环境
+     */
+    #[OperationLog('查询数据清理环境')]
+    public function dataEnvironment(Request $request): Response
+    {
+        if (!$this->isAdmin()) {
+            return $this->fail(40300, '无操作权限', 403);
+        }
+
+        $isTest = RuntimeEnvironment::isTest();
+
+        return $this->ok([
+            'mode' => RuntimeEnvironment::mode(),
+            'is_test' => $isTest,
+            'clear_allowed' => $isTest && CurrentContext::roleType() === 'super_admin',
+        ]);
+    }
+
+    /**
      * 清除测试数据
      */
     #[OperationLog('清除测试数据')]
@@ -442,6 +463,9 @@ class AdminController
     {
         if (CurrentContext::roleType() !== 'super_admin') {
             return $this->fail(40300, '仅超级管理员可清除测试数据', 403);
+        }
+        if (!RuntimeEnvironment::isTest()) {
+            return $this->fail(40300, '当前不是测试环境，禁止清除测试数据', 403);
         }
 
         try {
@@ -471,6 +495,8 @@ class AdminController
                 'accounts' => $this->accountsData(),
                 'departments' => ChannelTable::enabledOptionRows('department', ['dep_id', 'dep_name', 'dep_short_name', 'dep_code'], ['sort']),
                 'grades' => ChannelTable::enabledOptionRows('grade_list', ['grade_id', 'grade_name', 'is_current'], ['sort']),
+                'graduation_cohorts' => AcademicArchiveRecord::enabledGraduationCohorts(),
+                'internship_categories' => AcademicArchiveRecord::enabledInternshipCategories(),
                 'professions' => ChannelTable::enabledOptionRows('profession', ['profession_id', 'profession_name', 'profession_short_name', 'profession_code', 'dep_id', 'grade_id'], ['sort']),
                 'classes' => ChannelTable::enabledOptionRows('class', ['class_id', 'class_name', 'class_short_name', 'class_num', 'dep_id', 'profession_id', 'grade_id'], ['sort']),
                 'companies' => ChannelTable::enabledOptionRows('companies', ['company_id', 'company_name', 'credit_code'], ['company_id']),
@@ -574,7 +600,7 @@ class AdminController
         $keys = [
             'name', 'login_name', 'password', 'mobile', 'email', 'role_id', 'status',
             'student_num', 'teacher_num', 'grade_id', 'dep_id', 'profession_id',
-            'class_id', 'class_num',
+            'graduation_cohort_id', 'class_id', 'class_num',
         ];
         $payload = [];
         foreach ($keys as $key) {

@@ -4,6 +4,7 @@ namespace app\server\file;
 
 use app\model\channel\FileBlob;
 use app\model\channel\FileRecord;
+use app\model\channel\FileAccessRecord;
 use app\model\channel\FileRelation;
 use app\server\config\ConfigService;
 use app\server\CurrentContext;
@@ -75,7 +76,7 @@ class FileService
         }
         $blob = FileBlob::activeByMd5($md5);
 
-        if (!$blob || !$this->blobFileExists($blob)) {
+        if (!$blob || !$this->blobFileExists($blob) || !FileRecord::ownsBlob((int) $blob->id, $accountId)) {
             return $this->uploadRequired($md5);
         }
 
@@ -110,7 +111,7 @@ class FileService
         $category = $this->category((string) ($options['category'] ?? $request->input('category', 'general')));
         $downloadName = $this->fileName((string) ($options['download_name'] ?? $request->input('download_name', $name)));
         $isTemporary = $this->boolInput($options['is_temporary'] ?? false);
-        $requireMd5 = (bool) ($options['require_md5'] ?? true);
+        $requireMd5 = $this->boolInput($options['require_md5'] ?? $request->input('require_md5', true));
         $declaredMd5 = $this->optionalMd5((string) ($options['md5'] ?? $request->header('x-file-md5', $request->input('md5', ''))));
         $device = $this->deviceInfo($request);
 
@@ -253,7 +254,7 @@ class FileService
 
     public function info(int $fileId): array
     {
-        $accountId = $this->accountId();
+        $this->accountId();
         if ($fileId <= 0) {
             throw new InvalidArgumentException('file_id 无效');
         }
@@ -263,9 +264,27 @@ class FileService
         if (!$row) {
             throw new RuntimeException('文件不存在');
         }
-        $this->assertExportFileAccess($row, $accountId);
+        $this->assertFileAccess($row);
 
         return $this->fileInfo($row);
+    }
+
+    /** 写入业务记录前校验其附件引用。 */
+    public function assertReadableReferences(array $values): void
+    {
+        $ids = [];
+        foreach (['file_id', 'attachment_id', 'signature_file_id', 'generated_file_id', 'signed_file_id'] as $key) {
+            $ids[] = (int) ($values[$key] ?? 0);
+        }
+        $attachments = $values['attachment_ids'] ?? [];
+        if (is_string($attachments)) {
+            $attachments = json_decode($attachments, true, 512, JSON_THROW_ON_ERROR);
+        }
+        foreach (array_unique(array_merge($ids, array_map('intval', (array) $attachments))) as $id) {
+            if ($id > 0) {
+                $this->info($id);
+            }
+        }
     }
 
     /** 回收失去执行权的后台生成文件 */
@@ -285,6 +304,9 @@ class FileService
         if ($entityId <= 0) {
             throw new InvalidArgumentException('entity_id 无效');
         }
+        if (!FileAccessRecord::entityReadable($entityType, $entityId)) {
+            throw new RuntimeException('无附件访问权限', 403);
+        }
 
         return FileRelation::rowsForEntity($entityType, $entityId, $tag === null ? null : $this->tag($tag))->map(fn ($row): array => array_merge(
             ['relation_id' => (int) $row->relation_id, 'tag' => $row->tag],
@@ -302,10 +324,11 @@ class FileService
         }
 
         return $this->connection()->transaction(function () use ($fileId, $entityType, $entityId, $tag): array {
-            $file = FileRecord::activeId($fileId);
+            $file = FileRecord::lockActiveById($fileId);
             if (!$file) {
                 throw new RuntimeException('文件不存在');
             }
+            $this->assertFileAccess(FileRecord::detailById($fileId) ?: $file);
 
             $relation = FileRelation::activeByUnique($fileId, $entityType, $entityId, $tag);
             if ($relation) {
@@ -330,28 +353,37 @@ class FileService
         });
     }
 
-    public function detach(Request $request): array
+    /** 替换实体的文件关联。 */
+    public function replaceRelations(array $fileIds, string $entityType, int $entityId, string $tag = ''): array
     {
         $this->accountId();
-        $relationId = $this->intInput($request, 'relation_id');
-        $now = $this->now();
-
-        if ($relationId > 0) {
-            return ['affected' => FileRelation::softDeleteById($relationId, $now)];
+        $entityType = $this->entityType($entityType);
+        $tag = $tag === '' ? '' : $this->tag($tag);
+        if ($entityId <= 0) {
+            throw new InvalidArgumentException('关联参数无效');
         }
 
-        $fileId = $this->intInput($request, 'file_id');
-        $entityType = $this->entityType((string) $request->input('entity_type', ''));
-        $entityId = $this->intInput($request, 'entity_id');
-        $tag = (string) $request->input('tag', '');
+        $fileIds = array_values(array_unique(array_filter(array_map('intval', $fileIds), static fn (int $id): bool => $id > 0)));
+        return $this->connection()->transaction(function () use ($fileIds, $entityType, $entityId, $tag): array {
+            $current = FileRelation::rowsForEntity($entityType, $entityId, $tag);
+            $currentIds = $current->map(fn ($row): int => (int) $row->id)->all();
 
-        if ($fileId <= 0 || $entityId <= 0) {
-            throw new InvalidArgumentException('解除关联参数无效');
-        }
+            foreach ($current as $row) {
+                if (!in_array((int) $row->id, $fileIds, true)) {
+                    FileRelation::softDeleteById((int) $row->relation_id, $this->now());
+                }
+            }
+            foreach (array_diff($fileIds, $currentIds) as $fileId) {
+                $this->attach((int) $fileId, $entityType, $entityId, $tag);
+            }
 
-        return [
-            'affected' => FileRelation::softDeleteByUnique($fileId, $entityType, $entityId, $tag === '' ? '' : $this->tag($tag), $now),
-        ];
+            return $this->relations($entityType, $entityId, $tag);
+        });
+    }
+
+    public function detach(Request $request): array
+    {
+        throw new RuntimeException('请通过对应业务提交或修改附件', 403);
     }
 
     public function delete(int $fileId, bool $force = false): array
@@ -364,8 +396,9 @@ class FileService
         if (!$row) {
             throw new RuntimeException('文件不存在');
         }
-        $this->assertExportFileAccess($row, $accountId);
-
+        if (!$this->isFileAdmin() && ((int) $row->uploader_id !== $accountId || $force)) {
+            throw new RuntimeException('无文件删除权限', 403);
+        }
         return $this->deleteFile($fileId, $force);
     }
 
@@ -383,7 +416,7 @@ class FileService
 
         foreach ($ids as $fileId) {
             try {
-                $result = $this->deleteFile($fileId, true, $before);
+                $result = $this->deleteFile($fileId, false, $before);
                 $deleted++;
                 if (!empty($result['physical_deleted'])) {
                     $physicalDeleted++;
@@ -1206,11 +1239,9 @@ class FileService
         return in_array(CurrentContext::roleType(), ['super_admin', 'school_admin'], true);
     }
 
-    private function assertExportFileAccess(object $row, int $accountId): void
+    private function assertFileAccess(object $row): void
     {
-        if ((string) $row->category === 'export'
-            && !$this->isFileAdmin()
-            && (int) ($row->uploader_id ?? 0) !== $accountId) {
+        if (!FileAccessRecord::readable($row)) {
             throw new RuntimeException('无文件访问权限', 403);
         }
     }

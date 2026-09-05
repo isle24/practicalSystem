@@ -5,7 +5,9 @@ namespace app\controller\Api;
 use app\attribute\OperationLog;
 use app\controller\Api\Concerns\Responds;
 use app\server\OperationLogContext;
+use app\server\internship\InternshipEnterpriseEvaluationService;
 use app\server\internship\InternshipService;
+use app\server\internship\InternshipStudentChangeService;
 use support\Request;
 use support\Response;
 use Throwable;
@@ -30,6 +32,69 @@ class InternshipController
     public function options(Request $request): Response
     {
         return $this->handle(fn (): array => $this->service()->options($request));
+    }
+
+    /** 查询学生实习当前资料。 */
+    #[OperationLog('查询学生实习资料')]
+    public function studentProfiles(Request $request): Response
+    {
+        return $this->handle(fn (): array => $this->studentChangeService()->profiles($request));
+    }
+
+    /** 查询学生实习资料变更申请。 */
+    #[OperationLog('查询学生实习资料变更')]
+    public function studentChanges(Request $request): Response
+    {
+        return $this->handle(fn (): array => $this->studentChangeService()->changes($request));
+    }
+
+    /** 查看学生实习资料变更详情。 */
+    #[OperationLog('查看学生实习资料变更详情')]
+    public function studentChangeDetail(Request $request): Response
+    {
+        return $this->handle(fn (): array => $this->studentChangeService()->detail($request));
+    }
+
+    /** 保存或提交学生实习资料变更。 */
+    #[OperationLog('保存学生实习资料变更')]
+    public function saveStudentChange(Request $request): Response
+    {
+        return $this->handle(fn (): array => $this->studentChangeService()->save($request));
+    }
+
+    /** 审核学生实习资料变更。 */
+    #[OperationLog('审核学生实习资料变更')]
+    public function reviewStudentChange(Request $request): Response
+    {
+        return $this->handle(fn (): array => $this->studentChangeService()->review($request));
+    }
+
+    /** 生成企业导师评价邀请。 */
+    #[OperationLog('生成企业导师评价邀请')]
+    public function createEnterpriseEvaluationInvitation(Request $request): Response
+    {
+        return $this->handle(fn (): array => $this->enterpriseEvaluationService()->createInvitation($request));
+    }
+
+    /** 查询企业导师评价进度。 */
+    #[OperationLog('查询企业导师评价进度')]
+    public function enterpriseEvaluationProgress(Request $request): Response
+    {
+        return $this->handle(fn (): array => $this->enterpriseEvaluationService()->progress($request));
+    }
+
+    /** 查询企业导师评价规则。 */
+    #[OperationLog('查询企业导师评价规则')]
+    public function enterpriseEvaluationRule(Request $request): Response
+    {
+        return $this->handle(fn (): array => $this->enterpriseEvaluationService()->rule($request));
+    }
+
+    /** 保存企业导师评价规则。 */
+    #[OperationLog('保存企业导师评价规则')]
+    public function saveEnterpriseEvaluationRule(Request $request): Response
+    {
+        return $this->handle(fn (): array => $this->enterpriseEvaluationService()->saveRule($request));
     }
 
     /**
@@ -66,6 +131,24 @@ class InternshipController
     public function saveBase(Request $request): Response
     {
         return $this->handle(fn (): array => $this->service()->saveBase($request));
+    }
+
+    /**
+     * 预览实习基地 Excel 导入
+     */
+    #[OperationLog('预览实习基地Excel导入')]
+    public function previewBaseImport(Request $request): Response
+    {
+        return $this->handle(fn (): array => $this->service()->previewBaseImport($request));
+    }
+
+    /**
+     * 确认实习基地 Excel 导入
+     */
+    #[OperationLog('确认实习基地Excel导入')]
+    public function confirmBaseImport(Request $request): Response
+    {
+        return $this->handle(fn (): array => $this->service()->confirmBaseImport($request));
     }
 
     /**
@@ -150,6 +233,16 @@ class InternshipController
     }
 
     /**
+     * 审核实习任务
+     */
+    #[OperationLog('审核实习任务')]
+    public function reviewArrangement(Request $request): Response
+    {
+        OperationLogContext::setName('审核实习任务');
+        return $this->handle(fn (): array => $this->service()->reviewArrangement($request));
+    }
+
+    /**
      * 提交实习任务变更
      */
     #[OperationLog('提交实习任务变更')]
@@ -177,36 +270,36 @@ class InternshipController
     }
 
     /**
-     * 查询实习申请
+     * 查询实习方式申请
      */
-    #[OperationLog('查询实习申请')]
+    #[OperationLog('查询实习方式申请')]
     public function applications(Request $request): Response
     {
         return $this->handle(fn (): array => $this->service()->applications($request));
     }
 
     /**
-     * 保存实习申请
+     * 保存实习方式申请
      */
-    #[OperationLog('保存实习申请')]
+    #[OperationLog('保存实习方式申请')]
     public function saveApplication(Request $request): Response
     {
         return $this->handle(fn (): array => $this->service()->saveApplication($request));
     }
 
     /**
-     * 提交实习申请
+     * 提交实习方式申请
      */
-    #[OperationLog('提交实习申请')]
+    #[OperationLog('提交实习方式申请')]
     public function submitApplication(Request $request): Response
     {
         return $this->handle(fn (): array => $this->service()->submitApplication($request));
     }
 
     /**
-     * 审核实习申请
+     * 审核实习方式申请
      */
-    #[OperationLog('审核实习申请')]
+    #[OperationLog('审核实习方式申请')]
     public function reviewApplication(Request $request): Response
     {
         return $this->handle(fn (): array => $this->service()->reviewApplication($request));
@@ -412,6 +505,13 @@ class InternshipController
         return $this->handle(fn (): array => $this->service()->stats($request));
     }
 
+    /** 导出实验实训成绩记载表。 */
+    #[OperationLog('导出实验实训成绩记载表')]
+    public function exportPracticeScoreSheet(Request $request): Response
+    {
+        return $this->handle(fn (): array => $this->service()->exportPracticeScoreSheet($request));
+    }
+
     /**
      * 查看实习归档材料
      */
@@ -419,6 +519,69 @@ class InternshipController
     public function archiveMaterials(Request $request): Response
     {
         return $this->handle(fn (): array => $this->service()->archiveMaterials($request));
+    }
+
+    /** 查询归档材料要求。 */
+    #[OperationLog('查询归档材料要求')]
+    public function archiveRequirements(Request $request): Response
+    {
+        return $this->handle(fn (): array => $this->service()->archiveRequirements($request));
+    }
+
+    /** 保存归档材料要求。 */
+    #[OperationLog('保存归档材料要求')]
+    public function saveArchiveRequirements(Request $request): Response
+    {
+        return $this->handle(fn (): array => $this->service()->saveArchiveRequirements($request));
+    }
+
+    /** 查看实习计划档案详情 */
+    #[OperationLog('查看实习计划档案详情')]
+    public function archiveMaterialDetail(Request $request): Response
+    {
+        return $this->handle(fn (): array => $this->service()->archiveMaterialDetail($request));
+    }
+
+    /** 查看实习档案材料历史版本 */
+    #[OperationLog('查看实习档案材料历史版本')]
+    public function archiveMaterialHistory(Request $request): Response
+    {
+        return $this->handle(fn (): array => $this->service()->archiveMaterialHistory($request));
+    }
+
+    /** 保存实习档案材料 */
+    #[OperationLog('保存实习档案材料')]
+    public function saveArchiveMaterial(Request $request): Response
+    {
+        return $this->handle(fn (): array => $this->service()->saveArchiveMaterial($request));
+    }
+
+    /** 生成实习档案材料 */
+    #[OperationLog('生成实习档案材料')]
+    public function generateArchiveMaterial(Request $request): Response
+    {
+        return $this->handle(fn (): array => $this->service()->generateArchiveMaterial($request));
+    }
+
+    /** 归档实习材料 */
+    #[OperationLog('归档实习材料')]
+    public function archiveMaterial(Request $request): Response
+    {
+        return $this->handle(fn (): array => $this->service()->archiveMaterial($request));
+    }
+
+    /** 保存毕业实习成绩鉴定 */
+    #[OperationLog('保存毕业实习成绩鉴定')]
+    public function saveGraduationAppraisal(Request $request): Response
+    {
+        return $this->handle(fn (): array => $this->service()->saveGraduationAppraisal($request));
+    }
+
+    /** 查看毕业实习成绩鉴定 */
+    #[OperationLog('查看毕业实习成绩鉴定')]
+    public function graduationAppraisal(Request $request): Response
+    {
+        return $this->handle(fn (): array => $this->service()->graduationAppraisal($request));
     }
 
     /**
@@ -625,7 +788,12 @@ class InternshipController
         try {
             return $this->ok($callback());
         } catch (Throwable $exception) {
-            $status = (int) $exception->getCode();
+            $exceptionCode = (int) $exception->getCode();
+            if (in_array($exceptionCode, [40100, 40300, 40301, 40400, 40900, 42900], true)) {
+                return $this->fail($exceptionCode, $exception->getMessage(), intdiv($exceptionCode, 100));
+            }
+
+            $status = $exceptionCode;
             if (!in_array($status, [401, 403, 404, 409, 422, 429], true)) {
                 $status = $exception->getMessage() === '请先登录' ? 401 : 400;
             }
@@ -638,8 +806,8 @@ class InternshipController
                 429 => 42900,
                 default => 40001,
             };
-            if ((int) $exception->getCode() >= 42201 && (int) $exception->getCode() <= 42299) {
-                $code = (int) $exception->getCode();
+            if ($exceptionCode >= 42201 && $exceptionCode <= 42299) {
+                $code = $exceptionCode;
                 $status = 422;
             }
 
@@ -650,6 +818,18 @@ class InternshipController
     private function service(): InternshipService
     {
         return new InternshipService();
+    }
+
+    /** 获取学生资料变更服务。 */
+    private function studentChangeService(): InternshipStudentChangeService
+    {
+        return new InternshipStudentChangeService();
+    }
+
+    /** 获取企业评价服务。 */
+    private function enterpriseEvaluationService(): InternshipEnterpriseEvaluationService
+    {
+        return new InternshipEnterpriseEvaluationService();
     }
 
     /**

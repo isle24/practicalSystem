@@ -1,7 +1,7 @@
 <template>
   <section class="support-panel export-task-panel">
     <div class="support-toolbar">
-      <el-select v-model="filters.status" @change="loadTasks(1)">
+      <el-select v-model="filters.status" placeholder="请选择任务状态" @change="loadTasks(1)">
         <el-option label="全部状态" value="all" />
         <el-option label="待处理" value="pending" />
         <el-option label="处理中" value="processing" />
@@ -17,6 +17,7 @@
 
     <section class="support-table">
       <el-table :data="tasks" height="100%" stripe v-loading="loading">
+        <el-table-column type="index" label="序号" width="66" align="center" :index="index => tableSequence(index, pagination)" />
         <el-table-column prop="file_name" label="文件名" min-width="220" />
         <el-table-column prop="type" label="类型" width="140" />
         <el-table-column label="状态" width="100">
@@ -60,12 +61,13 @@
 
     <small v-if="message">{{ message }}</small>
 
-    <div v-if="createDialog.visible" class="operation-mask" @click.self="createDialog.visible = false">
-      <section class="operation-dialog export-create-dialog">
-        <header>
-          <strong>创建导出任务</strong>
-          <button type="button" @click="createDialog.visible = false">关闭</button>
-        </header>
+    <OperationDialog
+      :visible="createDialog.visible"
+      title="创建导出任务"
+      dialog-class="export-create-dialog"
+      :busy="saving"
+      @close="createDialog.visible = false"
+    >
         <div class="operation-form">
           <label>
             <span>导出类型</span>
@@ -80,12 +82,11 @@
             <textarea v-model="createDialog.paramsText" rows="7" placeholder='{"grade_id":1}' />
           </label>
         </div>
-        <footer>
+        <template #footer>
           <el-button @click="createDialog.visible = false">取消</el-button>
           <el-button type="primary" :icon="Save" :loading="saving" @click="createTask">创建</el-button>
-        </footer>
-      </section>
-    </div>
+        </template>
+    </OperationDialog>
   </section>
 </template>
 
@@ -93,6 +94,8 @@
 import { onMounted, reactive, ref } from 'vue';
 import { Plus, RefreshCw, Save, Search } from '@lucide/vue';
 import { createExportTask, fetchExportTasks, retryExportTask } from '../api/system';
+import { tableSequence } from '../utils/table';
+import OperationDialog from './OperationDialog.vue';
 
 const loading = ref(false);
 const saving = ref(false);

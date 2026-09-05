@@ -4,7 +4,7 @@
       <el-select v-model="filters.category_id" clearable filterable placeholder="全部分类" @change="loadArticles(1)">
         <el-option v-for="item in flatCategories" :key="item.id" :label="item.name" :value="item.id" />
       </el-select>
-      <el-select v-if="canManage" v-model="filters.status" @change="loadArticles(1)">
+      <el-select v-if="canManage" v-model="filters.status" placeholder="请选择文档状态" @change="loadArticles(1)">
         <el-option label="全部状态" value="all" />
         <el-option label="草稿" value="draft" />
         <el-option label="已发布" value="published" />
@@ -37,6 +37,7 @@
 
       <section class="support-table">
         <el-table :data="articles" height="100%" stripe v-loading="loading" @row-click="openDetail">
+          <el-table-column type="index" label="序号" width="66" align="center" :index="index => tableSequence(index, pagination)" />
           <el-table-column prop="title" label="标题" min-width="220" />
           <el-table-column prop="category_name" label="分类" width="130" />
           <el-table-column prop="version" label="版本" width="90" />
@@ -88,12 +89,13 @@
 
     <small v-if="message">{{ message }}</small>
 
-    <div v-if="articleDialog.visible" class="operation-mask" @click.self="closeArticleDialog">
-      <section class="operation-dialog doc-edit-dialog">
-        <header>
-          <strong>{{ articleDialog.form.id ? '编辑文档' : '新增文档' }}</strong>
-          <button type="button" @click="closeArticleDialog">关闭</button>
-        </header>
+    <OperationDialog
+      :visible="articleDialog.visible"
+      :title="articleDialog.form.id ? '编辑文档' : '新增文档'"
+      dialog-class="doc-edit-dialog"
+      :busy="saving"
+      @close="closeArticleDialog"
+    >
         <div class="operation-form">
           <label>
             <span>标题</span>
@@ -111,7 +113,7 @@
           </label>
           <label>
             <span>状态</span>
-            <el-select v-model="articleDialog.form.status">
+            <el-select v-model="articleDialog.form.status" placeholder="请选择文档状态">
               <el-option label="草稿" value="draft" />
               <el-option label="发布" value="published" />
               <el-option label="归档" value="archived" />
@@ -119,7 +121,7 @@
           </label>
           <label>
             <span>适用角色</span>
-            <el-select v-model="articleDialog.form.visible_roles" multiple collapse-tags collapse-tags-tooltip>
+            <el-select v-model="articleDialog.form.visible_roles" multiple collapse-tags collapse-tags-tooltip placeholder="请选择适用角色">
               <el-option v-for="item in roleOptions" :key="item.value" :label="item.label" :value="item.value" />
             </el-select>
           </label>
@@ -147,19 +149,19 @@
             />
           </section>
         </div>
-        <footer>
+        <template #footer>
           <el-button @click="closeArticleDialog">取消</el-button>
           <el-button type="primary" :icon="Save" :loading="saving" @click="saveArticle">保存</el-button>
-        </footer>
-      </section>
-    </div>
+        </template>
+    </OperationDialog>
 
-    <div v-if="categoryDialog.visible" class="operation-mask" @click.self="closeCategoryDialog">
-      <section class="operation-dialog category-edit-dialog">
-        <header>
-          <strong>文档分类</strong>
-          <button type="button" @click="closeCategoryDialog">关闭</button>
-        </header>
+    <OperationDialog
+      :visible="categoryDialog.visible"
+      title="文档分类"
+      dialog-class="category-edit-dialog"
+      :busy="saving"
+      @close="closeCategoryDialog"
+    >
         <div class="operation-form">
           <label>
             <span>分类名称</span>
@@ -180,28 +182,22 @@
             <input v-model="categoryDialog.form.sort" type="number">
           </label>
         </div>
-        <footer>
+        <template #footer>
           <el-button @click="closeCategoryDialog">取消</el-button>
           <el-button type="primary" :icon="Save" :loading="saving" @click="saveCategory">保存分类</el-button>
-        </footer>
-      </section>
-    </div>
+        </template>
+    </OperationDialog>
 
-    <div v-if="historyDialog.visible" class="operation-mask" @click.self="historyDialog.visible = false">
-      <section class="operation-dialog history-dialog">
-        <header>
-          <strong>版本记录</strong>
-          <button type="button" @click="historyDialog.visible = false">关闭</button>
-        </header>
+    <OperationDialog :visible="historyDialog.visible" title="版本记录" dialog-class="history-dialog" @close="historyDialog.visible = false">
         <el-table :data="historyDialog.items" height="100%" stripe>
+          <el-table-column type="index" label="序号" width="66" align="center" />
           <el-table-column prop="version" label="版本" width="90" />
           <el-table-column prop="title" label="标题" min-width="180" />
           <el-table-column prop="change_note" label="说明" min-width="220" />
           <el-table-column prop="editor_name" label="维护人" width="120" />
           <el-table-column prop="created_at" label="时间" width="168" />
         </el-table>
-      </section>
-    </div>
+    </OperationDialog>
   </section>
 </template>
 
@@ -217,6 +213,8 @@ import {
   saveDocArticle,
   saveDocCategory,
 } from '../api/system';
+import OperationDialog from './OperationDialog.vue';
+import { tableSequence } from '../utils/table';
 
 defineProps({
   canManage: {

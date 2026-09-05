@@ -175,6 +175,7 @@ class AccountRegistrationService
         if ($roleType === 'student') {
             $values['student_num'] = $this->nullableText($payload, 'student_num', 80);
             $values['grade_id'] = $this->intValue($payload, 'grade_id');
+            $values['graduation_cohort_id'] = $this->intValue($payload, 'graduation_cohort_id');
             $values['class_id'] = $this->intValue($payload, 'class_id');
             $values['class_num'] = $this->nullableText($payload, 'class_num', 80);
             return $values;

@@ -51,10 +51,58 @@ seedMaster($master, [
     'appDomain' => appDomain($appUrl),
 ]);
 
-foreach ([$templateDb, $defaultSchoolDb] as $schoolDb) {
-    $school = databasePdo($host, $port, $user, $pass, $schoolDb, $charset);
-    createSchoolSchema($school);
-    seedSchool($school, $wechatProxyUrl);
+$schoolTargets = [[
+    'database_id' => null,
+    'database_host' => $host,
+    'database_port' => $port,
+    'database_user' => $user,
+    'database_pwd' => $pass,
+    'database_db' => $templateDb,
+    'database_charset' => $charset,
+    'database_prefix' => '',
+    'is_default_business_db' => 'false',
+]];
+$schoolTargets = array_merge($schoolTargets, enabledSchoolDatabaseTargets($master));
+$upgradedTargets = [];
+foreach ($schoolTargets as $target) {
+    $targetId = isset($target['database_id']) ? (int) $target['database_id'] : null;
+    $targetHost = trim((string) ($target['database_host'] ?? ''));
+    $targetPort = (int) ($target['database_port'] ?? 3306);
+    $targetUser = (string) ($target['database_user'] ?? '');
+    $targetPass = (string) ($target['database_pwd'] ?? '');
+    $targetDb = trim((string) ($target['database_db'] ?? ''));
+    $targetCharset = trim((string) ($target['database_charset'] ?? 'utf8mb4')) ?: 'utf8mb4';
+    $targetPrefix = trim((string) ($target['database_prefix'] ?? ''));
+    $isDefaultBusinessDb = (string) ($target['is_default_business_db'] ?? 'false') === 'true';
+    $label = $targetId === null
+        ? "模板库升级失败：database_db={$targetDb}"
+        : "学校业务库升级失败：database_id={$targetId}, database_db={$targetDb}";
+    if ($targetHost === '' || $targetPort < 1 || $targetPort > 65535 || $targetUser === '' || $targetDb === '') {
+        throw new RuntimeException($label . '：连接配置不完整');
+    }
+    if (!preg_match('/^[A-Za-z0-9_]+$/', $targetCharset)) {
+        throw new RuntimeException($label . '：database_charset 格式无效');
+    }
+    if ($targetPrefix !== '') {
+        throw new RuntimeException($label . "：当前初始化程序不支持带表前缀的学校业务库（database_prefix={$targetPrefix}）");
+    }
+    $targetKey = hash('sha256', strtolower($targetHost) . "\0" . $targetPort . "\0" . $targetDb);
+    if (isset($upgradedTargets[$targetKey])) {
+        continue;
+    }
+
+    try {
+        $school = databasePdo($targetHost, $targetPort, $targetUser, $targetPass, $targetDb, $targetCharset);
+        createSchoolSchema($school);
+        if ($targetId === null || $isDefaultBusinessDb || $targetDb === $defaultSchoolDb) {
+            seedSchool($school, $wechatProxyUrl);
+        }
+    } catch (Throwable $exception) {
+        $detail = sanitizeDatabaseError($exception->getMessage(), $targetPass);
+        throw new RuntimeException($detail === '' ? $label : $label . '：' . $detail);
+    }
+
+    $upgradedTargets[$targetKey] = true;
 }
 
 echo "database initialized\n";
@@ -73,6 +121,25 @@ function databasePdo(string $host, int $port, string $user, string $pass, string
             PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
         ]
     );
+}
+
+/** 查询主库登记的全部启用学校业务库 */
+function enabledSchoolDatabaseTargets(PDO $master): array
+{
+    return $master->query(
+        "SELECT `database_id`, `database_host`, `database_port`, `database_user`, `database_pwd`,
+                `database_db`, `database_charset`, `database_prefix`, `is_default_business_db`
+         FROM `databases`
+         WHERE `status` = 'enabled'
+         ORDER BY `database_id`"
+    )->fetchAll(PDO::FETCH_ASSOC);
+}
+
+/** 清理数据库升级错误中的连接密码 */
+function sanitizeDatabaseError(string $message, string $password): string
+{
+    $message = trim($message);
+    return $password === '' ? $message : str_replace($password, '******', $message);
 }
 
 function quoteIdentifier(string $identifier): string
@@ -171,6 +238,44 @@ function ensureIndex(PDO $pdo, string $table, string $index, string $ddl): void
     }
 }
 
+/** 检测重复值后创建单列唯一索引 */
+function ensureUniqueIndex(PDO $pdo, string $table, string $index, string $column, string $ddl): void
+{
+    $stmt = $pdo->prepare(
+        'SELECT NON_UNIQUE, COLUMN_NAME FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND INDEX_NAME = ? ORDER BY SEQ_IN_INDEX'
+    );
+    $stmt->execute([$table, $index]);
+    $existing = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    if ($existing) {
+        if (array_filter($existing, static fn (array $row): bool => (int) $row['NON_UNIQUE'] !== 0)) {
+            throw new RuntimeException("索引 {$index} 已存在但不是唯一索引");
+        }
+        $columns = array_map(static fn (array $row): string => (string) $row['COLUMN_NAME'], $existing);
+        if ($columns !== [$column]) {
+            throw new RuntimeException("唯一索引 {$index} 已存在但字段不匹配，请检查数据库结构");
+        }
+        return;
+    }
+
+    $tableName = quoteIdentifier($table);
+    $columnName = quoteIdentifier($column);
+    $duplicate = $pdo->query(
+        "SELECT {$columnName} AS duplicate_value, COUNT(*) AS duplicate_count
+         FROM {$tableName}
+         WHERE {$columnName} IS NOT NULL
+         GROUP BY {$columnName}
+         HAVING COUNT(*) > 1
+         LIMIT 1"
+    )->fetch();
+    if ($duplicate) {
+        $value = (string) ($duplicate['duplicate_value'] ?? '');
+        $count = (int) ($duplicate['duplicate_count'] ?? 0);
+        throw new RuntimeException("无法创建唯一索引 {$index}：{$table}.{$column} 值 '{$value}' 重复 {$count} 次，请先清理重复教师档案");
+    }
+
+    $pdo->exec($ddl);
+}
+
 function ensureIndexColumns(PDO $pdo, string $table, string $index, array $columns, string $ddl): void
 {
     $stmt = $pdo->prepare(
@@ -186,6 +291,33 @@ function ensureIndexColumns(PDO $pdo, string $table, string $index, array $colum
         $pdo->exec("ALTER TABLE `{$table}` DROP INDEX `{$index}`");
     }
     $pdo->exec($ddl);
+}
+
+/** 收紧归档要求唯一索引，检测到历史重复配置时中止升级。 */
+function ensureArchiveRequirementIndex(PDO $pdo): void
+{
+    $duplicate = $pdo->query(
+        "SELECT `practice_type`, `material_type`, COUNT(*) AS `total`
+         FROM `internship_archive_requirement`
+         GROUP BY `practice_type`, `material_type`
+         HAVING COUNT(*) > 1
+         LIMIT 1"
+    )->fetch(PDO::FETCH_ASSOC);
+    if ($duplicate) {
+        throw new RuntimeException(
+            '归档材料要求存在重复配置：'
+            . (string) $duplicate['practice_type'] . '/'
+            . (string) $duplicate['material_type']
+        );
+    }
+
+    ensureIndexColumns(
+        $pdo,
+        'internship_archive_requirement',
+        'uk_archive_requirement_type_material',
+        ['practice_type', 'material_type'],
+        "ALTER TABLE `internship_archive_requirement` ADD UNIQUE KEY `uk_archive_requirement_type_material` (`practice_type`, `material_type`)"
+    );
 }
 
 function seedMaster(PDO $pdo, array $config): void
@@ -253,11 +385,13 @@ function createSchoolSchema(PDO $pdo): void
 
     ensureMenuSchema($pdo);
     ensureArchiveSchema($pdo);
+    ensureColumn($pdo, 'users', 'verified_mobile', "ALTER TABLE `users` ADD COLUMN `verified_mobile` VARCHAR(40) DEFAULT NULL AFTER `mobile`");
     ensureColumn($pdo, 'account', 'login_name', "ALTER TABLE `account` ADD COLUMN `login_name` VARCHAR(80) DEFAULT NULL AFTER `user_id`");
     ensureIndex($pdo, 'account', 'uk_login_name', "ALTER TABLE `account` ADD UNIQUE KEY `uk_login_name` (`login_name`)");
     ensureFileSchema($pdo);
     ensureInternshipSchema($pdo);
     ensurePracticeSchema($pdo);
+    ensureSocialPracticeSchema($pdo);
     ensureMessageSchema($pdo);
     ensureDocSchema($pdo);
     ensureTemplateSchema($pdo);
@@ -319,9 +453,37 @@ function menuIndexMap(PDO $pdo): array
 function ensureArchiveSchema(PDO $pdo): void
 {
     ensureColumn($pdo, 'department', 'dep_short_name', "ALTER TABLE `department` ADD COLUMN `dep_short_name` VARCHAR(80) DEFAULT NULL AFTER `dep_name`");
+    ensureColumn($pdo, 'grade_list', 'grade_code', "ALTER TABLE `grade_list` ADD COLUMN `grade_code` VARCHAR(80) DEFAULT NULL AFTER `grade_name`");
     ensureColumn($pdo, 'grade_list', 'is_current', "ALTER TABLE `grade_list` ADD COLUMN `is_current` ENUM('false','true') DEFAULT 'false' AFTER `grade_name`");
     ensureColumn($pdo, 'profession', 'profession_short_name', "ALTER TABLE `profession` ADD COLUMN `profession_short_name` VARCHAR(80) DEFAULT NULL AFTER `profession_name`");
     ensureColumn($pdo, 'class', 'class_short_name', "ALTER TABLE `class` ADD COLUMN `class_short_name` VARCHAR(80) DEFAULT NULL AFTER `class_name`");
+    ensureColumn($pdo, 'students', 'graduation_cohort_id', "ALTER TABLE `students` ADD COLUMN `graduation_cohort_id` BIGINT UNSIGNED DEFAULT NULL AFTER `grade_id`");
+    ensureIndex($pdo, 'students', 'idx_graduation_cohort', "ALTER TABLE `students` ADD KEY `idx_graduation_cohort` (`graduation_cohort_id`)");
+    ensureIndex($pdo, 'grade_list', 'idx_grade_code', "ALTER TABLE `grade_list` ADD KEY `idx_grade_code` (`grade_code`, `flag`)");
+
+    $teacherColumns = [
+        'external_id' => "ALTER TABLE `teacher_list` ADD COLUMN `external_id` VARCHAR(120) DEFAULT NULL AFTER `teacher_uuid`",
+        'gender' => "ALTER TABLE `teacher_list` ADD COLUMN `gender` VARCHAR(20) DEFAULT NULL AFTER `profession_id`",
+        'birth_date' => "ALTER TABLE `teacher_list` ADD COLUMN `birth_date` DATE DEFAULT NULL AFTER `gender`",
+        'title' => "ALTER TABLE `teacher_list` ADD COLUMN `title` VARCHAR(120) DEFAULT NULL AFTER `birth_date`",
+        'education' => "ALTER TABLE `teacher_list` ADD COLUMN `education` VARCHAR(80) DEFAULT NULL AFTER `title`",
+        'phone' => "ALTER TABLE `teacher_list` ADD COLUMN `phone` VARCHAR(40) DEFAULT NULL AFTER `education`",
+        'email' => "ALTER TABLE `teacher_list` ADD COLUMN `email` VARCHAR(120) DEFAULT NULL AFTER `phone`",
+        'employment_type' => "ALTER TABLE `teacher_list` ADD COLUMN `employment_type` VARCHAR(40) DEFAULT NULL AFTER `email`",
+        'sync_source' => "ALTER TABLE `teacher_list` ADD COLUMN `sync_source` VARCHAR(40) DEFAULT NULL AFTER `employment_type`",
+        'source_updated_at' => "ALTER TABLE `teacher_list` ADD COLUMN `source_updated_at` DATETIME DEFAULT NULL AFTER `sync_source`",
+        'last_synced_at' => "ALTER TABLE `teacher_list` ADD COLUMN `last_synced_at` DATETIME DEFAULT NULL AFTER `source_updated_at`",
+    ];
+    foreach ($teacherColumns as $column => $ddl) {
+        ensureColumn($pdo, 'teacher_list', $column, $ddl);
+    }
+    ensureIndex($pdo, 'teacher_list', 'idx_teacher_external', "ALTER TABLE `teacher_list` ADD KEY `idx_teacher_external` (`external_id`, `status`)");
+    ensureIndex($pdo, 'teacher_list', 'idx_teacher_number', "ALTER TABLE `teacher_list` ADD KEY `idx_teacher_number` (`teacher_num`, `status`)");
+    ensureUniqueIndex($pdo, 'teacher_list', 'uk_teacher_external_id', 'external_id', "ALTER TABLE `teacher_list` ADD UNIQUE KEY `uk_teacher_external_id` (`external_id`)");
+    ensureUniqueIndex($pdo, 'teacher_list', 'uk_teacher_number', 'teacher_num', "ALTER TABLE `teacher_list` ADD UNIQUE KEY `uk_teacher_number` (`teacher_num`)");
+
+    ensureColumn($pdo, 'companies', 'unit_type', "ALTER TABLE `companies` ADD COLUMN `unit_type` VARCHAR(80) DEFAULT NULL AFTER `address`");
+    ensureColumn($pdo, 'companies', 'enterprise_level', "ALTER TABLE `companies` ADD COLUMN `enterprise_level` VARCHAR(120) DEFAULT NULL AFTER `unit_type`");
 }
 
 function schoolCoreStatements(): array
@@ -347,6 +509,7 @@ function schoolCoreStatements(): array
             `grade_id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
             `grade_uuid` CHAR(36) DEFAULT NULL,
             `grade_name` VARCHAR(80) NOT NULL,
+            `grade_code` VARCHAR(80) DEFAULT NULL,
             `is_current` ENUM('false','true') DEFAULT 'false',
             `sort` INT DEFAULT 0,
             `flag` ENUM('on','off') DEFAULT 'on',
@@ -355,6 +518,23 @@ function schoolCoreStatements(): array
             `deleted_at` DATETIME DEFAULT NULL,
             PRIMARY KEY (`grade_id`),
             UNIQUE KEY `uk_grade_uuid` (`grade_uuid`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+        "CREATE TABLE IF NOT EXISTS `graduation_cohort` (
+            `cohort_id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            `cohort_uuid` CHAR(36) DEFAULT NULL,
+            `cohort_name` VARCHAR(80) NOT NULL,
+            `cohort_year` SMALLINT UNSIGNED NOT NULL,
+            `is_current` ENUM('false','true') DEFAULT 'false',
+            `sort` INT DEFAULT 0,
+            `flag` ENUM('on','off') DEFAULT 'on',
+            `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+            `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            `deleted_at` DATETIME DEFAULT NULL,
+            `active_flag` TINYINT GENERATED ALWAYS AS (CASE WHEN `deleted_at` IS NULL THEN 1 ELSE NULL END) STORED,
+            PRIMARY KEY (`cohort_id`),
+            UNIQUE KEY `uk_cohort_uuid` (`cohort_uuid`),
+            UNIQUE KEY `uk_cohort_year_active` (`cohort_year`, `active_flag`),
+            KEY `idx_cohort_current` (`is_current`, `flag`, `sort`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
         "CREATE TABLE IF NOT EXISTS `profession` (
             `profession_id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -413,6 +593,8 @@ function schoolCoreStatements(): array
             `contact_name` VARCHAR(80) DEFAULT NULL,
             `contact_mobile` VARCHAR(40) DEFAULT NULL,
             `address` VARCHAR(255) DEFAULT NULL,
+            `unit_type` VARCHAR(80) DEFAULT NULL,
+            `enterprise_level` VARCHAR(120) DEFAULT NULL,
             `flag` ENUM('on','off') DEFAULT 'on',
             `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
             `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -426,6 +608,7 @@ function schoolCoreStatements(): array
             `name` VARCHAR(80) NOT NULL,
             `avatar` VARCHAR(255) DEFAULT NULL,
             `mobile` VARCHAR(40) DEFAULT NULL,
+            `verified_mobile` VARCHAR(40) DEFAULT NULL,
             `email` VARCHAR(120) DEFAULT NULL,
             `status` ENUM('enabled','disabled') DEFAULT 'enabled',
             `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -526,6 +709,7 @@ function schoolCoreStatements(): array
             `name` VARCHAR(80) NOT NULL,
             `student_num` VARCHAR(80) DEFAULT NULL,
             `grade_id` BIGINT UNSIGNED DEFAULT NULL,
+            `graduation_cohort_id` BIGINT UNSIGNED DEFAULT NULL,
             `dep_id` BIGINT UNSIGNED DEFAULT NULL,
             `profession_id` BIGINT UNSIGNED DEFAULT NULL,
             `class_id` BIGINT UNSIGNED DEFAULT NULL,
@@ -543,11 +727,22 @@ function schoolCoreStatements(): array
         "CREATE TABLE IF NOT EXISTS `teacher_list` (
             `teacher_id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
             `teacher_uuid` CHAR(36) DEFAULT NULL,
+            `external_id` VARCHAR(120) DEFAULT NULL,
             `user_id` BIGINT UNSIGNED DEFAULT NULL,
             `teacher_name` VARCHAR(80) NOT NULL,
             `teacher_num` VARCHAR(80) DEFAULT NULL,
             `dep_id` BIGINT UNSIGNED DEFAULT NULL,
             `profession_id` BIGINT UNSIGNED DEFAULT NULL,
+            `gender` VARCHAR(20) DEFAULT NULL,
+            `birth_date` DATE DEFAULT NULL,
+            `title` VARCHAR(120) DEFAULT NULL,
+            `education` VARCHAR(80) DEFAULT NULL,
+            `phone` VARCHAR(40) DEFAULT NULL,
+            `email` VARCHAR(120) DEFAULT NULL,
+            `employment_type` VARCHAR(40) DEFAULT NULL,
+            `sync_source` VARCHAR(40) DEFAULT NULL,
+            `source_updated_at` DATETIME DEFAULT NULL,
+            `last_synced_at` DATETIME DEFAULT NULL,
             `status` ENUM('enabled','disabled') DEFAULT 'enabled',
             `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
             `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -555,7 +750,11 @@ function schoolCoreStatements(): array
             PRIMARY KEY (`teacher_id`),
             UNIQUE KEY `uk_teacher_uuid` (`teacher_uuid`),
             KEY `idx_user_id` (`user_id`),
-            KEY `idx_dep_id` (`dep_id`)
+            KEY `idx_dep_id` (`dep_id`),
+            KEY `idx_teacher_external` (`external_id`, `status`),
+            KEY `idx_teacher_number` (`teacher_num`, `status`),
+            UNIQUE KEY `uk_teacher_external_id` (`external_id`),
+            UNIQUE KEY `uk_teacher_number` (`teacher_num`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
         "CREATE TABLE IF NOT EXISTS `grade_teacher_guide` (
             `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -675,11 +874,19 @@ function schoolBusinessStatements(): array
         simpleTable('favorite_link', ['`account_id` BIGINT UNSIGNED DEFAULT NULL', '`user_id` BIGINT UNSIGNED DEFAULT NULL', '`title` VARCHAR(180) DEFAULT NULL', '`url` VARCHAR(500) DEFAULT NULL', '`icon_url` VARCHAR(500) DEFAULT NULL', '`icon_file_id` BIGINT UNSIGNED DEFAULT NULL', '`sort` INT DEFAULT 0', 'KEY `idx_account_status` (`account_id`, `status`)', 'KEY `idx_user_id` (`user_id`)']),
         simpleTable('theme_preset', ['`theme_json` JSON DEFAULT NULL']),
         simpleTable('api_key', ['`account_id` BIGINT UNSIGNED DEFAULT NULL', '`api_key_hash` CHAR(64) DEFAULT NULL', '`enabled` ENUM(\'false\',\'true\') DEFAULT \'false\'']),
+        simpleTable('internship_category', [
+            '`scope_type` ENUM(\'grade\',\'cohort\') NOT NULL DEFAULT \'grade\'',
+            '`sort` INT DEFAULT 0',
+            '`active_flag` TINYINT GENERATED ALWAYS AS (CASE WHEN `deleted_at` IS NULL THEN 1 ELSE NULL END) STORED',
+            'UNIQUE KEY `uk_internship_category_code` (`code`, `active_flag`)',
+            'KEY `idx_internship_category_scope` (`scope_type`, `status`, `sort`)',
+        ]),
         simpleTable('base', [
             '`company_id` BIGINT UNSIGNED DEFAULT NULL',
             '`dep_id` BIGINT UNSIGNED DEFAULT NULL',
             '`base_type` VARCHAR(20) DEFAULT \'long_term\'',
             '`address` VARCHAR(255) DEFAULT NULL',
+            '`district` VARCHAR(120) DEFAULT NULL',
             '`area` DECIMAL(12,2) DEFAULT NULL',
             '`annual_student_count` INT UNSIGNED DEFAULT 0',
             '`current_student_count` INT UNSIGNED DEFAULT 0',
@@ -700,6 +907,7 @@ function schoolBusinessStatements(): array
             '`base_id` BIGINT UNSIGNED NOT NULL',
             '`person_type` VARCHAR(20) NOT NULL',
             '`user_id` BIGINT UNSIGNED DEFAULT NULL',
+            '`teacher_id` BIGINT UNSIGNED DEFAULT NULL',
             '`gender` VARCHAR(20) DEFAULT NULL',
             '`birth_date` VARCHAR(40) DEFAULT NULL',
             '`title` VARCHAR(120) DEFAULT NULL',
@@ -734,6 +942,7 @@ function schoolBusinessStatements(): array
         ]),
         simpleTable('base_budget', [
             '`base_id` BIGINT UNSIGNED NOT NULL',
+            '`declaration_id` BIGINT UNSIGNED DEFAULT NULL',
             '`item_name` VARCHAR(180) DEFAULT NULL',
             '`content` TEXT DEFAULT NULL',
             '`amount` DECIMAL(12,2) DEFAULT NULL',
@@ -741,25 +950,238 @@ function schoolBusinessStatements(): array
             '`sort` INT DEFAULT 0',
             'KEY `idx_base_sort` (`base_id`, `sort`, `status`)',
         ]),
+        simpleTable('base_declaration', [
+            '`base_id` BIGINT UNSIGNED NOT NULL',
+            '`declaration_year` SMALLINT UNSIGNED NOT NULL',
+            '`base_category` VARCHAR(120) DEFAULT NULL',
+            '`base_level` VARCHAR(80) DEFAULT NULL',
+            '`project_status` VARCHAR(20) DEFAULT NULL',
+            '`approved_amount` DECIMAL(12,2) DEFAULT NULL',
+            '`industry_cobuilt` VARCHAR(20) DEFAULT NULL',
+            '`service_profession_count` INT UNSIGNED DEFAULT 0',
+            '`curriculum_in_plan` VARCHAR(20) DEFAULT NULL',
+            '`unit_type` VARCHAR(80) DEFAULT NULL',
+            '`enterprise_level` VARCHAR(120) DEFAULT NULL',
+            '`teacher_count` INT UNSIGNED DEFAULT 0',
+            '`external_teacher_count` INT UNSIGNED DEFAULT 0',
+            '`planned_content` TEXT DEFAULT NULL',
+            '`expected_student_visits` INT UNSIGNED DEFAULT 0',
+            '`expected_student_days` INT UNSIGNED DEFAULT 0',
+            '`has_signboard` VARCHAR(20) DEFAULT NULL',
+            '`has_agreement` VARCHAR(20) DEFAULT NULL',
+            '`remark` TEXT DEFAULT NULL',
+            '`source_edited_at` DATETIME DEFAULT NULL',
+            '`source_editor` VARCHAR(120) DEFAULT NULL',
+            '`source_admin` VARCHAR(120) DEFAULT NULL',
+            '`active_flag` TINYINT GENERATED ALWAYS AS (CASE WHEN `deleted_at` IS NULL THEN 1 ELSE NULL END) STORED',
+            'UNIQUE KEY `uk_base_declaration` (`base_id`, `declaration_year`, `active_flag`)',
+            'KEY `idx_base_declaration_year` (`declaration_year`, `base_level`, `status`)',
+        ]),
+        simpleTable('base_reception_stat', [
+            '`declaration_id` BIGINT UNSIGNED NOT NULL',
+            '`stat_year` SMALLINT UNSIGNED NOT NULL',
+            '`student_count` INT UNSIGNED DEFAULT 0',
+            '`active_flag` TINYINT GENERATED ALWAYS AS (CASE WHEN `deleted_at` IS NULL THEN 1 ELSE NULL END) STORED',
+            'UNIQUE KEY `uk_base_reception_stat` (`declaration_id`, `stat_year`, `active_flag`)',
+            'KEY `idx_base_reception_year` (`stat_year`, `status`)',
+        ]),
+        simpleTable('open_sync_app', [
+            '`app_id` VARCHAR(120) NOT NULL',
+            '`app_secret` TEXT NOT NULL',
+            '`allowed_ips` JSON DEFAULT NULL',
+            '`last_used_at` DATETIME DEFAULT NULL',
+            '`secret_updated_at` DATETIME DEFAULT NULL',
+            'UNIQUE KEY `uk_open_sync_app_id` (`app_id`)',
+        ]),
+        simpleTable('teacher_sync_batch', [
+            '`request_id` VARCHAR(120) NOT NULL',
+            '`sync_source` VARCHAR(40) DEFAULT \'push\'',
+            '`received_count` INT UNSIGNED DEFAULT 0',
+            '`created_count` INT UNSIGNED DEFAULT 0',
+            '`updated_count` INT UNSIGNED DEFAULT 0',
+            '`disabled_count` INT UNSIGNED DEFAULT 0',
+            '`failed_count` INT UNSIGNED DEFAULT 0',
+            '`result_json` JSON DEFAULT NULL',
+            '`processed_at` DATETIME DEFAULT NULL',
+            'UNIQUE KEY `uk_teacher_sync_request` (`request_id`)',
+            'KEY `idx_teacher_sync_source` (`sync_source`, `status`, `created_at`)',
+        ]),
+        simpleTable('internship_plan_sync_inbox', [
+            '`source_plan_id` VARCHAR(120) NOT NULL',
+            '`source_version` VARCHAR(80) NOT NULL',
+            '`source_course_id` VARCHAR(120) DEFAULT NULL',
+            '`source_status` VARCHAR(40) DEFAULT NULL',
+            '`grade_code` VARCHAR(80) DEFAULT NULL',
+            '`grade_name` VARCHAR(120) DEFAULT NULL',
+            '`dep_code` VARCHAR(80) DEFAULT NULL',
+            '`dep_name` VARCHAR(120) DEFAULT NULL',
+            '`profession_code` VARCHAR(80) DEFAULT NULL',
+            '`profession_name` VARCHAR(180) DEFAULT NULL',
+            '`education_level` VARCHAR(80) DEFAULT NULL',
+            '`scheme_name` VARCHAR(180) DEFAULT NULL',
+            '`scheme_version` VARCHAR(80) DEFAULT NULL',
+            '`course_code` VARCHAR(120) DEFAULT NULL',
+            '`course_name` VARCHAR(180) DEFAULT NULL',
+            '`course_category` VARCHAR(80) DEFAULT NULL',
+            '`course_nature` VARCHAR(80) DEFAULT NULL',
+            '`credit` DECIMAL(5,2) DEFAULT NULL',
+            '`weekly_hours` DECIMAL(6,2) DEFAULT NULL',
+            '`total_hours` DECIMAL(8,2) DEFAULT NULL',
+            '`theory_hours` DECIMAL(8,2) DEFAULT NULL',
+            '`experiment_hours` DECIMAL(8,2) DEFAULT NULL',
+            '`practice_hours` DECIMAL(8,2) DEFAULT NULL',
+            '`computer_hours` DECIMAL(8,2) DEFAULT NULL',
+            '`other_hours` DECIMAL(8,2) DEFAULT NULL',
+            '`source_period` VARCHAR(80) DEFAULT NULL',
+            '`source_updated_at` DATETIME DEFAULT NULL',
+            '`mapping_status` VARCHAR(40) DEFAULT \'pending\'',
+            '`mapped_grade_id` BIGINT UNSIGNED DEFAULT NULL',
+            '`mapped_dep_id` BIGINT UNSIGNED DEFAULT NULL',
+            '`mapped_profession_id` BIGINT UNSIGNED DEFAULT NULL',
+            '`raw_payload` JSON DEFAULT NULL',
+            '`diff_payload` JSON DEFAULT NULL',
+            '`sync_batch_no` VARCHAR(120) DEFAULT NULL',
+            '`local_plan_id` BIGINT UNSIGNED DEFAULT NULL',
+            '`confirmed_by` BIGINT UNSIGNED DEFAULT NULL',
+            '`confirmed_at` DATETIME DEFAULT NULL',
+            '`ignored_by` BIGINT UNSIGNED DEFAULT NULL',
+            '`ignored_at` DATETIME DEFAULT NULL',
+            '`ignore_reason` VARCHAR(500) DEFAULT NULL',
+            '`received_at` DATETIME DEFAULT NULL',
+            'UNIQUE KEY `uk_plan_version` (`source_plan_id`, `source_version`)',
+            'KEY `idx_inbox_status` (`status`, `received_at`)',
+            'KEY `idx_inbox_mapping` (`mapping_status`, `mapped_dep_id`, `mapped_profession_id`)',
+            'KEY `idx_inbox_local_plan` (`local_plan_id`, `status`)',
+        ]),
         simpleTable('base_profession_direction', ['`base_id` BIGINT UNSIGNED NOT NULL', '`profession_id` BIGINT UNSIGNED NOT NULL', '`direction_id` BIGINT UNSIGNED NOT NULL', 'UNIQUE KEY `uk_base_profession_direction` (`base_id`, `profession_id`, `direction_id`)']),
         simpleTable('enterprise_mentor', ['`company_id` BIGINT UNSIGNED DEFAULT NULL', '`mentor_name` VARCHAR(80) DEFAULT NULL', '`mobile` VARCHAR(40) DEFAULT NULL']),
-        simpleTable('arrangement', ['`plan_id` BIGINT UNSIGNED DEFAULT NULL', '`base_id` BIGINT UNSIGNED DEFAULT NULL', '`dep_id` BIGINT UNSIGNED DEFAULT NULL', '`profession_id` BIGINT UNSIGNED DEFAULT NULL', '`semester` VARCHAR(80) DEFAULT NULL', '`teacher_id` BIGINT UNSIGNED DEFAULT NULL', '`task_no` VARCHAR(80) DEFAULT NULL', '`batch_no` VARCHAR(80) DEFAULT NULL', '`credit` DECIMAL(5,2) DEFAULT NULL', '`student_count` INT DEFAULT 0', '`start_date` DATE DEFAULT NULL', '`end_date` DATE DEFAULT NULL']),
+        simpleTable('arrangement', ['`plan_id` BIGINT UNSIGNED DEFAULT NULL', '`base_id` BIGINT UNSIGNED DEFAULT NULL', '`dep_id` BIGINT UNSIGNED DEFAULT NULL', '`profession_id` BIGINT UNSIGNED DEFAULT NULL', '`semester` VARCHAR(80) DEFAULT NULL', '`teacher_id` BIGINT UNSIGNED DEFAULT NULL', '`task_no` VARCHAR(80) DEFAULT NULL', '`batch_no` VARCHAR(80) DEFAULT NULL', '`credit` DECIMAL(5,2) DEFAULT NULL', '`student_count` INT DEFAULT 0', '`start_date` DATE DEFAULT NULL', '`end_date` DATE DEFAULT NULL', '`created_by` BIGINT UNSIGNED DEFAULT NULL', '`submitter_id` BIGINT UNSIGNED DEFAULT NULL']),
         simpleTable('arrangement_recording', recordingColumns()),
         simpleTable('arrangement_change', ['`arrangement_id` BIGINT UNSIGNED DEFAULT NULL', '`payload` JSON DEFAULT NULL', '`reason` TEXT DEFAULT NULL', '`from_status` VARCHAR(40) DEFAULT NULL', '`submitter_id` BIGINT UNSIGNED DEFAULT NULL', '`submitted_at` DATETIME DEFAULT NULL', '`reviewer_id` BIGINT UNSIGNED DEFAULT NULL', '`review_opinion` TEXT DEFAULT NULL', '`reviewed_at` DATETIME DEFAULT NULL', '`new_arrangement_id` BIGINT UNSIGNED DEFAULT NULL']),
         simpleTable('arrangement_change_recording', recordingColumns()),
+        simpleTable('internship_student_profile', [
+            '`student_id` BIGINT UNSIGNED NOT NULL',
+            '`arrangement_id` BIGINT UNSIGNED NOT NULL',
+            '`pair_id` BIGINT UNSIGNED DEFAULT NULL',
+            '`company_id` BIGINT UNSIGNED DEFAULT NULL',
+            '`base_id` BIGINT UNSIGNED DEFAULT NULL',
+            '`enterprise_mentor_id` BIGINT UNSIGNED DEFAULT NULL',
+            '`location` VARCHAR(255) DEFAULT NULL',
+            '`position` VARCHAR(180) DEFAULT NULL',
+            '`start_date` DATE DEFAULT NULL',
+            '`end_date` DATE DEFAULT NULL',
+            '`effective_at` DATETIME DEFAULT NULL',
+            '`terminated_at` DATETIME DEFAULT NULL',
+            '`termination_reason` TEXT DEFAULT NULL',
+            'UNIQUE KEY `uk_student_arrangement` (`student_id`, `arrangement_id`)',
+            'KEY `idx_profile_mentor` (`enterprise_mentor_id`, `status`)',
+            'KEY `idx_profile_dates` (`start_date`, `end_date`, `status`)',
+        ]),
+        simpleTable('internship_student_change', [
+            '`student_id` BIGINT UNSIGNED NOT NULL',
+            '`arrangement_id` BIGINT UNSIGNED NOT NULL',
+            '`profile_id` BIGINT UNSIGNED DEFAULT NULL',
+            '`change_type` VARCHAR(40) NOT NULL',
+            '`before_payload` JSON DEFAULT NULL',
+            '`after_payload` JSON DEFAULT NULL',
+            '`reason` TEXT DEFAULT NULL',
+            '`effective_date` DATE DEFAULT NULL',
+            '`submitter_id` BIGINT UNSIGNED DEFAULT NULL',
+            '`reviewer_id` BIGINT UNSIGNED DEFAULT NULL',
+            '`review_opinion` TEXT DEFAULT NULL',
+            '`submitted_at` DATETIME DEFAULT NULL',
+            '`reviewed_at` DATETIME DEFAULT NULL',
+            'KEY `idx_student_change_task` (`student_id`, `arrangement_id`, `status`)',
+            'KEY `idx_student_change_review` (`status`, `reviewer_id`, `updated_at`)',
+        ]),
+        simpleTable('internship_student_change_recording', recordingColumns()),
         simpleTable('internship_task_class', ['`arrangement_id` BIGINT UNSIGNED NOT NULL', '`grade_id` BIGINT UNSIGNED DEFAULT NULL', '`dep_id` BIGINT UNSIGNED DEFAULT NULL', '`profession_id` BIGINT UNSIGNED DEFAULT NULL', '`class_id` BIGINT UNSIGNED NOT NULL', '`student_count_snapshot` INT DEFAULT 0', 'UNIQUE KEY `uk_task_class` (`arrangement_id`, `class_id`)']),
         simpleTable('application', ['`arrangement_id` BIGINT UNSIGNED DEFAULT NULL', '`student_id` BIGINT UNSIGNED DEFAULT NULL', '`teacher_id` BIGINT UNSIGNED DEFAULT NULL']),
         simpleTable('application_recording', recordingColumns()),
         simpleTable('student_join_teacher', ['`student_id` BIGINT UNSIGNED DEFAULT NULL', '`teacher_id` BIGINT UNSIGNED DEFAULT NULL', '`arrangement_id` BIGINT UNSIGNED DEFAULT NULL']),
         simpleTable('join_recording', recordingColumns()),
-        simpleTable('pair', ['`student_id` BIGINT UNSIGNED DEFAULT NULL', '`teacher_id` BIGINT UNSIGNED DEFAULT NULL', '`type` ENUM(\'internship\',\'training\',\'lab\') DEFAULT \'internship\'', '`arrangement_id` BIGINT UNSIGNED DEFAULT NULL', '`entity_type` VARCHAR(40) DEFAULT NULL', '`entity_id` BIGINT UNSIGNED DEFAULT NULL', '`active_flag` TINYINT GENERATED ALWAYS AS (CASE WHEN `status` = \'active\' AND `deleted_at` IS NULL THEN 1 ELSE NULL END) STORED', 'UNIQUE KEY `uk_pair_active` (`student_id`, `type`, `arrangement_id`, `active_flag`)']),
+        simpleTable('pair', ['`student_id` BIGINT UNSIGNED DEFAULT NULL', '`teacher_id` BIGINT UNSIGNED DEFAULT NULL', '`type` ENUM(\'internship\',\'training\',\'lab\',\'social_practice\') DEFAULT \'internship\'', '`arrangement_id` BIGINT UNSIGNED DEFAULT NULL', '`entity_type` VARCHAR(40) DEFAULT NULL', '`entity_id` BIGINT UNSIGNED DEFAULT NULL', '`active_flag` TINYINT GENERATED ALWAYS AS (CASE WHEN `status` = \'active\' AND `deleted_at` IS NULL THEN 1 ELSE NULL END) STORED', 'UNIQUE KEY `uk_pair_active` (`student_id`, `type`, `arrangement_id`, `active_flag`)']),
+        simpleTable('internship_enterprise_evaluation_invitation', [
+            '`arrangement_id` BIGINT UNSIGNED NOT NULL',
+            '`enterprise_mentor_id` BIGINT UNSIGNED NOT NULL',
+            '`token` VARCHAR(180) NOT NULL',
+            '`mobile` VARCHAR(40) DEFAULT NULL',
+            '`expires_at` DATETIME NOT NULL',
+            '`created_by` BIGINT UNSIGNED DEFAULT NULL',
+            '`revoked_at` DATETIME DEFAULT NULL',
+            'UNIQUE KEY `uk_evaluation_invitation_token` (`token`)',
+            'KEY `idx_evaluation_invitation_target` (`arrangement_id`, `enterprise_mentor_id`, `status`, `expires_at`)',
+        ]),
+        simpleTable('internship_enterprise_evaluation_session', [
+            '`invitation_id` BIGINT UNSIGNED NOT NULL',
+            '`mobile` VARCHAR(40) NOT NULL',
+            '`code_hash` VARCHAR(255) NOT NULL',
+            '`code_sent_at` DATETIME DEFAULT NULL',
+            '`verified_at` DATETIME DEFAULT NULL',
+            '`expires_at` DATETIME NOT NULL',
+            '`session_token` VARCHAR(180) DEFAULT NULL',
+            '`attempts` INT UNSIGNED DEFAULT 0',
+            'UNIQUE KEY `uk_evaluation_session_token` (`session_token`)',
+            'KEY `idx_evaluation_session_invitation` (`invitation_id`, `mobile`, `expires_at`)',
+        ]),
+        simpleTable('internship_enterprise_evaluation', [
+            '`student_id` BIGINT UNSIGNED NOT NULL',
+            '`arrangement_id` BIGINT UNSIGNED NOT NULL',
+            '`pair_id` BIGINT UNSIGNED DEFAULT NULL',
+            '`enterprise_mentor_id` BIGINT UNSIGNED NOT NULL',
+            '`evaluator_name` VARCHAR(80) DEFAULT NULL',
+            '`evaluator_mobile` VARCHAR(40) DEFAULT NULL',
+            '`verification_id` BIGINT UNSIGNED DEFAULT NULL',
+            '`criteria_json` JSON DEFAULT NULL',
+            '`total_score` DECIMAL(5,2) DEFAULT NULL',
+            '`comment` TEXT DEFAULT NULL',
+            '`submitted_at` DATETIME DEFAULT NULL',
+            '`submitted_ip` VARCHAR(80) DEFAULT NULL',
+            'UNIQUE KEY `uk_enterprise_evaluation_student_task` (`student_id`, `arrangement_id`)',
+            'KEY `idx_enterprise_evaluation_mentor` (`enterprise_mentor_id`, `status`)',
+        ]),
+        simpleTable('internship_enterprise_evaluation_recording', recordingColumns()),
+        simpleTable('internship_enterprise_evaluation_rule', [
+            '`practice_type` VARCHAR(40) DEFAULT \'graduation\'',
+            '`criteria_json` JSON DEFAULT NULL',
+            '`total_score` DECIMAL(5,2) DEFAULT 30',
+            '`created_by` BIGINT UNSIGNED DEFAULT NULL',
+            'UNIQUE KEY `uk_enterprise_evaluation_rule_type` (`practice_type`, `status`)',
+        ]),
+        simpleTable('internship_archive_requirement', [
+            '`practice_type` VARCHAR(40) NOT NULL',
+            '`material_type` VARCHAR(60) NOT NULL',
+            '`required` TINYINT(1) DEFAULT 1',
+            '`sort` INT DEFAULT 100',
+            '`created_by` BIGINT UNSIGNED DEFAULT NULL',
+            'UNIQUE KEY `uk_archive_requirement_type_material` (`practice_type`, `material_type`)',
+        ]),
         simpleTable('sign_in', entityColumns(['`student_id` BIGINT UNSIGNED DEFAULT NULL', '`teacher_id` BIGINT UNSIGNED DEFAULT NULL', '`sign_time` DATETIME DEFAULT NULL', '`date` DATE DEFAULT NULL', '`longitude` DECIMAL(10,6) DEFAULT NULL', '`latitude` DECIMAL(10,6) DEFAULT NULL', '`location` VARCHAR(255) DEFAULT NULL', '`sign_type` VARCHAR(40) DEFAULT \'gps\'', '`remark` TEXT DEFAULT NULL'])),
         simpleTable('sign_in_recording', recordingColumns()),
         simpleTable('sign_in_qrcode', entityColumns(['`teacher_id` BIGINT UNSIGNED DEFAULT NULL', '`token` VARCHAR(120) DEFAULT NULL', '`expires_at` DATETIME DEFAULT NULL'])),
         simpleTable('journal', entityColumns(['`student_id` BIGINT UNSIGNED DEFAULT NULL', '`teacher_id` BIGINT UNSIGNED DEFAULT NULL', '`date` DATE DEFAULT NULL', '`title` VARCHAR(180) DEFAULT NULL', '`content` TEXT DEFAULT NULL', '`remark` TEXT DEFAULT NULL'])),
         simpleTable('journal_recording', recordingColumns()),
-        simpleTable('report', entityColumns(['`student_id` BIGINT UNSIGNED DEFAULT NULL', '`teacher_id` BIGINT UNSIGNED DEFAULT NULL', '`date` DATE DEFAULT NULL', '`title` VARCHAR(180) DEFAULT NULL', '`content` TEXT DEFAULT NULL', '`template_id` BIGINT UNSIGNED DEFAULT NULL', '`submitted_at` DATETIME DEFAULT NULL', '`remark` TEXT DEFAULT NULL'])),
+        simpleTable('report', entityColumns(['`student_id` BIGINT UNSIGNED DEFAULT NULL', '`teacher_id` BIGINT UNSIGNED DEFAULT NULL', '`date` DATE DEFAULT NULL', '`title` VARCHAR(180) DEFAULT NULL', '`content` TEXT DEFAULT NULL', '`template_id` BIGINT UNSIGNED DEFAULT NULL', '`submitted_at` DATETIME DEFAULT NULL', '`remark` TEXT DEFAULT NULL', '`practice_project_id` BIGINT UNSIGNED DEFAULT NULL', '`reflection_summary` TEXT DEFAULT NULL'])),
         simpleTable('report_recording', recordingColumns()),
+        simpleTable('internship_graduation_appraisal', [
+            '`student_id` BIGINT UNSIGNED NOT NULL',
+            '`arrangement_id` BIGINT UNSIGNED NOT NULL',
+            '`teacher_id` BIGINT UNSIGNED DEFAULT NULL',
+            '`process_score` DECIMAL(5,2) DEFAULT NULL',
+            '`enterprise_score` DECIMAL(5,2) DEFAULT NULL',
+            '`school_score` DECIMAL(5,2) DEFAULT NULL',
+            '`report_score` DECIMAL(5,2) DEFAULT NULL',
+            '`final_score` DECIMAL(5,2) DEFAULT NULL',
+            '`grade_level` VARCHAR(40) DEFAULT NULL',
+            '`enterprise_comment` TEXT DEFAULT NULL',
+            '`school_comment` TEXT DEFAULT NULL',
+            '`form_data` JSON DEFAULT NULL',
+            '`attachment_id` BIGINT UNSIGNED DEFAULT NULL',
+            '`submitted_at` DATETIME DEFAULT NULL',
+            '`reviewed_at` DATETIME DEFAULT NULL',
+            'KEY `idx_graduation_appraisal_student_task` (`student_id`, `arrangement_id`, `status`)',
+        ]),
+        simpleTable('internship_graduation_appraisal_recording', recordingColumns()),
         simpleTable('report_template', ['`template_json` JSON DEFAULT NULL']),
         simpleTable('review_opinion', entityColumns(['`reviewer_id` BIGINT UNSIGNED DEFAULT NULL', '`opinion` TEXT DEFAULT NULL'])),
         simpleTable('review_opinion_draft', entityColumns(['`reviewer_id` BIGINT UNSIGNED DEFAULT NULL', '`teacher_id` BIGINT UNSIGNED DEFAULT NULL', '`review_status` VARCHAR(40) DEFAULT NULL', '`opinion` TEXT DEFAULT NULL', '`score` DECIMAL(5,2) DEFAULT NULL', 'UNIQUE KEY `uk_review_draft` (`entity_type`, `entity_id`, `reviewer_id`)', 'KEY `idx_reviewer` (`reviewer_id`)'])),
@@ -771,10 +1193,15 @@ function schoolBusinessStatements(): array
         simpleTable('course_score', ['`plan_id` BIGINT UNSIGNED DEFAULT NULL', '`student_id` BIGINT UNSIGNED DEFAULT NULL', '`score_value` DECIMAL(5,2) DEFAULT NULL', '`operator_id` BIGINT UNSIGNED DEFAULT NULL', '`remark` TEXT DEFAULT NULL', 'UNIQUE KEY `uk_course_score` (`plan_id`, `student_id`)']),
         simpleTable('internship_plan', [
             '`source_type` VARCHAR(40) DEFAULT \'edu_system\'',
+            '`source_plan_id` VARCHAR(120) DEFAULT NULL',
+            '`source_version` VARCHAR(80) DEFAULT NULL',
+            '`source_last_synced_at` DATETIME DEFAULT NULL',
             '`course_code` VARCHAR(120) DEFAULT NULL',
             '`course_name` VARCHAR(180) DEFAULT NULL',
             '`course_category` VARCHAR(80) DEFAULT NULL',
+            '`category_id` BIGINT UNSIGNED DEFAULT NULL',
             '`grade_id` BIGINT UNSIGNED DEFAULT NULL',
+            '`graduation_cohort_id` BIGINT UNSIGNED DEFAULT NULL',
             '`dep_id` BIGINT UNSIGNED DEFAULT NULL',
             '`profession_id` BIGINT UNSIGNED DEFAULT NULL',
             '`semester` VARCHAR(80) DEFAULT NULL',
@@ -805,6 +1232,33 @@ function schoolBusinessStatements(): array
         simpleTable('safety_letter_recording', recordingColumns()),
         simpleTable('syllabus_guide', ['`dep_id` BIGINT UNSIGNED DEFAULT NULL', '`file_id` BIGINT UNSIGNED DEFAULT NULL']),
         simpleTable('syllabus_guide_recording', recordingColumns()),
+        simpleTable('internship_archive_material', [
+            '`material_type` VARCHAR(60) NOT NULL',
+            '`scope_type` VARCHAR(40) NOT NULL',
+            '`plan_id` BIGINT UNSIGNED DEFAULT NULL',
+            '`arrangement_id` BIGINT UNSIGNED DEFAULT NULL',
+            '`student_id` BIGINT UNSIGNED DEFAULT NULL',
+            '`class_id` BIGINT UNSIGNED DEFAULT NULL',
+            '`template_id` BIGINT UNSIGNED DEFAULT NULL',
+            '`template_version` VARCHAR(40) DEFAULT NULL',
+            '`source_entity_type` VARCHAR(60) DEFAULT NULL',
+            '`source_entity_id` BIGINT UNSIGNED DEFAULT NULL',
+            '`content_json` JSON DEFAULT NULL',
+            '`generated_file_id` BIGINT UNSIGNED DEFAULT NULL',
+            '`signed_file_id` BIGINT UNSIGNED DEFAULT NULL',
+            '`recording_id` BIGINT UNSIGNED DEFAULT NULL',
+            '`archive_version` INT UNSIGNED DEFAULT 1',
+            '`archived_at` DATETIME DEFAULT NULL',
+            '`created_by` BIGINT UNSIGNED DEFAULT NULL',
+            '`updated_by` BIGINT UNSIGNED DEFAULT NULL',
+            "`scope_key` VARCHAR(180) GENERATED ALWAYS AS (CONCAT(`scope_type`, ':', IFNULL(`plan_id`, 0), ':', IFNULL(`arrangement_id`, 0), ':', IFNULL(`student_id`, 0), ':', IFNULL(`class_id`, 0))) STORED",
+            "`current_flag` TINYINT GENERATED ALWAYS AS (CASE WHEN `status` IN ('draft','submitted','archived') AND `deleted_at` IS NULL THEN 1 ELSE NULL END) STORED",
+            'UNIQUE KEY `uk_archive_material_current` (`material_type`, `scope_key`, `current_flag`)',
+            'KEY `idx_archive_material_plan` (`plan_id`, `scope_type`, `status`)',
+            'KEY `idx_archive_material_task` (`arrangement_id`, `student_id`, `status`)',
+            'KEY `idx_archive_material_files` (`generated_file_id`, `signed_file_id`)',
+        ]),
+        simpleTable('internship_archive_material_recording', recordingColumns()),
         simpleTable('implementation_sheet', [
             '`arrangement_id` BIGINT UNSIGNED DEFAULT NULL',
             '`teacher_id` BIGINT UNSIGNED DEFAULT NULL',
@@ -868,17 +1322,279 @@ function schoolBusinessStatements(): array
         simpleTable('base_usage', ['`base_id` BIGINT UNSIGNED DEFAULT NULL', '`dep_id` BIGINT UNSIGNED DEFAULT NULL', '`usage_type` VARCHAR(80) DEFAULT NULL']),
         simpleTable('base_result', ['`base_id` BIGINT UNSIGNED DEFAULT NULL', '`dep_id` BIGINT UNSIGNED DEFAULT NULL', '`result_type` VARCHAR(80) DEFAULT NULL']),
         simpleTable('base_expense', ['`base_id` BIGINT UNSIGNED DEFAULT NULL', '`dep_id` BIGINT UNSIGNED DEFAULT NULL', '`amount` DECIMAL(12,2) DEFAULT NULL']),
-        simpleTable('practice_plan', practiceCommonColumns(['`source_type` VARCHAR(40) DEFAULT \'manual\'', '`submitter_id` BIGINT UNSIGNED DEFAULT NULL'])),
-        simpleTable('practice_schedule', practiceCommonColumns(['`room_id` BIGINT UNSIGNED DEFAULT NULL', '`base_id` BIGINT UNSIGNED DEFAULT NULL', '`place_type` VARCHAR(40) DEFAULT \'inside\'', '`schedule_date` DATE DEFAULT NULL', '`start_time` VARCHAR(20) DEFAULT NULL', '`end_time` VARCHAR(20) DEFAULT NULL', '`location` VARCHAR(255) DEFAULT NULL', '`student_count` INT DEFAULT 0', '`roster_printed_at` DATETIME DEFAULT NULL'])),
+        simpleTable('practice_period', ['`start_time` TIME NOT NULL', '`end_time` TIME NOT NULL', '`sort` INT DEFAULT 0', 'KEY `idx_period_sort` (`sort`, `status`)']),
+        simpleTable('practice_plan', practiceCommonColumns(['`source_type` VARCHAR(40) DEFAULT \'manual\'', '`submitter_id` BIGINT UNSIGNED DEFAULT NULL', '`course_leader_id` BIGINT UNSIGNED DEFAULT NULL', '`course_leader_account_id` BIGINT UNSIGNED DEFAULT NULL'])),
+        simpleTable('practice_plan_teacher', [
+            '`module_type` ENUM(\'training\',\'lab\') DEFAULT \'training\'',
+            '`plan_id` BIGINT UNSIGNED NOT NULL',
+            '`teacher_id` BIGINT UNSIGNED NOT NULL',
+            '`teacher_role` ENUM(\'leader\',\'teacher\') DEFAULT \'teacher\'',
+            '`sort` INT DEFAULT 0',
+            '`active_flag` TINYINT GENERATED ALWAYS AS (CASE WHEN `status` = \'enabled\' AND `deleted_at` IS NULL THEN 1 ELSE NULL END) STORED',
+            'UNIQUE KEY `uk_practice_plan_teacher_active` (`plan_id`, `teacher_id`, `active_flag`)',
+            'KEY `idx_practice_plan_teacher_scope` (`module_type`, `teacher_id`, `status`)',
+        ]),
+        simpleTable('practice_schedule', practiceCommonColumns(['`room_id` BIGINT UNSIGNED DEFAULT NULL', '`base_id` BIGINT UNSIGNED DEFAULT NULL', '`place_type` VARCHAR(40) DEFAULT \'inside\'', '`schedule_date` DATE DEFAULT NULL', '`period_start_id` BIGINT UNSIGNED DEFAULT NULL', '`period_end_id` BIGINT UNSIGNED DEFAULT NULL', '`start_time` VARCHAR(20) DEFAULT NULL', '`end_time` VARCHAR(20) DEFAULT NULL', '`location` VARCHAR(255) DEFAULT NULL', '`student_count` INT DEFAULT 0', '`roster_printed_at` DATETIME DEFAULT NULL'])),
         simpleTable('practice_project', practiceCommonColumns(['`schedule_id` BIGINT UNSIGNED DEFAULT NULL', '`start_date` DATE DEFAULT NULL', '`end_date` DATE DEFAULT NULL', '`student_count` INT DEFAULT 0', '`published_at` DATETIME DEFAULT NULL', '`submitter_id` BIGINT UNSIGNED DEFAULT NULL'])),
         simpleTable('practice_project_student', ['`module_type` ENUM(\'training\',\'lab\') DEFAULT \'training\'', '`project_id` BIGINT UNSIGNED NOT NULL', '`student_id` BIGINT UNSIGNED NOT NULL', '`teacher_id` BIGINT UNSIGNED DEFAULT NULL', '`plan_id` BIGINT UNSIGNED DEFAULT NULL', '`schedule_id` BIGINT UNSIGNED DEFAULT NULL', '`grade_id` BIGINT UNSIGNED DEFAULT NULL', '`dep_id` BIGINT UNSIGNED DEFAULT NULL', '`profession_id` BIGINT UNSIGNED DEFAULT NULL', '`class_id` BIGINT UNSIGNED DEFAULT NULL', '`active_flag` TINYINT GENERATED ALWAYS AS (CASE WHEN `status` = \'active\' AND `deleted_at` IS NULL THEN 1 ELSE NULL END) STORED', 'UNIQUE KEY `uk_project_student` (`project_id`, `student_id`, `active_flag`)', 'KEY `idx_student` (`student_id`)', 'KEY `idx_project` (`project_id`)']),
         simpleTable('practice_syllabus', practiceCommonColumns(['`submitter_id` BIGINT UNSIGNED DEFAULT NULL'])),
         simpleTable('practice_lesson_plan', practiceCommonColumns(['`submitter_id` BIGINT UNSIGNED DEFAULT NULL'])),
         simpleTable('practice_grade_rule', practiceCommonColumns(['`ratio_json` JSON DEFAULT NULL'])),
-        simpleTable('practice_score', practiceCommonColumns(['`project_id` BIGINT UNSIGNED DEFAULT NULL', '`student_id` BIGINT UNSIGNED DEFAULT NULL', '`rule_id` BIGINT UNSIGNED DEFAULT NULL', '`score_items` JSON DEFAULT NULL', '`score_value` DECIMAL(5,2) DEFAULT NULL'])),
+        simpleTable('practice_score', practiceCommonColumns(['`submitter_id` BIGINT UNSIGNED DEFAULT NULL', '`project_id` BIGINT UNSIGNED DEFAULT NULL', '`student_id` BIGINT UNSIGNED DEFAULT NULL', '`rule_id` BIGINT UNSIGNED DEFAULT NULL', '`score_items` JSON DEFAULT NULL', '`score_value` DECIMAL(5,2) DEFAULT NULL'])),
         simpleTable('practice_reflection', practiceCommonColumns(['`submitter_id` BIGINT UNSIGNED DEFAULT NULL'])),
         simpleTable('practice_room', ['`module_type` ENUM(\'training\',\'lab\') DEFAULT \'training\'', '`dep_id` BIGINT UNSIGNED DEFAULT NULL', '`room_type` VARCHAR(80) DEFAULT NULL', '`capacity` INT DEFAULT 0', '`location` VARCHAR(255) DEFAULT NULL', '`manager_id` BIGINT UNSIGNED DEFAULT NULL']),
         simpleTable('practice_recording', array_merge(['`parent_id` BIGINT UNSIGNED DEFAULT NULL', '`module_type` ENUM(\'training\',\'lab\') DEFAULT \'training\'', '`action` VARCHAR(40) DEFAULT NULL', '`content` TEXT DEFAULT NULL'], recordingColumns())),
+        simpleTable('practice_archive', [
+            '`module_type` ENUM(\'training\',\'lab\') DEFAULT \'training\'',
+            '`plan_id` BIGINT UNSIGNED NOT NULL',
+            '`version_no` INT UNSIGNED NOT NULL DEFAULT 1',
+            '`snapshot_json` JSON DEFAULT NULL',
+            '`missing_items_json` JSON DEFAULT NULL',
+            '`pending_items_json` JSON DEFAULT NULL',
+            '`archive_file_id` BIGINT UNSIGNED DEFAULT NULL',
+            '`created_by` BIGINT UNSIGNED DEFAULT NULL',
+            '`invalidated_by` BIGINT UNSIGNED DEFAULT NULL',
+            '`invalidated_at` DATETIME DEFAULT NULL',
+            '`invalidate_reason` VARCHAR(500) DEFAULT NULL',
+            'UNIQUE KEY `uk_practice_archive_version` (`module_type`, `plan_id`, `version_no`)',
+            'KEY `idx_practice_archive_plan` (`module_type`, `plan_id`, `status`)',
+        ]),
+        simpleTable('social_practice_plan', [
+            '`source_type` VARCHAR(40) DEFAULT \'manual\'',
+            '`source_key` VARCHAR(180) DEFAULT NULL',
+            '`title` VARCHAR(180) DEFAULT NULL',
+            '`description` MEDIUMTEXT DEFAULT NULL',
+            '`grade_id` BIGINT UNSIGNED NOT NULL',
+            '`organizer_dep_id` BIGINT UNSIGNED DEFAULT NULL',
+            '`credit` DECIMAL(5,2) DEFAULT 0',
+            '`participation_mode` VARCHAR(40) DEFAULT \'mandatory\'',
+            '`teacher_match_mode` VARCHAR(40) DEFAULT \'mixed\'',
+            '`teacher_confirm_hours` INT UNSIGNED DEFAULT 48',
+            '`max_reselect_count` INT UNSIGNED DEFAULT 2',
+            '`default_team_submit_mode` VARCHAR(40) DEFAULT \'individual\'',
+            '`register_start_at` DATETIME DEFAULT NULL',
+            '`register_end_at` DATETIME DEFAULT NULL',
+            '`practice_start_at` DATETIME DEFAULT NULL',
+            '`practice_end_at` DATETIME DEFAULT NULL',
+            '`result_deadline_at` DATETIME DEFAULT NULL',
+            '`score_deadline_at` DATETIME DEFAULT NULL',
+            '`approval_flow_id` BIGINT UNSIGNED DEFAULT NULL',
+            '`current_node_id` BIGINT UNSIGNED DEFAULT NULL',
+            '`phase` VARCHAR(40) DEFAULT \'ready\'',
+            '`submitter_id` BIGINT UNSIGNED DEFAULT NULL',
+            '`published_at` DATETIME DEFAULT NULL',
+            'UNIQUE KEY `uk_social_plan_source` (`source_type`, `source_key`)',
+            'KEY `idx_social_plan_scope` (`grade_id`, `organizer_dep_id`, `status`, `phase`)',
+        ]),
+        simpleTable('social_practice_plan_scope', [
+            '`plan_id` BIGINT UNSIGNED NOT NULL',
+            '`scope_type` VARCHAR(40) DEFAULT \'school\'',
+            '`dep_id` BIGINT UNSIGNED DEFAULT NULL',
+            '`profession_id` BIGINT UNSIGNED DEFAULT NULL',
+            '`class_id` BIGINT UNSIGNED DEFAULT NULL',
+            '`scope_key` VARCHAR(180) GENERATED ALWAYS AS (CONCAT(`scope_type`, \':\', IFNULL(`dep_id`, 0), \':\', IFNULL(`profession_id`, 0), \':\', IFNULL(`class_id`, 0))) STORED',
+            '`active_flag` TINYINT GENERATED ALWAYS AS (CASE WHEN `status` = \'enabled\' AND `deleted_at` IS NULL THEN 1 ELSE NULL END) STORED',
+            'UNIQUE KEY `uk_social_plan_scope` (`plan_id`, `scope_key`, `active_flag`)',
+            'KEY `idx_social_scope_org` (`dep_id`, `profession_id`, `class_id`, `status`)',
+        ]),
+        simpleTable('social_practice_approval_flow', [
+            '`scope_type` VARCHAR(40) DEFAULT \'school\'',
+            '`dep_id` BIGINT UNSIGNED DEFAULT NULL',
+            '`profession_id` BIGINT UNSIGNED DEFAULT NULL',
+            '`version` INT UNSIGNED DEFAULT 1',
+            '`description` TEXT DEFAULT NULL',
+            '`created_by` BIGINT UNSIGNED DEFAULT NULL',
+            'KEY `idx_social_flow_scope` (`scope_type`, `dep_id`, `profession_id`, `status`)',
+        ]),
+        simpleTable('social_practice_approval_node', [
+            '`flow_id` BIGINT UNSIGNED NOT NULL',
+            '`node_code` VARCHAR(80) NOT NULL',
+            '`node_name` VARCHAR(120) DEFAULT NULL',
+            '`sort` INT DEFAULT 0',
+            '`scope_type` VARCHAR(40) DEFAULT \'school\'',
+            '`permission_code` VARCHAR(120) DEFAULT NULL',
+            '`node_type` VARCHAR(40) DEFAULT \'review\'',
+            '`can_return` ENUM(\'false\',\'true\') DEFAULT \'true\'',
+            '`auto_pass` ENUM(\'false\',\'true\') DEFAULT \'false\'',
+            'UNIQUE KEY `uk_social_flow_node` (`flow_id`, `node_code`)',
+            'KEY `idx_social_flow_sort` (`flow_id`, `sort`, `status`)',
+        ]),
+        simpleTable('social_practice_requirement', [
+            '`plan_id` BIGINT UNSIGNED NOT NULL',
+            '`practice_mode` VARCHAR(40) DEFAULT \'all\'',
+            '`requirement_type` VARCHAR(80) NOT NULL',
+            '`required_flag` ENUM(\'false\',\'true\') DEFAULT \'true\'',
+            '`submit_scope` VARCHAR(40) DEFAULT \'student\'',
+            '`deadline_at` DATETIME DEFAULT NULL',
+            '`config_json` JSON DEFAULT NULL',
+            '`active_flag` TINYINT GENERATED ALWAYS AS (CASE WHEN `status` = \'enabled\' AND `deleted_at` IS NULL THEN 1 ELSE NULL END) STORED',
+            'UNIQUE KEY `uk_social_requirement` (`plan_id`, `practice_mode`, `requirement_type`, `active_flag`)',
+            'KEY `idx_social_requirement_plan` (`plan_id`, `practice_mode`, `status`)',
+        ]),
+        simpleTable('social_practice_project', [
+            '`plan_id` BIGINT UNSIGNED NOT NULL',
+            '`practice_mode` VARCHAR(40) NOT NULL',
+            '`source_type` VARCHAR(40) DEFAULT \'admin_created\'',
+            '`source_declaration_id` BIGINT UNSIGNED DEFAULT NULL',
+            '`project_code` VARCHAR(120) DEFAULT NULL',
+            '`title` VARCHAR(180) DEFAULT NULL',
+            '`content` MEDIUMTEXT DEFAULT NULL',
+            '`objective` TEXT DEFAULT NULL',
+            '`location` VARCHAR(255) DEFAULT NULL',
+            '`start_at` DATETIME DEFAULT NULL',
+            '`end_at` DATETIME DEFAULT NULL',
+            '`capacity` INT UNSIGNED DEFAULT 0',
+            '`phase` VARCHAR(40) DEFAULT \'ready\'',
+            '`created_by` BIGINT UNSIGNED DEFAULT NULL',
+            '`published_at` DATETIME DEFAULT NULL',
+            'UNIQUE KEY `uk_social_project_code` (`plan_id`, `project_code`)',
+            'KEY `idx_social_project_plan` (`plan_id`, `practice_mode`, `status`, `phase`)',
+        ]),
+        simpleTable('social_practice_project_teacher', [
+            '`project_id` BIGINT UNSIGNED NOT NULL',
+            '`teacher_id` BIGINT UNSIGNED NOT NULL',
+            '`teacher_role` VARCHAR(40) DEFAULT \'guide\'',
+            '`capacity` INT UNSIGNED DEFAULT 0',
+            '`active_flag` TINYINT GENERATED ALWAYS AS (CASE WHEN `status` = \'active\' AND `deleted_at` IS NULL THEN 1 ELSE NULL END) STORED',
+            'UNIQUE KEY `uk_social_project_teacher` (`project_id`, `teacher_id`, `active_flag`)',
+            'KEY `idx_social_teacher_project` (`teacher_id`, `project_id`, `status`)',
+        ]),
+        simpleTable('social_practice_participant', [
+            '`plan_id` BIGINT UNSIGNED NOT NULL',
+            '`project_id` BIGINT UNSIGNED DEFAULT NULL',
+            '`student_id` BIGINT UNSIGNED NOT NULL',
+            '`teacher_id` BIGINT UNSIGNED DEFAULT NULL',
+            '`practice_mode` VARCHAR(40) NOT NULL',
+            '`join_source` VARCHAR(40) DEFAULT \'scope\'',
+            '`remove_reason` TEXT DEFAULT NULL',
+            '`active_flag` TINYINT GENERATED ALWAYS AS (CASE WHEN `status` = \'active\' AND `deleted_at` IS NULL THEN 1 ELSE NULL END) STORED',
+            'UNIQUE KEY `uk_social_participant` (`plan_id`, `student_id`, `active_flag`)',
+            'KEY `idx_social_participant_project` (`project_id`, `teacher_id`, `status`)',
+            'KEY `idx_social_participant_student` (`student_id`, `status`)',
+        ]),
+        simpleTable('social_practice_implementation_application', [
+            '`project_id` BIGINT UNSIGNED NOT NULL',
+            '`applicant_id` BIGINT UNSIGNED NOT NULL',
+            '`title` VARCHAR(180) DEFAULT NULL',
+            '`content` MEDIUMTEXT DEFAULT NULL',
+            '`budget_amount` DECIMAL(12,2) DEFAULT 0',
+            '`material_requirement` TEXT DEFAULT NULL',
+            '`venue_requirement` TEXT DEFAULT NULL',
+            '`approval_flow_id` BIGINT UNSIGNED DEFAULT NULL',
+            '`current_node_id` BIGINT UNSIGNED DEFAULT NULL',
+            '`submitted_at` DATETIME DEFAULT NULL',
+            'KEY `idx_social_implementation_project` (`project_id`, `status`)',
+        ]),
+        simpleTable('social_practice_declaration', [
+            '`plan_id` BIGINT UNSIGNED NOT NULL',
+            '`applicant_student_id` BIGINT UNSIGNED NOT NULL',
+            '`declaration_type` VARCHAR(40) DEFAULT \'individual\'',
+            '`team_submit_mode` VARCHAR(40) DEFAULT \'individual\'',
+            '`title` VARCHAR(180) DEFAULT NULL',
+            '`content` MEDIUMTEXT DEFAULT NULL',
+            '`objective` TEXT DEFAULT NULL',
+            '`expected_duration` VARCHAR(120) DEFAULT NULL',
+            '`expected_result` TEXT DEFAULT NULL',
+            '`location` VARCHAR(255) DEFAULT NULL',
+            '`selected_teacher_id` BIGINT UNSIGNED DEFAULT NULL',
+            '`assigned_teacher_id` BIGINT UNSIGNED DEFAULT NULL',
+            '`teacher_confirm_deadline_at` DATETIME DEFAULT NULL',
+            '`teacher_confirm_status` VARCHAR(40) DEFAULT \'pending\'',
+            '`teacher_reselect_count` INT UNSIGNED DEFAULT 0',
+            '`accepted_project_id` BIGINT UNSIGNED DEFAULT NULL',
+            '`submitted_at` DATETIME DEFAULT NULL',
+            'KEY `idx_social_declaration_plan` (`plan_id`, `status`, `teacher_confirm_status`)',
+            'KEY `idx_social_declaration_student` (`applicant_student_id`, `status`)',
+            'KEY `idx_social_declaration_teacher` (`selected_teacher_id`, `assigned_teacher_id`, `status`)',
+        ]),
+        simpleTable('social_practice_declaration_member', [
+            '`declaration_id` BIGINT UNSIGNED NOT NULL',
+            '`student_id` BIGINT UNSIGNED NOT NULL',
+            '`member_role` VARCHAR(40) DEFAULT \'member\'',
+            '`confirm_status` VARCHAR(40) DEFAULT \'pending\'',
+            '`confirmed_at` DATETIME DEFAULT NULL',
+            '`active_flag` TINYINT GENERATED ALWAYS AS (CASE WHEN `status` = \'active\' AND `deleted_at` IS NULL THEN 1 ELSE NULL END) STORED',
+            'UNIQUE KEY `uk_social_declaration_member` (`declaration_id`, `student_id`, `active_flag`)',
+            'KEY `idx_social_member_student` (`student_id`, `confirm_status`, `status`)',
+        ]),
+        simpleTable('social_practice_material', [
+            '`plan_id` BIGINT UNSIGNED NOT NULL',
+            '`project_id` BIGINT UNSIGNED DEFAULT NULL',
+            '`declaration_id` BIGINT UNSIGNED DEFAULT NULL',
+            '`student_id` BIGINT UNSIGNED DEFAULT NULL',
+            '`material_type` VARCHAR(80) NOT NULL',
+            '`submit_scope` VARCHAR(40) DEFAULT \'student\'',
+            '`version` INT UNSIGNED DEFAULT 1',
+            '`title` VARCHAR(180) DEFAULT NULL',
+            '`content` MEDIUMTEXT DEFAULT NULL',
+            '`submitted_at` DATETIME DEFAULT NULL',
+            'KEY `idx_social_material_target` (`plan_id`, `project_id`, `student_id`, `material_type`, `status`)',
+        ]),
+        simpleTable('social_practice_patch_sign', [
+            '`plan_id` BIGINT UNSIGNED NOT NULL',
+            '`project_id` BIGINT UNSIGNED NOT NULL',
+            '`student_id` BIGINT UNSIGNED NOT NULL',
+            '`sign_in_id` BIGINT UNSIGNED DEFAULT NULL',
+            '`sign_date` DATE NOT NULL',
+            '`reason` TEXT DEFAULT NULL',
+            '`proof` TEXT DEFAULT NULL',
+            '`submitted_at` DATETIME DEFAULT NULL',
+            'KEY `idx_social_patch_sign` (`project_id`, `student_id`, `sign_date`, `status`)',
+        ]),
+        simpleTable('social_practice_score_rule', [
+            '`plan_id` BIGINT UNSIGNED NOT NULL',
+            '`practice_mode` VARCHAR(40) NOT NULL',
+            '`item_code` VARCHAR(80) NOT NULL',
+            '`item_name` VARCHAR(120) DEFAULT NULL',
+            '`weight` DECIMAL(5,2) DEFAULT 0',
+            '`max_score` DECIMAL(5,2) DEFAULT 100',
+            '`sort` INT DEFAULT 0',
+            '`active_flag` TINYINT GENERATED ALWAYS AS (CASE WHEN `status` = \'enabled\' AND `deleted_at` IS NULL THEN 1 ELSE NULL END) STORED',
+            'UNIQUE KEY `uk_social_score_rule` (`plan_id`, `practice_mode`, `item_code`, `active_flag`)',
+            'KEY `idx_social_score_rule_plan` (`plan_id`, `practice_mode`, `sort`, `status`)',
+        ]),
+        simpleTable('social_practice_score', [
+            '`plan_id` BIGINT UNSIGNED NOT NULL',
+            '`project_id` BIGINT UNSIGNED NOT NULL',
+            '`student_id` BIGINT UNSIGNED NOT NULL',
+            '`teacher_id` BIGINT UNSIGNED DEFAULT NULL',
+            '`final_score` DECIMAL(5,2) DEFAULT NULL',
+            '`credit_recognized` ENUM(\'false\',\'true\') DEFAULT \'false\'',
+            '`comment` TEXT DEFAULT NULL',
+            '`reviewer_id` BIGINT UNSIGNED DEFAULT NULL',
+            '`reviewed_at` DATETIME DEFAULT NULL',
+            '`active_flag` TINYINT GENERATED ALWAYS AS (CASE WHEN `deleted_at` IS NULL THEN 1 ELSE NULL END) STORED',
+            'UNIQUE KEY `uk_social_score_student` (`plan_id`, `project_id`, `student_id`, `active_flag`)',
+            'KEY `idx_social_score_review` (`teacher_id`, `status`, `reviewed_at`)',
+        ]),
+        simpleTable('social_practice_score_detail', [
+            '`score_id` BIGINT UNSIGNED NOT NULL',
+            '`rule_id` BIGINT UNSIGNED DEFAULT NULL',
+            '`item_code` VARCHAR(80) NOT NULL',
+            '`score_value` DECIMAL(5,2) DEFAULT 0',
+            '`weight` DECIMAL(5,2) DEFAULT 0',
+            '`weighted_score` DECIMAL(6,2) DEFAULT 0',
+            'UNIQUE KEY `uk_social_score_detail` (`score_id`, `item_code`)',
+            'KEY `idx_social_score_detail_rule` (`rule_id`, `status`)',
+        ]),
+        simpleTable('social_practice_archive', [
+            '`plan_id` BIGINT UNSIGNED NOT NULL',
+            '`project_id` BIGINT UNSIGNED DEFAULT NULL',
+            '`student_id` BIGINT UNSIGNED DEFAULT NULL',
+            '`teacher_id` BIGINT UNSIGNED DEFAULT NULL',
+            '`version` INT UNSIGNED DEFAULT 1',
+            '`snapshot_json` JSON DEFAULT NULL',
+            '`print_file_id` BIGINT UNSIGNED DEFAULT NULL',
+            '`archived_by` BIGINT UNSIGNED DEFAULT NULL',
+            '`archived_at` DATETIME DEFAULT NULL',
+            'UNIQUE KEY `uk_social_archive_version` (`plan_id`, `project_id`, `student_id`, `version`)',
+            'KEY `idx_social_archive_scope` (`plan_id`, `project_id`, `status`, `archived_at`)',
+        ]),
+        simpleTable('social_practice_recording', array_merge([
+            '`parent_id` BIGINT UNSIGNED DEFAULT NULL',
+            '`action` VARCHAR(40) DEFAULT NULL',
+            '`content` MEDIUMTEXT DEFAULT NULL',
+        ], recordingColumns())),
     ];
 
     foreach (['training_project', 'training_project_class', 'training_room', 'training_booking', 'training_material', 'training_report', 'training_score'] as $table) {
@@ -1154,6 +1870,7 @@ function ensureInternshipSchema(PDO $pdo): void
             'updated_by' => "ALTER TABLE `base` ADD COLUMN `updated_by` BIGINT UNSIGNED DEFAULT NULL AFTER `created_by`",
             'capacity' => "ALTER TABLE `base` ADD COLUMN `capacity` INT UNSIGNED DEFAULT 0 AFTER `address`",
             'used_count' => "ALTER TABLE `base` ADD COLUMN `used_count` INT UNSIGNED DEFAULT 0 AFTER `capacity`",
+            'district' => "ALTER TABLE `base` ADD COLUMN `district` VARCHAR(120) DEFAULT NULL AFTER `address`",
         ],
         'base_profession' => [
             'base_id' => "ALTER TABLE `base_profession` ADD COLUMN `base_id` BIGINT UNSIGNED NOT NULL AFTER `code`",
@@ -1163,7 +1880,8 @@ function ensureInternshipSchema(PDO $pdo): void
             'base_id' => "ALTER TABLE `base_person` ADD COLUMN `base_id` BIGINT UNSIGNED NOT NULL AFTER `code`",
             'person_type' => "ALTER TABLE `base_person` ADD COLUMN `person_type` VARCHAR(20) NOT NULL AFTER `base_id`",
             'user_id' => "ALTER TABLE `base_person` ADD COLUMN `user_id` BIGINT UNSIGNED DEFAULT NULL AFTER `person_type`",
-            'name' => "ALTER TABLE `base_person` ADD COLUMN `name` VARCHAR(80) DEFAULT NULL AFTER `user_id`",
+            'teacher_id' => "ALTER TABLE `base_person` ADD COLUMN `teacher_id` BIGINT UNSIGNED DEFAULT NULL AFTER `user_id`",
+            'name' => "ALTER TABLE `base_person` ADD COLUMN `name` VARCHAR(80) DEFAULT NULL AFTER `teacher_id`",
             'gender' => "ALTER TABLE `base_person` ADD COLUMN `gender` VARCHAR(20) DEFAULT NULL AFTER `name`",
             'birth_date' => "ALTER TABLE `base_person` ADD COLUMN `birth_date` VARCHAR(40) DEFAULT NULL AFTER `gender`",
             'title' => "ALTER TABLE `base_person` ADD COLUMN `title` VARCHAR(120) DEFAULT NULL AFTER `birth_date`",
@@ -1193,7 +1911,8 @@ function ensureInternshipSchema(PDO $pdo): void
         ],
         'base_budget' => [
             'base_id' => "ALTER TABLE `base_budget` ADD COLUMN `base_id` BIGINT UNSIGNED NOT NULL AFTER `code`",
-            'item_name' => "ALTER TABLE `base_budget` ADD COLUMN `item_name` VARCHAR(180) DEFAULT NULL AFTER `base_id`",
+            'declaration_id' => "ALTER TABLE `base_budget` ADD COLUMN `declaration_id` BIGINT UNSIGNED DEFAULT NULL AFTER `base_id`",
+            'item_name' => "ALTER TABLE `base_budget` ADD COLUMN `item_name` VARCHAR(180) DEFAULT NULL AFTER `declaration_id`",
             'content' => "ALTER TABLE `base_budget` ADD COLUMN `content` TEXT DEFAULT NULL AFTER `item_name`",
             'amount' => "ALTER TABLE `base_budget` ADD COLUMN `amount` DECIMAL(12,2) DEFAULT NULL AFTER `content`",
             'remark' => "ALTER TABLE `base_budget` ADD COLUMN `remark` TEXT DEFAULT NULL AFTER `amount`",
@@ -1224,6 +1943,8 @@ function ensureInternshipSchema(PDO $pdo): void
             'location' => "ALTER TABLE `arrangement` ADD COLUMN `location` VARCHAR(255) DEFAULT NULL AFTER `end_date`",
             'description' => "ALTER TABLE `arrangement` ADD COLUMN `description` TEXT DEFAULT NULL AFTER `location`",
             'created_by' => "ALTER TABLE `arrangement` ADD COLUMN `created_by` BIGINT UNSIGNED DEFAULT NULL AFTER `description`",
+            'submitter_id' => "ALTER TABLE `arrangement` ADD COLUMN `submitter_id` BIGINT UNSIGNED DEFAULT NULL AFTER `created_by`",
+            'required_journal_count' => "ALTER TABLE `arrangement` ADD COLUMN `required_journal_count` INT UNSIGNED DEFAULT 1 AFTER `created_by`",
         ],
         'arrangement_change' => [
             'arrangement_id' => "ALTER TABLE `arrangement_change` ADD COLUMN `arrangement_id` BIGINT UNSIGNED DEFAULT NULL AFTER `code`",
@@ -1302,6 +2023,12 @@ function ensureInternshipSchema(PDO $pdo): void
             'content' => "ALTER TABLE `journal` ADD COLUMN `content` TEXT DEFAULT NULL AFTER `title`",
             'date' => "ALTER TABLE `journal` ADD COLUMN `date` DATE DEFAULT NULL AFTER `content`",
             'teacher_id' => "ALTER TABLE `journal` ADD COLUMN `teacher_id` BIGINT UNSIGNED DEFAULT NULL AFTER `date`",
+            'location' => "ALTER TABLE `journal` ADD COLUMN `location` VARCHAR(255) DEFAULT NULL AFTER `teacher_id`",
+            'work_content' => "ALTER TABLE `journal` ADD COLUMN `work_content` TEXT DEFAULT NULL AFTER `location`",
+            'gains' => "ALTER TABLE `journal` ADD COLUMN `gains` TEXT DEFAULT NULL AFTER `work_content`",
+            'problems' => "ALTER TABLE `journal` ADD COLUMN `problems` TEXT DEFAULT NULL AFTER `gains`",
+            'form_data' => "ALTER TABLE `journal` ADD COLUMN `form_data` JSON DEFAULT NULL AFTER `problems`",
+            'attachment_ids' => "ALTER TABLE `journal` ADD COLUMN `attachment_ids` JSON DEFAULT NULL AFTER `form_data`",
         ],
         'report' => [
             'student_id' => "ALTER TABLE `report` ADD COLUMN `student_id` BIGINT UNSIGNED DEFAULT NULL AFTER `code`",
@@ -1312,6 +2039,11 @@ function ensureInternshipSchema(PDO $pdo): void
             'teacher_id' => "ALTER TABLE `report` ADD COLUMN `teacher_id` BIGINT UNSIGNED DEFAULT NULL AFTER `content`",
             'submitted_at' => "ALTER TABLE `report` ADD COLUMN `submitted_at` DATETIME DEFAULT NULL AFTER `teacher_id`",
             'reviewed_at' => "ALTER TABLE `report` ADD COLUMN `reviewed_at` DATETIME DEFAULT NULL AFTER `submitted_at`",
+            'report_type' => "ALTER TABLE `report` ADD COLUMN `report_type` VARCHAR(40) DEFAULT 'general' AFTER `reviewed_at`",
+            'form_data' => "ALTER TABLE `report` ADD COLUMN `form_data` JSON DEFAULT NULL AFTER `report_type`",
+            'attachment_ids' => "ALTER TABLE `report` ADD COLUMN `attachment_ids` JSON DEFAULT NULL AFTER `form_data`",
+            'practice_project_id' => "ALTER TABLE `report` ADD COLUMN `practice_project_id` BIGINT UNSIGNED DEFAULT NULL AFTER `attachment_ids`",
+            'reflection_summary' => "ALTER TABLE `report` ADD COLUMN `reflection_summary` TEXT DEFAULT NULL AFTER `practice_project_id`",
         ],
         'report_template' => [
             'content' => "ALTER TABLE `report_template` ADD COLUMN `content` TEXT DEFAULT NULL AFTER `code`",
@@ -1356,10 +2088,15 @@ function ensureInternshipSchema(PDO $pdo): void
         ],
         'internship_plan' => [
             'source_type' => "ALTER TABLE `internship_plan` ADD COLUMN `source_type` VARCHAR(40) DEFAULT 'edu_system' AFTER `code`",
+            'source_plan_id' => "ALTER TABLE `internship_plan` ADD COLUMN `source_plan_id` VARCHAR(120) DEFAULT NULL AFTER `source_type`",
+            'source_version' => "ALTER TABLE `internship_plan` ADD COLUMN `source_version` VARCHAR(80) DEFAULT NULL AFTER `source_plan_id`",
+            'source_last_synced_at' => "ALTER TABLE `internship_plan` ADD COLUMN `source_last_synced_at` DATETIME DEFAULT NULL AFTER `source_version`",
             'course_code' => "ALTER TABLE `internship_plan` ADD COLUMN `course_code` VARCHAR(120) DEFAULT NULL AFTER `source_type`",
             'course_name' => "ALTER TABLE `internship_plan` ADD COLUMN `course_name` VARCHAR(180) DEFAULT NULL AFTER `course_code`",
             'course_category' => "ALTER TABLE `internship_plan` ADD COLUMN `course_category` VARCHAR(80) DEFAULT NULL AFTER `course_name`",
-            'grade_id' => "ALTER TABLE `internship_plan` ADD COLUMN `grade_id` BIGINT UNSIGNED DEFAULT NULL AFTER `course_category`",
+            'category_id' => "ALTER TABLE `internship_plan` ADD COLUMN `category_id` BIGINT UNSIGNED DEFAULT NULL AFTER `course_category`",
+            'grade_id' => "ALTER TABLE `internship_plan` ADD COLUMN `grade_id` BIGINT UNSIGNED DEFAULT NULL AFTER `category_id`",
+            'graduation_cohort_id' => "ALTER TABLE `internship_plan` ADD COLUMN `graduation_cohort_id` BIGINT UNSIGNED DEFAULT NULL AFTER `grade_id`",
             'dep_id' => "ALTER TABLE `internship_plan` ADD COLUMN `dep_id` BIGINT UNSIGNED DEFAULT NULL AFTER `grade_id`",
             'profession_id' => "ALTER TABLE `internship_plan` ADD COLUMN `profession_id` BIGINT UNSIGNED DEFAULT NULL AFTER `dep_id`",
             'semester' => "ALTER TABLE `internship_plan` ADD COLUMN `semester` VARCHAR(80) DEFAULT NULL AFTER `profession_id`",
@@ -1396,6 +2133,49 @@ function ensureInternshipSchema(PDO $pdo): void
             'level_name' => "ALTER TABLE `internship_plan_approval` ADD COLUMN `level_name` VARCHAR(80) DEFAULT NULL AFTER `approval_level`",
             'opinion' => "ALTER TABLE `internship_plan_approval` ADD COLUMN `opinion` TEXT DEFAULT NULL AFTER `level_name`",
         ],
+        'internship_plan_sync_inbox' => [
+            'source_plan_id' => "ALTER TABLE `internship_plan_sync_inbox` ADD COLUMN `source_plan_id` VARCHAR(120) NOT NULL AFTER `code`",
+            'source_version' => "ALTER TABLE `internship_plan_sync_inbox` ADD COLUMN `source_version` VARCHAR(80) NOT NULL AFTER `source_plan_id`",
+            'source_course_id' => "ALTER TABLE `internship_plan_sync_inbox` ADD COLUMN `source_course_id` VARCHAR(120) DEFAULT NULL AFTER `source_version`",
+            'source_status' => "ALTER TABLE `internship_plan_sync_inbox` ADD COLUMN `source_status` VARCHAR(40) DEFAULT NULL AFTER `source_course_id`",
+            'grade_code' => "ALTER TABLE `internship_plan_sync_inbox` ADD COLUMN `grade_code` VARCHAR(80) DEFAULT NULL AFTER `source_status`",
+            'grade_name' => "ALTER TABLE `internship_plan_sync_inbox` ADD COLUMN `grade_name` VARCHAR(120) DEFAULT NULL AFTER `grade_code`",
+            'dep_code' => "ALTER TABLE `internship_plan_sync_inbox` ADD COLUMN `dep_code` VARCHAR(80) DEFAULT NULL AFTER `grade_name`",
+            'dep_name' => "ALTER TABLE `internship_plan_sync_inbox` ADD COLUMN `dep_name` VARCHAR(120) DEFAULT NULL AFTER `dep_code`",
+            'profession_code' => "ALTER TABLE `internship_plan_sync_inbox` ADD COLUMN `profession_code` VARCHAR(80) DEFAULT NULL AFTER `dep_name`",
+            'profession_name' => "ALTER TABLE `internship_plan_sync_inbox` ADD COLUMN `profession_name` VARCHAR(180) DEFAULT NULL AFTER `profession_code`",
+            'education_level' => "ALTER TABLE `internship_plan_sync_inbox` ADD COLUMN `education_level` VARCHAR(80) DEFAULT NULL AFTER `profession_name`",
+            'scheme_name' => "ALTER TABLE `internship_plan_sync_inbox` ADD COLUMN `scheme_name` VARCHAR(180) DEFAULT NULL AFTER `education_level`",
+            'scheme_version' => "ALTER TABLE `internship_plan_sync_inbox` ADD COLUMN `scheme_version` VARCHAR(80) DEFAULT NULL AFTER `scheme_name`",
+            'course_code' => "ALTER TABLE `internship_plan_sync_inbox` ADD COLUMN `course_code` VARCHAR(120) DEFAULT NULL AFTER `scheme_version`",
+            'course_name' => "ALTER TABLE `internship_plan_sync_inbox` ADD COLUMN `course_name` VARCHAR(180) DEFAULT NULL AFTER `course_code`",
+            'course_category' => "ALTER TABLE `internship_plan_sync_inbox` ADD COLUMN `course_category` VARCHAR(80) DEFAULT NULL AFTER `course_name`",
+            'course_nature' => "ALTER TABLE `internship_plan_sync_inbox` ADD COLUMN `course_nature` VARCHAR(80) DEFAULT NULL AFTER `course_category`",
+            'credit' => "ALTER TABLE `internship_plan_sync_inbox` ADD COLUMN `credit` DECIMAL(5,2) DEFAULT NULL AFTER `course_nature`",
+            'weekly_hours' => "ALTER TABLE `internship_plan_sync_inbox` ADD COLUMN `weekly_hours` DECIMAL(6,2) DEFAULT NULL AFTER `credit`",
+            'total_hours' => "ALTER TABLE `internship_plan_sync_inbox` ADD COLUMN `total_hours` DECIMAL(8,2) DEFAULT NULL AFTER `weekly_hours`",
+            'theory_hours' => "ALTER TABLE `internship_plan_sync_inbox` ADD COLUMN `theory_hours` DECIMAL(8,2) DEFAULT NULL AFTER `total_hours`",
+            'experiment_hours' => "ALTER TABLE `internship_plan_sync_inbox` ADD COLUMN `experiment_hours` DECIMAL(8,2) DEFAULT NULL AFTER `theory_hours`",
+            'practice_hours' => "ALTER TABLE `internship_plan_sync_inbox` ADD COLUMN `practice_hours` DECIMAL(8,2) DEFAULT NULL AFTER `experiment_hours`",
+            'computer_hours' => "ALTER TABLE `internship_plan_sync_inbox` ADD COLUMN `computer_hours` DECIMAL(8,2) DEFAULT NULL AFTER `practice_hours`",
+            'other_hours' => "ALTER TABLE `internship_plan_sync_inbox` ADD COLUMN `other_hours` DECIMAL(8,2) DEFAULT NULL AFTER `computer_hours`",
+            'source_period' => "ALTER TABLE `internship_plan_sync_inbox` ADD COLUMN `source_period` VARCHAR(80) DEFAULT NULL AFTER `other_hours`",
+            'source_updated_at' => "ALTER TABLE `internship_plan_sync_inbox` ADD COLUMN `source_updated_at` DATETIME DEFAULT NULL AFTER `source_period`",
+            'mapping_status' => "ALTER TABLE `internship_plan_sync_inbox` ADD COLUMN `mapping_status` VARCHAR(40) DEFAULT 'pending' AFTER `source_updated_at`",
+            'mapped_grade_id' => "ALTER TABLE `internship_plan_sync_inbox` ADD COLUMN `mapped_grade_id` BIGINT UNSIGNED DEFAULT NULL AFTER `mapping_status`",
+            'mapped_dep_id' => "ALTER TABLE `internship_plan_sync_inbox` ADD COLUMN `mapped_dep_id` BIGINT UNSIGNED DEFAULT NULL AFTER `mapped_grade_id`",
+            'mapped_profession_id' => "ALTER TABLE `internship_plan_sync_inbox` ADD COLUMN `mapped_profession_id` BIGINT UNSIGNED DEFAULT NULL AFTER `mapped_dep_id`",
+            'raw_payload' => "ALTER TABLE `internship_plan_sync_inbox` ADD COLUMN `raw_payload` JSON DEFAULT NULL AFTER `mapped_profession_id`",
+            'diff_payload' => "ALTER TABLE `internship_plan_sync_inbox` ADD COLUMN `diff_payload` JSON DEFAULT NULL AFTER `raw_payload`",
+            'sync_batch_no' => "ALTER TABLE `internship_plan_sync_inbox` ADD COLUMN `sync_batch_no` VARCHAR(120) DEFAULT NULL AFTER `diff_payload`",
+            'local_plan_id' => "ALTER TABLE `internship_plan_sync_inbox` ADD COLUMN `local_plan_id` BIGINT UNSIGNED DEFAULT NULL AFTER `sync_batch_no`",
+            'confirmed_by' => "ALTER TABLE `internship_plan_sync_inbox` ADD COLUMN `confirmed_by` BIGINT UNSIGNED DEFAULT NULL AFTER `local_plan_id`",
+            'confirmed_at' => "ALTER TABLE `internship_plan_sync_inbox` ADD COLUMN `confirmed_at` DATETIME DEFAULT NULL AFTER `confirmed_by`",
+            'ignored_by' => "ALTER TABLE `internship_plan_sync_inbox` ADD COLUMN `ignored_by` BIGINT UNSIGNED DEFAULT NULL AFTER `confirmed_at`",
+            'ignored_at' => "ALTER TABLE `internship_plan_sync_inbox` ADD COLUMN `ignored_at` DATETIME DEFAULT NULL AFTER `ignored_by`",
+            'ignore_reason' => "ALTER TABLE `internship_plan_sync_inbox` ADD COLUMN `ignore_reason` VARCHAR(500) DEFAULT NULL AFTER `ignored_at`",
+            'received_at' => "ALTER TABLE `internship_plan_sync_inbox` ADD COLUMN `received_at` DATETIME DEFAULT NULL AFTER `ignore_reason`",
+        ],
         'insurance' => [
             'arrangement_id' => "ALTER TABLE `insurance` ADD COLUMN `arrangement_id` BIGINT UNSIGNED DEFAULT NULL AFTER `code`",
             'student_id' => "ALTER TABLE `insurance` ADD COLUMN `student_id` BIGINT UNSIGNED DEFAULT NULL AFTER `arrangement_id`",
@@ -1415,12 +2195,15 @@ function ensureInternshipSchema(PDO $pdo): void
         ],
         'syllabus_guide' => [
             'arrangement_id' => "ALTER TABLE `syllabus_guide` ADD COLUMN `arrangement_id` BIGINT UNSIGNED DEFAULT NULL AFTER `code`",
+            'plan_id' => "ALTER TABLE `syllabus_guide` ADD COLUMN `plan_id` BIGINT UNSIGNED DEFAULT NULL AFTER `arrangement_id`",
+            'document_type' => "ALTER TABLE `syllabus_guide` ADD COLUMN `document_type` VARCHAR(40) DEFAULT 'syllabus' AFTER `plan_id`",
             'dep_id' => "ALTER TABLE `syllabus_guide` ADD COLUMN `dep_id` BIGINT UNSIGNED DEFAULT NULL AFTER `arrangement_id`",
             'profession_id' => "ALTER TABLE `syllabus_guide` ADD COLUMN `profession_id` BIGINT UNSIGNED DEFAULT NULL AFTER `dep_id`",
             'title' => "ALTER TABLE `syllabus_guide` ADD COLUMN `title` VARCHAR(180) DEFAULT NULL AFTER `profession_id`",
             'content' => "ALTER TABLE `syllabus_guide` ADD COLUMN `content` TEXT DEFAULT NULL AFTER `title`",
             'file_id' => "ALTER TABLE `syllabus_guide` ADD COLUMN `file_id` BIGINT UNSIGNED DEFAULT NULL AFTER `content`",
             'created_by' => "ALTER TABLE `syllabus_guide` ADD COLUMN `created_by` BIGINT UNSIGNED DEFAULT NULL AFTER `file_id`",
+            'form_data' => "ALTER TABLE `syllabus_guide` ADD COLUMN `form_data` JSON DEFAULT NULL AFTER `created_by`",
         ],
         'implementation_sheet' => [
             'arrangement_id' => "ALTER TABLE `implementation_sheet` ADD COLUMN `arrangement_id` BIGINT UNSIGNED DEFAULT NULL AFTER `code`",
@@ -1483,6 +2266,20 @@ function ensureInternshipSchema(PDO $pdo): void
             'suggestions' => "ALTER TABLE `teacher_work_report` ADD COLUMN `suggestions` TEXT DEFAULT NULL AFTER `problems`",
             'attachment_id' => "ALTER TABLE `teacher_work_report` ADD COLUMN `attachment_id` BIGINT UNSIGNED DEFAULT NULL AFTER `suggestions`",
         ],
+        'internship_graduation_appraisal' => [
+            'process_score' => "ALTER TABLE `internship_graduation_appraisal` ADD COLUMN `process_score` DECIMAL(5,2) DEFAULT NULL AFTER `teacher_id`",
+            'enterprise_score' => "ALTER TABLE `internship_graduation_appraisal` ADD COLUMN `enterprise_score` DECIMAL(5,2) DEFAULT NULL AFTER `process_score`",
+            'school_score' => "ALTER TABLE `internship_graduation_appraisal` ADD COLUMN `school_score` DECIMAL(5,2) DEFAULT NULL AFTER `enterprise_score`",
+            'report_score' => "ALTER TABLE `internship_graduation_appraisal` ADD COLUMN `report_score` DECIMAL(5,2) DEFAULT NULL AFTER `school_score`",
+            'final_score' => "ALTER TABLE `internship_graduation_appraisal` ADD COLUMN `final_score` DECIMAL(5,2) DEFAULT NULL AFTER `report_score`",
+            'grade_level' => "ALTER TABLE `internship_graduation_appraisal` ADD COLUMN `grade_level` VARCHAR(40) DEFAULT NULL AFTER `final_score`",
+            'enterprise_comment' => "ALTER TABLE `internship_graduation_appraisal` ADD COLUMN `enterprise_comment` TEXT DEFAULT NULL AFTER `grade_level`",
+            'school_comment' => "ALTER TABLE `internship_graduation_appraisal` ADD COLUMN `school_comment` TEXT DEFAULT NULL AFTER `enterprise_comment`",
+            'form_data' => "ALTER TABLE `internship_graduation_appraisal` ADD COLUMN `form_data` JSON DEFAULT NULL AFTER `school_comment`",
+            'attachment_id' => "ALTER TABLE `internship_graduation_appraisal` ADD COLUMN `attachment_id` BIGINT UNSIGNED DEFAULT NULL AFTER `form_data`",
+            'submitted_at' => "ALTER TABLE `internship_graduation_appraisal` ADD COLUMN `submitted_at` DATETIME DEFAULT NULL AFTER `attachment_id`",
+            'reviewed_at' => "ALTER TABLE `internship_graduation_appraisal` ADD COLUMN `reviewed_at` DATETIME DEFAULT NULL AFTER `submitted_at`",
+        ],
         'inspection_record' => [
             'semester' => "ALTER TABLE `inspection_record` ADD COLUMN `semester` VARCHAR(80) DEFAULT NULL AFTER `code`",
             'arrangement_id' => "ALTER TABLE `inspection_record` ADD COLUMN `arrangement_id` BIGINT UNSIGNED DEFAULT NULL AFTER `semester`",
@@ -1500,7 +2297,7 @@ function ensureInternshipSchema(PDO $pdo): void
         }
     }
 
-    foreach (['application_recording', 'arrangement_recording', 'arrangement_change_recording', 'sign_in_recording', 'journal_recording', 'report_recording', 'join_recording', 'apply_report_delay_recording', 'score_recording', 'plan_recording', 'insurance_recording', 'safety_letter_recording', 'syllabus_guide_recording', 'implementation_sheet_recording', 'teacher_work_report_recording', 'inspection_recording'] as $table) {
+    foreach (['application_recording', 'arrangement_recording', 'arrangement_change_recording', 'sign_in_recording', 'journal_recording', 'report_recording', 'internship_graduation_appraisal_recording', 'internship_archive_material_recording', 'join_recording', 'apply_report_delay_recording', 'score_recording', 'plan_recording', 'insurance_recording', 'safety_letter_recording', 'syllabus_guide_recording', 'implementation_sheet_recording', 'teacher_work_report_recording', 'inspection_recording'] as $table) {
         ensureColumn($pdo, $table, 'parent_id', "ALTER TABLE `{$table}` ADD COLUMN `parent_id` BIGINT UNSIGNED DEFAULT NULL AFTER `code`");
         ensureColumn($pdo, $table, 'action', "ALTER TABLE `{$table}` ADD COLUMN `action` VARCHAR(40) DEFAULT NULL AFTER `parent_id`");
         ensureColumn($pdo, $table, 'operator_id', "ALTER TABLE `{$table}` ADD COLUMN `operator_id` BIGINT UNSIGNED DEFAULT NULL AFTER `action`");
@@ -1510,19 +2307,33 @@ function ensureInternshipSchema(PDO $pdo): void
     }
 
     ensureIndex($pdo, 'base_profession_direction', 'uk_base_profession_direction', "ALTER TABLE `base_profession_direction` ADD UNIQUE KEY `uk_base_profession_direction` (`base_id`, `profession_id`, `direction_id`)");
+    ensureIndex($pdo, 'base', 'idx_base_scope', "ALTER TABLE `base` ADD KEY `idx_base_scope` (`dep_id`, `base_type`, `status`)");
+    ensureIndex($pdo, 'base_person', 'idx_base_teacher', "ALTER TABLE `base_person` ADD KEY `idx_base_teacher` (`base_id`, `teacher_id`, `person_type`, `status`)");
+    ensureIndex($pdo, 'base_budget', 'idx_base_declaration', "ALTER TABLE `base_budget` ADD KEY `idx_base_declaration` (`declaration_id`, `sort`, `status`)");
     ensureIndex($pdo, 'arrangement', 'idx_arrangement_scope', "ALTER TABLE `arrangement` ADD KEY `idx_arrangement_scope` (`dep_id`, `profession_id`, `status`)");
     ensureIndex($pdo, 'arrangement', 'idx_arrangement_plan', "ALTER TABLE `arrangement` ADD KEY `idx_arrangement_plan` (`plan_id`, `teacher_id`, `status`)");
     ensureIndex($pdo, 'arrangement', 'idx_arrangement_plan_task', "ALTER TABLE `arrangement` ADD KEY `idx_arrangement_plan_task` (`plan_id`, `task_no`, `status`)");
     ensureIndex($pdo, 'arrangement', 'idx_arrangement_teacher_time', "ALTER TABLE `arrangement` ADD KEY `idx_arrangement_teacher_time` (`teacher_id`, `start_date`, `end_date`)");
+    ensureIndex($pdo, 'arrangement', 'idx_arrangement_submitter', "ALTER TABLE `arrangement` ADD KEY `idx_arrangement_submitter` (`submitter_id`, `status`)");
     ensureIndex($pdo, 'arrangement_change', 'idx_arrangement_change_task', "ALTER TABLE `arrangement_change` ADD KEY `idx_arrangement_change_task` (`arrangement_id`, `status`)");
     ensureIndex($pdo, 'arrangement_change', 'idx_arrangement_change_submitter', "ALTER TABLE `arrangement_change` ADD KEY `idx_arrangement_change_submitter` (`submitter_id`, `status`)");
     ensureIndex($pdo, 'internship_plan', 'idx_internship_plan_scope', "ALTER TABLE `internship_plan` ADD KEY `idx_internship_plan_scope` (`grade_id`, `dep_id`, `profession_id`, `status`)");
+    ensureIndex($pdo, 'internship_plan', 'idx_internship_plan_category', "ALTER TABLE `internship_plan` ADD KEY `idx_internship_plan_category` (`category_id`, `status`)");
+    ensureIndex($pdo, 'internship_plan', 'idx_internship_plan_cohort', "ALTER TABLE `internship_plan` ADD KEY `idx_internship_plan_cohort` (`graduation_cohort_id`, `dep_id`, `profession_id`, `status`)");
     ensureIndex($pdo, 'internship_plan', 'idx_internship_plan_import_code', "ALTER TABLE `internship_plan` ADD KEY `idx_internship_plan_import_code` (`grade_id`, `dep_id`, `profession_id`, `course_code`, `status`)");
     ensureIndex($pdo, 'internship_plan', 'idx_internship_plan_import_name', "ALTER TABLE `internship_plan` ADD KEY `idx_internship_plan_import_name` (`grade_id`, `dep_id`, `profession_id`, `course_name`, `status`)");
     ensureIndex($pdo, 'internship_plan', 'idx_internship_plan_file', "ALTER TABLE `internship_plan` ADD KEY `idx_internship_plan_file` (`import_file_id`)");
+    ensureIndex($pdo, 'internship_plan', 'uk_internship_plan_source_version', "ALTER TABLE `internship_plan` ADD UNIQUE KEY `uk_internship_plan_source_version` (`source_plan_id`, `source_version`)");
+    ensureIndex($pdo, 'internship_plan_sync_inbox', 'uk_plan_version', "ALTER TABLE `internship_plan_sync_inbox` ADD UNIQUE KEY `uk_plan_version` (`source_plan_id`, `source_version`)");
+    ensureIndex($pdo, 'internship_plan_sync_inbox', 'idx_inbox_status', "ALTER TABLE `internship_plan_sync_inbox` ADD KEY `idx_inbox_status` (`status`, `received_at`)");
+    ensureIndex($pdo, 'internship_plan_sync_inbox', 'idx_inbox_mapping', "ALTER TABLE `internship_plan_sync_inbox` ADD KEY `idx_inbox_mapping` (`mapping_status`, `mapped_dep_id`, `mapped_profession_id`)");
+    ensureIndex($pdo, 'internship_plan_sync_inbox', 'idx_inbox_local_plan', "ALTER TABLE `internship_plan_sync_inbox` ADD KEY `idx_inbox_local_plan` (`local_plan_id`, `status`)");
     ensureIndex($pdo, 'implementation_sheet', 'idx_implementation_arrangement', "ALTER TABLE `implementation_sheet` ADD KEY `idx_implementation_arrangement` (`arrangement_id`, `status`)");
     ensureIndex($pdo, 'implementation_schedule', 'idx_implementation_schedule', "ALTER TABLE `implementation_schedule` ADD KEY `idx_implementation_schedule` (`implementation_id`, `sort`, `status`)");
     ensureIndex($pdo, 'implementation_expense', 'idx_implementation_expense', "ALTER TABLE `implementation_expense` ADD KEY `idx_implementation_expense` (`implementation_id`, `sort`, `status`)");
+    ensureIndex($pdo, 'syllabus_guide', 'idx_syllabus_plan_type', "ALTER TABLE `syllabus_guide` ADD KEY `idx_syllabus_plan_type` (`plan_id`, `document_type`, `status`)");
+    ensureIndex($pdo, 'report', 'idx_report_student_task_type', "ALTER TABLE `report` ADD KEY `idx_report_student_task_type` (`student_id`, `arrangement_id`, `report_type`, `status`)");
+    ensureIndex($pdo, 'internship_graduation_appraisal', 'idx_graduation_appraisal_student_task', "ALTER TABLE `internship_graduation_appraisal` ADD KEY `idx_graduation_appraisal_student_task` (`student_id`, `arrangement_id`, `status`)");
     ensureIndex($pdo, 'internship_plan_approval', 'idx_plan_approval_flow', "ALTER TABLE `internship_plan_approval` ADD KEY `idx_plan_approval_flow` (`plan_id`, `approval_level`, `status`, `created_at`)");
     ensureIndex($pdo, 'internship_task_class', 'uk_task_class', "ALTER TABLE `internship_task_class` ADD UNIQUE KEY `uk_task_class` (`arrangement_id`, `class_id`)");
     ensureIndex($pdo, 'internship_task_class', 'idx_task_class_scope', "ALTER TABLE `internship_task_class` ADD KEY `idx_task_class_scope` (`grade_id`, `dep_id`, `profession_id`, `class_id`)");
@@ -1546,6 +2357,7 @@ function ensureInternshipSchema(PDO $pdo): void
     ensureIndex($pdo, 'insurance', 'idx_insurance_student_task_date', "ALTER TABLE `insurance` ADD KEY `idx_insurance_student_task_date` (`student_id`, `arrangement_id`, `status`, `start_date`, `end_date`)");
     ensureIndex($pdo, 'insurance', 'idx_insurance_expiry', "ALTER TABLE `insurance` ADD KEY `idx_insurance_expiry` (`end_date`, `status`, `deleted_at`)");
     ensureIndex($pdo, 'safety_letter_sign', 'idx_safety_student_task_status', "ALTER TABLE `safety_letter_sign` ADD KEY `idx_safety_student_task_status` (`student_id`, `arrangement_id`, `status`, `signed_at`)");
+    ensureArchiveRequirementIndex($pdo);
 }
 
 function ensurePracticeSchema(PDO $pdo): void
@@ -1577,13 +2389,17 @@ function ensurePracticeSchema(PDO $pdo): void
         'practice_plan' => [
             'source_type' => "ALTER TABLE `practice_plan` ADD COLUMN `source_type` VARCHAR(40) DEFAULT 'manual' AFTER `remark`",
             'submitter_id' => "ALTER TABLE `practice_plan` ADD COLUMN `submitter_id` BIGINT UNSIGNED DEFAULT NULL AFTER `source_type`",
+            'course_leader_id' => "ALTER TABLE `practice_plan` ADD COLUMN `course_leader_id` BIGINT UNSIGNED DEFAULT NULL AFTER `submitter_id`",
+            'course_leader_account_id' => "ALTER TABLE `practice_plan` ADD COLUMN `course_leader_account_id` BIGINT UNSIGNED DEFAULT NULL AFTER `course_leader_id`",
         ],
         'practice_schedule' => [
             'room_id' => "ALTER TABLE `practice_schedule` ADD COLUMN `room_id` BIGINT UNSIGNED DEFAULT NULL AFTER `remark`",
             'base_id' => "ALTER TABLE `practice_schedule` ADD COLUMN `base_id` BIGINT UNSIGNED DEFAULT NULL AFTER `room_id`",
             'place_type' => "ALTER TABLE `practice_schedule` ADD COLUMN `place_type` VARCHAR(40) DEFAULT 'inside' AFTER `base_id`",
             'schedule_date' => "ALTER TABLE `practice_schedule` ADD COLUMN `schedule_date` DATE DEFAULT NULL AFTER `place_type`",
-            'start_time' => "ALTER TABLE `practice_schedule` ADD COLUMN `start_time` VARCHAR(20) DEFAULT NULL AFTER `schedule_date`",
+            'period_start_id' => "ALTER TABLE `practice_schedule` ADD COLUMN `period_start_id` BIGINT UNSIGNED DEFAULT NULL AFTER `schedule_date`",
+            'period_end_id' => "ALTER TABLE `practice_schedule` ADD COLUMN `period_end_id` BIGINT UNSIGNED DEFAULT NULL AFTER `period_start_id`",
+            'start_time' => "ALTER TABLE `practice_schedule` ADD COLUMN `start_time` VARCHAR(20) DEFAULT NULL AFTER `period_end_id`",
             'end_time' => "ALTER TABLE `practice_schedule` ADD COLUMN `end_time` VARCHAR(20) DEFAULT NULL AFTER `start_time`",
             'location' => "ALTER TABLE `practice_schedule` ADD COLUMN `location` VARCHAR(255) DEFAULT NULL AFTER `end_time`",
             'student_count' => "ALTER TABLE `practice_schedule` ADD COLUMN `student_count` INT DEFAULT 0 AFTER `location`",
@@ -1607,6 +2423,7 @@ function ensurePracticeSchema(PDO $pdo): void
             'ratio_json' => "ALTER TABLE `practice_grade_rule` ADD COLUMN `ratio_json` JSON DEFAULT NULL AFTER `remark`",
         ],
         'practice_score' => [
+            'submitter_id' => "ALTER TABLE `practice_score` ADD COLUMN `submitter_id` BIGINT UNSIGNED DEFAULT NULL AFTER `remark`",
             'project_id' => "ALTER TABLE `practice_score` ADD COLUMN `project_id` BIGINT UNSIGNED DEFAULT NULL AFTER `remark`",
             'student_id' => "ALTER TABLE `practice_score` ADD COLUMN `student_id` BIGINT UNSIGNED DEFAULT NULL AFTER `remark`",
             'rule_id' => "ALTER TABLE `practice_score` ADD COLUMN `rule_id` BIGINT UNSIGNED DEFAULT NULL AFTER `student_id`",
@@ -1615,6 +2432,9 @@ function ensurePracticeSchema(PDO $pdo): void
         ],
         'practice_reflection' => [
             'submitter_id' => "ALTER TABLE `practice_reflection` ADD COLUMN `submitter_id` BIGINT UNSIGNED DEFAULT NULL AFTER `remark`",
+        ],
+        'practice_archive' => [
+            'archive_file_id' => "ALTER TABLE `practice_archive` ADD COLUMN `archive_file_id` BIGINT UNSIGNED DEFAULT NULL AFTER `pending_items_json`",
         ],
         'practice_room' => [
             'module_type' => "ALTER TABLE `practice_room` ADD COLUMN `module_type` ENUM('training','lab') DEFAULT 'training' AFTER `code`",
@@ -1637,7 +2457,32 @@ function ensurePracticeSchema(PDO $pdo): void
         }
     }
 
+    ensureIndex($pdo, 'practice_plan', 'idx_practice_plan_leader', "ALTER TABLE `practice_plan` ADD KEY `idx_practice_plan_leader` (`module_type`, `course_leader_id`, `status`)");
+    ensureIndex($pdo, 'report', 'idx_report_practice_project', "ALTER TABLE `report` ADD KEY `idx_report_practice_project` (`practice_project_id`, `student_id`, `status`)");
+    ensureIndex($pdo, 'practice_plan_teacher', 'uk_practice_plan_teacher_active', "ALTER TABLE `practice_plan_teacher` ADD UNIQUE KEY `uk_practice_plan_teacher_active` (`plan_id`, `teacher_id`, `active_flag`)");
+    ensureIndex($pdo, 'practice_plan_teacher', 'idx_practice_plan_teacher_scope', "ALTER TABLE `practice_plan_teacher` ADD KEY `idx_practice_plan_teacher_scope` (`module_type`, `teacher_id`, `status`)");
+    ensureIndex($pdo, 'practice_archive', 'uk_practice_archive_version', "ALTER TABLE `practice_archive` ADD UNIQUE KEY `uk_practice_archive_version` (`module_type`, `plan_id`, `version_no`)");
+    ensureIndex($pdo, 'practice_archive', 'idx_practice_archive_plan', "ALTER TABLE `practice_archive` ADD KEY `idx_practice_archive_plan` (`module_type`, `plan_id`, `status`)");
+
+    $pdo->exec("UPDATE `practice_plan`
+        SET `course_leader_id` = `teacher_id`
+        WHERE `course_leader_id` IS NULL AND `teacher_id` IS NOT NULL");
+    $pdo->exec("INSERT INTO `practice_plan_teacher`
+        (`uuid`, `status`, `created_at`, `updated_at`, `module_type`, `plan_id`, `teacher_id`, `teacher_role`, `sort`)
+        SELECT UUID(), 'enabled', NOW(), NOW(), p.`module_type`, p.`id`, p.`course_leader_id`, 'leader', 0
+        FROM `practice_plan` p
+        WHERE p.`course_leader_id` IS NOT NULL
+          AND p.`deleted_at` IS NULL
+          AND NOT EXISTS (
+              SELECT 1 FROM `practice_plan_teacher` pt
+              WHERE pt.`plan_id` = p.`id`
+                AND pt.`teacher_id` = p.`course_leader_id`
+                AND pt.`status` = 'enabled'
+                AND pt.`deleted_at` IS NULL
+          )");
+
     ensureIndex($pdo, 'practice_schedule', 'idx_practice_schedule_date', "ALTER TABLE `practice_schedule` ADD KEY `idx_practice_schedule_date` (`module_type`, `schedule_date`, `status`)");
+    ensureIndex($pdo, 'practice_schedule', 'idx_practice_schedule_period', "ALTER TABLE `practice_schedule` ADD KEY `idx_practice_schedule_period` (`schedule_date`, `period_start_id`, `period_end_id`, `status`)");
     ensureIndex($pdo, 'practice_project', 'idx_practice_project_schedule', "ALTER TABLE `practice_project` ADD KEY `idx_practice_project_schedule` (`module_type`, `schedule_id`, `status`)");
     ensureIndex($pdo, 'practice_score', 'idx_practice_score_student', "ALTER TABLE `practice_score` ADD KEY `idx_practice_score_student` (`module_type`, `student_id`, `status`)");
     ensureIndex($pdo, 'practice_score', 'idx_practice_score_project', "ALTER TABLE `practice_score` ADD KEY `idx_practice_score_project` (`module_type`, `project_id`, `student_id`, `status`)");
@@ -1739,6 +2584,47 @@ function ensurePracticeSchema(PDO $pdo): void
     ensureIndex($pdo, 'base_company_profile', 'uk_base_company_profile', "ALTER TABLE `base_company_profile` ADD UNIQUE KEY `uk_base_company_profile` (`base_id`)");
     ensureIndex($pdo, 'base_construction', 'uk_base_construction', "ALTER TABLE `base_construction` ADD UNIQUE KEY `uk_base_construction` (`base_id`)");
     ensureIndex($pdo, 'base_budget', 'idx_base_budget', "ALTER TABLE `base_budget` ADD KEY `idx_base_budget` (`base_id`, `sort`, `status`)");
+}
+
+function ensureSocialPracticeSchema(PDO $pdo): void
+{
+    $pdo->exec(
+        "ALTER TABLE `pair`
+         MODIFY COLUMN `type` ENUM('internship','training','lab','social_practice') DEFAULT 'internship'"
+    );
+
+    ensureColumn(
+        $pdo,
+        'social_practice_plan',
+        'current_node_id',
+        "ALTER TABLE `social_practice_plan` ADD COLUMN `current_node_id` BIGINT UNSIGNED DEFAULT NULL AFTER `approval_flow_id`"
+    );
+    ensureColumn(
+        $pdo,
+        'social_practice_declaration',
+        'teacher_reselect_count',
+        "ALTER TABLE `social_practice_declaration` ADD COLUMN `teacher_reselect_count` INT UNSIGNED DEFAULT 0 AFTER `teacher_confirm_status`"
+    );
+
+    $indexes = [
+        ['social_practice_plan', 'idx_social_plan_scope', "ALTER TABLE `social_practice_plan` ADD KEY `idx_social_plan_scope` (`grade_id`, `organizer_dep_id`, `status`, `phase`)"],
+        ['social_practice_plan_scope', 'idx_social_scope_org', "ALTER TABLE `social_practice_plan_scope` ADD KEY `idx_social_scope_org` (`dep_id`, `profession_id`, `class_id`, `status`)"],
+        ['social_practice_project', 'idx_social_project_plan', "ALTER TABLE `social_practice_project` ADD KEY `idx_social_project_plan` (`plan_id`, `practice_mode`, `status`, `phase`)"],
+        ['social_practice_project_teacher', 'idx_social_teacher_project', "ALTER TABLE `social_practice_project_teacher` ADD KEY `idx_social_teacher_project` (`teacher_id`, `project_id`, `status`)"],
+        ['social_practice_participant', 'idx_social_participant_project', "ALTER TABLE `social_practice_participant` ADD KEY `idx_social_participant_project` (`project_id`, `teacher_id`, `status`)"],
+        ['social_practice_participant', 'idx_social_participant_student', "ALTER TABLE `social_practice_participant` ADD KEY `idx_social_participant_student` (`student_id`, `status`)"],
+        ['social_practice_declaration', 'idx_social_declaration_plan', "ALTER TABLE `social_practice_declaration` ADD KEY `idx_social_declaration_plan` (`plan_id`, `status`, `teacher_confirm_status`)"],
+        ['social_practice_declaration', 'idx_social_declaration_teacher', "ALTER TABLE `social_practice_declaration` ADD KEY `idx_social_declaration_teacher` (`selected_teacher_id`, `assigned_teacher_id`, `status`)"],
+        ['social_practice_material', 'idx_social_material_target', "ALTER TABLE `social_practice_material` ADD KEY `idx_social_material_target` (`plan_id`, `project_id`, `student_id`, `material_type`, `status`)"],
+        ['social_practice_score', 'idx_social_score_review', "ALTER TABLE `social_practice_score` ADD KEY `idx_social_score_review` (`teacher_id`, `status`, `reviewed_at`)"],
+        ['social_practice_archive', 'idx_social_archive_scope', "ALTER TABLE `social_practice_archive` ADD KEY `idx_social_archive_scope` (`plan_id`, `project_id`, `status`, `archived_at`)"],
+        ['social_practice_recording', 'idx_social_recording_entity', "ALTER TABLE `social_practice_recording` ADD KEY `idx_social_recording_entity` (`entity_type`, `entity_id`, `created_at`)"],
+        ['social_practice_recording', 'idx_social_recording_parent', "ALTER TABLE `social_practice_recording` ADD KEY `idx_social_recording_parent` (`parent_id`)"],
+    ];
+
+    foreach ($indexes as [$table, $index, $ddl]) {
+        ensureIndex($pdo, $table, $index, $ddl);
+    }
 }
 
 function ensureMessageSchema(PDO $pdo): void
@@ -1861,6 +2747,10 @@ function ensureTemplateSchema(PDO $pdo): void
             'version' => "ALTER TABLE `template` ADD COLUMN `version` VARCHAR(40) DEFAULT '1.0' AFTER `file_id`",
             'download_count' => "ALTER TABLE `template` ADD COLUMN `download_count` INT UNSIGNED DEFAULT 0 AFTER `version`",
             'flag' => "ALTER TABLE `template` ADD COLUMN `flag` ENUM('off','on') DEFAULT 'on' AFTER `download_count`",
+            'business_code' => "ALTER TABLE `template` ADD COLUMN `business_code` VARCHAR(80) DEFAULT NULL AFTER `flag`",
+            'material_type' => "ALTER TABLE `template` ADD COLUMN `material_type` VARCHAR(60) DEFAULT NULL AFTER `business_code`",
+            'scope_type' => "ALTER TABLE `template` ADD COLUMN `scope_type` VARCHAR(40) DEFAULT NULL AFTER `material_type`",
+            'practice_types' => "ALTER TABLE `template` ADD COLUMN `practice_types` JSON DEFAULT NULL AFTER `scope_type`",
         ],
     ];
 
@@ -1876,6 +2766,7 @@ function ensureTemplateSchema(PDO $pdo): void
     ensureIndex($pdo, 'template', 'idx_category_flag', "ALTER TABLE `template` ADD KEY `idx_category_flag` (`category_id`, `flag`)");
     ensureIndex($pdo, 'template', 'idx_file_id', "ALTER TABLE `template` ADD KEY `idx_file_id` (`file_id`)");
     ensureIndex($pdo, 'template', 'idx_deleted_at', "ALTER TABLE `template` ADD KEY `idx_deleted_at` (`deleted_at`)");
+    ensureIndex($pdo, 'template', 'idx_template_business_material', "ALTER TABLE `template` ADD KEY `idx_template_business_material` (`business_code`, `material_type`, `status`)");
 }
 
 function ensureExportTaskSchema(PDO $pdo): void
@@ -1993,6 +2884,9 @@ function recordingArchiveColumns(): array
 function seedSchool(PDO $pdo, string $wechatProxyUrl): void
 {
     seedRoles($pdo);
+    seedPracticePeriods($pdo);
+    seedInternshipCategories($pdo);
+    seedArchiveRequirements($pdo);
     seedArchives($pdo);
     seedAdmin($pdo);
     seedPermissionAccounts($pdo);
@@ -2003,11 +2897,116 @@ function seedSchool(PDO $pdo, string $wechatProxyUrl): void
     seedMessageTemplates($pdo);
     seedConfig($pdo, $wechatProxyUrl);
     seedInternshipDemo($pdo);
+    seedSocialPracticeDemo($pdo);
+}
+
+function seedInternshipCategories(PDO $pdo): void
+{
+    $categories = [
+        [1, '00000000-0000-0000-0000-000000320001', '毕业实习', 'graduation', 'cohort', 10],
+        [2, '00000000-0000-0000-0000-000000320002', '认识实习', 'cognition', 'grade', 20],
+        [3, '00000000-0000-0000-0000-000000320003', '生产实习', 'production', 'grade', 30],
+        [4, '00000000-0000-0000-0000-000000320004', '岗位实习', 'position', 'grade', 40],
+        [5, '00000000-0000-0000-0000-000000320005', '课程实习', 'course', 'grade', 50],
+        [6, '00000000-0000-0000-0000-000000320006', '其他实习', 'other', 'grade', 60],
+    ];
+    $stmt = $pdo->prepare(
+        "INSERT INTO `internship_category` (`id`, `uuid`, `name`, `code`, `scope_type`, `sort`, `status`, `deleted_at`)
+         VALUES (?, ?, ?, ?, ?, ?, 'enabled', NULL)
+         ON DUPLICATE KEY UPDATE
+            `name` = VALUES(`name`),
+            `sort` = VALUES(`sort`),
+            `status` = 'enabled',
+            `deleted_at` = NULL"
+    );
+    foreach ($categories as $category) {
+        $stmt->execute($category);
+    }
+
+    $pdo->exec(
+        "UPDATE `internship_plan`
+         SET `category_id` = CASE
+             WHEN CONCAT_WS(' ', `name`, `course_name`, `course_category`) LIKE '%毕业实习%' THEN 1
+             ELSE 6
+         END
+         WHERE `category_id` IS NULL"
+    );
+    $pdo->exec(
+        "UPDATE `internship_plan`
+         SET `status` = 'draft'
+         WHERE `category_id` = 1 AND `graduation_cohort_id` IS NULL AND `deleted_at` IS NULL"
+    );
+}
+
+function seedArchiveRequirements(PDO $pdo): void
+{
+    $requirements = [
+        'graduation' => ['plan', 'implementation_sheet', 'syllabus', 'guide', 'registration', 'teacher_work_report', 'journal', 'graduation_report', 'graduation_appraisal', 'score_register', 'safety_commitment'],
+        'internship' => ['plan', 'implementation_sheet', 'syllabus', 'guide', 'registration', 'teacher_work_report', 'journal', 'report', 'score_register', 'safety_commitment'],
+    ];
+    $stmt = $pdo->prepare(
+        "INSERT INTO `internship_archive_requirement` (`uuid`, `name`, `practice_type`, `material_type`, `required`, `sort`, `status`, `deleted_at`)
+         VALUES (?, '实习归档材料要求', ?, ?, 1, ?, 'enabled', NULL)
+         ON DUPLICATE KEY UPDATE `practice_type` = VALUES(`practice_type`)"
+    );
+    foreach ($requirements as $practiceType => $materials) {
+        foreach ($materials as $sort => $materialType) {
+            $stmt->execute([
+                '00000000-0000-0000-0000-' . str_pad((string) (($practiceType === 'graduation' ? 500001 : 600001) + $sort), 12, '0', STR_PAD_LEFT),
+                $practiceType,
+                $materialType,
+                $sort,
+            ]);
+        }
+    }
+}
+
+function seedPracticePeriods(PDO $pdo): void
+{
+    $periods = [
+        [1, '00000000-0000-0000-0000-000000310001', '第 1 节', '08:30:00', '09:15:00', 10],
+        [2, '00000000-0000-0000-0000-000000310002', '第 2 节', '09:20:00', '10:05:00', 20],
+        [3, '00000000-0000-0000-0000-000000310003', '第 3 节', '10:25:00', '11:10:00', 30],
+        [4, '00000000-0000-0000-0000-000000310004', '第 4 节', '11:15:00', '12:00:00', 40],
+        [5, '00000000-0000-0000-0000-000000310005', '第 5 节', '14:00:00', '14:45:00', 50],
+        [6, '00000000-0000-0000-0000-000000310006', '第 6 节', '14:50:00', '15:35:00', 60],
+        [7, '00000000-0000-0000-0000-000000310007', '第 7 节', '15:55:00', '16:40:00', 70],
+        [8, '00000000-0000-0000-0000-000000310008', '第 8 节', '16:45:00', '17:30:00', 80],
+        [9, '00000000-0000-0000-0000-000000310009', '第 9 节', '18:30:00', '19:15:00', 90],
+        [10, '00000000-0000-0000-0000-000000310010', '第 10 节', '19:20:00', '20:05:00', 100],
+        [11, '00000000-0000-0000-0000-000000310011', '第 11 节', '20:15:00', '21:00:00', 110],
+        [12, '00000000-0000-0000-0000-000000310012', '第 12 节', '21:05:00', '21:50:00', 120],
+    ];
+    $stmt = $pdo->prepare(
+        "INSERT IGNORE INTO `practice_period` (`id`, `uuid`, `name`, `start_time`, `end_time`, `sort`, `status`)
+         VALUES (?, ?, ?, ?, ?, ?, 'enabled')"
+    );
+    foreach ($periods as $period) {
+        $stmt->execute($period);
+    }
 }
 
 function seedMessageTemplates(PDO $pdo): void
 {
     MessageRecord::ensureDefaultTemplates($pdo);
+    $pdo->exec(
+        "UPDATE `message_template`
+         SET `link_url_tpl` = REPLACE(`link_url_tpl`, '#panel=training:', '#panel=practice:')
+         WHERE `code` LIKE 'training\\_%' ESCAPE '\\\\' AND `link_url_tpl` LIKE '#panel=training:%'"
+    );
+    $pdo->exec(
+        "UPDATE `message_template`
+         SET `link_url_tpl` = REPLACE(`link_url_tpl`, '#panel=lab:', '#panel=practice:')
+         WHERE `code` LIKE 'lab\\_%' ESCAPE '\\\\' AND `link_url_tpl` LIKE '#panel=lab:%'"
+    );
+    $pdo->exec(
+        "UPDATE `message_template`
+         SET `name` = REPLACE(`name`, '特殊申请', '实习方式申请'),
+             `title_tpl` = REPLACE(`title_tpl`, '特殊申请', '实习方式申请'),
+             `content_tpl` = REPLACE(`content_tpl`, '特殊申请', '实习方式申请'),
+             `description` = REPLACE(`description`, '特殊申请', '实习方式申请')
+         WHERE `code` LIKE 'internship\\_application\\_%' ESCAPE '\\\\'"
+    );
 }
 
 function seedRoles(PDO $pdo): void
@@ -2215,12 +3214,13 @@ function seedInternshipDemo(PDO $pdo): void
     );
 
     $pdo->exec(
-        "INSERT INTO `internship_plan` (`id`, `uuid`, `source_type`, `course_code`, `course_name`, `grade_id`, `dep_id`, `profession_id`, `semester`, `credit`, `student_count`, `score_rule`, `plan_content`, `submitter_id`, `status`)
-         VALUES (1, '00000000-0000-0000-0000-000000100000', 'edu_system', 'SX-RJ-2026', '软件技术专业实习课程', 1, 1, 1, '2025-2026-2', 2.00, 1, 'average', JSON_OBJECT('content', '从教务系统抽取的软件技术专业实习课程计划。'), 1, 'accept')
+        "INSERT INTO `internship_plan` (`id`, `uuid`, `source_type`, `course_code`, `course_name`, `category_id`, `grade_id`, `dep_id`, `profession_id`, `semester`, `credit`, `student_count`, `score_rule`, `plan_content`, `submitter_id`, `status`)
+         VALUES (1, '00000000-0000-0000-0000-000000100000', 'edu_system', 'SX-RJ-2026', '软件技术专业实习课程', 6, 1, 1, 1, '2025-2026-2', 2.00, 1, 'average', JSON_OBJECT('content', '从教务系统抽取的软件技术专业实习课程计划。'), 1, 'accept')
          ON DUPLICATE KEY UPDATE
             `source_type` = VALUES(`source_type`),
             `course_code` = VALUES(`course_code`),
             `course_name` = VALUES(`course_name`),
+            `category_id` = VALUES(`category_id`),
             `grade_id` = VALUES(`grade_id`),
             `dep_id` = VALUES(`dep_id`),
             `profession_id` = VALUES(`profession_id`),
@@ -2235,8 +3235,8 @@ function seedInternshipDemo(PDO $pdo): void
     );
 
     $pdo->exec(
-        "INSERT INTO `arrangement` (`id`, `uuid`, `name`, `plan_id`, `base_id`, `dep_id`, `profession_id`, `semester`, `teacher_id`, `task_no`, `batch_no`, `credit`, `student_count`, `type`, `organize_mode`, `title`, `start_date`, `end_date`, `location`, `description`, `created_by`, `status`)
-         VALUES (1, '00000000-0000-0000-0000-000000100001', '软件技术2601实习任务', 1, 1, 1, 1, '2025-2026-2', 1, 'TASK-RJ-2601-01', '第一批', 2.00, 1, 'major_external', 'centralized', '软件技术2601校外实习任务', '2026-07-01', '2026-08-31', '成都锦城学院实践基地', '默认开发环境实习任务', 1, 'enabled')
+        "INSERT INTO `arrangement` (`id`, `uuid`, `name`, `plan_id`, `base_id`, `dep_id`, `profession_id`, `semester`, `teacher_id`, `task_no`, `batch_no`, `credit`, `student_count`, `type`, `organize_mode`, `title`, `start_date`, `end_date`, `location`, `description`, `created_by`, `submitter_id`, `status`)
+         VALUES (1, '00000000-0000-0000-0000-000000100001', '软件技术2601实习任务', 1, 1, 1, 1, '2025-2026-2', 1, 'TASK-RJ-2601-01', '第一批', 2.00, 1, 'major_external', 'centralized', '软件技术2601校外实习任务', '2026-07-01', '2026-08-31', '成都锦城学院实践基地', '默认开发环境实习任务', 1, 1, 'accept')
          ON DUPLICATE KEY UPDATE
             `name` = VALUES(`name`),
             `plan_id` = VALUES(`plan_id`),
@@ -2256,7 +3256,8 @@ function seedInternshipDemo(PDO $pdo): void
             `end_date` = VALUES(`end_date`),
             `location` = VALUES(`location`),
             `description` = VALUES(`description`),
-            `status` = 'enabled',
+            `submitter_id` = VALUES(`submitter_id`),
+            `status` = 'accept',
             `deleted_at` = NULL"
     );
 
@@ -2382,6 +3383,139 @@ function seedArchives(PDO $pdo): void
     );
 }
 
+function seedSocialPracticeDemo(PDO $pdo): void
+{
+    $pdo->exec(
+        "INSERT INTO `social_practice_approval_flow`
+            (`id`, `uuid`, `name`, `code`, `scope_type`, `version`, `description`, `created_by`, `status`)
+         VALUES
+            (1, '00000000-0000-0000-0000-000000710001', '社会实践默认审批流', 'social-default', 'school', 1, '专业负责人、学院审批、教务备案', 1, 'enabled')
+         ON DUPLICATE KEY UPDATE
+            `name` = VALUES(`name`), `description` = VALUES(`description`),
+            `version` = VALUES(`version`), `status` = 'enabled', `deleted_at` = NULL"
+    );
+
+    $nodes = [
+        [1, '00000000-0000-0000-0000-000000711001', 'major_review', '专业负责人审核', 10, 'profession', 'social_practice:approve', 'review', 'true', 'false'],
+        [2, '00000000-0000-0000-0000-000000711002', 'college_review', '学院审批', 20, 'college', 'social_practice:approve', 'review', 'true', 'false'],
+        [3, '00000000-0000-0000-0000-000000711003', 'academic_filing', '教务备案', 30, 'school', 'social_practice:approve', 'filing', 'true', 'true'],
+    ];
+    $nodeStmt = $pdo->prepare(
+        "INSERT INTO `social_practice_approval_node`
+            (`id`, `uuid`, `flow_id`, `node_code`, `node_name`, `sort`, `scope_type`, `permission_code`, `node_type`, `can_return`, `auto_pass`, `status`)
+         VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, 'enabled')
+         ON DUPLICATE KEY UPDATE
+            `node_name` = VALUES(`node_name`), `sort` = VALUES(`sort`),
+            `scope_type` = VALUES(`scope_type`), `permission_code` = VALUES(`permission_code`),
+            `node_type` = VALUES(`node_type`), `can_return` = VALUES(`can_return`),
+            `auto_pass` = VALUES(`auto_pass`), `status` = 'enabled', `deleted_at` = NULL"
+    );
+    foreach ($nodes as $node) {
+        $nodeStmt->execute($node);
+    }
+
+    $pdo->exec(
+        "INSERT INTO `social_practice_plan`
+            (`id`, `uuid`, `name`, `code`, `source_type`, `source_key`, `title`, `description`, `grade_id`, `organizer_dep_id`, `credit`, `participation_mode`, `teacher_match_mode`, `teacher_confirm_hours`, `max_reselect_count`, `default_team_submit_mode`, `register_start_at`, `register_end_at`, `practice_start_at`, `practice_end_at`, `result_deadline_at`, `score_deadline_at`, `approval_flow_id`, `phase`, `submitter_id`, `published_at`, `status`)
+         VALUES
+            (1, '00000000-0000-0000-0000-000000712001', '2026级社会实践计划', 'SP-2026-001', 'manual', 'demo-social-2026', '2026级社会实践计划', '社会调研、志愿服务与专业实践结合。', 1, 1, 1.00, 'mandatory', 'mixed', 48, 2, 'individual', '2026-07-01 00:00:00', '2026-07-15 23:59:59', '2026-07-20 00:00:00', '2026-08-20 23:59:59', '2026-08-25 23:59:59', '2026-08-31 23:59:59', 1, 'active', 1, '2026-06-20 09:00:00', 'accept')
+         ON DUPLICATE KEY UPDATE
+            `name` = VALUES(`name`), `title` = VALUES(`title`), `description` = VALUES(`description`),
+            `grade_id` = VALUES(`grade_id`), `organizer_dep_id` = VALUES(`organizer_dep_id`),
+            `credit` = VALUES(`credit`), `approval_flow_id` = VALUES(`approval_flow_id`),
+            `phase` = VALUES(`phase`), `status` = 'accept', `deleted_at` = NULL"
+    );
+    $pdo->exec(
+        "INSERT INTO `social_practice_plan_scope`
+            (`id`, `uuid`, `plan_id`, `scope_type`, `dep_id`, `profession_id`, `class_id`, `status`)
+         VALUES
+            (1, '00000000-0000-0000-0000-000000713001', 1, 'profession', 1, 1, NULL, 'enabled')
+         ON DUPLICATE KEY UPDATE
+            `dep_id` = VALUES(`dep_id`), `profession_id` = VALUES(`profession_id`),
+            `status` = 'enabled', `deleted_at` = NULL"
+    );
+
+    $requirements = [
+        [1, '00000000-0000-0000-0000-000000714001', 'all', 'safety_agreement', 'true', 'student'],
+        [2, '00000000-0000-0000-0000-000000714002', 'all', 'insurance', 'true', 'student'],
+        [3, '00000000-0000-0000-0000-000000714003', 'all', 'emergency_plan', 'true', 'project'],
+        [4, '00000000-0000-0000-0000-000000714004', 'all', 'parent_notice', 'false', 'student'],
+        [5, '00000000-0000-0000-0000-000000714005', 'centralized', 'practice_report', 'true', 'student'],
+        [6, '00000000-0000-0000-0000-000000714006', 'centralized', 'practice_photo', 'true', 'student'],
+        [7, '00000000-0000-0000-0000-000000714007', 'distributed', 'practice_proof', 'true', 'student'],
+        [8, '00000000-0000-0000-0000-000000714008', 'distributed', 'social_practice_report', 'true', 'student'],
+    ];
+    $requirementStmt = $pdo->prepare(
+        "INSERT INTO `social_practice_requirement`
+            (`id`, `uuid`, `plan_id`, `practice_mode`, `requirement_type`, `required_flag`, `submit_scope`, `status`)
+         VALUES (?, ?, 1, ?, ?, ?, ?, 'enabled')
+         ON DUPLICATE KEY UPDATE
+            `required_flag` = VALUES(`required_flag`), `submit_scope` = VALUES(`submit_scope`),
+            `status` = 'enabled', `deleted_at` = NULL"
+    );
+    foreach ($requirements as $requirement) {
+        $requirementStmt->execute($requirement);
+    }
+
+    $pdo->exec(
+        "INSERT INTO `social_practice_project`
+            (`id`, `uuid`, `name`, `code`, `plan_id`, `practice_mode`, `source_type`, `project_code`, `title`, `content`, `objective`, `location`, `start_at`, `end_at`, `capacity`, `phase`, `created_by`, `published_at`, `status`)
+         VALUES
+            (1, '00000000-0000-0000-0000-000000715001', '社区数字服务集中实践', 'SP-PROJECT-001', 1, 'centralized', 'admin_created', 'SP-C-001', '社区数字服务集中实践', '完成社区数字服务调研和志愿服务。', '将专业能力用于真实社区场景。', '成都市高新区', '2026-07-20 08:00:00', '2026-08-20 18:00:00', 20, 'active', 1, '2026-06-20 10:00:00', 'enabled')
+         ON DUPLICATE KEY UPDATE
+            `name` = VALUES(`name`), `title` = VALUES(`title`), `content` = VALUES(`content`),
+            `location` = VALUES(`location`), `capacity` = VALUES(`capacity`),
+            `phase` = VALUES(`phase`), `status` = 'enabled', `deleted_at` = NULL"
+    );
+    $pdo->exec(
+        "INSERT INTO `social_practice_project_teacher`
+            (`id`, `uuid`, `project_id`, `teacher_id`, `teacher_role`, `capacity`, `status`)
+         VALUES
+            (1, '00000000-0000-0000-0000-000000716001', 1, 1, 'leader', 20, 'active')
+         ON DUPLICATE KEY UPDATE
+            `teacher_role` = VALUES(`teacher_role`), `capacity` = VALUES(`capacity`),
+            `status` = 'active', `deleted_at` = NULL"
+    );
+    $pdo->exec(
+        "INSERT INTO `social_practice_participant`
+            (`id`, `uuid`, `plan_id`, `project_id`, `student_id`, `teacher_id`, `practice_mode`, `join_source`, `status`)
+         VALUES
+            (1, '00000000-0000-0000-0000-000000717001', 1, 1, 1, 1, 'centralized', 'scope', 'active')
+         ON DUPLICATE KEY UPDATE
+            `project_id` = VALUES(`project_id`), `teacher_id` = VALUES(`teacher_id`),
+            `practice_mode` = VALUES(`practice_mode`), `status` = 'active', `deleted_at` = NULL"
+    );
+    $pdo->exec(
+        "INSERT INTO `pair`
+            (`uuid`, `student_id`, `teacher_id`, `type`, `arrangement_id`, `entity_type`, `entity_id`, `status`)
+         VALUES
+            ('00000000-0000-0000-0000-000000718001', 1, 1, 'social_practice', 1, 'social_practice_project', 1, 'active')
+         ON DUPLICATE KEY UPDATE
+            `teacher_id` = VALUES(`teacher_id`), `entity_type` = VALUES(`entity_type`),
+            `entity_id` = VALUES(`entity_id`), `status` = 'active', `deleted_at` = NULL"
+    );
+
+    $scoreRules = [
+        [1, '00000000-0000-0000-0000-000000719001', 'centralized', 'attendance', '签到', 20, 10],
+        [2, '00000000-0000-0000-0000-000000719002', 'centralized', 'performance', '实践表现', 30, 20],
+        [3, '00000000-0000-0000-0000-000000719003', 'centralized', 'report', '实践报告', 50, 30],
+        [4, '00000000-0000-0000-0000-000000719004', 'distributed', 'attitude', '实践态度', 20, 10],
+        [5, '00000000-0000-0000-0000-000000719005', 'distributed', 'result', '实践成果', 30, 20],
+        [6, '00000000-0000-0000-0000-000000719006', 'distributed', 'report', '社会实践报告', 50, 30],
+    ];
+    $ruleStmt = $pdo->prepare(
+        "INSERT INTO `social_practice_score_rule`
+            (`id`, `uuid`, `plan_id`, `practice_mode`, `item_code`, `item_name`, `weight`, `max_score`, `sort`, `status`)
+         VALUES (?, ?, 1, ?, ?, ?, ?, 100, ?, 'enabled')
+         ON DUPLICATE KEY UPDATE
+            `item_name` = VALUES(`item_name`), `weight` = VALUES(`weight`),
+            `sort` = VALUES(`sort`), `status` = 'enabled', `deleted_at` = NULL"
+    );
+    foreach ($scoreRules as $rule) {
+        $ruleStmt->execute($rule);
+    }
+}
+
 function seedMenus(PDO $pdo): void
 {
     $menus = [
@@ -2390,8 +3524,8 @@ function seedMenus(PDO $pdo): void
         [111, 11, '列表', 'internship:view', '/internship', 'both', 'list', 111, 'List'],
         [101, 111, '新增', 'internship:manage', null, 'both', 'button', 101, null],
         [1112, 111, '删除', 'internship:arrangement:delete', null, 'pc', 'button', 112, null],
-        [12, 1, '补充申请', null, null, 'both', 'menu', 12, 'ClipboardList'],
-        [121, 12, '列表', 'internship:application:list', '/internship/applications', 'both', 'list', 121, 'List'],
+        [12, 1, '申请管理', null, null, 'both', 'menu', 12, 'ClipboardList'],
+        [121, 12, '实习方式申请', 'internship:application:list', '/internship/requests?tab=applications', 'both', 'list', 121, 'List'],
         [103, 121, '提交', 'internship:apply', null, 'both', 'button', 103, null],
         [104, 121, '审核', 'internship:approve', null, 'both', 'button', 104, null],
         [1213, 121, '通过后修改', 'internship:application:reopen', null, 'pc', 'button', 123, null],
@@ -2419,68 +3553,78 @@ function seedMenus(PDO $pdo): void
         [19, 1, '实习计划', null, null, 'pc', 'menu', 19, 'FileText'],
         [191, 19, '列表', 'internship:plan:list', '/internship/plans', 'pc', 'list', 191, 'List'],
         [110, 191, '维护', 'internship:plan', null, 'pc', 'button', 110, null],
-        [195, 1, '延期申请', null, null, 'both', 'menu', 195, 'FileClock'],
-        [1951, 195, '列表', 'internship:delay:list', '/internship/delays', 'both', 'list', 1951, 'List'],
+        [195, 12, '延期申请', null, null, 'both', 'menu', 195, 'FileClock'],
+        [1951, 195, '列表', 'internship:delay:list', '/internship/requests?tab=delays', 'both', 'list', 1951, 'List'],
         [19511, 1951, '提交', 'internship:apply', null, 'both', 'button', 1951, null],
         [19512, 1951, '审核', 'internship:approve', null, 'both', 'button', 1952, null],
-        [2, 0, '实训管理', null, null, 'both', 'directory', 20, 'Workflow'],
+        [2, 0, '实验实训管理', null, null, 'both', 'directory', 20, 'FlaskConical'],
         [21, 2, '教学计划', null, null, 'both', 'menu', 21, 'FileText'],
-        [211, 21, '列表', 'training:view', '/training/plans', 'both', 'list', 211, 'List'],
-        [201, 211, '维护', 'training:manage', null, 'both', 'button', 201, null],
-        [202, 211, '审核', 'training:approve', null, 'both', 'button', 202, null],
+        [211, 21, '列表', 'practice:view', '/practice/plans', 'both', 'list', 211, 'List'],
+        [201, 211, '维护', 'practice:manage', null, 'both', 'button', 201, null],
+        [202, 211, '审核', 'practice:approve', null, 'both', 'button', 202, null],
         [22, 2, '课表安排', null, null, 'both', 'menu', 22, 'CalendarCheck'],
-        [221, 22, '列表', 'training:schedule:list', '/training/schedules', 'both', 'list', 221, 'List'],
-        [2211, 221, '维护', 'training:manage', null, 'both', 'button', 2211, null],
+        [221, 22, '列表', 'practice:view', '/practice/schedules', 'both', 'list', 221, 'List'],
+        [2211, 221, '维护', 'practice:manage', null, 'both', 'button', 2211, null],
         [222, 2, '项目发布', null, null, 'both', 'menu', 222, 'ClipboardList'],
-        [2221, 222, '列表', 'training:project:list', '/training/projects', 'both', 'list', 2221, 'List'],
-        [22211, 2221, '维护', 'training:manage', null, 'pc', 'button', 2221, null],
+        [2221, 222, '列表', 'practice:view', '/practice/projects', 'both', 'list', 2221, 'List'],
+        [22211, 2221, '维护', 'practice:manage', null, 'pc', 'button', 2221, null],
         [23, 2, '大纲编写', null, null, 'both', 'menu', 23, 'BookOpen'],
-        [231, 23, '列表', 'training:syllabus:list', '/training/syllabus', 'both', 'list', 231, 'List'],
-        [2311, 231, '维护', 'training:manage', null, 'both', 'button', 2311, null],
-        [2312, 231, '审核', 'training:approve', null, 'both', 'button', 2312, null],
+        [231, 23, '列表', 'practice:view', '/practice/syllabus', 'both', 'list', 231, 'List'],
+        [2311, 231, '维护', 'practice:manage', null, 'both', 'button', 2311, null],
+        [2312, 231, '审核', 'practice:approve', null, 'both', 'button', 2312, null],
         [24, 2, '教案编写', null, null, 'both', 'menu', 24, 'FileText'],
-        [241, 24, '列表', 'training:lesson:list', '/training/lesson-plans', 'both', 'list', 241, 'List'],
-        [2411, 241, '维护', 'training:manage', null, 'both', 'button', 2411, null],
-        [2412, 241, '审核', 'training:approve', null, 'both', 'button', 2412, null],
+        [241, 24, '列表', 'practice:view', '/practice/lesson-plans', 'both', 'list', 241, 'List'],
+        [2411, 241, '维护', 'practice:manage', null, 'both', 'button', 2411, null],
+        [2412, 241, '审核', 'practice:approve', null, 'both', 'button', 2412, null],
         [25, 2, '成绩评定', null, null, 'both', 'menu', 25, 'GraduationCap'],
-        [251, 25, '列表', 'training:score:list', '/training/scores', 'both', 'list', 251, 'List'],
-        [2511, 251, '维护', 'training:manage', null, 'both', 'button', 2511, null],
+        [251, 25, '列表', 'practice:view', '/practice/scores', 'both', 'list', 251, 'List'],
+        [2511, 251, '维护', 'practice:manage', null, 'both', 'button', 2511, null],
         [26, 2, '反思报告', null, null, 'both', 'menu', 26, 'FileClock'],
-        [261, 26, '列表', 'training:reflection:list', '/training/reflections', 'both', 'list', 261, 'List'],
-        [2611, 261, '维护', 'training:manage', null, 'both', 'button', 2611, null],
-        [2612, 261, '审核', 'training:approve', null, 'both', 'button', 2612, null],
+        [261, 26, '列表', 'practice:view', '/practice/reflections', 'both', 'list', 261, 'List'],
+        [2611, 261, '维护', 'practice:manage', null, 'both', 'button', 2611, null],
+        [2612, 261, '审核', 'practice:approve', null, 'both', 'button', 2612, null],
         [27, 2, '场地管理', null, null, 'pc', 'menu', 27, 'Building2'],
-        [271, 27, '列表', 'training:room:list', '/training/rooms', 'pc', 'list', 271, 'List'],
-        [2711, 271, '维护', 'training:manage', null, 'pc', 'button', 2711, null],
-        [3, 0, '实验管理', null, null, 'both', 'directory', 30, 'FlaskConical'],
-        [31, 3, '教学计划', null, null, 'both', 'menu', 31, 'FileText'],
-        [311, 31, '列表', 'lab:view', '/lab/plans', 'both', 'list', 311, 'List'],
-        [301, 311, '维护', 'lab:manage', null, 'both', 'button', 301, null],
-        [302, 311, '审核', 'lab:approve', null, 'both', 'button', 302, null],
-        [32, 3, '课表安排', null, null, 'both', 'menu', 32, 'CalendarCheck'],
-        [321, 32, '列表', 'lab:schedule:list', '/lab/schedules', 'both', 'list', 321, 'List'],
-        [3211, 321, '维护', 'lab:manage', null, 'both', 'button', 3211, null],
-        [322, 3, '项目发布', null, null, 'both', 'menu', 322, 'ClipboardList'],
-        [3221, 322, '列表', 'lab:project:list', '/lab/projects', 'both', 'list', 3221, 'List'],
-        [32211, 3221, '维护', 'lab:manage', null, 'pc', 'button', 3221, null],
-        [33, 3, '大纲编写', null, null, 'both', 'menu', 33, 'BookOpen'],
-        [331, 33, '列表', 'lab:syllabus:list', '/lab/syllabus', 'both', 'list', 331, 'List'],
-        [3311, 331, '维护', 'lab:manage', null, 'both', 'button', 3311, null],
-        [3312, 331, '审核', 'lab:approve', null, 'both', 'button', 3312, null],
-        [34, 3, '教案编写', null, null, 'both', 'menu', 34, 'FileText'],
-        [341, 34, '列表', 'lab:lesson:list', '/lab/lesson-plans', 'both', 'list', 341, 'List'],
-        [3411, 341, '维护', 'lab:manage', null, 'both', 'button', 3411, null],
-        [3412, 341, '审核', 'lab:approve', null, 'both', 'button', 3412, null],
-        [35, 3, '成绩评定', null, null, 'both', 'menu', 35, 'GraduationCap'],
-        [351, 35, '列表', 'lab:score:list', '/lab/scores', 'both', 'list', 351, 'List'],
-        [3511, 351, '维护', 'lab:manage', null, 'both', 'button', 3511, null],
-        [36, 3, '反思报告', null, null, 'both', 'menu', 36, 'FileClock'],
-        [361, 36, '列表', 'lab:reflection:list', '/lab/reflections', 'both', 'list', 361, 'List'],
-        [3611, 361, '维护', 'lab:manage', null, 'both', 'button', 3611, null],
-        [3612, 361, '审核', 'lab:approve', null, 'both', 'button', 3612, null],
-        [37, 3, '场地管理', null, null, 'pc', 'menu', 37, 'Building2'],
-        [371, 37, '列表', 'lab:room:list', '/lab/rooms', 'pc', 'list', 371, 'List'],
-        [3711, 371, '维护', 'lab:manage', null, 'pc', 'button', 3711, null],
+        [271, 27, '列表', 'practice:view', '/practice/rooms', 'pc', 'list', 271, 'List'],
+        [2711, 271, '维护', 'practice:manage', null, 'pc', 'button', 2711, null],
+        [700000, 0, '社会实践管理', 'social_practice:view', null, 'both', 'directory', 35, 'Route'],
+        [700010, 700000, '总览', null, null, 'both', 'menu', 10, 'LayoutDashboard'],
+        [700011, 700010, '列表', 'social_practice:view', '/social-practice/overview', 'both', 'list', 10, 'List'],
+        [700020, 700000, '计划管理', null, null, 'both', 'menu', 20, 'CalendarRange'],
+        [700021, 700020, '列表', 'social_practice:view', '/social-practice/plans', 'both', 'list', 20, 'List'],
+        [7000211, 700021, '维护', 'social_practice:plan:manage', null, 'pc', 'button', 21, null],
+        [7000212, 700021, '审核', 'social_practice:approve', null, 'pc', 'button', 22, null],
+        [7000213, 700021, '发布', 'social_practice:plan:manage', null, 'pc', 'button', 23, null],
+        [700030, 700000, '集中实践', null, null, 'both', 'menu', 30, 'UsersRound'],
+        [700031, 700030, '列表', 'social_practice:view', '/social-practice/centralized', 'both', 'list', 30, 'List'],
+        [7000311, 700031, '项目维护', 'social_practice:project:manage', null, 'pc', 'button', 31, null],
+        [7000312, 700031, '教师学生分配', 'social_practice:project:manage', null, 'pc', 'button', 32, null],
+        [7000313, 700031, '实施审批', 'social_practice:approve', null, 'pc', 'button', 33, null],
+        [700040, 700000, '分散实践', null, null, 'both', 'menu', 40, 'Network'],
+        [700041, 700040, '列表', 'social_practice:view', '/social-practice/distributed', 'both', 'list', 40, 'List'],
+        [7000411, 700041, '申报', 'social_practice:declare', null, 'both', 'button', 41, null],
+        [7000412, 700041, '审核', 'social_practice:approve', null, 'pc', 'button', 42, null],
+        [7000413, 700041, '教师确认', 'social_practice:teacher:confirm', null, 'both', 'button', 43, null],
+        [700050, 700000, '指导教师', null, null, 'both', 'menu', 50, 'UserRoundCheck'],
+        [700051, 700050, '列表', 'social_practice:view', '/social-practice/teachers', 'both', 'list', 50, 'List'],
+        [700060, 700000, '安全材料', null, null, 'both', 'menu', 60, 'ShieldCheck'],
+        [700061, 700060, '列表', 'social_practice:view', '/social-practice/safety', 'both', 'list', 60, 'List'],
+        [7000611, 700061, '提交评阅', 'social_practice:material:manage', null, 'both', 'button', 61, null],
+        [700070, 700000, '签到与补签', null, null, 'both', 'menu', 70, 'MapPin'],
+        [700071, 700070, '列表', 'social_practice:view', '/social-practice/attendance', 'both', 'list', 70, 'List'],
+        [7000711, 700071, '签到和审核', 'social_practice:attendance:manage', null, 'both', 'button', 71, null],
+        [700080, 700000, '成果材料', null, null, 'both', 'menu', 80, 'FileText'],
+        [700081, 700080, '列表', 'social_practice:view', '/social-practice/materials', 'both', 'list', 80, 'List'],
+        [7000811, 700081, '提交评阅', 'social_practice:material:manage', null, 'both', 'button', 81, null],
+        [700090, 700000, '成绩管理', null, null, 'both', 'menu', 90, 'GraduationCap'],
+        [700091, 700090, '列表', 'social_practice:view', '/social-practice/scores', 'both', 'list', 90, 'List'],
+        [7000911, 700091, '评分', 'social_practice:score:manage', null, 'pc', 'button', 91, null],
+        [7000912, 700091, '审核', 'social_practice:score:approve', null, 'pc', 'button', 92, null],
+        [700100, 700000, '归档管理', null, null, 'pc', 'menu', 100, 'FolderOpen'],
+        [700101, 700100, '列表', 'social_practice:view', '/social-practice/archives', 'pc', 'list', 100, 'List'],
+        [7001011, 700101, '归档', 'social_practice:archive', null, 'pc', 'button', 101, null],
+        [700110, 700000, '统计报表', null, null, 'pc', 'menu', 110, 'ChartColumn'],
+        [700111, 700110, '列表', 'social_practice:view', '/social-practice/statistics', 'pc', 'list', 110, 'List'],
+        [7001111, 700111, '导出', 'social_practice:export', null, 'pc', 'button', 111, null],
         [4, 0, '统计报表', null, null, 'pc', 'directory', 40, 'ChartColumn'],
         [41, 4, '实习统计', null, null, 'pc', 'menu', 41, 'ChartColumn'],
         [411, 41, '列表', 'stat:view', '/stat', 'pc', 'list', 411, 'List'],
@@ -2504,11 +3648,21 @@ function seedMenus(PDO $pdo): void
         [6, 0, '系统配置', 'config:view', null, 'pc', 'directory', 60, 'Settings'],
         [606, 6, '用户管理', null, null, 'pc', 'menu', 60, 'UsersRound'],
         [6061, 606, '列表', 'config:user', '/config/users', 'pc', 'list', 601, 'List'],
-        [607, 6, '届次管理', null, null, 'pc', 'menu', 61, 'GraduationCap'],
+        [607, 6, '年级管理', null, null, 'pc', 'menu', 61, 'GraduationCap'],
         [6071, 607, '列表', 'config:grade', '/config/grades', 'pc', 'list', 611, 'List'],
         [60711, 6071, '新增', 'config:grade:save', null, 'pc', 'button', 611, null],
         [60712, 6071, '编辑', 'config:grade:update', null, 'pc', 'button', 612, null],
         [60713, 6071, '删除', 'config:grade:delete', null, 'pc', 'button', 613, null],
+        [6120, 6, '毕业届次管理', null, null, 'pc', 'menu', 62, 'CalendarRange'],
+        [6121, 6120, '列表', 'config:graduation-cohort', '/config/graduation-cohorts', 'pc', 'list', 621, 'List'],
+        [61211, 6121, '新增', 'config:graduation-cohort:save', null, 'pc', 'button', 6211, null],
+        [61212, 6121, '编辑', 'config:graduation-cohort:update', null, 'pc', 'button', 6212, null],
+        [61213, 6121, '删除', 'config:graduation-cohort:delete', null, 'pc', 'button', 6213, null],
+        [6130, 6, '实习类别管理', null, null, 'pc', 'menu', 63, 'Tags'],
+        [6131, 6130, '列表', 'config:internship-category', '/config/internship-categories', 'pc', 'list', 631, 'List'],
+        [61311, 6131, '新增', 'config:internship-category:save', null, 'pc', 'button', 6311, null],
+        [61312, 6131, '编辑', 'config:internship-category:update', null, 'pc', 'button', 6312, null],
+        [61313, 6131, '删除', 'config:internship-category:delete', null, 'pc', 'button', 6313, null],
         [605, 6, '学院管理', null, null, 'pc', 'menu', 62, 'Building2'],
         [6051, 605, '列表', 'config:department', '/config/departments', 'pc', 'list', 621, 'List'],
         [60511, 6051, '新增', 'config:department:save', null, 'pc', 'button', 621, null],
@@ -2524,11 +3678,22 @@ function seedMenus(PDO $pdo): void
         [60911, 6091, '新增', 'config:class:save', null, 'pc', 'button', 641, null],
         [60912, 6091, '编辑', 'config:class:update', null, 'pc', 'button', 642, null],
         [60913, 6091, '删除', 'config:class:delete', null, 'pc', 'button', 643, null],
-        [610, 6, '基地管理', null, null, 'pc', 'menu', 65, 'Building2'],
-        [6101, 610, '列表', 'config:company', '/config/companies', 'pc', 'list', 651, 'List'],
-        [61011, 6101, '新增', 'config:company:save', null, 'pc', 'button', 651, null],
-        [61012, 6101, '编辑', 'config:company:update', null, 'pc', 'button', 652, null],
-        [61013, 6101, '删除', 'config:company:delete', null, 'pc', 'button', 653, null],
+        [610, 0, '基地管理', 'internship:view', null, 'pc', 'directory', 30, 'Building2'],
+        [6101, 610, '基地建设', null, null, 'pc', 'menu', 301, 'Building2'],
+        [61011, 6101, '列表', 'internship:view', '/base-management/construction', 'pc', 'list', 3011, 'List'],
+        [61012, 61011, '维护', 'internship:manage', null, 'pc', 'button', 3012, null],
+        [61013, 61011, '导入', 'internship:manage', null, 'pc', 'button', 3013, null],
+        [61014, 61011, '导出', 'internship:manage', null, 'pc', 'button', 3014, null],
+        [6102, 610, '基地申报', null, null, 'pc', 'menu', 302, 'FileText'],
+        [61021, 6102, '列表', 'internship:view', '/base-management/applications', 'pc', 'list', 3021, 'List'],
+        [610211, 61021, '提交', 'internship:manage', null, 'pc', 'button', 30211, null],
+        [610212, 61021, '审核', 'internship:approve', null, 'pc', 'button', 30212, null],
+        [610213, 61021, '通过后修改', 'internship:approve', null, 'pc', 'button', 30213, null],
+        [6103, 610, '基地使用', null, null, 'pc', 'menu', 303, 'ClipboardList'],
+        [61031, 6103, '列表', 'internship:view', '/base-management/usage', 'pc', 'list', 3031, 'List'],
+        [610311, 61031, '提交', 'internship:manage', null, 'pc', 'button', 30311, null],
+        [610312, 61031, '审核', 'internship:approve', null, 'pc', 'button', 30312, null],
+        [610313, 61031, '通过后修改', 'internship:approve', null, 'pc', 'button', 30313, null],
         [61, 6, '菜单管理', null, null, 'pc', 'menu', 70, 'ListTree'],
         [611, 61, '列表', 'config:menu', '/config/menus', 'pc', 'list', 701, 'List'],
         [601, 611, '新增', 'config:manage', null, 'pc', 'button', 601, null],
@@ -2544,6 +3709,9 @@ function seedMenus(PDO $pdo): void
         [631, 63, '列表', 'guide:view', '/config/guides', 'pc', 'list', 731, 'List'],
         [6311, 631, '保存', 'guide:save', null, 'pc', 'button', 631, null],
         [6312, 631, '删除', 'guide:delete', null, 'pc', 'button', 632, null],
+        [64, 6, '课节配置', null, null, 'pc', 'menu', 74, 'Clock3'],
+        [641, 64, '列表', 'practice:period:manage', '/config/practice-periods', 'pc', 'list', 741, 'List'],
+        [6411, 641, '维护', 'practice:period:manage', null, 'pc', 'button', 7411, null],
         [7, 6, '企业微信应用', null, null, 'pc', 'menu', 74, 'Network'],
         [711, 7, '列表', 'wechat:proxy', '/config/wechat-proxy', 'pc', 'list', 741, 'List'],
         [701, 711, '保存', 'wechat:proxy:save', null, 'pc', 'button', 701, null],
@@ -2573,32 +3741,100 @@ function seedMenus(PDO $pdo): void
         "INSERT INTO `menu` (`id`, `parent_id`, `name`, `code`, `path`, `platform`, `type`, `sort`, `icon`, `visible`, `status`)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'true', 'enabled')
          ON DUPLICATE KEY UPDATE
-            `parent_id` = VALUES(`parent_id`),
-            `name` = VALUES(`name`),
-            `code` = VALUES(`code`),
-            `path` = VALUES(`path`),
-            `platform` = VALUES(`platform`),
-            `type` = VALUES(`type`),
-            `sort` = VALUES(`sort`),
-            `icon` = VALUES(`icon`),
-            `visible` = 'true',
-            `status` = 'enabled',
-            `deleted_at` = NULL"
+            `id` = VALUES(`id`)"
     );
 
     foreach ($menus as $menu) {
         $stmt->execute($menu);
     }
 
+    $baseManagementMenuIds = [
+        610, 6101, 61011, 61012, 61013, 61014,
+        6102, 61021, 610211, 610212, 610213,
+        6103, 61031, 610311, 610312, 610313,
+    ];
+    $menuById = [];
+    foreach ($menus as $menu) {
+        $menuById[(int) $menu[0]] = $menu;
+    }
+    $baseMenuStmt = $pdo->prepare(
+        "UPDATE `menu`
+         SET `parent_id` = ?, `name` = ?, `code` = ?, `path` = ?, `platform` = ?, `type` = ?,
+             `sort` = ?, `icon` = ?, `visible` = 'true', `status` = 'enabled', `deleted_at` = NULL
+         WHERE `id` = ?"
+    );
+    foreach ($baseManagementMenuIds as $menuId) {
+        $menu = $menuById[$menuId];
+        $baseMenuStmt->execute([
+            $menu[1], $menu[2], $menu[3], $menu[4], $menu[5], $menu[6], $menu[7], $menu[8], $menu[0],
+        ]);
+    }
+
+    $pdo->exec("UPDATE `menu` SET `name` = '年级管理' WHERE `id` = 607");
+
+    $pdo->exec(
+        "UPDATE `menu`
+         SET `name` = '申请管理', `icon` = 'ClipboardList'
+         WHERE `id` = 12 AND `name` IN ('补充申请', '特殊申请', '申请管理')"
+    );
+    $pdo->exec(
+        "UPDATE `menu`
+         SET `name` = '实习方式申请', `path` = '/internship/requests?tab=applications'
+         WHERE `id` = 121"
+    );
+    $pdo->exec(
+        "UPDATE `menu`
+         SET `parent_id` = 12, `name` = '延期申请', `icon` = 'FileClock'
+         WHERE `id` = 195"
+    );
+    $pdo->exec(
+        "UPDATE `menu`
+         SET `path` = '/internship/requests?tab=delays'
+         WHERE `id` = 1951"
+    );
+
+    $practiceMenuIds = [
+        2, 21, 211, 201, 202, 22, 221, 2211, 222, 2221, 22211,
+        23, 231, 2311, 2312, 24, 241, 2411, 2412, 25, 251, 2511,
+        26, 261, 2611, 2612, 27, 271, 2711,
+    ];
+    $practiceMenuById = [];
+    foreach ($menus as $menu) {
+        if (in_array((int) $menu[0], $practiceMenuIds, true)) {
+            $practiceMenuById[(int) $menu[0]] = $menu;
+        }
+    }
+    $legacyPracticeStmt = $pdo->prepare(
+        "UPDATE `menu`
+         SET `parent_id` = ?, `code` = ?, `path` = ?, `platform` = ?, `type` = ?, `sort` = ?, `icon` = ?
+         WHERE `id` = ? AND (`code` LIKE 'training:%' OR `path` LIKE '/training/%')"
+    );
+    foreach ($practiceMenuIds as $menuId) {
+        $menu = $practiceMenuById[$menuId] ?? null;
+        if (!$menu) {
+            continue;
+        }
+        $legacyPracticeStmt->execute([
+            $menu[1], $menu[3], $menu[4], $menu[5], $menu[6], $menu[7], $menu[8], $menu[0],
+        ]);
+    }
+    $pdo->exec(
+        "UPDATE `menu`
+         SET `name` = '实验实训管理', `icon` = 'FlaskConical'
+         WHERE `id` = 2 AND `name` IN ('实训管理', '实验管理')"
+    );
+
     $moduleMenus = [
         1 => 'internship',
-        2 => 'training',
-        3 => 'lab',
+        2 => 'practice',
+        700000 => 'socialPractice',
         4 => 'stat',
         5 => 'log',
         6 => 'config',
         606 => 'userManage',
         607 => 'gradeManage',
+        6120 => 'graduationCohortManage',
+        6130 => 'internshipCategoryManage',
         605 => 'departmentManage',
         608 => 'professionManage',
         609 => 'classManage',
@@ -2617,7 +3853,11 @@ function seedMenus(PDO $pdo): void
         $moduleStmt->execute([$moduleKey, $menuId]);
     }
 
-    $disabledMenuIds = [102, 401];
+    $disabledMenuIds = [
+        3, 31, 311, 301, 302, 32, 321, 3211, 322, 3221, 32211,
+        33, 331, 3311, 3312, 34, 341, 3411, 3412, 35, 351, 3511,
+        36, 361, 3611, 3612, 37, 371, 3711, 102, 401,
+    ];
     $disableStmt = $pdo->prepare(
         "UPDATE `menu`
          SET `visible` = 'false', `status` = 'disabled', `deleted_at` = COALESCE(`deleted_at`, NOW())
@@ -2630,28 +3870,82 @@ function seedMenus(PDO $pdo): void
     $roleMenu = $pdo->prepare(
         "INSERT INTO `role_menu` (`role_id`, `menu_id`)
          VALUES (?, ?)
-         ON DUPLICATE KEY UPDATE `deleted_at` = NULL"
+         ON DUPLICATE KEY UPDATE `role_id` = VALUES(`role_id`)"
     );
+
+    $legacyPracticeRoleMap = [
+        3 => 2, 31 => 21, 311 => 211, 301 => 201, 302 => 202,
+        32 => 22, 321 => 221, 3211 => 2211, 322 => 222, 3221 => 2221,
+        32211 => 22211, 33 => 23, 331 => 231, 3311 => 2311, 3312 => 2312,
+        34 => 24, 341 => 241, 3411 => 2411, 3412 => 2412, 35 => 25,
+        351 => 251, 3511 => 2511, 36 => 26, 361 => 261, 3611 => 2611,
+        3612 => 2612, 37 => 27, 371 => 271, 3711 => 2711,
+    ];
+    $legacyRoleStmt = $pdo->prepare(
+        "SELECT DISTINCT `role_id` FROM `role_menu` WHERE `menu_id` = ? AND `deleted_at` IS NULL"
+    );
+    $migrateRoleStmt = $pdo->prepare(
+        "INSERT INTO `role_menu` (`role_id`, `menu_id`)
+         VALUES (?, ?)
+         ON DUPLICATE KEY UPDATE `deleted_at` = NULL, `updated_at` = NOW()"
+    );
+    $disableLegacyRoleStmt = $pdo->prepare(
+        "UPDATE `role_menu` SET `deleted_at` = NOW(), `updated_at` = NOW()
+         WHERE `role_id` = ? AND `menu_id` = ? AND `deleted_at` IS NULL"
+    );
+    foreach ($legacyPracticeRoleMap as $legacyMenuId => $practiceMenuId) {
+        $legacyRoleStmt->execute([$legacyMenuId]);
+        foreach ($legacyRoleStmt->fetchAll(PDO::FETCH_COLUMN) as $roleId) {
+            $migrateRoleStmt->execute([(int) $roleId, $practiceMenuId]);
+            $disableLegacyRoleStmt->execute([(int) $roleId, $legacyMenuId]);
+        }
+    }
 
     $internshipAdminMenus = [
         1, 11, 111, 101, 1112, 12, 121, 103, 104, 1213, 13, 131, 1311, 1312,
         14, 141, 105, 15, 151, 106, 1512, 16, 161, 107, 1612, 17, 171, 108,
         18, 181, 109, 19, 191, 110, 195, 1951, 19511, 19512,
     ];
-    $trainingMenus = [2, 21, 211, 201, 202, 22, 221, 2211, 222, 2221, 22211, 23, 231, 2311, 2312, 24, 241, 2411, 2412, 25, 251, 2511, 26, 261, 2611, 2612, 27, 271, 2711];
-    $labMenus = [3, 31, 311, 301, 302, 32, 321, 3211, 322, 3221, 32211, 33, 331, 3311, 3312, 34, 341, 3411, 3412, 35, 351, 3511, 36, 361, 3611, 3612, 37, 371, 3711];
-    $trainingReadonlyMenus = [2, 21, 211, 22, 221, 222, 2221, 25, 251];
-    $labReadonlyMenus = [3, 31, 311, 32, 321, 322, 3221, 35, 351];
+    $baseManagementMenus = [
+        610, 6101, 61011, 61012, 61013, 61014,
+        6102, 61021, 610211, 610212, 610213,
+        6103, 61031, 610311, 610312, 610313,
+    ];
+    $practiceMenus = [2, 21, 211, 201, 202, 22, 221, 2211, 222, 2221, 22211, 23, 231, 2311, 2312, 24, 241, 2411, 2412, 25, 251, 2511, 26, 261, 2611, 2612, 27, 271, 2711];
+    $practiceReadonlyMenus = [2, 21, 211, 22, 221, 222, 2221, 25, 251];
+    $socialPracticeMenus = [
+        700000, 700010, 700011, 700020, 700021, 7000211, 7000212, 7000213,
+        700030, 700031, 7000311, 7000312, 7000313,
+        700040, 700041, 7000411, 7000412, 7000413,
+        700050, 700051, 700060, 700061, 7000611,
+        700070, 700071, 7000711, 700080, 700081, 7000811,
+        700090, 700091, 7000911, 7000912, 700100, 700101, 7001011,
+        700110, 700111, 7001111,
+    ];
+    $socialPracticeTeacherMenus = [
+        700000, 700010, 700011, 700020, 700021,
+        700030, 700031, 700040, 700041, 7000412, 7000413,
+        700050, 700051, 700060, 700061, 7000611,
+        700070, 700071, 7000711, 700080, 700081, 7000811,
+        700090, 700091, 7000911,
+    ];
+    $socialPracticeStudentMenus = [
+        700000, 700010, 700011, 700020, 700021,
+        700030, 700031, 700040, 700041, 7000411,
+        700050, 700051, 700060, 700061, 7000611,
+        700070, 700071, 7000711, 700080, 700081, 7000811,
+        700090, 700091,
+    ];
     $statMenus = [4, 41, 411, 402, 42, 421, 43, 431, 44, 441, 45, 451, 46, 461, 47, 471];
     $commonViewMenus = [9, 91, 911, 10, 100, 1000, 10001, 20, 200, 2000, 20001, 20002];
     $allMenuIds = array_map(static fn (array $menu): int => (int) $menu[0], $menus);
     $roleMenuIds = [
         1 => $allMenuIds,
         2 => $allMenuIds,
-        3 => array_merge($internshipAdminMenus, $trainingMenus, $labMenus, $statMenus, $commonViewMenus),
-        4 => array_merge($internshipAdminMenus, $trainingMenus, $labMenus, $statMenus, $commonViewMenus),
-        5 => array_merge([1, 11, 111, 12, 121, 104, 1213, 13, 131, 14, 141, 105, 15, 151, 106, 1512, 16, 161, 107, 1612, 17, 171, 108, 195, 1951, 19512, 201, 202, 2311, 2312, 2411, 2412, 2511, 2611, 2612, 301, 302, 3311, 3312, 3411, 3412, 3511, 3611, 3612], $trainingReadonlyMenus, $labReadonlyMenus, $commonViewMenus),
-        6 => array_merge([1, 11, 111, 12, 121, 103, 14, 141, 105, 15, 151, 106, 16, 161, 107, 195, 1951, 19511], $trainingReadonlyMenus, $labReadonlyMenus, $commonViewMenus),
+        3 => array_merge($internshipAdminMenus, $baseManagementMenus, $practiceMenus, $socialPracticeMenus, $statMenus, $commonViewMenus),
+        4 => array_merge($internshipAdminMenus, $baseManagementMenus, $practiceMenus, $socialPracticeMenus, $statMenus, $commonViewMenus),
+        5 => array_merge([1, 11, 111, 12, 121, 104, 1213, 13, 131, 14, 141, 105, 15, 151, 106, 1512, 16, 161, 107, 1612, 17, 171, 108, 195, 1951, 19512, 201, 202, 2311, 2312, 2411, 2412, 2511, 2611, 2612], $practiceReadonlyMenus, $socialPracticeTeacherMenus, $commonViewMenus),
+        6 => array_merge([1, 11, 111, 12, 121, 103, 14, 141, 105, 15, 151, 106, 16, 161, 107, 195, 1951, 19511], $practiceReadonlyMenus, $socialPracticeStudentMenus, $commonViewMenus),
         7 => array_merge([1, 17, 171, 108], $commonViewMenus),
     ];
 
@@ -2660,28 +3954,7 @@ function seedMenus(PDO $pdo): void
         foreach ($menuIds as $menuId) {
             $roleMenu->execute([$roleId, $menuId]);
         }
-        syncSeedRoleMenus($pdo, (int) $roleId, $menuIds);
     }
-}
-
-function syncSeedRoleMenus(PDO $pdo, int $roleId, array $menuIds): void
-{
-    if (!$menuIds) {
-        $pdo->prepare(
-            "UPDATE `role_menu`
-             SET `deleted_at` = NOW(), `updated_at` = NOW()
-             WHERE `role_id` = ? AND `deleted_at` IS NULL"
-        )->execute([$roleId]);
-        return;
-    }
-
-    $placeholders = implode(',', array_fill(0, count($menuIds), '?'));
-    $stmt = $pdo->prepare(
-        "UPDATE `role_menu`
-         SET `deleted_at` = NOW(), `updated_at` = NOW()
-         WHERE `role_id` = ? AND `deleted_at` IS NULL AND `menu_id` NOT IN ({$placeholders})"
-    );
-    $stmt->execute(array_merge([$roleId], $menuIds));
 }
 
 function seedCommonSupportData(PDO $pdo): void
@@ -2735,14 +4008,14 @@ function seedDocCenterData(PDO $pdo): void
             '00000000-0000-0000-0000-000000220001',
             1,
             '高校实习实践基础流程',
-            '<h3>流程</h3><p>管理员维护届次、学院、专业、班级、基地、实习计划、实习任务和任务绑定；学生按已绑定任务提交补充申请、签到、日志、报告和延期申请；任务老师按任务处理审核、评阅和成绩；学校管理员查看统计、归档材料和审计日志。</p><h3>注意</h3><p>实习主链路以计划、任务、班级学生绑定为边界，补充申请不生成任务绑定。</p>',
+            '<h3>流程</h3><p>管理员维护届次、学院、专业、班级、基地、实习计划、实习任务和任务绑定；学生按已绑定任务提交实习方式申请、签到、日志、报告和延期申请；任务老师按任务处理审核、评阅和成绩；学校管理员查看统计、归档材料和审计日志。</p><h3>注意</h3><p>实习主链路以计划、任务、班级学生绑定为边界，实习方式申请不生成任务绑定。</p>',
         ],
         [
             2,
             '00000000-0000-0000-0000-000000220002',
             2,
             '学生端提交说明',
-            '<h3>学生流程</h3><p>学生端主要完成自己已绑定任务下的补充申请、签到、日志、报告、延期申请和流程记录查看。状态为需修改时，应进入对应记录重新编辑并提交。</p><h3>常见问题</h3><p>看不到列表筛选属于正常体验，学生仅查看本人的数据。</p>',
+            '<h3>学生流程</h3><p>学生端主要完成自己已绑定任务下的实习方式申请、签到、日志、报告、延期申请和流程记录查看。状态为需修改时，应进入对应记录重新编辑并提交。</p><h3>常见问题</h3><p>看不到列表筛选属于正常体验，学生仅查看本人的数据。</p>',
         ],
         [
             3,
@@ -2788,18 +4061,133 @@ function seedTemplateLibraryData(PDO $pdo): void
         [5, '00000000-0000-0000-0000-000000230005', 'tripartite_agreement', '三方协议模板库', '学校、学生、企业三方协议相关模板。', 50],
         [6, '00000000-0000-0000-0000-000000230006', 'process_document', '过程文档模板库', '签到、日志、周志、过程检查材料模板。', 60],
         [7, '00000000-0000-0000-0000-000000230007', 'report_template_lib', '实习报告模板库', '实习报告、总结、鉴定类模板。', 70],
+        [8, '00000000-0000-0000-0000-000000230008', 'internship_archive', '实习档案模板', '实习计划、实施、大纲、指导书、过程、报告、成绩和安全承诺档案模板。', 80],
     ];
     foreach ($categories as $category) {
         $stmt->execute($category);
     }
+
+    $templateStmt = $pdo->prepare(
+        "INSERT INTO `template` (`uuid`, `category_id`, `code`, `name`, `description`, `file_id`, `version`, `download_count`, `flag`, `business_code`, `material_type`, `scope_type`, `practice_types`, `status`)
+         VALUES (?, 8, ?, ?, ?, ?, ?, 0, 'on', 'internship_archive', ?, ?, ?, 'enabled')
+         ON DUPLICATE KEY UPDATE
+            `category_id` = 8,
+            `code` = VALUES(`code`),
+            `name` = VALUES(`name`),
+            `description` = VALUES(`description`),
+            `file_id` = VALUES(`file_id`),
+            `version` = VALUES(`version`),
+            `flag` = 'on',
+            `business_code` = 'internship_archive',
+            `material_type` = VALUES(`material_type`),
+            `scope_type` = VALUES(`scope_type`),
+            `practice_types` = VALUES(`practice_types`),
+            `status` = 'enabled',
+            `deleted_at` = NULL"
+    );
+    $templates = [
+        ['plan', '实习计划', '计划表导入和归档模板。', 'plan.xlsx', 'plan', 'plan', ['internship']],
+        ['implementation_sheet', '教学实习实施表', '按已确认的新版实施（经费）表生成。', 'implementation-sheet.pdf', 'implementation_sheet', 'arrangement', ['internship']],
+        ['syllabus', '实习教学大纲', '成都锦城学院实习教学大纲模板。', 'syllabus.docx', 'syllabus', 'plan', ['internship']],
+        ['guide', '实习指导书', '实习指导书模板。', 'guide.doc', 'guide', 'plan', ['internship']],
+        ['registration', '实习情况登记表', '根据实习任务和学生绑定生成。', 'registration.xlsx', 'registration', 'arrangement', ['internship']],
+        ['teacher_work_report', '指导教师工作报告', '实习指导教师工作报告模板。', 'teacher-work-report.docx', 'teacher_work_report', 'arrangement', ['internship']],
+        ['journal', '实习周（日）志', '学生实习周志和日志模板。', 'journal.docx', 'journal', 'student_task', ['internship']],
+        ['report', '实习/实训报告', '普通实习报告模板。', 'report.docx', 'report', 'student_task', ['internship']],
+        ['graduation_report', '毕业实习报告', '毕业实习报告模板。', 'graduation-report.docx', 'graduation_report', 'student_task', ['graduation']],
+        ['graduation_appraisal', '毕业实习成绩鉴定表', '毕业实习过程管理、实习单位和校内指导教师成绩鉴定模板。', 'graduation-appraisal.docx', 'graduation_appraisal', 'student_task', ['graduation']],
+        ['score_register', '成绩登记表', '按计划、任务和班级生成成绩登记表。', 'score-register.pdf', 'score_register', 'plan_class', ['internship']],
+        ['safety_commitment', '学生实习安全承诺书', '学生签署后上传定稿文件。', 'safety-commitment.pdf', 'safety_commitment', 'student_task', ['internship']],
+    ];
+    foreach ($templates as $index => [$code, $name, $description, $fileName, $materialType, $scopeType, $practiceTypes]) {
+        $sequence = $index + 1;
+        $fileId = seedArchiveTemplateFile($pdo, $fileName, $name, $sequence);
+        $templateStmt->execute([
+            sprintf('00000000-0000-0000-0000-%012d', 250000 + $sequence),
+            'internship_archive_' . $code,
+            $name,
+            $description,
+            $fileId ?: null,
+            '2026.1',
+            $materialType,
+            $scopeType,
+            json_encode($practiceTypes, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+        ]);
+    }
+}
+
+function seedArchiveTemplateFile(PDO $pdo, string $fileName, string $downloadName, int $sequence): ?int
+{
+    $source = dirname(__DIR__) . '/resources/templates/internship/archive/' . $fileName;
+    if (!is_file($source)) {
+        return null;
+    }
+
+    $relativePath = 'files/b1/system/template/archive/' . $fileName;
+    $target = dirname(__DIR__) . '/public/' . $relativePath;
+    $directory = dirname($target);
+    if (!is_dir($directory) && !mkdir($directory, 0775, true) && !is_dir($directory)) {
+        throw new RuntimeException('模板文件目录创建失败');
+    }
+    if (!is_file($target) || md5_file($target) !== md5_file($source)) {
+        if (!copy($source, $target)) {
+            throw new RuntimeException('模板文件复制失败：' . $fileName);
+        }
+    }
+
+    $md5 = md5_file($target);
+    $sha1 = sha1_file($target);
+    if ($md5 === false || $sha1 === false) {
+        throw new RuntimeException('模板文件校验失败：' . $fileName);
+    }
+    $ext = strtolower((string) pathinfo($fileName, PATHINFO_EXTENSION));
+    $mime = function_exists('mime_content_type') ? (string) mime_content_type($target) : 'application/octet-stream';
+    $blobStmt = $pdo->prepare(
+        "INSERT INTO `file_blob` (`md5`, `sha1`, `path`, `url`, `ext`, `size`, `mime_type`, `disk`, `block`, `category`, `ref_count`, `deleted_at`)
+         VALUES (?, ?, ?, ?, ?, ?, ?, 'public', 'b1', 'template', 1, NULL)
+         ON DUPLICATE KEY UPDATE
+            `id` = LAST_INSERT_ID(`id`),
+            `sha1` = VALUES(`sha1`),
+            `path` = VALUES(`path`),
+            `url` = VALUES(`url`),
+            `ext` = VALUES(`ext`),
+            `size` = VALUES(`size`),
+            `mime_type` = VALUES(`mime_type`),
+            `category` = 'template',
+            `ref_count` = GREATEST(`ref_count`, 1),
+            `deleted_at` = NULL"
+    );
+    $url = '/' . $relativePath;
+    $blobStmt->execute([$md5, $sha1, $relativePath, $url, $ext, (int) filesize($target), $mime]);
+    $blobId = (int) $pdo->lastInsertId();
+
+    $fileStmt = $pdo->prepare(
+        "INSERT INTO `file` (`uuid`, `blob_id`, `name`, `download_name`, `url`, `is_temporary`, `uploader_id`, `client`, `category`, `status`, `deleted_at`)
+         VALUES (?, ?, ?, ?, ?, 0, 1, 'system', 'template', 'enabled', NULL)
+         ON DUPLICATE KEY UPDATE
+            `id` = LAST_INSERT_ID(`id`),
+            `blob_id` = VALUES(`blob_id`),
+            `name` = VALUES(`name`),
+            `download_name` = VALUES(`download_name`),
+            `url` = VALUES(`url`),
+            `is_temporary` = 0,
+            `category` = 'template',
+            `status` = 'enabled',
+            `deleted_at` = NULL"
+    );
+    $uuid = sprintf('00000000-0000-0000-0000-%012d', 240000 + $sequence);
+    $fileStmt->execute([$uuid, $blobId, $fileName, $downloadName . '.' . $ext, $url]);
+
+    return (int) $pdo->lastInsertId();
 }
 
 function seedOperationGuides(PDO $pdo): void
 {
     $guides = [
-        ['internship', '实习管理操作说明', '实习管理围绕实习计划、实习任务、任务绑定、补充申请、签到、日志、报告、成绩和归档材料进行全过程留痕。', '管理员按计划拆分任务并绑定班级，系统展开学生生成任务绑定；学生按任务完成过程材料，任务老师按任务审核评阅，学校管理员按学院、专业、届次查看整体进度。', '学生看不到列表筛选时，先确认当前账号是否为学生角色；教师看不到学生时，检查任务绑定和组织范围；审核退回后学生重新提交会形成新的记录。', 10],
-        ['training', '实训管理操作说明', '实训管理围绕教学计划、课表安排、大纲、教案、成绩评定和反思报告进行维护。', '教学计划可由教务拉取或教师填报，经过系主任、学院教务科、学院主管院长、教务处和教务处领导等节点审核；课表安排区分校内实训室和校外基地，并支持签到册打印记录；大纲、教案和反思报告由任课教师提交后按学院流程审核。', '待审核数据才能通过或退回；已通过数据只能发起通过后修改；学生端主要查看本人课表、成绩和可提交材料。', 20],
-        ['lab', '实验管理操作说明', '实验管理围绕教学计划、课表安排、大纲、教案、成绩评定和反思报告进行维护。', '教学计划可由教务拉取或教师填报，课表安排维护实验室、时间地点和学生范围；大纲、教案由任课教师编写后进入系主任和学院分管院长审核；成绩评定包含比例设定、成绩录入、成绩提交和成绩统计。', '实验室、课程、项目和课表数据要先维护基础信息；待审核数据才能处理，退回后需重新提交形成新记录。', 30],
+        ['internship', '实习管理操作说明', '实习管理围绕实习计划、实习任务、任务绑定、实习方式申请、延期申请、签到、日志、报告、成绩和归档材料进行全过程留痕。', '管理员按计划拆分任务并绑定班级，系统展开学生生成任务绑定；学生按任务完成过程材料，任务老师按任务审核评阅，学校管理员按学院、专业、届次查看整体进度。', '学生看不到列表筛选时，先确认当前账号是否为学生角色；教师看不到学生时，检查任务绑定和组织范围；审核退回后学生重新提交会形成新的记录。', 10],
+        ['companyManage', '基地管理操作说明', '基地管理统一维护基地建设资料、基地申报和基地使用记录。', '管理员先维护长期或临时基地资料，再按实际业务提交基地申报或基地使用记录；提交审核后由具备审核权限的管理员处理，全部流程保留提交和审核记录。', '学院管理员和专业管理员仅能查看本组织范围内的基地数据；基地申报和基地使用保存草稿后不会进入审核待办。', 15],
+        ['practice', '实验实训管理操作说明', '实验实训管理统一维护教学计划、专业课表、项目、大纲、教案、成绩和反思报告，并通过类别区分实验与实训。', '管理员先维护届次、学院、专业和十二节通用课节，再按专业安排二维周课表；每条课表明确实验或实训类别、教师、日期、起止课节和场地，项目发布后按届次与专业绑定学生。', '课表必须先选择届次、学院和专业；同专业、教师或场地在重叠课节内不能重复排课；历史课表仍按保存时的时间快照显示。', 20],
+        ['socialPractice', '社会实践管理操作说明', '社会实践按年级组织，同一计划可同时开展集中实践和分散实践。', '管理员创建并发布计划；集中实践由管理员配置项目、教师和学生，分散实践由学生个人或团队申报并完成教师确认；安全条件完整后进入签到、成果、成绩和归档。', '学生只能查看本人参与数据，教师只能查看本人项目和学生；家长知情书为可选材料，不会阻断实施、评分或归档。', 30],
         ['stat', '统计报表操作说明', '统计报表按当前角色的数据范围展示实习总览、学院统计、专业统计、任务老师统计、学生过程统计和归档材料统计。', '选择左侧报表菜单后，通过届次、学院、专业和关键词筛选数据；切换报表菜单可查看不同统计口径的数据明细。', '如果统计值与列表不一致，优先确认当前角色的数据范围、筛选条件和业务数据是否已刷新。', 40],
         ['log', '日志审计操作说明', '日志审计读取当前学校业务库下所有 operation_log 按月分表，支持关键词、动作、IP 和日期范围查询。', '管理员进入日志审计后先设置查询条件，再查看来源分表、操作账号、动作、IP 和日志内容。', '如果日志为空，检查当前月份日志分表是否存在，以及账号是否具备日志查看权限。', 50],
         ['file', '文件管理操作说明', '文件管理用于查看学校业务库内的上传文件、上传人、上传时间、设备信息和文件状态。', '通过关键词、状态和分类定位文件，点击打开可查看文件访问地址。', '如果文件打不开，检查文件状态、存储配置和浏览器访问权限。', 60],
@@ -2828,6 +4216,7 @@ function seedOperationGuides(PDO $pdo): void
             $sort,
         ]);
     }
+    $pdo->exec("UPDATE `operation_guide` SET `status` = 'disabled', `deleted_at` = COALESCE(`deleted_at`, NOW()) WHERE `module_key` IN ('training', 'lab')");
 }
 
 function guideContent(string $flow, string $process, string $faq): string
@@ -2842,8 +4231,8 @@ function seedConfig(PDO $pdo, string $wechatProxyUrl): void
     $groups = [
         [1, 0, 'system', '系统配置', 10],
         [2, 0, 'internship', '实习管理', 20],
-        [3, 0, 'training', '实训管理', 30],
-        [4, 0, 'lab', '实验管理', 40],
+        [3, 0, 'practice', '实验实训管理', 30],
+        [7, 0, 'social_practice', '社会实践管理', 40],
         [5, 0, 'wechat', '企业微信', 50],
         [6, 0, 'file', '文件管理', 60],
     ];
@@ -2851,7 +4240,13 @@ function seedConfig(PDO $pdo, string $wechatProxyUrl): void
     $groupStmt = $pdo->prepare(
         "INSERT INTO `config_group` (`id`, `parent_id`, `code`, `name`, `sort`, `status`)
          VALUES (?, ?, ?, ?, ?, 'enabled')
-         ON DUPLICATE KEY UPDATE `name` = VALUES(`name`), `sort` = VALUES(`sort`), `status` = 'enabled'"
+         ON DUPLICATE KEY UPDATE
+            `parent_id` = VALUES(`parent_id`),
+            `code` = VALUES(`code`),
+            `name` = VALUES(`name`),
+            `sort` = VALUES(`sort`),
+            `status` = 'enabled',
+            `deleted_at` = NULL"
     );
     foreach ($groups as $group) {
         $groupStmt->execute($group);
@@ -2863,8 +4258,11 @@ function seedConfig(PDO $pdo, string $wechatProxyUrl): void
         [2, 'sign_in_radius', 500, '学生 GPS 签到时允许的最大距离，单位米', 10],
         [2, 'pair_mode', 'admin_assign', '实习任务绑定模式', 20],
         [2, 'max_student_count', 20, '任务老师默认负责学生数上限', 30],
-        [3, 'booking_max_days', 14, '实训室最长可预约天数', 10],
-        [4, 'booking_max_days', 14, '实验室最长可预约天数', 10],
+        [3, 'booking_max_days', 14, '实验实训室最长可预约天数', 10],
+        [7, 'teacher_confirm_hours', 48, '分散实践教师默认确认时限，单位小时', 10],
+        [7, 'max_reselect_count', 2, '分散实践学生默认重新选择教师次数', 20],
+        [7, 'default_team_submit_mode', 'individual', '团队成果默认提交方式', 30],
+        [7, 'parent_notice_required', false, '家长知情书是否必交，当前需保持关闭', 40],
         [5, 'app_id', '', '企业微信应用 AppID，可用于第三方应用或自建应用标识', 5],
         [5, 'corp_id', '', '企业微信企业 ID', 10],
         [5, 'agent_id', '', '企业微信自建应用 AgentId', 15],
@@ -2894,4 +4292,6 @@ function seedConfig(PDO $pdo, string $wechatProxyUrl): void
     foreach ($items as [$groupId, $key, $value, $description, $sort]) {
         $itemStmt->execute([$groupId, $key, json_encode($value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), $description, $sort]);
     }
+    $pdo->exec("UPDATE `config_group` SET `status` = 'disabled', `deleted_at` = COALESCE(`deleted_at`, NOW()) WHERE `id` = 4");
+    $pdo->exec("UPDATE `config_item` SET `status` = 'disabled', `deleted_at` = COALESCE(`deleted_at`, NOW()) WHERE `group_id` = 4");
 }

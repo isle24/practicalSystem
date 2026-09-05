@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>社会实践管理流程图</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    padding: 20px;
+    color: #1f2937;
+    background: #eef2f6;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  }
+  main {
+    width: min(1800px, 100%);
+    margin: 0 auto;
+    overflow: hidden;
+    border: 1px solid #dbe2ea;
+    border-radius: 8px;
+    background: #ffffff;
+    box-shadow: 0 8px 24px rgba(31, 41, 55, 0.08);
+  }
+  header {
+    padding: 22px 28px;
+    border-bottom: 1px solid #dbe2ea;
+    background: #173f6b;
+    color: #ffffff;
+  }
+  h1 {
+    margin: 0;
+    font-size: 24px;
+    letter-spacing: 0;
+  }
+  header p {
+    margin: 8px 0 0;
+    color: #dbeafe;
+    font-size: 14px;
+  }
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    padding: 14px 28px;
+    border-bottom: 1px solid #e5e7eb;
+  }
+  .legend span {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 13px;
+  }
+  .legend i {
+    width: 12px;
+    height: 12px;
+    border-radius: 3px;
+  }
+  .source { background: #6d4c9a; }
+  .plan { background: #a86515; }
+  .central { background: #1769aa; }
+  .distributed { background: #16805c; }
+  .review { background: #bd4a16; }
+  .student { background: #596579; }
+  .safety { background: #b93338; }
+  .archive { background: #4d6575; }
+  .chart {
+    min-height: 900px;
+    padding: 20px 12px 32px;
+    overflow: auto;
+  }
+  .mermaid {
+    display: flex;
+    min-width: 1100px;
+    justify-content: center;
+  }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>社会实践管理流程图</h1>
+    <p>按年级组织；同一计划可同时开展集中实践与分散实践；不包含日志和中期汇报</p>
+  </header>
+  <section class="legend" aria-label="图例">
+    <span><i class="source"></i>数据来源</span>
+    <span><i class="plan"></i>计划与配置</span>
+    <span><i class="central"></i>集中实践</span>
+    <span><i class="distributed"></i>分散实践</span>
+    <span><i class="review"></i>教师与审批</span>
+    <span><i class="student"></i>学生操作</span>
+    <span><i class="safety"></i>安全与异常</span>
+    <span><i class="archive"></i>成绩与归档</span>
+  </section>
+  <section class="chart">
+    <div class="mermaid">
+flowchart TB
+    classDef source fill:#6d4c9a,color:#fff,stroke:#553978,stroke-width:2px
+    classDef plan fill:#a86515,color:#fff,stroke:#854d0e,stroke-width:2px
+    classDef central fill:#1769aa,color:#fff,stroke:#124f82,stroke-width:2px
+    classDef distributed fill:#16805c,color:#fff,stroke:#116349,stroke-width:2px
+    classDef review fill:#bd4a16,color:#fff,stroke:#94380f,stroke-width:2px
+    classDef student fill:#596579,color:#fff,stroke:#414b5d,stroke-width:2px
+    classDef safety fill:#b93338,color:#fff,stroke:#92282c,stroke-width:2px
+    classDef archive fill:#4d6575,color:#fff,stroke:#394d5a,stroke-width:2px
+    classDef decision fill:#7257a8,color:#fff,stroke:#584287,stroke-width:2px
+
+    EDU["教务系统同步"]:::source
+    EXCEL["Excel 导入"]:::source
+    MANUAL["后台新增"]:::source
+    DRAFT["生成计划草稿<br/>按年级组织"]:::plan
+    SCOPE["配置适用范围<br/>全校 / 学院 / 专业 / 班级"]:::plan
+    RULES["配置计划规则<br/>全员或自愿参与<br/>时间窗口 / 审批流程<br/>安全要求 / 材料 / 成绩"]:::plan
+    PUBLISH["确认并发布计划<br/>同一计划支持两种模式"]:::plan
+
+    EDU --> DRAFT
+    EXCEL --> DRAFT
+    MANUAL --> DRAFT
+    DRAFT --> SCOPE --> RULES --> PUBLISH
+
+    subgraph CENTRAL_FLOW[集中实践]
+      direction TB
+      C_PROJECT["管理员创建集中项目"]:::central
+      C_TEACHERS["配置一名负责人<br/>和多名指导教师"]:::central
+      C_STUDENTS["分配学生<br/>每名学生绑定一名教师"]:::central
+      C_APPLY["提交实施申请"]:::central
+      C_MAJOR{"专业负责人审核"}:::review
+      C_COLLEGE{"学院审批"}:::review
+      C_FILING{"教务处节点<br/>审批或自动备案"}:::review
+      C_SAFE["安全条件确认<br/>安全协议 / 保险 / 应急预案<br/>家长知情书仅可选"]:::safety
+      C_READY{"必填条件完整？"}:::decision
+      C_ACTIVE["开始集中实践"]:::central
+      C_SIGN["学生签到和拍照"]:::student
+      C_ABNORMAL{"签到异常？"}:::decision
+      C_PATCH["补签到申请<br/>指导教师审核"]:::review
+      C_RESULT["提交成果<br/>实践报告 / 实践照片"]:::student
+      C_COMPLETE{"材料完整？"}:::decision
+      C_SUPPLY["限时补交材料"]:::student
+      C_SCORE["指导教师评分<br/>签到 / 表现 / 报告"]:::review
+      C_SCORE_REVIEW{"学院审核成绩"}:::review
+
+      C_PROJECT --> C_TEACHERS --> C_STUDENTS --> C_APPLY
+      C_APPLY --> C_MAJOR
+      C_MAJOR -->|退回修改| C_APPLY
+      C_MAJOR -->|通过| C_COLLEGE
+      C_COLLEGE -->|退回修改| C_APPLY
+      C_COLLEGE -->|通过| C_FILING
+      C_FILING -->|退回修改| C_APPLY
+      C_FILING -->|通过或自动备案| C_SAFE
+      C_SAFE --> C_READY
+      C_READY -->|否| C_SAFE
+      C_READY -->|是| C_ACTIVE --> C_SIGN --> C_ABNORMAL
+      C_ABNORMAL -->|是| C_PATCH --> C_SIGN
+      C_ABNORMAL -->|否| C_RESULT --> C_COMPLETE
+      C_COMPLETE -->|否| C_SUPPLY --> C_RESULT
+      C_COMPLETE -->|是| C_SCORE --> C_SCORE_REVIEW
+      C_SCORE_REVIEW -->|退回修改| C_SCORE
+    end
+
+    subgraph DISTRIBUTED_FLOW[分散实践]
+      direction TB
+      S_WINDOW["开放分散实践申报窗口"]:::distributed
+      S_DECLARE["个人或团队申报<br/>团队成员确认加入"]:::student
+      S_SUBMIT_MODE["材料提交方式<br/>默认分别提交<br/>学院可改为共同提交"]:::distributed
+      S_TEACHER["学生选择指导教师<br/>或管理员分配"]:::student
+      S_CONFIRM{"教师确认容量"}:::review
+      S_RESELECT["重新选择教师<br/>次数由计划配置"]:::student
+      S_ADMIN["确认超时<br/>管理员介入分配"]:::review
+      S_REVIEW{"教师审核可行性<br/>安全性与学分要求"}:::review
+      S_SAFE["安全条件确认<br/>安全协议 / 保险 / 应急预案<br/>家长知情书仅可选"]:::safety
+      S_READY{"必填条件完整？"}:::decision
+      S_ACTIVE["开始分散实践"]:::distributed
+      S_SIGN["学生签到和拍照"]:::student
+      S_ABNORMAL{"签到异常？"}:::decision
+      S_PATCH["补签到申请<br/>指导教师审核"]:::review
+      S_RESULT["提交成果<br/>实践证明 / 照片 / 社会实践报告"]:::student
+      S_COMPLETE{"材料完整？"}:::decision
+      S_SUPPLY["限时补交材料"]:::student
+      S_SCORE["指导教师评分<br/>态度 / 成果 / 报告"]:::review
+      S_SCORE_REVIEW{"学院审核成绩"}:::review
+      S_STOP["申报终止"]:::safety
+
+      S_WINDOW --> S_DECLARE --> S_SUBMIT_MODE --> S_TEACHER --> S_CONFIRM
+      S_CONFIRM -->|拒绝| S_RESELECT --> S_TEACHER
+      S_CONFIRM -->|超时| S_ADMIN --> S_TEACHER
+      S_CONFIRM -->|确认| S_REVIEW
+      S_REVIEW -->|退回修改| S_DECLARE
+      S_REVIEW -->|不通过| S_STOP
+      S_REVIEW -->|通过| S_SAFE
+      S_SAFE --> S_READY
+      S_READY -->|否| S_SAFE
+      S_READY -->|是| S_ACTIVE --> S_SIGN --> S_ABNORMAL
+      S_ABNORMAL -->|是| S_PATCH --> S_SIGN
+      S_ABNORMAL -->|否| S_RESULT --> S_COMPLETE
+      S_COMPLETE -->|否| S_SUPPLY --> S_RESULT
+      S_COMPLETE -->|是| S_SCORE --> S_SCORE_REVIEW
+      S_SCORE_REVIEW -->|退回修改| S_SCORE
+    end
+
+    PUBLISH --> C_PROJECT
+    PUBLISH --> S_WINDOW
+
+    C_SCORE_REVIEW -->|通过| CREDIT["形成最终成绩<br/>认定学分"]:::archive
+    S_SCORE_REVIEW -->|通过| CREDIT
+    CREDIT --> ARCHIVE["归档并生成打印文件<br/>保留材料 / 成绩 / 审核 / 时间线版本"]:::archive
+    ARCHIVE --> END(["社会实践完成"]):::archive
+
+    </div>
+  </section>
+</main>
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'base',
+    securityLevel: 'loose',
+    themeVariables: {
+      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif',
+      fontSize: '13px',
+      lineColor: '#8793a3',
+      clusterBkg: '#f8fafc',
+      clusterBorder: '#cbd5e1'
+    },
+    flowchart: {
+      useMaxWidth: false,
+      htmlLabels: true,
+      curve: 'linear',
+      nodeSpacing: 36,
+      rankSpacing: 44,
+      padding: 14
+    }
+  });
+</script>
+</body>
+</html>

@@ -25,6 +25,10 @@ class RecordingArchiveRecord extends TableRecord
         'implementation_sheet_recording' => ['parent' => 'implementation_sheet', 'grade_source' => 'arrangement'],
         'teacher_work_report_recording' => ['parent' => 'teacher_work_report', 'grade_source' => 'arrangement'],
         'inspection_recording' => ['parent' => 'inspection_record', 'grade_source' => 'arrangement'],
+        'internship_student_change_recording' => ['parent' => 'internship_student_change', 'grade_source' => 'student'],
+        'internship_enterprise_evaluation_recording' => ['parent' => 'internship_enterprise_evaluation', 'grade_source' => 'student'],
+        'internship_graduation_appraisal_recording' => ['parent' => 'internship_graduation_appraisal', 'grade_source' => 'student'],
+        'internship_archive_material_recording' => ['parent' => 'internship_archive_material', 'grade_source' => 'parent_plan'],
     ];
 
     private const PRACTICE_PARENT_TABLES = [
@@ -42,7 +46,7 @@ class RecordingArchiveRecord extends TableRecord
     ];
 
     /**
-     * 归档非当前及上一届次的审核时间线。
+     * 归档非当前及上一年级的审核时间线。
      */
     public static function archiveOlderGrades(int $year, int $limitPerTable = 500): array
     {
@@ -105,7 +109,7 @@ class RecordingArchiveRecord extends TableRecord
     }
 
     /**
-     * 查询具备明确届次的实验实训流程记录。
+     * 查询具备明确年级的实验实训流程记录。
      */
     private static function eligiblePracticeRows(string $entityType, array $config, array $retainedGradeIds, int $limit): array
     {
@@ -131,7 +135,7 @@ class RecordingArchiveRecord extends TableRecord
     }
 
     /**
-     * 获取当前届次和上一届次 ID。
+     * 获取当前年级和上一年级 ID。
      */
     public static function retainedGradeIds(): array
     {
@@ -191,7 +195,7 @@ class RecordingArchiveRecord extends TableRecord
     }
 
     /**
-     * 查询具备明确届次且可归档的时间线记录。
+     * 查询具备明确年级且可归档的时间线记录。
      */
     private static function eligibleRows(string $sourceTable, array $config, array $retainedGradeIds, int $limit): array
     {
@@ -217,7 +221,7 @@ class RecordingArchiveRecord extends TableRecord
     }
 
     /**
-     * 应用来源主表的届次关联。
+     * 应用来源主表的年级关联。
      */
     private static function applyGradeSource(mixed $query, string $source): string
     {
@@ -453,7 +457,7 @@ class RecordingArchiveRecord extends TableRecord
     }
 
     /**
-     * 提取届次名称中的年份。
+     * 提取年级名称中的年份。
      */
     private static function gradeYear(string $name): int
     {

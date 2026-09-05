@@ -9,8 +9,8 @@
         v-for="row in internship.options.arrangements"
         :key="row.id"
         :title="row.title"
-        :subtitle="joinFact([row.course_name, row.teacher_name])"
-        :meta="[dateRangeText(row.start_date, row.end_date)].filter(Boolean)"
+        :subtitle="joinFact([row.course_name, row.category_name, row.teacher_name])"
+        :meta="[internshipPlanScopeText(row), dateRangeText(row.start_date, row.end_date)].filter(Boolean)"
         :footer-text="row.student_count ? `${row.student_count} 人` : ''"
         clickable
         @open="openTimelineDialog('arrangement', row)"
@@ -26,7 +26,7 @@
   <section class="mobile-card form-card">
     <header>
       <ClipboardList :size="20" />
-      <strong>提交特殊申请</strong>
+      <strong>提交实习方式申请</strong>
     </header>
     <label>
       <span>实习任务</span>
@@ -63,7 +63,7 @@
       <AppListCard
         v-for="row in internship.lists.applications.items"
         :key="row.id"
-        :title="row.arrangement_title || '实习申请'"
+        :title="row.arrangement_title || '实习方式申请'"
         :subtitle="row.student_name || ''"
         :status="row.status"
         :meta="[`教师：${statusText(row.teacher_status)}`, `管理员：${statusText(row.admin_status)}`]"
@@ -100,6 +100,7 @@ const {
   canLoadMore,
   dateRangeText,
   internship,
+  internshipPlanScopeText,
   joinFact,
   loadMoreInternshipList,
   openTimelineDialog,

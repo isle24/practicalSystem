@@ -971,8 +971,9 @@ class MessageRecord extends TableRecord
     {
         $definitions = [
             ['seq' => 101, 'prefix' => 'internship_plan', 'name' => '实习计划', 'panel' => '#panel=internship:plans'],
+            ['seq' => 102, 'prefix' => 'internship_arrangement', 'name' => '实习任务', 'panel' => '#panel=internship:arrangements'],
             ['seq' => 104, 'prefix' => 'internship_arrangement_change', 'name' => '实习任务变更', 'panel' => '#panel=internship:arrangementChanges'],
-            ['seq' => 107, 'prefix' => 'internship_application', 'name' => '特殊申请', 'panel' => '#panel=internship:applications'],
+            ['seq' => 107, 'prefix' => 'internship_application', 'name' => '实习方式申请', 'panel' => '#panel=internship:applications'],
             ['seq' => 110, 'prefix' => 'internship_journal', 'name' => '实习日志', 'panel' => '#panel=internship:journals'],
             ['seq' => 113, 'prefix' => 'internship_report', 'name' => '实习报告', 'panel' => '#panel=internship:reports'],
             ['seq' => 116, 'prefix' => 'internship_delay', 'name' => '延期申请', 'panel' => '#panel=internship:delays'],
@@ -986,22 +987,54 @@ class MessageRecord extends TableRecord
             ['seq' => 140, 'prefix' => 'internship_base_usage', 'name' => '基地使用', 'panel' => '#panel=internship:baseFlows'],
             ['seq' => 143, 'prefix' => 'internship_base_result', 'name' => '基地成果', 'panel' => '#panel=internship:baseFlows'],
             ['seq' => 146, 'prefix' => 'internship_base_expense', 'name' => '基地费用', 'panel' => '#panel=internship:baseFlows'],
-            ['seq' => 201, 'prefix' => 'training_plan', 'name' => '实训教学计划', 'panel' => '#panel=training:plans'],
-            ['seq' => 204, 'prefix' => 'training_syllabus', 'name' => '实训大纲', 'panel' => '#panel=training:syllabus'],
-            ['seq' => 207, 'prefix' => 'training_lesson_plan', 'name' => '实训教案', 'panel' => '#panel=training:lessonPlans'],
-            ['seq' => 210, 'prefix' => 'training_reflection', 'name' => '实训反思报告', 'panel' => '#panel=training:reflections'],
-            ['seq' => 213, 'prefix' => 'training_journal', 'name' => '实训日志', 'panel' => '#panel=training:journals'],
-            ['seq' => 216, 'prefix' => 'training_report', 'name' => '实训报告', 'panel' => '#panel=training:reports'],
-            ['seq' => 301, 'prefix' => 'lab_plan', 'name' => '实验教学计划', 'panel' => '#panel=lab:plans'],
-            ['seq' => 304, 'prefix' => 'lab_syllabus', 'name' => '实验大纲', 'panel' => '#panel=lab:syllabus'],
-            ['seq' => 307, 'prefix' => 'lab_lesson_plan', 'name' => '实验教案', 'panel' => '#panel=lab:lessonPlans'],
-            ['seq' => 310, 'prefix' => 'lab_reflection', 'name' => '实验反思报告', 'panel' => '#panel=lab:reflections'],
-            ['seq' => 313, 'prefix' => 'lab_journal', 'name' => '实验日志', 'panel' => '#panel=lab:journals'],
-            ['seq' => 316, 'prefix' => 'lab_report', 'name' => '实验报告', 'panel' => '#panel=lab:reports'],
+            ['seq' => 149, 'prefix' => 'internship_graduation_appraisal', 'name' => '毕业实习成绩鉴定表', 'panel' => '#panel=internship:documents'],
+            ['seq' => 152, 'prefix' => 'internship_student_change', 'name' => '学生实习资料变更', 'panel' => '#panel=internship:studentChanges'],
+            ['seq' => 201, 'prefix' => 'training_plan', 'name' => '实训教学计划', 'panel' => '#panel=practice:plans'],
+            ['seq' => 204, 'prefix' => 'training_syllabus', 'name' => '实训大纲', 'panel' => '#panel=practice:syllabus'],
+            ['seq' => 207, 'prefix' => 'training_lesson_plan', 'name' => '实训教案', 'panel' => '#panel=practice:lessonPlans'],
+            ['seq' => 210, 'prefix' => 'training_reflection', 'name' => '实训课程教学反思', 'panel' => '#panel=practice:reflections'],
+            ['seq' => 213, 'prefix' => 'training_journal', 'name' => '实训历史过程记录', 'panel' => '#panel=practice:journals'],
+            ['seq' => 216, 'prefix' => 'training_report', 'name' => '实训项目报告', 'panel' => '#panel=practice:reports'],
+            ['seq' => 219, 'prefix' => 'training_score', 'name' => '实训成绩', 'panel' => '#panel=practice:scores'],
+            ['seq' => 301, 'prefix' => 'lab_plan', 'name' => '实验教学计划', 'panel' => '#panel=practice:plans'],
+            ['seq' => 304, 'prefix' => 'lab_syllabus', 'name' => '实验大纲', 'panel' => '#panel=practice:syllabus'],
+            ['seq' => 307, 'prefix' => 'lab_lesson_plan', 'name' => '实验教案', 'panel' => '#panel=practice:lessonPlans'],
+            ['seq' => 310, 'prefix' => 'lab_reflection', 'name' => '实验课程教学反思', 'panel' => '#panel=practice:reflections'],
+            ['seq' => 313, 'prefix' => 'lab_journal', 'name' => '实验历史过程记录', 'panel' => '#panel=practice:journals'],
+            ['seq' => 316, 'prefix' => 'lab_report', 'name' => '实验项目报告', 'panel' => '#panel=practice:reports'],
+            ['seq' => 319, 'prefix' => 'lab_score', 'name' => '实验成绩', 'panel' => '#panel=practice:scores'],
+            ['seq' => 401, 'prefix' => 'social_practice_plan', 'name' => '社会实践计划', 'panel' => '#panel=socialPractice:plans'],
+            ['seq' => 404, 'prefix' => 'social_practice_project', 'name' => '社会实践项目', 'panel' => '#panel=socialPractice:centralized'],
+            ['seq' => 407, 'prefix' => 'social_practice_implementation', 'name' => '集中实践实施申请', 'panel' => '#panel=socialPractice:centralized'],
+            ['seq' => 410, 'prefix' => 'social_practice_declaration', 'name' => '分散实践申报', 'panel' => '#panel=socialPractice:distributed'],
+            ['seq' => 413, 'prefix' => 'social_practice_material', 'name' => '社会实践材料', 'panel' => '#panel=socialPractice:materials'],
+            ['seq' => 416, 'prefix' => 'social_practice_patch_sign', 'name' => '社会实践补签', 'panel' => '#panel=socialPractice:attendance'],
+            ['seq' => 419, 'prefix' => 'social_practice_score', 'name' => '社会实践成绩', 'panel' => '#panel=socialPractice:scores'],
         ];
 
         $templates = [
             self::resultTemplate(190, '实习成绩核定结果', 'internship_score_result', '实习成绩已核定：{entity_title}', '你的实习成绩已核定，{score_text}。{opinion_text}', '#panel=internship:scores', 190),
+            self::systemTemplate(430, '社会实践计划发布', 'social_practice_plan_published', '社会实践计划已发布：{entity_title}', '{entity_title}已发布，实践时间：{date_text}。', 'todo', 'important', '社会实践计划发布后通知适用学生和相关教师。', [
+                'entity_title' => '计划标题',
+                'date_text' => '实践起止时间',
+            ], '#panel=socialPractice:plans', 430),
+            self::systemTemplate(431, '社会实践教师确认提醒', 'social_practice_teacher_confirm_pending', '待确认社会实践申报', '{student_name}选择你指导社会实践项目「{entity_title}」，请在{deadline_text}前处理。', 'todo', 'important', '分散实践申报提交后通知指导教师。', [
+                'student_name' => '学生或团队负责人',
+                'entity_title' => '申报标题',
+                'deadline_text' => '教师确认截止时间',
+            ], '#panel=socialPractice:distributed', 431),
+            self::systemTemplate(432, '社会实践安全材料提醒', 'social_practice_safety_incomplete', '社会实践安全材料待完善', '计划「{entity_title}」仍有必交安全材料未完成：{missing_text}。', 'todo', 'urgent', '实践开始前提醒学生和管理人员完善安全条件。', [
+                'entity_title' => '计划或项目标题',
+                'missing_text' => '缺失材料',
+            ], '#panel=socialPractice:safety', 432),
+            self::systemTemplate(433, '社会实践成果截止提醒', 'social_practice_result_due', '社会实践成果即将截止', '计划「{entity_title}」的成果材料将于{deadline_text}截止，请及时提交。', 'todo', 'important', '成果截止前通知未完成学生。', [
+                'entity_title' => '计划标题',
+                'deadline_text' => '成果截止时间',
+            ], '#panel=socialPractice:materials', 433),
+            self::systemTemplate(434, '社会实践归档通知', 'social_practice_archived', '社会实践已归档：{entity_title}', '社会实践「{entity_title}」已完成归档，归档版本：{version_text}。', 'result', 'normal', '社会实践归档完成后通知相关人员。', [
+                'entity_title' => '归档对象',
+                'version_text' => '归档版本',
+            ], '#panel=socialPractice:archives', 434),
         ];
         foreach ($definitions as $definition) {
             $templates[] = self::submitTemplate($definition['seq'], $definition['name'], $definition['prefix'], $definition['panel']);

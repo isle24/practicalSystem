@@ -19,6 +19,7 @@ class FileRecord extends BaseModel
             ->join('file_blob', 'file.blob_id', '=', 'file_blob.id')
             ->where('file.id', $fileId)
             ->whereNull('file.deleted_at')
+            ->whereNull('file_blob.deleted_at')
             ->first([
                 'file.id',
                 'file.uuid',
@@ -43,6 +44,44 @@ class FileRecord extends BaseModel
                 'file_blob.block',
                 'file_blob.ref_count',
             ]);
+    }
+
+    /** 查询当前学校中静态地址对应的有效文件引用。 */
+    public static function idsByUrl(string $url): array
+    {
+        return self::query()->where('url', $url)->whereNull('deleted_at')->pluck('id')->all();
+    }
+
+    /** 秒传仅复用当前上传人已持有的文件。 */
+    public static function ownsBlob(int $blobId, int $accountId): bool
+    {
+        return self::query()->where('blob_id', $blobId)->where('uploader_id', $accountId)->whereNull('deleted_at')->exists();
+    }
+
+    /** 查询多个有效文件及物理存储信息。 */
+    public static function detailsByIds(array $fileIds): array
+    {
+        $fileIds = array_values(array_unique(array_filter(array_map('intval', $fileIds), static fn (int $id): bool => $id > 0)));
+        if (!$fileIds) {
+            return [];
+        }
+
+        return self::query()
+            ->join('file_blob', 'file.blob_id', '=', 'file_blob.id')
+            ->whereIn('file.id', $fileIds)
+            ->whereNull('file.deleted_at')
+            ->whereNull('file_blob.deleted_at')
+            ->get([
+                'file.id',
+                'file.name',
+                'file.download_name',
+                'file.url',
+                'file_blob.path',
+                'file_blob.ext',
+                'file_blob.size',
+                'file_blob.mime_type',
+            ])
+            ->all();
     }
 
     public static function pagedRows(array $filters): array
@@ -160,6 +199,12 @@ class FileRecord extends BaseModel
             ->where('is_temporary', 1)
             ->where('created_at', '<=', $before)
             ->whereNull('deleted_at')
+            ->whereNotExists(function ($query): void {
+                $query->selectRaw('1')
+                    ->from('file_relation')
+                    ->whereColumn('file_relation.file_id', 'file.id')
+                    ->whereNull('file_relation.deleted_at');
+            })
             ->orderBy('id')
             ->limit(max(1, $limit))
             ->pluck('id')

@@ -1,18 +1,11 @@
 <template>
   <section class="support-panel template-library-panel">
-    <div class="template-library-tabs">
-      <button
-        v-if="canViewMessageTemplates"
-        type="button"
-        :class="{ active: activeTab === 'message' }"
-        @click="setActiveTab('message')"
-      >
-        流程审核待办/消息模板
-      </button>
-      <button type="button" :class="{ active: activeTab === 'file' }" @click="setActiveTab('file')">
-        材料文件模板
-      </button>
-    </div>
+    <TextTabs
+      :model-value="activeTab"
+      :items="templateTabs"
+      class="template-library-tabs"
+      @update:model-value="setActiveTab"
+    />
     <div class="template-library-hint">
       <span v-if="activeTab === 'message'">
         学生提交、教师审核、通过后修改等流程都会按这里的模板发送待办和消息；默认模板已写入学校业务库，管理员只需要按需编辑。
@@ -25,6 +18,15 @@
     <div v-if="activeTab === 'file'" class="support-toolbar">
       <el-select v-model="filters.category_id" clearable filterable placeholder="全部分类" @change="loadTemplates(1)">
         <el-option v-for="item in categories" :key="item.id" :label="item.name" :value="item.id" />
+      </el-select>
+      <el-select v-model="filters.business_code" clearable placeholder="全部业务" @change="loadTemplates(1)">
+        <el-option v-for="item in businessOptions" :key="item.value" :label="item.label" :value="item.value" />
+      </el-select>
+      <el-select v-model="filters.material_type" clearable filterable placeholder="全部材料" @change="loadTemplates(1)">
+        <el-option v-for="item in materialOptions" :key="item.value" :label="item.label" :value="item.value" />
+      </el-select>
+      <el-select v-model="filters.scope_type" clearable placeholder="全部层级" @change="loadTemplates(1)">
+        <el-option v-for="item in scopeOptions" :key="item.value" :label="item.label" :value="item.value" />
       </el-select>
       <el-input v-model="filters.keyword" clearable placeholder="搜索模板、说明、分类" @keyup.enter="loadTemplates(1)" />
       <el-button :icon="Search" :loading="loading" @click="loadTemplates(1)">查询</el-button>
@@ -48,6 +50,7 @@
 
     <section v-if="activeTab === 'file'" class="support-table">
       <el-table :data="templates" height="100%" stripe v-loading="loading">
+        <el-table-column type="index" label="序号" width="66" align="center" :index="index => tableSequence(index, pagination)" />
         <template #empty>
           <div class="template-empty-state">
             <strong>暂无材料文件模板</strong>
@@ -72,6 +75,17 @@
           </template>
         </el-table-column>
         <el-table-column prop="category_name" label="分类" width="150" />
+        <el-table-column label="业务用途" min-width="190">
+          <template #default="{ row }">
+            <div class="template-purpose-cell">
+              <strong>{{ businessText(row.business_code) }}</strong>
+              <small>{{ materialText(row.material_type) }} · {{ scopeText(row.scope_type) }}</small>
+            </div>
+          </template>
+        </el-table-column>
+        <el-table-column label="适用类型" min-width="150">
+          <template #default="{ row }">{{ practiceTypesText(row.practice_types) }}</template>
+        </el-table-column>
         <el-table-column prop="version" label="版本" width="90" />
         <el-table-column label="文件" min-width="180">
           <template #default="{ row }">
@@ -108,7 +122,7 @@
 
     <section v-else class="support-table message-template-support">
       <div class="message-template-library-toolbar">
-        <el-select v-model="messageFilters.type" @change="loadMessageTemplates(1)">
+        <el-select v-model="messageFilters.type" placeholder="请选择消息类型" @change="loadMessageTemplates(1)">
           <el-option
             v-for="item in messageTemplateTypeOptions"
             :key="item.value"
@@ -116,7 +130,7 @@
             :value="item.value"
           />
         </el-select>
-        <el-select v-model="messageFilters.status" @change="loadMessageTemplates(1)">
+        <el-select v-model="messageFilters.status" placeholder="请选择状态" @change="loadMessageTemplates(1)">
           <el-option label="全部状态" value="all" />
           <el-option label="启用" value="enabled" />
           <el-option label="停用" value="disabled" />
@@ -134,6 +148,7 @@
       </div>
 
       <el-table :data="messageTemplates" height="100%" stripe v-loading="messageLoading">
+        <el-table-column type="index" label="序号" width="66" align="center" :index="index => tableSequence(index, messagePagination)" />
         <template #empty>
           <div class="template-empty-state">
             <strong>{{ messageTemplateEmptyTitle }}</strong>
@@ -190,12 +205,13 @@
 
     <small v-if="message">{{ message }}</small>
 
-    <div v-if="messageTemplateDialog.visible" class="operation-mask" @click.self="closeMessageTemplateDialog">
-      <section class="operation-dialog message-template-edit-dialog">
-        <header>
-          <strong>编辑流程消息模板</strong>
-          <button type="button" @click="closeMessageTemplateDialog">关闭</button>
-        </header>
+    <OperationDialog
+      :visible="messageTemplateDialog.visible"
+      title="编辑流程消息模板"
+      dialog-class="message-template-edit-dialog"
+      :busy="messageSaving"
+      @close="closeMessageTemplateDialog"
+    >
         <div class="message-template-edit-body">
           <label>
             <span>模板名称</span>
@@ -207,7 +223,7 @@
           </label>
           <label>
             <span>消息类型</span>
-            <el-select v-model="messageTemplateDialog.form.type">
+            <el-select v-model="messageTemplateDialog.form.type" placeholder="请选择消息类型">
               <el-option
                 v-for="item in messageTemplateTypeOptions.filter(option => option.value !== 'all')"
                 :key="item.value"
@@ -218,7 +234,7 @@
           </label>
           <label>
             <span>消息级别</span>
-            <el-select v-model="messageTemplateDialog.form.level">
+            <el-select v-model="messageTemplateDialog.form.level" placeholder="请选择消息级别">
               <el-option label="普通" value="normal" />
               <el-option label="重要" value="important" />
               <el-option label="紧急" value="urgent" />
@@ -259,19 +275,19 @@
             <el-input v-model="messageTemplateDialog.form.description" type="textarea" :rows="2" maxlength="500" show-word-limit />
           </label>
         </div>
-        <footer>
+        <template #footer>
           <el-button @click="closeMessageTemplateDialog">取消</el-button>
           <el-button type="primary" :icon="Save" :loading="messageSaving" @click="saveMessageTemplateDialog">保存</el-button>
-        </footer>
-      </section>
-    </div>
+        </template>
+    </OperationDialog>
 
-    <div v-if="templateDialog.visible" class="operation-mask" @click.self="closeTemplateDialog">
-      <section class="operation-dialog template-edit-dialog">
-        <header>
-          <strong>{{ templateDialog.form.id ? '编辑模板' : '上传模板' }}</strong>
-          <button type="button" @click="closeTemplateDialog">关闭</button>
-        </header>
+    <OperationDialog
+      :visible="templateDialog.visible"
+      :title="templateDialog.form.id ? '编辑模板' : '上传模板'"
+      dialog-class="template-edit-dialog"
+      :busy="saving"
+      @close="closeTemplateDialog"
+    >
         <div class="operation-form">
           <label>
             <span>模板名称</span>
@@ -297,6 +313,30 @@
               inactive-text="停用"
             />
           </label>
+          <label>
+            <span>业务编码</span>
+            <el-select v-model="templateDialog.form.business_code" clearable filterable allow-create default-first-option placeholder="选择或输入业务编码">
+              <el-option v-for="item in businessOptions" :key="item.value" :label="item.label" :value="item.value" />
+            </el-select>
+          </label>
+          <label>
+            <span>材料类型</span>
+            <el-select v-model="templateDialog.form.material_type" clearable filterable placeholder="选择材料类型">
+              <el-option v-for="item in materialOptions" :key="item.value" :label="item.label" :value="item.value" />
+            </el-select>
+          </label>
+          <label>
+            <span>材料层级</span>
+            <el-select v-model="templateDialog.form.scope_type" clearable placeholder="选择材料层级">
+              <el-option v-for="item in scopeOptions" :key="item.value" :label="item.label" :value="item.value" />
+            </el-select>
+          </label>
+          <label class="span-2">
+            <span>适用实习类型</span>
+            <el-select v-model="templateDialog.form.practice_types" multiple collapse-tags collapse-tags-tooltip clearable placeholder="全部类型">
+              <el-option v-for="item in practiceTypeOptions" :key="item.value" :label="item.label" :value="item.value" />
+            </el-select>
+          </label>
           <label class="span-2">
             <span>说明</span>
             <textarea v-model="templateDialog.form.description" rows="3" />
@@ -311,19 +351,19 @@
             <input ref="fileInputRef" type="file" hidden @change="handleFileSelected">
           </div>
         </div>
-        <footer>
+        <template #footer>
           <el-button @click="closeTemplateDialog">取消</el-button>
           <el-button type="primary" :icon="Save" :loading="saving" @click="saveTemplate">保存</el-button>
-        </footer>
-      </section>
-    </div>
+        </template>
+    </OperationDialog>
 
-    <div v-if="categoryDialog.visible" class="operation-mask" @click.self="categoryDialog.visible = false">
-      <section class="operation-dialog category-edit-dialog">
-        <header>
-          <strong>模板分类</strong>
-          <button type="button" @click="categoryDialog.visible = false">关闭</button>
-        </header>
+    <OperationDialog
+      :visible="categoryDialog.visible"
+      title="模板分类"
+      dialog-class="category-edit-dialog"
+      :busy="saving"
+      @close="categoryDialog.visible = false"
+    >
         <div class="operation-form">
           <label>
             <span>分类名称</span>
@@ -352,18 +392,18 @@
             <textarea v-model="categoryDialog.form.description" rows="3" />
           </label>
         </div>
-        <footer>
+        <template #footer>
           <el-button @click="categoryDialog.visible = false">取消</el-button>
           <el-button type="primary" :icon="Save" :loading="saving" @click="saveCategory">保存分类</el-button>
-        </footer>
-      </section>
-    </div>
+        </template>
+    </OperationDialog>
   </section>
 </template>
 
 <script setup>
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { FileText, Plus, RefreshCw, Save, Search, Upload } from '@lucide/vue';
+import { tableSequence } from '../utils/table';
 import {
   deleteTemplateItem,
   downloadTemplateItem,
@@ -376,6 +416,8 @@ import {
   syncMessageTemplates,
   uploadTemplateFile,
 } from '../api/system';
+import TextTabs from './TextTabs.vue';
+import OperationDialog from './OperationDialog.vue';
 
 const props = defineProps({
   canManage: {
@@ -393,6 +435,10 @@ const props = defineProps({
 });
 
 const activeTab = ref(props.canViewMessageTemplates ? 'message' : 'file');
+const templateTabs = computed(() => [
+  ...(props.canViewMessageTemplates ? [{ key: 'message', label: '流程审核待办/消息模板' }] : []),
+  { key: 'file', label: '材料文件模板' },
+]);
 const loading = ref(false);
 const saving = ref(false);
 const messageLoading = ref(false);
@@ -406,8 +452,42 @@ const messageTemplates = ref([]);
 const fileInputRef = ref(null);
 const filters = reactive({
   category_id: '',
+  business_code: '',
+  material_type: '',
+  scope_type: '',
   keyword: '',
 });
+const businessOptions = [
+  { label: '实习档案', value: 'internship_archive' },
+];
+const materialOptions = [
+  { label: '实习计划', value: 'plan' },
+  { label: '教学实习实施表', value: 'implementation_sheet' },
+  { label: '实习教学大纲', value: 'syllabus' },
+  { label: '实习指导书', value: 'guide' },
+  { label: '实习情况登记表', value: 'registration' },
+  { label: '指导教师工作报告', value: 'teacher_work_report' },
+  { label: '实习周（日）志', value: 'journal' },
+  { label: '实习/实训报告', value: 'report' },
+  { label: '毕业实习报告', value: 'graduation_report' },
+  { label: '毕业实习成绩鉴定表', value: 'graduation_appraisal' },
+  { label: '成绩登记表', value: 'score_register' },
+  { label: '学生实习安全承诺书', value: 'safety_commitment' },
+];
+const scopeOptions = [
+  { label: '计划', value: 'plan' },
+  { label: '任务', value: 'arrangement' },
+  { label: '学生任务', value: 'student_task' },
+  { label: '计划班级', value: 'plan_class' },
+];
+const practiceTypeOptions = [
+  { label: '认识实习（校内）', value: 'cognition_internal' },
+  { label: '认识实习（校外）', value: 'cognition_external' },
+  { label: '专业实习（校内）', value: 'major_internal' },
+  { label: '专业实习（校外）', value: 'major_external' },
+  { label: '生产实习', value: 'production' },
+  { label: '毕业实习', value: 'graduation' },
+];
 const messageFilters = reactive({
   type: 'all',
   status: 'enabled',
@@ -430,6 +510,7 @@ const messagePagination = reactive({
   page_size: 100,
   total: 0,
 });
+
 const messageTemplateEmptyTitle = computed(() => (
   hasMessageTemplateFilters() ? '当前筛选无流程模板' : '暂无启用流程审核待办/消息模板'
 ));
@@ -517,6 +598,9 @@ async function loadTemplates(page = 1) {
       page,
       page_size: pagination.page_size,
       category_id: filters.category_id || '',
+      business_code: filters.business_code || '',
+      material_type: filters.material_type || '',
+      scope_type: filters.scope_type || '',
       keyword: filters.keyword,
     });
     templates.value = data.items || [];
@@ -633,6 +717,10 @@ function openTemplateDialog(row = null) {
     version: row.version || '1.0',
     flag: row.flag || 'on',
     status: row.status || 'enabled',
+    business_code: row.business_code || '',
+    material_type: row.material_type || '',
+    scope_type: row.scope_type || '',
+    practice_types: Array.isArray(row.practice_types) ? [...row.practice_types] : [],
   } : emptyTemplateForm();
   templateDialog.fileName = row?.file?.download_name || row?.file?.name || '';
   templateDialog.visible = true;
@@ -820,7 +908,32 @@ function emptyTemplateForm() {
     version: '1.0',
     flag: 'on',
     status: 'enabled',
+    business_code: '',
+    material_type: '',
+    scope_type: '',
+    practice_types: [],
   };
+}
+
+function optionText(options, value, fallback = '-') {
+  return options.find(item => item.value === value)?.label || value || fallback;
+}
+
+function businessText(value) {
+  return optionText(businessOptions, value, '通用模板');
+}
+
+function materialText(value) {
+  return optionText(materialOptions, value, '未绑定材料');
+}
+
+function scopeText(value) {
+  return optionText(scopeOptions, value, '通用层级');
+}
+
+function practiceTypesText(values) {
+  if (!Array.isArray(values) || !values.length) return '全部类型';
+  return values.map(value => optionText(practiceTypeOptions, value, value)).join('、');
 }
 
 function emptyMessageTemplateForm(row = {}) {

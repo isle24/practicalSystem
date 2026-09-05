@@ -16,10 +16,15 @@
         <component :is="icon" :size="18" />
         <span>{{ title }}</span>
       </div>
-      <div class="window-controls">
-        <button class="window-control-minimize" title="最小化" @mousedown.stop @click.stop="emit('minimize')"><Minus :size="14" /></button>
-        <button class="window-control-maximize" :title="maximized ? '还原' : '最大化'" @mousedown.stop @click.stop="toggleMaximize"><Square :size="13" /></button>
-        <button class="window-control-close" title="关闭" @mousedown.stop @click.stop="emit('close')"><X :size="15" /></button>
+      <div class="window-title-side">
+        <div v-if="$slots.actions" class="window-title-actions" @mousedown.stop @dblclick.stop>
+          <slot name="actions" />
+        </div>
+        <div class="window-controls">
+          <button class="window-control-minimize" title="最小化" @mousedown.stop @click.stop="emit('minimize')"><Minus :size="14" /></button>
+          <button class="window-control-maximize" :title="maximized ? '还原' : '最大化'" @mousedown.stop @click.stop="toggleMaximize"><Square :size="13" /></button>
+          <button class="window-control-close" title="关闭" @mousedown.stop @click.stop="emit('close')"><X :size="15" /></button>
+        </div>
       </div>
     </header>
 
@@ -193,6 +198,8 @@ function toggleMaximize() {
     return;
   }
 
+  parent.scrollLeft = 0;
+  parent.scrollTop = 0;
   emit('focus');
   if (!maximized.value) {
     restoreFrame.value = { ...frame };
@@ -220,6 +227,8 @@ function fitToWorkspace() {
   if (!parent) {
     return;
   }
+  parent.scrollLeft = 0;
+  parent.scrollTop = 0;
   const minFrame = effectiveMinFrame();
 
   if (maximized.value) {

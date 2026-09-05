@@ -11,6 +11,7 @@
   <van-cell-group inset class="app-profile-group">
     <van-cell title="姓名" :value="userName" />
     <van-cell title="登录账号" :value="accountName" />
+    <MobileBinding @verified="emit('mobile-verified')" />
     <van-cell title="当前角色" :value="roleName" />
     <van-cell title="所属学校" :value="schoolName" />
     <van-cell title="数据范围" :label="scopeDetail" :value="scopeText" />
@@ -49,6 +50,7 @@
 <script setup>
 import { UserRound } from '@lucide/vue';
 import AppButton from '../components/ui/AppButton.vue';
+import MobileBinding from '../components/MobileBinding.vue';
 
 const props = defineProps({
   userName: { type: String, default: '' },
@@ -63,7 +65,7 @@ const props = defineProps({
   roleLabels: { type: Object, default: () => ({}) },
 });
 
-const emit = defineEmits(['logout', 'open-tab', 'switch-account']);
+const emit = defineEmits(['logout', 'open-tab', 'switch-account', 'mobile-verified']);
 
 function accountTitle(account) {
   return account?.name || account?.login_name || '未命名账号';

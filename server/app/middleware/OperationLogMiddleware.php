@@ -24,6 +24,7 @@ class OperationLogMiddleware implements MiddlewareInterface
         'access_token',
         'refresh_token',
         'jwt',
+        'sms_code',
         'aes_key',
         'encoding_aes_key',
     ];

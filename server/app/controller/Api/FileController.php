@@ -70,12 +70,7 @@ class FileController
     #[OperationLog('绑定文件关联')]
     public function attach(Request $request): Response
     {
-        return $this->handle(fn (): array => (new FileService())->attach(
-            $this->intInput($request, 'file_id'),
-            (string) $request->input('entity_type', ''),
-            $this->intInput($request, 'entity_id'),
-            (string) $request->input('tag', '')
-        ));
+        return $this->fail(40300, '请通过对应业务提交或修改附件', 403);
     }
 
     /**
@@ -84,7 +79,7 @@ class FileController
     #[OperationLog('解绑文件关联')]
     public function detach(Request $request): Response
     {
-        return $this->handle(fn (): array => (new FileService())->detach($request));
+        return $this->fail(40300, '请通过对应业务提交或修改附件', 403);
     }
 
     /**

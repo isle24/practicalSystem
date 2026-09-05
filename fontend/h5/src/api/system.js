@@ -1,5 +1,17 @@
 import { request } from './client';
 
+export function fetchProfileSettings() {
+  return request('/profile/settings');
+}
+
+export function sendMobileCode(payload) {
+  return request('/profile/send-mobile-code', { method: 'POST', body: JSON.stringify(payload) });
+}
+
+export function verifyMobile(payload) {
+  return request('/profile/verify-mobile', { method: 'POST', body: JSON.stringify(payload) });
+}
+
 export function fetchContext() {
   return request('/auth/context');
 }
@@ -95,6 +107,17 @@ export function fetchTemplateList(params = {}) {
   return request(`/template/list${query ? `?${query}` : ''}`);
 }
 
+export function uploadFile(file, options = {}) {
+  const body = new FormData();
+  Object.entries({ require_md5: 'false', ...options }).forEach(([key, value]) => {
+    if (value !== undefined && value !== null) {
+      body.append(key, value);
+    }
+  });
+  body.append('file', file);
+  return request('/file/upload', { method: 'POST', body });
+}
+
 export function downloadTemplateItem(id) {
   return request('/template/download', {
     method: 'POST',
@@ -124,6 +147,14 @@ export function fetchInternshipOptions() {
 
 export function fetchInternshipBases(params = {}) {
   return internshipList('bases', params);
+}
+
+export function fetchInternshipBaseDetail(params = {}) {
+  return internshipList('base-detail', params);
+}
+
+export function exportInternshipBaseWord(payload) {
+  return internshipPost('export-base-word', payload);
 }
 
 export function saveInternshipBase(payload) {
@@ -156,6 +187,10 @@ export function fetchInternshipArrangementChanges(params = {}) {
 
 export function saveInternshipArrangement(payload) {
   return internshipPost('save-arrangement', payload);
+}
+
+export function reviewInternshipArrangement(payload) {
+  return internshipPost('review-arrangement', payload);
 }
 
 export function saveInternshipArrangementChange(payload) {
@@ -286,6 +321,102 @@ export function fetchInternshipArchiveMaterials(params = {}) {
   return internshipList('archive-materials', params);
 }
 
+export function fetchInternshipArchiveRequirements(params = {}) {
+  return internshipList('archive-requirements', params);
+}
+
+export function saveInternshipArchiveRequirements(payload) {
+  return internshipPost('save-archive-requirements', payload);
+}
+
+export function fetchInternshipArchiveMaterialDetail(params = {}) {
+  return internshipList('archive-material-detail', params);
+}
+
+export function fetchInternshipArchiveMaterialHistory(params = {}) {
+  return internshipList('archive-material-history', params);
+}
+
+export function fetchInternshipStudentProfiles(params = {}) {
+  return internshipList('student-profiles', params);
+}
+
+export function fetchInternshipStudentChanges(params = {}) {
+  return internshipList('student-changes', params);
+}
+
+export function fetchInternshipStudentChangeDetail(params = {}) {
+  return internshipList('student-change-detail', params);
+}
+
+export function saveInternshipStudentChange(payload) {
+  return internshipPost('save-student-change', payload);
+}
+
+export function reviewInternshipStudentChange(payload) {
+  return internshipPost('review-student-change', payload);
+}
+
+export function createEnterpriseEvaluationInvitation(payload) {
+  return internshipPost('create-enterprise-evaluation-invitation', payload);
+}
+
+export function fetchEnterpriseEvaluationProgress(params = {}) {
+  return internshipList('enterprise-evaluation-progress', params);
+}
+
+export function fetchEnterpriseEvaluationRule(params = {}) {
+  return internshipList('enterprise-evaluation-rule', params);
+}
+
+export function saveEnterpriseEvaluationRule(payload) {
+  return internshipPost('save-enterprise-evaluation-rule', payload);
+}
+
+export function sendEnterpriseEvaluationCode(payload) {
+  return request('/open-enterprise-evaluation/send-code', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function verifyEnterpriseEvaluationCode(payload) {
+  return request('/open-enterprise-evaluation/verify-code', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function fetchEnterpriseEvaluationContext(payload) {
+  return request('/open-enterprise-evaluation/context', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function submitEnterpriseEvaluation(payload) {
+  return request('/open-enterprise-evaluation/submit', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function saveInternshipArchiveMaterial(payload) {
+  return internshipPost('save-archive-material', payload);
+}
+
+export function generateInternshipArchiveMaterial(payload) {
+  return internshipPost('generate-archive-material', payload);
+}
+
+export function archiveInternshipMaterial(payload) {
+  return internshipPost('archive-material', payload);
+}
+
+export function saveInternshipGraduationAppraisal(payload) {
+  return internshipPost('save-graduation-appraisal', payload);
+}
+
 export function saveInternshipScore(payload) {
   return internshipPost('save-score', payload);
 }
@@ -298,6 +429,10 @@ export function fetchInternshipSafetyLetters(params = {}) {
   return internshipList('safety-letters', params);
 }
 
+export function saveInternshipSafetyLetter(payload) {
+  return internshipPost('save-safety-letter', payload);
+}
+
 export function fetchInternshipSyllabusGuides(params = {}) {
   return internshipList('syllabus-guides', params);
 }
@@ -308,6 +443,14 @@ export function saveInternshipSyllabusGuide(payload) {
 
 export function fetchInternshipImplementationSheets(params = {}) {
   return internshipList('implementation-sheets', params);
+}
+
+export function fetchInternshipImplementationDetail(params = {}) {
+  return internshipList('implementation-detail', params);
+}
+
+export function exportInternshipImplementationPdf(payload) {
+  return internshipPost('export-implementation-pdf', payload);
 }
 
 export function saveInternshipImplementationSheet(payload) {
@@ -330,89 +473,221 @@ export function saveInternshipInspection(payload) {
   return internshipPost('save-inspection', payload);
 }
 
-function practiceList(module, params = {}) {
-  const query = new URLSearchParams(params).toString();
-  return request(`/${module}/list${query ? `?${query}` : ''}`);
+function practiceQuery(path, moduleType = 'all', params = {}) {
+  const query = new URLSearchParams({ module_type: moduleType, ...params }).toString();
+  return request(`/practice/${path}${query ? `?${query}` : ''}`);
 }
 
-function practicePost(module, path, payload) {
-  return request(`/${module}/${path}`, {
+function practicePost(path, moduleType, payload) {
+  return request(`/practice/${path}`, {
     method: 'POST',
-    body: JSON.stringify(payload),
+    body: JSON.stringify({ ...payload, module_type: payload.module_type || moduleType }),
   });
 }
 
-export function fetchPracticeOverview(module) {
-  return request(`/${module}/overview`);
+export function fetchPracticeOverview(moduleType = 'all') {
+  return practiceQuery('overview', moduleType);
 }
 
-export function fetchPracticeOptions(module) {
-  return request(`/${module}/options`);
+export function fetchPracticeOptions(moduleType = 'all') {
+  return practiceQuery('options', moduleType);
 }
 
-export function fetchPracticeList(module, params = {}) {
-  return practiceList(module, params);
+export function fetchPracticePlanTeachers(moduleType, planId) {
+  return practiceQuery('plan-teachers', moduleType, { plan_id: planId });
 }
 
-export function savePracticeItem(module, payload) {
-  return practicePost(module, 'save', payload);
+export function fetchPracticeProjectStudents(moduleType, projectId) {
+  return practiceQuery('project-students', moduleType, { project_id: projectId });
 }
 
-export function reviewPracticeItem(module, payload) {
-  return practicePost(module, 'review', payload);
+export function savePracticePlanTeachers(moduleType, payload) {
+  return practicePost('save-plan-teachers', moduleType, payload);
 }
 
-export function fetchPracticeReviewDraft(module, params = {}) {
-  const query = new URLSearchParams(params).toString();
-  return request(`/${module}/review-draft${query ? `?${query}` : ''}`);
+export function fetchPracticeList(moduleType = 'all', params = {}) {
+  return practiceQuery('list', moduleType, params);
 }
 
-export function savePracticeReviewDraft(module, payload) {
-  return practicePost(module, 'save-review-draft', payload);
+export function fetchPracticeScheduleWeek(moduleType = 'all', params = {}) {
+  return practiceQuery('schedule-week', moduleType, params);
 }
 
-export function requestPracticeModification(module, payload) {
-  return practicePost(module, 'request-modification', payload);
+export function savePracticeItem(moduleType, payload) {
+  return practicePost('save', moduleType, payload);
 }
 
-export function fetchPracticeTimeline(module, params = {}) {
-  const query = new URLSearchParams(params).toString();
-  return request(`/${module}/timeline${query ? `?${query}` : ''}`);
+export function reviewPracticeItem(moduleType, payload) {
+  return practicePost('review', moduleType, payload);
 }
 
-export function fetchPracticeExecutionList(module, execution, params = {}) {
+export function fetchPracticeReviewDraft(moduleType = 'all', params = {}) {
+  return practiceQuery('review-draft', moduleType, params);
+}
+
+export function savePracticeReviewDraft(moduleType, payload) {
+  return practicePost('save-review-draft', moduleType, payload);
+}
+
+export function requestPracticeModification(moduleType, payload) {
+  return practicePost('request-modification', moduleType, payload);
+}
+
+export function fetchPracticeTimeline(moduleType = 'all', params = {}) {
+  return practiceQuery('timeline', moduleType, params);
+}
+
+export function fetchPracticeExecutionList(moduleType = 'all', execution, params = {}) {
   const path = {
     sign_in: 'sign-ins',
     journal: 'journals',
     report: 'reports',
   }[execution] || 'journals';
-  const query = new URLSearchParams(params).toString();
-  return request(`/${module}/${path}${query ? `?${query}` : ''}`);
+  return practiceQuery(path, moduleType, params);
 }
 
-export function savePracticeExecution(module, execution, payload) {
+export function savePracticeExecution(moduleType, execution, payload) {
   const path = {
     sign_in: 'save-sign-in',
     journal: 'save-journal',
     report: 'save-report',
   }[execution] || 'save-journal';
-  return practicePost(module, path, payload);
+  return practicePost(path, moduleType, payload);
 }
 
-export function reviewPracticeExecution(module, execution, payload) {
+export function reviewPracticeExecution(moduleType, execution, payload) {
   const path = execution === 'report' ? 'review-report' : 'review-journal';
-  return practicePost(module, path, payload);
+  return practicePost(path, moduleType, payload);
 }
 
-export function requestPracticeExecutionModification(module, payload) {
-  return practicePost(module, 'request-execution-modification', payload);
+export function requestPracticeExecutionModification(moduleType, payload) {
+  return practicePost('request-execution-modification', moduleType, payload);
 }
 
-export function savePracticeProjectScore(module, payload) {
-  return practicePost(module, 'save-score', payload);
+export function savePracticeProjectScore(moduleType, payload) {
+  return practicePost('save-score', moduleType, payload);
 }
 
-export function fetchPracticeExecutionTimeline(module, params = {}) {
+export function fetchPracticeExecutionTimeline(moduleType = 'all', params = {}) {
+  return practiceQuery('execution-timeline', moduleType, params);
+}
+
+export function fetchPracticeArchiveCheck(moduleType, planId) {
+  return practiceQuery('archive-check', moduleType, { plan_id: planId });
+}
+
+export function createPracticeArchive(moduleType, planId) {
+  return practicePost('archive', moduleType, { plan_id: planId });
+}
+
+export function fetchPracticeArchives(moduleType = 'all', params = {}) {
+  return practiceQuery('archive-list', moduleType, params);
+}
+
+export function fetchPracticeArchiveDetail(moduleType, id) {
+  return practiceQuery('archive-detail', moduleType, { id });
+}
+
+export function fetchPracticeArchiveDownload(moduleType, id) {
+  return practiceQuery('archive-download', moduleType, { id });
+}
+
+export function fetchPracticeCourseScores(moduleType, params = {}) {
+  return practiceQuery('course-scores', moduleType, { ...params, module_type: moduleType });
+}
+
+function socialPracticeQuery(path, params = {}) {
   const query = new URLSearchParams(params).toString();
-  return request(`/${module}/execution-timeline${query ? `?${query}` : ''}`);
+  return request(`/social-practice/${path}${query ? `?${query}` : ''}`);
+}
+
+function socialPracticePost(path, payload = {}) {
+  return request(`/social-practice/${path}`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function fetchSocialPracticeOverview() {
+  return socialPracticeQuery('overview');
+}
+
+export function fetchSocialPracticeStatistics(params = {}) {
+  return socialPracticeQuery('statistics', params);
+}
+
+export function fetchSocialPracticeOptions() {
+  return socialPracticeQuery('options');
+}
+
+export function fetchSocialPracticeEligibleStudents(planId) {
+  return socialPracticeQuery('eligible-students', { plan_id: planId });
+}
+
+export function fetchSocialPracticeList(resource, params = {}) {
+  return socialPracticeQuery('list', { ...params, resource });
+}
+
+export function fetchSocialPracticeDetail(resource, id) {
+  return socialPracticeQuery('detail', { resource, id });
+}
+
+export function fetchSocialPracticeTimeline(resource, id) {
+  return socialPracticeQuery('timeline', { resource, id });
+}
+
+export function saveSocialPractice(payload) {
+  return socialPracticePost('save', payload);
+}
+
+export function submitSocialPractice(payload) {
+  return socialPracticePost('submit', payload);
+}
+
+export function reviewSocialPractice(payload) {
+  return socialPracticePost('review', payload);
+}
+
+export function requestSocialPracticeModification(payload) {
+  return socialPracticePost('request-modification', payload);
+}
+
+export function confirmSocialPracticeMember(payload) {
+  return socialPracticePost('confirm-member', payload);
+}
+
+export function confirmSocialPracticeTeacher(payload) {
+  return socialPracticePost('confirm-teacher', payload);
+}
+
+export function reselectSocialPracticeTeacher(payload) {
+  return socialPracticePost('reselect-teacher', payload);
+}
+
+export function assignSocialPracticeDeclarationTeacher(payload) {
+  return socialPracticePost('assign-declaration-teacher', payload);
+}
+
+export function saveSocialPracticeMaterial(payload) {
+  return socialPracticePost('save-material', payload);
+}
+
+export function saveSocialPracticeSignIn(payload) {
+  return socialPracticePost('save-sign-in', payload);
+}
+
+export function saveSocialPracticePatchSign(payload) {
+  return socialPracticePost('save-patch-sign', payload);
+}
+
+export function saveSocialPracticeScore(payload) {
+  return socialPracticePost('save-score', payload);
+}
+
+export function fetchSocialPracticeReviewDraft(resource, id) {
+  return socialPracticeQuery('review-draft', { resource, id });
+}
+
+export function saveSocialPracticeReviewDraft(payload) {
+  return socialPracticePost('save-review-draft', payload);
 }

@@ -32,7 +32,8 @@ const emit = defineEmits(['update:modelValue']);
 
 <style>
 .app-dialog-popup.van-popup {
-  width: min(88vw, 380px);
+  width: min(92vw, 420px);
+  max-height: min(86dvh, 760px);
   border-radius: var(--app-radius);
   overflow: hidden;
   box-shadow: 0 24px 60px rgba(24, 33, 43, .22);
@@ -41,6 +42,9 @@ const emit = defineEmits(['update:modelValue']);
 
 <style scoped>
 .app-dialog {
+  max-height: min(86dvh, 760px);
+  display: flex;
+  flex-direction: column;
   color: var(--app-text);
   background: var(--app-surface);
 }
@@ -63,16 +67,20 @@ const emit = defineEmits(['update:modelValue']);
 }
 
 .app-dialog-content {
+  min-height: 0;
+  overflow: auto;
   padding: 4px 18px 18px;
   color: var(--app-text-secondary);
   line-height: 1.6;
 }
 
 .app-dialog > footer {
+  flex: 0 0 auto;
+  flex-wrap: wrap;
   display: flex;
   justify-content: flex-end;
   gap: 8px;
-  padding: 10px 12px;
+  padding: 10px 12px max(10px, env(safe-area-inset-bottom));
   border-top: 1px solid var(--app-line);
   background: var(--app-surface-muted);
 }

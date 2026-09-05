@@ -227,7 +227,7 @@ class Account extends BaseModel
                 'role.name as role_name',
                 'role.role_type',
             ])
-            ->map(static fn ($row): array => (array) $row)
+            ->map(static fn ($row): array => $row->getAttributes())
             ->all();
     }
 
@@ -306,8 +306,10 @@ class Account extends BaseModel
             ->where(function ($builder) use ($identity): void {
                 $builder->where('account.user_id', (int) $identity['user_id']);
                 $mobile = trim((string) ($identity['mobile'] ?? ''));
-                if ($mobile !== '') {
-                    $builder->orWhere('users.mobile', $mobile);
+                if ($mobile !== '' && ($identity['verified_mobile'] ?? null) === $mobile) {
+                    $builder->orWhere(function ($linked) use ($mobile): void {
+                        $linked->where('users.mobile', $mobile)->where('users.verified_mobile', $mobile);
+                    });
                 }
             })
             ->whereNotNull('role.id')
@@ -361,7 +363,9 @@ class Account extends BaseModel
 
         $currentMobile = trim((string) ($current['mobile'] ?? ''));
         $targetMobile = trim((string) ($target['mobile'] ?? ''));
-        return $currentMobile !== '' && $currentMobile === $targetMobile;
+        return $currentMobile !== '' && $currentMobile === $targetMobile
+            && ($current['verified_mobile'] ?? null) === $currentMobile
+            && ($target['verified_mobile'] ?? null) === $targetMobile;
     }
 
     public static function adminLoginTargetProfile(int $accountId): ?array
@@ -689,6 +693,7 @@ class Account extends BaseModel
                 'account.user_id',
                 'account.login_name',
                 'users.mobile',
+                'users.verified_mobile',
                 'role.role_type',
             ]);
 
@@ -697,6 +702,7 @@ class Account extends BaseModel
             'user_id' => (int) $row->user_id,
             'login_name' => $row->login_name,
             'mobile' => $row->mobile,
+            'verified_mobile' => $row->verified_mobile,
             'role_type' => $row->role_type,
         ] : null;
     }
@@ -708,7 +714,7 @@ class Account extends BaseModel
                 ->where('user_id', $userId)
                 ->whereNull('deleted_at')
                 ->orderByDesc('student_id')
-                ->first(['student_id', 'student_num', 'grade_id', 'dep_id', 'profession_id', 'class_id', 'class_num']);
+                ->first(['student_id', 'student_num', 'grade_id', 'graduation_cohort_id', 'dep_id', 'profession_id', 'class_id', 'class_num']);
 
             return $student ? [
                 'student_id' => (int) $student->student_id,
@@ -716,6 +722,7 @@ class Account extends BaseModel
                 'teacher_id' => null,
                 'teacher_num' => null,
                 'grade_id' => $student->grade_id === null ? null : (int) $student->grade_id,
+                'graduation_cohort_id' => $student->graduation_cohort_id === null ? null : (int) $student->graduation_cohort_id,
                 'dep_id' => $student->dep_id === null ? null : (int) $student->dep_id,
                 'profession_id' => $student->profession_id === null ? null : (int) $student->profession_id,
                 'class_id' => $student->class_id === null ? null : (int) $student->class_id,
@@ -736,6 +743,7 @@ class Account extends BaseModel
                 'teacher_id' => (int) $teacher->teacher_id,
                 'teacher_num' => $teacher->teacher_num,
                 'grade_id' => null,
+                'graduation_cohort_id' => null,
                 'dep_id' => $teacher->dep_id === null ? null : (int) $teacher->dep_id,
                 'profession_id' => $teacher->profession_id === null ? null : (int) $teacher->profession_id,
                 'class_id' => null,
@@ -754,6 +762,7 @@ class Account extends BaseModel
             'teacher_id' => null,
             'teacher_num' => null,
             'grade_id' => null,
+            'graduation_cohort_id' => null,
             'dep_id' => null,
             'profession_id' => null,
             'class_id' => null,
@@ -833,6 +842,7 @@ class Account extends BaseModel
             'name' => $name,
             'student_num' => $values['student_num'] ?? null,
             'grade_id' => $values['grade_id'] ?? null,
+            'graduation_cohort_id' => $values['graduation_cohort_id'] ?? null,
             'dep_id' => $values['dep_id'] ?? null,
             'profession_id' => $values['profession_id'] ?? null,
             'class_id' => $values['class_id'] ?? null,

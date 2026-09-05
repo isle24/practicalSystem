@@ -24,7 +24,7 @@
     <label><span>签到成绩</span><input v-model="internship.forms.score.sign_in_score" type="number"></label>
     <label><span>日志成绩</span><input v-model="internship.forms.score.journal_score" type="number"></label>
     <label><span>报告成绩</span><input v-model="internship.forms.score.report_score" type="number"></label>
-    <label><span>企业成绩</span><input v-model="internship.forms.score.enterprise_score" type="number"></label>
+    <label><span>企业成绩</span><input v-model="internship.forms.score.enterprise_score" type="number" disabled placeholder="毕业实习由企业评价自动写入"></label>
     <AppButton block :loading="internship.loading" @click="submitScore">保存成绩</AppButton>
   </section>
 

@@ -11,8 +11,9 @@
     :page-key="navigationPageKey"
     :transition-direction="navigationTransitionDirection"
     :internship-visible="isMobileModuleVisible('internship')"
-    :training-visible="isMobileModuleVisible('training')"
-    :lab-visible="isMobileModuleVisible('lab')"
+    :training-visible="isMobileModuleVisible('practice')"
+    :lab-visible="false"
+    :social-visible="isMobileModuleVisible('socialPractice')"
     @back="goMobileBack"
     @message="openMobileMessages"
     @refresh="handleMobilePullRefresh"
@@ -63,6 +64,7 @@
         :role-labels="roleNameMap"
         @open-tab="activeTab = $event"
         @switch-account="switchMobileAccount"
+        @mobile-verified="loadSwitchableAccounts"
         @logout="confirmMobileLogout"
       />
 
@@ -104,7 +106,13 @@
 
       <InternshipPage v-else-if="activeTab === 'internship'" />
 
-      <PracticePage v-else-if="isPracticeTab(activeTab)" :module-type="activeTab" />
+      <PracticePage v-else-if="isPracticeTab(activeTab)" module-type="all" />
+
+      <SocialPracticePage
+        v-else-if="activeTab === 'socialPractice'"
+        :role-type="roleType"
+        :has-permission="hasPermission"
+      />
 
       <template v-else>
         <section class="mobile-empty-card">
@@ -128,7 +136,7 @@
 
 <script setup>
 import { computed, ref, watch } from 'vue';
-import { showToast } from 'vant';
+import { showConfirmDialog, showToast } from 'vant';
 import {
   BriefcaseBusiness,
   BookOpen,
@@ -137,7 +145,7 @@ import {
   ClipboardList,
   FileClock,
   FileText,
-  FlaskConical,
+  FolderOpen,
   GraduationCap,
   Home,
   MapPin,
@@ -153,6 +161,7 @@ import InternshipPage from './features/internship/InternshipPage.vue';
 import { provideInternshipContext } from './features/internship/internshipContext';
 import PracticePage from './features/practice/PracticePage.vue';
 import { providePracticeContext } from './features/practice/practiceContext';
+import SocialPracticePage from './features/social-practice/SocialPracticePage.vue';
 import MobileAppShell from './layouts/MobileAppShell.vue';
 import DocumentPage from './pages/DocumentPage.vue';
 import HomePage from './pages/HomePage.vue';
@@ -168,12 +177,17 @@ import { useMobilePermissions } from './composables/useMobilePermissions';
 import { usePracticeModule } from './composables/usePracticeModule';
 import { useSupportCenter } from './composables/useSupportCenter';
 import { statusText as resolveStatusText } from './constants/status';
+import { backendUrl } from './api/client';
 import { formatDateKey } from './utils/date';
 import {
+  exportInternshipBaseWord,
+  exportInternshipImplementationPdf,
   fetchInternshipArchiveMaterials,
   fetchInternshipApplications,
   fetchInternshipArrangementChanges,
   fetchInternshipArrangements,
+  fetchInternshipBaseDetail,
+  fetchInternshipBases,
   fetchInternshipDelays,
   fetchInternshipInsurances,
   fetchInternshipJournals,
@@ -188,21 +202,31 @@ import {
   fetchInternshipScores,
   fetchInternshipSignIns,
   fetchInternshipSyllabusGuides,
+  fetchInternshipImplementationDetail,
   fetchInternshipImplementationSheets,
   fetchInternshipTeacherWorkReports,
   fetchInternshipInspections,
   fetchInternshipTimeline,
+  fetchTemplateList,
   fetchPracticeList,
   fetchPracticeOptions,
   fetchPracticeOverview,
   fetchPracticeExecutionList,
   fetchPracticeExecutionTimeline,
+  fetchPracticeArchiveCheck,
+  fetchPracticeArchiveDetail,
+  fetchPracticeArchiveDownload,
+  fetchPracticeArchives,
+  fetchPracticeCourseScores,
+  fetchPracticeProjectStudents,
   fetchPracticeReviewDraft,
+  fetchPracticeScheduleWeek,
   fetchPracticeTimeline,
   requestInternshipModification,
   requestPracticeExecutionModification,
   requestPracticeModification,
   reviewInternshipApplication,
+  reviewInternshipArrangement,
   reviewInternshipArrangementChange,
   reviewInternshipDelay,
   reviewInternshipDocument,
@@ -218,9 +242,13 @@ import {
   saveInternshipReviewDraft,
   saveInternshipScore,
   saveInternshipSignIn,
+  saveInternshipSafetyLetter,
   savePracticeExecution,
+  savePracticeItem,
   savePracticeProjectScore,
   savePracticeReviewDraft,
+  createPracticeArchive,
+  uploadFile,
 } from './api/system';
 
 const { state, hasPermission, load } = useMobilePermissions();
@@ -255,6 +283,7 @@ const {
   reviewDialog: practiceReviewDialog,
   executionDialog: practiceExecutionDialog,
   timelineDialog: practiceTimelineDialog,
+  materialDialog: practiceMaterialDialog,
   emptyFilters: emptyPracticeFilters,
   reset: resetPracticeState,
 } = usePracticeModule();
@@ -271,17 +300,16 @@ const {
     internshipSubmitSection: internship.submitSection,
     internshipReviewList: internship.reviewList,
     internshipManageList: internship.manageList,
-    trainingPanel: practice.training.panel,
-    labPanel: practice.lab.panel,
+    practicePanel: practice.panel,
   }),
   restoreExtras: async (snapshot) => {
     internship.panel = snapshot.internshipPanel || 'workbench';
     internship.submitSection = snapshot.internshipSubmitSection || '';
     internship.reviewList = snapshot.internshipReviewList || 'applications';
-    internship.manageList = snapshot.internshipManageList || 'arrangements';
-    practice.training.panel = snapshot.trainingPanel || practice.training.panel;
-    practice.lab.panel = snapshot.labPanel || practice.lab.panel;
+    internship.manageList = snapshot.internshipManageList || 'plans';
+    practice.panel = snapshot.practicePanel || practice.panel;
   },
+  rootTabs: ['home', 'internship', 'practice', 'socialPractice', 'mine'],
 });
 
 const {
@@ -348,22 +376,22 @@ const modules = [
     flow: '按实习文档开发',
   },
   {
-    key: 'training',
-    title: '实训管理',
-    desc: '实训模块入口',
-    icon: Workflow,
+    key: 'practice',
+    title: '实验实训管理',
+    desc: '实验与实训项目、课表和过程记录',
+    icon: CalendarCheck,
     theme: 'teal',
-    permission: 'training:view',
+    permission: 'practice:view',
     flow: '-',
   },
   {
-    key: 'lab',
-    title: '实验管理',
-    desc: '实验模块入口',
-    icon: FlaskConical,
+    key: 'socialPractice',
+    title: '社会实践',
+    desc: '申报、材料、签到和成绩',
+    icon: Workflow,
     theme: 'green',
-    permission: 'lab:view',
-    flow: '-',
+    permission: 'social_practice:view',
+    flow: '按社会实践流程执行',
   },
   {
     key: 'doc',
@@ -412,6 +440,10 @@ const isAdminRole = computed(() => ['super_admin', 'school_admin', 'college_admi
 const visibleMobileModules = computed(() => modules.filter(canShowMobileModule));
 const supportHomeModules = computed(() => visibleMobileModules.value.filter(module => ['doc', 'templateLib'].includes(module.key)));
 const canReviewInternship = computed(() => hasPermission('internship:approve'));
+const canReviewArrangement = computed(() => (
+  isAdminRole.value
+  && (hasPermission('internship:manage') || hasPermission('internship:approve'))
+));
 const canReviewInternshipPlan = computed(() => hasPermission('internship:plan') && isAdminRole.value);
 const signGpsReady = computed(() => hasCoordinateValue(internship.forms.sign.longitude) && hasCoordinateValue(internship.forms.sign.latitude));
 const signGpsTitle = computed(() => (signGpsReady.value ? '已获取 GPS 定位' : '等待 GPS 定位'));
@@ -422,6 +454,13 @@ const practiceGpsTitle = computed(() => (practiceGpsReady.value ? '已获取 GPS
 const practiceGpsHint = computed(() => (practiceGpsReady.value ? '坐标来自当前设备定位' : '签到前请先授权并获取当前位置'));
 const practiceMapUrl = computed(() => coordinateMapUrl(practiceExecutionDialog.form.longitude, practiceExecutionDialog.form.latitude, practiceGpsReady.value));
 const signAccuracyText = computed(() => accuracyDisplayText(internship.forms.sign.accuracy));
+const currentReportIsGraduation = computed(() => {
+  const arrangement = currentArrangement();
+  return arrangement?.type === 'graduation'
+    || arrangement?.category_code === 'graduation'
+    || arrangement?.scope_type === 'cohort';
+});
+const safetyTemplate = computed(() => internship.options.archive_templates.find(item => item.material_type === 'safety_commitment') || null);
 const practiceAccuracyText = computed(() => accuracyDisplayText(practiceExecutionDialog.form.accuracy));
 
 function coordinateMapUrl(longitudeValue, latitudeValue, ready) {
@@ -451,10 +490,13 @@ function canShowMobileModule(module) {
   if (!hasPermission(module.permission)) {
     return false;
   }
-  if (['training', 'lab'].includes(module.key)) {
+  if (module.key === 'practice') {
     return ['student', 'teacher', 'super_admin', 'school_admin', 'college_admin', 'profession_admin'].includes(roleType.value);
   }
   if (module.key === 'internship') {
+    return ['student', 'teacher', 'super_admin', 'school_admin', 'college_admin', 'profession_admin'].includes(roleType.value);
+  }
+  if (module.key === 'socialPractice') {
     return ['student', 'teacher', 'super_admin', 'school_admin', 'college_admin', 'profession_admin'].includes(roleType.value);
   }
   return true;
@@ -520,6 +562,7 @@ const internshipPanels = computed(() => {
       { key: 'workbench', name: '概况', icon: Home },
       { key: 'apply', name: '任务', icon: ClipboardList },
       { key: 'submit', name: '提交', icon: Send },
+      { key: 'changes', name: '资料', icon: FileText },
       { key: 'score', name: '成绩', icon: GraduationCap },
     ];
   }
@@ -527,6 +570,7 @@ const internshipPanels = computed(() => {
     return [
       { key: 'workbench', name: '概况', icon: Home },
       { key: 'review', name: '审核', icon: CheckCircle2 },
+      { key: 'changes', name: '变更', icon: FileText },
       { key: 'score', name: '成绩', icon: GraduationCap },
     ];
   }
@@ -534,12 +578,14 @@ const internshipPanels = computed(() => {
     return [
       { key: 'workbench', name: '概况', icon: Home },
       { key: 'review', name: '审核', icon: CheckCircle2 },
+      { key: 'changes', name: '变更', icon: FileText },
       { key: 'manage', name: '数据', icon: CalendarCheck },
     ];
   }
   return [{ key: 'workbench', name: '概况', icon: Home }];
 });
 const reviewStatusOptions = [
+  { value: 'draft', label: '草稿' },
   { value: 'wait', label: '待审核' },
   { value: 'accept', label: '已通过' },
   { value: 'modify', label: '需修改' },
@@ -554,22 +600,50 @@ const delayStatusOptions = [
   { value: 'accept', label: '已通过' },
   { value: 'refuse', label: '已退回' },
 ];
+
+/** 返回实习大纲或指导书移动端配置 */
+function mobileSyllabusGuideConfig(key, documentType, title, shortTitle) {
+  return {
+    key,
+    entity: 'syllabus_guide',
+    documentType,
+    title,
+    shortTitle,
+    icon: documentType === 'guide' ? FileText : BookOpen,
+    keywordPlaceholder: `搜索${title}标题、任务、学院或专业`,
+    gradeFilter: true,
+    statusOptions: [
+      { value: 'draft', label: '草稿' },
+      { value: 'published', label: '已发布' },
+    ],
+    emptyText: `暂无${title}`,
+  };
+}
+
 const mobileListConfigs = computed(() => ({
+  bases: {
+    key: 'bases',
+    entity: '',
+    detailType: 'base',
+    title: '基地建设',
+    shortTitle: '基地',
+    icon: BriefcaseBusiness,
+    keywordPlaceholder: '基地、合作单位、位置、负责人',
+    statusOptions: [
+      { value: 'enabled', label: '启用' },
+      { value: 'disabled', label: '停用' },
+    ],
+    emptyText: '暂无实习基地',
+  },
   arrangements: {
     key: 'arrangements',
     entity: 'arrangement',
     title: '实习任务',
     shortTitle: '任务',
     icon: CalendarCheck,
-    keywordPlaceholder: '任务、课程、届次、学院、专业',
+    keywordPlaceholder: '任务、课程、年级或届次、学院、专业',
     gradeFilter: true,
-    statusOptions: [
-      { value: 'enabled', label: '启用' },
-      { value: 'completed', label: '已完成' },
-      { value: 'changing', label: '变更中' },
-      { value: 'changed', label: '已变更' },
-      { value: 'disabled', label: '停用' },
-    ],
+    statusOptions: reviewStatusOptions,
     emptyText: '暂无实习任务',
   },
   arrangementChanges: {
@@ -591,51 +665,39 @@ const mobileListConfigs = computed(() => ({
   plans: {
     key: 'plans',
     entity: 'plan',
-    title: '实习计划',
-    shortTitle: '计划',
+    detailType: 'plan',
+    scopeFilter: true,
+    title: '计划表',
+    shortTitle: '计划表',
     icon: FileText,
-    keywordPlaceholder: '学院、提交人',
+    keywordPlaceholder: '课程、类别、年级或毕业届次、学院、专业',
     statusOptions: reviewStatusOptions,
     emptyText: '暂无实习计划',
   },
-  syllabusGuides: {
-    key: 'syllabusGuides',
-    entity: 'syllabus_guide',
-    title: '大纲指导书',
-    shortTitle: '大纲',
-    icon: BookOpen,
-    keywordPlaceholder: '标题、安排、学院、专业',
-    gradeFilter: true,
-    statusOptions: [
-      { value: 'draft', label: '草稿' },
-      { value: 'published', label: '已发布' },
-    ],
-    emptyText: '暂无大纲指导书',
-  },
+  syllabuses: mobileSyllabusGuideConfig('syllabuses', 'syllabus', '实习大纲', '大纲'),
+  guides: mobileSyllabusGuideConfig('guides', 'guide', '实习指导书', '指导书'),
   implementationSheets: {
     key: 'implementationSheets',
     entity: 'implementation_sheet',
-    title: '实施表',
+    detailType: 'implementation',
+    title: '实习实施',
     shortTitle: '实施',
     icon: ClipboardList,
-    keywordPlaceholder: '安排、学院、专业、教师',
+    keywordPlaceholder: '任务、学院、专业、教师',
     gradeFilter: true,
-    statusOptions: [
-      { value: 'draft', label: '草稿' },
-      { value: 'confirmed', label: '已确认' },
-    ],
-    emptyText: '暂无实施表',
+    statusOptions: reviewStatusOptions,
+    emptyText: '暂无实习实施任务',
   },
   applications: {
     key: 'applications',
     entity: 'application',
-    title: '特殊申请',
-    shortTitle: '特申',
+    title: '实习方式申请',
+    shortTitle: '方式',
     icon: ClipboardList,
     keywordPlaceholder: '学生、学号、实习任务、教师',
     gradeFilter: true,
     statusOptions: reviewStatusOptions,
-    emptyText: '暂无特殊申请',
+    emptyText: '暂无实习方式申请',
   },
   pairs: {
     key: 'pairs',
@@ -749,8 +811,8 @@ const mobileListConfigs = computed(() => ({
     title: '归档材料',
     shortTitle: '归档',
     icon: FileText,
-    keywordPlaceholder: '学生、学号、安排、材料',
-    gradeFilter: true,
+    keywordPlaceholder: '课程、任务、材料',
+    scopeFilter: true,
     statusOptions: [
       { value: 'complete', label: '完整' },
       { value: 'incomplete', label: '待补齐' },
@@ -786,7 +848,7 @@ const mobileListConfigs = computed(() => ({
 const reviewListTabs = computed(() => {
   const keys = isTeacherRole.value
     ? ['journals', 'reports', 'delays', 'applications']
-    : ['arrangementChanges', 'plans', 'delays', 'applications'];
+    : ['arrangements', 'implementationSheets', 'arrangementChanges', 'plans', 'delays', 'applications'];
   if (!canReviewInternshipPlan.value) {
     const planIndex = keys.indexOf('plans');
     if (planIndex >= 0) {
@@ -795,23 +857,29 @@ const reviewListTabs = computed(() => {
   }
   return keys.map(getMobileListConfig).filter(Boolean);
 });
-const manageListTabs = computed(() => [
-  'plans',
-  'arrangements',
-  'pairs',
-  'arrangementChanges',
-  'syllabusGuides',
-  'implementationSheets',
-  'signIns',
-  'journals',
-  'reports',
-  'teacherWorkReports',
-  'delays',
-  'scores',
-  'courseScores',
-  'inspections',
-  'archiveMaterials',
-].map(getMobileListConfig).filter(Boolean));
+const manageListTabs = computed(() => {
+  const keys = [
+    'bases',
+    'plans',
+    'implementationSheets',
+    'syllabuses',
+    'guides',
+    'signIns',
+    'journals',
+    'reports',
+    'teacherWorkReports',
+    'delays',
+    'scores',
+    'courseScores',
+    'inspections',
+    'archiveMaterials',
+  ];
+  return keys
+    .filter(key => key !== 'plans' || hasPermission('internship:plan'))
+    .filter(key => key !== 'inspections' || hasPermission('internship:archive'))
+    .map(getMobileListConfig)
+    .filter(Boolean);
+});
 const currentReviewListConfig = computed(() => getMobileListConfig(internship.reviewList) || reviewListTabs.value[0] || null);
 const currentManageListConfig = computed(() => getMobileListConfig(internship.manageList) || manageListTabs.value[0] || null);
 const internshipSummaries = computed(() => [
@@ -851,6 +919,13 @@ const studentSubmitCards = computed(() => [
     expired: isStageExpired('report_deadline'),
   },
   {
+    key: 'safety',
+    title: '安全承诺',
+    desc: '下载模板签署后上传定稿件',
+    icon: CheckCircle2,
+    meta: internship.forms.safety.signature_file_id ? '已选择定稿' : '待签署',
+  },
+  {
     key: 'delay',
     title: '延期申请',
     desc: '针对日志、报告等提交阶段申请延期',
@@ -863,20 +938,20 @@ const internshipWorkbenchCells = computed(() => {
     return [
       { title: '我的任务', label: '已绑定的实习任务', value: internship.options.arrangements.length || '-' },
       { title: '已评分任务', label: '按任务记录成绩', value: internship.lists.scores.pagination.total || 0 },
-      { title: '特殊申请', label: '分散、自主等场景', value: internship.lists.applications.pagination.total || 0 },
+      { title: '实习方式申请', label: '集中、分散、自主实习', value: internship.lists.applications.pagination.total || 0 },
     ];
   }
   if (isTeacherRole.value) {
     return [
       { title: '待评日志', label: '学生提交的实习日志', value: internship.overview.journals_waiting || 0 },
       { title: '待评报告', label: '学生提交的实习报告', value: internship.overview.reports_waiting || 0 },
-      { title: '特殊申请', label: '分散、自主等场景', value: internship.lists.applications.pagination.total || 0 },
+      { title: '实习方式申请', label: '集中、分散、自主实习', value: internship.lists.applications.pagination.total || 0 },
     ];
   }
   return [
     { title: '实习任务', label: '全校实习任务', value: internship.overview.arrangements || 0 },
     { title: '任务绑定', label: '学生与任务老师绑定', value: internship.overview.active_pairs || 0 },
-    { title: '特殊申请', label: '分散、自主等场景待审', value: internship.overview.applications_waiting || 0 },
+    { title: '实习方式申请', label: '集中、分散、自主实习待审', value: internship.overview.applications_waiting || 0 },
   ];
 });
 
@@ -908,23 +983,25 @@ function openHomeFocus(item) {
 }
 
 const practiceFlowSteps = [
-  '教学计划来源于教务拉取或教师填报',
-  '课表明确老师、班级、时间和地点',
-  '课表发布为项目并绑定学生范围',
-  '成绩比例配置后录入成绩并统计',
+  { label: '查看本人参与的课程和项目', panel: 'plans' },
+  { label: '按项目完成签到和课程任务', panel: 'signIns' },
+  { label: '提交项目报告并填写反思小结', panel: 'reports' },
+  { label: '教师评阅后查看课程成绩', panel: 'courseScores' },
 ];
 const practicePanelDefinitions = [
-  { key: 'plans', entity: 'plan', title: '教学计划', shortTitle: '计划', icon: FileText, review: true, emptyText: '暂无教学计划' },
+  { key: 'plans', entity: 'plan', title: '我的开课任务', shortTitle: '课程', icon: FileText, review: true, emptyText: '暂无开课任务' },
   { key: 'schedules', entity: 'schedule', title: '课表安排', shortTitle: '课表', icon: CalendarCheck, review: false, emptyText: '暂无课表安排' },
-  { key: 'projects', entity: 'project', title: '项目发布', shortTitle: '项目', icon: ClipboardList, review: false, emptyText: '暂无项目' },
+  { key: 'projects', entity: 'project', title: '项目与任务', shortTitle: '项目', icon: ClipboardList, review: false, emptyText: '暂无项目' },
   { key: 'signIns', entity: 'sign_in', execution: 'sign_in', title: '签到记录', shortTitle: '签到', icon: MapPin, review: false, emptyText: '暂无签到记录' },
-  { key: 'journals', entity: 'journal', execution: 'journal', title: '过程日志', shortTitle: '日志', icon: FileClock, review: true, emptyText: '暂无日志记录' },
-  { key: 'reports', entity: 'report', execution: 'report', title: '总结报告', shortTitle: '报告', icon: FileText, review: true, emptyText: '暂无报告记录' },
-  { key: 'syllabus', entity: 'syllabus', title: '大纲编写', shortTitle: '大纲', icon: BookOpen, review: true, emptyText: '暂无大纲' },
+  { key: 'journals', entity: 'journal', execution: 'journal', title: '历史过程记录', shortTitle: '历史', icon: FileClock, review: true, emptyText: '暂无历史记录' },
+  { key: 'reports', entity: 'report', execution: 'report', title: '项目报告评阅', shortTitle: '项目报告', icon: FileText, review: true, emptyText: '暂无项目报告' },
+  { key: 'syllabus', entity: 'syllabus', title: '课程大纲', shortTitle: '大纲', icon: BookOpen, review: true, emptyText: '暂无大纲' },
   { key: 'lessonPlans', entity: 'lessonPlan', title: '教案编写', shortTitle: '教案', icon: FileText, review: true, emptyText: '暂无教案' },
-  { key: 'gradeRules', entity: 'gradeRule', title: '成绩比例', shortTitle: '比例', icon: GraduationCap, review: false, emptyText: '暂无成绩比例' },
-  { key: 'scores', entity: 'score', title: '成绩评定', shortTitle: '成绩', icon: GraduationCap, review: false, emptyText: '暂无成绩记录' },
-  { key: 'reflections', entity: 'reflection', title: '反思报告', shortTitle: '反思', icon: FileClock, review: true, emptyText: '暂无反思报告' },
+  { key: 'gradeRules', entity: 'gradeRule', title: '成绩方案', shortTitle: '成绩方案', icon: GraduationCap, review: false, emptyText: '暂无成绩方案' },
+  { key: 'scores', entity: 'score', title: '成绩管理', shortTitle: '成绩', icon: GraduationCap, review: true, emptyText: '暂无成绩记录' },
+  { key: 'courseScores', entity: '', title: '课程汇总成绩', shortTitle: '课程汇总', icon: GraduationCap, review: false, emptyText: '暂无课程汇总成绩' },
+  { key: 'reflections', entity: 'reflection', title: '课程教学反思', shortTitle: '课程反思', icon: FileClock, review: true, emptyText: '暂无课程教学反思' },
+  { key: 'archives', entity: '', title: '归档中心', shortTitle: '归档', icon: FolderOpen, review: false, emptyText: '暂无归档版本' },
 ];
 
 const practiceReviewDialogTitle = computed(() => {
@@ -945,16 +1022,16 @@ const practiceReviewTargetDetails = computed(() => {
     return [];
   }
   return [
-    detailItem('模块', practiceModuleName(practiceReviewDialog.module)),
+    detailItem('类别', practiceTypeName(practiceReviewDialog.module)),
     detailItem('业务', practiceEntityName(practiceReviewDialog.entity)),
     detailItem('标题', row.title || row.name),
-    detailItem('届次', row.grade_name),
+    detailItem('年级', row.grade_name),
     detailItem('学院专业', joinFact([row.dep_name, row.profession_name])),
     detailItem('当前状态', statusText(row.status)),
   ].filter(Boolean);
 });
 const practiceExecutionDialogTitle = computed(() => {
-  const names = { sign_in: '签到', journal: '提交日志', report: '提交报告' };
+  const names = { sign_in: '签到', journal: '提交历史记录', report: '提交项目报告', score: '录入项目成绩' };
   return `${practiceModuleName(practiceExecutionDialog.module)}${names[practiceExecutionDialog.execution] || '提交'}`;
 });
 const practiceExecutionDialogSubtitle = computed(() => {
@@ -979,12 +1056,47 @@ const studentScopedListKeys = new Set([
   'insurances',
   'safetyLetters',
 ]);
+const organizationScopedListKeys = new Set([
+  ...studentScopedListKeys,
+  'bases',
+  'arrangements',
+  'arrangementChanges',
+  'plans',
+  'syllabuses',
+  'guides',
+  'implementationSheets',
+  'teacherWorkReports',
+  'inspections',
+]);
 
 function selectFilterItems(items, valueKey, labelKey) {
   return (items || []).map(item => ({
     value: item[valueKey],
     label: item[labelKey] || item[valueKey],
   }));
+}
+
+function selectedMobileInternshipCategory(filters = {}) {
+  const categoryId = Number(filters.category_id || 0);
+  return internship.options.internship_categories.find(item => Number(item.id) === categoryId) || null;
+}
+
+function currentMobileGradeId() {
+  const current = internship.options.grades.find(item => sameFilterValue(item.is_current, 'true') || sameFilterValue(item.is_current, 1));
+  return current?.grade_id || internship.options.grades[0]?.grade_id || '';
+}
+
+function currentMobileGraduationCohortId() {
+  const current = internship.options.graduation_cohorts.find(item => sameFilterValue(item.is_current, 'true') || sameFilterValue(item.is_current, 1));
+  return current?.cohort_id || internship.options.graduation_cohorts[0]?.cohort_id || '';
+}
+
+function defaultMobileInternshipCategory() {
+  return internship.options.internship_categories.find((item) => {
+    return item.scope_type === 'cohort'
+      ? internship.options.graduation_cohorts.length > 0
+      : internship.options.grades.length > 0;
+  }) || internship.options.internship_categories[0] || null;
 }
 
 function mobileDepartmentOptions(key) {
@@ -1005,7 +1117,7 @@ function mobileProfessionOptions(key) {
 }
 
 function mobileProfessionOptionsByValues(filters = {}) {
-  const gradeId = Number(filters.grade_id || 0);
+  const gradeId = filters.graduation_cohort_id ? 0 : Number(filters.grade_id || 0);
   const depId = Number(filters.dep_id || 0);
   return internship.options.professions.filter((item) => {
     const matchGrade = !gradeId || Number(item.grade_id || 0) === gradeId;
@@ -1031,20 +1143,43 @@ function mobileClassOptionsByValues(filters = {}) {
 }
 
 function mobileListSelectFilters(config) {
-  if (!config) {
+  if (!config || !isAdminRole.value) {
     return [];
   }
   const key = config.key;
   const filters = [];
-  if (config.gradeFilter) {
+  if (config.scopeFilter) {
+    filters.push({
+      key: 'category_id',
+      label: '实习类别',
+      placeholder: '全部类别',
+      options: selectFilterItems(internship.options.internship_categories, 'id', 'name'),
+    });
+    const category = selectedMobileInternshipCategory(internship.filters[key]);
+    if (category?.scope_type === 'cohort') {
+      filters.push({
+        key: 'graduation_cohort_id',
+        label: '毕业届次',
+        placeholder: '全部毕业届次',
+        options: selectFilterItems(internship.options.graduation_cohorts, 'cohort_id', 'cohort_name'),
+      });
+    } else if (category) {
+      filters.push({
+        key: 'grade_id',
+        label: '年级',
+        placeholder: '全部年级',
+        options: selectFilterItems(internship.options.grades, 'grade_id', 'grade_name'),
+      });
+    }
+  } else if (config.gradeFilter) {
     filters.push({
       key: 'grade_id',
-      label: '届次',
-      placeholder: '全部届次',
+      label: '年级',
+      placeholder: '全部年级',
       options: selectFilterItems(internship.options.grades, 'grade_id', 'grade_name'),
     });
   }
-  if (isAdminRole.value && (studentScopedListKeys.has(key) || ['arrangements', 'arrangementChanges', 'plans', 'syllabusGuides', 'implementationSheets', 'teacherWorkReports', 'inspections'].includes(key))) {
+  if (organizationScopedListKeys.has(key)) {
     filters.push({
       key: 'dep_id',
       label: '学院',
@@ -1052,7 +1187,7 @@ function mobileListSelectFilters(config) {
       options: selectFilterItems(mobileDepartmentOptions(key), 'dep_id', 'dep_name'),
     });
   }
-  if (isAdminRole.value && (studentScopedListKeys.has(key) || ['arrangements', 'arrangementChanges', 'syllabusGuides', 'implementationSheets', 'teacherWorkReports', 'inspections'].includes(key))) {
+  if (organizationScopedListKeys.has(key)) {
     filters.push({
       key: 'profession_id',
       label: '专业',
@@ -1060,7 +1195,7 @@ function mobileListSelectFilters(config) {
       options: selectFilterItems(mobileProfessionOptions(key), 'profession_id', 'profession_name'),
     });
   }
-  if (isAdminRole.value && studentScopedListKeys.has(key)) {
+  if (studentScopedListKeys.has(key)) {
     filters.push({
       key: 'class_id',
       label: '班级',
@@ -1068,7 +1203,43 @@ function mobileListSelectFilters(config) {
       options: selectFilterItems(mobileClassOptions(key), 'class_id', 'class_name'),
     });
   }
+  if (key === 'bases') {
+    filters.push({
+      key: 'base_type',
+      label: '基地类型',
+      placeholder: '全部基地类型',
+      options: [
+        { value: 'long_term', label: '长期基地' },
+        { value: 'temporary', label: '临时基地' },
+      ],
+    });
+  }
   return filters;
+}
+
+function normalizeMobileScopeFilter(key, changedKey = '') {
+  const config = getMobileListConfig(key);
+  const filters = internship.filters[key];
+  if (!config?.scopeFilter || !filters) {
+    return;
+  }
+  const category = selectedMobileInternshipCategory(filters);
+  if (!category) {
+    filters.grade_id = '';
+    filters.graduation_cohort_id = '';
+    return;
+  }
+  if (category.scope_type === 'cohort') {
+    filters.grade_id = '';
+    if (changedKey === 'category_id' || !hasFilterValue(filters.graduation_cohort_id)) {
+      filters.graduation_cohort_id = currentMobileGraduationCohortId();
+    }
+    return;
+  }
+  filters.graduation_cohort_id = '';
+  if (changedKey === 'category_id' || !hasFilterValue(filters.grade_id)) {
+    filters.grade_id = currentMobileGradeId();
+  }
 }
 
 function normalizeMobileListFilters(key) {
@@ -1089,6 +1260,7 @@ function updateInternshipListFilter(key, payload) {
     return;
   }
   internship.filters[key][payload.key] = payload.value;
+  normalizeMobileScopeFilter(key, payload.key);
   normalizeMobileListFilters(key);
 }
 
@@ -1097,8 +1269,8 @@ function resetInternshipListFilters(key) {
     return;
   }
   const filters = emptyInternshipFilters();
-  applyInternshipFilterDefaults(filters);
   internship.filters[key] = filters;
+  applyInternshipFilterDefaults(filters, key);
   reloadInternshipList(key);
 }
 
@@ -1127,12 +1299,14 @@ function mobileListTitle(key, row) {
   const arrangement = row.arrangement_title || (row.arrangement_id ? `任务ID ${row.arrangement_id}` : '');
   const changePayload = arrangementChangePayload(row);
   const titles = {
+    bases: row.name || row.company_name || `基地ID ${row.id}`,
     arrangements: row.title || row.name || `任务ID ${row.id}`,
     arrangementChanges: changePayload.title || row.arrangement_title || `变更ID ${row.id}`,
     // 暂时隐藏学期展示，后续需要时恢复 row.semester。
-    plans: row.dep_name || `计划ID ${row.id}`,
-    syllabusGuides: row.title || row.arrangement_title || `大纲ID ${row.id}`,
-    implementationSheets: row.arrangement_title || `实施表ID ${row.id}`,
+    plans: row.course_name || row.course_code || `计划ID ${row.id}`,
+    syllabuses: row.title || row.arrangement_title || `大纲ID ${row.id}`,
+    guides: row.title || row.arrangement_title || `指导书ID ${row.id}`,
+    implementationSheets: row.title || row.arrangement_title || `任务ID ${row.id}`,
     applications: student || arrangement || `申请ID ${row.id}`,
     pairs: student || `关系ID ${row.id}`,
     signIns: student || arrangement || `签到ID ${row.id}`,
@@ -1143,7 +1317,7 @@ function mobileListTitle(key, row) {
     scores: student || `成绩ID ${row.id}`,
     courseScores: joinFact([row.student_name, row.student_num]) || `课程成绩 ${row.plan_id}-${row.student_id}`,
     inspections: joinFact([row.arrangement_title, row.student_name]) || `巡查ID ${row.id}`,
-    archiveMaterials: student || arrangement || `归档ID ${row.id}`,
+    archiveMaterials: row.course_name || student || arrangement || `归档ID ${row.id}`,
     insurances: student || row.insurance_company || `保险ID ${row.id}`,
     safetyLetters: student || `承诺ID ${row.id}`,
   };
@@ -1151,6 +1325,9 @@ function mobileListTitle(key, row) {
 }
 
 function mobileListValue(key, row) {
+  if (key === 'bases') {
+    return row.base_type === 'temporary' ? '临时基地' : '长期基地';
+  }
   if (key === 'arrangementChanges') {
     return statusText(row.status);
   }
@@ -1179,21 +1356,30 @@ function mobileListFacts(key, row) {
   const student = joinFact([row.student_name, row.student_num]);
   const arrangement = row.arrangement_title || (row.arrangement_id ? `任务ID ${row.arrangement_id}` : '');
   const changePayload = arrangementChangePayload(row);
+  const arrangementFacts = [
+    namedFact('课程', row.course_name || row.course_code),
+    namedFact('任务编号', row.task_no),
+    namedFact('批次', row.batch_no),
+    namedFact('类型', arrangementTypeText(row.type)),
+    namedFact('方式', organizeModeText(row.organize_mode)),
+    namedFact('时间', dateRangeText(row.start_date, row.end_date)),
+    namedFact('绑定班级', row.class_names),
+    namedFact('负责老师', row.teacher_name),
+    namedFact('绑定人数', row.task_binding_count),
+    namedFact('任务评分', row.task_score_progress_text),
+    namedFact('范围', joinFact([row.dep_name || '全校', row.profession_name || '全部专业', internshipPlanScopeName(row)])),
+  ];
   const facts = {
-    arrangements: [
-      // 暂时隐藏学期字段，后续需要时恢复。
-      // namedFact('学期', row.semester),
-      namedFact('任务编号', row.task_no),
-      namedFact('批次', row.batch_no),
-      namedFact('类型', arrangementTypeText(row.type)),
-      namedFact('方式', organizeModeText(row.organize_mode)),
-      namedFact('时间', dateRangeText(row.start_date, row.end_date)),
-      namedFact('绑定班级', row.class_names),
-      namedFact('学生数', row.student_count),
-      namedFact('绑定人数', row.task_binding_count),
-      namedFact('任务评分', row.task_score_progress_text),
-      namedFact('范围', joinFact([row.dep_name || '全校', row.profession_name || '全部专业', row.grade_name])),
+    bases: [
+      namedFact('学院', row.dep_name),
+      namedFact('服务专业', row.profession_names),
+      namedFact('合作单位', row.company_name),
+      namedFact('位置', row.address),
+      namedFact('负责人', row.manager_name),
+      namedFact('申报年份', row.declaration_year),
+      namedFact('基地等级', row.base_level),
     ],
+    arrangements: arrangementFacts,
     arrangementChanges: [
       namedFact('原任务', arrangement),
       namedFact('课程', row.course_name),
@@ -1208,6 +1394,8 @@ function mobileListFacts(key, row) {
     plans: [
       // 暂时隐藏学期字段，后续需要时恢复。
       // namedFact('学期', row.semester),
+      namedFact('实习类别', row.category_name),
+      namedFact(internshipPlanScopeLabel(row), internshipPlanScopeName(row)),
       namedFact('学院', row.dep_name),
       namedFact('专业', row.profession_name),
       namedFact('任务数', row.task_count),
@@ -1218,24 +1406,24 @@ function mobileListFacts(key, row) {
       namedFact('当前节点', row.current_approval_name),
       namedFact('内容', planContentText(row.plan_content, 48)),
     ],
-    syllabusGuides: [
-      namedFact('届次', row.grade_name),
+    syllabuses: [
+      internshipAcademicScopeFact(row),
       namedFact('任务', arrangement),
       namedFact('学院专业', joinFact([row.dep_name, row.profession_name])),
       namedFact('录入人', row.creator_name),
       namedFact('内容', previewText(row.content, 42)),
     ],
-    implementationSheets: [
-      namedFact('届次', row.grade_name),
+    guides: [
+      internshipAcademicScopeFact(row),
       namedFact('任务', arrangement),
       namedFact('学院专业', joinFact([row.dep_name, row.profession_name])),
-      namedFact('教师', row.teacher_name),
-      namedFact('承诺签署', `${row.signed_count || 0}/${Number(row.signed_count || 0) + Number(row.unsigned_count || 0)}`),
-      namedFact('保险', row.insurance_verified === 'true' ? '已核验' : '未核验'),
+      namedFact('录入人', row.creator_name),
+      namedFact('内容', previewText(row.content, 42)),
     ],
+    implementationSheets: arrangementFacts,
     applications: [
       namedFact('学号', row.student_num),
-      namedFact('届次', row.grade_name),
+      internshipAcademicScopeFact(row),
       namedFact('任务', arrangement),
       namedFact('学院专业', joinFact([row.dep_name, row.profession_name])),
       namedFact('教师审核', statusText(row.teacher_status)),
@@ -1244,7 +1432,7 @@ function mobileListFacts(key, row) {
     ],
     pairs: [
       namedFact('学号', row.student_num),
-      namedFact('届次', row.grade_name),
+      internshipAcademicScopeFact(row),
       namedFact('学院专业', joinFact([row.dep_name, row.profession_name])),
       namedFact('班级', row.class_name),
       namedFact('任务', arrangement),
@@ -1255,27 +1443,27 @@ function mobileListFacts(key, row) {
     ],
     signIns: [
       namedFact('学生', student),
-      namedFact('届次', row.grade_name),
+      internshipAcademicScopeFact(row),
       namedFact('任务', arrangement),
       namedFact('时间', joinFact([row.date, row.sign_time])),
       namedFact('地点', row.location),
     ],
     journals: [
       namedFact('学生', student),
-      namedFact('届次', row.grade_name),
+      internshipAcademicScopeFact(row),
       namedFact('日期', row.date || row.created_at),
       namedFact('任务', arrangement),
       namedFact('内容', previewText(row.content, 42)),
     ],
     reports: [
       namedFact('学生', student),
-      namedFact('届次', row.grade_name),
+      internshipAcademicScopeFact(row),
       namedFact('任务', arrangement),
       namedFact('提交', row.submitted_at || row.created_at),
       namedFact('内容', previewText(row.content, 42)),
     ],
     teacherWorkReports: [
-      namedFact('届次', row.grade_name),
+      internshipAcademicScopeFact(row),
       namedFact('任务', arrangement),
       namedFact('教师', row.teacher_name),
       namedFact('指导人数', row.guidance_count),
@@ -1283,21 +1471,21 @@ function mobileListFacts(key, row) {
     ],
     delays: [
       namedFact('学生', student),
-      namedFact('届次', row.grade_name),
+      internshipAcademicScopeFact(row),
       namedFact('任务', arrangement),
       namedFact('延期类型', delayConfigText(row.config_key)),
       namedFact('延期至', row.requested_date),
       namedFact('原因', previewText(row.reason, 42)),
     ],
     scores: [
-      namedFact('届次', row.grade_name),
+      internshipAcademicScopeFact(row),
       namedFact('任务', arrangement),
       namedFact('评分状态', row.final_score !== null && row.final_score !== undefined ? '已评分' : '待评分'),
       namedFact('评分人', row.teacher_name || row.teacher_num),
       namedFact('分项', scoreBreakdownText(row)),
     ],
     courseScores: [
-      namedFact('届次', row.grade_name),
+      internshipAcademicScopeFact(row),
       namedFact('学院专业', joinFact([row.dep_name, row.profession_name])),
       namedFact('班级', row.class_name),
       namedFact('课程', joinFact([row.course_code, row.course_name])),
@@ -1309,31 +1497,31 @@ function mobileListFacts(key, row) {
       namedFact('任务成绩', row.task_score_text),
     ],
     inspections: [
-      namedFact('届次', row.grade_name),
+      internshipAcademicScopeFact(row),
       namedFact('任务', arrangement),
       namedFact('学生', student),
       namedFact('巡查人', row.inspector_name),
       namedFact('说明', previewText(row.remark, 42)),
     ],
     archiveMaterials: [
-      namedFact('学生', student || (row.student_id ? `学生ID ${row.student_id}` : '')),
-      namedFact('届次', row.grade_name),
-      namedFact('任务', arrangement),
-      namedFact('类型', row.arrangement_type_text),
+      internshipAcademicScopeFact(row),
+      namedFact(row.student_id ? '学生' : '学院专业', row.student_id ? student : joinFact([row.dep_name, row.profession_name])),
+      namedFact(row.student_id ? '任务' : '课程', row.student_id ? arrangement : joinFact([row.course_code, row.course_name])),
+      namedFact('任务数', row.task_count),
+      namedFact('学生任务数', row.student_task_count),
       namedFact('进度', row.material_progress),
-      namedFact('抽检', row.inspection_record_status),
       namedFact('缺失', row.missing_materials),
     ],
     insurances: [
       namedFact('学生', student || (row.student_id ? `学生ID ${row.student_id}` : '')),
-      namedFact('届次', row.grade_name),
+      internshipAcademicScopeFact(row),
       namedFact('任务', arrangement),
       namedFact('保险公司', row.insurance_company),
       namedFact('时间', dateRangeText(row.start_date, row.end_date)),
     ],
     safetyLetters: [
       namedFact('学生', student || (row.student_id ? `学生ID ${row.student_id}` : '')),
-      namedFact('届次', row.grade_name),
+      internshipAcademicScopeFact(row),
       namedFact('任务', arrangement),
       namedFact('签署', row.signed_at),
     ],
@@ -1343,11 +1531,18 @@ function mobileListFacts(key, row) {
 
 function mobileListActions(key, row, context) {
   const config = getMobileListConfig(key);
-  if (!config?.entity) {
+  if (!config) {
     return [];
   }
 
-  const actions = [{ key: 'timeline', label: '记录', type: 'timeline', entity: config.entity }];
+  const actions = [];
+  if (config.detailType || ['applications', 'syllabuses', 'guides', 'journals', 'reports', 'teacherWorkReports', 'delays', 'inspections', 'archiveMaterials'].includes(key)) {
+    actions.push({ key: 'detail', label: '查看', type: 'detail', listKey: key });
+  }
+  if (!config.entity) {
+    return actions;
+  }
+  actions.push({ key: 'timeline', label: '记录', type: 'timeline', entity: config.entity });
   const canActInContext = context === 'review' || (context === 'manage' && config.entity === 'arrangement_change');
   if (canActInContext && canReviewEntity(config.entity)) {
     if (canReviewRow(row, config.entity)) {
@@ -1368,13 +1563,17 @@ function canReviewEntity(entity) {
   if (entity === 'plan') {
     return canReviewInternshipPlan.value;
   }
-  if (entity === 'arrangement_change') {
-    return isAdminRole.value && (hasPermission('internship:manage') || hasPermission('internship:approve'));
+  if (['arrangement', 'arrangement_change'].includes(entity)) {
+    return canReviewArrangement.value;
   }
   return canReviewInternship.value;
 }
 
 function handleMobileListAction(action, row) {
+  if (action.type === 'detail') {
+    openMobileListDetail(action.listKey, row);
+    return;
+  }
   if (action.type === 'timeline') {
     openTimelineDialog(action.entity, row);
     return;
@@ -1427,6 +1626,359 @@ function planContentText(value, length = 48) {
   return previewText(text, length);
 }
 
+function fullContentText(value) {
+  if (value === null || value === undefined || value === '') {
+    return '';
+  }
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value);
+      if (parsed && typeof parsed === 'object') {
+        return parsed.content || parsed.summary || Object.values(parsed).filter(item => typeof item === 'string').join('\n');
+      }
+    } catch {
+      return value;
+    }
+    return value;
+  }
+  if (Array.isArray(value)) {
+    return value.map(fullContentText).filter(Boolean).join('\n');
+  }
+  if (typeof value === 'object') {
+    return value.content || value.summary || Object.values(value).map(fullContentText).filter(Boolean).join('\n');
+  }
+  return String(value);
+}
+
+function detailSection(key, name, items = [], blocks = [], cards = []) {
+  return {
+    key,
+    name,
+    count: cards.length || undefined,
+    items: items.filter(Boolean),
+    blocks: blocks.filter(item => item?.value),
+    cards,
+  };
+}
+
+function detailBlock(label, value) {
+  const text = fullContentText(value).trim();
+  return text ? { label, value: text } : null;
+}
+
+function detailCard(key, title, subtitle = '', status = '', facts = [], action = null) {
+  return {
+    key,
+    title: title || '未命名记录',
+    subtitle,
+    status,
+    facts: facts.filter(Boolean),
+    action,
+  };
+}
+
+function recordDetailSections(key, row) {
+  const factItems = mobileListFacts(key, row).map((fact) => {
+    const separator = fact.indexOf('：');
+    return separator > 0 ? detailItem(fact.slice(0, separator), fact.slice(separator + 1)) : detailItem('信息', fact);
+  });
+  const blockDefinitions = {
+    applications: [detailBlock('申请说明', row.remark)],
+    syllabuses: [detailBlock('大纲内容', row.content)],
+    guides: [detailBlock('指导书内容', row.content)],
+    journals: [
+      detailBlock('工作内容', row.work_content || row.content),
+      detailBlock('收获体会', row.gains),
+      detailBlock('问题记录', row.problems),
+    ],
+    reports: [
+      detailBlock('报告内容', row.content),
+      detailBlock('实习目的', row.purpose),
+      detailBlock('主要收获', row.gains),
+      detailBlock('单位概况', row.company_profile),
+      detailBlock('意见建议', row.suggestions),
+    ],
+    teacherWorkReports: [
+      detailBlock('工作总结', row.summary),
+      detailBlock('存在问题', row.problems),
+      detailBlock('改进建议', row.suggestions),
+    ],
+    delays: [detailBlock('延期原因', row.reason)],
+    inspections: [detailBlock('巡查说明', row.remark)],
+    archiveMaterials: [detailBlock('缺失材料', row.missing_materials)],
+  };
+  return [detailSection('detail', '详情', factItems, blockDefinitions[key] || [])];
+}
+
+function planDetailSections(row) {
+  const tasks = Array.isArray(row.tasks) ? row.tasks : [];
+  return [
+    detailSection('overview', '基本信息', [
+      detailItem('课程名称', row.course_name),
+      detailItem('课程代码', row.course_code),
+      detailItem('实习类别', row.category_name),
+      detailItem(internshipPlanScopeLabel(row), internshipPlanScopeName(row)),
+      detailItem('学院', row.dep_name),
+      detailItem('专业', row.profession_name),
+      detailItem('学分', row.credit),
+      detailItem('成绩规则', scoreRuleText(row.score_rule)),
+      detailItem('计划状态', statusText(row.status)),
+      detailItem('审核进度', row.approval_progress_text),
+      detailItem('当前节点', row.current_approval_name),
+      detailItem('提交人', row.submitter_name),
+    ], [
+      detailBlock('计划内容', row.plan_content),
+      detailBlock('备注', row.remark),
+    ]),
+    detailSection('source', '教学来源', [
+      detailItem('课程类别', row.course_category),
+      detailItem('总学分', row.total_credit),
+      detailItem('实习学分', row.internship_credit),
+      detailItem('总学时', row.total_hours),
+      detailItem('实习学时', row.internship_hours),
+      detailItem('原始教师', row.source_teacher),
+      detailItem('原始时间', row.source_time),
+      detailItem('原始地点', row.source_location),
+    ]),
+    detailSection('tasks', '任务拆分', [], [], tasks.map(task => detailCard(
+      `task-${task.id}`,
+      task.title || task.task_no || `任务ID ${task.id}`,
+      task.teacher_name || '',
+      task.status,
+      [
+        namedFact('任务编号', task.task_no),
+        namedFact('批次', task.batch_no),
+        namedFact('班级', task.class_names),
+        namedFact('时间', dateRangeText(task.start_date, task.end_date)),
+        namedFact('地点', task.location),
+        namedFact('绑定人数', task.task_binding_count),
+      ],
+      { key: 'implementation', label: '查看实施', row: task },
+    ))),
+  ];
+}
+
+function baseDetailSections(detail) {
+  const item = detail.item || {};
+  const manager = detail.manager || {};
+  const professions = (detail.professions || []).map(row => row.profession_name).filter(Boolean).join('、');
+  const peopleCards = [
+    ...(detail.teachers || []).map(row => ({ ...row, person_label: '校内指导教师' })),
+    ...(detail.mentors || []).map(row => ({ ...row, person_label: '企业指导教师' })),
+  ].map(row => detailCard(
+    `person-${row.id}`,
+    row.name || row.teacher_name || row.teacher_num,
+    row.person_label,
+    row.status,
+    [
+      namedFact('性别', row.gender),
+      namedFact('职务职称', row.title),
+      namedFact('学院专业', joinFact([row.dep_name, row.profession_name])),
+      namedFact('联系电话', row.phone),
+    ],
+  ));
+  const declarationCards = (detail.declarations || []).map(row => detailCard(
+    `declaration-${row.id}`,
+    `${row.declaration_year || '-'} 年度申报`,
+    joinFact([row.base_category, row.base_level]),
+    row.status,
+    [
+      namedFact('项目状态', row.project_status),
+      namedFact('立项经费', row.approved_amount),
+      namedFact('服务专业数', row.service_profession_count),
+      namedFact('预计接纳人次', row.expected_student_visits),
+    ],
+  ));
+  return [
+    detailSection('profile', '基地资料', [
+      detailItem('基地名称', item.name),
+      detailItem('基地类型', item.base_type === 'temporary' ? '临时基地' : '长期基地'),
+      detailItem('基地编号', item.code),
+      detailItem('所属学院', item.dep_name),
+      detailItem('服务专业', professions),
+      detailItem('合作单位', item.company_name),
+      detailItem('负责人', manager.name),
+      detailItem('联系电话', manager.phone),
+      detailItem('基地类别', item.category),
+      detailItem('可接收人数', item.capacity),
+    ], [
+      detailBlock('基地所在位置', item.address),
+      detailBlock('服务课程', item.service_courses),
+      detailBlock('负责人职责', manager.duties),
+    ]),
+    detailSection('people', '指导教师', [], [], peopleCards),
+    detailSection('declarations', '年度申报', [], [], declarationCards),
+  ];
+}
+
+function implementationDetailSections(detail) {
+  const task = detail.task || detail.item || {};
+  const sheet = detail.implementation_sheet || {};
+  const studentCards = (detail.students || []).map(row => detailCard(
+    `student-${row.id || row.student_id}`,
+    row.student_name || row.name || row.student_num,
+    row.student_num || '',
+    row.status,
+    [
+      namedFact('班级', row.class_name),
+      namedFact('专业', row.profession_name),
+      namedFact('负责老师', row.teacher_name),
+      namedFact('成绩', row.final_score),
+    ],
+  ));
+  const changeCards = (detail.changes || []).map(row => detailCard(
+    `change-${row.id}`,
+    row.reason || '任务变更',
+    row.submitted_at || row.created_at || '',
+    row.status,
+    [
+      namedFact('提交人', row.submitter_name),
+      namedFact('审核人', row.reviewer_name),
+      namedFact('审核意见', row.review_opinion),
+    ],
+  ));
+  const scheduleCards = (detail.schedules || []).map((row, index) => detailCard(
+    `schedule-${row.id || index}`,
+    row.profession_name || `组织安排 ${index + 1}`,
+    joinFact([row.week_text, row.weekday_text]),
+    '',
+    [
+      namedFact('年级', row.grade_name),
+      namedFact('人数', row.people_count),
+      namedFact('时间', row.time_text),
+      namedFact('地点', row.location),
+      namedFact('带队教师', row.teacher_name),
+    ],
+  ));
+  const expenseCards = (detail.expenses || []).map((row, index) => detailCard(
+    `expense-${row.id || index}`,
+    row.item_name || `费用 ${index + 1}`,
+    row.amount !== null && row.amount !== undefined ? `${row.amount} 元` : '',
+    '',
+    [namedFact('内容', row.content), namedFact('备注', row.remark)],
+  ));
+  return [
+    detailSection('overview', '任务概况', [
+      detailItem('课程', task.course_name || task.title),
+      detailItem('任务编号', task.task_no),
+      detailItem('批次', task.batch_no),
+      detailItem('负责老师', task.teacher_name),
+      detailItem(internshipPlanScopeLabel(task), internshipPlanScopeName(task)),
+      detailItem('学院', task.dep_name),
+      detailItem('专业', task.profession_name),
+      detailItem('实习基地', task.base_name),
+      detailItem('时间', dateRangeText(task.start_date, task.end_date)),
+      detailItem('地点', task.location),
+      detailItem('绑定班级', task.class_names),
+      detailItem('绑定学生', studentCards.length),
+    ], [detailBlock('任务说明', task.description)]),
+    detailSection('students', '学生绑定', [], [], studentCards),
+    detailSection('changes', '任务变更', [], [], changeCards),
+    detailSection('sheet', '实施资料', [
+      detailItem('申请人', sheet.applicant_name || sheet.applicant_user_name),
+      detailItem('申请部门', sheet.applicant_department),
+      detailItem('审批编号', sheet.approval_no),
+      detailItem('课程名称', sheet.course_name),
+      detailItem('课程性质', sheet.course_type),
+      detailItem('学分', sheet.credit),
+      detailItem('实施状态', statusText(sheet.status)),
+      detailItem('保险核验', sheet.insurance_verified === 'true' ? '已核验' : '未核验'),
+    ], [
+      detailBlock('实施内容', sheet.detail_content),
+      detailBlock('备注', sheet.remark),
+    ]),
+    detailSection('schedules', '组织安排', [], [], scheduleCards),
+    detailSection('expenses', '费用明细', [], [], expenseCards),
+  ];
+}
+
+function setMobileDetailSheet(values) {
+  Object.assign(internship.detailSheet, {
+    visible: true,
+    loading: false,
+    type: '',
+    title: '',
+    subtitle: '',
+    sections: [],
+    primaryAction: null,
+    message: '',
+    ...values,
+  });
+}
+
+function closeMobileListDetail() {
+  internship.detailSheet.visible = false;
+}
+
+async function openMobileListDetail(key, row) {
+  const config = getMobileListConfig(key);
+  const type = config?.detailType || 'record';
+  setMobileDetailSheet({
+    loading: ['base', 'implementation'].includes(type),
+    type,
+    title: type === 'plan' ? '计划表详情' : (type === 'implementation' ? '实习实施详情' : `${config?.title || '记录'}详情`),
+    subtitle: mobileListTitle(key, row),
+    sections: type === 'plan' ? planDetailSections(row) : (type === 'record' ? recordDetailSections(key, row) : []),
+  });
+  try {
+    if (type === 'base') {
+      const detail = await fetchInternshipBaseDetail({ id: row.id });
+      const item = detail.item || row;
+      setMobileDetailSheet({
+        type,
+        title: '实习基地详情',
+        subtitle: item.name || row.name || '',
+        sections: baseDetailSections(detail),
+        primaryAction: item.base_type === 'long_term'
+          ? { key: 'exportBase', label: '导出 Word', row: item }
+          : null,
+      });
+    }
+    if (type === 'implementation') {
+      const arrangementId = Number(row.arrangement_id || row.id || 0);
+      const detail = await fetchInternshipImplementationDetail({ arrangement_id: arrangementId });
+      const task = detail.task || detail.item || row;
+      setMobileDetailSheet({
+        type,
+        title: '实习实施详情',
+        subtitle: task.title || task.course_name || '',
+        sections: implementationDetailSections(detail),
+        primaryAction: detail.implementation_sheet?.id
+          ? { key: 'exportImplementation', label: '导出经费 PDF', row: task }
+          : null,
+      });
+    }
+  } catch (error) {
+    internship.detailSheet.loading = false;
+    internship.detailSheet.message = error.message;
+  }
+}
+
+async function handleMobileDetailAction(action) {
+  if (!action || internship.loading) {
+    return;
+  }
+  if (action.key === 'implementation') {
+    await openMobileListDetail('implementationSheets', action.row);
+    return;
+  }
+  internship.loading = true;
+  try {
+    if (action.key === 'exportBase') {
+      await exportInternshipBaseWord({ id: action.row.id });
+      showToast('基地申报书导出任务已创建');
+    }
+    if (action.key === 'exportImplementation') {
+      await exportInternshipImplementationPdf({ arrangement_id: action.row.id || action.row.arrangement_id });
+      showToast('实施经费表导出任务已创建');
+    }
+  } catch (error) {
+    showToast(error.message);
+  } finally {
+    internship.loading = false;
+  }
+}
+
 function scoreBreakdownText(row) {
   return [
     `签到 ${row.sign_in_score ?? '-'}`,
@@ -1451,12 +2003,6 @@ function hasFilterValue(value) {
 
 function sameFilterValue(left, right) {
   return String(left ?? '') === String(right ?? '');
-}
-
-function currentInternshipGradeId() {
-  const currentGrade = (internship.options.grades || [])
-    .find(item => sameFilterValue(item.is_current, 'true') || sameFilterValue(item.is_current, 1));
-  return currentGrade?.grade_id || internship.options.grades?.[0]?.grade_id || '';
 }
 
 function scopeIds(field) {
@@ -1486,9 +2032,11 @@ function firstScopedOption(items = [], key, ids = []) {
   return (items || []).find(item => values.includes(String(item?.[key] ?? ''))) || null;
 }
 
-function internshipScopeDefaults() {
+function internshipScopeDefaults(key = '') {
   const defaults = {
-    grade_id: currentInternshipGradeId(),
+    category_id: '',
+    grade_id: '',
+    graduation_cohort_id: '',
     dep_id: '',
     profession_id: '',
     class_id: '',
@@ -1499,17 +2047,28 @@ function internshipScopeDefaults() {
   const scopedClass = firstScopedOption(internship.options.classes, 'class_id', classIds);
   const scopedProfession = firstScopedOption(internship.options.professions, 'profession_id', professionIds);
   const scopedDepartment = firstScopedOption(internship.options.departments, 'dep_id', depIds);
+  const config = getMobileListConfig(key);
+
+  if (isAdminRole.value && config?.scopeFilter) {
+    const category = defaultMobileInternshipCategory();
+    defaults.category_id = category?.id || '';
+    if (category?.scope_type === 'cohort') {
+      defaults.graduation_cohort_id = currentMobileGraduationCohortId();
+    } else if (category) {
+      defaults.grade_id = currentMobileGradeId();
+    }
+  } else if (isAdminRole.value && config?.gradeFilter) {
+    defaults.grade_id = currentMobileGradeId();
+  }
 
   if (scopedClass) {
     defaults.class_id = scopedClass.class_id || '';
     defaults.profession_id = scopedClass.profession_id || defaults.profession_id;
     defaults.dep_id = scopedClass.dep_id || defaults.dep_id;
-    defaults.grade_id = defaults.grade_id || scopedClass.grade_id || '';
   }
   if (scopedProfession) {
     defaults.profession_id = scopedProfession.profession_id || defaults.profession_id;
     defaults.dep_id = scopedProfession.dep_id || defaults.dep_id;
-    defaults.grade_id = defaults.grade_id || scopedProfession.grade_id || '';
   }
   if (scopedDepartment) {
     defaults.dep_id = scopedDepartment.dep_id || defaults.dep_id;
@@ -1524,20 +2083,20 @@ function internshipScopeDefaults() {
     if (fallback) {
       defaults.profession_id = fallback.profession_id || '';
       defaults.dep_id = fallback.dep_id || defaults.dep_id;
-      defaults.grade_id = defaults.grade_id || fallback.grade_id || '';
     }
   }
 
   return defaults;
 }
 
-function applyInternshipFilterDefaults(target) {
-  const defaults = internshipScopeDefaults();
+function applyInternshipFilterDefaults(target, key = '') {
+  const defaults = internshipScopeDefaults(key);
   Object.entries(defaults).forEach(([key, value]) => {
     if (hasFilterValue(value) && !hasFilterValue(target[key])) {
       target[key] = value;
     }
   });
+  normalizeMobileScopeFilter(key);
   normalizeMobileListFiltersByValues(target);
 }
 
@@ -1547,8 +2106,8 @@ function applyDefaultInternshipFilters() {
       ...emptyInternshipFilters(),
       ...internship.filters[key],
     };
-    applyInternshipFilterDefaults(current);
     internship.filters[key] = current;
+    applyInternshipFilterDefaults(current, key);
   });
 }
 
@@ -1579,11 +2138,16 @@ function internshipQueryParams(key, page = 1) {
       params[filterKey] = value;
     }
   });
+  const config = getMobileListConfig(key);
+  if (config?.documentType) {
+    params.document_type = config.documentType;
+  }
   return params;
 }
 
 function internshipFetcher(key) {
   const fetchers = {
+    bases: fetchInternshipBases,
     arrangements: fetchInternshipArrangements,
     arrangementChanges: fetchInternshipArrangementChanges,
     plans: fetchInternshipPlans,
@@ -1595,7 +2159,8 @@ function internshipFetcher(key) {
     delays: fetchInternshipDelays,
     scores: fetchInternshipScores,
     courseScores: fetchInternshipCourseScores,
-    syllabusGuides: fetchInternshipSyllabusGuides,
+    syllabuses: fetchInternshipSyllabusGuides,
+    guides: fetchInternshipSyllabusGuides,
     implementationSheets: fetchInternshipImplementationSheets,
     teacherWorkReports: fetchInternshipTeacherWorkReports,
     inspections: fetchInternshipInspections,
@@ -1611,7 +2176,8 @@ async function loadInternshipList(key, page = 1, append = false) {
   if (!fetcher) {
     return;
   }
-  applyInternshipFilterDefaults(internship.filters[key] || {});
+  normalizeMobileScopeFilter(key);
+  normalizeMobileListFiltersByValues(internship.filters[key] || {});
   const data = await fetcher(internshipQueryParams(key, page));
   setPagedList(key, data, append);
 }
@@ -1655,41 +2221,101 @@ function canLoadMore(key) {
 }
 
 function isPracticeTab(tab) {
-  return ['training', 'lab'].includes(tab);
+  return tab === 'practice';
 }
 
-function practiceModule(module) {
-  return practice[module] || practice.training;
+function practiceModule() {
+  return practice;
 }
 
 function practiceModuleName(module) {
-  return module === 'lab' ? '实验管理' : '实训管理';
+  return module === 'lab' ? '实验' : (module === 'training' ? '实训' : '实验实训');
+}
+
+function practiceTypeName(moduleType) {
+  return practiceModuleName(moduleType || 'all');
 }
 
 function practicePanels(module) {
   if (isStudentRole.value) {
-    return practicePanelDefinitions.filter(item => ['projects', 'signIns', 'journals', 'reports', 'scores'].includes(item.key));
+    return practicePanelDefinitions.filter(item => ['plans', 'reports', 'signIns', 'scores'].includes(item.key));
   }
   if (isTeacherRole.value) {
-    return practicePanelDefinitions.filter(item => item.key !== 'gradeRules');
+    const keys = ['plans', 'projects', 'reports', 'signIns', 'lessonPlans', 'reflections', 'scores', 'archives'];
+    if (isPracticeCourseLeader(module)) {
+      keys.splice(4, 0, 'syllabus');
+    }
+    return practicePanelDefinitions.filter(item => keys.includes(item.key));
   }
-  return practicePanelDefinitions;
+  return practicePanelDefinitions.filter(item => item.key !== 'gradeRules');
 }
 
 function currentPracticePanel(module) {
   const state = practiceModule(module);
+  if (state.panel === 'scores' && ['gradeRules', 'courseScores'].includes(state.scoreView)) {
+    return practicePanelDefinitions.find(item => item.key === state.scoreView);
+  }
   const panels = practicePanels(module);
   return panels.find(item => item.key === state.panel) || panels[0] || practicePanelDefinitions[0];
 }
 
+function currentPracticeTeacherId(module) {
+  return Number(practiceModule(module).options.current_teacher_id || 0);
+}
+
+function isPracticeCourseLeader(module) {
+  if (isAdminRole.value) {
+    return true;
+  }
+  const teacherId = currentPracticeTeacherId(module);
+  return teacherId > 0 && (practiceModule(module).options.plans || [])
+    .some(plan => Number(plan.course_leader_id || 0) === teacherId);
+}
+
+function practiceScoreTabs(module) {
+  const tabs = [
+    { key: 'scores', label: '成绩录入与评定' },
+    { key: 'courseScores', label: '课程汇总' },
+  ];
+  if (isPracticeCourseLeader(module)) {
+    tabs.unshift({ key: 'gradeRules', label: '成绩方案' });
+  }
+  return tabs;
+}
+
+function practiceExecutionProjectOptions() {
+  const state = practiceModule(practiceExecutionDialog.module);
+  const projects = state.options.projects || [];
+  if (practiceExecutionDialog.execution !== 'score' || !isTeacherRole.value) {
+    return projects;
+  }
+
+  const teacherId = currentPracticeTeacherId(practiceExecutionDialog.module);
+  return projects.filter(project => Number(project.teacher_id || 0) === teacherId);
+}
+
+function switchPracticeScoreView(module, view) {
+  const state = practiceModule(module);
+  state.scoreView = view;
+  reloadPracticeList(module);
+}
+
 function practiceSummaries(module) {
   const overview = practiceModule(module).overview;
+  if (isStudentRole.value) {
+    return [
+      { name: '我的课程', value: practiceModule(module).lists.plans.pagination.total || 0 },
+      { name: '项目报告', value: practiceModule(module).lists.reports.pagination.total || 0 },
+      { name: '签到记录', value: practiceModule(module).lists.signIns.pagination.total || 0 },
+      { name: '成绩记录', value: practiceModule(module).lists.scores.pagination.total || 0 },
+    ];
+  }
   return [
-    { name: '待审计划', value: overview.plans_waiting || 0 },
-    { name: '课表', value: overview.schedules || 0 },
-    { name: '项目', value: overview.projects || 0 },
-    { name: '日志', value: practiceModule(module).lists.journals.pagination.total || 0 },
-    { name: '今日课表', value: overview.today_schedules || 0 },
+    { name: '开课任务', value: practiceModule(module).lists.plans.pagination.total || 0 },
+    { name: '项目与任务', value: overview.projects || 0 },
+    { name: '待审报告', value: practiceModule(module).lists.reports.pagination.total || 0 },
+    { name: '成绩记录', value: overview.scores_submitted || 0 },
+    { name: '归档版本', value: practiceModule(module).lists.archives.pagination.total || 0 },
   ];
 }
 
@@ -1700,7 +2326,17 @@ function practiceFilters(module) {
   const state = practiceModule(module);
   const options = state.options;
   const common = [
-    { key: 'grade_id', label: '届次', placeholder: '全部届次', options: selectFilterItems(options.grades, 'grade_id', 'grade_name') },
+    {
+      key: 'module_type',
+      label: '类别',
+      placeholder: '全部类别',
+      options: [
+        { value: 'all', label: '全部' },
+        { value: 'lab', label: '实验' },
+        { value: 'training', label: '实训' },
+      ],
+    },
+    { key: 'grade_id', label: '年级', placeholder: '全部年级', options: selectFilterItems(options.grades, 'grade_id', 'grade_name') },
   ];
   if (isAdminRole.value) {
     common.push(
@@ -1708,6 +2344,17 @@ function practiceFilters(module) {
       { key: 'profession_id', label: '专业', placeholder: '全部专业', options: selectFilterItems(practiceProfessionFilterOptions(module), 'profession_id', 'profession_name') },
       { key: 'class_id', label: '班级', placeholder: '全部班级', options: selectFilterItems(practiceClassFilterOptions(module), 'class_id', 'class_name') },
     );
+  }
+  if (currentPracticePanel(module).key === 'courseScores') {
+    common.push({
+      key: 'plan_id',
+      label: '开课任务',
+      placeholder: '请选择开课任务',
+      options: practiceCourseScorePlanOptions(module).map(plan => ({
+        value: plan.id,
+        label: plan.title || plan.course_name || `开课任务 ${plan.id}`,
+      })),
+    });
   }
   if (currentPracticePanel(module).review) {
     common.push({ key: 'status', label: '状态', placeholder: '全部状态', options: reviewStatusOptions });
@@ -1757,6 +2404,33 @@ function practiceClassFilterOptions(module, filters = practiceFilterValues(modul
   });
 }
 
+function practiceCourseScorePlanOptions(module) {
+  const state = practiceModule(module);
+  const filters = state.filters.courseScores || {};
+  return (state.options.plans || []).filter((plan) => {
+    if (!['accept', 'enabled'].includes(String(plan.status || ''))) {
+      return false;
+    }
+    if (filters.module_type && filters.module_type !== 'all' && plan.module_type !== filters.module_type) {
+      return false;
+    }
+    return ['grade_id', 'dep_id', 'profession_id', 'class_id'].every((key) => (
+      !hasFilterValue(filters[key]) || !hasFilterValue(plan[key]) || sameFilterValue(filters[key], plan[key])
+    ));
+  });
+}
+
+function selectedPracticeCourseScorePlan(module) {
+  const state = practiceModule(module);
+  const plans = practiceCourseScorePlanOptions(module);
+  let plan = plans.find(item => Number(item.id) === Number(state.filters.courseScores.plan_id || 0));
+  if (!plan) {
+    plan = plans[0] || null;
+    state.filters.courseScores.plan_id = plan?.id || '';
+  }
+  return plan;
+}
+
 function normalizePracticeFilters(module, filters = practiceFilterValues(module)) {
   if (!filters) {
     return;
@@ -1773,11 +2447,23 @@ function normalizePracticeFilters(module, filters = practiceFilterValues(module)
   if (filters.class_id && !practiceClassFilterOptions(module, filters).some(item => sameFilterValue(item.class_id, filters.class_id))) {
     filters.class_id = '';
   }
+  if (filters.plan_id) {
+    const plan = (practiceModule(module).options.plans || []).find(item => sameFilterValue(item.id, filters.plan_id));
+    const matchesPlan = plan
+      && (!filters.module_type || filters.module_type === 'all' || plan.module_type === filters.module_type)
+      && ['grade_id', 'dep_id', 'profession_id', 'class_id'].every(key => (
+        !hasFilterValue(filters[key]) || !hasFilterValue(plan[key]) || sameFilterValue(filters[key], plan[key])
+      ));
+    if (!matchesPlan) {
+      filters.plan_id = '';
+    }
+  }
 }
 
 function practiceScopeDefaults(module) {
   const state = practiceModule(module);
   const defaults = {
+    module_type: 'all',
     grade_id: currentPracticeGradeId(module),
     dep_id: '',
     profession_id: '',
@@ -1888,8 +2574,26 @@ function practiceExecutionQueryParams(module, page = 1) {
   return params;
 }
 
+function practiceScheduleWeekParams(module) {
+  const state = practiceModule(module);
+  const panel = currentPracticePanel(module);
+  const filters = state.filters[panel.key] || {};
+  const today = new Date();
+  const dayOffset = (today.getDay() + 6) % 7;
+  today.setDate(today.getDate() - dayOffset);
+  const params = {
+    week_start: state.schedule.week_start || formatDateKey(today),
+  };
+  Object.entries(filters).forEach(([key, value]) => {
+    if (value !== '' && value !== null && value !== undefined) {
+      params[key] = value;
+    }
+  });
+  return params;
+}
+
 async function loadPractice(module) {
-  if (!isLoggedIn.value || !hasPermission(`${module}:view`)) {
+  if (!isLoggedIn.value || !hasPermission('practice:view')) {
     return;
   }
   const state = practiceModule(module);
@@ -1897,8 +2601,8 @@ async function loadPractice(module) {
   state.message = '';
   try {
     const [overview, options] = await Promise.all([
-      fetchPracticeOverview(module),
-      fetchPracticeOptions(module),
+      fetchPracticeOverview('all'),
+      fetchPracticeOptions('all'),
     ]);
     state.overview = { ...state.overview, ...(overview || {}) };
     state.options = { ...state.options, ...(options || {}) };
@@ -1915,9 +2619,47 @@ async function loadPractice(module) {
 async function loadPracticeList(module, page = 1, append = false) {
   const state = practiceModule(module);
   const panel = currentPracticePanel(module);
-  const data = panel.execution
-    ? await fetchPracticeExecutionList(module, panel.execution, practiceExecutionQueryParams(module, page))
-    : await fetchPracticeList(module, practiceQueryParams(module, page));
+  if (panel.key === 'schedules' && isAdminRole.value) {
+    const data = await fetchPracticeScheduleWeek('all', practiceScheduleWeekParams(module));
+    state.schedule = {
+      week_start: data.week_start || state.schedule.week_start,
+      week_end: data.week_end || '',
+      periods: data.periods || [],
+      items: data.items || [],
+    };
+    state.lists[panel.key].items = state.schedule.items;
+    state.lists[panel.key].pagination = { page: 1, page_size: state.schedule.items.length, total: state.schedule.items.length };
+    return;
+  }
+  if (panel.key === 'courseScores') {
+    const plan = selectedPracticeCourseScorePlan(module);
+    if (!plan) {
+      state.courseScore = { plan: null, rule: null, summary: null };
+      state.lists.courseScores.items = [];
+      state.lists.courseScores.pagination = { ...state.lists.courseScores.pagination, page, total: 0 };
+      return;
+    }
+    const params = practiceQueryParams(module, page);
+    delete params.module_type;
+    const data = await fetchPracticeCourseScores(plan.module_type, params);
+    const items = data.items || [];
+    state.courseScore = {
+      plan: data.plan || plan,
+      rule: data.rule || null,
+      summary: data.summary || null,
+    };
+    state.lists.courseScores.items = append ? [...state.lists.courseScores.items, ...items] : items;
+    state.lists.courseScores.pagination = {
+      ...state.lists.courseScores.pagination,
+      ...(data.pagination || {}),
+    };
+    return;
+  }
+  const data = panel.key === 'archives'
+    ? await fetchPracticeArchives('all', practiceQueryParams(module, page))
+    : panel.execution
+    ? await fetchPracticeExecutionList('all', panel.execution, practiceExecutionQueryParams(module, page))
+    : await fetchPracticeList('all', practiceQueryParams(module, page));
   const items = data.items || [];
   state.lists[panel.key].items = append ? [...state.lists[panel.key].items, ...items] : items;
   state.lists[panel.key].pagination = {
@@ -1974,6 +2716,18 @@ function practiceListTotal(module) {
   return state.lists[currentPracticePanel(module).key]?.pagination.total || 0;
 }
 
+function practiceScheduleGroups(module) {
+  const rows = practiceModule(module).schedule.items || [];
+  return Object.values(rows.reduce((groups, row) => {
+    const date = row.schedule_date || '-';
+    if (!groups[date]) {
+      groups[date] = { date, rows: [] };
+    }
+    groups[date].rows.push(row);
+    return groups;
+  }, {}));
+}
+
 function normalizePracticePanel(module) {
   const state = practiceModule(module);
   const keys = practicePanels(module).map(item => item.key);
@@ -1983,7 +2737,19 @@ function normalizePracticePanel(module) {
 }
 
 function switchPracticePanel(module, panel) {
-  practiceModule(module).panel = panel;
+  const state = practiceModule(module);
+  if (['gradeRules', 'courseScores'].includes(panel)) {
+    state.panel = 'scores';
+    state.scoreView = panel;
+    reloadPracticeList(module);
+    return;
+  }
+  state.panel = panel;
+  if (panel !== 'scores') {
+    state.scoreView = 'scores';
+  } else if (!practiceScoreTabs(module).some(item => item.key === state.scoreView)) {
+    state.scoreView = 'scores';
+  }
   reloadPracticeList(module);
 }
 
@@ -1995,8 +2761,11 @@ function practiceRowTitle(module, row) {
   if (['journals', 'reports'].includes(panel)) {
     return row.title || row.project_title || `记录 ${row.id}`;
   }
-  if (panel === 'scores') {
+  if (['scores', 'courseScores'].includes(panel)) {
     return row.student_name || row.student_num || row.title || `成绩 ${row.id}`;
+  }
+  if (panel === 'archives') {
+    return row.plan_title || row.course_name || `归档版本 ${row.id}`;
   }
   if (panel === 'projects') {
     return row.title || row.course_name || `项目 ${row.id}`;
@@ -2024,13 +2793,24 @@ function practiceRowValue(module, row) {
   if (panel === 'scores') {
     return row.score_value !== null && row.score_value !== undefined ? `${row.score_value} 分` : statusText(row.status);
   }
+  if (panel === 'courseScores') {
+    if (row.final_score !== null && row.final_score !== undefined) {
+      return `最终成绩 ${row.final_score} 分`;
+    }
+    return row.preview_score !== null && row.preview_score !== undefined ? `试算成绩 ${row.preview_score} 分` : '成绩待录入';
+  }
   return statusText(row.status);
 }
 
 function practiceRowFacts(module, row) {
   const panel = currentPracticePanel(module).key;
   const common = [
-    namedFact('届次', row.grade_name),
+    namedFact('类别', practiceTypeName(row.module_type || row.entity_type)),
+    namedFact('课程', row.course_name || row.project_course_name),
+    namedFact('日期', row.schedule_date || row.start_date || row.date),
+    namedFact('课节', joinFact([row.period_start_name, row.period_end_name]) || joinFact([row.start_time, row.end_time])),
+    namedFact('场地', row.room_name || row.base_name || row.location),
+    namedFact('年级', row.grade_name),
     namedFact('学院专业', joinFact([row.dep_name, row.profession_name])),
     namedFact('教师', row.teacher_name),
   ];
@@ -2064,11 +2844,20 @@ function practiceRowFacts(module, row) {
       namedFact('学生', joinFact([row.student_name, row.student_num])),
       namedFact('提交', row.submitted_at || row.created_at),
       namedFact('内容', previewText(row.content, 52)),
+      namedFact('反思小结', previewText(row.reflection_summary, 52)),
     ],
     scores: [
       namedFact('学号', row.student_num),
       namedFact('计划', row.plan_title),
       namedFact('评分教师', row.teacher_name),
+    ],
+    courseScores: [
+      namedFact('学号', row.student_num),
+      namedFact('班级', row.class_name),
+      namedFact('项目进度', `${row.accepted_project_count || 0} / ${row.expected_project_count || 0} 已通过`),
+      namedFact('缺失成绩', row.missing_project_count || 0),
+      namedFact('试算成绩', row.preview_score !== null && row.preview_score !== undefined ? `${row.preview_score} 分` : '暂未生成'),
+      namedFact('最终成绩', row.final_score !== null && row.final_score !== undefined ? `${row.final_score} 分` : '待全部项目审核通过'),
     ],
     gradeRules: [
       namedFact('计划', row.plan_title),
@@ -2076,7 +2865,14 @@ function practiceRowFacts(module, row) {
     ],
     plans: [
       namedFact('来源', practiceSourceText(row.source_type)),
+      namedFact('课程负责人', row.course_leader_name),
+      namedFact('任课教师', row.related_teacher_count ? `${row.related_teacher_count} 人` : ''),
       namedFact('内容', previewText(row.content, 52)),
+    ],
+    archives: [
+      namedFact('版本', `V${row.version_no || 1}`),
+      namedFact('归档时间', row.created_at),
+      namedFact('状态', row.status === 'archived' ? '已归档' : '已失效'),
     ],
   }[panel] || [
     namedFact('计划', row.plan_title),
@@ -2087,25 +2883,53 @@ function practiceRowFacts(module, row) {
 
 function practiceRowActions(module, row) {
   const panel = currentPracticePanel(module);
-  if (panel.key === 'projects' && isStudentRole.value) {
-    return [
-      { key: 'signIn', label: '签到' },
-      { key: 'journal', label: '日志' },
-      { key: 'report', label: '报告' },
-    ];
+  if (panel.key === 'archives') {
+    return [{ key: 'archiveDetail', label: '查看归档' }];
+  }
+  if (panel.key === 'scores' && !isStudentRole.value) {
+    const actions = [];
+    const canEditScore = !isTeacherRole.value
+      || Number(row.teacher_id || 0) === currentPracticeTeacherId(module);
+    if (canEditScore && ['draft', 'modify'].includes(row.status || '')) {
+      actions.push({ key: 'editScore', label: '编辑成绩' });
+    }
+    actions.push({ key: 'timeline', label: '记录' });
+    if (row.status === 'wait' && canApprovePracticeRow(module, panel, row)) {
+      actions.push({ key: 'accept', label: '通过' }, { key: 'modify', label: '退回' });
+    }
+    if (row.status === 'accept' && canApprovePracticeRow(module, panel, row)) {
+      actions.push({ key: 'reopen', label: '通过后修改' });
+    }
+    return actions;
+  }
+  if (['syllabus', 'lessonPlans', 'reflections', 'gradeRules'].includes(panel.key)) {
+    const actions = [];
+    if (canWritePracticeMaterial(module, panel.key, row)) {
+      actions.push({ key: 'editMaterial', label: '编辑' });
+    }
+    if (panel.review) {
+      actions.push({ key: 'timeline', label: '记录' });
+      if (row.status === 'wait' && canApprovePracticeRow(module, panel, row)) {
+        actions.push({ key: 'accept', label: '通过' }, { key: 'modify', label: '退回' });
+      }
+      if (row.status === 'accept' && canApprovePracticeRow(module, panel, row)) {
+        actions.push({ key: 'reopen', label: '通过后修改' });
+      }
+    }
+    return actions;
   }
   if (panel.execution) {
     const actions = [{ key: 'timeline', label: '记录' }];
     if (isStudentRole.value && ['journals', 'reports'].includes(panel.key) && ['draft', 'modify'].includes(row.status || '')) {
       actions.unshift({ key: 'editExecution', label: '修改' });
     }
-    if (!isStudentRole.value && row.status === 'wait' && hasPermission(`${module}:approve`) && panel.review) {
+    if (row.status === 'wait' && panel.review && canApprovePracticeRow(module, panel, row)) {
       actions.push(
         { key: 'accept', label: '通过' },
         { key: 'modify', label: '退回' },
       );
     }
-    if (!isStudentRole.value && row.status === 'accept' && hasPermission(`${module}:approve`) && panel.review) {
+    if (row.status === 'accept' && panel.review && canApprovePracticeRow(module, panel, row)) {
       actions.push({ key: 'reopen', label: '通过后修改' });
     }
     return actions;
@@ -2114,16 +2938,36 @@ function practiceRowActions(module, row) {
     return [];
   }
   const actions = [{ key: 'timeline', label: '记录' }];
-  if (row.status === 'wait' && hasPermission(`${module}:approve`) && !isStudentRole.value) {
+  if (row.status === 'wait' && canApprovePracticeRow(module, panel, row)) {
     actions.push(
       { key: 'accept', label: '通过' },
       { key: 'modify', label: '退回' },
     );
   }
-  if (row.status === 'accept' && hasPermission(`${module}:approve`) && !isStudentRole.value) {
+  if (row.status === 'accept' && canApprovePracticeRow(module, panel, row)) {
     actions.push({ key: 'reopen', label: '通过后修改' });
   }
   return actions;
+}
+
+function canApprovePracticeRow(module, panel, row) {
+  if (isStudentRole.value || !hasPermission('practice:approve')) {
+    return false;
+  }
+  if (!isTeacherRole.value) {
+    return true;
+  }
+  if (panel.execution) {
+    return true;
+  }
+  if (panel.key !== 'scores') {
+    return false;
+  }
+
+  const teacherId = currentPracticeTeacherId(module);
+  const plan = (practiceModule(module).options.plans || [])
+    .find(item => Number(item.id) === Number(row?.plan_id || 0));
+  return teacherId > 0 && Number(plan?.course_leader_id || 0) === teacherId;
 }
 
 function handlePracticeAction(module, action, row) {
@@ -2132,11 +2976,24 @@ function handlePracticeAction(module, action, row) {
     openPracticeExecutionDialog(module, action.key === 'signIn' ? 'signIns' : `${action.key}s`, null, {
       projectId: row.id,
       projectTitle: row.title || row.course_name,
+      moduleType: row.module_type,
     });
     return;
   }
   if (action.key === 'editExecution') {
     openPracticeExecutionDialog(module, panel.key, row);
+    return;
+  }
+  if (action.key === 'editScore') {
+    openPracticeExecutionDialog(module, 'scores', row);
+    return;
+  }
+  if (action.key === 'editMaterial') {
+    openPracticeMaterialDialog(module, panel.key, row);
+    return;
+  }
+  if (action.key === 'archiveDetail') {
+    openPracticeArchiveDetail(module, row);
     return;
   }
   if (action.key === 'timeline') {
@@ -2150,6 +3007,67 @@ function handlePracticeAction(module, action, row) {
   openPracticeReview(module, panel, row, action.key, 'review');
 }
 
+function practicePrimaryAction(module) {
+  const panel = currentPracticePanel(module);
+  if (isStudentRole.value && panel.key === 'reports') {
+    return { key: 'report', label: '提交项目报告' };
+  }
+  if (isStudentRole.value && panel.key === 'signIns') {
+    return { key: 'signIn', label: '提交签到' };
+  }
+  if (!isStudentRole.value && panel.key === 'scores') {
+    return { key: 'score', label: '录入成绩' };
+  }
+  if (!isStudentRole.value && ['syllabus', 'lessonPlans', 'reflections', 'gradeRules'].includes(panel.key) && canWritePracticeMaterial(module, panel.key)) {
+    return { key: 'material', label: panel.key === 'gradeRules' ? '维护方案' : '新增' };
+  }
+  if (panel.key === 'archives') {
+    return { key: 'archiveCheck', label: '归档检查' };
+  }
+  return null;
+}
+
+function canWritePracticeMaterial(module, panelKey, row = null) {
+  if (!hasPermission('practice:manage')) {
+    return false;
+  }
+  if (!isTeacherRole.value) {
+    return true;
+  }
+  if (panelKey === 'lessonPlans') {
+    return !row || Number(row.submitter_id || 0) === Number(state.context.account_id || 0);
+  }
+  if (!['syllabus', 'gradeRules', 'reflections'].includes(panelKey)) {
+    return false;
+  }
+
+  const teacherId = currentPracticeTeacherId(module);
+  const planId = Number(row?.plan_id || 0);
+  if (planId > 0) {
+    const plan = (practiceModule(module).options.plans || []).find(item => Number(item.id) === planId);
+    return teacherId > 0 && Number(plan?.course_leader_id || 0) === teacherId;
+  }
+  return isPracticeCourseLeader(module);
+}
+
+function handlePracticePrimaryAction(module) {
+  const action = practicePrimaryAction(module);
+  if (!action) {
+    return;
+  }
+  if (action.key === 'report') {
+    openPracticeExecutionDialog(module, 'reports');
+  } else if (action.key === 'signIn') {
+    openPracticeExecutionDialog(module, 'signIns');
+  } else if (action.key === 'score') {
+    openPracticeExecutionDialog(module, 'scores');
+  } else if (action.key === 'material') {
+    openPracticeMaterialDialog(module, currentPracticePanel(module).key);
+  } else if (action.key === 'archiveCheck') {
+    openPracticeArchiveCheck(module);
+  }
+}
+
 function applyDefaultInternshipSelection() {
   const firstArrangement = internship.options.arrangements[0];
   if (firstArrangement) {
@@ -2158,7 +3076,10 @@ function applyDefaultInternshipSelection() {
     internship.forms.journal.arrangement_id ||= firstArrangement.id;
     internship.forms.report.arrangement_id ||= firstArrangement.id;
     internship.forms.delay.arrangement_id ||= firstArrangement.id;
+    internship.forms.safety.arrangement_id ||= firstArrangement.id;
   }
+  internship.forms.journal.date ||= formatDateKey(new Date());
+  internship.forms.safety.template_id ||= safetyTemplate.value?.id || null;
 }
 
 async function loadInternship() {
@@ -2169,9 +3090,10 @@ async function loadInternship() {
   internship.loading = true;
   internship.message = '';
   try {
-    const [overview, options] = await Promise.all([
+    const [overview, options, archiveTemplates] = await Promise.all([
       fetchInternshipOverview(),
       fetchInternshipOptions(),
+      fetchTemplateList({ business_code: 'internship_archive', page: 1, page_size: 100 }),
     ]);
     internship.overview = {
       ...emptyInternshipOverview(),
@@ -2180,6 +3102,7 @@ async function loadInternship() {
     internship.options = {
       ...emptyInternshipOptions(),
       ...(options || {}),
+      archive_templates: archiveTemplates.items || [],
     };
     applyDefaultInternshipFilters();
     applyDefaultInternshipSelection();
@@ -2211,6 +3134,7 @@ async function loadInternshipPanelData() {
       loadInternshipList('journals'),
       loadInternshipList('reports'),
       loadInternshipList('delays'),
+      loadInternshipList('safetyLetters'),
     ]);
     return;
   }
@@ -2373,21 +3297,46 @@ async function submitJournal(status = 'wait') {
     openDelayForStage('journal_deadline');
     return;
   }
+  if (!String(internship.forms.journal.title || '').trim()) {
+    internship.message = '请填写日志标题';
+    showToast(internship.message);
+    return;
+  }
+  if (!String(internship.forms.journal.work_content || '').trim()) {
+    internship.message = '请填写工作内容';
+    showToast(internship.message);
+    return;
+  }
   internship.loading = true;
   internship.message = '';
   try {
     await saveInternshipJournal({
       id: internship.forms.journal.id || undefined,
       arrangement_id: arrangementId,
+      date: internship.forms.journal.date || formatDateKey(new Date()),
       title: internship.forms.journal.title,
-      content: internship.forms.journal.content,
+      content: internship.forms.journal.work_content,
+      location: internship.forms.journal.location,
+      work_content: internship.forms.journal.work_content,
+      gains: internship.forms.journal.gains,
+      problems: internship.forms.journal.problems,
+      form_data: {
+        location: internship.forms.journal.location,
+        gains: internship.forms.journal.gains,
+        problems: internship.forms.journal.problems,
+      },
+      attachment_ids: internship.forms.journal.attachments.map(item => item.id),
       status,
     });
     if (status === 'wait') {
       internship.forms.journal.id = null;
       internship.forms.journal.arrangement_id = arrangementId;
       internship.forms.journal.title = '';
-      internship.forms.journal.content = '';
+      internship.forms.journal.location = '';
+      internship.forms.journal.work_content = '';
+      internship.forms.journal.gains = '';
+      internship.forms.journal.problems = '';
+      internship.forms.journal.attachments = [];
     }
     internship.message = status === 'wait' ? '日志已提交审核' : '日志草稿已保存';
     await loadInternship();
@@ -2416,6 +3365,11 @@ async function submitReport(status = 'wait') {
     openDelayForStage('report_deadline');
     return;
   }
+  if (!String(internship.forms.report.title || '').trim() || !String(internship.forms.report.content || '').trim()) {
+    internship.message = '请填写报告标题和主要内容';
+    showToast(internship.message);
+    return;
+  }
   internship.loading = true;
   internship.message = '';
   try {
@@ -2425,6 +3379,14 @@ async function submitReport(status = 'wait') {
       template_id: internship.options.report_templates[0]?.id || null,
       title: internship.forms.report.title,
       content: internship.forms.report.content,
+      report_type: currentReportIsGraduation.value ? 'graduation' : 'general',
+      form_data: {
+        purpose: internship.forms.report.purpose,
+        gains: internship.forms.report.gains,
+        suggestions: internship.forms.report.suggestions,
+        company_profile: internship.forms.report.company_profile,
+      },
+      attachment_ids: internship.forms.report.attachments.map(item => item.id),
       status,
     });
     if (status === 'wait') {
@@ -2432,12 +3394,96 @@ async function submitReport(status = 'wait') {
       internship.forms.report.arrangement_id = arrangementId;
       internship.forms.report.title = '';
       internship.forms.report.content = '';
+      internship.forms.report.purpose = '';
+      internship.forms.report.gains = '';
+      internship.forms.report.suggestions = '';
+      internship.forms.report.company_profile = '';
+      internship.forms.report.attachments = [];
     }
     internship.message = status === 'wait' ? '报告已提交审核' : '报告草稿已保存';
     await loadInternship();
     showToast(internship.message);
   } catch (error) {
     internship.message = error.message;
+    showToast(error.message);
+  } finally {
+    internship.loading = false;
+  }
+}
+
+async function uploadInternshipAttachments(type, event) {
+  const files = Array.from(event.target.files || []);
+  event.target.value = '';
+  if (!files.length || internship.loading) {
+    return;
+  }
+  internship.loading = true;
+  try {
+    for (const file of files.slice(0, 10)) {
+      const uploaded = await uploadFile(file, { category: 'internship_material', is_temporary: 'false' });
+      internship.forms[type].attachments.push({ id: uploaded.file_id, name: uploaded.name || file.name, url: uploaded.url || '' });
+    }
+    showToast('附件已上传');
+  } catch (error) {
+    showToast(error.message);
+  } finally {
+    internship.loading = false;
+  }
+}
+
+function removeInternshipAttachment(type, fileId) {
+  internship.forms[type].attachments = internship.forms[type].attachments.filter(item => Number(item.id) !== Number(fileId));
+}
+
+function openSafetyTemplate() {
+  const url = safetyTemplate.value?.file?.url;
+  if (!url) {
+    showToast('安全承诺模板暂不可用');
+    return;
+  }
+  window.open(backendUrl(url), '_blank', 'noopener,noreferrer');
+}
+
+async function uploadSafetyFinal(event) {
+  const file = event.target.files?.[0];
+  event.target.value = '';
+  if (!file || internship.loading) {
+    return;
+  }
+  internship.loading = true;
+  try {
+    const uploaded = await uploadFile(file, { category: 'internship_archive', is_temporary: 'false' });
+    internship.forms.safety.signature_file_id = uploaded.file_id;
+    internship.forms.safety.file_name = uploaded.name || file.name;
+    showToast('签署定稿已上传');
+  } catch (error) {
+    showToast(error.message);
+  } finally {
+    internship.loading = false;
+  }
+}
+
+async function submitSafetyLetter() {
+  if (internship.loading) {
+    return;
+  }
+  if (!internship.forms.safety.arrangement_id || !internship.forms.safety.signature_file_id) {
+    showToast('请选择实习任务并上传签署定稿');
+    return;
+  }
+  internship.loading = true;
+  try {
+    await saveInternshipSafetyLetter({
+      arrangement_id: internship.forms.safety.arrangement_id,
+      template_id: internship.forms.safety.template_id || safetyTemplate.value?.id || null,
+      signature_file_id: internship.forms.safety.signature_file_id,
+      status: 'signed',
+    });
+    internship.forms.safety.signature_file_id = null;
+    internship.forms.safety.file_name = '';
+    await loadInternship();
+    showToast('安全承诺已提交');
+  } catch (error) {
     showToast(error.message);
   } finally {
     internship.loading = false;
@@ -2506,7 +3552,12 @@ function editStudentWork(type, row) {
     internship.forms.journal.id = row.id || null;
     internship.forms.journal.arrangement_id = row.arrangement_id || null;
     internship.forms.journal.title = row.title || '';
-    internship.forms.journal.content = row.content || '';
+    internship.forms.journal.date = row.date || formatDateKey(new Date());
+    internship.forms.journal.location = row.location || '';
+    internship.forms.journal.work_content = row.work_content || row.content || '';
+    internship.forms.journal.gains = row.gains || '';
+    internship.forms.journal.problems = row.problems || '';
+    internship.forms.journal.attachments = (row.attachment_ids || []).map(id => ({ id, name: `附件 ${id}` }));
     internship.forms.sign.arrangement_id = row.arrangement_id || internship.forms.sign.arrangement_id;
     internship.message = '已载入日志内容，请修改后重新提交';
   }
@@ -2516,6 +3567,11 @@ function editStudentWork(type, row) {
     internship.forms.report.arrangement_id = row.arrangement_id || null;
     internship.forms.report.title = row.title || '';
     internship.forms.report.content = row.content || '';
+    internship.forms.report.purpose = row.form_data?.purpose || '';
+    internship.forms.report.gains = row.form_data?.gains || '';
+    internship.forms.report.suggestions = row.form_data?.suggestions || '';
+    internship.forms.report.company_profile = row.form_data?.company_profile || '';
+    internship.forms.report.attachments = (row.attachment_ids || []).map(id => ({ id, name: `附件 ${id}` }));
     internship.forms.sign.arrangement_id = row.arrangement_id || internship.forms.sign.arrangement_id;
     internship.message = '已载入报告内容，请修改后重新提交';
   }
@@ -2667,8 +3723,8 @@ async function openPracticeTimeline(module, panel, row) {
   practiceTimelineDialog.message = '';
   try {
     const data = panel.execution
-      ? await fetchPracticeExecutionTimeline(module, { execution: panel.execution, id: row.id })
-      : await fetchPracticeTimeline(module, { entity: panel.entity, id: row.id });
+      ? await fetchPracticeExecutionTimeline(row.module_type || row.entity_type || 'all', { execution: panel.execution, id: row.id })
+      : await fetchPracticeTimeline(row.module_type || 'all', { entity: panel.entity, id: row.id });
     practiceTimelineDialog.cycles = data.cycles || [];
     practiceTimelineDialog.items = data.items || data.records || [];
   } catch (error) {
@@ -2682,23 +3738,26 @@ function closePracticeTimeline() {
   practiceTimelineDialog.visible = false;
 }
 
-function openPracticeExecutionDialog(module, panelKey, row = null, context = {}) {
+async function openPracticeExecutionDialog(module, panelKey, row = null, context = {}) {
   const panel = practicePanelDefinitions.find(item => item.key === panelKey) || currentPracticePanel(module);
   const projectId = context.projectId
     || (panel.key === 'projects'
       ? row?.id
-      : row?.project_id || row?.entity_id || practiceModule(module).options.projects[0]?.id || null);
+      : row?.project_id || row?.entity_id || null);
   practiceExecutionDialog.visible = true;
-  practiceExecutionDialog.module = module;
+  practiceExecutionDialog.module = context.moduleType || row?.module_type || row?.entity_type || module;
   practiceExecutionDialog.panel = panel.key;
-  practiceExecutionDialog.execution = panel.execution || 'journal';
+  practiceExecutionDialog.execution = panel.key === 'scores' ? 'score' : (panel.execution || 'journal');
   practiceExecutionDialog.row = row;
+  const scoreItems = row?.score_items && typeof row.score_items === 'object' ? row.score_items : {};
   practiceExecutionDialog.form = {
     id: context.projectId ? null : (panel.execution && row?.id ? row.id : null),
     project_id: projectId,
+    module_type: context.moduleType || row?.module_type || row?.entity_type || '',
     title: panel.execution ? (row?.title || context.projectTitle || '') : '',
     date: row?.date || '',
     content: row?.content || '',
+    reflection_summary: row?.reflection_summary || '',
     location: row?.location || '',
     longitude: row?.longitude || '',
     latitude: row?.latitude || '',
@@ -2707,7 +3766,16 @@ function openPracticeExecutionDialog(module, panelKey, row = null, context = {})
     locating: false,
     gps_error: '',
     remark: row?.remark || '',
+    student_id: row?.student_id || null,
+    attendance_score: scoreItems.attendance_score ?? '',
+    material_score: scoreItems.material_score ?? '',
+    report_score: scoreItems.report_score ?? '',
+    score_value: row?.score_value ?? '',
   };
+  practiceExecutionDialog.students = [];
+  practiceExecutionDialog.rule = null;
+  practiceExecutionDialog.form.project_id ||= practiceExecutionProjectOptions()[0]?.id || null;
+  await changePracticeExecutionProject();
   if (practiceExecutionDialog.execution === 'sign_in' && !practiceGpsReady.value) {
     locatePracticePosition();
   }
@@ -2729,10 +3797,44 @@ async function submitPracticeExecution(status = 'wait') {
     showToast(state.message);
     return;
   }
-  if (execution !== 'sign_in' && !String(practiceExecutionDialog.form.content || '').trim()) {
-    state.message = '请填写内容';
+  if (!['lab', 'training'].includes(practiceExecutionDialog.form.module_type)) {
+    state.message = '项目类别无效，请刷新后重试';
     showToast(state.message);
     return;
+  }
+  if (execution !== 'sign_in' && !String(practiceExecutionDialog.form.content || '').trim()) {
+    if (execution !== 'score') {
+      state.message = '请填写内容';
+      showToast(state.message);
+      return;
+    }
+  }
+  if (execution === 'report' && status === 'wait' && !String(practiceExecutionDialog.form.reflection_summary || '').trim()) {
+    state.message = '提交审核前请填写反思小结';
+    showToast(state.message);
+    return;
+  }
+  if (execution === 'score' && !practiceExecutionDialog.form.student_id) {
+    state.message = '请选择项目学生';
+    showToast(state.message);
+    return;
+  }
+  if (execution === 'score') {
+    const scoreValues = [
+      practiceExecutionDialog.form.attendance_score,
+      practiceExecutionDialog.form.material_score,
+      practiceExecutionDialog.form.report_score,
+    ];
+    if (scoreValues.some(value => value !== '' && value !== null && value !== undefined && (!Number.isFinite(Number(value)) || Number(value) < 0 || Number(value) > 100))) {
+      state.message = '分项成绩必须为 0 至 100';
+      showToast(state.message);
+      return;
+    }
+    if (status === 'wait' && scoreValues.some(value => value === '' || value === null || value === undefined)) {
+      state.message = '提交审核前请完整填写三项成绩';
+      showToast(state.message);
+      return;
+    }
   }
   if (execution === 'sign_in' && !practiceGpsReady.value) {
     state.message = '请先获取 GPS 定位后再签到';
@@ -2742,18 +3844,31 @@ async function submitPracticeExecution(status = 'wait') {
   state.loading = true;
   state.message = '';
   try {
-    await savePracticeExecution(practiceExecutionDialog.module, execution, {
+    const payload = {
       id: practiceExecutionDialog.form.id || undefined,
       project_id: practiceExecutionDialog.form.project_id,
+      student_id: practiceExecutionDialog.form.student_id || undefined,
       title: practiceExecutionDialog.form.title,
       date: practiceExecutionDialog.form.date,
       content: practiceExecutionDialog.form.content,
+      reflection_summary: practiceExecutionDialog.form.reflection_summary,
       location: practiceExecutionDialog.form.location,
       longitude: practiceExecutionDialog.form.longitude,
       latitude: practiceExecutionDialog.form.latitude,
       remark: practiceExecutionDialog.form.remark,
       status: execution === 'sign_in' ? 'signed' : status,
-    });
+      module_type: practiceExecutionDialog.form.module_type,
+    };
+    if (execution === 'score') {
+      await savePracticeProjectScore(practiceExecutionDialog.form.module_type, {
+        ...payload,
+        attendance_score: practiceExecutionDialog.form.attendance_score,
+        material_score: practiceExecutionDialog.form.material_score,
+        report_score: practiceExecutionDialog.form.report_score,
+      });
+    } else {
+      await savePracticeExecution(practiceExecutionDialog.form.module_type, execution, payload);
+    }
     if (execution === 'sign_in' || status === 'wait') {
       closePracticeExecutionDialog();
     }
@@ -2768,6 +3883,376 @@ async function submitPracticeExecution(status = 'wait') {
   }
 }
 
+async function changePracticeExecutionProject() {
+  const state = practiceModule(practiceExecutionDialog.module);
+  const projectId = Number(practiceExecutionDialog.form.project_id || 0);
+  const project = practiceExecutionProjectOptions().find(item => Number(item.id) === projectId);
+  if (project) {
+    practiceExecutionDialog.form.module_type = project.module_type;
+  }
+  practiceExecutionDialog.students = [];
+  practiceExecutionDialog.rule = null;
+  if (practiceExecutionDialog.execution !== 'score' || !projectId || !['lab', 'training'].includes(practiceExecutionDialog.form.module_type)) {
+    return;
+  }
+  try {
+    const data = await fetchPracticeProjectStudents(practiceExecutionDialog.form.module_type, projectId);
+    practiceExecutionDialog.students = data.items || [];
+    practiceExecutionDialog.rule = data.rule || null;
+    const current = Number(practiceExecutionDialog.form.student_id || 0);
+    if (!practiceExecutionDialog.students.some(item => Number(item.student_id) === current)) {
+      practiceExecutionDialog.form.student_id = practiceExecutionDialog.students[0]?.student_id || null;
+    }
+    applyPracticeStudentScore();
+  } catch (error) {
+    state.message = error.message;
+    showToast(error.message);
+  }
+}
+
+function applyPracticeStudentScore() {
+  if (practiceExecutionDialog.execution !== 'score') {
+    return;
+  }
+  const student = practiceExecutionDialog.students.find(item => Number(item.student_id) === Number(practiceExecutionDialog.form.student_id || 0));
+  const scoreItems = student?.score_items && typeof student.score_items === 'object' ? student.score_items : {};
+  practiceExecutionDialog.form.id = student?.score_id || null;
+  practiceExecutionDialog.form.attendance_score = scoreItems.attendance_score ?? '';
+  practiceExecutionDialog.form.material_score = scoreItems.material_score ?? '';
+  practiceExecutionDialog.form.report_score = scoreItems.report_score ?? '';
+  practiceExecutionDialog.form.score_value = student?.score_value ?? '';
+}
+
+function practiceProjectScoreWeights() {
+  const ratio = practiceExecutionDialog.rule?.ratio_json;
+  return {
+    attendance_score: Number(ratio?.attendance_weight ?? 20),
+    material_score: Number(ratio?.operation_weight ?? 70),
+    report_score: Number(ratio?.report_weight ?? 10),
+  };
+}
+
+function practiceProjectScorePreview() {
+  const values = {
+    attendance_score: practiceExecutionDialog.form.attendance_score,
+    material_score: practiceExecutionDialog.form.material_score,
+    report_score: practiceExecutionDialog.form.report_score,
+  };
+  if (Object.values(values).some(value => value === '' || value === null || value === undefined || !Number.isFinite(Number(value)))) {
+    return '';
+  }
+  const weights = practiceProjectScoreWeights();
+  const score = Object.entries(values).reduce((total, [key, value]) => total + Number(value) * weights[key] / 100, 0);
+  return Math.round(score * 100) / 100;
+}
+
+function practiceProjectScoreRuleText() {
+  const weights = practiceProjectScoreWeights();
+  return `考勤与课堂表现 ${weights.attendance_score}% + 项目实操 ${weights.material_score}% + 项目报告 ${weights.report_score}%`;
+}
+
+function practiceMaterialEntity(panel) {
+  return {
+    syllabus: 'syllabus',
+    lessonPlans: 'lessonPlan',
+    gradeRules: 'gradeRule',
+    reflections: 'reflection',
+  }[panel] || '';
+}
+
+function practiceMaterialTitle(panel) {
+  return {
+    syllabus: '课程大纲',
+    lessonPlans: '课程教案',
+    gradeRules: '成绩方案',
+    reflections: '课程教学反思',
+  }[panel] || '课程材料';
+}
+
+function practiceMaterialPlans(module, entity) {
+  const plans = practiceModule(module).options.plans || [];
+  if (!isTeacherRole.value || !['syllabus', 'gradeRule', 'reflection'].includes(entity)) {
+    return plans;
+  }
+  const teacherId = currentPracticeTeacherId(module);
+  return plans.filter(plan => Number(plan.course_leader_id || 0) === teacherId);
+}
+
+function openPracticeMaterialDialog(module, panel, row = null) {
+  const entity = practiceMaterialEntity(panel);
+  if (!entity) {
+    return;
+  }
+  const ratio = row?.ratio_json && typeof row.ratio_json === 'object' ? row.ratio_json : {};
+  practiceMaterialDialog.visible = true;
+  practiceMaterialDialog.module = row?.module_type || module;
+  practiceMaterialDialog.panel = panel;
+  practiceMaterialDialog.entity = entity;
+  practiceMaterialDialog.row = row;
+  practiceMaterialDialog.form = {
+    id: row?.id || null,
+    module_type: row?.module_type || '',
+    plan_id: row?.plan_id || practiceMaterialPlans(module, entity)[0]?.id || null,
+    title: row?.title || '',
+    content: row?.content || '',
+    attendance_weight: ratio.attendance_weight ?? 20,
+    operation_weight: ratio.operation_weight ?? 70,
+    report_weight: ratio.report_weight ?? 10,
+    projects: Array.isArray(ratio.projects) ? ratio.projects : [],
+  };
+  changePracticeMaterialPlan();
+}
+
+function closePracticeMaterialDialog() {
+  practiceMaterialDialog.visible = false;
+  practiceMaterialDialog.row = null;
+}
+
+function evenPracticeProjectWeights(count) {
+  if (count <= 0) {
+    return [];
+  }
+  const base = Math.floor(10000 / count) / 100;
+  return Array.from({ length: count }, (_, index) => index === count - 1
+    ? Math.round((100 - base * (count - 1)) * 100) / 100
+    : base);
+}
+
+function syncPracticeMaterialProjects() {
+  const state = practiceModule(practiceMaterialDialog.module);
+  const form = practiceMaterialDialog.form;
+  const projects = (state.options.projects || []).filter(project => (
+    Number(project.plan_id || 0) === Number(form.plan_id || 0)
+      && project.module_type === form.module_type
+      && ['enabled', 'completed'].includes(String(project.status || ''))
+  ));
+  const existing = new Map((form.projects || []).map(project => [Number(project.project_id || 0), project]));
+  const sameSet = projects.length > 0
+    && projects.length === existing.size
+    && projects.every(project => existing.has(Number(project.id)));
+  const existingTotal = projects.reduce((sum, project) => sum + Number(existing.get(Number(project.id))?.weight || 0), 0);
+  const weights = sameSet && Math.abs(existingTotal - 100) < 0.001
+    ? projects.map(project => Number(existing.get(Number(project.id)).weight))
+    : evenPracticeProjectWeights(projects.length);
+  form.projects = projects.map((project, index) => ({
+    project_id: Number(project.id),
+    title: project.title || project.course_name || `项目 ${project.id}`,
+    weight: weights[index] ?? 0,
+    status: project.status || 'enabled',
+  }));
+}
+
+function changePracticeMaterialPlan() {
+  const state = practiceModule(practiceMaterialDialog.module);
+  const plan = state.options.plans.find(item => Number(item.id) === Number(practiceMaterialDialog.form.plan_id || 0));
+  if (plan) {
+    practiceMaterialDialog.form.module_type = plan.module_type;
+    if (!practiceMaterialDialog.form.title) {
+      practiceMaterialDialog.form.title = `${plan.course_name || plan.title || '课程'}${practiceMaterialTitle(practiceMaterialDialog.panel)}`;
+    }
+  }
+  if (practiceMaterialDialog.entity === 'gradeRule') {
+    syncPracticeMaterialProjects();
+  }
+}
+
+async function submitPracticeMaterial(status = 'wait') {
+  const state = practiceModule(practiceMaterialDialog.module);
+  const form = practiceMaterialDialog.form;
+  const plan = state.options.plans.find(item => Number(item.id) === Number(form.plan_id || 0));
+  if (!plan || !['lab', 'training'].includes(form.module_type)) {
+    showToast('请选择开课任务');
+    return;
+  }
+  if (!String(form.title || '').trim()) {
+    showToast('请填写标题');
+    return;
+  }
+  if (practiceMaterialDialog.entity !== 'gradeRule' && !String(form.content || '').trim()) {
+    showToast('请填写内容');
+    return;
+  }
+  if (practiceMaterialDialog.entity === 'gradeRule') {
+    const total = Number(form.attendance_weight || 0) + Number(form.operation_weight || 0) + Number(form.report_weight || 0);
+    if (Math.abs(total - 100) > 0.001) {
+      showToast('成绩比例合计必须为 100%');
+      return;
+    }
+    const projectTotal = (form.projects || []).reduce((sum, project) => sum + Number(project.weight || 0), 0);
+    if (form.projects.length && Math.abs(projectTotal - 100) > 0.001) {
+      showToast('课程项目权重合计必须为 100%');
+      return;
+    }
+  }
+  state.loading = true;
+  try {
+    await savePracticeItem(form.module_type, {
+      id: form.id || undefined,
+      entity: practiceMaterialDialog.entity,
+      plan_id: form.plan_id,
+      grade_id: plan.grade_id,
+      dep_id: plan.dep_id,
+      profession_id: plan.profession_id,
+      class_id: plan.class_id,
+      course_name: plan.course_name,
+      title: form.title,
+      content: form.content,
+      ratio_json: practiceMaterialDialog.entity === 'gradeRule' ? {
+        attendance_weight: Number(form.attendance_weight || 0),
+        operation_weight: Number(form.operation_weight || 0),
+        report_weight: Number(form.report_weight || 0),
+        projects: form.projects,
+      } : undefined,
+      status: practiceMaterialDialog.entity === 'gradeRule' ? 'enabled' : status,
+      module_type: form.module_type,
+    });
+    closePracticeMaterialDialog();
+    await reloadPracticeList(practiceMaterialDialog.module);
+    showToast(practiceMaterialDialog.entity === 'gradeRule' ? '成绩方案已保存' : (status === 'wait' ? '已提交审核' : '草稿已保存'));
+  } catch (error) {
+    state.message = error.message;
+    showToast(error.message);
+  } finally {
+    state.loading = false;
+  }
+}
+
+function practiceArchivePlans(module) {
+  return (practiceModule(module).options.plans || []).filter(plan => ['accept', 'enabled'].includes(String(plan.status || '')));
+}
+
+async function openPracticeArchiveCheck(module) {
+  const state = practiceModule(module);
+  state.archive.detailVisible = false;
+  state.archive.detail = null;
+  state.archive.plan_id ||= practiceArchivePlans(module)[0]?.id || null;
+  if (!state.archive.plan_id) {
+    showToast('暂无可检查的开课任务');
+    return;
+  }
+  await loadPracticeArchiveCheck(module);
+}
+
+async function loadPracticeArchiveCheck(module) {
+  const state = practiceModule(module);
+  const plan = practiceArchivePlans(module).find(item => Number(item.id) === Number(state.archive.plan_id || 0));
+  if (!plan) {
+    showToast('请选择开课任务');
+    return;
+  }
+  state.loading = true;
+  try {
+    state.archive.check = await fetchPracticeArchiveCheck(plan.module_type, plan.id);
+  } catch (error) {
+    state.message = error.message;
+    showToast(error.message);
+  } finally {
+    state.loading = false;
+  }
+}
+
+function closePracticeArchiveCheck(module) {
+  practiceModule(module).archive.check = null;
+}
+
+async function confirmCreatePracticeArchive(module) {
+  const state = practiceModule(module);
+  const check = state.archive.check;
+  if (!check?.ready || !check.plan?.id || state.loading) {
+    return;
+  }
+  try {
+    await showConfirmDialog({
+      title: '确认正式归档',
+      message: `将为「${check.plan.title || check.plan.course_name}」生成只读版本快照。`,
+      confirmButtonText: '确认归档',
+    });
+  } catch {
+    return;
+  }
+  state.loading = true;
+  try {
+    await createPracticeArchive(check.plan.module_type, check.plan.id);
+    state.archive.check = null;
+    await loadPracticeList(module, 1);
+    showToast('归档版本已生成');
+  } catch (error) {
+    state.message = error.message;
+    showToast(error.message);
+  } finally {
+    state.loading = false;
+  }
+}
+
+async function openPracticeArchiveDetail(module, row) {
+  const state = practiceModule(module);
+  state.archive.detailVisible = true;
+  state.archive.detail = row;
+  state.loading = true;
+  try {
+    state.archive.detail = await fetchPracticeArchiveDetail(row.module_type, row.id);
+  } catch (error) {
+    state.archive.detailVisible = false;
+    state.message = error.message;
+    showToast(error.message);
+  } finally {
+    state.loading = false;
+  }
+}
+
+async function downloadPracticeArchive(module) {
+  const state = practiceModule(module);
+  const archive = state.archive.detail;
+  if (!archive?.id || state.loading) {
+    return;
+  }
+  state.loading = true;
+  try {
+    const result = await fetchPracticeArchiveDownload(archive.module_type, archive.id);
+    const link = document.createElement('a');
+    link.href = backendUrl(result.url);
+    link.download = result.download_name || '';
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  } catch (error) {
+    state.message = error.message;
+    showToast(error.message);
+  } finally {
+    state.loading = false;
+  }
+}
+
+function closePracticeArchiveDetail(module) {
+  const archive = practiceModule(module).archive;
+  archive.detailVisible = false;
+  archive.detail = null;
+}
+
+function practiceArchiveItems(module) {
+  const archive = practiceModule(module).archive;
+  return archive.detail?.snapshot_json?.items || archive.check?.items || [];
+}
+
+function practiceArchiveStatusText(status) {
+  return { accepted: '已完成', pending: '待审核', modify: '需修改', missing: '未提交' }[status] || status || '-';
+}
+
+function canCreatePracticeArchive(module) {
+  if (!hasPermission('practice:manage')) {
+    return false;
+  }
+  if (isAdminRole.value) {
+    return true;
+  }
+  const state = practiceModule(module);
+  const planId = Number(state.archive.check?.plan?.id || state.archive.plan_id || 0);
+  const plan = (state.options.plans || []).find(item => Number(item.id) === planId);
+  return isTeacherRole.value && Number(plan?.course_leader_id || 0) === currentPracticeTeacherId(module);
+}
+
 function closeTimelineDialog() {
   internship.timelineDialog.visible = false;
 }
@@ -2775,7 +4260,7 @@ function closeTimelineDialog() {
 function openPracticeReview(module, panel, row, status, mode = 'review') {
   practiceReviewDialog.visible = true;
   practiceReviewDialog.mode = mode;
-  practiceReviewDialog.module = module;
+  practiceReviewDialog.module = row.module_type || row.entity_type || module;
   practiceReviewDialog.panel = panel.key;
   practiceReviewDialog.entity = panel.entity;
   practiceReviewDialog.status = status;
@@ -2847,6 +4332,11 @@ async function savePracticeReviewDraftFromDialog() {
   if (state.loading || practiceReviewDialog.mode !== 'review' || !practiceReviewDialog.row?.id) {
     return;
   }
+  if (!['lab', 'training'].includes(practiceReviewDialog.module)) {
+    state.message = '记录类别无效，请刷新后重试';
+    showToast(state.message);
+    return;
+  }
   trimPracticeReviewMax();
   state.loading = true;
   state.message = '';
@@ -2855,6 +4345,7 @@ async function savePracticeReviewDraftFromDialog() {
       ...practiceReviewDraftPayload(),
       status: practiceReviewDialog.status,
       opinion: practiceReviewDialog.reason,
+      module_type: practiceReviewDialog.module,
     });
     showToast('审核草稿已保存');
   } catch (error) {
@@ -2868,6 +4359,11 @@ async function savePracticeReviewDraftFromDialog() {
 async function confirmPracticeReview() {
   const state = practiceModule(practiceReviewDialog.module);
   if (state.loading) {
+    return;
+  }
+  if (!['lab', 'training'].includes(practiceReviewDialog.module)) {
+    state.message = '记录类别无效，请刷新后重试';
+    showToast(state.message);
     return;
   }
   const error = validatePracticeReason(
@@ -2897,6 +4393,7 @@ async function confirmPracticeReview() {
           execution: panel.execution,
           id: practiceReviewDialog.row.id,
           opinion: practiceReviewDialog.reason,
+          module_type: practiceReviewDialog.module,
         });
       } else {
         await requestPracticeModification(practiceReviewDialog.module, payload);
@@ -2908,11 +4405,13 @@ async function confirmPracticeReview() {
           id: practiceReviewDialog.row.id,
           status: practiceReviewDialog.status,
           opinion: practiceReviewDialog.reason,
+          module_type: practiceReviewDialog.module,
         });
       } else {
         await reviewPracticeItem(practiceReviewDialog.module, {
           ...payload,
           status: practiceReviewDialog.status,
+          module_type: practiceReviewDialog.module,
         });
       }
     }
@@ -2962,6 +4461,10 @@ async function confirmReviewDialog() {
     await reviewApplication(row, status, internship.reviewDialog.reason);
     return;
   }
+  if (entity === 'arrangement') {
+    await reviewArrangement(row, status, internship.reviewDialog.reason);
+    return;
+  }
   if (entity === 'arrangement_change') {
     await reviewArrangementChange(row, status, internship.reviewDialog.reason);
     return;
@@ -3004,6 +4507,25 @@ async function reviewArrangementChange(row, status, opinion) {
       id: row.id,
       status,
       opinion: opinion || defaultReviewOpinion('arrangement_change', status),
+    });
+    closeReviewDialog();
+    await loadInternship();
+  } catch (error) {
+    internship.message = error.message;
+    showToast(error.message);
+  } finally {
+    internship.loading = false;
+  }
+}
+
+async function reviewArrangement(row, status, opinion) {
+  internship.loading = true;
+  internship.message = '';
+  try {
+    await reviewInternshipArrangement({
+      id: row.id,
+      status,
+      opinion: opinion || defaultReviewOpinion('arrangement', status),
     });
     closeReviewDialog();
     await loadInternship();
@@ -3198,7 +4720,7 @@ function reviewEntityName(entity) {
   const names = {
     arrangement: '实习任务',
     arrangement_change: '任务变更',
-    application: '特殊申请',
+    application: '实习方式申请',
     sign_in: '实习签到',
     journal: '实习日志',
     report: '实习报告',
@@ -3207,7 +4729,7 @@ function reviewEntityName(entity) {
     delay: '延期申请',
     insurance: '保险记录',
     safety_letter: '安全承诺',
-    syllabus_guide: '大纲指导书',
+    syllabus_guide: '实习大纲/指导书',
     implementation_sheet: '实施表',
     teacher_work_report: '教师工作报告',
     inspection: '巡查记录',
@@ -3243,8 +4765,8 @@ function canReviewRow(row, entity) {
   if (entity === 'plan') {
     return canReviewInternshipPlan.value && canReviewPlanLevel(row);
   }
-  if (entity === 'arrangement_change') {
-    return isAdminRole.value && (hasPermission('internship:manage') || hasPermission('internship:approve'));
+  if (['arrangement', 'arrangement_change'].includes(entity)) {
+    return canReviewArrangement.value;
   }
   if (entity === 'application') {
     if (!canReviewInternship.value) {
@@ -3275,6 +4797,7 @@ function canRequestModification(row, entity) {
   }
   if (![
     'application',
+    'arrangement',
     'journal',
     'report',
     'plan',
@@ -3289,12 +4812,38 @@ function canRequestModification(row, entity) {
   if (entity === 'plan') {
     return canReviewInternshipPlan.value;
   }
+  if (entity === 'arrangement') {
+    return canReviewArrangement.value;
+  }
   return canReviewInternship.value;
 }
 
 function detailItem(label, value) {
   const text = String(value ?? '').trim();
   return text && text !== '-' ? { label, value: text } : null;
+}
+
+function internshipPlanScopeLabel(row) {
+  return row?.scope_type === 'cohort' || row?.graduation_cohort_id || row?.cohort_name ? '毕业届次' : '年级';
+}
+
+function internshipPlanScopeName(row) {
+  return internshipPlanScopeLabel(row) === '毕业届次'
+    ? (row?.cohort_name || row?.scope_name || '')
+    : (row?.grade_name || row?.scope_name || '');
+}
+
+function internshipPlanScopeText(row) {
+  const name = internshipPlanScopeName(row);
+  return name ? `${internshipPlanScopeLabel(row)}：${name}` : '';
+}
+
+function internshipAcademicScopeFact(row) {
+  return namedFact(internshipPlanScopeLabel(row), internshipPlanScopeName(row));
+}
+
+function internshipAcademicScopeDetail(row) {
+  return detailItem(internshipPlanScopeLabel(row), internshipPlanScopeName(row));
 }
 
 function reviewTargetDetails(entity, row) {
@@ -3323,20 +4872,20 @@ function reviewTargetDetails(entity, row) {
       detailItem('提交人', row.submitter_name),
     ],
     application: [
-      detailItem('届次', row.grade_name),
+      internshipAcademicScopeDetail(row),
       detailItem('学院专业', joinFact([row.dep_name, row.profession_name])),
       detailItem('教师审核', statusText(row.teacher_status)),
       detailItem('管理审核', statusText(row.admin_status)),
       detailItem('申请备注', previewText(row.remark, 80)),
     ],
     journal: [
-      detailItem('届次', row.grade_name),
+      internshipAcademicScopeDetail(row),
       detailItem('日志标题', row.title),
       detailItem('日志日期', row.date || row.created_at),
       detailItem('内容摘要', previewText(row.content, 100)),
     ],
     report: [
-      detailItem('届次', row.grade_name),
+      internshipAcademicScopeDetail(row),
       detailItem('报告标题', row.title),
       detailItem('提交时间', row.submitted_at || row.created_at),
       detailItem('内容摘要', previewText(row.content, 100)),
@@ -3344,6 +4893,8 @@ function reviewTargetDetails(entity, row) {
     plan: [
       // 暂时隐藏学期字段，后续需要时恢复。
       // detailItem('学期', row.semester),
+      detailItem('实习类别', row.category_name),
+      detailItem(internshipPlanScopeLabel(row), internshipPlanScopeName(row)),
       detailItem('学院', row.dep_name),
       detailItem('提交人', row.submitter_name),
       detailItem('审核进度', row.approval_progress_text),
@@ -3351,7 +4902,7 @@ function reviewTargetDetails(entity, row) {
       detailItem('计划摘要', planContentText(row.plan_content, 100)),
     ],
     delay: [
-      detailItem('届次', row.grade_name),
+      internshipAcademicScopeDetail(row),
       detailItem('延期类型', delayConfigText(row.config_key)),
       detailItem('申请延期至', row.requested_date),
       detailItem('申请原因', previewText(row.reason, 100)),
@@ -3524,6 +5075,7 @@ function isGenericSubmitContent(value) {
   return [
     '提交特殊申请',
     '提交补充申请',
+    '提交实习方式申请',
     '提交实习日志',
     '提交实习报告',
     '提交延期申请',
@@ -3637,7 +5189,6 @@ async function submitScore() {
       sign_in_score: numericOrNull(internship.forms.score.sign_in_score),
       journal_score: numericOrNull(internship.forms.score.journal_score),
       report_score: numericOrNull(internship.forms.score.report_score),
-      enterprise_score: numericOrNull(internship.forms.score.enterprise_score),
     });
     internship.message = '成绩已保存';
     await loadInternship();
@@ -3730,6 +5281,7 @@ function currentArrangement() {
     report: internship.forms.report.arrangement_id,
     delay: internship.forms.delay.arrangement_id,
     sign: internship.forms.sign.arrangement_id,
+    safety: internship.forms.safety.arrangement_id,
   }[internship.submitSection];
   const arrangementId = Number(
     formArrangementId
@@ -3738,6 +5290,7 @@ function currentArrangement() {
     || internship.forms.report.arrangement_id
     || internship.forms.application.arrangement_id
     || internship.forms.delay.arrangement_id
+    || internship.forms.safety.arrangement_id
     || 0,
   );
   return internship.options.arrangements.find(item => Number(item.id) === arrangementId) || internship.options.arrangements[0] || null;
@@ -3980,6 +5533,7 @@ provideInternshipContext({
   canEditStudentWork,
   canLoadMore,
   canReviewInternship,
+  closeMobileListDetail,
   closeReviewDialog,
   closeTimelineDialog,
   confirmReviewDialog,
@@ -3991,8 +5545,10 @@ provideInternshipContext({
   delayConfigText,
   editStudentWork,
   getMobileListConfig,
+  handleMobileDetailAction,
   handleMobileListAction,
   internship,
+  internshipPlanScopeText,
   internshipPanels,
   internshipReviewStatusOptions,
   internshipSummaries,
@@ -4044,8 +5600,14 @@ provideInternshipContext({
   submitDelay,
   submitJournal,
   submitReport,
+  submitSafetyLetter,
   submitScore,
   submitSignIn,
+  uploadInternshipAttachments,
+  uploadSafetyFinal,
+  removeInternshipAttachment,
+  openSafetyTemplate,
+  currentReportIsGraduation,
   switchInternshipPanel,
   switchMobileList,
   textLength,
@@ -4063,21 +5625,38 @@ provideInternshipContext({
 });
 
 providePracticeContext({
+  applyPracticeStudentScore,
+  canCreatePracticeArchive,
   canLoadMorePractice,
+  changePracticeExecutionProject,
+  changePracticeMaterialPlan,
+  closePracticeArchiveCheck,
+  closePracticeArchiveDetail,
   closePracticeExecutionDialog,
+  closePracticeMaterialDialog,
   closePracticeReviewDialog,
   closePracticeTimeline,
+  confirmCreatePracticeArchive,
   confirmPracticeReview,
   coordinateText,
   currentPracticePanel,
   currentPracticeRows,
+  downloadPracticeArchive,
   handlePracticeAction,
+  handlePracticePrimaryAction,
+  isAdminRole,
   isModifyAfterAcceptBranch,
   isStudentRole,
+  isTeacherRole,
+  loadPracticeArchiveCheck,
   loadMorePracticeList,
   locatePracticePosition,
   practiceAccuracyText,
+  practiceArchiveItems,
+  practiceArchivePlans,
+  practiceArchiveStatusText,
   practiceExecutionDialog,
+  practiceExecutionProjectOptions,
   practiceExecutionDialogSubtitle,
   practiceExecutionDialogTitle,
   practiceFilters,
@@ -4087,9 +5666,17 @@ providePracticeContext({
   practiceGpsTitle,
   practiceListTotal,
   practiceMapUrl,
+  practiceMaterialDialog,
+  practiceMaterialPlans,
+  practiceMaterialTitle,
   practiceModule,
   practiceModuleName,
+  practiceScheduleGroups,
   practicePanels,
+  practicePrimaryAction,
+  practiceProjectScorePreview,
+  practiceProjectScoreRuleText,
+  practiceScoreTabs,
   practiceReviewDialog,
   practiceReviewDialogRuleText,
   practiceReviewDialogTitle,
@@ -4103,6 +5690,7 @@ providePracticeContext({
   practiceRuleMax,
   practiceRuleMaxText,
   practiceSummaries,
+  practiceTypeName,
   practiceTimelineCycles,
   practiceTimelineDialog,
   reloadPracticeList,
@@ -4111,7 +5699,9 @@ providePracticeContext({
   setPracticeReviewStatus,
   statusText,
   submitPracticeExecution,
+  submitPracticeMaterial,
   switchPracticePanel,
+  switchPracticeScoreView,
   textLength,
   timelineBranchContent,
   timelineBranchKey,
@@ -4153,8 +5743,7 @@ watch(roleType, () => {
     internship.panel = panels[0] || 'workbench';
   }
   normalizeInternshipListViews();
-  normalizePracticePanel('training');
-  normalizePracticePanel('lab');
+  normalizePracticePanel('practice');
 });
 
 watch(visibleMobileModules, () => {

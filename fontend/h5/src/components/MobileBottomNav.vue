@@ -13,13 +13,13 @@
       <template #icon><BriefcaseBusiness :size="21" /></template>
       实习
     </van-tabbar-item>
-    <van-tabbar-item v-if="trainingVisible" name="training">
+    <van-tabbar-item v-if="trainingVisible || labVisible" name="practice">
       <template #icon><Workflow :size="21" /></template>
-      实训
+      实验实训
     </van-tabbar-item>
-    <van-tabbar-item v-if="labVisible" name="lab">
-      <template #icon><FlaskConical :size="21" /></template>
-      实验
+    <van-tabbar-item v-if="socialVisible" name="socialPractice">
+      <template #icon><Workflow :size="21" /></template>
+      社会实践
     </van-tabbar-item>
     <van-tabbar-item name="mine">
       <template #icon><UserRound :size="21" /></template>
@@ -29,13 +29,14 @@
 </template>
 
 <script setup>
-import { BriefcaseBusiness, FlaskConical, Home, UserRound, Workflow } from '@lucide/vue';
+import { BriefcaseBusiness, Home, UserRound, Workflow } from '@lucide/vue';
 
 defineProps({
   modelValue: { type: String, default: 'home' },
   internshipVisible: { type: Boolean, default: false },
   trainingVisible: { type: Boolean, default: false },
   labVisible: { type: Boolean, default: false },
+  socialVisible: { type: Boolean, default: false },
 });
 
 const emit = defineEmits(['update:modelValue']);

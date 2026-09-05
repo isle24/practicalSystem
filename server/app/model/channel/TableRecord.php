@@ -7,7 +7,7 @@ use Illuminate\Database\Query\Expression;
 
 class TableRecord extends BaseModel
 {
-    private const DEFAULT_DESKTOP_MODULE_KEYS = ['internship', 'training', 'lab', 'config'];
+    private const DEFAULT_DESKTOP_MODULE_KEYS = ['internship', 'practice', 'config'];
 
     protected $guarded = [];
     public $timestamps = false;
@@ -160,8 +160,16 @@ class TableRecord extends BaseModel
         if (!preg_match('/^[a-z_]+_recording$/', $table)) {
             return;
         }
-        if (isset($ensured[$table])) {
+        $key = self::connection()->getDatabaseName() . ':' . $table;
+        if (isset($ensured[$key])) {
             return;
+        }
+        if (self::tableExists($table)) {
+            $ensured[$key] = true;
+            return;
+        }
+        if (self::connection()->transactionLevel() > 0) {
+            throw new \RuntimeException('记录表尚未初始化，请先升级学校数据库结构');
         }
 
         self::connection()->statement("CREATE TABLE IF NOT EXISTS `{$table}` (
@@ -189,7 +197,24 @@ class TableRecord extends BaseModel
             KEY `idx_parent` (`parent_id`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
-        $ensured[$table] = true;
+        $ensured[$key] = true;
+    }
+
+    /** 检查部署时初始化的业务表，不在业务事务内执行 DDL。 */
+    protected static function requireTables(array $tables): void
+    {
+        static $ready = [];
+        $database = self::connection()->getDatabaseName();
+        foreach ($tables as $table) {
+            $key = $database . ':' . $table;
+            if (isset($ready[$key])) {
+                continue;
+            }
+            if (!self::tableExists($table)) {
+                throw new \RuntimeException('业务表尚未初始化，请先升级学校数据库结构');
+            }
+            $ready[$key] = true;
+        }
     }
 
     public static function ensureReviewOpinionDraftTable(): void
@@ -198,6 +223,9 @@ class TableRecord extends BaseModel
         $connection = self::connection();
         $key = method_exists($connection, 'getDatabaseName') ? (string) $connection->getDatabaseName() : spl_object_hash($connection);
         if (isset($ensured[$key])) {
+            return;
+        }
+        if (method_exists($connection, 'transactionLevel') && $connection->transactionLevel() > 0) {
             return;
         }
 
@@ -343,6 +371,7 @@ class TableRecord extends BaseModel
             'login_name' => $row->login_name,
             'user_name' => $row->user_name,
             'action' => $row->action,
+            'operation' => $payloadData['operation'] ?? $row->action,
             'ip' => $row->ip,
             'method' => $payloadData['method'] ?? null,
             'path' => $payloadData['path'] ?? null,
@@ -837,6 +866,43 @@ class TableRecord extends BaseModel
         return (string) $row->jti;
     }
 
+    /**
+     * 下线当前设备之外的所有登录设备。
+     *
+     * @return string[]
+     */
+    public static function revokeOtherDevices(int $accountId, ?string $currentJti, string $now): array
+    {
+        $currentJti = trim((string) $currentJti);
+        $query = self::queryTable('user_device')
+            ->where('account_id', $accountId)
+            ->whereNull('deleted_at');
+
+        if ($currentJti !== '') {
+            $query->where('jti', '<>', $currentJti);
+        }
+
+        $rows = $query->get(['id', 'jti']);
+        $ids = $rows->pluck('id')->map(static fn ($id): int => (int) $id)->all();
+        if (!$ids) {
+            return [];
+        }
+
+        self::queryTable('user_device')
+            ->whereIn('id', $ids)
+            ->update([
+                'status' => 'disabled',
+                'deleted_at' => $now,
+                'updated_at' => $now,
+            ]);
+
+        return $rows->pluck('jti')
+            ->map(static fn ($jti): string => trim((string) $jti))
+            ->filter()
+            ->values()
+            ->all();
+    }
+
     public static function desktopShortcuts(int $accountId): array
     {
         $items = self::queryTable('user_desktop_shortcut')
@@ -1180,7 +1246,7 @@ class TableRecord extends BaseModel
 
     private static function tableExists(string $table): bool
     {
-        $database = CurrentContext::schoolDatabase();
+        $database = self::connection()->getDatabaseName();
         if ($database === '') {
             return false;
         }

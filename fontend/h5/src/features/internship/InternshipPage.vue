@@ -18,20 +18,24 @@
     <InternshipOverview v-if="internship.panel === 'workbench'" />
     <InternshipTaskList v-else-if="isStudentRole && internship.panel === 'apply'" />
     <InternshipSubmitHub v-else-if="isStudentRole && internship.panel === 'submit'" />
+    <InternshipStudentChangePage v-else-if="internship.panel === 'changes'" />
     <InternshipReviewList v-else-if="canReviewInternship && internship.panel === 'review'" />
     <InternshipScorePage v-else-if="internship.panel === 'score'" />
     <InternshipManageList v-else-if="isAdminRole && internship.panel === 'manage'" />
   </section>
 
+  <InternshipDetailSheet />
   <InternshipTimeline />
 </template>
 
 <script>
 import AppSegmented from '../../components/ui/AppSegmented.vue';
+import InternshipDetailSheet from './InternshipDetailSheet.vue';
 import InternshipManageList from './InternshipManageList.vue';
 import InternshipOverview from './InternshipOverview.vue';
 import InternshipReviewList from './InternshipReviewList.vue';
 import InternshipScorePage from './InternshipScorePage.vue';
+import InternshipStudentChangePage from './InternshipStudentChangePage.vue';
 import InternshipSubmitHub from './InternshipSubmitHub.vue';
 import InternshipTaskList from './InternshipTaskList.vue';
 import InternshipTimeline from './InternshipTimeline.vue';
@@ -41,10 +45,12 @@ export default {
   name: 'InternshipPage',
   components: {
     AppSegmented,
+    InternshipDetailSheet,
     InternshipManageList,
     InternshipOverview,
     InternshipReviewList,
     InternshipScorePage,
+    InternshipStudentChangePage,
     InternshipSubmitHub,
     InternshipTaskList,
     InternshipTimeline,

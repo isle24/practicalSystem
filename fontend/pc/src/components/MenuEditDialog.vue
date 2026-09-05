@@ -56,11 +56,12 @@
           default-expand-all
           filterable
           node-key="id"
+          placeholder="请选择父级菜单"
         />
       </label>
       <label>
         <span>平台</span>
-        <el-select v-model="form.platform">
+        <el-select v-model="form.platform" placeholder="请选择平台">
           <el-option label="PC" value="pc" />
           <el-option label="H5" value="h5" />
           <el-option label="双端" value="both" />

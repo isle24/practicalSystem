@@ -12,11 +12,14 @@ const practicePanelKeys = [
   'lessonPlans',
   'gradeRules',
   'scores',
+  'courseScores',
   'reflections',
+  'archives',
 ];
 
 export function emptyPracticeFilters() {
   return {
+    module_type: 'all',
     grade_id: '',
     dep_id: '',
     profession_id: '',
@@ -54,9 +57,29 @@ export function createPracticeState() {
       schedules: [],
       projects: [],
       review_rules: {},
+      current_teacher_id: null,
+      current_student_id: null,
     },
     filters: Object.fromEntries(practicePanelKeys.map(key => [key, emptyPracticeFilters()])),
     lists: Object.fromEntries(practicePanelKeys.map(key => [key, emptyPagedList()])),
+    schedule: {
+      week_start: '',
+      week_end: '',
+      periods: [],
+      items: [],
+    },
+    archive: {
+      plan_id: null,
+      check: null,
+      detail: null,
+      detailVisible: false,
+    },
+    courseScore: {
+      plan: null,
+      rule: null,
+      summary: null,
+    },
+    scoreView: 'scores',
   };
 }
 
@@ -64,7 +87,7 @@ function createReviewDialog() {
   return {
     visible: false,
     mode: 'review',
-    module: 'training',
+    module: 'all',
     panel: 'plans',
     entity: 'plan',
     status: 'accept',
@@ -76,7 +99,7 @@ function createReviewDialog() {
 function createExecutionDialog() {
   return {
     visible: false,
-    module: 'training',
+    module: 'all',
     panel: 'journals',
     execution: 'journal',
     row: null,
@@ -86,6 +109,7 @@ function createExecutionDialog() {
       title: '',
       date: '',
       content: '',
+      reflection_summary: '',
       location: '',
       longitude: '',
       latitude: '',
@@ -94,7 +118,14 @@ function createExecutionDialog() {
       locating: false,
       gps_error: '',
       remark: '',
+      student_id: null,
+      attendance_score: '',
+      material_score: '',
+      report_score: '',
+      score_value: '',
     },
+    students: [],
+    rule: null,
   };
 }
 
@@ -110,21 +141,40 @@ function createTimelineDialog() {
   };
 }
 
+function createMaterialDialog() {
+  return {
+    visible: false,
+    module: 'all',
+    panel: 'lessonPlans',
+    entity: 'lessonPlan',
+    row: null,
+    form: {
+      id: null,
+      module_type: '',
+      plan_id: null,
+      title: '',
+      content: '',
+      attendance_weight: 20,
+      operation_weight: 70,
+      report_weight: 10,
+      projects: [],
+    },
+  };
+}
+
 export function usePracticeModule() {
-  const practice = reactive({
-    training: createPracticeState(),
-    lab: createPracticeState(),
-  });
+  const practice = reactive(createPracticeState());
   const reviewDialog = reactive(createReviewDialog());
   const executionDialog = reactive(createExecutionDialog());
   const timelineDialog = reactive(createTimelineDialog());
+  const materialDialog = reactive(createMaterialDialog());
 
   function reset() {
-    practice.training = createPracticeState();
-    practice.lab = createPracticeState();
+    Object.assign(practice, createPracticeState());
     Object.assign(reviewDialog, createReviewDialog());
     Object.assign(executionDialog, createExecutionDialog());
     Object.assign(timelineDialog, createTimelineDialog());
+    Object.assign(materialDialog, createMaterialDialog());
   }
 
   return {
@@ -132,6 +182,7 @@ export function usePracticeModule() {
     reviewDialog,
     executionDialog,
     timelineDialog,
+    materialDialog,
     emptyFilters: emptyPracticeFilters,
     reset,
   };

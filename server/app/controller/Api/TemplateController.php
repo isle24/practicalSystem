@@ -34,6 +34,10 @@ class TemplateController
             'category_id' => $this->intInput($request, 'category_id'),
             'status' => $request->input('status', 'all'),
             'keyword' => $request->input('keyword', ''),
+            'business_code' => $request->input('business_code', ''),
+            'material_type' => $request->input('material_type', ''),
+            'scope_type' => $request->input('scope_type', ''),
+            'practice_type' => $request->input('practice_type', ''),
         ]));
     }
 

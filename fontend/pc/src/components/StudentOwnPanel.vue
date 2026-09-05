@@ -24,10 +24,11 @@
             <dd>{{ fieldText(field, row) }}</dd>
           </template>
         </dl>
-        <footer v-if="timelineEntity">
-          <el-button size="small" type="primary" plain @click="emit('timeline', row)">
+        <footer v-if="timelineEntity || $slots.actions">
+          <el-button v-if="timelineEntity" size="small" type="primary" plain @click="emit('timeline', row)">
             记录
           </el-button>
+          <slot name="actions" :row="row" />
         </footer>
       </article>
     </div>

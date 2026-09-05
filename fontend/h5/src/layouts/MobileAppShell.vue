@@ -35,6 +35,7 @@
       :internship-visible="internshipVisible"
       :training-visible="trainingVisible"
       :lab-visible="labVisible"
+      :social-visible="socialVisible"
       @update:model-value="emit('update:activeTab', $event)"
     />
 
@@ -61,6 +62,7 @@ defineProps({
   internshipVisible: { type: Boolean, default: false },
   trainingVisible: { type: Boolean, default: false },
   labVisible: { type: Boolean, default: false },
+  socialVisible: { type: Boolean, default: false },
 });
 
 const emit = defineEmits([
