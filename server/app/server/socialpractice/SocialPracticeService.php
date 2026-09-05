@@ -741,8 +741,33 @@ class SocialPracticeService
         }
         $fileService = new FileService();
         $fromStatus = (string) ($existing['status'] ?? 'draft');
-        $result = $this->withLock('material', $id ?: $projectId ?: $declarationId ?: $planId, function () use ($id, $values, $fileIds, $fileService, $fromStatus, $submit): array {
+        $lockId = max(1, (int) sprintf('%u', crc32(implode(':', [$planId, $projectId, $declarationId, $studentId, $materialType]))));
+        $result = $this->withLock('material', $lockId, function () use ($id, $values, $fileIds, $fileService, $fromStatus, $submit): array {
             return SocialPracticeRecord::connection()->transaction(function () use ($id, $values, $fileIds, $fileService, $fromStatus, $submit): array {
+                if (!SocialPracticeRecord::lockEntity('plan', (int) $values['plan_id'])) {
+                    throw new RuntimeException('计划已变更，请刷新后重试', 409);
+                }
+                $this->assertMaterialTarget($values['plan_id'], $values['project_id'], $values['declaration_id'], $values['student_id'], $values['submit_scope']);
+                if (!$id) {
+                    $existing = SocialPracticeRecord::materialTargetRow($values['plan_id'], $values['project_id'], $values['declaration_id'], $values['student_id'], $values['material_type']);
+                    $id = $existing ? (int) $existing['id'] : null;
+                }
+                if ($id) {
+                    $current = SocialPracticeRecord::lockEntity('material', $id);
+                    if (!$current || !SocialPracticeRecord::entityVisible($this->scopeContext(), 'material', $id)) {
+                        throw new RuntimeException('材料不存在或无权限', 40301);
+                    }
+                    if (!in_array((string) $current->status, ['draft', 'modify'], true)) {
+                        throw new RuntimeException('材料已提交或审核，请刷新后重试', 409);
+                    }
+                    foreach (['plan_id', 'project_id', 'declaration_id', 'student_id', 'material_type', 'submit_scope'] as $field) {
+                        if ((string) $current->$field !== (string) $values[$field]) {
+                            throw new RuntimeException('不可修改已有材料的所属对象', 409);
+                        }
+                    }
+                    $fromStatus = (string) $current->status;
+                    $values['version'] = (int) $current->version + ($submit && $fromStatus === 'modify' ? 1 : 0);
+                }
                 $materialId = SocialPracticeRecord::saveEntity('material', $id, $values);
                 $attachments = $fileService->replaceRelations($fileIds, SocialPracticeRecord::entityType('material'), $materialId, 'attachment');
                 $recordingId = null;
@@ -951,8 +976,23 @@ class SocialPracticeService
         }
         $now = $this->now();
         $comment = $this->stringInput($request, 'comment', 10000);
-        $result = $this->withLock('score', $existing ? (int) $existing['id'] : abs(crc32($projectId . ':' . $studentId)), function () use ($existing, $project, $projectId, $studentId, $teacherId, $finalScore, $details, $comment, $submit, $now): array {
-            return SocialPracticeRecord::connection()->transaction(function () use ($existing, $project, $projectId, $studentId, $teacherId, $finalScore, $details, $comment, $submit, $now): array {
+        $result = $this->withLock('score', max(1, (int) sprintf('%u', crc32($projectId . ':' . $studentId))), function () use ($project, $projectId, $studentId, $teacherId, $finalScore, $details, $comment, $submit, $now): array {
+            return SocialPracticeRecord::connection()->transaction(function () use ($project, $projectId, $studentId, $teacherId, $finalScore, $details, $comment, $submit, $now): array {
+                if (!SocialPracticeRecord::lockEntity('project', $projectId)) {
+                    throw new RuntimeException('项目已变更，请刷新后重试', 409);
+                }
+                $fromStatus = 'draft';
+                $existing = SocialPracticeRecord::scoreTargetRow((int) $project['plan_id'], $projectId, $studentId);
+                if ($existing) {
+                    $current = SocialPracticeRecord::lockEntity('score', (int) $existing['id']);
+                    if (!$current || !SocialPracticeRecord::entityVisible($this->scopeContext(), 'score', (int) $existing['id'])) {
+                        throw new RuntimeException('成绩不存在或无权限', 40301);
+                    }
+                    if (!in_array((string) $current->status, ['draft', 'modify'], true)) {
+                        throw new RuntimeException('成绩已提交或审核，请刷新后重试', 409);
+                    }
+                    $fromStatus = (string) $current->status;
+                }
                 $scoreId = SocialPracticeRecord::saveEntity('score', $existing ? (int) $existing['id'] : null, [
                     'plan_id' => (int) $project['plan_id'],
                     'project_id' => $projectId,
@@ -966,7 +1006,7 @@ class SocialPracticeService
                 SocialPracticeRecord::syncScoreDetails($scoreId, $details, $now);
                 $recordingId = null;
                 if ($submit) {
-                    $recordingId = $this->recordWorkflow('score', $scoreId, 'submit', 'draft', 'wait', '提交社会实践成绩', null);
+                    $recordingId = $this->recordWorkflow('score', $scoreId, 'submit', $fromStatus, 'wait', '提交社会实践成绩', null);
                 }
                 return ['id' => $scoreId, 'recording_id' => $recordingId, 'status' => $submit ? 'wait' : 'draft', 'final_score' => $finalScore];
             });

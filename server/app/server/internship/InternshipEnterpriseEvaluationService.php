@@ -175,14 +175,15 @@ class InternshipEnterpriseEvaluationService
                 (int) $session->enterprise_mentor_id,
                 [
                     'evaluator_name' => (string) ($session->mentor_name ?? ''),
-                    'evaluator_mobile' => (string) ($session->mentor_phone ?? ''),
+                    'evaluator_mobile' => (string) $session->mobile,
                     'verification_id' => (int) $session->session_id,
                     'criteria_json' => json_encode($criteria, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
                     'total_score' => $totalScore,
                     'comment' => $comment,
                     'submitted_ip' => (string) $request->getRealIp(),
                 ],
-                $this->now()
+                $this->now(),
+                (string) $session->session_token
             );
 
             return [

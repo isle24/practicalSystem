@@ -1,5 +1,17 @@
 import { request } from './client';
 
+export function fetchProfileSettings() {
+  return request('/profile/settings');
+}
+
+export function sendMobileCode(payload) {
+  return request('/profile/send-mobile-code', { method: 'POST', body: JSON.stringify(payload) });
+}
+
+export function verifyMobile(payload) {
+  return request('/profile/verify-mobile', { method: 'POST', body: JSON.stringify(payload) });
+}
+
 export function fetchContext() {
   return request('/auth/context');
 }

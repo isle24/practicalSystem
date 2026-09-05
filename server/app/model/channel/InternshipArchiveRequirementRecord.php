@@ -5,8 +5,6 @@ namespace app\model\channel;
 /** 实习归档材料要求配置查询。 */
 class InternshipArchiveRequirementRecord extends TableRecord
 {
-    private static array $schemaReady = [];
-
     private const DEFAULTS = [
         'graduation' => [
             'plan', 'implementation_sheet', 'syllabus', 'guide', 'registration',
@@ -137,20 +135,7 @@ class InternshipArchiveRequirementRecord extends TableRecord
     /** 确保归档要求表存在。 */
     private static function ensureTable(): void
     {
-        $connection = self::connection();
-        $key = method_exists($connection, 'getDatabaseName') ? (string) $connection->getDatabaseName() : spl_object_hash($connection);
-        if (isset(self::$schemaReady[$key])) {
-            return;
-        }
-        $connection->statement("CREATE TABLE IF NOT EXISTS `internship_archive_requirement` (
-            `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT, `uuid` CHAR(36) DEFAULT NULL, `name` VARCHAR(180) DEFAULT NULL,
-            `code` VARCHAR(120) DEFAULT NULL, `status` VARCHAR(40) DEFAULT 'enabled', `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
-            `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, `deleted_at` DATETIME DEFAULT NULL,
-            `practice_type` VARCHAR(40) NOT NULL, `material_type` VARCHAR(60) NOT NULL, `required` TINYINT(1) DEFAULT 1,
-            `sort` INT DEFAULT 100, `created_by` BIGINT UNSIGNED DEFAULT NULL,
-            PRIMARY KEY (`id`), UNIQUE KEY `uk_archive_requirement_type_material` (`practice_type`, `material_type`)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-        self::$schemaReady[$key] = true;
+        self::requireTables(['internship_archive_requirement']);
     }
 
     /** 生成 UUID。 */

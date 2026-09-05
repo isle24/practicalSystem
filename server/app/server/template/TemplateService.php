@@ -68,6 +68,7 @@ class TemplateService
         if (!$fileId) {
             throw new InvalidArgumentException('请上传模板文件');
         }
+        (new FileService())->assertReadableReferences(['file_id' => $fileId]);
 
         $id = TemplateRecord::saveTemplate([
             'id' => $this->intValue($payload['id'] ?? 0),

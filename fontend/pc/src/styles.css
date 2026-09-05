@@ -4923,6 +4923,7 @@ a {
 }
 
 .profile-form-grid label,
+.profile-mobile-binding,
 .profile-line-field {
   display: grid;
   gap: 6px;
@@ -4930,7 +4931,12 @@ a {
   font-size: 12px;
 }
 
-.profile-form-grid input,
+.profile-mobile-binding {
+  grid-column: 1 / -1;
+  min-width: 0;
+}
+
+.profile-form-grid > label > input,
 .profile-line-field input {
   height: 34px;
   border: 1px solid var(--line);
@@ -4940,7 +4946,7 @@ a {
   outline: none;
 }
 
-.profile-form-grid input:focus,
+.profile-form-grid > label > input:focus,
 .profile-line-field input:focus {
   border-color: #8dbdea;
 }

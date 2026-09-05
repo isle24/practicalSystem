@@ -385,6 +385,7 @@ function createSchoolSchema(PDO $pdo): void
 
     ensureMenuSchema($pdo);
     ensureArchiveSchema($pdo);
+    ensureColumn($pdo, 'users', 'verified_mobile', "ALTER TABLE `users` ADD COLUMN `verified_mobile` VARCHAR(40) DEFAULT NULL AFTER `mobile`");
     ensureColumn($pdo, 'account', 'login_name', "ALTER TABLE `account` ADD COLUMN `login_name` VARCHAR(80) DEFAULT NULL AFTER `user_id`");
     ensureIndex($pdo, 'account', 'uk_login_name', "ALTER TABLE `account` ADD UNIQUE KEY `uk_login_name` (`login_name`)");
     ensureFileSchema($pdo);
@@ -607,6 +608,7 @@ function schoolCoreStatements(): array
             `name` VARCHAR(80) NOT NULL,
             `avatar` VARCHAR(255) DEFAULT NULL,
             `mobile` VARCHAR(40) DEFAULT NULL,
+            `verified_mobile` VARCHAR(40) DEFAULT NULL,
             `email` VARCHAR(120) DEFAULT NULL,
             `status` ENUM('enabled','disabled') DEFAULT 'enabled',
             `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,

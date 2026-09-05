@@ -8,6 +8,23 @@ class User extends BaseModel
     protected $primaryKey = 'id';
     protected $guarded = [];
 
+    public static function connection(): mixed
+    {
+        return (new static())->getConnection();
+    }
+
+    /** 锁定个人资料，序列化手机号绑定和设置保存。 */
+    public static function lockProfile(int $id): ?self
+    {
+        return self::query()->where('id', $id)->where('status', 'enabled')->whereNull('deleted_at')->lockForUpdate()->first();
+    }
+
+    /** 保存短信验证通过的手机号。 */
+    public static function bindVerifiedMobile(int $id, string $mobile, string $now): void
+    {
+        self::updateActiveProfile($id, ['mobile' => $mobile, 'verified_mobile' => $mobile, 'updated_at' => $now]);
+    }
+
     public static function createAdminUser(array $values): self
     {
         return self::query()->create(array_merge([

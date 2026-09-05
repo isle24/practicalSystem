@@ -306,8 +306,10 @@ class Account extends BaseModel
             ->where(function ($builder) use ($identity): void {
                 $builder->where('account.user_id', (int) $identity['user_id']);
                 $mobile = trim((string) ($identity['mobile'] ?? ''));
-                if ($mobile !== '') {
-                    $builder->orWhere('users.mobile', $mobile);
+                if ($mobile !== '' && ($identity['verified_mobile'] ?? null) === $mobile) {
+                    $builder->orWhere(function ($linked) use ($mobile): void {
+                        $linked->where('users.mobile', $mobile)->where('users.verified_mobile', $mobile);
+                    });
                 }
             })
             ->whereNotNull('role.id')
@@ -361,7 +363,9 @@ class Account extends BaseModel
 
         $currentMobile = trim((string) ($current['mobile'] ?? ''));
         $targetMobile = trim((string) ($target['mobile'] ?? ''));
-        return $currentMobile !== '' && $currentMobile === $targetMobile;
+        return $currentMobile !== '' && $currentMobile === $targetMobile
+            && ($current['verified_mobile'] ?? null) === $currentMobile
+            && ($target['verified_mobile'] ?? null) === $targetMobile;
     }
 
     public static function adminLoginTargetProfile(int $accountId): ?array
@@ -689,6 +693,7 @@ class Account extends BaseModel
                 'account.user_id',
                 'account.login_name',
                 'users.mobile',
+                'users.verified_mobile',
                 'role.role_type',
             ]);
 
@@ -697,6 +702,7 @@ class Account extends BaseModel
             'user_id' => (int) $row->user_id,
             'login_name' => $row->login_name,
             'mobile' => $row->mobile,
+            'verified_mobile' => $row->verified_mobile,
             'role_type' => $row->role_type,
         ] : null;
     }

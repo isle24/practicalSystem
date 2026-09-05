@@ -64,6 +64,7 @@
         :role-labels="roleNameMap"
         @open-tab="activeTab = $event"
         @switch-account="switchMobileAccount"
+        @mobile-verified="loadSwitchableAccounts"
         @logout="confirmMobileLogout"
       />
 

@@ -160,8 +160,16 @@ class TableRecord extends BaseModel
         if (!preg_match('/^[a-z_]+_recording$/', $table)) {
             return;
         }
-        if (isset($ensured[$table])) {
+        $key = self::connection()->getDatabaseName() . ':' . $table;
+        if (isset($ensured[$key])) {
             return;
+        }
+        if (self::tableExists($table)) {
+            $ensured[$key] = true;
+            return;
+        }
+        if (self::connection()->transactionLevel() > 0) {
+            throw new \RuntimeException('记录表尚未初始化，请先升级学校数据库结构');
         }
 
         self::connection()->statement("CREATE TABLE IF NOT EXISTS `{$table}` (
@@ -189,7 +197,24 @@ class TableRecord extends BaseModel
             KEY `idx_parent` (`parent_id`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
-        $ensured[$table] = true;
+        $ensured[$key] = true;
+    }
+
+    /** 检查部署时初始化的业务表，不在业务事务内执行 DDL。 */
+    protected static function requireTables(array $tables): void
+    {
+        static $ready = [];
+        $database = self::connection()->getDatabaseName();
+        foreach ($tables as $table) {
+            $key = $database . ':' . $table;
+            if (isset($ready[$key])) {
+                continue;
+            }
+            if (!self::tableExists($table)) {
+                throw new \RuntimeException('业务表尚未初始化，请先升级学校数据库结构');
+            }
+            $ready[$key] = true;
+        }
     }
 
     public static function ensureReviewOpinionDraftTable(): void
@@ -1221,7 +1246,7 @@ class TableRecord extends BaseModel
 
     private static function tableExists(string $table): bool
     {
-        $database = CurrentContext::schoolDatabase();
+        $database = self::connection()->getDatabaseName();
         if ($database === '') {
             return false;
         }

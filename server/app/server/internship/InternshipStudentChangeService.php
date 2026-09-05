@@ -198,7 +198,28 @@ class InternshipStudentChangeService
                     $now = $this->now();
                     if ($status === 'accept') {
                         $profile = InternshipStudentProfileRecord::ensureForTask((int) $row->student_id, (int) $row->arrangement_id, $now);
-                        InternshipStudentProfileRecord::applyChange((int) $profile->id, $this->decode($row->after_payload), $now);
+                        $before = $this->decode($row->before_payload);
+                        $after = $this->decode($row->after_payload);
+                        $current = InternshipStudentProfileRecord::snapshot($profile);
+                        $changes = [];
+                        foreach ($after as $field => $value) {
+                            if (($before[$field] ?? null) === $value) {
+                                continue;
+                            }
+                            if (($current[$field] ?? null) !== ($before[$field] ?? null)) {
+                                throw new InvalidArgumentException('申请涉及的资料已变更，请退回后由学生重新提交', 409);
+                            }
+                            $changes[$field] = $value;
+                        }
+                        $updated = array_replace($current, $changes);
+                        $issue = InternshipStudentProfileRecord::referenceIssue($updated);
+                        if ($issue) {
+                            throw new InvalidArgumentException($issue);
+                        }
+                        if (!empty($updated['start_date']) && !empty($updated['end_date']) && $updated['end_date'] < $updated['start_date']) {
+                            throw new InvalidArgumentException('资料已变更，结束日期不能早于开始日期', 409);
+                        }
+                        InternshipStudentProfileRecord::applyChange((int) $profile->id, $updated, $now);
                     }
                     InternshipStudentChangeRecord::review($id, $status, (int) CurrentContext::accountId(), $opinion ?: ($status === 'accept' ? '审核通过' : '请修改后重新提交'), $now);
                     $content = $opinion ?: ($status === 'accept' ? '审核通过' : '请修改后重新提交');

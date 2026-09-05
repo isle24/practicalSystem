@@ -8,7 +8,7 @@ use RuntimeException;
 use support\Redis;
 use Throwable;
 
-/** 企业评价短信验证码发送和校验辅助服务。 */
+/** 短信验证码发送和一次性校验。 */
 class SmsCodeService
 {
     private const CODE_TTL = 300;
@@ -19,14 +19,15 @@ class SmsCodeService
     {
         $mobile = $this->mobile($mobile);
         $key = $this->key($scene, $mobile);
-        if (Redis::exists($this->intervalKey($scene, $mobile))) {
-            throw new InvalidArgumentException('验证码发送过于频繁，请稍后再试', 429);
-        }
-
         $code = (string) random_int(100000, 999999);
         $gateway = trim((string) ($_ENV['SMS_GATEWAY_URL'] ?? getenv('SMS_GATEWAY_URL') ?: ''));
         if ($gateway === '') {
             throw new RuntimeException('短信服务未配置，请先配置 SMS_GATEWAY_URL', 503);
+        }
+        $interval = $this->intervalKey($scene, $mobile);
+        $reservation = bin2hex(random_bytes(16));
+        if (!Redis::set($interval, $reservation, 'EX', self::SEND_INTERVAL, 'NX')) {
+            throw new InvalidArgumentException('验证码发送过于频繁，请稍后再试', 429);
         }
         $client = new Client(['timeout' => 8, 'http_errors' => false]);
         $headers = ['Accept' => 'application/json', 'Content-Type' => 'application/json'];
@@ -39,16 +40,16 @@ class SmsCodeService
                 'headers' => $headers,
                 'json' => ['mobile' => $mobile, 'code' => $code, 'scene' => $scene],
             ]);
+            if ($response->getStatusCode() < 200 || $response->getStatusCode() >= 300) {
+                throw new RuntimeException('短信发送失败', 503);
+            }
         } catch (Throwable $exception) {
+            Redis::eval("if redis.call('GET', KEYS[1]) == ARGV[1] then return redis.call('DEL', KEYS[1]) else return 0 end", 1, $interval, $reservation);
             throw new RuntimeException('短信发送失败', 503, $exception);
         }
-        if ($response->getStatusCode() < 200 || $response->getStatusCode() >= 300) {
-            throw new RuntimeException('短信发送失败', 503);
-        }
 
-        Redis::setex($key, self::CODE_TTL, password_hash($code, PASSWORD_BCRYPT));
-        Redis::del($this->attemptKey($scene, $mobile));
-        Redis::setex($this->intervalKey($scene, $mobile), self::SEND_INTERVAL, '1');
+        Redis::eval("redis.call('SETEX', KEYS[1], ARGV[1], ARGV[2]); redis.call('DEL', KEYS[2]); return 1", 2,
+            $key, $this->attemptKey($scene, $mobile), self::CODE_TTL, password_hash($code, PASSWORD_BCRYPT));
 
         return ['mobile' => $this->mask($mobile), 'expires_in' => self::CODE_TTL];
     }
@@ -62,19 +63,12 @@ class SmsCodeService
             return false;
         }
         $key = $this->key($scene, $mobile);
-        $hash = (string) (Redis::get($key) ?: '');
         $attemptKey = $this->attemptKey($scene, $mobile);
-        $attempts = (int) (Redis::get($attemptKey) ?: 0);
-        if ($attempts >= 5) {
-            return false;
-        }
+        $hash = (string) (Redis::eval("local hash = redis.call('GET', KEYS[1]); if not hash then return '' end; local attempts = redis.call('INCR', KEYS[2]); if attempts == 1 then redis.call('EXPIRE', KEYS[2], ARGV[1]) end; if attempts > 5 then return '' end; return hash", 2, $key, $attemptKey, self::CODE_TTL) ?: '');
         if ($hash === '' || !password_verify($code, $hash)) {
-            Redis::setex($attemptKey, self::CODE_TTL, (string) ($attempts + 1));
             return false;
         }
-        Redis::del($key);
-        Redis::del($attemptKey);
-        return true;
+        return (int) Redis::eval("if redis.call('GET', KEYS[1]) == ARGV[1] then redis.call('DEL', KEYS[1], KEYS[2]); return 1 end; return 0", 2, $key, $attemptKey, $hash) === 1;
     }
 
     /** 标准化并校验手机号。 */

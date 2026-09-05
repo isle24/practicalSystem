@@ -293,6 +293,7 @@ class InternshipArchiveRecord extends TableRecord
                 if ($planPracticeType === 'graduation') {
                     $student['materials'][] = self::materialState('graduation_appraisal', $target, $materialMap, $sources);
                 }
+                $student['materials'] = self::applyRequirementState($student['materials'], $planPracticeType);
                 $student['compliance'] = self::studentComplianceState($arrangementId, (int) $student['student_id'], $sources);
                 $arrangementRow['students'][] = $student;
             }
@@ -471,7 +472,8 @@ class InternshipArchiveRecord extends TableRecord
         if ($materialType === 'graduation_appraisal') {
             return self::appraisalSourceState(
                 (int) ($target['student_id'] ?? 0),
-                (int) ($target['arrangement_id'] ?? 0)
+                (int) ($target['arrangement_id'] ?? 0),
+                false
             );
         }
 
@@ -533,7 +535,7 @@ class InternshipArchiveRecord extends TableRecord
                 'appraisal_file.download_name as attachment_download_name',
                 'appraisal_file.url as attachment_url',
             ]);
-        if (!$row || !self::targetContext($scope, [
+        if (!self::targetContext($scope, [
             'plan_id' => self::planIdByArrangement($arrangementId),
             'arrangement_id' => $arrangementId,
             'student_id' => $studentId,
@@ -541,7 +543,10 @@ class InternshipArchiveRecord extends TableRecord
             return null;
         }
 
-        $item = self::decodeGenerationRow(self::row($row));
+        $item = $row ? self::decodeGenerationRow(self::row($row)) : [
+            'id' => null, 'student_id' => $studentId, 'arrangement_id' => $arrangementId,
+            'status' => 'draft', 'enterprise_score' => null, 'enterprise_comment' => '',
+        ];
         $evaluation = EnterpriseEvaluationRecord::evaluationByStudentTask($studentId, $arrangementId);
         if ($evaluation && (string) $evaluation->status === 'submitted') {
             $item['enterprise_score'] = (float) $evaluation->total_score;
@@ -1612,13 +1617,14 @@ class InternshipArchiveRecord extends TableRecord
         return ['ready' => $status === 'accept', 'text' => $status ? self::statusText($status) : '待提交'];
     }
 
-    private static function appraisalSourceState(int $studentId, int $arrangementId): array
+    private static function appraisalSourceState(int $studentId, int $arrangementId, bool $requireFinalFile = true): array
     {
         $row = self::queryTable('internship_graduation_appraisal')
             ->where('student_id', $studentId)->where('arrangement_id', $arrangementId)
             ->whereNull('deleted_at')->orderByDesc('id')->first(['status', 'attachment_id']);
         $evaluation = EnterpriseEvaluationRecord::evaluationByStudentTask($studentId, $arrangementId);
-        $appraisalReady = $row && (string) $row->status === 'accept' && self::fileExists((int) $row->attachment_id);
+        $appraisalReady = $row && (string) $row->status === 'accept'
+            && (!$requireFinalFile || self::fileExists((int) $row->attachment_id));
         $evaluationReady = $evaluation && (string) $evaluation->status === 'submitted';
         if (!$row) {
             return ['ready' => false, 'text' => '待填写鉴定表'];
@@ -1627,7 +1633,7 @@ class InternshipArchiveRecord extends TableRecord
             return ['ready' => false, 'text' => '待企业导师提交评价'];
         }
         if (!$appraisalReady) {
-            return ['ready' => false, 'text' => self::statusText((string) $row->status) . '，待上传定稿'];
+            return ['ready' => false, 'text' => self::statusText((string) $row->status) . ($requireFinalFile ? '，待上传定稿' : '')];
         }
         return ['ready' => true, 'text' => '鉴定表和企业评价已完成'];
     }

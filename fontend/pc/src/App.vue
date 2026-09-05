@@ -144,13 +144,13 @@
                     <input v-model="profileState.form.name">
                   </label>
                   <label>
-                    <span>手机号</span>
-                    <input v-model="profileState.form.mobile">
-                  </label>
-                  <label>
                     <span>邮箱</span>
                     <input v-model="profileState.form.email">
                   </label>
+                  <div class="profile-mobile-binding">
+                    <span>手机号</span>
+                    <MobileBinding :mobile="profileState.form.mobile" @verified="data => { profileState.form.mobile = data.user.mobile; loadSwitchableAccounts(); }" />
+                  </div>
                 </div>
               </section>
 
@@ -4360,6 +4360,7 @@ import {
   Workflow,
 } from '@lucide/vue';
 import DesktopWindow from './components/DesktopWindow.vue';
+import MobileBinding from './components/MobileBinding.vue';
 import DesktopLauncher from './components/DesktopLauncher.vue';
 import AdaptiveDesktopGrid from './components/AdaptiveDesktopGrid.vue';
 import AppIcon from './components/AppIcon.vue';

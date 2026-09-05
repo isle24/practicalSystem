@@ -8,6 +8,12 @@ class FileRelation extends BaseModel
     protected $primaryKey = 'id';
     protected $guarded = [];
 
+    /** 查询文件关联的有效业务对象。 */
+    public static function entitiesForFile(int $fileId): array
+    {
+        return self::query()->where('file_id', $fileId)->whereNull('deleted_at')->get(['entity_type', 'entity_id'])->all();
+    }
+
     public static function rowsForEntity(string $entityType, int $entityId, ?string $tag = null): mixed
     {
         $query = self::query()

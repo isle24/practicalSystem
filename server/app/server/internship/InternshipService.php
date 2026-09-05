@@ -1906,6 +1906,7 @@ class InternshipService
         if ($attachmentId && !InternshipArchiveRecord::fileExists($attachmentId)) {
             throw new InvalidArgumentException('鉴定表附件不存在');
         }
+        (new FileService())->assertReadableReferences(['attachment_id' => $attachmentId]);
         $id = $this->optionalInt($request, 'id') ?: InternshipArchiveRecord::graduationAppraisalId($studentId, $arrangementId);
         $this->ensureRecordingTable('internship_graduation_appraisal_recording');
 
@@ -2669,6 +2670,7 @@ class InternshipService
                 if ($values['syllabus_ref_id'] && !InternshipRecord::syllabusGuideBelongsToArrangement((int) $values['syllabus_ref_id'], $arrangementId)) {
                     throw new RuntimeException('实习大纲指导书不存在或不属于当前任务', 40301);
                 }
+                (new FileService())->assertReadableReferences($values);
 
                 $fromStatus = $locked ? (string) ($locked->status ?? 'draft') : 'draft';
                 $values['applicant_id'] = $locked && (int) ($locked->applicant_id ?? 0) > 0
@@ -3687,6 +3689,7 @@ class InternshipService
 
     private function saveRow(string $table, Request $request, array $values, array $unique = []): array
     {
+        (new FileService())->assertReadableReferences($values);
         $id = $this->optionalInt($request, 'id');
         $uuid = $this->nullableString($request, 'uuid', 36);
         $now = $this->now();
@@ -3789,6 +3792,10 @@ class InternshipService
                 $resolvedSignedFileId = $action === 'generate'
                     ? 0
                     : ($signedFileId ?: (!$replaceCurrent ? (int) ($current->signed_file_id ?? 0) : 0));
+                (new FileService())->assertReadableReferences([
+                    'generated_file_id' => $resolvedGeneratedFileId,
+                    'signed_file_id' => $resolvedSignedFileId,
+                ]);
                 $values = array_merge($target, [
                     'name' => $definition['label'],
                     'material_type' => $materialType,

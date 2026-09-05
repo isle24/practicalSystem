@@ -777,7 +777,6 @@ class PracticeService
 
         $status = $this->enum($request, 'status', ['draft', 'wait'], 'draft');
         [$scoreItems, $scoreValue] = $this->projectScoreInput($request, (int) ($project['plan_id'] ?? 0), $status);
-        $existingId = PracticeRecord::currentProjectScoreId($this->moduleType, (int) $project['id'], $studentId);
         $values = [
             'uuid' => $this->uuid(),
             'module_type' => $this->moduleType,
@@ -800,10 +799,13 @@ class PracticeService
             'created_at' => $this->now(),
         ];
 
-        $lockId = $existingId ?: max(1, (int) sprintf('%u', crc32($this->moduleType . ':' . (int) $project['id'] . ':' . $studentId)));
-        return $this->workflowLock('practice', $this->entityType('score'), $lockId, function () use ($existingId, $status, $values): array {
-            return PracticeRecord::connection()->transaction(function () use ($existingId, $status, $values): array {
-                $id = $existingId;
+        $lockId = max(1, (int) sprintf('%u', crc32($this->moduleType . ':' . (int) $project['id'] . ':' . $studentId)));
+        return $this->workflowLock('practice', $this->entityType('score'), $lockId, function () use ($status, $values): array {
+            return PracticeRecord::connection()->transaction(function () use ($status, $values): array {
+                if (!PracticeRecord::lockActiveRowByEntity($this->moduleType, 'project', (int) $values['project_id'])) {
+                    throw new RuntimeException('项目已变更，请刷新后重试', 409);
+                }
+                $id = PracticeRecord::currentProjectScoreId($this->moduleType, (int) $values['project_id'], (int) $values['student_id']);
                 $fromStatus = 'draft';
                 if ($id > 0) {
                     $row = PracticeRecord::lockActiveRowByEntity($this->moduleType, 'score', $id);
@@ -937,8 +939,19 @@ class PracticeService
         $status = $this->enum($request, 'status', ['draft', 'wait'], 'wait');
         $values = $this->executionValues($request, $execution, $project, $projectStudent, $studentId, $status);
 
-        $save = function () use ($execution, $id, $values, $status): array {
-            return PracticeRecord::connection()->transaction(function () use ($execution, $id, $values, $status): array {
+        $projectId = (int) $project['id'];
+        $save = function () use ($execution, $id, $values, $status, $projectId, $studentId): array {
+            return PracticeRecord::connection()->transaction(function () use ($execution, $id, $values, $status, $projectId, $studentId): array {
+            if ($execution === 'report') {
+                if (!PracticeRecord::lockActiveRowByEntity($this->moduleType, 'project', $projectId)) {
+                    throw new RuntimeException('项目已变更，请刷新后重试', 409);
+                }
+                $currentId = PracticeRecord::currentProjectReportId($this->moduleType, $projectId, $studentId);
+                if ($id && $currentId !== $id) {
+                    throw new InvalidArgumentException('报告已变更，请刷新后重试', 409);
+                }
+                $id = $currentId ?: null;
+            }
             $fromStatus = 'draft';
             if ($id) {
                 $row = PracticeRecord::lockExecutionRow($this->scopeContext(), $this->moduleType, $execution, $id);
@@ -966,6 +979,10 @@ class PracticeService
             });
         };
 
+        if ($execution === 'report') {
+            $lockId = max(1, (int) sprintf('%u', crc32($this->moduleType . ':' . $projectId . ':' . $studentId)));
+            return $this->workflowLock('practice', 'project_report', $lockId, $save);
+        }
         return $id
             ? $this->workflowLock('practice', $this->executionEntityType($execution), $id, $save)
             : $save();

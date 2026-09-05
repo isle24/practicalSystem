@@ -19,6 +19,7 @@ class FileRecord extends BaseModel
             ->join('file_blob', 'file.blob_id', '=', 'file_blob.id')
             ->where('file.id', $fileId)
             ->whereNull('file.deleted_at')
+            ->whereNull('file_blob.deleted_at')
             ->first([
                 'file.id',
                 'file.uuid',
@@ -43,6 +44,18 @@ class FileRecord extends BaseModel
                 'file_blob.block',
                 'file_blob.ref_count',
             ]);
+    }
+
+    /** 查询当前学校中静态地址对应的有效文件引用。 */
+    public static function idsByUrl(string $url): array
+    {
+        return self::query()->where('url', $url)->whereNull('deleted_at')->pluck('id')->all();
+    }
+
+    /** 秒传仅复用当前上传人已持有的文件。 */
+    public static function ownsBlob(int $blobId, int $accountId): bool
+    {
+        return self::query()->where('blob_id', $blobId)->where('uploader_id', $accountId)->whereNull('deleted_at')->exists();
     }
 
     /** 查询多个有效文件及物理存储信息。 */

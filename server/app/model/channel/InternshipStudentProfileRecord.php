@@ -7,8 +7,6 @@ use RuntimeException;
 /** 实习学生任务的当前有效信息和历史变更查询。 */
 class InternshipStudentProfileRecord extends TableRecord
 {
-    private static array $schemaReady = [];
-
     /** 查询学生任务当前有效资料。 */
     public static function currentByTask(int $studentId, int $arrangementId, bool $lock = false): ?object
     {
@@ -341,22 +339,7 @@ class InternshipStudentProfileRecord extends TableRecord
 
     private static function ensureTable(): void
     {
-        $connection = self::connection();
-        $key = method_exists($connection, 'getDatabaseName') ? (string) $connection->getDatabaseName() : spl_object_hash($connection);
-        if (isset(self::$schemaReady[$key])) {
-            return;
-        }
-        $connection->statement("CREATE TABLE IF NOT EXISTS `internship_student_profile` (
-            `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT, `uuid` CHAR(36) DEFAULT NULL, `name` VARCHAR(180) DEFAULT NULL,
-            `code` VARCHAR(120) DEFAULT NULL, `status` VARCHAR(40) DEFAULT 'active', `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
-            `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, `deleted_at` DATETIME DEFAULT NULL,
-            `student_id` BIGINT UNSIGNED NOT NULL, `arrangement_id` BIGINT UNSIGNED NOT NULL, `pair_id` BIGINT UNSIGNED DEFAULT NULL,
-            `company_id` BIGINT UNSIGNED DEFAULT NULL, `base_id` BIGINT UNSIGNED DEFAULT NULL, `enterprise_mentor_id` BIGINT UNSIGNED DEFAULT NULL,
-            `location` VARCHAR(255) DEFAULT NULL, `position` VARCHAR(180) DEFAULT NULL, `start_date` DATE DEFAULT NULL, `end_date` DATE DEFAULT NULL,
-            `effective_at` DATETIME DEFAULT NULL, `terminated_at` DATETIME DEFAULT NULL, `termination_reason` TEXT DEFAULT NULL,
-            PRIMARY KEY (`id`), UNIQUE KEY `uk_student_arrangement` (`student_id`, `arrangement_id`), KEY `idx_profile_mentor` (`enterprise_mentor_id`, `status`), KEY `idx_profile_dates` (`start_date`, `end_date`, `status`)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-        self::$schemaReady[$key] = true;
+        self::requireTables(['internship_student_profile']);
     }
 
     /** 生成学生资料 UUID。 */

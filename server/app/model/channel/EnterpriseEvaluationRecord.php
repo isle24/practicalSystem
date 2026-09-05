@@ -7,8 +7,6 @@ use RuntimeException;
 /** 企业导师评价、邀请和验证会话查询。 */
 class EnterpriseEvaluationRecord extends TableRecord
 {
-    private static array $schemaReady = [];
-
     /** 查询企业评价邀请。 */
     public static function invitationByToken(string $token, bool $lock = false): ?object
     {
@@ -22,6 +20,8 @@ class EnterpriseEvaluationRecord extends TableRecord
             ->whereNull('invitation.revoked_at')
             ->whereNull('invitation.deleted_at')
             ->whereNull('arrangement.deleted_at')
+            ->where('enterprise_mentor.status', 'enabled')
+            ->whereColumn('invitation.mobile', 'enterprise_mentor.phone')
             ->whereNull('enterprise_mentor.deleted_at');
         self::applyGraduationScope($query);
         if ($lock) {
@@ -45,6 +45,7 @@ class EnterpriseEvaluationRecord extends TableRecord
             ->where('pair.status', 'active')
             ->whereNull('pair.deleted_at')
             ->whereNull('arrangement.deleted_at')
+            ->where('enterprise_mentor.status', 'enabled')
             ->whereNull('enterprise_mentor.deleted_at')
             ->whereNull('students.deleted_at');
         self::applyGraduationScope($query);
@@ -72,6 +73,8 @@ class EnterpriseEvaluationRecord extends TableRecord
             ->whereNull('invitation.deleted_at')
             ->where('invitation.expires_at', '>', $now)
             ->whereNull('arrangement.deleted_at')
+            ->where('enterprise_mentor.status', 'enabled')
+            ->whereColumn('invitation.mobile', 'enterprise_mentor.phone')
             ->whereNull('enterprise_mentor.deleted_at');
         self::applyGraduationScope($query);
 
@@ -92,7 +95,7 @@ class EnterpriseEvaluationRecord extends TableRecord
     }
 
     /** 查询已验证的企业评价会话。 */
-    public static function sessionByToken(string $sessionToken, string $now): ?object
+    public static function sessionByToken(string $sessionToken, string $now, bool $lock = false): ?object
     {
         self::ensureTable();
         $query = self::queryTable('internship_enterprise_evaluation_session as session')
@@ -104,12 +107,17 @@ class EnterpriseEvaluationRecord extends TableRecord
             ->where('invitation.status', 'enabled')->whereNull('invitation.revoked_at')
             ->where('invitation.expires_at', '>', $now)
             ->whereNull('session.deleted_at')->whereNull('invitation.deleted_at')
+            ->where('enterprise_mentor.status', 'enabled')
+            ->whereColumn('invitation.mobile', 'enterprise_mentor.phone')
             ->whereNull('enterprise_mentor.deleted_at')->whereNull('arrangement.deleted_at')
             ->whereColumn('invitation.mobile', 'session.mobile');
         self::applyGraduationScope($query);
 
+        if ($lock) {
+            $query->lockForUpdate();
+        }
         return $query->first([
-                'session.*', 'invitation.arrangement_id', 'invitation.enterprise_mentor_id', 'invitation.token',
+                'session.*', 'session.id as session_id', 'invitation.arrangement_id', 'invitation.enterprise_mentor_id', 'invitation.token',
                 'enterprise_mentor.name as mentor_name', 'enterprise_mentor.phone as mentor_phone',
                 'arrangement.title as arrangement_title',
             ]);
@@ -238,12 +246,23 @@ class EnterpriseEvaluationRecord extends TableRecord
     }
 
     /** 保存企业评价。 */
-    public static function saveEvaluation(int $studentId, int $arrangementId, int $pairId, int $mentorId, array $values, string $now): int
+    public static function saveEvaluation(int $studentId, int $arrangementId, int $pairId, int $mentorId, array $values, string $now, string $sessionToken): int
     {
         self::ensureTable();
         self::ensureRecordingTable('internship_enterprise_evaluation_recording');
 
-        return (int) self::connection()->transaction(function () use ($studentId, $arrangementId, $pairId, $mentorId, $values, $now): int {
+        return (int) self::connection()->transaction(function () use ($studentId, $arrangementId, $pairId, $mentorId, $values, $now, $sessionToken): int {
+            $session = self::sessionByToken($sessionToken, date('Y-m-d H:i:s'), true);
+            if (!$session || (int) $session->arrangement_id !== $arrangementId || (int) $session->enterprise_mentor_id !== $mentorId) {
+                throw new RuntimeException('企业评价验证已失效，请重新获取邀请', 403);
+            }
+            $pair = self::studentPairForSession($session, $studentId, true);
+            if (!$pair || (int) $pair->pair_id !== $pairId) {
+                throw new RuntimeException('学生绑定已变化，请刷新后重试', 409);
+            }
+            $values['verification_id'] = (int) $session->session_id;
+            $values['evaluator_mobile'] = (string) $session->mobile;
+            $values['evaluator_name'] = (string) $session->mentor_name;
             $existing = self::queryTable('internship_enterprise_evaluation')
                 ->where('student_id', $studentId)->where('arrangement_id', $arrangementId)
                 ->whereNull('deleted_at')->lockForUpdate()->first();
@@ -434,28 +453,7 @@ class EnterpriseEvaluationRecord extends TableRecord
 
     private static function ensureTable(): void
     {
-        $connection = self::connection();
-        $key = method_exists($connection, 'getDatabaseName') ? (string) $connection->getDatabaseName() : spl_object_hash($connection);
-        if (isset(self::$schemaReady[$key])) return;
-        $connection->statement("CREATE TABLE IF NOT EXISTS `internship_enterprise_evaluation_invitation` (
-            `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT, `uuid` CHAR(36) DEFAULT NULL, `name` VARCHAR(180) DEFAULT NULL, `code` VARCHAR(120) DEFAULT NULL,
-            `status` VARCHAR(40) DEFAULT 'enabled', `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP, `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, `deleted_at` DATETIME DEFAULT NULL,
-            `arrangement_id` BIGINT UNSIGNED NOT NULL, `enterprise_mentor_id` BIGINT UNSIGNED NOT NULL, `token` VARCHAR(180) NOT NULL, `mobile` VARCHAR(40) DEFAULT NULL, `expires_at` DATETIME NOT NULL, `created_by` BIGINT UNSIGNED DEFAULT NULL, `revoked_at` DATETIME DEFAULT NULL,
-            PRIMARY KEY (`id`), UNIQUE KEY `uk_evaluation_invitation_token` (`token`), KEY `idx_evaluation_invitation_target` (`arrangement_id`, `enterprise_mentor_id`, `status`, `expires_at`)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-        $connection->statement("CREATE TABLE IF NOT EXISTS `internship_enterprise_evaluation_session` (
-            `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT, `uuid` CHAR(36) DEFAULT NULL, `name` VARCHAR(180) DEFAULT NULL, `code` VARCHAR(120) DEFAULT NULL, `status` VARCHAR(40) DEFAULT 'enabled', `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP, `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, `deleted_at` DATETIME DEFAULT NULL,
-            `invitation_id` BIGINT UNSIGNED NOT NULL, `mobile` VARCHAR(40) NOT NULL, `code_hash` VARCHAR(255) NOT NULL, `code_sent_at` DATETIME DEFAULT NULL, `verified_at` DATETIME DEFAULT NULL, `expires_at` DATETIME NOT NULL, `session_token` VARCHAR(180) DEFAULT NULL, `attempts` INT UNSIGNED DEFAULT 0,
-            PRIMARY KEY (`id`), UNIQUE KEY `uk_evaluation_session_token` (`session_token`), KEY `idx_evaluation_session_invitation` (`invitation_id`, `mobile`, `expires_at`)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-        $connection->statement("CREATE TABLE IF NOT EXISTS `internship_enterprise_evaluation` (
-            `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT, `uuid` CHAR(36) DEFAULT NULL, `name` VARCHAR(180) DEFAULT NULL, `code` VARCHAR(120) DEFAULT NULL, `status` VARCHAR(40) DEFAULT 'submitted', `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP, `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, `deleted_at` DATETIME DEFAULT NULL,
-            `student_id` BIGINT UNSIGNED NOT NULL, `arrangement_id` BIGINT UNSIGNED NOT NULL, `pair_id` BIGINT UNSIGNED DEFAULT NULL, `enterprise_mentor_id` BIGINT UNSIGNED NOT NULL, `evaluator_name` VARCHAR(80) DEFAULT NULL, `evaluator_mobile` VARCHAR(40) DEFAULT NULL, `verification_id` BIGINT UNSIGNED DEFAULT NULL, `criteria_json` JSON DEFAULT NULL, `total_score` DECIMAL(5,2) DEFAULT NULL, `comment` TEXT DEFAULT NULL, `submitted_at` DATETIME DEFAULT NULL, `submitted_ip` VARCHAR(80) DEFAULT NULL,
-            PRIMARY KEY (`id`), UNIQUE KEY `uk_enterprise_evaluation_student_task` (`student_id`, `arrangement_id`), KEY `idx_enterprise_evaluation_mentor` (`enterprise_mentor_id`, `status`)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-        self::ensureRecordingTable('internship_enterprise_evaluation_recording');
-        $connection->statement("CREATE TABLE IF NOT EXISTS `internship_enterprise_evaluation_rule` (`id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT, `uuid` CHAR(36) DEFAULT NULL, `name` VARCHAR(180) DEFAULT NULL, `code` VARCHAR(120) DEFAULT NULL, `status` VARCHAR(40) DEFAULT 'enabled', `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP, `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, `deleted_at` DATETIME DEFAULT NULL, `practice_type` VARCHAR(40) DEFAULT 'graduation', `criteria_json` JSON DEFAULT NULL, `total_score` DECIMAL(5,2) DEFAULT 30, `created_by` BIGINT UNSIGNED DEFAULT NULL, PRIMARY KEY (`id`), UNIQUE KEY `uk_enterprise_evaluation_rule_type` (`practice_type`, `status`)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-        self::$schemaReady[$key] = true;
+        self::requireTables(['internship_enterprise_evaluation_invitation', 'internship_enterprise_evaluation_session', 'internship_enterprise_evaluation', 'internship_enterprise_evaluation_recording', 'internship_enterprise_evaluation_rule']);
     }
 
     /** 生成企业评价 UUID。 */

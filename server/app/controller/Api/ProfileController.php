@@ -7,6 +7,7 @@ use app\controller\Api\Concerns\Responds;
 use app\model\channel\Account;
 use app\model\channel\TableRecord as ChannelTable;
 use app\model\channel\User;
+use app\server\auth\AccountMobileService;
 use app\server\auth\AuthService;
 use app\server\auth\DeviceBlacklist;
 use app\server\CurrentContext;
@@ -63,10 +64,16 @@ class ProfileController
             $now = date('Y-m-d H:i:s');
 
             ChannelTable::connection()->transaction(function () use ($userId, $accountId, $name, $avatar, $mobile, $email, $layout, $notify, $now): void {
+                $current = User::lockProfile($userId);
+                if (!$current) {
+                    throw new \RuntimeException('用户不存在或已停用', 403);
+                }
+                if ($mobile !== null && (string) $current->mobile !== (string) $mobile) {
+                    throw new \RuntimeException('手机号变更需要短信验证，请使用手机号绑定入口', 409);
+                }
                 User::updateActiveProfile($userId, [
                     'name' => $name,
                     'avatar' => $avatar,
-                    'mobile' => $mobile,
                     'email' => $email,
                     'updated_at' => $now,
                 ]);
@@ -232,11 +239,41 @@ class ProfileController
         }
     }
 
+    /** 发送手机号绑定验证码。 */
+    #[OperationLog('发送手机号绑定验证码')]
+    public function sendMobileCode(Request $request): Response
+    {
+        try {
+            return $this->ok((new AccountMobileService())->send((string) $request->input('mobile', '')));
+        } catch (Throwable $exception) {
+            return $this->mobileFailure($exception);
+        }
+    }
+
+    /** 验证并绑定当前用户手机号。 */
+    #[OperationLog('验证并绑定手机号')]
+    public function verifyMobile(Request $request): Response
+    {
+        try {
+            (new AccountMobileService())->verify((string) $request->input('mobile', ''), (string) $request->input('sms_code', ''));
+            return $this->ok($this->profileData(), '手机号已验证');
+        } catch (Throwable $exception) {
+            return $this->mobileFailure($exception);
+        }
+    }
+
+    /** 返回手机号验证错误。 */
+    private function mobileFailure(Throwable $exception): Response
+    {
+        $status = in_array((int) $exception->getCode(), [401, 403, 409, 429, 503], true) ? (int) $exception->getCode() : 400;
+        return $this->fail($status * 100, $exception->getMessage(), $status);
+    }
+
     private function profileData(): array
     {
         $accountId = CurrentContext::accountId();
         $userId = CurrentContext::userId();
-        $user = User::activeById((int) $userId, ['id', 'name', 'avatar', 'mobile', 'email']);
+        $user = User::activeById((int) $userId, ['id', 'name', 'avatar', 'mobile', 'email', 'verified_mobile']);
         $desktopRow = ChannelTable::latestDesktopConfig((int) $accountId, ['layout_json']);
         $notifyRows = ChannelTable::notifySettings((int) $accountId);
 
@@ -255,6 +292,7 @@ class ProfileController
                 'name' => $user?->name ?? '',
                 'avatar' => $user?->avatar ?? '',
                 'mobile' => $user?->mobile ?? '',
+                'mobile_verified' => !empty($user?->mobile) && $user->mobile === $user->verified_mobile,
                 'email' => $user?->email ?? '',
             ],
             'desktop' => [

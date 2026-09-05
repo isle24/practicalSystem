@@ -5,8 +5,6 @@ namespace app\model\channel;
 /** 学生个人实习信息变更申请及历史记录。 */
 class InternshipStudentChangeRecord extends TableRecord
 {
-    private static array $schemaReady = [];
-
     /** 查询当前学校范围内的变更申请。 */
     public static function page(array $scope, array $filters): array
     {
@@ -144,6 +142,7 @@ class InternshipStudentChangeRecord extends TableRecord
                 : $query->whereRaw('1 = 0');
             return;
         }
+        $query->where('change.status', '<>', 'draft');
         if ($role === 'teacher') {
             $teacherId = (int) ($scope['teacher_id'] ?? 0);
             if ($teacherId <= 0) {
@@ -226,22 +225,7 @@ class InternshipStudentChangeRecord extends TableRecord
 
     private static function ensureTable(): void
     {
-        $connection = self::connection();
-        $key = method_exists($connection, 'getDatabaseName') ? (string) $connection->getDatabaseName() : spl_object_hash($connection);
-        if (isset(self::$schemaReady[$key])) {
-            return;
-        }
-        $connection->statement("CREATE TABLE IF NOT EXISTS `internship_student_change` (
-            `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT, `uuid` CHAR(36) DEFAULT NULL, `name` VARCHAR(180) DEFAULT NULL,
-            `code` VARCHAR(120) DEFAULT NULL, `status` VARCHAR(40) DEFAULT 'draft', `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
-            `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, `deleted_at` DATETIME DEFAULT NULL,
-            `student_id` BIGINT UNSIGNED NOT NULL, `arrangement_id` BIGINT UNSIGNED NOT NULL, `profile_id` BIGINT UNSIGNED DEFAULT NULL,
-            `change_type` VARCHAR(40) NOT NULL, `before_payload` JSON DEFAULT NULL, `after_payload` JSON DEFAULT NULL, `reason` TEXT DEFAULT NULL,
-            `effective_date` DATE DEFAULT NULL, `submitter_id` BIGINT UNSIGNED DEFAULT NULL, `reviewer_id` BIGINT UNSIGNED DEFAULT NULL,
-            `review_opinion` TEXT DEFAULT NULL, `submitted_at` DATETIME DEFAULT NULL, `reviewed_at` DATETIME DEFAULT NULL,
-            PRIMARY KEY (`id`), UNIQUE KEY `uk_uuid` (`uuid`), KEY `idx_student_change_task` (`student_id`, `arrangement_id`, `status`), KEY `idx_student_change_review` (`status`, `reviewer_id`, `updated_at`)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-        self::$schemaReady[$key] = true;
+        self::requireTables(['internship_student_change', 'internship_student_change_recording']);
     }
 
     /** 生成变更申请 UUID。 */
