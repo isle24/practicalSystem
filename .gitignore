@@ -1,0 +1,29 @@
+.DS_Store
+
+# local environment
+server/.env
+server/.env.*
+!server/.env.example
+
+# dependencies
+server/vendor/
+fontend/**/node_modules/
+
+# build output
+fontend/**/dist/
+fontend/desktop/src-tauri/target/
+fontend/desktop/src-tauri/gen/
+fontend/desktop/src-tauri/icons/android/
+fontend/desktop/src-tauri/icons/ios/
+
+# runtime/cache/logs/uploads
+server/runtime/
+server/public/files/
+tmp/
+
+# editor/system
+.idea/
+.vscode/
+.worktrees/
+*.log
+test/*

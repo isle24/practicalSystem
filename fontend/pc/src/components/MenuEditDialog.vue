@@ -1,0 +1,133 @@
+<template>
+  <OperationDialog
+    :visible="visible"
+    :title="mode === 'edit' ? '编辑菜单' : '新增菜单'"
+    dialog-class="menu-dialog"
+    @close="emit('close')"
+  >
+    <div class="operation-form menu-dialog-form">
+      <label>
+        <span>名称</span>
+        <input v-model="form.name">
+      </label>
+      <label>
+        <span>权限码</span>
+        <input v-model="form.code" placeholder="如 internship:apply">
+      </label>
+      <label>
+        <span>路径</span>
+        <input v-model="form.path" placeholder="页面菜单填写路由，按钮可为空">
+      </label>
+      <label>
+        <span>外链地址</span>
+        <input v-model="form.url" placeholder="需要打开文件或网址时填写">
+      </label>
+      <IconConfigField
+        v-model:icon="form.icon"
+        class="span-2"
+        :icon-url="form.icon_url"
+        upload-label="菜单图标"
+        :resolve-icon="resolveIcon"
+        :uploading="iconUploading"
+        :backend-url="backendUrl"
+        @select="file => emit('select-icon', file)"
+      />
+      <label>
+        <span>作为模块</span>
+        <el-switch
+          v-model="form.is_module"
+          active-value="true"
+          inactive-value="false"
+          active-text="是"
+          inactive-text="否"
+        />
+      </label>
+      <label>
+        <span>模块标识</span>
+        <input v-model="form.module_key" :disabled="form.is_module !== 'true'" placeholder="为空时自动使用菜单ID">
+      </label>
+      <label>
+        <span>父级</span>
+        <el-tree-select
+          v-model="form.parent_id"
+          :data="parentOptions"
+          :props="treeProps"
+          check-strictly
+          default-expand-all
+          filterable
+          node-key="id"
+          placeholder="请选择父级菜单"
+        />
+      </label>
+      <label>
+        <span>平台</span>
+        <el-select v-model="form.platform" placeholder="请选择平台">
+          <el-option label="PC" value="pc" />
+          <el-option label="H5" value="h5" />
+          <el-option label="双端" value="both" />
+        </el-select>
+      </label>
+      <label>
+        <span>类型</span>
+        <el-radio-group v-model="form.type" class="menu-type-radios">
+          <el-radio-button label="directory">目录</el-radio-button>
+          <el-radio-button label="menu">菜单</el-radio-button>
+          <el-radio-button label="list">列表</el-radio-button>
+          <el-radio-button label="button">按钮</el-radio-button>
+        </el-radio-group>
+      </label>
+      <label>
+        <span>排序</span>
+        <input v-model="form.sort" type="number">
+      </label>
+      <label>
+        <span>可见</span>
+        <el-switch
+          v-model="form.visible"
+          active-value="true"
+          inactive-value="false"
+          active-text="是"
+          inactive-text="否"
+        />
+      </label>
+      <label>
+        <span>状态</span>
+        <el-switch
+          v-model="form.status"
+          active-value="enabled"
+          inactive-value="disabled"
+          active-text="启用"
+          inactive-text="禁用"
+        />
+      </label>
+      <small class="menu-module-hint">
+        勾选作为模块后，该菜单会出现在启动台，可由用户添加到桌面；未上传图标时使用默认图标。
+      </small>
+    </div>
+    <template #footer>
+      <el-button @click="emit('close')">取消</el-button>
+      <el-button type="primary" :loading="loading" @click="emit('save')">
+        保存
+      </el-button>
+    </template>
+  </OperationDialog>
+</template>
+
+<script setup>
+import IconConfigField from './IconConfigField.vue';
+import OperationDialog from './OperationDialog.vue';
+
+defineProps({
+  visible: { type: Boolean, default: false },
+  mode: { type: String, default: 'create' },
+  form: { type: Object, required: true },
+  parentOptions: { type: Array, default: () => [] },
+  treeProps: { type: Object, required: true },
+  resolveIcon: { type: Function, required: true },
+  iconUploading: { type: Boolean, default: false },
+  loading: { type: Boolean, default: false },
+  backendUrl: { type: Function, required: true },
+});
+
+const emit = defineEmits(['close', 'save', 'select-icon']);
+</script>
