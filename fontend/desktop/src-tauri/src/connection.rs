@@ -108,7 +108,7 @@ pub async fn connect(origin: Url, port: u16) -> Result<Connection, String> {
     let endpoint = origin
         .join("api/config/login-page")
         .map_err(|_| "学校地址格式不正确")?;
-    let response = client
+    let mut response = client
         .get(endpoint)
         .timeout(Duration::from_secs(15))
         .send()
@@ -120,10 +120,15 @@ pub async fn connect(origin: Url, port: u16) -> Result<Connection, String> {
             response.status().as_u16()
         ));
     }
-    let payload: serde_json::Value = response
-        .json()
-        .await
-        .map_err(|_| "该地址未返回实践管理系统的接口数据")?;
+    let mut bytes = Vec::new();
+    while let Some(chunk) = response.chunk().await.map_err(|_| "读取学校信息失败")? {
+        if bytes.len() + chunk.len() > 65536 {
+            return Err("学校配置响应过大，请检查所填域名".into());
+        }
+        bytes.extend_from_slice(&chunk);
+    }
+    let payload: serde_json::Value =
+        serde_json::from_slice(&bytes).map_err(|_| "该地址未返回实践管理系统的接口数据")?;
     let name = payload
         .get("data")
         .and_then(|data| data.get("school_name"))

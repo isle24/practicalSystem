@@ -7,7 +7,8 @@
     "dev": "tauri dev",
     "build": "node scripts/build.mjs",
     "bundle": "tauri build",
-    "bundle:mac": "tauri build --target aarch64-apple-darwin --bundles app,dmg",
+    "bundle:mac": "CI=true tauri build --target aarch64-apple-darwin --bundles app,dmg",
+    "bundle:mac:universal": "CI=true tauri build --target universal-apple-darwin --bundles app,dmg",
     "icons": "node scripts/icons.mjs && tauri icon assets/app-icon.png",
     "tauri": "tauri"
   },

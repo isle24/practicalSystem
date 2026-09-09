@@ -1,6 +1,6 @@
-use crate::gateway;
+use crate::{downloads::Downloads, gateway};
 use tauri::{
-    webview::{DownloadEvent, NewWindowFeatures, NewWindowResponse},
+    webview::{NewWindowFeatures, NewWindowResponse},
     AppHandle, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder,
 };
 use tauri_plugin_dialog::DialogExt;
@@ -23,6 +23,7 @@ pub fn build(
     let popup_app = app.clone();
     let popup_local = local.clone();
     let popup_remote = remote.clone();
+    let downloads = Downloads::default();
     let context = serde_json::json!({ "serverOrigin": remote.origin().ascii_serialization(), "localOrigin": local.origin().ascii_serialization() });
     let mut builder = WebviewWindowBuilder::new(app, label, WebviewUrl::External(url))
         .title("实践管理系统")
@@ -64,24 +65,7 @@ pub fn build(
             let title: String = title.chars().take(100).collect();
             if !title.is_empty() { let _ = window.set_title(&title); }
         })
-        .on_download(move |window, event| {
-            match event {
-                DownloadEvent::Requested { destination, .. } => {
-                    let Some(directory) = window.app_handle().path().download_dir().ok().map(|path| path.join("实践管理系统")) else { return false; };
-                    if std::fs::create_dir_all(&directory).is_err() { return false; }
-                    let name = destination.file_name().and_then(|name| name.to_str()).unwrap_or("download");
-                    let name: String = name.chars().filter(|c| !c.is_control()).map(|c| if "<>:\"/\\|?*".contains(c) { '_' } else { c }).take(160).collect();
-                    let name = format!("{}-{}", &uuid::Uuid::new_v4().simple().to_string()[..12], name);
-                    *destination = directory.join(&name);
-                }
-                DownloadEvent::Finished { success, .. } => {
-                    let message = if success { "文件已保存至下载文件夹中的“实践管理系统”目录" } else { "文件下载失败，请检查网络后重试" };
-                    window.app_handle().dialog().message(message).title("文件下载").show(|_| {});
-                }
-                _ => {}
-            }
-            true
-        });
+        .on_download(move |webview, event| downloads.handle(webview, event));
     if let Some(features) = features {
         builder = builder.window_features(features);
     }

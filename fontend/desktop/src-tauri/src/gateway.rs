@@ -40,14 +40,8 @@ impl Drop for Gateway {
 }
 
 /// 启动只监听回环地址的会话通道，PC 页面来自安装包。
-pub async fn start(connection: Connection) -> Result<Gateway, String> {
-    let listener =
-        match TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, connection.school.port)).await {
-            Ok(listener) => listener,
-            Err(_) => TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0))
-                .await
-                .map_err(|_| "无法建立本机连接通道")?,
-        };
+pub async fn start(connection: Connection, reserved_ports: &[u16]) -> Result<Gateway, String> {
+    let listener = bind_school_port(connection.school.port, reserved_ports).await?;
     let port = listener
         .local_addr()
         .map_err(|_| "无法读取本机连接端口")?
@@ -81,6 +75,29 @@ pub async fn start(connection: Connection) -> Result<Gateway, String> {
         port,
         shutdown: Some(shutdown),
     })
+}
+
+/// 保留学校独立的网页存储来源，避开其他学校的历史端口。
+async fn bind_school_port(preferred: u16, reserved: &[u16]) -> Result<TcpListener, String> {
+    if preferred != 0 && !reserved.contains(&preferred) {
+        if let Ok(listener) = TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, preferred)).await {
+            return Ok(listener);
+        }
+    }
+    for _ in 0..32 {
+        let listener = TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0))
+            .await
+            .map_err(|_| "无法建立本机连接通道")?;
+        if !reserved.contains(
+            &listener
+                .local_addr()
+                .map_err(|_| "无法读取本机连接端口")?
+                .port(),
+        ) {
+            return Ok(listener);
+        }
+    }
+    Err("无法分配学校独立连接端口，请稍后重试".into())
 }
 
 /// 验证本机入口、会话 Cookie 和来源后分发请求。
