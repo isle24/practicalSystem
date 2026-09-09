@@ -1,6 +1,7 @@
 use crate::{downloads::Downloads, gateway};
+use std::sync::Arc;
 use tauri::{
-    webview::{NewWindowFeatures, NewWindowResponse},
+    webview::{NewWindowFeatures, NewWindowResponse, PageLoadEvent},
     AppHandle, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder,
 };
 use tauri_plugin_dialog::DialogExt;
@@ -23,7 +24,8 @@ pub fn build(
     let popup_app = app.clone();
     let popup_local = local.clone();
     let popup_remote = remote.clone();
-    let downloads = Downloads::default();
+    let downloads = Arc::new(Downloads::default());
+    let document_state = downloads.clone();
     let context = serde_json::json!({ "serverOrigin": remote.origin().ascii_serialization(), "localOrigin": local.origin().ascii_serialization() });
     let mut builder = WebviewWindowBuilder::new(app, label, WebviewUrl::External(url))
         .title("实践管理系统")
@@ -64,6 +66,11 @@ pub fn build(
         .on_document_title_changed(|window, title| {
             let title: String = title.chars().take(100).collect();
             if !title.is_empty() { let _ = window.set_title(&title); }
+        })
+        .on_page_load(move |_, page| {
+            if page.event() == PageLoadEvent::Finished && page.url().as_str() != "about:blank" {
+                document_state.mark_document_loaded();
+            }
         })
         .on_download(move |webview, event| downloads.handle(webview, event));
     if let Some(features) = features {
