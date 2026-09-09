@@ -1,4 +1,5 @@
 mod connection;
+mod downloads;
 mod gateway;
 mod windows;
 
@@ -99,7 +100,13 @@ async fn connect_school(
         .map_or(0, |school| school.port);
     let connection = connection::connect(origin, preferred_port).await?;
     let mut profile = connection.school.clone();
-    let gateway = gateway::start(connection).await?;
+    let reserved_ports: Vec<u16> = settings
+        .schools
+        .iter()
+        .filter(|school| school.origin != profile.origin)
+        .map(|school| school.port)
+        .collect();
+    let gateway = gateway::start(connection, &reserved_ports).await?;
     profile.port = gateway.port;
     settings.last_origin = profile.origin.clone();
     settings
