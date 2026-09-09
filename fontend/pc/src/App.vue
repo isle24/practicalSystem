@@ -4390,7 +4390,7 @@ import { DEFAULT_DESKTOP_MODULE_IDS, useDesktopLauncher } from './composables/us
 import { usePermissions } from './composables/usePermissions';
 import { buildLaunchableMenuModules, mergeLaunchableModules as mergeMenuModules } from './utils/menuModules';
 import { tableSequence } from './utils/table';
-import { backendUrl } from './api/client';
+import { backendUrl, frontendPublicUrl } from './api/client';
 import {
   changeOwnPassword,
   changeAdminAccountStatus,
@@ -9335,7 +9335,7 @@ async function copyAdminLoginUrl(row) {
 }
 
 function frontendLoginReturnUrl() {
-  return `${window.location.origin}${window.location.pathname}`;
+  return frontendPublicUrl();
 }
 
 function buildPasskeyUrl(passkey) {

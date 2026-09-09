@@ -7,6 +7,11 @@ export function backendUrl(path = '') {
     return '';
   }
   if (/^https?:\/\//i.test(value)) {
+    const desktop = window.__PRACTICAL_DESKTOP__;
+    if (desktop && new URL(value).origin === desktop.serverOrigin) {
+      const url = new URL(value);
+      return new URL(`${url.pathname}${url.search}${url.hash}`, desktop.localOrigin).href;
+    }
     return value;
   }
 
@@ -15,6 +20,11 @@ export function backendUrl(path = '') {
     || (/^https?:\/\//i.test(apiBase) ? apiBase : '')
     || (import.meta.env.DEV ? 'http://127.0.0.1:8787' : window.location.origin);
   return new URL(value.startsWith('/') ? value : `/${value}`, base).href;
+}
+
+// 对外分享链接使用学校服务器地址。
+export function frontendPublicUrl() {
+  return `${window.__PRACTICAL_DESKTOP__?.serverOrigin || window.location.origin}${window.location.pathname}`;
 }
 
 export async function request(path, options = {}) {

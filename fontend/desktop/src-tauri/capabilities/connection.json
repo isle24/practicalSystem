@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "connection-settings",
+  "description": "仅本地连接页可以读取应用版本和连接学校。",
+  "windows": ["connection"],
+  "permissions": ["core:app:allow-version"]
+}

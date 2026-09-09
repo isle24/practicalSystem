@@ -1,0 +1,26 @@
+{
+  "name": "practical-system-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tauri dev",
+    "build": "node scripts/build.mjs",
+    "bundle": "tauri build",
+    "bundle:mac": "tauri build --target aarch64-apple-darwin --bundles app,dmg",
+    "icons": "node scripts/icons.mjs && tauri icon assets/app-icon.png",
+    "tauri": "tauri"
+  },
+  "dependencies": {
+    "@lucide/vue": "^1.17.0",
+    "@tauri-apps/api": "^2.11.1",
+    "vue": "^3.5.13"
+  },
+  "devDependencies": {
+    "@resvg/resvg-js": "^2.6.2",
+    "@tauri-apps/cli": "2.11.4",
+    "@vitejs/plugin-vue": "^6.0.1",
+    "@vue/server-renderer": "^3.5.13",
+    "vite": "^7.1.2"
+  }
+}

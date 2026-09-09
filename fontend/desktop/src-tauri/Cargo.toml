@@ -1,0 +1,33 @@
+[package]
+name = "practical-system-desktop"
+version = "0.1.0"
+description = "Practical System desktop client"
+edition = "2021"
+rust-version = "1.88"
+
+[lib]
+name = "practical_system_desktop"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2.11.5", features = [] }
+tauri-plugin-dialog = "2"
+tauri-plugin-opener = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+url = "2"
+uuid = { version = "1", features = ["v4"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "cookies", "json", "stream"] }
+axum = "0.8"
+tokio = { version = "1", features = ["net", "sync", "time"] }
+rust-embed = "8"
+mime_guess = "2"
+tempfile = "3"
+
+[profile.release]
+codegen-units = 1
+lto = true
+strip = true

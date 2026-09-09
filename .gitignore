@@ -11,6 +11,10 @@ fontend/**/node_modules/
 
 # build output
 fontend/**/dist/
+fontend/desktop/src-tauri/target/
+fontend/desktop/src-tauri/gen/
+fontend/desktop/src-tauri/icons/android/
+fontend/desktop/src-tauri/icons/ios/
 
 # runtime/cache/logs/uploads
 server/runtime/
