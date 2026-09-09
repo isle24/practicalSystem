@@ -1,4 +1,11 @@
-use std::{collections::HashMap, path::PathBuf, sync::Mutex};
+use std::{
+    collections::HashMap,
+    path::PathBuf,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Mutex,
+    },
+};
 use tauri::{webview::DownloadEvent, Manager, Webview};
 use tauri_plugin_dialog::DialogExt;
 
@@ -9,14 +16,22 @@ struct PendingDownload {
 }
 
 #[derive(Default)]
-pub struct Downloads(Mutex<HashMap<String, PendingDownload>>);
+pub struct Downloads {
+    pending: Mutex<HashMap<String, PendingDownload>>,
+    document_loaded: AtomicBool,
+}
 
 impl Downloads {
+    /// 标记窗口已呈现可预览的页面。
+    pub fn mark_document_loaded(&self) {
+        self.document_loaded.store(true, Ordering::Release);
+    }
+
     /// 接收 WebView 下载，完成后由系统保存对话框选择位置。
     pub fn handle(&self, webview: Webview, event: DownloadEvent<'_>) -> bool {
         match event {
             DownloadEvent::Requested { url, destination } => {
-                let Ok(mut pending) = self.0.lock() else {
+                let Ok(mut pending) = self.pending.lock() else {
                     return false;
                 };
                 if pending.contains_key(url.as_str()) {
@@ -62,7 +77,7 @@ impl Downloads {
             }
             DownloadEvent::Finished { url, success, .. } => {
                 let downloaded = self
-                    .0
+                    .pending
                     .lock()
                     .ok()
                     .and_then(|mut pending| pending.remove(url.as_str()));
@@ -70,13 +85,9 @@ impl Downloads {
                     return true;
                 };
                 let app = webview.app_handle().clone();
-                if webview.label().starts_with("preview-")
-                    && webview.url().is_ok_and(|url| url.as_str() == "about:blank")
-                {
-                    if let Some(window) = app.get_webview_window(webview.label()) {
-                        let _ = window.destroy();
-                    }
-                }
+                let empty_preview = (webview.label().starts_with("preview-")
+                    && !self.document_loaded.load(Ordering::Acquire))
+                .then(|| webview.label().to_owned());
                 if !success {
                     app.dialog()
                         .message("文件下载失败，请检查网络后重试")
@@ -97,6 +108,11 @@ impl Downloads {
                 }
                 dialog.save_file(move |destination| {
                     tauri::async_runtime::spawn_blocking(move || {
+                        if let Some(label) = empty_preview {
+                            if let Some(window) = app.get_webview_window(&label) {
+                                let _ = window.destroy();
+                            }
+                        }
                         let _cache = downloaded.directory;
                         let Some(destination) = destination else {
                             return;
