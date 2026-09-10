@@ -16,7 +16,13 @@ function collect(platform) {
   mkdirSync(directory, { recursive: true });
   const files = scan(bundle).filter(file => packageFile(basename(file)));
   if (!files.length) throw Error('No installation artifacts found');
-  for (const file of files) copyFileSync(file, join(directory, basename(file)));
+  const names = new Set();
+  for (const file of files) {
+    const name = basename(file).replace(/[^A-Za-z0-9._-]+/g, '-');
+    if (names.has(name)) throw Error('Duplicate installation artifact: ' + name);
+    names.add(name);
+    copyFileSync(file, join(directory, name));
+  }
   console.log(`Collected ${platform}: ${files.length} artifacts`);
 }
 
@@ -57,10 +63,17 @@ async function publish() {
   if (release && !release.draft) throw Error('This version is already published; bump the version to publish changed packages');
   if (!release) release = await call(`${api}/releases`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tag_name: `v${version}`, target_commitish: process.env.GITHUB_SHA, name: `实践管理系统客户端 v${version}`, body: data.notes, draft: true, prerelease: false }) });
   const oldAssets = await call(`${api}/releases/${release.id}/assets?per_page=100`);
-  for (const file of scan(directory)) {
+  const files = scan(directory);
+  for (const file of files) {
     const name = basename(file), bytes = readFileSync(file), old = oldAssets.find(a => a.name === name);
     if (old) { if (old.digest !== `sha256:${sha(file)}`) throw Error('Draft asset differs: ' + name); continue; }
     await call(release.upload_url.replace('{?name,label}', '') + '?name=' + encodeURIComponent(name), { method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: bytes });
+  }
+  const uploadedAssets = await call(`${api}/releases/${release.id}/assets?per_page=100`);
+  if (uploadedAssets.length !== files.length) throw Error('Uploaded asset count differs from the release manifest');
+  for (const file of files) {
+    const name = basename(file), asset = uploadedAssets.find(a => a.name === name);
+    if (!asset || asset.state !== 'uploaded' || asset.size !== statSync(file).size || asset.digest !== `sha256:${sha(file)}`) throw Error('Uploaded asset verification failed: ' + name);
   }
   await call(`${api}/releases/${release.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ draft: false, make_latest: 'true', body: data.notes }) });
   console.log(release.html_url);
