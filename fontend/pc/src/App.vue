@@ -2722,121 +2722,10 @@
                   <ExportTaskCenter />
                 </div>
 
-                <div v-else-if="win.module.id === 'favorite'" class="favorite-panel">
-                  <div class="admin-toolbar favorite-toolbar">
-                    <el-input
-                      v-model="favoriteState.filters.keyword"
-                      clearable
-                      placeholder="搜索标题或网址"
-                      @keyup.enter="loadFavorites(1)"
-                    />
-                    <el-button :icon="Search" :loading="favoriteState.loading" @click="loadFavorites(1)">
-                      查询
-                    </el-button>
-                    <el-button :icon="RefreshCw" :loading="favoriteState.loading" @click="loadFavorites(favoriteState.pagination.page)">
-                      刷新
-                    </el-button>
-                    <el-button type="primary" :icon="Plus" @click="openFavoriteDialog()">
-                      新增收藏
-                    </el-button>
-                  </div>
-                  <el-alert
-                    v-if="favoriteState.message"
-                    type="warning"
-                    :closable="false"
-                    show-icon
-                    :title="favoriteState.message"
-                  />
-                  <div class="favorite-grid-wrap" v-loading="favoriteState.loading">
-                    <article
-                      v-for="(row, index) in favoriteState.items"
-                      :key="row.id"
-                      class="favorite-card"
-                      :class="favoriteCardClass(row, index)"
-                    >
-                      <button type="button" class="favorite-card-main" @click="openFavoriteLink(row)">
-                        <AppIcon class="favorite-card-icon" :icon="Globe2" :icon-url="row.icon_url" :label="row.title" color="" :size="24" :backend-url="backendUrl" />
-                        <span>
-                          <strong>{{ row.title || '未命名收藏' }}</strong>
-                          <small>{{ favoriteHost(row) }}</small>
-                        </span>
-                      </button>
-                      <el-dropdown trigger="click" @command="command => handleFavoriteCommand(row, command)">
-                        <button type="button" class="favorite-card-more" title="更多操作" @click.stop>
-                          <MoreHorizontal :size="22" />
-                        </button>
-                        <template #dropdown>
-                          <el-dropdown-menu>
-                            <el-dropdown-item command="open">打开</el-dropdown-item>
-                            <el-dropdown-item command="edit">编辑</el-dropdown-item>
-                            <el-dropdown-item command="desktop">{{ isFavoriteDesktop(row.id) ? '从桌面移除' : '加入桌面' }}</el-dropdown-item>
-                            <el-dropdown-item command="delete" divided>删除</el-dropdown-item>
-                          </el-dropdown-menu>
-                        </template>
-                      </el-dropdown>
-                    </article>
-                    <div v-if="!favoriteState.loading && !favoriteState.items.length" class="empty-grid-state">
-                      暂无收藏
-                    </div>
-                  </div>
-                  <div class="file-pagination">
-                    <span>共 {{ favoriteState.pagination.total }} 个收藏</span>
-                    <el-pagination
-                      size="small"
-                      layout="prev, pager, next"
-                      :current-page="favoriteState.pagination.page"
-                      :page-size="favoriteState.pagination.page_size"
-                      :total="favoriteState.pagination.total"
-                      @current-change="loadFavorites"
-                    />
-                  </div>
-
-                  <OperationDialog
-                    :visible="favoriteState.dialogVisible"
-                    :title="favoriteState.editing.id ? '编辑收藏' : '新增收藏'"
-                    dialog-class="favorite-dialog"
-                    :busy="favoriteState.loading || favoriteState.iconUploading"
-                    @close="closeFavoriteDialog"
-                  >
-                      <div class="favorite-editor">
-                        <div class="favorite-preview-card" :class="favoriteCardClass(favoriteState.editing, 0)">
-                          <AppIcon class="favorite-card-icon" :icon="Globe2" :icon-url="favoriteState.editing.icon_url" label="收藏图标" color="" :size="24" :backend-url="backendUrl" />
-                          <strong>{{ favoriteState.editing.title || '收藏标题' }}</strong>
-                          <MoreHorizontal :size="22" />
-                        </div>
-                        <div class="operation-form favorite-form">
-                          <label><span>标题</span><input v-model="favoriteState.editing.title" maxlength="180" placeholder="请输入收藏标题"></label>
-                          <label><span>网址</span><input v-model="favoriteState.editing.url" maxlength="500" placeholder="https://example.com"></label>
-                          <label><span>排序</span><input v-model="favoriteState.editing.sort" type="number"></label>
-                          <div class="favorite-desktop-check">
-                            <span>桌面</span>
-                            <label class="inline-check">
-                              <input v-model="favoriteState.editing.add_to_desktop" type="checkbox">
-                              <span>发送快捷方式到桌面</span>
-                            </label>
-                          </div>
-                          <label class="favorite-icon-field">
-                            <span>图标</span>
-                            <IconUpload
-                              button-class="favorite-icon-upload"
-                              :icon="Globe2"
-                              :icon-url="favoriteState.editing.icon_url"
-                              label="收藏图标"
-                              :uploading="favoriteState.iconUploading"
-                              :backend-url="backendUrl"
-                              @select="handleFavoriteIconSelected"
-                            />
-                          </label>
-                        </div>
-                      </div>
-                      <footer>
-                        <el-button @click="closeFavoriteDialog">取消</el-button>
-                        <el-button type="primary" :icon="Save" :loading="favoriteState.loading" @click="saveFavoriteItem">
-                          保存
-                        </el-button>
-                      </footer>
-                  </OperationDialog>
-                </div>
+                <FavoritePanel v-else-if="win.module.id === 'favorite'" :is-desktop="isFavoriteDesktop" :set-desktop="setFavoriteDesktopShortcut" @changed="refreshFavoriteShortcuts" />
+                <NotebookPanel v-else-if="win.module.id === 'notebook'" :key="noteSessionKey" :ref="el => setNotebookRef(win.id, el)" :request="request" :session-key="noteSessionKey" />
+                <ReleaseNotesPanel v-else-if="win.module.id === 'releaseNotes'" :request="request" />
+                <ReleaseManager v-else-if="win.module.id === 'config' && win.panel === 'releases'" />
 
                 <div v-else-if="win.module.source === 'menu'" class="module-content-panel menu-module-panel">
                   <section class="menu-module-card">
@@ -4306,6 +4195,8 @@
       @change="handleSyllabusGuideFile"
     >
   </main>
+    <DesktopUpdateStatus />
+    <ReleaseNotice v-if="isLoggedIn" :key="noteSessionKey" :request="request" :session-key="noteSessionKey" @open="openModule(modules.find(item => item.id === 'releaseNotes'))" />
   </el-config-provider>
 </template>
 
@@ -4360,6 +4251,13 @@ import {
   Workflow,
 } from '@lucide/vue';
 import DesktopWindow from './components/DesktopWindow.vue';
+import FavoritePanel from './components/FavoritePanel.vue';
+import ReleaseManager from './components/ReleaseManager.vue';
+import DesktopUpdateStatus from './components/DesktopUpdateStatus.vue';
+import ReleaseNotesPanel from '../../shared/components/ReleaseNotesPanel.vue';
+import ReleaseNotice from '../../shared/components/ReleaseNotice.vue';
+import NotebookPanel from '../../shared/components/NotebookPanel.vue';
+import { openExternalLink } from './utils/externalLinks';
 import MobileBinding from './components/MobileBinding.vue';
 import DesktopLauncher from './components/DesktopLauncher.vue';
 import AdaptiveDesktopGrid from './components/AdaptiveDesktopGrid.vue';
@@ -4390,13 +4288,12 @@ import { DEFAULT_DESKTOP_MODULE_IDS, useDesktopLauncher } from './composables/us
 import { usePermissions } from './composables/usePermissions';
 import { buildLaunchableMenuModules, mergeLaunchableModules as mergeMenuModules } from './utils/menuModules';
 import { tableSequence } from './utils/table';
-import { backendUrl, frontendPublicUrl } from './api/client';
+import { backendUrl, frontendPublicUrl, request } from './api/client';
 import {
   changeOwnPassword,
   changeAdminAccountStatus,
   clearTestData,
   deleteArchiveItem,
-  deleteFavorite,
   exportInternshipBaseWord,
   exportInternshipImplementationPdf,
   fetchAdminAccountDetail,
@@ -4517,7 +4414,6 @@ import {
   savePracticeReviewDraft,
   savePracticeProjectScore,
   saveDesktopShortcuts,
-  saveFavorite,
   saveMenu as saveMenuApi,
   saveMessageTemplate,
   sendMessage,
@@ -4529,7 +4425,6 @@ import {
   saveWechatConfig,
   switchAccount,
   removeInternshipPair,
-  uploadFavoriteIcon,
   uploadLoginBackground,
   uploadMenuIcon,
   uploadProfileAsset,
@@ -4642,10 +4537,9 @@ const desktopShortcutModuleAliases = {
   file: 'resourceCenter',
   doc: 'resourceCenter',
   templateLib: 'resourceCenter',
-  favorite: 'resourceCenter',
 };
 const desktopLauncher = useDesktopLauncher({
-  allModules: computed(() => desktopEntryModules.value),
+  allModules: computed(() => [...desktopEntryModules.value, ...allLaunchableModules.value.filter(module => ['favorite', 'notebook', 'releaseNotes'].includes(module.id))]),
   favoriteItems: computed(() => favoriteState.items),
   defaultModuleIds: DEFAULT_DESKTOP_MODULE_IDS,
   moduleAliases: desktopShortcutModuleAliases,
@@ -4949,7 +4843,7 @@ const modules = [
     color: 'blue',
     scope: '文件、文档、模板与收藏',
     collection: true,
-    childIds: ['file', 'doc', 'templateLib', 'favorite'],
+    childIds: ['file', 'doc', 'templateLib', 'favorite', 'notebook', 'releaseNotes'],
     childNames: { templateLib: '模板库' },
   },
   {
@@ -5026,6 +4920,13 @@ const modules = [
     managePermission: '',
     defaultPanel: 'favoriteList',
     collectionParent: 'resourceCenter',
+  },
+  {
+    id: 'notebook', name: '记事本', icon: FileText, color: 'amber',
+    scope: '个人备忘录 / Markdown', viewPermission: '', managePermission: '', defaultPanel: 'notes', collectionParent: 'resourceCenter',
+  },
+  {
+    id: 'releaseNotes', name: '更新说明', icon: FileText, color: 'green', scope: '版本更新历史', viewPermission: '', managePermission: '', defaultPanel: 'notes', collectionParent: 'resourceCenter',
   },
   {
     id: 'userManage',
@@ -5503,22 +5404,10 @@ const fileState = reactive({
   message: '',
 });
 
-const favoriteState = reactive({
-  items: [],
-  filters: {
-    keyword: '',
-  },
-  pagination: {
-    page: 1,
-    page_size: 20,
-    total: 0,
-  },
-  loading: false,
-  iconUploading: false,
-  message: '',
-  dialogVisible: false,
-  editing: emptyFavoriteForm(),
-});
+const favoriteState = reactive({ items: [], loading: false, message: '', pagination: { page: 1 } });
+const notebookRefs = new Map();
+const noteSessionKey = computed(() => [window.location.origin, permissionState.context.school_database_id, permissionState.context.account_id].join(':'));
+function setNotebookRef(id, el) { if (el) notebookRefs.set(id, el); else notebookRefs.delete(id); }
 
 const dataManageState = reactive({
   clearLoading: false,
@@ -5687,6 +5576,7 @@ const defaultDesktopModuleIds = DEFAULT_DESKTOP_MODULE_IDS;
 const launcherModuleIds = modules.filter(module => !module.collectionParent && !module.launcherHidden).map(module => module.id);
 const launcherModuleIdSet = new Set(launcherModuleIds);
 const configSidebarDefinitions = [
+  { key: 'releases', name: '版本与更新', permission: 'config:manage', schoolConfig: true, icon: Download },
   { key: 'userManage', name: '用户管理', permission: 'config:user', icon: UsersRound },
   { key: 'gradeManage', name: '年级管理', permission: 'config:grade', icon: GraduationCap },
   { key: 'graduationCohortManage', name: '毕业届次管理', permission: 'config:graduation-cohort', icon: CalendarRange },
@@ -5966,7 +5856,7 @@ function canShowModule(module) {
   if (module.id === 'profile') {
     return isLoggedIn.value;
   }
-  if (module.id === 'favorite') {
+  if (['favorite', 'notebook', 'releaseNotes'].includes(module.id)) {
     return isLoggedIn.value;
   }
   if (module.id === 'config') {
@@ -7594,7 +7484,7 @@ function openGlobalSearchModule(module) {
 
 function openModule(module) {
   if (module?.type === 'favoriteLink' && module.url) {
-    window.open(module.url, '_blank', 'noopener,noreferrer');
+    openExternalLink(module).catch(error => ElMessage.error(error.message));
     return;
   }
   if (module?.source === 'menu' && module.menu?.url) {
@@ -7605,12 +7495,12 @@ function openModule(module) {
     window.open(module.menu.path, '_blank', 'noopener,noreferrer');
     return;
   }
-  openModuleWindow(module, { reuse: true });
+  openModuleWindow(module, { reuse: module.id !== 'notebook' });
 }
 
 function openDesktopLauncher() {
   desktopLauncherState.visible = true;
-  if (!favoriteState.items.length && !favoriteState.loading) {
+  if (!favoriteState.loading) {
     loadFavorites(1);
   }
 }
@@ -7763,134 +7653,23 @@ function closeGuide() {
   guideState.visible = false;
 }
 
-function emptyFavoriteForm(row = {}) {
-  return {
-    id: row.id || null,
-    title: row.title || '',
-    url: row.url || '',
-    icon_url: row.icon_url || '',
-    icon_file_id: row.icon_file_id || null,
-    sort: row.sort || 0,
-    add_to_desktop: false,
-  };
-}
-
-async function loadFavorites(page = favoriteState.pagination.page || 1) {
-  if (!isLoggedIn.value) {
-    favoriteState.items = [];
-    favoriteState.pagination.total = 0;
-    return;
-  }
-
+/** 启动台收藏独立于列表分页和筛选。 */
+async function loadFavorites() {
+  if (!isLoggedIn.value || favoriteState.loading) return;
+  const account = permissionState.context.account_id;
   favoriteState.loading = true;
-  favoriteState.message = '';
   try {
-    const data = await fetchFavorites({
-      ...favoriteState.filters,
-      page,
-      page_size: favoriteState.pagination.page_size,
-    });
-    favoriteState.items = data.items || [];
-    favoriteState.pagination = {
-      ...favoriteState.pagination,
-      ...(data.pagination || {}),
-      page,
-    };
-  } catch (error) {
-    favoriteState.message = error.message;
-  } finally {
-    favoriteState.loading = false;
-  }
+    let page = 1, total = 0; const items = [];
+    do {
+      const data = await fetchFavorites({ page, page_size: 200 });
+      items.push(...data.items); total = data.pagination.total; page += 1;
+      if (!data.items.length) break;
+    } while (items.length < total);
+    if (permissionState.context.account_id === account) favoriteState.items = items;
+  } catch (error) { favoriteState.message = error.message; }
+  finally { favoriteState.loading = false; }
 }
-
-function openFavoriteDialog(row = null) {
-  favoriteState.editing = emptyFavoriteForm(row || {});
-  favoriteState.editing.add_to_desktop = row?.id ? isFavoriteDesktop(row.id) : true;
-  favoriteState.message = '';
-  favoriteState.dialogVisible = true;
-}
-
-function closeFavoriteDialog() {
-  favoriteState.dialogVisible = false;
-}
-
-async function saveFavoriteItem() {
-  if (favoriteState.loading) {
-    return;
-  }
-
-  favoriteState.loading = true;
-  favoriteState.message = '';
-  const form = { ...favoriteState.editing };
-  try {
-    const data = await saveFavorite({
-      ...form,
-      sort: Number(form.sort || 0),
-    });
-    favoriteState.items = data.items || [];
-    favoriteState.pagination = {
-      ...favoriteState.pagination,
-      ...(data.pagination || {}),
-    };
-    const savedRow = resolveSavedFavoriteRow(data.items || [], form);
-    if (savedRow?.id) {
-      await setFavoriteDesktopShortcut(savedRow, Boolean(form.add_to_desktop));
-    }
-    favoriteState.dialogVisible = false;
-    favoriteState.message = '已保存';
-  } catch (error) {
-    favoriteState.message = error.message;
-  } finally {
-    favoriteState.loading = false;
-  }
-}
-
-async function deleteFavoriteItem(row) {
-  if (!row?.id || !window.confirm(`确认删除收藏「${row.title || row.url}」？`)) {
-    return;
-  }
-
-  favoriteState.loading = true;
-  favoriteState.message = '';
-  try {
-    const data = await deleteFavorite(row.id);
-    favoriteState.items = data.items || [];
-    favoriteState.pagination = {
-      ...favoriteState.pagination,
-      ...(data.pagination || {}),
-    };
-    await loadDesktopShortcuts();
-    favoriteState.message = '已删除';
-  } catch (error) {
-    favoriteState.message = error.message;
-  } finally {
-    favoriteState.loading = false;
-  }
-}
-
-function openFavoriteLink(row) {
-  if (row?.url) {
-    window.open(row.url, '_blank', 'noopener,noreferrer');
-  }
-}
-
-function handleFavoriteCommand(row, command) {
-  if (command === 'open') {
-    openFavoriteLink(row);
-    return;
-  }
-  if (command === 'edit') {
-    openFavoriteDialog(row);
-    return;
-  }
-  if (command === 'desktop') {
-    toggleFavoriteDesktop(row);
-    return;
-  }
-  if (command === 'delete') {
-    deleteFavoriteItem(row);
-  }
-}
+async function refreshFavoriteShortcuts() { await loadFavorites(); await loadDesktopShortcuts(); }
 
 function isFavoriteDesktop(id) {
   return customDesktopShortcutItems.value.some(item => item.type === 'favorite' && Number(item.ref_id) === Number(id));
@@ -7920,58 +7699,6 @@ async function setFavoriteDesktopShortcut(row, enabled) {
   await persistDesktopShortcuts(items);
 }
 
-function resolveSavedFavoriteRow(items, form) {
-  if (!Array.isArray(items)) {
-    return null;
-  }
-  if (form.id) {
-    const byId = items.find(item => Number(item.id) === Number(form.id));
-    if (byId) {
-      return byId;
-    }
-  }
-  return items.find(item => String(item.url || '') === String(form.url || '') && String(item.title || '') === String(form.title || '')) || null;
-}
-
-function favoriteInitial(row) {
-  const value = String(row?.title || row?.url || '收').trim();
-  return value.charAt(0).toUpperCase() || '收';
-}
-
-function favoriteHost(row) {
-  const value = String(row?.url || '').trim();
-  if (!value) {
-    return '未填写地址';
-  }
-  try {
-    return new URL(value).host || value;
-  } catch {
-    return value.replace(/^https?:\/\//i, '').split('/')[0] || value;
-  }
-}
-
-function favoriteCardClass(row, index = 0) {
-  const themes = ['mint', 'green', 'tan', 'blue', 'cyan', 'purple', 'gold', 'rose'];
-  const source = Number(row?.id || 0) || index + 1;
-  return `favorite-card-${themes[Math.abs(source) % themes.length]}`;
-}
-
-async function handleFavoriteIconSelected(file) {
-  if (!file) {
-    return;
-  }
-  favoriteState.iconUploading = true;
-  favoriteState.message = '';
-  try {
-    const data = await uploadFavoriteIcon(file);
-    favoriteState.editing.icon_url = data.url || '';
-    favoriteState.editing.icon_file_id = data.file_id || null;
-  } catch (error) {
-    favoriteState.message = error.message;
-  } finally {
-    favoriteState.iconUploading = false;
-  }
-}
 
 function fallbackGuideContent(win) {
   const common = [
@@ -8443,7 +8170,9 @@ function minimizeWindow(id) {
   }
 }
 
-function closeWindow(id) {
+async function closeWindow(id) {
+  const notebook = notebookRefs.get(id);
+  if (notebook && !(await notebook.beforeLeave())) return;
   const index = openWindows.findIndex(item => item.id === id);
   if (index === -1) {
     return;
@@ -15994,14 +15723,9 @@ function resetAdminState() {
 
 function resetFavoriteState() {
   favoriteState.items = [];
-  favoriteState.filters.keyword = '';
   favoriteState.pagination.page = 1;
-  favoriteState.pagination.total = 0;
   favoriteState.loading = false;
-  favoriteState.iconUploading = false;
   favoriteState.message = '';
-  favoriteState.dialogVisible = false;
-  favoriteState.editing = emptyFavoriteForm();
 }
 
 function resetInternshipState() {

@@ -7,6 +7,7 @@ export default defineConfig(({ mode }) => {
   return {
     base: './',
     plugins: [vue()],
+    resolve: { dedupe: ['vue', 'markdown-it', 'dompurify', '@lucide/vue'] },
     server: {
       proxy: {
         '/api': {

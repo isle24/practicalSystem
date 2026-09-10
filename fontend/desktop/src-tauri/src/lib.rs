@@ -1,6 +1,8 @@
 mod connection;
 mod downloads;
+mod external;
 mod gateway;
+mod updater;
 mod windows;
 
 use connection::Settings;
@@ -106,7 +108,7 @@ async fn connect_school(
         .filter(|school| school.origin != profile.origin)
         .map(|school| school.port)
         .collect();
-    let gateway = gateway::start(connection, &reserved_ports).await?;
+    let gateway = gateway::start(app.clone(), connection, &reserved_ports).await?;
     profile.port = gateway.port;
     settings.last_origin = profile.origin.clone();
     settings
@@ -150,6 +152,7 @@ fn application_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         &[
             &about,
             &settings,
+            &MenuItem::with_id(app, "check-update", "检查更新…", true, None::<&str>)?,
             &PredefinedMenuItem::separator(app)?,
             &PredefinedMenuItem::quit(app, Some("退出"))?,
         ],
@@ -176,6 +179,14 @@ fn application_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
             &MenuItem::with_id(app, "back", "后退", true, Some("CmdOrCtrl+["))?,
             &MenuItem::with_id(app, "forward", "前进", true, Some("CmdOrCtrl+]"))?,
             &MenuItem::with_id(app, "reload", "重新加载", true, Some("CmdOrCtrl+R"))?,
+            &MenuItem::with_id(
+                app,
+                "external-browser",
+                "在浏览器打开当前网页",
+                true,
+                None::<&str>,
+            )?,
+            &MenuItem::with_id(app, "copy-address", "复制当前网址", true, None::<&str>)?,
             &PredefinedMenuItem::separator(app)?,
             &MenuItem::with_id(app, "zoom-in", "放大", true, Some("CmdOrCtrl+="))?,
             &MenuItem::with_id(app, "zoom-out", "缩小", true, Some("CmdOrCtrl+-"))?,
@@ -189,6 +200,16 @@ fn application_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
 
 /// 处理原生导航与窗口菜单。
 fn handle_menu(app: &AppHandle, id: &str) {
+    if id == "check-update" {
+        if let Some(window) = app.get_webview_window("school") {
+            let _ = window.eval("window.__PRACTICAL_DESKTOP__?.checkUpdate(true)");
+        } else {
+            app.dialog()
+                .message("请先连接学校并登录后检查更新")
+                .show(|_| {});
+        }
+        return;
+    }
     if id == "connection" {
         windows::show_connection(app);
         return;
@@ -208,6 +229,7 @@ fn handle_menu(app: &AppHandle, id: &str) {
         return;
     };
     match id {
+        "external-browser" | "copy-address" => external::menu(app, &window, id),
         "back" => {
             let _ = window.eval("history.back()");
         }
@@ -240,6 +262,8 @@ pub fn run() {
     tauri::Builder::default()
         .manage(AppState::default())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(
             tauri_plugin_opener::Builder::new()
                 .open_js_links_on_click(false)
