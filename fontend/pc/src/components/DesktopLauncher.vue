@@ -129,7 +129,7 @@ const groupDefinitions = [
   {
     key: 'personal',
     title: '个人工具',
-    ids: new Set(['profile']),
+    ids: new Set(['profile', 'favorite', 'notebook', 'releaseNotes']),
   },
 ];
 

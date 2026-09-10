@@ -21,9 +21,12 @@ pub struct Gateway {
     pub entry: Url,
     pub port: u16,
     shutdown: Option<oneshot::Sender<()>>,
+    cancel: tokio_util::sync::CancellationToken,
 }
 
 struct GatewayState {
+    app: tauri::AppHandle,
+    cancel: tokio_util::sync::CancellationToken,
     connection: Connection,
     local: Url,
     cookie: String,
@@ -33,6 +36,7 @@ struct GatewayState {
 impl Drop for Gateway {
     /// 关闭当前学校本机通道。
     fn drop(&mut self) {
+        self.cancel.cancel();
         if let Some(shutdown) = self.shutdown.take() {
             let _ = shutdown.send(());
         }
@@ -40,7 +44,11 @@ impl Drop for Gateway {
 }
 
 /// 启动只监听回环地址的会话通道，PC 页面来自安装包。
-pub async fn start(connection: Connection, reserved_ports: &[u16]) -> Result<Gateway, String> {
+pub async fn start(
+    app: tauri::AppHandle,
+    connection: Connection,
+    reserved_ports: &[u16],
+) -> Result<Gateway, String> {
     let listener = bind_school_port(connection.school.port, reserved_ports).await?;
     let port = listener
         .local_addr()
@@ -53,7 +61,10 @@ pub async fn start(connection: Connection, reserved_ports: &[u16]) -> Result<Gat
         .join(&format!("_desktop/connect/{token}"))
         .map_err(|_| "无法创建学校入口")?;
     let remote = connection.origin.clone();
+    let cancel = tokio_util::sync::CancellationToken::new();
     let state = Arc::new(GatewayState {
+        app,
+        cancel: cancel.clone(),
         connection,
         local: local.clone(),
         cookie: format!("practical_desktop_{port}"),
@@ -73,6 +84,7 @@ pub async fn start(connection: Connection, reserved_ports: &[u16]) -> Result<Gat
         remote,
         entry,
         port,
+        cancel,
         shutdown: Some(shutdown),
     })
 }
@@ -149,6 +161,44 @@ async fn handle(State(state): State<Arc<GatewayState>>, request: Request) -> Res
         .is_some_and(|cookies| cookies.split(';').any(|cookie| cookie.trim() == expected));
     if !authenticated {
         return error(StatusCode::UNAUTHORIZED, "请从客户端连接学校");
+    }
+    if path == "/_desktop/external" || path == "/_desktop/update" {
+        if request.method() != axum::http::Method::POST
+            || headers.get(header::ORIGIN).and_then(|v| v.to_str().ok())
+                != Some(state.local.origin().ascii_serialization().as_str())
+        {
+            return error(StatusCode::FORBIDDEN, "仅学校页面可以调用客户端功能");
+        }
+        let update = path.ends_with("/update");
+        let bytes = match axum::body::to_bytes(request.into_body(), 8192).await {
+            Ok(bytes) => bytes,
+            Err(_) => return error(StatusCode::BAD_REQUEST, "参数过长"),
+        };
+        let input: serde_json::Value = match serde_json::from_slice(&bytes) {
+            Ok(input) => input,
+            Err(_) => return error(StatusCode::BAD_REQUEST, "参数无效"),
+        };
+        if update {
+            crate::updater::start(
+                state.app.clone(),
+                state.connection.client.clone(),
+                state.connection.origin.clone(),
+                state.cancel.clone(),
+                input["interactive"].as_bool().unwrap_or(true),
+            );
+        } else if let Err(message) = crate::external::open(
+            &state.app,
+            input["url"].as_str().unwrap_or(""),
+            input["mode"].as_str().unwrap_or("client"),
+        ) {
+            return error(StatusCode::BAD_REQUEST, &message);
+        }
+        let mut response = Response::new(Body::from("{\"ok\":true}"));
+        response.headers_mut().insert(
+            header::CONTENT_TYPE,
+            HeaderValue::from_static("application/json"),
+        );
+        return response;
     }
     if path.starts_with("/api/") || path.starts_with("/files/") {
         return proxy(state, request).await;

@@ -40,6 +40,7 @@ class DesktopController
     #[OperationLog('保存桌面快捷方式')]
     public function saveShortcuts(Request $request): Response
     {
+        if ($request->method() !== 'POST') return $this->fail(40500, '请使用 POST 请求', 405);
         $accountId = CurrentContext::accountId();
         if (!$accountId) {
             return $this->fail(40100, '请先登录', 401);

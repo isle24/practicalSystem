@@ -871,7 +871,7 @@ function schoolBusinessStatements(): array
         simpleTable('user_notify_setting', ['`account_id` BIGINT UNSIGNED DEFAULT NULL', '`msg_type` VARCHAR(80) DEFAULT NULL', '`channel` VARCHAR(80) DEFAULT NULL', '`enabled` ENUM(\'false\',\'true\') DEFAULT \'true\'']),
         simpleTable('user_desktop_config', ['`account_id` BIGINT UNSIGNED DEFAULT NULL', '`layout_json` JSON DEFAULT NULL']),
         simpleTable('user_desktop_shortcut', ['`account_id` BIGINT UNSIGNED DEFAULT NULL', '`item_type` VARCHAR(40) DEFAULT \'module\'', '`item_key` VARCHAR(120) DEFAULT NULL', '`ref_id` BIGINT UNSIGNED DEFAULT NULL', '`sort` INT DEFAULT 0', 'KEY `idx_account_type` (`account_id`, `item_type`)', 'KEY `idx_ref` (`ref_id`)']),
-        simpleTable('favorite_link', ['`account_id` BIGINT UNSIGNED DEFAULT NULL', '`user_id` BIGINT UNSIGNED DEFAULT NULL', '`title` VARCHAR(180) DEFAULT NULL', '`url` VARCHAR(500) DEFAULT NULL', '`icon_url` VARCHAR(500) DEFAULT NULL', '`icon_file_id` BIGINT UNSIGNED DEFAULT NULL', '`sort` INT DEFAULT 0', 'KEY `idx_account_status` (`account_id`, `status`)', 'KEY `idx_user_id` (`user_id`)']),
+        simpleTable('favorite_link', ['`scope` VARCHAR(20) NOT NULL DEFAULT \'personal\'', '`open_mode` VARCHAR(20) NOT NULL DEFAULT \'client\'', '`updated_by` BIGINT UNSIGNED DEFAULT NULL', '`revision` INT UNSIGNED DEFAULT 1', 'KEY `idx_scope_status` (`scope`, `status`, `deleted_at`)', '`account_id` BIGINT UNSIGNED DEFAULT NULL', '`user_id` BIGINT UNSIGNED DEFAULT NULL', '`title` VARCHAR(180) DEFAULT NULL', '`url` VARCHAR(500) DEFAULT NULL', '`icon_url` VARCHAR(500) DEFAULT NULL', '`icon_file_id` BIGINT UNSIGNED DEFAULT NULL', '`sort` INT DEFAULT 0', 'KEY `idx_account_status` (`account_id`, `status`)', 'KEY `idx_user_id` (`user_id`)']),
         simpleTable('theme_preset', ['`theme_json` JSON DEFAULT NULL']),
         simpleTable('api_key', ['`account_id` BIGINT UNSIGNED DEFAULT NULL', '`api_key_hash` CHAR(64) DEFAULT NULL', '`enabled` ENUM(\'false\',\'true\') DEFAULT \'false\'']),
         simpleTable('internship_category', [
@@ -1619,6 +1619,10 @@ function schoolBusinessStatements(): array
 
     $statements[] = simpleTable('operation_log_202606', ['`account_id` BIGINT UNSIGNED DEFAULT NULL', '`action` VARCHAR(120) DEFAULT NULL', '`ip` VARCHAR(80) DEFAULT NULL', '`payload` JSON DEFAULT NULL']);
 
+    $toolsSql = file_get_contents(__DIR__ . '/updates/0.2.0-school-tools.sql');
+    foreach (array_map('trim', explode(';', $toolsSql)) as $statement) {
+        if (str_starts_with($statement, 'CREATE TABLE')) $statements[] = $statement;
+    }
     return $statements;
 }
 

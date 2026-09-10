@@ -1,6 +1,7 @@
 <template>
   <MobileAppShell
-    v-model:active-tab="activeTab"
+    :active-tab="activeTab"
+    @update:active-tab="navigateMobileTab"
     v-model:refreshing="mobileRefreshing"
     :logged-in="isLoggedIn"
     :title="mobileHeaderTitle"
@@ -88,6 +89,9 @@
         @reload="loadMessages(1)"
       />
 
+      <NotebookPanel v-else-if="activeTab === 'notebook'" ref="mobileNotebook" :request="request" :session-key="[locationOrigin, state.context.school_database_id, state.context.account_id].join(':')" />
+      <ReleaseNotesPanel v-else-if="activeTab === 'releaseNotes'" :request="request" />
+
       <DocumentPage
         v-else-if="activeTab === 'doc'"
         :model="support.doc"
@@ -124,6 +128,7 @@
     </template>
 
     <template #overlays>
+    <ReleaseNotice v-if="isLoggedIn" :key="[state.context.school_database_id, state.context.account_id].join(':')" :request="request" :session-key="[locationOrigin, state.context.school_database_id, state.context.account_id].join(':')" @open="navigateMobileTab('releaseNotes')" />
     <DocumentDetail
       :visible="support.doc.detail.visible"
       :detail="support.doc.detail"
@@ -168,6 +173,9 @@ import HomePage from './pages/HomePage.vue';
 import LoginPage from './pages/LoginPage.vue';
 import MessagePage from './pages/MessagePage.vue';
 import ProfilePage from './pages/ProfilePage.vue';
+import NotebookPanel from '../../shared/components/NotebookPanel.vue';
+import ReleaseNotesPanel from '../../shared/components/ReleaseNotesPanel.vue';
+import ReleaseNotice from '../../shared/components/ReleaseNotice.vue';
 import TemplatePage from './pages/TemplatePage.vue';
 import { useAuthSession } from './composables/useAuthSession';
 import { useInternship } from './composables/useInternship';
@@ -177,7 +185,7 @@ import { useMobilePermissions } from './composables/useMobilePermissions';
 import { usePracticeModule } from './composables/usePracticeModule';
 import { useSupportCenter } from './composables/useSupportCenter';
 import { statusText as resolveStatusText } from './constants/status';
-import { backendUrl } from './api/client';
+import { backendUrl, request } from './api/client';
 import { formatDateKey } from './utils/date';
 import {
   exportInternshipBaseWord,
@@ -295,6 +303,7 @@ const {
   goBack: goMobileBack,
   resetToHome: resetMobileNavigationToHome,
 } = useMobileNavigation({
+  beforeLeave: () => mobileNotebook.value?.beforeLeave() ?? true,
   captureExtras: () => ({
     internshipPanel: internship.panel,
     internshipSubmitSection: internship.submitSection,
@@ -365,7 +374,16 @@ const {
   onInitialLoad: refreshMobileSession,
 });
 
+const mobileNotebook = ref(null);
+const locationOrigin = window.location.origin;
+async function navigateMobileTab(tab) {
+  if (tab === activeTab.value || !(await (mobileNotebook.value?.beforeLeave() ?? true))) return;
+  activeTab.value = tab;
+}
+
 const modules = [
+  { key: 'releaseNotes', title: '更新说明', icon: FileText, theme: 'teal', permission: '', flow: '-' },
+  { key: 'notebook', title: '记事本', icon: FileText, theme: 'teal', permission: '', flow: '-' },
   {
     key: 'internship',
     title: '实习管理',
@@ -430,7 +448,7 @@ const isLoggedIn = computed(() => Boolean(state.context.account_id));
 const mobileHeaderTitle = computed(() => (isLoggedIn.value ? currentPage.value.title : '实践管理系统'));
 const showMobileHeaderBack = computed(() => (
   isLoggedIn.value
-  && ['message', 'doc', 'templateLib'].includes(activeTab.value)
+  && ['message', 'doc', 'templateLib', 'notebook', 'releaseNotes'].includes(activeTab.value)
   && canGoMobileBack.value
 ));
 const roleType = computed(() => state.context.role_type || '');
@@ -487,6 +505,7 @@ const roleNameMap = {
 };
 
 function canShowMobileModule(module) {
+  if (['notebook', 'releaseNotes'].includes(module.key)) return isLoggedIn.value;
   if (!hasPermission(module.permission)) {
     return false;
   }
@@ -5525,7 +5544,7 @@ async function refreshMobileSession(resetWorkspace = false) {
 
 function openMobileMessages() {
   if (isLoggedIn.value && activeTab.value !== 'message') {
-    activeTab.value = 'message';
+    navigateMobileTab('message');
   }
 }
 

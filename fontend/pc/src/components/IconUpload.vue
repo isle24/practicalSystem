@@ -4,6 +4,8 @@
     class="icon-upload-button"
     :class="buttonClass"
     :disabled="uploading"
+    :title="uploading ? '正在上传' : `上传${label || '图标'}`"
+    :aria-label="`上传${label || '图标'}`"
     @click="chooseFile"
   >
     <img v-if="iconUrl" :src="resolvedUrl" :alt="label">
@@ -48,3 +50,7 @@ function handleFileChange(event) {
   event.target.value = '';
 }
 </script>
+
+<style scoped>
+.icon-upload-button{width:56px;height:56px;flex-shrink:0;display:grid;place-items:center;border:1px dashed #cdd6e2;border-radius:8px;background:#f5f8fc;color:#526b8a;cursor:pointer;overflow:hidden;padding:8px}.icon-upload-button:hover{border-color:#648ddd;background:#edf3fc}.icon-upload-button:disabled{opacity:.5;cursor:wait}.icon-upload-button img{width:100%;height:100%;object-fit:contain}.hidden-file{display:none}
+</style>

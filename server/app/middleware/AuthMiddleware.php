@@ -15,6 +15,8 @@ class AuthMiddleware implements MiddlewareInterface
      * 免登录接口白名单（完整路径）。
      */
     private const PUBLIC_PATHS = [
+        '/api/release/update-manifest',
+        '/api/release/download',
         '/api/auth/login',
         '/api/auth/register',
         '/api/auth/register-options',

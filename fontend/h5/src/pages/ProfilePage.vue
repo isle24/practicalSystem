@@ -10,6 +10,8 @@
 
   <van-cell-group inset class="app-profile-group">
     <van-cell title="姓名" :value="userName" />
+    <van-cell title="个人记事本" is-link @click="emit('open-tab', 'notebook')" />
+    <van-cell title="更新说明" is-link @click="emit('open-tab', 'releaseNotes')" />
     <van-cell title="登录账号" :value="accountName" />
     <MobileBinding @verified="emit('mobile-verified')" />
     <van-cell title="当前角色" :value="roleName" />

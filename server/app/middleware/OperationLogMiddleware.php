@@ -27,6 +27,8 @@ class OperationLogMiddleware implements MiddlewareInterface
         'sms_code',
         'aes_key',
         'encoding_aes_key',
+        'content_md',
+        'sql_content',
     ];
 
     /**
@@ -74,8 +76,8 @@ class OperationLogMiddleware implements MiddlewareInterface
                     'action_method' => is_string($request->action ?? null) ? $request->action : null,
                     'status_code' => $statusCode,
                     'duration_ms' => round((microtime(true) - $startedAt) * 1000, 2),
-                    'query' => $this->mask($this->requestQuery($request)),
-                    'input' => $this->mask($this->requestInput($request)),
+                    'query' => $this->auditParameters($path, $this->requestQuery($request)),
+                    'input' => $this->auditParameters($path, $this->requestInput($request)),
                     'user_agent' => mb_substr((string) $request->header('user-agent', ''), 0, 300),
                     'response_code' => $responsePayload['code'],
                     'response_message' => $responsePayload['message'],
@@ -233,6 +235,15 @@ class OperationLogMiddleware implements MiddlewareInterface
     /**
      * 脱敏请求参数。
      */
+    private function auditParameters(string $path, array $input): mixed
+    {
+        if (preg_match('~^/api/(note|release)/~i', $path)) {
+            $input = array_intersect_key($input, array_flip(['id', 'revision', 'page', 'page_size', 'product', 'version', 'action', 'sql_id']));
+        }
+        return $this->mask($input);
+    }
+
+    /** 脱敏日志参数。 */
     private function mask(mixed $value, ?string $key = null): mixed
     {
         if ($key !== null && $this->isSensitiveKey($key)) {

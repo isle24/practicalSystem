@@ -395,7 +395,7 @@ class TableRecord extends BaseModel
         return json_last_error() === JSON_ERROR_NONE ? $decoded : $payload;
     }
 
-    private static function uuid(): string
+    protected static function uuid(): string
     {
         $data = random_bytes(16);
         $data[6] = chr((ord($data[6]) & 0x0f) | 0x40);
@@ -912,6 +912,12 @@ class TableRecord extends BaseModel
                     ->whereNull('favorite_link.deleted_at');
             })
             ->where('user_desktop_shortcut.account_id', $accountId)
+            ->where(function ($query) use ($accountId): void {
+                $query->where('user_desktop_shortcut.item_type', 'module')->orWhere(function ($favorite) use ($accountId): void {
+                    $favorite->where('favorite_link.status', 'enabled')->whereNull('favorite_link.deleted_at')
+                        ->where(fn ($visible) => $visible->where('favorite_link.account_id', $accountId)->orWhere('favorite_link.scope', 'school'));
+                });
+            })
             ->whereNull('user_desktop_shortcut.deleted_at')
             ->orderBy('user_desktop_shortcut.sort')
             ->orderBy('user_desktop_shortcut.id')
@@ -924,6 +930,8 @@ class TableRecord extends BaseModel
                 'favorite_link.title as favorite_title',
                 'favorite_link.url as favorite_url',
                 'favorite_link.icon_url as favorite_icon_url',
+                'favorite_link.open_mode as favorite_open_mode',
+                'favorite_link.scope as favorite_scope',
             ])
             ->map(static fn ($row): array => [
                 'id' => (int) $row->id,
@@ -936,6 +944,8 @@ class TableRecord extends BaseModel
                     'title' => $row->favorite_title,
                     'url' => $row->favorite_url,
                     'icon_url' => $row->favorite_icon_url,
+                    'open_mode' => $row->favorite_open_mode,
+                    'scope' => $row->favorite_scope,
                 ],
             ])
             ->all();
@@ -945,128 +955,31 @@ class TableRecord extends BaseModel
 
     public static function replaceDesktopShortcuts(int $accountId, array $items, string $now): void
     {
-        self::queryTable('user_desktop_shortcut')
-            ->where('account_id', $accountId)
-            ->whereNull('deleted_at')
-            ->update([
-                'deleted_at' => $now,
-                'updated_at' => $now,
-            ]);
-
-        foreach (self::normalizeDesktopShortcutItems($accountId, $items) as $index => $item) {
-            self::queryTable('user_desktop_shortcut')->insert([
-                'uuid' => self::uuid(),
-                'account_id' => $accountId,
-                'item_type' => $item['type'],
-                'item_key' => $item['key'],
-                'ref_id' => $item['ref_id'],
-                'sort' => $index + 1,
-                'status' => 'enabled',
-                'created_at' => $now,
-                'updated_at' => $now,
-                'deleted_at' => null,
-            ]);
-        }
-    }
-
-    public static function favoritePage(int $accountId, array $filters): array
-    {
-        $page = max(1, (int) ($filters['page'] ?? 1));
-        $pageSize = min(100, max(10, (int) ($filters['page_size'] ?? 20)));
-        $query = self::queryTable('favorite_link')
-            ->where('account_id', $accountId)
-            ->whereNull('deleted_at');
-
-        $keyword = trim((string) ($filters['keyword'] ?? ''));
-        if ($keyword !== '') {
-            $like = '%' . str_replace(['%', '_'], ['\\%', '\\_'], $keyword) . '%';
-            $query->where(function ($builder) use ($like): void {
-                $builder->where('title', 'like', $like)
-                    ->orWhere('url', 'like', $like);
-            });
-        }
-
-        $total = (int) (clone $query)->count();
-        $items = $query
-            ->orderBy('sort')
-            ->orderByDesc('id')
-            ->forPage($page, $pageSize)
-            ->get(['id', 'title', 'url', 'icon_url', 'icon_file_id', 'sort', 'status', 'created_at', 'updated_at'])
-            ->map(static fn ($row): array => [
-                'id' => (int) $row->id,
-                'title' => $row->title,
-                'url' => $row->url,
-                'icon_url' => $row->icon_url,
-                'icon_file_id' => $row->icon_file_id === null ? null : (int) $row->icon_file_id,
-                'sort' => (int) $row->sort,
-                'status' => $row->status,
-                'created_at' => $row->created_at,
-                'updated_at' => $row->updated_at,
-            ])
-            ->all();
-
-        return [
-            'items' => $items,
-            'pagination' => [
-                'page' => $page,
-                'page_size' => $pageSize,
-                'total' => $total,
-            ],
-        ];
-    }
-
-    public static function saveFavorite(int $accountId, int $userId, array $values, string $now): int
-    {
-        $id = (int) ($values['id'] ?? 0);
-        $payload = [
-            'account_id' => $accountId,
-            'user_id' => $userId,
-            'title' => $values['title'] ?? '',
-            'url' => $values['url'] ?? '',
-            'icon_url' => $values['icon_url'] ?? null,
-            'icon_file_id' => $values['icon_file_id'] ?? null,
-            'sort' => (int) ($values['sort'] ?? 0),
-            'status' => $values['status'] ?? 'enabled',
-            'updated_at' => $now,
-            'deleted_at' => null,
-        ];
-
-        if ($id > 0) {
-            self::queryTable('favorite_link')
-                ->where('id', $id)
+        self::connection()->transaction(function () use ($accountId, $items, $now): void {
+            self::queryTable('account')->where('id', $accountId)->lockForUpdate()->first(['id']);
+            self::queryTable('user_desktop_shortcut')
                 ->where('account_id', $accountId)
                 ->whereNull('deleted_at')
-                ->update($payload);
-            return $id;
-        }
+                ->update([
+                    'deleted_at' => $now,
+                    'updated_at' => $now,
+                ]);
 
-        return (int) self::queryTable('favorite_link')->insertGetId(array_merge($payload, [
-            'uuid' => self::uuid(),
-            'created_at' => $now,
-        ]));
-    }
-
-    public static function deleteFavorite(int $accountId, int $id, string $now): int
-    {
-        self::queryTable('user_desktop_shortcut')
-            ->where('account_id', $accountId)
-            ->where('item_type', 'favorite')
-            ->where('ref_id', $id)
-            ->whereNull('deleted_at')
-            ->update([
-                'deleted_at' => $now,
-                'updated_at' => $now,
-            ]);
-
-        return self::queryTable('favorite_link')
-            ->where('id', $id)
-            ->where('account_id', $accountId)
-            ->whereNull('deleted_at')
-            ->update([
-                'deleted_at' => $now,
-                'updated_at' => $now,
-                'status' => 'disabled',
-            ]);
+            foreach (self::normalizeDesktopShortcutItems($accountId, $items) as $index => $item) {
+                self::queryTable('user_desktop_shortcut')->insert([
+                    'uuid' => self::uuid(),
+                    'account_id' => $accountId,
+                    'item_type' => $item['type'],
+                    'item_key' => $item['key'],
+                    'ref_id' => $item['ref_id'],
+                    'sort' => $index + 1,
+                    'status' => 'enabled',
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                    'deleted_at' => null,
+                ]);
+            }
+        });
     }
 
     public static function clearTestData(string $now): array
@@ -1082,7 +995,7 @@ class TableRecord extends BaseModel
             $result[$table] = self::queryTable($table)->delete();
         }
 
-        foreach (['user_device', 'user_notify_setting', 'user_desktop_config', 'user_desktop_shortcut', 'favorite_link', 'message_target', 'message_channel_log'] as $table) {
+        foreach (['user_device', 'user_notify_setting', 'user_desktop_config', 'user_desktop_shortcut', 'favorite_link', 'user_note', 'message_target', 'message_channel_log'] as $table) {
             $result[$table] = self::queryTable($table)
                 ->where(function ($query): void {
                     $query->whereNull('account_id')
@@ -1090,8 +1003,9 @@ class TableRecord extends BaseModel
                 })
                 ->delete();
         }
-        $result['file_relation'] = self::queryTable('file_relation')->delete();
+        $result['file_relation'] = self::queryTable('file_relation')->where('entity_type', '<>', 'system_release')->delete();
         $result['file'] = self::queryTable('file')
+            ->whereNotIn('id', self::queryTable('desktop_release_asset')->whereNotNull('file_id')->select('file_id'))
             ->where(function ($query): void {
                 $query->whereNull('uploader_id')
                     ->orWhere('uploader_id', '<>', 1);
@@ -1220,13 +1134,10 @@ class TableRecord extends BaseModel
         );
     }
 
+    /** 判断收藏是否仍对桌面所属账号可见。 */
     private static function favoriteExists(int $accountId, int $id): bool
     {
-        return self::queryTable('favorite_link')
-            ->where('id', $id)
-            ->where('account_id', $accountId)
-            ->whereNull('deleted_at')
-            ->exists();
+        return FavoriteRecord::visible($accountId, $id) !== null;
     }
 
     private static function clearOperationLogRows(string $now): int

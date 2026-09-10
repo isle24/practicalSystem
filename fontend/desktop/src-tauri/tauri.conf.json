@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Practical System",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "identifier": "com.2iwm.practical.desktop",
   "build": {
     "beforeDevCommand": "npm run build",
@@ -25,7 +25,14 @@
       "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src ipc: http://ipc.localhost; object-src 'none'; base-uri 'none'; frame-src 'none'"
     }
   },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEExQjAyMUI0QUYwOEU0OTAKUldTUTVBaXZ0Q0d3b1UxaFFOMzN0RUtTZS9Rak5FZzB0d2toL3VZbHZqNkduTE5TeStoYXA4S2cK",
+      "windows": { "installMode": "passive" }
+    }
+  },
   "bundle": {
+    "createUpdaterArtifacts": true,
     "active": true,
     "targets": "all",
     "category": "Education",

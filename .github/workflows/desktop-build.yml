@@ -2,11 +2,18 @@ name: Desktop installers
 
 on:
   workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish a GitHub Release after all platforms succeed
+        type: boolean
+        default: false
   push:
     branches: [main, master]
+    tags: ['v*']
     paths:
       - 'fontend/desktop/**'
       - 'fontend/pc/**'
+      - 'fontend/shared/**'
       - '.github/workflows/desktop-build.yml'
 
 permissions:
@@ -14,23 +21,45 @@ permissions:
 
 concurrency:
   group: desktop-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
+  configuration:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify signing configuration
+        shell: bash
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          if [ -z "$TAURI_SIGNING_PRIVATE_KEY" ] || [ -z "$TAURI_SIGNING_PRIVATE_KEY_PASSWORD" ]; then
+            echo 'Configure TAURI_SIGNING_PRIVATE_KEY and TAURI_SIGNING_PRIVATE_KEY_PASSWORD in repository Actions secrets.'
+            exit 1
+          fi
+
   build:
+    needs: configuration
     name: ${{ matrix.name }}
     strategy:
       fail-fast: false
       matrix:
         include:
+          - name: macOS universal
+            os: macos-latest
+            target: universal-apple-darwin
+            args: --target universal-apple-darwin --bundles app,dmg
+            artifact: macos
           - name: Windows x64
             os: windows-latest
             args: --bundles nsis
+            artifact: windows
           - name: Linux x64
             os: ubuntu-22.04
             args: --bundles deb,appimage
+            artifact: linux
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 45
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -41,6 +70,9 @@ jobs:
             fontend/desktop/package-lock.json
             fontend/pc/package-lock.json
       - uses: dtolnay/rust-toolchain@stable
+      - name: Install both Mac architectures
+        if: runner.os == 'macOS'
+        run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
       - uses: swatinem/rust-cache@v2
         with:
           workspaces: fontend/desktop/src-tauri -> target
@@ -49,15 +81,47 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf xdg-utils
-      - name: Install shared PC dependencies
+      - name: Install PC dependencies
         run: npm ci --prefix fontend/pc
       - name: Install desktop dependencies
         run: npm ci --prefix fontend/desktop
-      - name: Build installer
+      - name: Build signed installer
         uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           projectPath: fontend/desktop
           args: ${{ matrix.args }}
-          uploadWorkflowArtifacts: true
+      - name: Collect installer artifacts
+        run: node fontend/desktop/scripts/release-artifacts.mjs collect ${{ matrix.artifact }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installers-${{ matrix.artifact }}
+          path: desktop-artifacts/*
+          if-no-files-found: error
+          retention-days: 14
+
+  publish:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.publish)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: installers-*
+          path: desktop-artifacts
+          merge-multiple: true
+      - name: Validate packages and generate release manifest
+        run: node fontend/desktop/scripts/release-artifacts.mjs manifest
+      - name: Publish all platforms together
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node fontend/desktop/scripts/release-artifacts.mjs publish

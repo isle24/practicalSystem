@@ -59,6 +59,10 @@ export function useMobileNavigation(options = {}) {
   }
 
   async function handlePopState() {
+    if (options.beforeLeave && !(await options.beforeLeave())) {
+      history.pushState({ practicalMobileNavigation: true }, '', window.location.href);
+      return;
+    }
     const target = state.backStack.pop();
     if (target) {
       await applyKey(target, 'back');

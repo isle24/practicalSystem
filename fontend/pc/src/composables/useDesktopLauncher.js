@@ -108,6 +108,7 @@ export function useDesktopLauncher(options) {
       title: item.favorite.title,
       url: item.favorite.url,
       icon_url: item.favorite.icon_url,
+      open_mode: item.favorite.open_mode,
     });
   }
 
@@ -121,6 +122,7 @@ export function useDesktopLauncher(options) {
       color: 'blue',
       scope: item.url,
       url: item.url,
+      open_mode: item.open_mode || 'client',
       type: 'favoriteLink',
     };
   }

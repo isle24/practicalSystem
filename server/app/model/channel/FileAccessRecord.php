@@ -24,6 +24,9 @@ class FileAccessRecord extends TableRecord
         if ((int) $file->uploader_id === CurrentContext::accountId() || self::schoolAdmin()) {
             return true;
         }
+        if ((string) $file->category === 'favorite' && FavoriteRecord::iconVisible((int) CurrentContext::accountId(), (int) $file->id)) {
+            return true;
+        }
         if ((string) $file->category === 'export') {
             return false;
         }
@@ -76,6 +79,9 @@ class FileAccessRecord extends TableRecord
         }
         $permissions = CurrentContext::permissionCodes();
         $scope = self::scope();
+        if ($entity === 'favorite_link') {
+            return FavoriteRecord::visible((int) CurrentContext::accountId(), $id) !== null;
+        }
         if ($entity === 'template') {
             return in_array('template:view', $permissions, true)
                 && self::queryTable('template')->where('id', $id)->where('status', 'enabled')->where('flag', 'on')->whereNull('deleted_at')->exists();
