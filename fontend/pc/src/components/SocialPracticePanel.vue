@@ -1011,7 +1011,12 @@ async function runLoading(callback) {
     await callback();
   } catch (error) {
     state.error = true;
-    state.message = error.message;
+    const detail = [
+      error.message || '请求失败',
+      error.code ? `业务码 ${error.code}` : '',
+      error.apiPath ? `接口 ${error.apiPath}` : '',
+    ].filter(Boolean);
+    state.message = detail.join('，');
   } finally {
     state.loading = false;
   }

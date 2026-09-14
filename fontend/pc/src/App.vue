@@ -54,10 +54,10 @@
     </section>
   </main>
 
-  <main v-else class="desktop-shell" :style="desktopStyle" @click.left="closeDesktopContextMenu" @contextmenu.prevent="openDesktopContextMenu">
+  <main v-else class="desktop-shell" :class="{ 'desktop-shell-mac': desktopStyleMode === 'mac' }" :style="desktopStyle" @click.left="closeDesktopContextMenu" @contextmenu.prevent="openDesktopContextMenu">
     <section class="workspace">
       <AdaptiveDesktopGrid
-        :modules="visibleDesktopModules"
+        :modules="desktopStyleMode === 'mac' ? launcherFilteredModules : visibleDesktopModules"
         :module-href="moduleHref"
         :is-focused="isModuleFocused"
         :backend-url="backendUrl"
@@ -193,6 +193,36 @@
                   accept="image/jpeg,image/png,image/webp,image/gif"
                   @change="event => handleAssetSelected('wallpaper', event)"
                 >
+              </section>
+
+              <section class="profile-panel-card">
+                <header>
+                  <strong>客户端外观</strong>
+                  <small>只保存在当前设备，不同步到学校服务器。</small>
+                </header>
+                <div class="desktop-style-options" role="radiogroup" aria-label="客户端外观">
+                  <button
+                    type="button"
+                    role="radio"
+                    :aria-checked="desktopStyleMode === 'windows'"
+                    :class="{ active: desktopStyleMode === 'windows' }"
+                    @click="setDesktopStyle('windows')"
+                  >
+                    <Monitor :size="18" />
+                    <span><strong>Windows 风格</strong><small>桌面、窗口和任务栏</small></span>
+                  </button>
+                  <button
+                    type="button"
+                    role="radio"
+                    :aria-checked="desktopStyleMode === 'mac'"
+                    :class="{ active: desktopStyleMode === 'mac' }"
+                    @click="setDesktopStyle('mac')"
+                  >
+                    <LayoutGrid :size="18" />
+                    <span><strong>Mac 风格</strong><small>启动台和居中应用网格</small></span>
+                  </button>
+                </div>
+                <small class="client-version">客户端版本 v{{ clientVersion }}</small>
               </section>
 
               <section v-if="canManageLoginBackground" class="profile-panel-card">
@@ -4055,6 +4085,10 @@
       @toggle="toggleDesktopShortcut"
     />
 
+    <button type="button" class="notebook-floating-button" title="快捷记事本" aria-label="快捷记事本" @click="openNotebook">
+      <FileText :size="19" />
+    </button>
+
     <InternshipArchiveDetail
       v-model="archiveDetailVisible"
       :plan-id="archiveDetailPlanId"
@@ -4129,6 +4163,7 @@
       </div>
       <div class="taskbar-status" aria-label="系统状态">
         <span class="taskbar-online"><i />在线</span>
+        <span class="taskbar-version">v{{ clientVersion }}</span>
         <el-button text class="taskbar-operator-button" :title="isAdminRole ? '修改密码' : '个人设置'" @click="handleOperatorClick">
           <span class="top-avatar" :style="topAvatarStyle">
             <UserRound v-if="!profileState.form.avatar" :size="14" />
@@ -4231,6 +4266,7 @@ import {
   LogOut,
   MapPin,
   MessageCircle,
+  Monitor,
   MoreHorizontal,
   Network,
   Plus,
@@ -4446,6 +4482,8 @@ const baseImportInputRef = ref(null);
 const syllabusGuideFileInputRef = ref(null);
 const focusedWindowId = ref(null);
 const zIndexSeed = ref(20);
+const desktopStyleMode = ref(localStorage.getItem('practical:desktop-style') === 'mac' ? 'mac' : 'windows');
+const clientVersion = window.__PRACTICAL_DESKTOP__?.version || 'Web';
 const wallpaperCacheKey = 'practical_pc_wallpaper';
 const loginBackgroundMaxSize = 8 * 1024 * 1024;
 const imageAssetTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
@@ -7496,6 +7534,18 @@ function openModule(module) {
     return;
   }
   openModuleWindow(module, { reuse: module.id !== 'notebook' });
+}
+
+function setDesktopStyle(style) {
+  desktopStyleMode.value = style === 'mac' ? 'mac' : 'windows';
+  localStorage.setItem('practical:desktop-style', desktopStyleMode.value);
+}
+
+function openNotebook() {
+  const notebook = modules.find(item => item.id === 'notebook');
+  if (notebook) {
+    openModuleWindow(notebook, { reuse: false });
+  }
 }
 
 function openDesktopLauncher() {

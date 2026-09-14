@@ -259,7 +259,7 @@ fn handle_menu(app: &AppHandle, id: &str) {
 
 /// 初始化原生客户端与本地连接命令。
 pub fn run() {
-    tauri::Builder::default()
+    let mut builder = tauri::Builder::default()
         .manage(AppState::default())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
@@ -272,9 +272,16 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             read_connection_settings,
             connect_school
-        ])
-        .menu(application_menu)
-        .on_menu_event(|app, event| handle_menu(app, event.id().as_ref()))
+        ]);
+
+    #[cfg(target_os = "macos")]
+    {
+        builder = builder
+            .menu(application_menu)
+            .on_menu_event(|app, event| handle_menu(app, event.id().as_ref()));
+    }
+
+    builder
         .on_window_event(|window, event| {
             if window.label() == "connection" {
                 if let tauri::WindowEvent::CloseRequested { api, .. } = event {

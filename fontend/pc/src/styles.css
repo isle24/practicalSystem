@@ -353,6 +353,52 @@ a {
   display: none;
 }
 
+.desktop-shell-mac .workspace {
+  padding: clamp(24px, 6vh, 72px) clamp(24px, 7vw, 110px) 24px;
+  background: radial-gradient(circle at 50% 35%, rgba(255, 255, 255, .18), transparent 48%);
+}
+
+.desktop-shell-mac .desktop-icons {
+  width: min(1120px, 100%);
+  margin: 0 auto;
+  align-content: center;
+  justify-content: center;
+  grid-template-columns: repeat(auto-fit, minmax(92px, 108px));
+  grid-auto-rows: 108px;
+  gap: 18px 22px;
+}
+
+.desktop-shell-mac .shortcut-tile-desktop {
+  padding-top: 10px;
+  border-radius: 14px;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, .22);
+}
+
+.desktop-shell-mac .taskbar {
+  width: max-content;
+  min-width: 260px;
+  max-width: calc(100vw - 32px);
+  margin: 0 auto 10px;
+  padding: 4px 10px;
+  border: 1px solid rgba(255, 255, 255, .48);
+  border-radius: 16px;
+  background: rgba(246, 248, 251, .66);
+  box-shadow: 0 12px 30px rgba(24, 33, 43, .16);
+}
+
+.desktop-shell-mac .taskbar-brand,
+.desktop-shell-mac .taskbar-status {
+  display: none;
+}
+
+.desktop-shell-mac .taskbar-center {
+  width: auto;
+}
+
+.desktop-shell-mac .taskbar-apps {
+  max-width: min(620px, calc(100vw - 100px));
+}
+
 .shortcut-tile-desktop {
   height: 100%;
   display: grid;
@@ -973,6 +1019,55 @@ a {
   gap: 14px;
   padding: 16px 18px;
   overflow: auto;
+}
+
+.desktop-style-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.desktop-style-options button {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--muted);
+  text-align: left;
+  background: #fff;
+}
+
+.desktop-style-options button.active {
+  border-color: rgba(37, 99, 235, .52);
+  color: var(--primary);
+  background: var(--primary-soft);
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, .08);
+}
+
+.desktop-style-options span {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.desktop-style-options strong {
+  color: var(--text);
+  font-size: 13px;
+}
+
+.desktop-style-options small,
+.client-version {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.client-version {
+  display: block;
+  margin-top: 12px;
 }
 
 .resize-handle {
@@ -5805,6 +5900,34 @@ a {
   gap: 6px;
 }
 
+.taskbar-version {
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.notebook-floating-button {
+  position: absolute;
+  z-index: 3120;
+  right: 24px;
+  bottom: 70px;
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, .78);
+  border-radius: 50%;
+  color: #fff;
+  background: rgba(37, 99, 235, .88);
+  box-shadow: 0 8px 22px rgba(24, 33, 43, .22);
+  transition: transform .16s ease, background .16s ease;
+}
+
+.notebook-floating-button:hover {
+  background: #1d56c8;
+  transform: translateY(-2px);
+}
+
 .taskbar-online i {
   width: 7px;
   height: 7px;
@@ -5827,6 +5950,10 @@ a {
     display: none;
   }
 
+  .taskbar-version {
+    display: none;
+  }
+
   .taskbar-center {
     width: min(720px, calc(100vw - 300px));
   }
@@ -5836,6 +5963,17 @@ a {
     width: 36px;
     flex-basis: 36px;
     padding: 0;
+  }
+}
+
+@media (max-width: 680px) {
+  .desktop-style-options {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .notebook-floating-button {
+    right: 14px;
+    bottom: 62px;
   }
 }
 
