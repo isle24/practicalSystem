@@ -1,6 +1,7 @@
 <?php
 
 use app\model\channel\MessageRecord;
+use app\server\edu\EduImportSchema;
 use Dotenv\Dotenv;
 
 require_once __DIR__ . '/../vendor/autoload.php';
@@ -382,6 +383,7 @@ function createSchoolSchema(PDO $pdo): void
 {
     execSql($pdo, schoolCoreStatements());
     execSql($pdo, schoolBusinessStatements());
+    EduImportSchema::ensure($pdo);
 
     ensureMenuSchema($pdo);
     ensureArchiveSchema($pdo);
@@ -867,6 +869,7 @@ function schoolCoreStatements(): array
 function schoolBusinessStatements(): array
 {
     $statements = [
+        ...EduImportSchema::statements(),
         simpleTable('user_device', ['`account_id` BIGINT UNSIGNED DEFAULT NULL', '`jti` VARCHAR(120) DEFAULT NULL', '`device_name` VARCHAR(120) DEFAULT NULL', '`ip` VARCHAR(80) DEFAULT NULL', '`user_agent` VARCHAR(255) DEFAULT NULL', '`last_active_at` DATETIME DEFAULT NULL']),
         simpleTable('user_notify_setting', ['`account_id` BIGINT UNSIGNED DEFAULT NULL', '`msg_type` VARCHAR(80) DEFAULT NULL', '`channel` VARCHAR(80) DEFAULT NULL', '`enabled` ENUM(\'false\',\'true\') DEFAULT \'true\'']),
         simpleTable('user_desktop_config', ['`account_id` BIGINT UNSIGNED DEFAULT NULL', '`layout_json` JSON DEFAULT NULL']),
@@ -3719,6 +3722,12 @@ function seedMenus(PDO $pdo): void
         [7, 6, '企业微信应用', null, null, 'pc', 'menu', 74, 'Network'],
         [711, 7, '列表', 'wechat:proxy', '/config/wechat-proxy', 'pc', 'list', 741, 'List'],
         [701, 711, '保存', 'wechat:proxy:save', null, 'pc', 'button', 701, null],
+        [702, 711, '测试配置', 'wechat:proxy:test', null, 'pc', 'button', 702, null],
+        [650, 6, '教务数据', 'edu:data:view', '/data/edu-data', 'pc', 'menu', 63, 'Upload'],
+        [6501, 650, '列表', 'edu:data:view', '/data/edu-data', 'pc', 'list', 631, 'List'],
+        [6502, 6501, '导入', 'edu:data:import', null, 'pc', 'button', 6502, null],
+        [6503, 6501, '确认', 'edu:data:confirm', null, 'pc', 'button', 6503, null],
+        [6504, 6501, '问题处理', 'edu:data:issue', null, 'pc', 'button', 6504, null],
         [8, 0, '文件管理', null, null, 'pc', 'directory', 70, 'FolderOpen'],
         [81, 8, '文件管理', null, null, 'pc', 'menu', 81, 'FolderOpen'],
         [811, 81, '列表', 'file:view', '/file', 'pc', 'list', 811, 'List'],
@@ -3847,6 +3856,7 @@ function seedMenus(PDO $pdo): void
         9 => 'doc',
         10 => 'templateLib',
         20 => 'exportTask',
+        650 => 'eduData',
     ];
     $moduleStmt = $pdo->prepare(
         "UPDATE `menu`
@@ -3916,6 +3926,8 @@ function seedMenus(PDO $pdo): void
         6103, 61031, 610311, 610312, 610313,
     ];
     $practiceMenus = [2, 21, 211, 201, 202, 22, 221, 2211, 222, 2221, 22211, 23, 231, 2311, 2312, 24, 241, 2411, 2412, 25, 251, 2511, 26, 261, 2611, 2612, 27, 271, 2711];
+    $eduDataAdminMenus = [650, 6501, 6502, 6503, 6504];
+    $eduDataViewMenus = [650, 6501];
     $practiceReadonlyMenus = [2, 21, 211, 22, 221, 222, 2221, 25, 251];
     $socialPracticeMenus = [
         700000, 700010, 700011, 700020, 700021, 7000211, 7000212, 7000213,
@@ -3946,7 +3958,7 @@ function seedMenus(PDO $pdo): void
     $roleMenuIds = [
         1 => $allMenuIds,
         2 => $allMenuIds,
-        3 => array_merge($internshipAdminMenus, $baseManagementMenus, $practiceMenus, $socialPracticeMenus, $statMenus, $commonViewMenus),
+        3 => array_merge($internshipAdminMenus, $baseManagementMenus, $practiceMenus, $socialPracticeMenus, $statMenus, $commonViewMenus, $eduDataViewMenus),
         4 => array_merge($internshipAdminMenus, $baseManagementMenus, $practiceMenus, $socialPracticeMenus, $statMenus, $commonViewMenus),
         5 => array_merge([1, 11, 111, 12, 121, 104, 1213, 13, 131, 14, 141, 105, 15, 151, 106, 1512, 16, 161, 107, 1612, 17, 171, 108, 195, 1951, 19512, 201, 202, 2311, 2312, 2411, 2412, 2511, 2611, 2612], $practiceReadonlyMenus, $socialPracticeTeacherMenus, $commonViewMenus),
         6 => array_merge([1, 11, 111, 12, 121, 103, 14, 141, 105, 15, 151, 106, 16, 161, 107, 195, 1951, 19511], $practiceReadonlyMenus, $socialPracticeStudentMenus, $commonViewMenus),

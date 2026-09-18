@@ -86,6 +86,78 @@ export function saveWechatConfig(payload) {
   });
 }
 
+export function checkWechatConfig(payload) {
+  return request('/wechat/check-config', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function fetchEduBatches(params = {}) {
+  const query = new URLSearchParams(params).toString();
+  return request(`/edu-data/batches${query ? `?${query}` : ''}`);
+}
+
+export function fetchEduBatchDetail(id) {
+  return request(`/edu-data/batch-detail?id=${encodeURIComponent(id)}`);
+}
+
+export function uploadEduData(type, file, params = {}) {
+  const body = new FormData();
+  body.append('type', type);
+  body.append('file', file);
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== '') {
+      body.append(key, value);
+    }
+  });
+  return request('/edu-data/upload', { method: 'POST', body, timeoutMs: 0 });
+}
+
+export function fetchEduSource(type, params = {}) {
+  const query = new URLSearchParams(params).toString();
+  const paths = { student: 'students', teaching_plan: 'teaching-plans', course_offering: 'course-offerings' };
+  return request(`/edu-data/${paths[type] || paths.student}${query ? `?${query}` : ''}`);
+}
+
+export function fetchEduChanges(batchId, params = {}) {
+  const query = new URLSearchParams({ batch_id: batchId, ...params }).toString();
+  return request(`/edu-data/changes?${query}`);
+}
+
+export function fetchEduIssues(batchId, params = {}) {
+  const query = new URLSearchParams({ batch_id: batchId, ...params }).toString();
+  return request(`/edu-data/issues?${query}`);
+}
+
+export function resolveEduIssue(id) {
+  return request('/edu-data/resolve-issue', {
+    method: 'POST',
+    body: JSON.stringify({ id }),
+  });
+}
+
+export function fetchEduCandidates(params = {}) {
+  const query = new URLSearchParams(params).toString();
+  return request(`/edu-data/candidates${query ? `?${query}` : ''}`);
+}
+
+export function publishEduBatch(id) {
+  return request('/edu-data/publish', { method: 'POST', body: JSON.stringify({ id }) });
+}
+
+export function cancelEduBatch(id) {
+  return request('/edu-data/cancel', { method: 'POST', body: JSON.stringify({ id }) });
+}
+
+export function classifyEduCandidate(id, businessType) {
+  return request('/edu-data/classify-candidate', { method: 'POST', body: JSON.stringify({ id, business_type: businessType }) });
+}
+
+export function confirmEduCandidates(ids) {
+  return request('/edu-data/confirm-candidates', { method: 'POST', body: JSON.stringify({ ids }) });
+}
+
 export function fetchOperationLogs(params = {}) {
   const query = new URLSearchParams(params).toString();
   return request(`/log/list${query ? `?${query}` : ''}`);

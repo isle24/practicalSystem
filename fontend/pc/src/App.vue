@@ -3547,6 +3547,13 @@
                   <small v-if="adminState.scope.message">{{ adminState.scope.message }}</small>
                 </div>
 
+                <EduDataPanel
+                  v-else-if="win.module.id === 'eduData'"
+                  :can-import="hasPermission('edu:data:import')"
+                  :can-confirm="hasPermission('edu:data:confirm')"
+                  :can-issue="hasPermission('edu:data:issue')"
+                />
+
                 <div v-else-if="win.module.id === 'dataManage' || (win.module.id === 'config' && win.panel === 'dataManage')" class="admin-panel data-manage-panel">
                   <section class="maintenance-card danger">
                     <header>
@@ -3915,6 +3922,9 @@
                     <el-button type="primary" :icon="Save" :loading="wechatProxy.loading" :disabled="!hasPermission('wechat:proxy:save')" @click="saveProxy">
                       保存配置
                     </el-button>
+                    <el-button :icon="CheckCircle2" :loading="wechatProxy.checking" :disabled="!hasPermission('wechat:proxy:test')" @click="checkProxyConfig">
+                      测试配置
+                    </el-button>
                     <el-button :icon="RefreshCw" :loading="wechatProxy.loading" @click="loadProxy">
                       重新读取
                     </el-button>
@@ -3992,6 +4002,9 @@
                     </section>
                   </div>
                   <small v-if="wechatProxy.message">{{ wechatProxy.message }}</small>
+                  <small v-if="wechatProxy.checkResult" class="wechat-check-result">
+                    已连接：{{ wechatProxy.checkResult.agent_name || '企业微信应用' }}（AgentId {{ wechatProxy.checkResult.agent_id }}），检测于 {{ wechatProxy.checkResult.checked_at }}
+                  </small>
                 </div>
 
                 <div v-else class="module-empty-state">
@@ -4303,6 +4316,7 @@ import PracticePeriodManager from './components/PracticePeriodManager.vue';
 import PracticeScheduleBoard from './components/PracticeScheduleBoard.vue';
 import DocCenter from './components/DocCenter.vue';
 import EducationPlanSyncPanel from './components/EducationPlanSyncPanel.vue';
+import EduDataPanel from './components/EduDataPanel.vue';
 import EnterpriseEvaluationPanel from './components/EnterpriseEvaluationPanel.vue';
 import ExportTaskCenter from './components/ExportTaskCenter.vue';
 import IconUpload from './components/IconUpload.vue';
@@ -4400,6 +4414,7 @@ import {
   fetchProfileSettings,
   fetchRolePermissions,
   fetchWechatConfig,
+  checkWechatConfig,
   generateAdminLoginPasskey,
   importArchiveExcel,
   importInternshipArrangementAssignments,
@@ -4569,6 +4584,7 @@ const desktopShortcutModuleAliases = {
   professionManage: 'dataCenter',
   classManage: 'dataCenter',
   companyManage: 'dataCenter',
+  eduData: 'dataCenter',
   dataManage: 'dataCenter',
   log: 'auditCenter',
   exportTask: 'auditCenter',
@@ -4603,6 +4619,8 @@ const wechatProxy = reactive({
   selectedMenuIndex: -1,
   selectedSubMenuIndex: -1,
   loading: false,
+  checking: false,
+  checkResult: null,
   message: '',
 });
 const logState = reactive({
@@ -4861,7 +4879,7 @@ const modules = [
     color: 'red',
     scope: '统计报表与学校基础数据',
     collection: true,
-    childIds: ['stat', 'userManage', 'gradeManage', 'departmentManage', 'professionManage', 'classManage', 'companyManage', 'dataManage'],
+    childIds: ['stat', 'userManage', 'gradeManage', 'departmentManage', 'professionManage', 'classManage', 'companyManage', 'eduData', 'dataManage'],
     adminOnly: true,
   },
   {
@@ -5060,6 +5078,17 @@ const modules = [
     managePermission: 'internship:manage',
     defaultPanel: 'baseFlows',
     adminOnly: true,
+    collectionParent: 'dataCenter',
+  },
+  {
+    id: 'eduData',
+    name: '教务数据',
+    icon: Upload,
+    color: 'blue',
+    scope: '教务学生、课程计划与开课情况导入',
+    viewPermission: 'edu:data:view',
+    managePermission: 'edu:data:import',
+    defaultPanel: 'eduData',
     collectionParent: 'dataCenter',
   },
   {
@@ -5605,6 +5634,7 @@ const moduleSearchKeywords = {
   professionManage: '专业',
   classManage: '班级',
   companyManage: '基地管理 基地建设 基地申报 基地使用 合作单位 企业',
+  eduData: '教务数据 学生 教师 开课计划 开课情况 导入 模板 差异 候选',
   dataManage: '数据 管理 清理 测试数据 初始化',
   config: '设置 配置 菜单 权限 角色 企业微信 操作说明 学校',
   profile: '个人设置 头像 壁纸 背景 消息接收 密码 资料',
@@ -15997,6 +16027,7 @@ function applyWechatConfig(data) {
   wechatProxy.proxy_url = data.proxy_url || '';
   wechatProxy.proxy_enabled = Boolean(data.proxy_enabled);
   wechatProxy.menu = normalizeWechatMenu(data.menu || []);
+  wechatProxy.checkResult = null;
   wechatProxy.selectedMenuIndex = wechatProxy.menu.length ? 0 : -1;
   wechatProxy.selectedSubMenuIndex = -1;
 }
@@ -16155,6 +16186,29 @@ async function saveProxy() {
     wechatProxy.message = error.message;
   } finally {
     wechatProxy.loading = false;
+  }
+}
+
+async function checkProxyConfig() {
+  if (wechatProxy.checking || !hasPermission('wechat:proxy:test')) {
+    return;
+  }
+  wechatProxy.checking = true;
+  wechatProxy.message = '';
+  wechatProxy.checkResult = null;
+  try {
+    wechatProxy.checkResult = await checkWechatConfig({
+      corp_id: wechatProxy.corp_id,
+      agent_id: wechatProxy.agent_id,
+      secret: wechatProxy.secret,
+      proxy_url: wechatProxy.proxy_url,
+      proxy_enabled: wechatProxy.proxy_enabled,
+    });
+    wechatProxy.message = '企业微信配置检测成功';
+  } catch (error) {
+    wechatProxy.message = error.message;
+  } finally {
+    wechatProxy.checking = false;
   }
 }
 
