@@ -34,6 +34,7 @@ class PluginController
     #[OperationLog('保存插件目录')]
     public function save(Request $request): Response
     {
+        if ($request->method() !== 'POST') return $this->fail(40500, '请使用 POST 请求', 405);
         try {
             return $this->ok((new PluginService())->save((array) $request->all()), '插件已保存');
         } catch (Throwable $exception) {
@@ -47,6 +48,7 @@ class PluginController
     #[OperationLog('删除插件目录')]
     public function delete(Request $request): Response
     {
+        if ($request->method() !== 'POST') return $this->fail(40500, '请使用 POST 请求', 405);
         try {
             (new PluginService())->delete((int) $request->input('id'));
             return $this->ok([], '插件已删除');

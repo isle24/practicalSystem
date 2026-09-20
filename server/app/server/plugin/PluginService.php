@@ -12,15 +12,16 @@ class PluginService
     /** 判断当前账号是否可以维护插件目录。 */
     public function canManage(): bool
     {
-        return in_array(CurrentContext::roleType(), ['super_admin', 'school_admin'], true)
-            || in_array('plugin:manage', CurrentContext::permissionCodes(), true);
+        return CurrentContext::accountId() && in_array(CurrentContext::roleType(), ['super_admin', 'school_admin'], true);
     }
 
     /** 查询当前学校启用的插件。 */
     public function page(array $input): array
     {
         if (!CurrentContext::accountId()) throw new RuntimeException('请先登录', 401);
-        return PluginRecord::page($input) + ['can_manage' => $this->canManage()];
+        $canManage = $this->canManage();
+        $input['status'] = $canManage ? 'all' : 'enabled';
+        return PluginRecord::page($input) + ['can_manage' => $canManage];
     }
 
     /** 保存管理员配置的受控 Web 入口。 */
@@ -45,12 +46,16 @@ class PluginService
         if ($entryHost === '' || !in_array($entryHost, $domains, true)) {
             throw new RuntimeException('插件入口域名必须包含在允许域名中', 400);
         }
+        $id = (int) ($input['id'] ?? 0);
+        if ($id > 0 && !PluginRecord::detail($id)) throw new RuntimeException('插件不存在', 404);
+        $icon = $this->nullableString($input['icon_url'] ?? null, 500);
+        if ($icon !== null) $this->assertEntry($icon);
         $id = PluginRecord::savePlugin([
             'id' => (int) ($input['id'] ?? 0), 'code' => $code, 'name' => $name,
             'description' => mb_substr(trim((string) ($input['description'] ?? '')), 0, 500),
             'version' => mb_substr(trim((string) ($input['version'] ?? '1.0.0')) ?: '1.0.0', 0, 40),
-            'icon_url' => $this->nullableString($input['icon_url'] ?? null, 500), 'entry_url' => $entry,
-            'open_mode' => in_array(($input['open_mode'] ?? 'browser'), ['browser', 'client'], true) ? $input['open_mode'] : 'browser',
+            'icon_url' => $icon, 'entry_url' => $entry,
+            'open_mode' => in_array(($input['open_mode'] ?? 'browser'), ['browser', 'client'], true) ? ($input['open_mode'] ?? 'browser') : 'browser',
             'allowed_domains' => json_encode($domains, JSON_UNESCAPED_UNICODE),
             'permission_description' => mb_substr(trim((string) ($input['permission_description'] ?? '')), 0, 500),
             'sort' => (int) ($input['sort'] ?? 100), 'status' => ($input['status'] ?? 'enabled') === 'disabled' ? 'disabled' : 'enabled',
@@ -75,7 +80,7 @@ class PluginService
     public function assertEntry(string $url): string
     {
         $parts = parse_url(trim($url));
-        if (!$parts || strtolower((string) ($parts['scheme'] ?? '')) !== 'https' || empty($parts['host']) || isset($parts['user']) || isset($parts['pass'])) {
+        if (strlen(trim($url)) > 500 || !filter_var(trim($url), FILTER_VALIDATE_URL) || !$parts || strtolower((string) ($parts['scheme'] ?? '')) !== 'https' || empty($parts['host']) || isset($parts['user']) || isset($parts['pass'])) {
             throw new RuntimeException('插件入口必须是 HTTPS 地址，且不能携带账号密码', 400);
         }
         return trim($url);

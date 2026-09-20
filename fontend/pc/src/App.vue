@@ -4111,6 +4111,7 @@
 
     <DesktopLauncher
       v-model:keyword="desktopLauncherState.keyword"
+      @reorder="setDesktopModuleOrder"
       :visible="desktopLauncherState.visible"
       :modules="launcherFilteredModules"
       :loading="desktopLauncherState.loading"
@@ -4625,7 +4626,7 @@ const desktopLauncher = useDesktopLauncher({
   defaultModuleIds: DEFAULT_DESKTOP_MODULE_IDS,
   moduleAliases: desktopShortcutModuleAliases,
   searchText: moduleSearchText,
-  orderStorageKey: () => `practical:pc:desktop-order:${window.location.origin}:${permissionState.context.account_id || 'guest'}`,
+  orderStorageKey: () => `practical:pc:desktop-order:${window.__PRACTICAL_DESKTOP__?.serverOrigin || window.location.origin}:${permissionState.context.account_id || 'guest'}`,
 });
 const desktopLauncherState = desktopLauncher.state;
 const loginPageState = reactive({
@@ -8544,7 +8545,9 @@ async function submitDesktopBootstrapLogin() {
   loginState.loading = true;
   loginState.message = '';
   try {
-    await window.__PRACTICAL_DESKTOP__.bootstrapLogin();
+    const result = await window.__PRACTICAL_DESKTOP__.bootstrapLogin();
+    if (result?.attempted === false) return;
+    if (result?.code !== 0) throw new Error(result?.message || '客户端登录失败，请手动登录');
     await refreshAuthenticatedSession(true);
   } catch (error) {
     loginState.message = error.message || '客户端自动登录失败，请手动登录';

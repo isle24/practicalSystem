@@ -1,13 +1,9 @@
 <template>
   <section class="plugin-panel">
     <header class="plugin-toolbar">
-      <div>
-        <h2>插件中心</h2>
-        <p>仅提供经过学校配置的安全 Web/OAuth 入口。</p>
-      </div>
       <div class="plugin-search">
-        <el-input v-model="keyword" clearable placeholder="搜索插件" @keyup.enter="load" />
-        <el-button :icon="Search" :loading="loading" @click="load">查询</el-button>
+        <el-input v-model="keyword" clearable placeholder="搜索插件" @keyup.enter="search" @clear="search" />
+        <el-button :icon="Search" :loading="loading" @click="search">查询</el-button>
         <el-button v-if="canManage" type="primary" :icon="Plus" @click="edit()">新增</el-button>
       </div>
     </header>
@@ -20,15 +16,17 @@
         </div>
         <div class="plugin-card-body">
           <header><strong>{{ item.name }}</strong><small>v{{ item.version || '1.0.0' }}</small></header>
+          <el-tag v-if="item.status === 'disabled'" type="info" size="small">已停用</el-tag>
           <p>{{ item.description || '暂无说明' }}</p>
           <small class="plugin-permission">{{ item.permission_description || '由学校管理员配置入口权限。' }}</small>
-          <el-button type="primary" :icon="ExternalLink" @click="open(item)">打开</el-button>
+          <el-button type="primary" :icon="ExternalLink" :disabled="item.status === 'disabled'" @click="open(item)">打开</el-button>
           <el-button v-if="canManage" link type="primary" @click="edit(item)">编辑</el-button>
           <el-button v-if="canManage" link type="danger" @click="remove(item)">删除</el-button>
         </div>
       </article>
       <el-empty v-if="!loading && !items.length" description="暂无可用插件" />
     </div>
+    <el-pagination v-if="total > pageSize" v-model:current-page="page" :page-size="pageSize" :total="total" layout="prev, pager, next" @current-change="load" />
     <OperationDialog :visible="dialog.visible" :title="dialog.form.id ? '编辑插件' : '新增插件'" :busy="saving" @close="dialog.visible = false">
       <div class="plugin-form">
         <label><span>插件编码</span><el-input v-model="dialog.form.code" :disabled="Boolean(dialog.form.id)" placeholder="如 cloud-storage" /></label>
@@ -60,6 +58,9 @@ const props = defineProps({ canManage: { type: Boolean, default: false } });
 const canManage = ref(props.canManage);
 const items = ref([]);
 const keyword = ref('');
+const page = ref(1);
+const total = ref(0);
+const pageSize = 20;
 const loading = ref(false);
 const error = ref('');
 const saving = ref(false);
@@ -73,14 +74,20 @@ async function load() {
   loading.value = true;
   error.value = '';
   try {
-    const data = await request(`/plugin/list?${new URLSearchParams({ keyword: keyword.value, page: 1, page_size: 100 })}`);
+    const data = await request(`/plugin/list?${new URLSearchParams({ keyword: keyword.value, page: page.value, page_size: pageSize })}`);
     items.value = data.items || [];
+    total.value = Number(data.pagination?.total || 0);
     canManage.value = Boolean(data.can_manage);
   } catch (reason) {
     error.value = reason.message || '插件目录加载失败';
   } finally {
     loading.value = false;
   }
+}
+
+function search() {
+  page.value = 1;
+  return load();
 }
 
 function edit(item = {}) {
@@ -92,7 +99,9 @@ async function save() {
   saving.value = true;
   try {
     const form = dialog.value.form;
-    await request('/plugin/save', { method: 'POST', body: JSON.stringify({ ...form, allowed_domains: form.allowed_domains_text.split(',').map(value => value.trim()).filter(Boolean) }) });
+    const domains = form.allowed_domains_text.split(',').map(value => value.trim()).filter(Boolean);
+    if (!domains.length) domains.push(new URL(form.entry_url).hostname);
+    await request('/plugin/save', { method: 'POST', body: JSON.stringify({ ...form, allowed_domains: domains }) });
     dialog.value.visible = false;
     await load();
   } catch (reason) { ElMessage.error(reason.message || '插件保存失败'); }
@@ -106,7 +115,11 @@ async function remove(item) {
 }
 
 async function open(item) {
-  try { await openExternalLink({ url: item.entry_url, open_mode: item.open_mode || 'browser' }); }
+  try {
+    const url = new URL(item.entry_url);
+    if (item.status === 'disabled' || url.protocol !== 'https:' || !(item.allowed_domains || []).includes(url.hostname.toLowerCase().replace(/\.$/, ''))) throw new Error('插件入口不在允许域名中或已停用');
+    await openExternalLink({ url: item.entry_url, open_mode: item.open_mode || 'browser' });
+  }
   catch (reason) { ElMessage.error(reason.message || '插件打开失败'); }
 }
 
@@ -120,7 +133,7 @@ onMounted(load);
 .plugin-toolbar p{margin:5px 0 0;color:#788596;font-size:13px}
 .plugin-search{display:flex;gap:8px;min-width:300px}
 .plugin-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px;align-content:start}
-.plugin-card{display:flex;gap:14px;padding:17px;border:1px solid #e4e9ef;border-radius:10px;background:#fff;min-width:0}
+.plugin-card{display:flex;gap:14px;padding:17px;border:1px solid #e4e9ef;border-radius:8px;background:#fff;min-width:0}
 .plugin-card-icon{width:52px;height:52px;display:grid;place-items:center;flex:none;border-radius:13px;background:#edf5ff;color:#2875c5}
 .plugin-card-icon img{width:100%;height:100%;object-fit:cover;border-radius:13px}
 .plugin-card-body{display:grid;gap:8px;min-width:0;flex:1}
@@ -129,7 +142,7 @@ onMounted(load);
 .plugin-card-body p{margin:0;color:#536173;font-size:13px;line-height:1.55}
 .plugin-card-body .el-button{justify-self:start}
 .plugin-permission{line-height:1.45}
-.plugin-form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px 20px;padding:4px 2px;min-width:0}
+.plugin-form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px 20px;padding:20px;min-width:0}
 .plugin-form label{display:grid;gap:6px;color:#5e6b7a;font-size:13px;min-width:0}
 .plugin-form .wide{grid-column:1/-1}
 @media(max-width:620px){.plugin-toolbar{display:grid}.plugin-search{min-width:0}}

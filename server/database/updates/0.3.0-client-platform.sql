@@ -20,6 +20,5 @@ CREATE TABLE IF NOT EXISTS `plugin_catalog` (
   KEY `idx_plugin_status_sort` (`status`, `sort`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
-INSERT INTO `plugin_catalog` (`uuid`, `code`, `name`, `description`, `version`, `entry_url`, `open_mode`, `allowed_domains`, `permission_description`, `sort`, `status`)
-VALUES ('00000000-0000-0000-0000-000000710001', 'cloud-storage', '网盘入口', '通过官方授权页面访问学校配置的网盘服务。', '1.0.0', 'https://drive.google.com/', 'browser', '["drive.google.com"]', '仅打开官方 Web/OAuth 页面，不保存网盘密码。', 10, 'enabled')
-ON DUPLICATE KEY UPDATE `name` = VALUES(`name`), `description` = VALUES(`description`), `updated_at` = CURRENT_TIMESTAMP;
+INSERT IGNORE INTO `plugin_catalog` (`uuid`, `code`, `name`, `description`, `version`, `entry_url`, `open_mode`, `allowed_domains`, `permission_description`, `sort`, `status`)
+VALUES ('00000000-0000-0000-0000-000000710001', 'cloud-storage', '网盘入口', '通过官方授权页面访问学校配置的网盘服务。', '1.0.0', 'https://drive.google.com/', 'browser', '["drive.google.com"]', '仅打开官方 Web/OAuth 页面，不保存网盘密码。', 10, 'enabled');

@@ -177,13 +177,23 @@ async fn handle(State(state): State<Arc<GatewayState>>, request: Request) -> Res
         }
         let credentials = state.credentials.lock().await.take();
         let Some((login_name, password)) = credentials else {
-            return error(StatusCode::CONFLICT, "本次连接没有可用的自动登录凭据");
+            let mut result = Response::new(Body::from("{\"attempted\":false}"));
+            result.headers_mut().insert(
+                header::CONTENT_TYPE,
+                HeaderValue::from_static("application/json"),
+            );
+            result
+                .headers_mut()
+                .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+            return result;
         };
         let target = match state.connection.origin.join("api/auth/login") {
             Ok(target) => target,
             Err(_) => return error(StatusCode::BAD_GATEWAY, "学校登录地址无效"),
         };
         let response = match state.connection.client.post(target)
+            .timeout(std::time::Duration::from_secs(30))
+            .header(header::ORIGIN, state.connection.origin.origin().ascii_serialization())
             .json(&serde_json::json!({"login_name": login_name, "password": password, "client": "WEB"}))
             .send().await {
             Ok(response) => response,

@@ -2,7 +2,7 @@
 
 namespace app\model\channel;
 
-use Illuminate\Database\Query\Builder;
+use Illuminate\Database\Eloquent\Builder;
 
 /** 受控 Web 插件目录模型。 */
 class PluginRecord extends TableRecord

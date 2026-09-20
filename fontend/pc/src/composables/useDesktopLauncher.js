@@ -1,4 +1,4 @@
-import { computed, reactive } from 'vue';
+import { computed, reactive, ref, watch } from 'vue';
 import { Globe2 } from '@lucide/vue';
 
 export const DEFAULT_DESKTOP_MODULE_IDS = ['internship', 'practice', 'config'];
@@ -31,9 +31,12 @@ export function useDesktopLauncher(options) {
     }
   }
 
-  function normalizeLocalOrder(modules, order = readLocalOrder()) {
+  const localOrder = ref(readLocalOrder());
+  watch(orderStorageKey, () => { localOrder.value = readLocalOrder(); }, { flush: 'sync' });
+
+  function normalizeLocalOrder(modules, order = localOrder.value) {
     const ids = new Set(modules.map(module => String(module.id)));
-    const known = order.filter(id => ids.has(id));
+    const known = [...new Set(order.filter(id => ids.has(id)))];
     const appended = modules.map(module => String(module.id)).filter(id => !known.includes(id));
     return [...known, ...appended];
   }
@@ -65,7 +68,7 @@ export function useDesktopLauncher(options) {
   const visibleDesktopModules = computed(() => {
     const shortcutIds = new Set(moduleShortcutKeys.value);
     const desktopModules = orderedAllModules.value.filter(module => shortcutIds.has(module.id));
-    return [...desktopModules, ...favoriteDesktopShortcuts.value];
+    return orderedModules([...desktopModules, ...favoriteDesktopShortcuts.value]);
   });
   const favoriteLauncherShortcuts = computed(() => {
     const rows = new Map();
@@ -82,7 +85,7 @@ export function useDesktopLauncher(options) {
     });
     return Array.from(rows.values());
   });
-  const launcherModules = computed(() => [...orderedAllModules.value, ...favoriteLauncherShortcuts.value]);
+  const launcherModules = computed(() => orderedModules([...orderedAllModules.value, ...favoriteLauncherShortcuts.value]));
   const filteredModules = computed(() => {
     const value = state.keyword.trim().toLowerCase();
     if (!value) {
@@ -133,7 +136,8 @@ export function useDesktopLauncher(options) {
   }
 
   function setModuleOrder(ids) {
-    const order = normalizeLocalOrder(options.allModules.value, Array.isArray(ids) ? ids : []);
+    const order = normalizeLocalOrder([...options.allModules.value, ...favoriteLauncherShortcuts.value], Array.isArray(ids) ? ids : []);
+    localOrder.value = order;
     try {
       localStorage.setItem(orderStorageKey(), JSON.stringify(order));
     } catch {

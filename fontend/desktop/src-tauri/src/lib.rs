@@ -93,7 +93,7 @@ async fn connect_school(
             .map_err(|_| "连接状态不可用")?
             .as_ref()
             .is_some_and(|gateway| gateway.remote.origin() == origin.origin());
-        if same_school {
+        if same_school && settings.last_username == username.trim() && password.is_empty() {
             let _ = school.unminimize();
             let _ = school.set_focus();
             let _ = window.hide();
@@ -101,10 +101,10 @@ async fn connect_school(
         }
         let proceed = app
             .dialog()
-            .message("切换学校将关闭当前学校的所有窗口，并结束本次登录。请先保存正在填写的内容。")
-            .title("切换学校")
+            .message("重新连接学校或账号将关闭当前学校的所有窗口，并结束本次登录。请先保存正在填写的内容。")
+            .title("重新连接")
             .buttons(MessageDialogButtons::OkCancelCustom(
-                "切换学校".into(),
+                "重新连接".into(),
                 "取消".into(),
             ))
             .blocking_show();
@@ -120,7 +120,7 @@ async fn connect_school(
     let connection = connection::connect(origin, preferred_port).await?;
     let mut profile = connection.school.clone();
     profile.username = username.trim().to_owned();
-    profile.auto_login = auto_login;
+    profile.auto_login = auto_login && remember_password && !password.is_empty();
     let reserved_ports: Vec<u16> = settings
         .schools
         .iter()
@@ -131,7 +131,7 @@ async fn connect_school(
         app.clone(),
         connection,
         &reserved_ports,
-        if auto_login && !username.trim().is_empty() && !password.is_empty() {
+        if !username.trim().is_empty() && !password.is_empty() {
             Some((username.trim().to_owned(), password.clone()))
         } else {
             None
@@ -140,9 +140,10 @@ async fn connect_school(
     .await?;
     profile.port = gateway.port;
     settings.last_origin = profile.origin.clone();
+    settings.last_username = profile.username.clone();
     settings
         .schools
-        .retain(|school| school.origin != profile.origin);
+        .retain(|school| school.origin != profile.origin || school.username != profile.username);
     settings.schools.insert(0, profile.clone());
     connection::save(&app, &settings)?;
     if remember_password {

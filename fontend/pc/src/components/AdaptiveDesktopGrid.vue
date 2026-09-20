@@ -8,12 +8,7 @@
       :href="moduleHref(module)"
       :active="isFocused(module.id)"
       :backend-url="backendUrl"
-      draggable="true"
       @open="emit('open', module)"
-      @dragstart="startDrag(module)"
-      @dragover.prevent="dragOver(module)"
-      @drop.prevent="drop(module)"
-      @dragend="finishDrag"
     />
   </nav>
 </template>
@@ -21,6 +16,7 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import ShortcutTile from './ShortcutTile.vue';
+import { useShortcutDrag } from '../composables/useShortcutDrag';
 
 const props = defineProps({
   modules: { type: Array, default: () => [] },
@@ -31,7 +27,7 @@ const props = defineProps({
 
 const emit = defineEmits(['open', 'reorder']);
 const gridRef = ref(null);
-const draggingId = ref('');
+useShortcutDrag(gridRef, () => props.modules, ids => emit('reorder', ids));
 const bounds = ref({ width: 0, height: 0 });
 let observer = null;
 
@@ -89,33 +85,4 @@ onMounted(() => {
 
 onBeforeUnmount(() => observer?.disconnect());
 
-function startDrag(module) {
-  draggingId.value = String(module.id);
-}
-
-function dragOver(module) {
-  if (draggingId.value && draggingId.value !== String(module.id)) {
-    module.__dragOver = true;
-  }
-}
-
-function drop(module) {
-  const sourceId = draggingId.value;
-  const targetId = String(module.id);
-  draggingId.value = '';
-  props.modules.forEach(item => { delete item.__dragOver; });
-  if (!sourceId || sourceId === targetId) return;
-  const ids = props.modules.map(item => String(item.id));
-  const from = ids.indexOf(sourceId);
-  const to = ids.indexOf(targetId);
-  if (from < 0 || to < 0) return;
-  ids.splice(from, 1);
-  ids.splice(to, 0, sourceId);
-  emit('reorder', ids);
-}
-
-function finishDrag() {
-  draggingId.value = '';
-  props.modules.forEach(item => { delete item.__dragOver; });
-}
 </script>

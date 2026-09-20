@@ -1,6 +1,7 @@
 <template>
   <span
     class="shortcut-tile"
+    :data-shortcut-id="item.id"
     :class="tileClasses"
     :title="title || item.scope || item.name"
   >
@@ -74,3 +75,8 @@ const tileClasses = computed(() => [
   },
 ]);
 </script>
+
+<style scoped>
+.is-dragging { opacity: .45; }
+.is-drop-target { outline: 2px solid #2975c8; outline-offset: 2px; }
+</style>

@@ -9,6 +9,8 @@ pub struct Settings {
     #[serde(default)]
     pub last_origin: String,
     #[serde(default)]
+    pub last_username: String,
+    #[serde(default)]
     pub schools: Vec<School>,
 }
 

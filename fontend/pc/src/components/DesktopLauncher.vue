@@ -95,6 +95,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { ChevronLeft, ChevronRight, Search, X } from '@lucide/vue';
 import ShortcutTile from './ShortcutTile.vue';
+import { useShortcutDrag } from '../composables/useShortcutDrag';
 
 const props = defineProps({
   visible: { type: Boolean, default: false },
@@ -108,7 +109,7 @@ const props = defineProps({
   shortcutTitle: { type: Function, required: true },
 });
 
-const emit = defineEmits(['close', 'open', 'toggle', 'update:keyword']);
+const emit = defineEmits(['close', 'open', 'toggle', 'update:keyword', 'reorder']);
 const maskRef = ref(null);
 const searchRef = ref(null);
 const currentPage = ref(0);
@@ -151,6 +152,7 @@ const groupedModules = computed(() => {
 
 const launcherPages = computed(() => paginateGroups(groupedModules.value, pageSize.value));
 const activePage = computed(() => launcherPages.value[currentPage.value] || null);
+useShortcutDrag(maskRef, () => props.modules, ids => emit('reorder', ids), () => activePage.value);
 
 watch(() => [props.visible, props.keyword, props.modules.length, pageSize.value], () => {
   currentPage.value = Math.min(currentPage.value, Math.max(0, launcherPages.value.length - 1));
