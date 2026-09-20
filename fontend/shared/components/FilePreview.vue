@@ -21,6 +21,7 @@
           <audio v-else-if="kind === 'audio'" :src="url" controls preload="metadata" @error="mediaError" />
           <canvas v-else-if="kind === 'pdf'" ref="canvas" :aria-label="`第 ${page} 页`" />
           <iframe v-else-if="kind === 'docx'" :srcdoc="documentHtml" sandbox="" referrerpolicy="no-referrer" title="Word 文档预览" />
+          <TextFilePreview v-else-if="textBytes" :bytes="textBytes" :kind="kind" :extension="extension" />
           <div v-else-if="kind === 'xlsx'" class="preview-spreadsheet"><p v-if="sheets[sheetIndex]?.truncated">仅预览前 2000 行、100 列，请下载查看完整表格。</p><table><tbody><tr v-for="(row, index) in sheets[sheetIndex]?.rows" :key="index"><th>{{ index + 1 }}</th><td v-for="(cell, column) in row" :key="column">{{ cell }}</td></tr></tbody></table><p v-if="!sheets[sheetIndex]?.rows.length">空工作表</p></div>
           <p v-else class="preview-state">此格式暂不支持内置预览，请下载原文件。</p>
         </template>
@@ -30,14 +31,18 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onBeforeUnmount, nextTick, watch } from 'vue';
+import { ref, shallowRef, defineAsyncComponent, onMounted, onBeforeUnmount, nextTick, watch } from 'vue';
 import { Download, X, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, RotateCw, Maximize, Search } from '@lucide/vue';
 import DOMPurify from 'dompurify';
+import formats from '../previewFormats.json';
+const TextFilePreview = defineAsyncComponent(() => import('./TextFilePreview.vue'));
+const types = Object.fromEntries(Object.entries(formats).flatMap(([type, extensions]) => extensions.map(ext => [ext, type])));
 const props = defineProps({ file: { type: Object, required: true }, adapter: { type: Object, required: true } });
 const emit = defineEmits(['close']);
 const dialog = ref(), body = ref(), canvas = ref();
 const name = ref(''), url = ref(''), kind = ref(''), loading = ref(true), error = ref('');
 const originalUrl = ref('');
+const textBytes = shallowRef(null), extension = ref('');
 const scale = ref(1), rotation = ref(0), page = ref(1), pages = ref(0), rendering = ref(false);
 const query = ref(''), searchStatus = ref(''), searching = ref(false), documentHtml = ref('');
 const sheets = ref([]), sheetIndex = ref(0);
@@ -47,13 +52,14 @@ let pdfTask, pdf, renderTask, disposed = false, renderSequence = 0, resizeObserv
 const timeout = setTimeout(() => { if (loading.value) { controller.abort(); spreadsheetWorker?.terminate(); error.value = '读取超时，请重新打开或下载原文件'; loading.value = false; } }, 60000);
 
 /** 读取受限大小的文件内容。 */
-async function readBytes() {
+async function readBytes(maxBytes = limit) {
   const response = await fetch(url.value, { credentials: new URL(url.value).origin === new URL(props.adapter.backendUrl('/')).origin ? 'include' : 'omit', signal: controller.signal });
   if (!response.ok) throw new Error(response.status === 401 || response.status === 403 ? '没有文件访问权限或登录已过期' : '文件读取失败');
-  if (Number(response.headers.get('content-length')) > limit) throw new Error('文档超过 30 MB，请下载查看');
+  const sizeError = `文档超过 ${maxBytes / 1024 / 1024} MB，请下载查看`;
+  if (Number(response.headers.get('content-length')) > maxBytes) { await response.body?.cancel(); throw new Error(sizeError); }
   const reader = response.body.getReader(), chunks = [];
   let size = 0;
-  while (true) { const { done, value } = await reader.read(); if (done) break; size += value.byteLength; if (size > limit) { await reader.cancel(); throw new Error('文档超过 30 MB，请下载查看'); } chunks.push(value); }
+  while (true) { const { done, value } = await reader.read(); if (done) break; size += value.byteLength; if (size > maxBytes) { await reader.cancel(); throw new Error(sizeError); } chunks.push(value); }
   const bytes = new Uint8Array(size); let offset = 0;
   for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
   return bytes;
@@ -74,8 +80,13 @@ async function load() {
       ? new URL(window.__PRACTICAL_DESKTOP__.previewFileUrl(id), window.location.origin).href : address;
     const ext = String(file.blob?.ext || name.value.split('.').pop() || '').toLowerCase();
     const suffix = new URL(address).pathname.split('.').pop().toLowerCase();
-    const types = { jpg: 'image', jpeg: 'image', png: 'image', webp: 'image', gif: 'image', bmp: 'image', avif: 'image', mp3: 'audio', wav: 'audio', ogg: 'audio', m4a: 'audio', mp4: 'video', webm: 'video', mov: 'video', pdf: 'pdf', docx: 'docx', xlsx: 'xlsx' };
+    extension.value = types[ext] ? ext : suffix;
     kind.value = types[ext] || types[suffix] || '';
+    if (['text', 'markdown', 'csv'].includes(kind.value)) {
+      if (Number(file.blob?.size || file.size) > 5 * 1024 * 1024) throw new Error('文本超过 5 MB，请下载查看');
+      const bytes = await readBytes(5 * 1024 * 1024);
+      if (!disposed) textBytes.value = bytes;
+    }
     if (['pdf', 'docx', 'xlsx'].includes(kind.value)) {
       if (Number(file.blob?.size || file.size) > limit) throw new Error('文档超过 30 MB，请下载查看');
       const bytes = await readBytes();
@@ -144,7 +155,7 @@ function mediaError() { error.value = '当前设备不支持此编码或文件�
 function keyboard(event) {
   if (event.key === 'Escape') { event.stopPropagation(); emit('close'); }
   if (event.key !== 'Tab') return;
-  const items = [...dialog.value.querySelectorAll('button:not(:disabled), a[href], input, video, audio, iframe')].filter(item => item.getClientRects().length);
+  const items = [...dialog.value.querySelectorAll('button:not(:disabled), a[href], input, select, video, audio, iframe')].filter(item => item.getClientRects().length);
   const first = items[0], last = items.at(-1);
   if (!items.length) { event.preventDefault(); return; }
   if (event.shiftKey && (document.activeElement === first || document.activeElement === dialog.value)) { event.preventDefault(); last.focus(); }

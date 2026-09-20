@@ -8,7 +8,7 @@ export default defineConfig(({ mode }) => {
   return {
     base: './',
     plugins: [vue(), pdfAssetsPlugin(process.cwd())],
-    resolve: { dedupe: ['vue', 'markdown-it', 'dompurify', '@lucide/vue', 'pdfjs-dist', 'docx-preview', 'exceljs', 'fflate'] },
+    resolve: { dedupe: ['vue', 'markdown-it', 'dompurify', '@lucide/vue', 'pdfjs-dist', 'docx-preview', 'exceljs', 'fflate', 'papaparse'] },
     server: {
       proxy: {
         '/api': {

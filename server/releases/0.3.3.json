@@ -1,0 +1,6 @@
+{
+  "version": "0.3.3",
+  "title": "补齐文本、Markdown 与 CSV 文件预览",
+  "notes_html": "<ul><li>修复 TXT 预览，增加日志、JSON、XML、配置及常见代码文件只读预览。</li><li>文本支持中文编码切换、自动换行、行号、分页和搜索定位。</li><li>Markdown 支持排版与原文，CSV/TSV 支持表格与原文。</li><li>新增格式接入客户端本机缓存，保留文件权限和版本校验。</li><li>无新增数据库更新；旧版 Office 与 PPT 暂保留下载。</li></ul>",
+  "sql": []
+}

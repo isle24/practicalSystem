@@ -22,6 +22,39 @@ use tokio_util::io::ReaderStream;
 
 const GIB: u64 = 1024 * 1024 * 1024;
 static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+static FORMATS: OnceLock<Value> = OnceLock::new();
+
+/// 与网页预览共用格式清单。
+fn preview_kind(ext: &str) -> Option<&'static str> {
+    let formats = FORMATS.get_or_init(|| {
+        serde_json::from_str(include_str!("../../../shared/previewFormats.json"))
+            .expect("invalid preview format registry")
+    });
+    formats.as_object()?.iter().find_map(|(kind, extensions)| {
+        extensions
+            .as_array()?
+            .iter()
+            .any(|value| value.as_str() == Some(ext))
+            .then_some(kind.as_str())
+    })
+}
+
+/// 阻止预览地址执行上传的脚本或主动内容。
+fn secure_preview_headers(response: &mut Response<Body>, kind: &str) {
+    let headers = response.headers_mut();
+    if matches!(kind, "text" | "markdown" | "csv") {
+        headers.insert(header::CONTENT_TYPE, HeaderValue::from_static("text/plain"));
+    }
+    headers.insert(
+        "x-content-type-options",
+        HeaderValue::from_static("nosniff"),
+    );
+    headers.insert(
+        "content-security-policy",
+        HeaderValue::from_static("sandbox; default-src 'none'"),
+    );
+    headers.insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+}
 #[derive(Serialize, Deserialize)]
 struct Settings {
     max_bytes: u64,
@@ -161,28 +194,7 @@ pub async fn serve(
         .as_str()
         .unwrap_or("")
         .to_ascii_lowercase();
-    if !matches!(
-        ext.as_str(),
-        "jpg"
-            | "jpeg"
-            | "png"
-            | "webp"
-            | "gif"
-            | "bmp"
-            | "avif"
-            | "mp3"
-            | "wav"
-            | "ogg"
-            | "m4a"
-            | "mp4"
-            | "webm"
-            | "mov"
-            | "pdf"
-            | "docx"
-            | "xlsx"
-    ) {
-        return Err("此格式不支持本机预览缓存，请下载原文件".into());
-    }
+    let kind = preview_kind(&ext).ok_or("此格式不支持本机预览缓存，请下载原文件")?;
     let digest = info["blob"]["sha1"]
         .as_str()
         .filter(|value| !value.is_empty())
@@ -232,9 +244,7 @@ pub async fn serve(
                 response.headers_mut().insert(key, value.clone());
             }
         }
-        response
-            .headers_mut()
-            .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+        secure_preview_headers(&mut response, kind);
         return Ok(response);
     }
     let hit = fs::symlink_metadata(&path)
@@ -361,9 +371,7 @@ pub async fn serve(
     response
         .headers_mut()
         .insert(header::ACCEPT_RANGES, HeaderValue::from_static("bytes"));
-    response
-        .headers_mut()
-        .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    secure_preview_headers(&mut response, kind);
     response.headers_mut().insert(
         "x-preview-cache",
         HeaderValue::from_static(if hit { "hit" } else { "miss" }),
