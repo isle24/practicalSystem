@@ -81,6 +81,7 @@ async fn connect_school(
     password: String,
     remember_password: bool,
     auto_login: bool,
+    remark: Option<String>,
 ) -> Result<Settings, String> {
     require_connection(&window)?;
     if state.connecting.swap(true, Ordering::AcqRel) {
@@ -124,6 +125,7 @@ async fn connect_school(
     let mut profile = connection.school.clone();
     profile.username = username.trim().to_owned();
     profile.auto_login = auto_login && remember_password && !password.is_empty();
+    profile.remark = remark.unwrap_or_default().trim().chars().take(60).collect();
     let reserved_ports: Vec<u16> = settings
         .schools
         .iter()

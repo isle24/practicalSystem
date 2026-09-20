@@ -1,4 +1,10 @@
 <template>
+  <section class="assistant-mode-tabs">
+    <button type="button" :class="{ active: !assistantVisible }" @click="assistantVisible = false">通知与待办</button>
+    <button type="button" :class="{ active: assistantVisible }" @click="assistantVisible = true">问答助手</button>
+  </section>
+  <AssistantPanel v-if="assistantVisible" :request="request" />
+  <template v-else>
   <AppErrorState
     v-if="state.message && !state.items.length"
     title="消息加载失败"
@@ -79,10 +85,13 @@
       </AppButton>
     </div>
   </template>
+  </template>
 </template>
 
 <script setup>
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
+import AssistantPanel from '../../../shared/components/AssistantPanel.vue';
+import { request } from '../api/client';
 import AppButton from '../components/ui/AppButton.vue';
 import AppEmptyState from '../components/ui/AppEmptyState.vue';
 import AppErrorState from '../components/ui/AppErrorState.vue';
@@ -101,6 +110,7 @@ const props = defineProps({
 });
 
 const emit = defineEmits(['filter', 'linked', 'load-more', 'open', 'read-all', 'reload', 'type']);
+const assistantVisible = ref(false);
 const filterItems = computed(() => [
   { value: 'all', label: '全部' },
   { value: 'unread', label: `未读 ${props.unreadCount}` },
@@ -108,6 +118,9 @@ const filterItems = computed(() => [
 </script>
 
 <style scoped>
+.assistant-mode-tabs { display: flex; gap: 20px; margin-bottom: 16px; border-bottom: 1px solid var(--app-line); }
+.assistant-mode-tabs button { border: 0; border-bottom: 2px solid transparent; background: transparent; padding: 10px 0; color: var(--app-text-secondary); font: inherit; }
+.assistant-mode-tabs button.active { border-bottom-color: var(--app-info); color: var(--app-info); }
 .app-message-toolbar {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;

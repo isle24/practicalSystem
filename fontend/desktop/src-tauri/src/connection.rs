@@ -24,6 +24,8 @@ pub struct School {
     pub username: String,
     #[serde(default)]
     pub auto_login: bool,
+    #[serde(default)]
+    pub remark: String,
 }
 
 pub struct Connection {
@@ -204,6 +206,7 @@ pub async fn connect(origin: Url, port: u16) -> Result<Connection, String> {
             port,
             username: String::new(),
             auto_login: false,
+            remark: String::new(),
         },
         origin,
         client,

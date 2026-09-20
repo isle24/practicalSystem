@@ -21,6 +21,14 @@ class CronTask
      */
     public function onWorkerStart(): void
     {
+        new Crontab('0 10 * * * *', fn () => \app\server\release\ReleaseUploadService::cleanup());
+        new Crontab('25 */5 * * * *', function (): void {
+            $this->runForSchools('desktop_download_requeue', date('YmdHi'), 290, function (int $databaseId): int {
+                $ids = \app\model\channel\ReleaseRecord::retryableAssetIds();
+                foreach ($ids as $id) \Webman\RedisQueue\Client::send('desktop-release-download', ['database_id' => $databaseId, 'asset_id' => $id]);
+                return count($ids);
+            });
+        });
         new Crontab('5 * * * * *', function (): void {
             $this->runForSchools('export_requeue', date('YmdHi'), 55, function (int $databaseId): int {
                 return (new ScheduledMaintenanceService())->requeuePendingExports($databaseId);

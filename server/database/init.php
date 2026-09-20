@@ -1626,6 +1626,10 @@ function schoolBusinessStatements(): array
     foreach (array_map('trim', explode(';', $toolsSql)) as $statement) {
         if (str_starts_with($statement, 'CREATE TABLE')) $statements[] = $statement;
     }
+    $messageSql = file_get_contents(__DIR__ . '/updates/0.3.4-message-assistant.sql');
+    foreach (array_map('trim', explode(';', $messageSql)) as $statement) {
+        if (str_starts_with($statement, 'CREATE TABLE')) $statements[] = $statement;
+    }
     return $statements;
 }
 

@@ -77,11 +77,15 @@ class MessageRecord extends TableRecord
             $query->whereIn('id', $ids);
         }
 
-        return (int) $query->update([
-            'is_read' => 1,
-            'read_at' => $now,
-            'updated_at' => $now,
-        ]);
+        return self::connection()->transaction(function () use ($query, $accountId, $now): int {
+            $count = (int) $query->update([
+                'is_read' => 1,
+                'read_at' => $now,
+                'updated_at' => $now,
+            ]);
+            if ($count > 0) MessageRealtimeRecord::enqueueNotification([$accountId]);
+            return $count;
+        });
     }
 
     public static function createMessage(array $message, array $accountIds, string $now): int
@@ -146,6 +150,7 @@ class MessageRecord extends TableRecord
 
             self::queryTable('message_target')->insert($targetRows);
             self::queryTable('message_channel_log')->insert($logRows);
+            MessageRealtimeRecord::enqueueNotification($targets);
 
             return $messageId;
         });
@@ -283,6 +288,14 @@ class MessageRecord extends TableRecord
         $connection = self::connection();
         $key = method_exists($connection, 'getDatabaseName') ? (string) $connection->getDatabaseName() : spl_object_hash($connection);
         if (isset(self::$schemaReady[$key])) {
+            self::seedDefaultTemplates();
+            return;
+        }
+
+        if ($connection->transactionLevel() > 0) {
+            foreach (['message', 'message_target', 'message_template', 'message_channel_log'] as $table) {
+                if (!$connection->getSchemaBuilder()->hasTable($table)) throw new \RuntimeException('消息表未初始化，请先升级学校数据库');
+            }
             self::seedDefaultTemplates();
             return;
         }

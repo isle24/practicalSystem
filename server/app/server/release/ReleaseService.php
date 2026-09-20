@@ -79,11 +79,17 @@ class ReleaseService
                 if (ReleaseRecord::pendingSql($row['id'])) throw new RuntimeException('请先在数据库工具执行 SQL，并由对应管理员登记处理结果', 409);
                 if ($row['product'] === 'desktop') {
                     $assets = ReleaseRecord::assets($row['id']);
+                    $deferred = array_values(array_unique((array) ($input['deferred_platforms'] ?? [])));
+                    $platforms = ['darwin-universal', 'windows-x86_64', 'linux-x86_64'];
+                    if (array_diff($deferred, $platforms)) throw new RuntimeException('延期平台无效', 400);
+                    $readyCount = 0;
                     foreach (['darwin-universal', 'windows-x86_64', 'linux-x86_64'] as $platform) {
                         $ready = array_filter($assets, fn ($a) => $a['platform'] === $platform && $a['kind'] === 'updater' && $a['status'] === 'ready' && $a['signature']);
-                        if (!$ready) throw new RuntimeException('升级包或签名未就绪: ' . $platform, 409);
+                        $pending = array_filter($assets, fn ($a) => $a['platform'] === $platform && $a['status'] !== 'ready');
+                        if ($ready && !$pending) { $readyCount++; continue; }
+                        if (!in_array($platform, $deferred, true)) throw new RuntimeException('平台未就绪，请等待下载或明确选择延期: ' . $platform, 409);
                     }
-                    if (array_filter($assets, fn ($a) => $a['status'] !== 'ready')) throw new RuntimeException('请等待所有安装包下载完成', 409);
+                    if (!$readyCount) throw new RuntimeException('至少一个平台全部校验完成后才能发布', 409);
                     $latest = ReleaseRecord::latestDesktop();
                     if ($latest && $latest['id'] !== $row['id'] && !version_compare($row['version'], $latest['version'], '>')) throw new RuntimeException('不能发布低于当前版本的客户端', 409);
                 }
@@ -122,7 +128,7 @@ class ReleaseService
     {
         if (!in_array($platform, ['darwin-universal', 'windows-x86_64', 'linux-x86_64'], true)) throw new RuntimeException('不支持的平台', 400);
         $this->validateVersion($current);
-        $row = ReleaseRecord::latestDesktop();
+        $row = ReleaseRecord::latestDesktop($platform);
         if (!$row || !version_compare($row['version'], $current, '>')) return null;
         foreach (ReleaseRecord::assets($row['id']) as $asset) {
             if ($asset['platform'] !== $platform || $asset['kind'] !== 'updater' || $asset['status'] !== 'ready') continue;
@@ -136,14 +142,29 @@ class ReleaseService
     /** 用户可下载学校当前发布的安装文件，不返回内部文件地址。 */
     public function packages(int $releaseId): array
     {
-        $release = ReleaseRecord::latestDesktop();
-        if (!$release || $release['id'] !== $releaseId) return [];
+        $release = ReleaseRecord::detail($releaseId);
+        if (!$release || $release['status'] !== 'published' || $release['product'] !== 'desktop') return [];
         $items = [];
+        $latestIds = [];
+        foreach (['darwin-universal', 'windows-x86_64', 'linux-x86_64'] as $platform) $latestIds[$platform] = ReleaseRecord::latestDesktop($platform)['id'] ?? 0;
         foreach (ReleaseRecord::assets($releaseId) as $asset) {
-            if ($asset['status'] !== 'ready' || str_ends_with($asset['file_name'], '.app.tar.gz')) continue;
+            if ($asset['status'] !== 'ready' || ($latestIds[$asset['platform']] ?? 0) !== $releaseId || str_ends_with($asset['file_name'], '.app.tar.gz')) continue;
             $ticket = bin2hex(random_bytes(32));
             Redis::setex($this->ticketKey($ticket), (int) config('desktop_release.download_ttl', 3600), json_encode(['release_id' => $releaseId, 'asset_id' => $asset['id']]));
             $items[] = ['file_name' => $asset['file_name'], 'platform' => $asset['platform'], 'size' => $asset['size'], 'download_path' => '/api/release/download?ticket=' . $ticket];
+        }
+        return $items;
+    }
+
+    /** 网页登录前仅公开已发布、已就绪平台的安装包。 */
+    public function downloads(): array
+    {
+        $items = []; $ids = [];
+        foreach (['darwin-universal', 'windows-x86_64', 'linux-x86_64'] as $platform) {
+            $release = ReleaseRecord::latestDesktop($platform);
+            if (!$release || isset($ids[$release['id']])) continue;
+            $ids[$release['id']] = true;
+            foreach ($this->packages($release['id']) as $package) $items[] = $package + ['version' => $release['version']];
         }
         return $items;
     }
@@ -155,7 +176,7 @@ class ReleaseService
         $data = json_decode(Redis::get($this->ticketKey($ticket)) ?: 'null', true);
         $asset = $data ? ReleaseRecord::asset((int) $data['asset_id']) : null;
         $release = $data ? ReleaseRecord::detail((int) $data['release_id']) : null;
-        $latest = ReleaseRecord::latestDesktop();
+        $latest = $asset ? ReleaseRecord::latestDesktop($asset['platform']) : null;
         if (!$asset || !$release || !$latest || $release['id'] !== $latest['id'] || $release['status'] !== 'published' || $asset['status'] !== 'ready') throw new RuntimeException('下载凭据已过期或版本已撤回，请重新检查更新', 403);
         return [$release, $asset];
     }

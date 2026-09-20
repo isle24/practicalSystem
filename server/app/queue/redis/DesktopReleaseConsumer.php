@@ -30,9 +30,11 @@ class DesktopReleaseConsumer implements Consumer
         try {
             (new GithubReleaseService())->download($asset['source_asset_id'], $path, $asset['size']);
             if (filesize($path) !== (int) $asset['size'] || hash_file('sha256', $path) !== $asset['sha256']) throw new \RuntimeException('安装包大小或 SHA256 不一致，已拒绝入库');
-            $stored = (new FileService())->storeGeneratedFile($path, ['name' => $asset['file_name'], 'ext' => pathinfo($asset['file_name'], PATHINFO_EXTENSION),
-                'category' => 'desktop_release', 'is_temporary' => false, 'uploader_id' => $release['created_by']]);
-            ReleaseRecord::connection()->transaction(function () use ($id, $token, $stored, $release): void {
+            ReleaseRecord::connection()->transaction(function () use ($id, $token, $path, $asset, $release): void {
+                $locked = ReleaseRecord::lockedAsset($id);
+                if (!$locked || $locked['status'] !== 'downloading' || $locked['claim_token'] !== $token) return;
+                $stored = (new FileService())->storeGeneratedFile($path, ['name' => $asset['file_name'], 'ext' => pathinfo($asset['file_name'], PATHINFO_EXTENSION),
+                    'category' => 'desktop_release', 'is_temporary' => false, 'uploader_id' => $release['created_by']]);
                 if (!ReleaseRecord::finishAsset($id, $token, ['status' => 'ready', 'file_id' => $stored['file_id'], 'error_message' => null])) throw new \RuntimeException('下载任务已失去执行权');
                 FileRelation::createRelation($stored['file_id'], 'system_release', $release['id'], 'package', date('Y-m-d H:i:s'));
             });

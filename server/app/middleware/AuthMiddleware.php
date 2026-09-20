@@ -17,6 +17,7 @@ class AuthMiddleware implements MiddlewareInterface
     private const PUBLIC_PATHS = [
         '/api/release/update-manifest',
         '/api/release/download',
+        '/api/release/downloads',
         '/api/auth/login',
         '/api/auth/register',
         '/api/auth/register-options',

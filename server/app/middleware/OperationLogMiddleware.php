@@ -237,8 +237,8 @@ class OperationLogMiddleware implements MiddlewareInterface
      */
     private function auditParameters(string $path, array $input): mixed
     {
-        if (preg_match('~^/api/(note|release)/~i', $path)) {
-            $input = array_intersect_key($input, array_flip(['id', 'revision', 'page', 'page_size', 'product', 'version', 'action', 'sql_id']));
+        if (preg_match('~^/api/(note|release|assistant)/~i', $path)) {
+            $input = array_intersect_key($input, array_flip(['id', 'revision', 'page', 'page_size', 'product', 'version', 'action', 'sql_id', 'deferred_platforms']));
         }
         return $this->mask($input);
     }

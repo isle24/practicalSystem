@@ -3134,7 +3134,7 @@ checksum = "439ee305def115ba05938db6eb1644ff94165c5ab5e9420d1c1bcedbba909391"
 
 [[package]]
 name = "practical-system-desktop"
-version = "0.3.3"
+version = "0.3.4"
 dependencies = [
  "axum",
  "keyring",

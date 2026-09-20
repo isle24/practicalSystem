@@ -2,6 +2,8 @@
 import { computed, onBeforeUnmount, onMounted, reactive } from 'vue';
 import { ElCheckbox, ElMessageBox } from 'element-plus';
 import { Check, Download, RefreshCw, Upload } from '@lucide/vue';
+import EduFieldChanges from './EduFieldChanges.vue';
+import OperationDialog from './OperationDialog.vue';
 import {
   cancelEduBatch,
   classifyEduCandidate,
@@ -9,6 +11,7 @@ import {
   fetchEduBatchDetail,
   fetchEduBatches,
   fetchEduCandidates,
+  fetchEduChanges,
   fetchEduIssues,
   fetchEduSource,
   publishEduBatch,
@@ -161,6 +164,21 @@ async function openBatch(row) {
   state.detailLoading = true;
   try {
     state.detail = await fetchEduBatchDetail(row.id);
+  } catch (error) {
+    state.message = error.message;
+  } finally {
+    state.detailLoading = false;
+  }
+}
+
+async function loadDetailPage(type, page) {
+  if (state.detailLoading || !state.selectedBatch) return;
+  state.detailLoading = true;
+  try {
+    const params = { page, page_size: 20 };
+    state.detail[type] = type === 'changes'
+      ? await fetchEduChanges(state.selectedBatch.id, params)
+      : await fetchEduIssues(state.selectedBatch.id, params);
   } catch (error) {
     state.message = error.message;
   } finally {
@@ -460,30 +478,43 @@ onBeforeUnmount(() => {
       <el-pagination size="small" layout="prev, pager, next" :current-page="state.issuePagination.page" :page-size="state.issuePagination.page_size" :total="state.issuePagination.total" @current-change="loadIssues" />
     </div>
 
-    <el-dialog v-model="state.detailVisible" title="导入批次详情" width="920px">
+    <OperationDialog :visible="state.detailVisible" title="导入批次详情" dialog-class="edu-batch-detail-dialog" @close="state.detailVisible = false">
+      <div class="edu-batch-detail-body">
       <el-skeleton v-if="state.detailLoading" :rows="8" animated />
       <template v-else>
         <p class="edu-detail-title">{{ state.selectedBatch?.name || '-' }} · {{ statusLabel(state.selectedBatch?.status) }}</p>
         <el-tabs>
           <el-tab-pane label="差异">
-            <el-table :data="state.detail.changes?.items || []" size="small"><el-table-column prop="change_type" label="类型" width="100" /><el-table-column prop="source_key" label="来源键" min-width="220" /><el-table-column prop="diff_json" label="字段差异" min-width="320" show-overflow-tooltip /></el-table>
+            <el-table :data="state.detail.changes?.items || []" size="small" max-height="54vh">
+              <el-table-column label="类型" width="80"><template #default="{ row }">{{ ({ created: '新增', updated: '更新', unchanged: '未变化', missing: '缺失', deleted: '删除' })[row.change_type] || row.change_type }}</template></el-table-column>
+              <el-table-column label="数据记录" min-width="190" show-overflow-tooltip><template #default="{ row }">{{ row.after_json?.course_name || row.after_json?.student_name || row.before_json?.course_name || row.source_key }}</template></el-table-column>
+              <el-table-column label="字段差异" min-width="380"><template #default="{ row }"><details class="edu-change-detail"><summary>查看字段变更</summary><EduFieldChanges :value="row.diff_json" /></details></template></el-table-column>
+            </el-table>
+            <el-pagination layout="total, prev, pager, next" :current-page="state.detail.changes?.pagination?.page || 1" :page-size="20" :total="state.detail.changes?.pagination?.total || 0" @current-change="loadDetailPage('changes', $event)" />
           </el-tab-pane>
           <el-tab-pane label="问题">
             <el-table :data="state.detail.issues?.items || []" size="small"><el-table-column prop="row_number" label="行号" width="80" /><el-table-column prop="field_name" label="字段" width="130" /><el-table-column prop="message" label="问题" min-width="320" /></el-table>
+            <el-pagination layout="total, prev, pager, next" :current-page="state.detail.issues?.pagination?.page || 1" :page-size="20" :total="state.detail.issues?.pagination?.total || 0" @current-change="loadDetailPage('issues', $event)" />
           </el-tab-pane>
         </el-tabs>
       </template>
-    </el-dialog>
+      </div>
+    </OperationDialog>
   </section>
 </template>
 
 <style scoped>
-.edu-data-panel {
+.edu-data-panel.admin-panel {
   display: flex;
   flex-direction: column;
   gap: 14px;
-  min-height: 100%;
+  min-height: 0;
+  overflow: auto;
 }
+.edu-data-panel > * { flex-shrink: 0; }
+.edu-batch-detail-body { padding: 20px 24px; min-height: 0; overflow: auto; }
+.edu-change-detail summary { color: var(--el-color-primary); cursor: pointer; padding: 6px 0; }
+:global(.edu-batch-detail-dialog) { width: min(1100px, 94vw); }
 
 .edu-data-toolbar {
   display: flex;
@@ -520,17 +551,19 @@ onBeforeUnmount(() => {
 
 .edu-template-actions {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
   gap: 12px;
 }
 
 .edu-template-item {
   display: flex;
   align-items: center;
-  min-height: 46px;
-  padding: 0 12px;
+  min-height: 54px;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 10px 12px;
   border: 1px solid var(--border-color, #d9e0ea);
-  border-radius: 10px;
+  border-radius: 8px;
   background: var(--panel-background, #fff);
 }
 
@@ -538,8 +571,8 @@ onBeforeUnmount(() => {
   margin-right: auto;
 }
 
-.edu-data-table {
-  flex: 1;
+.edu-data-panel .edu-data-table {
+  flex: 1 0 260px;
   min-height: 260px;
 }
 

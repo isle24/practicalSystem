@@ -66,4 +66,13 @@ return [
         'handler' => app\process\CronTask::class,
         'count' => 1,
     ],
+    'message_socket' => [
+        'handler' => app\process\MessageSocket::class,
+        'listen' => $_ENV['MESSAGE_WS_LISTEN'] ?? getenv('MESSAGE_WS_LISTEN') ?: 'websocket://127.0.0.1:8788',
+        'count' => 1,
+    ],
+    'message_relay' => [
+        'handler' => app\process\MessageRelay::class,
+        'count' => 1,
+    ],
 ];

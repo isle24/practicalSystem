@@ -117,13 +117,15 @@ class ConfigService
             'lab' => '实验配置',
             'file' => '文件配置',
             'teacher_sync' => '教师同步配置',
+            'assistant' => '问答助手配置',
         ][$groupCode] ?? $groupCode;
     }
 
     /** 判断配置项是否需要加密和脱敏 */
     private function isEncryptedSecret(string $groupCode, string $key): bool
     {
-        return in_array($groupCode, ['teacher_sync', 'education_plan_sync'], true) && $key === 'pull_app_secret';
+        return (in_array($groupCode, ['teacher_sync', 'education_plan_sync'], true) && $key === 'pull_app_secret')
+            || ($groupCode === 'assistant' && $key === 'api_key');
     }
 
     /** 校验配置键格式 */

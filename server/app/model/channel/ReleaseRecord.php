@@ -41,9 +41,14 @@ class ReleaseRecord extends TableRecord
     }
 
     /** 最新已发布客户端，按版本号取最高版本。 */
-    public static function latestDesktop(): ?array
+    public static function latestDesktop(?string $platform = null): ?array
     {
-        $rows = self::queryTable('system_release')->where('product', 'desktop')->where('status', 'published')->get()->toArray();
+        $query = self::queryTable('system_release')->where('product', 'desktop')->where('status', 'published');
+        if ($platform !== null) {
+            $query->whereExists(fn ($q) => $q->selectRaw('1')->from('desktop_release_asset as a')->whereColumn('a.release_id', 'system_release.id')->where('a.platform', $platform)->where('a.kind', 'updater')->where('a.status', 'ready')->whereNotNull('a.signature')->where('a.signature', '<>', ''))
+                ->whereNotExists(fn ($q) => $q->selectRaw('1')->from('desktop_release_asset as a')->whereColumn('a.release_id', 'system_release.id')->where('a.platform', $platform)->where('a.status', '<>', 'ready'));
+        }
+        $rows = $query->get()->toArray();
         usort($rows, fn ($a, $b) => version_compare($b['version'], $a['version']));
         return $rows[0] ?? null;
     }
@@ -101,6 +106,20 @@ class ReleaseRecord extends TableRecord
         return self::queryTable('desktop_release_asset')->where('id', $id)->first()?->toArray();
     }
 
+    /** 锁定已导入清单的资产供上传替换。 */
+    public static function lockedAsset(int $id): ?array
+    {
+        return self::queryTable('desktop_release_asset')->where('id', $id)->lockForUpdate()->first()?->toArray();
+    }
+
+    /** 完成本地上传，正在下载的旧任务失去写入权。 */
+    public static function completeUpload(int $id, int $fileId): void
+    {
+        self::queryTable('desktop_release_asset')->where('id', $id)->update([
+            'status' => 'ready', 'file_id' => $fileId, 'claim_token' => null, 'error_message' => null, 'updated_at' => date('Y-m-d H:i:s'),
+        ]);
+    }
+
     /** 领取待下载或超时的资产，阻止重复消费者同时写入。 */
     public static function claimAsset(int $id, string $token): bool
     {
@@ -113,5 +132,14 @@ class ReleaseRecord extends TableRecord
     public static function finishAsset(int $id, string $token, array $values): bool
     {
         return self::queryTable('desktop_release_asset')->where('id', $id)->where('claim_token', $token)->where('status', 'downloading')->update($values + ['updated_at' => date('Y-m-d H:i:s')]) > 0;
+    }
+
+    /** 返回需要恢复的下载任务，限制每轮排队数量。 */
+    public static function retryableAssetIds(): array
+    {
+        return self::queryTable('desktop_release_asset')->where(function ($q): void {
+            $q->where(fn ($q) => $q->whereIn('status', ['pending', 'failed'])->where('updated_at', '<', date('Y-m-d H:i:s', time() - 300)))
+                ->orWhere(fn ($q) => $q->where('status', 'downloading')->where('started_at', '<', date('Y-m-d H:i:s', time() - 3600)));
+        })->orderBy('id')->limit(20)->pluck('id')->map(fn ($id) => (int) $id)->all();
     }
 }

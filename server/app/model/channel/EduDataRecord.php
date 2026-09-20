@@ -274,7 +274,15 @@ class EduDataRecord extends BaseModel
 
     public static function changes(int $batchId, array $filters): array
     {
-        return self::pagedRows('edu_import_change', $batchId, $filters, static fn ($row): array => self::jsonRow($row, ['before_json', 'after_json', 'diff_json']));
+        return self::pagedRows('edu_import_change', $batchId, $filters, static function ($row): array {
+            $item = self::jsonRow($row, ['before_json', 'after_json', 'diff_json']);
+            $hidden = ['email', 'raw_payload', 'sensitive_payload_cipher', 'mobile_hmac', 'identity_last_six_hmac', 'source_hash'];
+            foreach (['before_json', 'after_json'] as $key) {
+                $item[$key] = array_diff_key((array) ($item[$key] ?? []), array_flip($hidden));
+            }
+            $item['diff_json'] = array_values(array_filter((array) ($item['diff_json'] ?? []), static fn ($diff): bool => is_array($diff) && !in_array($diff['field'] ?? '', $hidden, true)));
+            return $item;
+        });
     }
 
     public static function issues(int $batchId, array $filters): array

@@ -77,7 +77,6 @@ class GithubReleaseService
     {
         $repo = config('desktop_release.repository', '');
         if (!preg_match('~^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$~', $repo)) throw new RuntimeException('GitHub 仓库配置无效', 503);
-        if (!config('desktop_release.token')) throw new RuntimeException('请在服务端配置只读 DESKTOP_GITHUB_TOKEN', 503);
         return 'https://api.github.com/repos/' . $repo . $path;
     }
 
@@ -88,7 +87,7 @@ class GithubReleaseService
             $host = parse_url($url, PHP_URL_HOST);
             if (parse_url($url, PHP_URL_SCHEME) !== 'https' || !in_array($host, ['api.github.com', 'release-assets.githubusercontent.com', 'objects.githubusercontent.com', 'github.com'], true)) throw new RuntimeException('GitHub 下载跳转地址不受信任', 502);
             $headers = ['User-Agent: PracticalSystem-Release', 'Accept: ' . $accept];
-            if ($host === 'api.github.com') $headers[] = 'Authorization: Bearer ' . config('desktop_release.token');
+            if ($host === 'api.github.com' && config('desktop_release.token')) $headers[] = 'Authorization: Bearer ' . config('desktop_release.token');
             $stream = $path ? fopen($path, 'wb') : null;
             if ($path && !$stream) throw new RuntimeException('无法创建下载临时文件', 500);
             $body = ''; $location = ''; $bytes = 0; $status = 0;

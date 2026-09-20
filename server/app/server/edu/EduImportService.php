@@ -640,7 +640,7 @@ class EduImportService
     {
         $changes = [];
         foreach ($after as $key => $value) {
-            if (in_array($key, ['email', 'raw_payload', 'teachers', 'updated_at', 'last_seen_at'], true)) {
+            if (in_array($key, ['email', 'raw_payload', 'teachers', 'updated_at', 'last_seen_at', 'sensitive_payload_cipher', 'mobile_hmac', 'identity_last_six_hmac', 'source_hash'], true)) {
                 continue;
             }
             if (is_array($value) || is_object($value)) {

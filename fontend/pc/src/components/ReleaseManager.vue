@@ -3,7 +3,29 @@
     <el-alert v-if="error" :title="error" type="error" :closable="false" />
     <el-table :data="items" v-loading="loading" height="100%"><el-table-column type="index" label="序号" width="68" :index="i => (page - 1) * 20 + i + 1" /><el-table-column prop="version" label="版本" width="100" /><el-table-column prop="title" label="标题" min-width="230" /><el-table-column label="状态" width="100"><template #default="{ row }"><el-tag :type="row.status === 'published' ? 'success' : 'info'">{{ status(row.status) }}</el-tag></template></el-table-column><el-table-column prop="published_at" label="发布时间" width="170" /><el-table-column label="操作" fixed="right" width="130"><template #default="{ row }"><el-button link type="primary" @click="detail(row.id)">编辑 / 详情</el-button></template></el-table-column></el-table>
     <footer><span>共 {{ total }} 个版本</span><el-pagination layout="prev, pager, next" :current-page="page" :page-size="20" :total="total" @current-change="load" /></footer>
-    <OperationDialog :visible="Boolean(selected)" title="版本与更新" :busy="busy" @close="close"><div v-if="selected" class="release-detail" :inert="busy"><TextTabs v-model="tab" :items="tabs" /><template v-if="tab === 'notes'"><label>版本标题<el-input v-model="selected.item.title" maxlength="180" /></label><RichTextEditor v-model="selected.item.notes_html" /><small v-if="selected.item.status === 'published'">保存后作为新草稿保留，再次发布才会更新用户可见的说明。</small></template><template v-if="tab === 'sql'"><p v-if="!selected.sql_files.length">此版本没有需要当前管理员处理的 SQL。</p><section v-for="sql in selected.sql_files" :key="sql.id" class="release-sql"><strong>{{ sql.file_name }}</strong><small>{{ sql.target_scope === 'school' ? '学校业务库' : '主库' }} · SHA256 {{ sql.sha256 }}</small><pre>{{ sql.sql_content }}</pre><div><el-button :icon="Copy" @click="copySql(sql)">复制 SQL</el-button><el-button :disabled="Boolean(sql.executed_at) || busy" @click="markSql(sql)">{{ sql.executed_at ? '已登记执行' : '登记已执行' }}</el-button></div><small v-if="sql.executed_at">人工登记于 {{ sql.executed_at }}，不代表系统验证了执行结果。</small></section></template><template v-if="tab === 'assets'"><el-button :loading="busy" @click="mutate('retry')">重试未完成下载</el-button><el-button :loading="busy" @click="detail(selected.item.id)">刷新状态</el-button><el-table :data="selected.assets"><el-table-column prop="file_name" label="安装文件" min-width="220" /><el-table-column prop="platform" label="平台" width="155" /><el-table-column label="大小" width="100"><template #default="{ row }">{{ (row.size / 1048576).toFixed(1) }} MB</template></el-table-column><el-table-column label="状态" width="95"><template #default="{ row }">{{ assetStatus(row.status) }}</template></el-table-column><el-table-column prop="error_message" label="下载提示" min-width="160" /></el-table></template></div><template #footer><el-button v-if="selected?.item.status === 'published'" type="danger" :disabled="busy" @click="confirmAction('withdraw')">撤回发布</el-button><el-button :disabled="busy" @click="close">关闭</el-button><el-button :loading="busy" @click="mutate('save')">保存草稿</el-button><el-button type="primary" :loading="busy" @click="confirmAction('publish')">发布</el-button></template></OperationDialog>
+    <OperationDialog :visible="Boolean(selected)" title="版本与更新" :busy="busy" @close="close">
+      <div v-if="selected" class="release-detail" :inert="busy">
+        <TextTabs v-model="tab" :items="tabs" />
+        <template v-if="tab === 'notes'">
+          <label>版本标题<el-input v-model="selected.item.title" maxlength="180" /></label>
+          <RichTextEditor v-model="selected.item.notes_html" />
+          <small v-if="selected.item.status === 'published'">保存后作为新草稿保留，再次发布才会更新用户可见的说明。</small>
+        </template>
+        <template v-if="tab === 'sql'">
+          <p v-if="!selected.sql_files.length">此版本没有需要当前管理员处理的 SQL。</p>
+          <section v-for="sql in selected.sql_files" :key="sql.id" class="release-sql">
+            <strong>{{ sql.file_name }}</strong><small>{{ sql.target_scope === 'school' ? '学校业务库' : '主库' }} · SHA256 {{ sql.sha256 }}</small><pre>{{ sql.sql_content }}</pre>
+            <div><el-button :icon="Copy" @click="copySql(sql)">复制 SQL</el-button><el-button :disabled="Boolean(sql.executed_at) || busy" @click="markSql(sql)">{{ sql.executed_at ? '已登记执行' : '登记已执行' }}</el-button></div>
+            <small v-if="sql.executed_at">人工登记于 {{ sql.executed_at }}，不代表系统验证了执行结果。</small>
+          </section>
+        </template>
+        <ReleaseAssets v-if="tab === 'assets'" v-model:deferred="deferredPlatforms" :assets="selected.assets" :disabled="busy" @busy="busy = $event" @uploaded="selected.assets = $event.assets" @retry="mutate('retry')" @refresh="detail(selected.item.id)" />
+      </div>
+      <template #footer>
+        <el-button v-if="selected?.item.status === 'published'" type="danger" :disabled="busy" @click="confirmAction('withdraw')">撤回发布</el-button>
+        <el-button :disabled="busy" @click="close">关闭</el-button><el-button :loading="busy" @click="mutate('save')">保存草稿</el-button><el-button type="primary" :loading="busy" @click="confirmAction('publish')">发布</el-button>
+      </template>
+    </OperationDialog>
     <OperationDialog :visible="githubVisible" title="导入客户端版本" :busy="busy" @close="githubVisible = false"><div class="release-detail"><el-select v-model="githubId" placeholder="请选择 GitHub 正式版本" style="width:100%"><el-option v-for="row in githubItems" :key="row.id" :label="row.name || row.tag" :value="row.id" /></el-select></div><template #footer><el-button type="primary" :disabled="!githubId" :loading="busy" @click="importVersion">导入草稿并下载</el-button></template></OperationDialog>
   </section>
 </template>
@@ -15,19 +37,27 @@ import { request } from '../api/client';
 import OperationDialog from './OperationDialog.vue';
 import TextTabs from './TextTabs.vue';
 import RichTextEditor from '../../../shared/components/RichTextEditor.vue';
+import ReleaseAssets from './ReleaseAssets.vue';
+const deferredPlatforms = ref([]);
 const product = ref('system'), items = ref([]), page = ref(1), total = ref(0), loading = ref(false), busy = ref(false), error = ref(''), selected = ref(null), tab = ref('notes');
 const githubVisible = ref(false), githubItems = ref([]), githubId = ref(null);
 const tabs = [{ key: 'notes', name: '更新说明' }, { key: 'sql', name: '升级 SQL' }, { key: 'assets', name: '客户端安装包' }];
 let baseline = '';
 const status = s => ({ draft: '草稿', published: '已发布', withdrawn: '已撤回' }[s] || s);
-const assetStatus = s => ({ pending: '等待下载', downloading: '下载中', ready: '已就绪', failed: '失败' }[s] || s);
 const payload = () => ({ id: selected.value.item.id, revision: selected.value.item.revision, title: selected.value.item.title, notes_html: selected.value.item.notes_html });
 async function load(target = 1) { loading.value = true; error.value = ''; try { const data = await request(`/release/admin-list?product=${product.value}&page=${target}`); items.value = data.items; page.value = target; total.value = data.pagination.total; } catch (e) { error.value = e.message; } finally { loading.value = false; } }
 function requireSaved() { if (selected.value && baseline !== JSON.stringify(payload())) { ElMessage.warning('请先保存草稿，再进行此操作'); return false; } return true; }
-async function detail(id) { if (busy.value || !requireSaved()) return; const previousId = selected.value?.item.id; busy.value = true; try { selected.value = await request(`/release/detail?id=${id}`); baseline = JSON.stringify(payload()); if (previousId !== id) tab.value = 'notes'; } catch (e) { ElMessage.error(e.message); } finally { busy.value = false; } }
+async function detail(id) { if (busy.value || !requireSaved()) return; const previousId = selected.value?.item.id; busy.value = true; try { selected.value = await request(`/release/detail?id=${id}`); baseline = JSON.stringify(payload()); if (previousId !== id) { tab.value = 'notes'; deferredPlatforms.value = []; } } catch (e) { ElMessage.error(e.message); } finally { busy.value = false; } }
 async function close() { if (busy.value) return; if (selected.value && baseline !== JSON.stringify(payload())) { try { await ElMessageBox.confirm('说明尚未保存，确认放弃本次编辑？', '关闭编辑'); } catch { return; } } selected.value = null; }
 async function mutate(action, extras = {}) { if (busy.value || (action !== 'save' && !requireSaved())) return; busy.value = true; try { const data = await request(`/release/${action}`, { method: 'POST', body: JSON.stringify({ ...payload(), ...extras }) }); if (data.item) { selected.value = data; baseline = JSON.stringify(payload()); } else { selected.value = await request(`/release/detail?id=${selected.value.item.id}`); baseline = JSON.stringify(payload()); } await load(page.value); ElMessage.success(action === 'retry' ? '已排队下载' : '操作成功'); } catch (e) { ElMessage.error(e.message); } finally { busy.value = false; } }
-async function confirmAction(action) { if (action === 'publish' && baseline !== JSON.stringify(payload())) { ElMessage.warning('请先保存草稿，再确认发布'); return; } try { await ElMessageBox.confirm(action === 'publish' ? '发布后全校用户可查看说明，客户端版本将提示升级，确认发布？' : '撤回后用户将不再看到该版本说明和升级提示，确认继续？', '确认发布操作'); } catch { return; } await mutate(action); }
+async function confirmAction(action) {
+  if (action === 'publish' && baseline !== JSON.stringify(payload())) { ElMessage.warning('请先保存草稿，再确认发布'); return; }
+  const platforms = { 'darwin-universal': 'macOS', 'windows-x86_64': 'Windows', 'linux-x86_64': 'Linux' };
+  const deferred = selected.value.item.product === 'desktop' ? [...deferredPlatforms.value] : [];
+  const suffix = deferred.length ? ` ${deferred.map(key => platforms[key]).join('、')}暂缓，后台下载校验完成后自动开放。` : '';
+  try { await ElMessageBox.confirm(action === 'publish' ? `发布后全校用户可查看说明，已就绪平台将提示升级。${suffix}确认发布？` : '撤回后用户将不再看到该版本说明和升级提示，确认继续？', '确认发布操作'); } catch { return; }
+  await mutate(action, { deferred_platforms: deferred });
+}
 async function copySql(sql) { try { await navigator.clipboard.writeText(sql.sql_content); ElMessage.success('SQL 已复制'); } catch { ElMessage.error('浏览器不允许复制，请选择 SQL 内容复制'); } }
 async function markSql(sql) { try { const result = await ElMessageBox.prompt('请先在数据库工具中完成执行，再登记执行说明。此操作不会执行 SQL。', '登记 SQL', { inputPlaceholder: '执行备注', inputValidator: v => Boolean(v?.trim()) || '请填写执行备注' }); await mutate('mark-sql', { sql_id: sql.id, execution_note: result.value }); } catch { /* 取消登记。 */ } }
 async function github() { if (busy.value) return; busy.value = true; try { githubItems.value = (await request('/release/github')).items; githubVisible.value = true; } catch (e) { ElMessage.error(e.message); } finally { busy.value = false; } }

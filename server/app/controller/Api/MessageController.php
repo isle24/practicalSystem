@@ -17,6 +17,15 @@ class MessageController
     private const ADMIN_ROLES = ['super_admin', 'school_admin'];
     private const TEMPLATE_ROLES = ['super_admin', 'school_admin'];
 
+    /** 获取实时消息连接票据。 */
+    #[OperationLog('连接实时消息')]
+    public function realtimeTicket(Request $request): Response
+    {
+        if ($request->method() !== 'POST') return $this->fail(40500, '请使用 POST', 405);
+        try { return $this->ok((new \app\server\message\MessageRealtimeService())->ticket()); }
+        catch (Throwable) { return $this->fail(50300, '实时通道暂不可用，消息仍可手动刷新', 503); }
+    }
+
     /**
      * 查询消息列表
      */

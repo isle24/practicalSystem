@@ -6,6 +6,7 @@ use app\attribute\OperationLog;
 use app\controller\Api\Concerns\Responds;
 use app\server\release\ReleaseService;
 use app\server\release\GithubReleaseService;
+use app\server\release\ReleaseUploadService;
 use support\Request;
 use support\Response;
 use Throwable;
@@ -55,6 +56,18 @@ class ReleaseController
     #[OperationLog('重试客户端资产下载')]
     public function retry(Request $request): Response { return $this->mutate($request, function () use ($request) { (new ReleaseService())->enqueue((int) $request->input('id')); return []; }); }
 
+    /** 创建安装包上传会话。 */
+    #[OperationLog('创建客户端安装包上传')]
+    public function beginUpload(Request $request): Response { return $this->mutate($request, fn () => (new ReleaseUploadService())->begin((int) $request->input('asset_id'))); }
+
+    /** 接收安装包分片。 */
+    #[OperationLog('上传客户端安装包分片')]
+    public function uploadChunk(Request $request): Response { return $this->mutate($request, fn () => (new ReleaseUploadService())->chunk((string) $request->input('upload_id'), (int) $request->input('offset'), $request->file('file'))); }
+
+    /** 校验并完成安装包上传。 */
+    #[OperationLog('校验客户端安装包上传')]
+    public function finishUpload(Request $request): Response { return $this->mutate($request, fn () => (new ReleaseUploadService())->finish((string) $request->input('upload_id'))); }
+
     /** 登录客户端获取适合本机的限时更新入口。 */
     #[OperationLog('检查客户端更新')]
     public function check(Request $request): Response { return $this->respond(fn () => ['update' => (new ReleaseService())->check((string) $request->input('platform'), (string) $request->input('current'))]); }
@@ -62,6 +75,10 @@ class ReleaseController
     /** 下载学校已发布客户端的手动安装包。 */
     #[OperationLog('查询客户端安装包')]
     public function packages(Request $request): Response { return $this->respond(fn () => ['items' => (new ReleaseService())->packages((int) $request->input('id'))]); }
+
+    /** 网页版安装包下载入口，不公开草稿或 SQL。 */
+    #[OperationLog('查看客户端下载入口')]
+    public function downloads(Request $request): Response { return $this->respond(fn () => ['items' => (new ReleaseService())->downloads()])->withHeader('Cache-Control', 'no-store'); }
 
     /** 官方 updater 使用的限时清单。 */
     public function updateManifest(Request $request): Response
@@ -96,7 +113,7 @@ class ReleaseController
     {
         try { return $this->ok($callback()); }
         catch (Throwable $e) {
-            $status = in_array($e->getCode(), [400, 403, 404, 409, 502, 503], true) ? $e->getCode() : 500;
+            $status = in_array($e->getCode(), [400, 403, 404, 409, 429, 502, 503], true) ? $e->getCode() : 500;
             return $this->fail($status * 100, $status === 500 ? '版本服务不可用，请确认数据库结构和服务配置' : $e->getMessage(), $status);
         }
     }

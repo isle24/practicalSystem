@@ -71,6 +71,7 @@
 
       <MessagePage
         v-else-if="activeTab === 'message'"
+        :key="`${state.context.school_database_id}:${state.context.account_id}`"
         :state="messageState"
         :groups="messageGroups"
         :unread-count="messageUnreadCount"
@@ -187,6 +188,7 @@ import { usePracticeModule } from './composables/usePracticeModule';
 import { useSupportCenter } from './composables/useSupportCenter';
 import { statusText as resolveStatusText } from './constants/status';
 import { backendUrl, request } from './api/client';
+import { useRealtimeMessages } from '../../shared/useRealtimeMessages';
 import { formatDateKey } from './utils/date';
 import {
   exportInternshipBaseWord,
@@ -446,6 +448,16 @@ const currentPage = computed(() => {
 });
 
 const isLoggedIn = computed(() => Boolean(state.context.account_id));
+useRealtimeMessages({
+  sessionKey: () => state.context.account_id ? `${state.context.school_database_id}:${state.context.account_id}` : '',
+  request,
+  backendOrigin: backendUrl('/'),
+  invalidate: async (topic) => {
+    if (topic !== 'messages') return;
+    await loadMessageSummary();
+    if (activeTab.value === 'message') await loadMessages(1);
+  },
+});
 const mobileHeaderTitle = computed(() => (isLoggedIn.value ? currentPage.value.title : '实践管理系统'));
 const showMobileHeaderBack = computed(() => (
   isLoggedIn.value

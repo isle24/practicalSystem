@@ -93,6 +93,7 @@ class ConfigController
             return $this->fail(40300, '无操作权限', 403);
         }
         $groupInput = $request->input('group');
+        if ($groupInput === 'assistant') return $this->fail(40001, '助手配置请使用 /api/assistant/save-settings', 400);
         if (is_string($groupInput) && trim($groupInput) === 'teacher_sync') {
             return $this->fail(40001, '教师同步配置请使用 /api/teacher-sync/save-config', 400);
         }

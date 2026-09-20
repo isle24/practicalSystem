@@ -1,21 +1,40 @@
 <template>
   <main class="connection-page">
-    <div class="app-mark" aria-hidden="true"><School :size="36" :stroke-width="1.6" /></div>
-    <h1>实践管理系统</h1>
-    <p class="subtitle">连接你的学校</p>
+    <header class="connection-heading">
+      <span class="product-name">实践管理系统</span>
+      <h1>{{ editingSchool ? '连接学校' : schoolName }}</h1>
+      <div v-if="!editingSchool" class="school-identity">
+        <span>{{ remark || '学校账号登录' }}</span>
+        <button type="button" class="switch-school" :disabled="busy || loading" @click="switching = !switching"><RefreshCw :size="14" />切换</button>
+      </div>
+    </header>
 
-    <form class="connection-form" @submit.prevent="connect">
+    <section v-if="switching" class="recent-schools" aria-label="切换学校">
+      <div class="history-heading"><h2>学校与账号</h2><button type="button" class="icon-button" aria-label="关闭切换" @click="switching = false"><X :size="16" /></button></div>
+      <button v-for="school in profiles" :key="`${school.origin}:${school.username || ''}`" class="school-row" :disabled="busy || loading" type="button" @click="selectSchool(school)">
+        <span class="school-label"><strong>{{ school.name || '学校' }}</strong><small>{{ [school.remark, school.username].filter(Boolean).join(' · ') }}</small></span>
+        <ChevronRight :size="18" />
+      </button>
+      <button class="add-school" type="button" @click="newSchool"><Plus :size="16" />连接其他学校</button>
+    </section>
+
+    <form v-else class="connection-form" @submit.prevent="connect">
+      <template v-if="editingSchool">
       <label for="school-domain">学校域名</label>
       <div class="domain-field" :class="{ invalid: error }">
         <Globe2 :size="19" aria-hidden="true" />
         <input id="school-domain" v-model="domain" type="text" autocomplete="url" autocapitalize="off"
-          spellcheck="false" placeholder="sx.2iwm.com" :disabled="busy || loading" :aria-invalid="!!error"
+          spellcheck="false" placeholder="请输入学校服务器域名" :disabled="busy || loading" :aria-invalid="!!error"
           :aria-describedby="error ? 'connection-error' : undefined" autofocus>
       </div>
+      <button v-if="profiles.length" class="switch-school history-entry" type="button" @click="switching = true">选择已连接的学校<ChevronRight :size="14" /></button>
+      </template>
       <label for="school-username">账号</label>
       <input id="school-username" v-model="username" type="text" autocomplete="username" placeholder="请输入账号" :disabled="busy || loading">
       <label for="school-password">密码</label>
       <input id="school-password" v-model="password" type="password" autocomplete="current-password" placeholder="请输入密码" :disabled="busy || loading">
+      <label for="school-remark">备注 <small>可选</small></label>
+      <input id="school-remark" v-model="remark" maxlength="60" placeholder="例如：工作账号" :disabled="busy || loading">
       <div class="connection-options">
         <label class="check-option"><input v-model="rememberPassword" type="checkbox" :disabled="busy || loading"><span>记住密码</span></label>
         <label class="check-option"><input v-model="autoLogin" type="checkbox" :disabled="busy || loading || !rememberPassword"><span>自动登录</span></label>
@@ -23,20 +42,11 @@
       <p v-if="error" id="connection-error" class="error" role="alert"><CircleAlert :size="17" />{{ error }}</p>
       <button class="connect-button" type="submit" :disabled="busy || loading || !domain.trim()">
         <LoaderCircle v-if="busy" :size="19" class="spin" />
-        <span>{{ busy ? '正在连接学校…' : '连接学校' }}</span>
+        <span>{{ busy ? '正在连接' : username.trim() ? '登录' : '进入学校' }}</span>
         <ArrowRight v-if="!busy" :size="19" />
       </button>
     </form>
 
-    <section v-if="profiles.length" class="recent-schools" aria-label="最近连接的学校">
-      <h2>最近连接</h2>
-      <button v-for="school in profiles" :key="`${school.origin}:${school.username || ''}`" class="school-row" :disabled="busy || loading"
-        type="button" @click="selectSchool(school)">
-        <span class="school-icon"><School :size="20" /></span>
-        <span class="school-label"><strong>{{ school.name || '学校' }}</strong><small>{{ school.origin }}{{ school.username ? ` / ${school.username}` : '' }}</small></span>
-        <ChevronRight :size="18" />
-      </button>
-    </section>
     <footer><LockKeyhole :size="13" /><span>学校独立登录</span><span class="version">v{{ version }}</span></footer>
   </main>
 </template>
@@ -45,9 +55,13 @@
 import { ref, onMounted, watch } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
 import { getVersion } from '@tauri-apps/api/app';
-import { ArrowRight, ChevronRight, CircleAlert, Globe2, LoaderCircle, LockKeyhole, School } from '@lucide/vue';
+import { ArrowRight, ChevronRight, CircleAlert, Globe2, LoaderCircle, LockKeyhole, Plus, RefreshCw, X } from '@lucide/vue';
 
-const domain = ref('sx.2iwm.com');
+const domain = ref('');
+const schoolName = ref('');
+const remark = ref('');
+const editingSchool = ref(true);
+const switching = ref(false);
 const username = ref('');
 const password = ref('');
 const rememberPassword = ref(false);
@@ -56,7 +70,7 @@ const profiles = ref([]);
 const error = ref('');
 const loading = ref(true);
 const busy = ref(false);
-const version = ref('0.3.1');
+const version = ref('');
 
 watch([domain, username], () => {
   if (loading.value || busy.value) return;
@@ -74,6 +88,11 @@ onMounted(async () => {
     domain.value = settings.last_origin || domain.value;
     const recent = settings.schools.find(item => item.origin === domain.value && item.username === settings.last_username)
       || settings.schools.find(item => item.origin === domain.value);
+    if (recent) {
+      schoolName.value = recent.name;
+      remark.value = recent.remark || '';
+      editingSchool.value = false;
+    }
     if (recent?.username) {
       username.value = recent.username;
       const saved = await invoke('read_saved_connection_password', { origin: recent.origin, username: recent.username });
@@ -108,9 +127,12 @@ async function connect() {
       password: password.value,
       rememberPassword: rememberPassword.value,
       autoLogin: autoLogin.value,
+      remark: remark.value,
     });
     profiles.value = settings.schools;
     domain.value = settings.last_origin;
+    const connected = settings.schools.find(item => item.origin === settings.last_origin && item.username === settings.last_username);
+    if (connected) { schoolName.value = connected.name; editingSchool.value = false; }
   } catch (reason) {
     error.value = String(reason);
   } finally {
@@ -124,6 +146,10 @@ async function selectSchool(school) {
   loading.value = true;
   error.value = '';
   domain.value = school.origin;
+  schoolName.value = school.name;
+  remark.value = school.remark || '';
+  editingSchool.value = false;
+  switching.value = false;
   username.value = school.username || '';
   password.value = '';
   autoLogin.value = false;
@@ -140,6 +166,12 @@ async function selectSchool(school) {
   } finally {
     loading.value = false;
   }
-  if (autoLogin.value && password.value) await connect();
+}
+
+// 切换到域名输入时不携带原学校的凭据。
+function newSchool() {
+  if (busy.value || loading.value) return;
+  domain.value = ''; username.value = ''; password.value = ''; remark.value = '';
+  schoolName.value = ''; editingSchool.value = true; switching.value = false; error.value = '';
 }
 </script>
