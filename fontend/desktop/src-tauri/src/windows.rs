@@ -41,7 +41,7 @@ pub fn build(
             r#"(() => {{
             const bridge = async (action, payload) => {{
                 const controller = new AbortController();
-                const timer = setTimeout(() => controller.abort(), 35000);
+                const timer = setTimeout(() => controller.abort(), action === 'external' ? 90000 : 60000);
                 try {{
                     const response = await fetch('/_desktop/' + action, {{
                         method:'POST', credentials:'same-origin', signal:controller.signal,
@@ -58,7 +58,10 @@ pub fn build(
             Object.defineProperty(window, '__PRACTICAL_DESKTOP__', {{
                 value:Object.freeze({{...{context}, version:'{}',
                     bootstrapLogin:()=>bridge('bootstrap-login',{{}}),
-                    openExternal:(url,mode='client')=>bridge('external',{{url,mode}}),
+                    openExternal:(url,mode='client',favorite_id=0)=>bridge('external',{{url,mode,favorite_id}}),
+                    favoriteCredentials:(id,action,profile)=>bridge('favorite-credentials',{{id,action,profile}}),
+                    previewCache:(action='status',max_gb)=>bridge('preview-cache',{{action,max_gb}}),
+                    previewFileUrl:(id)=>'/_desktop/preview-file?id='+encodeURIComponent(id),
                     checkUpdate:(interactive=true)=>bridge('update',{{interactive}})
                 }}), writable:false
             }});

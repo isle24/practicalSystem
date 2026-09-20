@@ -130,12 +130,12 @@
 .desktop-window-mac { border-color: rgba(0,0,0,.18); box-shadow: 0 20px 55px rgba(0,0,0,.2); }
 .desktop-window-mac .window-title { position: relative; padding: 0 12px; gap: 12px; background: #f1f1f3; }
 .desktop-window-mac .window-controls { order: -1; gap: 8px; align-items: center; }
-.desktop-window-mac .window-controls button { width: 13px; height: 13px; border-radius: 50%; border: 1px solid rgba(0,0,0,.12); color: rgba(0,0,0,.62); }
+.desktop-window-mac .window-controls button { width: 13px; height: 13px; min-width: 13px; flex: 0 0 13px; padding: 0; line-height: 1; border-radius: 50%; border: 1px solid rgba(0,0,0,.12); color: rgba(0,0,0,.62); }
 .desktop-window-mac .window-controls .window-control-close { order: -1; background: #ff5f57; }
 .desktop-window-mac .window-controls .window-control-minimize { background: #febc2e; }
 .desktop-window-mac .window-controls .window-control-maximize { background: #28c840; }
 .desktop-window-mac:not(.active) .window-controls button { background: #c6c7c9; }
-.desktop-window-mac .window-controls button svg { width: 9px; height: 9px; opacity: 0; }
+.desktop-window-mac .window-controls button svg { display: block; width: 9px; height: 9px; margin: 0; opacity: 0; }
 .desktop-window-mac .window-controls:hover button svg,
 .desktop-window-mac .window-controls button:focus-visible svg { opacity: 1; }
 .desktop-window-mac .window-name { padding-left: 6px; }

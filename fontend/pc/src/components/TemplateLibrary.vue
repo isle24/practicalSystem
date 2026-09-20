@@ -102,6 +102,7 @@
         <el-table-column label="操作" width="190" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" @click="downloadTemplate(row)">下载</el-button>
+            <el-button link type="primary" @click="downloadTemplate(row, true)">预览</el-button>
             <el-button v-if="canManage" link type="primary" @click="openTemplateDialog(row)">编辑</el-button>
             <el-button v-if="canManage" link type="danger" @click="deleteTemplate(row)">删除</el-button>
           </template>
@@ -401,6 +402,7 @@
 </template>
 
 <script setup>
+import { previewFile } from '../../../shared/filePreview';
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { FileText, Plus, RefreshCw, Save, Search, Upload } from '@lucide/vue';
 import { tableSequence } from '../utils/table';
@@ -865,12 +867,13 @@ async function deleteTemplate(row) {
   }
 }
 
-async function downloadTemplate(row) {
+async function downloadTemplate(row, preview = false) {
   message.value = '';
   try {
     const data = await downloadTemplateItem(row.id);
     if (data.url) {
-      window.open(data.url, '_blank', 'noopener');
+      if (preview) previewFile({ url: data.url, file_id: data.file_id, name: data.download_name || data.file_name });
+      else window.open(data.url, '_blank', 'noopener');
     }
     await loadTemplates(pagination.page || 1);
   } catch (error) {

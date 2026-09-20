@@ -1,7 +1,10 @@
 mod connection;
 mod downloads;
 mod external;
+mod favorite_auth;
 mod gateway;
+mod preview_cache;
+mod school_api;
 mod updater;
 mod windows;
 

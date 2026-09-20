@@ -1,13 +1,14 @@
 import { defineConfig, loadEnv } from 'vite';
 import vue from '@vitejs/plugin-vue';
+import { pdfAssetsPlugin } from '../shared/pdfAssetsPlugin';
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
 
   return {
     base: './',
-    plugins: [vue()],
-    resolve: { dedupe: ['vue', 'markdown-it', 'dompurify', '@lucide/vue'] },
+    plugins: [vue(), pdfAssetsPlugin(process.cwd())],
+    resolve: { dedupe: ['vue', 'markdown-it', 'dompurify', '@lucide/vue', 'pdfjs-dist', 'docx-preview', 'exceljs', 'fflate'] },
     server: {
       proxy: {
         '/api': {
@@ -21,6 +22,7 @@ export default defineConfig(({ mode }) => {
       emptyOutDir: true,
       rollupOptions: {
         output: {
+          assetFileNames: asset => asset.names?.some(name => name.endsWith('.mjs')) ? 'assets/[name]-[hash].js' : 'assets/[name]-[hash][extname]',
           manualChunks: {
             vue: ['vue'],
             element: ['element-plus'],

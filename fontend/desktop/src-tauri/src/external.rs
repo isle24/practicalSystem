@@ -5,10 +5,26 @@ use tauri_plugin_opener::OpenerExt;
 use url::Url;
 
 /// 外部网页不得访问本机客户端通道或特权协议。
-fn allowed(url: &Url) -> bool {
-    let host = url.host_str().unwrap_or("").to_ascii_lowercase();
+pub fn allowed(url: &Url) -> bool {
+    let host = url
+        .host_str()
+        .unwrap_or("")
+        .trim_end_matches('.')
+        .to_ascii_lowercase();
+    let loopback = match url.host() {
+        Some(url::Host::Ipv4(ip)) => ip.is_loopback() || ip.is_unspecified(),
+        Some(url::Host::Ipv6(ip)) => {
+            ip.is_loopback()
+                || ip.is_unspecified()
+                || ip
+                    .to_ipv4_mapped()
+                    .is_some_and(|ip| ip.is_loopback() || ip.is_unspecified())
+        }
+        _ => false,
+    };
     matches!(url.scheme(), "http" | "https")
         && !host.is_empty()
+        && !loopback
         && url.username().is_empty()
         && url.password().is_none()
         && host != "localhost"
@@ -16,6 +32,54 @@ fn allowed(url: &Url) -> bool {
         && !host.starts_with("127.")
         && host != "[::1]"
         && host != "0.0.0.0"
+}
+
+/// 认证窗口使用非持久独立上下文，禁止携带凭据跳转其他来源。
+pub fn open_authenticated(
+    app: &AppHandle,
+    url: Url,
+    cookies: Vec<tauri::webview::Cookie<'static>>,
+) -> Result<(), String> {
+    let origin = url.origin();
+    let builder = WebviewWindowBuilder::new(
+        app,
+        format!("external-{}", uuid::Uuid::new_v4().simple()),
+        WebviewUrl::External(Url::parse("about:blank").map_err(|_| "无法创建认证窗口")?),
+    )
+    .title(format!("{} - 外部网页", url.host_str().unwrap_or("网页")))
+    .inner_size(1180.0, 820.0)
+    .incognito(true)
+    .on_navigation(move |target| {
+        target.as_str() == "about:blank" || (allowed(target) && target.origin() == origin)
+    })
+    .on_new_window(|_, _| NewWindowResponse::Deny);
+    #[cfg(target_os = "windows")]
+    let directory = tempfile::tempdir().map_err(|_| "无法创建独立网页会话")?;
+    #[cfg(target_os = "windows")]
+    let builder = builder.data_directory(directory.path().to_path_buf());
+    let window = builder.build().map_err(|_| "无法创建认证窗口")?;
+    #[cfg(target_os = "windows")]
+    {
+        let directory = std::sync::Mutex::new(Some(directory));
+        window.on_window_event(move |event| {
+            if matches!(event, tauri::WindowEvent::Destroyed) {
+                if let Ok(mut directory) = directory.lock() {
+                    directory.take();
+                }
+            }
+        });
+    }
+    for cookie in cookies {
+        if window.set_cookie(cookie).is_err() {
+            let _ = window.destroy();
+            return Err("当前平台无法设置认证 Cookie".into());
+        }
+    }
+    if window.navigate(url).is_err() {
+        let _ = window.destroy();
+        return Err("无法打开认证页面".into());
+    }
+    Ok(())
 }
 
 /// 统一打开收藏的客户端窗口或系统浏览器。
