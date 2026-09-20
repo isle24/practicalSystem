@@ -1,6 +1,6 @@
 [package]
 name = "practical-system-desktop"
-version = "0.2.0"
+version = "0.3.1"
 description = "Practical System desktop client"
 edition = "2021"
 rust-version = "1.88"
@@ -29,6 +29,7 @@ tokio = { version = "1", features = ["net", "sync", "time"] }
 rust-embed = "8"
 mime_guess = "2"
 tempfile = "3"
+keyring = { version = "3.6", default-features = false, features = ["apple-native", "windows-native", "linux-native-sync-persistent"] }
 
 [profile.release]
 codegen-units = 1

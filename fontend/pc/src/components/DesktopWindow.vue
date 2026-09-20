@@ -7,6 +7,7 @@
       maximized,
       dragging: interaction?.type === 'drag',
       resizing: interaction?.type === 'resize',
+      'desktop-window-mac': appearance === 'mac',
     }"
     :style="windowStyle"
     @mousedown.capture="focusWindow"
@@ -20,11 +21,11 @@
         <div v-if="$slots.actions" class="window-title-actions" @mousedown.stop @dblclick.stop>
           <slot name="actions" />
         </div>
-        <div class="window-controls">
-          <button class="window-control-minimize" title="最小化" @mousedown.stop @click.stop="emit('minimize')"><Minus :size="14" /></button>
-          <button class="window-control-maximize" :title="maximized ? '还原' : '最大化'" @mousedown.stop @click.stop="toggleMaximize"><Square :size="13" /></button>
-          <button class="window-control-close" title="关闭" @mousedown.stop @click.stop="emit('close')"><X :size="15" /></button>
-        </div>
+      </div>
+      <div class="window-controls" @dblclick.stop>
+        <button class="window-control-minimize" title="最小化" aria-label="最小化" @mousedown.stop @click.stop="emit('minimize')"><Minus :size="14" /></button>
+        <button class="window-control-maximize" :title="maximized ? '还原' : '最大化'" :aria-label="maximized ? '还原' : '最大化'" @mousedown.stop @click.stop="toggleMaximize"><Square :size="13" /></button>
+        <button class="window-control-close" title="关闭" aria-label="关闭" @mousedown.stop @click.stop="emit('close')"><X :size="15" /></button>
       </div>
     </header>
 
@@ -55,6 +56,7 @@ const props = defineProps({
   initialWidth: { type: Number, default: 1120 },
   initialHeight: { type: Number, default: 680 },
   active: { type: Boolean, default: false },
+  appearance: { type: String, default: 'windows' },
 });
 
 const emit = defineEmits(['close', 'focus', 'minimize']);
@@ -70,6 +72,7 @@ const interaction = ref(null);
 const baseMinFrame = { width: 680, height: 500 };
 const maximized = ref(false);
 const restoreFrame = ref(null);
+let workspaceObserver = null;
 
 const windowStyle = computed(() => ({
   left: `${frame.left}px`,
@@ -256,11 +259,12 @@ function clamp(value, min, max) {
 
 onMounted(() => {
   fitToWorkspace();
-  window.addEventListener('resize', fitToWorkspace);
+  workspaceObserver = new ResizeObserver(fitToWorkspace);
+  workspaceObserver.observe(windowRef.value.parentElement);
 });
 
 onBeforeUnmount(() => {
   stop();
-  window.removeEventListener('resize', fitToWorkspace);
+  workspaceObserver?.disconnect();
 });
 </script>

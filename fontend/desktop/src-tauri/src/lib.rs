@@ -54,6 +54,19 @@ fn read_connection_settings(app: AppHandle, window: WebviewWindow) -> Result<Set
     connection::load(&app)
 }
 
+/// 读取当前学校账号对应的系统密码。
+#[tauri::command]
+fn read_saved_connection_password(
+    app: AppHandle,
+    window: WebviewWindow,
+    origin: String,
+    username: String,
+) -> Result<Option<String>, String> {
+    require_connection(&window)?;
+    let _ = connection::load(&app)?;
+    connection::load_password(&origin, &username)
+}
+
 /// 建立所选学校的原生会话，并打开安装包内的 PC 界面。
 #[tauri::command]
 async fn connect_school(
@@ -61,6 +74,10 @@ async fn connect_school(
     window: WebviewWindow,
     state: State<'_, AppState>,
     domain: String,
+    username: String,
+    password: String,
+    remember_password: bool,
+    auto_login: bool,
 ) -> Result<Settings, String> {
     require_connection(&window)?;
     if state.connecting.swap(true, Ordering::AcqRel) {
@@ -76,7 +93,7 @@ async fn connect_school(
             .map_err(|_| "连接状态不可用")?
             .as_ref()
             .is_some_and(|gateway| gateway.remote.origin() == origin.origin());
-        if same_school {
+        if same_school && settings.last_username == username.trim() && password.is_empty() {
             let _ = school.unminimize();
             let _ = school.set_focus();
             let _ = window.hide();
@@ -84,10 +101,10 @@ async fn connect_school(
         }
         let proceed = app
             .dialog()
-            .message("切换学校将关闭当前学校的所有窗口，并结束本次登录。请先保存正在填写的内容。")
-            .title("切换学校")
+            .message("重新连接学校或账号将关闭当前学校的所有窗口，并结束本次登录。请先保存正在填写的内容。")
+            .title("重新连接")
             .buttons(MessageDialogButtons::OkCancelCustom(
-                "切换学校".into(),
+                "重新连接".into(),
                 "取消".into(),
             ))
             .blocking_show();
@@ -102,20 +119,38 @@ async fn connect_school(
         .map_or(0, |school| school.port);
     let connection = connection::connect(origin, preferred_port).await?;
     let mut profile = connection.school.clone();
+    profile.username = username.trim().to_owned();
+    profile.auto_login = auto_login && remember_password && !password.is_empty();
     let reserved_ports: Vec<u16> = settings
         .schools
         .iter()
         .filter(|school| school.origin != profile.origin)
         .map(|school| school.port)
         .collect();
-    let gateway = gateway::start(app.clone(), connection, &reserved_ports).await?;
+    let gateway = gateway::start(
+        app.clone(),
+        connection,
+        &reserved_ports,
+        if !username.trim().is_empty() && !password.is_empty() {
+            Some((username.trim().to_owned(), password.clone()))
+        } else {
+            None
+        },
+    )
+    .await?;
     profile.port = gateway.port;
     settings.last_origin = profile.origin.clone();
+    settings.last_username = profile.username.clone();
     settings
         .schools
-        .retain(|school| school.origin != profile.origin);
+        .retain(|school| school.origin != profile.origin || school.username != profile.username);
     settings.schools.insert(0, profile.clone());
     connection::save(&app, &settings)?;
+    if remember_password {
+        connection::save_password(&profile.origin, &profile.username, &password)?;
+    } else {
+        connection::delete_password(&profile.origin, &profile.username)?;
+    }
     windows::close_school(&app);
     let school = windows::build(
         &app,
@@ -259,7 +294,7 @@ fn handle_menu(app: &AppHandle, id: &str) {
 
 /// 初始化原生客户端与本地连接命令。
 pub fn run() {
-    tauri::Builder::default()
+    let mut builder = tauri::Builder::default()
         .manage(AppState::default())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
@@ -271,10 +306,18 @@ pub fn run() {
         )
         .invoke_handler(tauri::generate_handler![
             read_connection_settings,
+            read_saved_connection_password,
             connect_school
-        ])
-        .menu(application_menu)
-        .on_menu_event(|app, event| handle_menu(app, event.id().as_ref()))
+        ]);
+
+    #[cfg(target_os = "macos")]
+    {
+        builder = builder
+            .menu(application_menu)
+            .on_menu_event(|app, event| handle_menu(app, event.id().as_ref()));
+    }
+
+    builder
         .on_window_event(|window, event| {
             if window.label() == "connection" {
                 if let tauri::WindowEvent::CloseRequested { api, .. } = event {

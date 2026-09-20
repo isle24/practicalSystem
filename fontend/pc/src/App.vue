@@ -54,14 +54,17 @@
     </section>
   </main>
 
-  <main v-else class="desktop-shell" :style="desktopStyle" @click.left="closeDesktopContextMenu" @contextmenu.prevent="openDesktopContextMenu">
+  <main v-else class="desktop-shell" :class="{ 'desktop-shell-mac': desktopStyleMode === 'mac' }" :style="desktopStyle" @click.left="closeDesktopContextMenu" @contextmenu.prevent="openDesktopContextMenu">
     <section class="workspace">
       <AdaptiveDesktopGrid
+        ref="desktopGridRef"
         :modules="visibleDesktopModules"
+        :storage-key="desktopPositionStorageKey"
         :module-href="moduleHref"
         :is-focused="isModuleFocused"
         :backend-url="backendUrl"
         @open="openModule"
+        @warning="ElMessage.warning"
       />
 
       <DesktopWindow
@@ -75,6 +78,7 @@
         :initial-width="win.width"
         :initial-height="win.height"
         :active="focusedWindowId === win.id"
+        :appearance="desktopStyleMode"
         @focus="focusWindow(win.id)"
         @minimize="minimizeWindow(win.id)"
         @close="closeWindow(win.id)"
@@ -193,6 +197,36 @@
                   accept="image/jpeg,image/png,image/webp,image/gif"
                   @change="event => handleAssetSelected('wallpaper', event)"
                 >
+              </section>
+
+              <section class="profile-panel-card">
+                <header>
+                  <strong>客户端外观</strong>
+                  <small>只保存在当前设备，不同步到学校服务器。</small>
+                </header>
+                <div class="desktop-style-options" role="radiogroup" aria-label="客户端外观">
+                  <button
+                    type="button"
+                    role="radio"
+                    :aria-checked="desktopStyleMode === 'windows'"
+                    :class="{ active: desktopStyleMode === 'windows' }"
+                    @click="setDesktopStyle('windows')"
+                  >
+                    <Monitor :size="18" />
+                    <span><strong>Windows 风格</strong><small>桌面、窗口和任务栏</small></span>
+                  </button>
+                  <button
+                    type="button"
+                    role="radio"
+                    :aria-checked="desktopStyleMode === 'mac'"
+                    :class="{ active: desktopStyleMode === 'mac' }"
+                    @click="setDesktopStyle('mac')"
+                  >
+                    <LayoutGrid :size="18" />
+                    <span><strong>Mac 风格</strong><small>悬浮 Dock 和独立启动台</small></span>
+                  </button>
+                </div>
+                <small class="client-version">客户端版本 v{{ clientVersion }}</small>
               </section>
 
               <section v-if="canManageLoginBackground" class="profile-panel-card">
@@ -2722,6 +2756,7 @@
                   <ExportTaskCenter />
                 </div>
 
+                <PluginPanel v-else-if="win.module.id === 'pluginCenter'" :can-manage="isSchoolConfigRole()" />
                 <FavoritePanel v-else-if="win.module.id === 'favorite'" :is-desktop="isFavoriteDesktop" :set-desktop="setFavoriteDesktopShortcut" @changed="refreshFavoriteShortcuts" />
                 <NotebookPanel v-else-if="win.module.id === 'notebook'" :key="noteSessionKey" :ref="el => setNotebookRef(win.id, el)" :request="request" :session-key="noteSessionKey" />
                 <ReleaseNotesPanel v-else-if="win.module.id === 'releaseNotes'" :request="request" />
@@ -2812,7 +2847,8 @@
                     </el-button>
                   </div>
 
-                  <section class="message-summary-strip">
+                  <section class="message-im-layout">
+                    <aside class="message-summary-strip message-conversation-list">
                     <button
                       v-for="item in messageTypeOptions"
                       :key="`summary-${item.value}`"
@@ -2823,7 +2859,9 @@
                       <span>{{ item.label }}</span>
                       <strong>{{ messageTypeUnread(item.value) }}</strong>
                     </button>
-                  </section>
+                    </aside>
+
+                    <div class="message-im-thread">
 
                   <el-alert
                     v-if="messageState.message"
@@ -2886,6 +2924,8 @@
                       @current-change="loadMessages"
                     />
                   </div>
+                    </div>
+                  </section>
 
                   <OperationDialog
                     :visible="messageState.sendDialog.visible"
@@ -3517,6 +3557,13 @@
                   <small v-if="adminState.scope.message">{{ adminState.scope.message }}</small>
                 </div>
 
+                <EduDataPanel
+                  v-else-if="win.module.id === 'eduData'"
+                  :can-import="hasPermission('edu:data:import')"
+                  :can-confirm="hasPermission('edu:data:confirm')"
+                  :can-issue="hasPermission('edu:data:issue')"
+                />
+
                 <div v-else-if="win.module.id === 'dataManage' || (win.module.id === 'config' && win.panel === 'dataManage')" class="admin-panel data-manage-panel">
                   <section class="maintenance-card danger">
                     <header>
@@ -3631,6 +3678,11 @@
                       </template>
                     </el-table-column>
                     <el-table-column prop="source_table" label="分表" width="138" />
+                    <el-table-column label="详情" width="76" fixed="right">
+                      <template #default="{ row }">
+                        <el-button link type="primary" @click="openLogDetail(row)">查看</el-button>
+                      </template>
+                    </el-table-column>
                   </el-table>
                   <div class="file-pagination">
                     <span>共 {{ logState.pagination.total }} 条日志，{{ logState.tables.length }} 个分表</span>
@@ -3644,6 +3696,20 @@
                     />
                   </div>
                   <small v-if="logState.message">{{ logState.message }}</small>
+                  <OperationDialog
+                    :visible="logDetailState.visible"
+                    title="操作日志详情"
+                    dialog-class="log-detail-dialog"
+                    @close="logDetailState.visible = false"
+                  >
+                    <div class="log-detail-content" v-if="logDetailState.row">
+                      <div class="log-detail-summary">
+                        <strong>{{ logDetailState.row.operation || logDetailState.row.action || '未命名操作' }}</strong>
+                        <span>{{ logDetailState.row.created_at }} / {{ logDetailState.row.user_name || logDetailState.row.login_name || '-' }}</span>
+                      </div>
+                      <pre>{{ logDetailText(logDetailState.row) }}</pre>
+                    </div>
+                  </OperationDialog>
                 </div>
 
                 <div v-else-if="win.module.id === 'stat'" class="admin-panel stat-panel">
@@ -3885,6 +3951,9 @@
                     <el-button type="primary" :icon="Save" :loading="wechatProxy.loading" :disabled="!hasPermission('wechat:proxy:save')" @click="saveProxy">
                       保存配置
                     </el-button>
+                    <el-button :icon="CheckCircle2" :loading="wechatProxy.checking" :disabled="!hasPermission('wechat:proxy:test')" @click="checkProxyConfig">
+                      测试配置
+                    </el-button>
                     <el-button :icon="RefreshCw" :loading="wechatProxy.loading" @click="loadProxy">
                       重新读取
                     </el-button>
@@ -3962,6 +4031,9 @@
                     </section>
                   </div>
                   <small v-if="wechatProxy.message">{{ wechatProxy.message }}</small>
+                  <small v-if="wechatProxy.checkResult" class="wechat-check-result">
+                    已连接：{{ wechatProxy.checkResult.agent_name || '企业微信应用' }}（AgentId {{ wechatProxy.checkResult.agent_id }}），检测于 {{ wechatProxy.checkResult.checked_at }}
+                  </small>
                 </div>
 
                 <div v-else class="module-empty-state">
@@ -3987,9 +4059,13 @@
         <ImagePlus :size="16" />
         <span>更换壁纸</span>
       </button>
-      <button type="button" @click="openProfile">
+      <button type="button" @click="closeDesktopContextMenu(); openProfile()">
         <UserRound :size="16" />
         <span>个人设置</span>
+      </button>
+      <button type="button" @click="resetDesktopPositions">
+        <RotateCcw :size="16" />
+        <span>恢复默认布局</span>
       </button>
     </div>
 
@@ -4042,6 +4118,7 @@
 
     <DesktopLauncher
       v-model:keyword="desktopLauncherState.keyword"
+      @reorder="setDesktopModuleOrder"
       :visible="desktopLauncherState.visible"
       :modules="launcherFilteredModules"
       :loading="desktopLauncherState.loading"
@@ -4054,6 +4131,10 @@
       @open="openLauncherModule"
       @toggle="toggleDesktopShortcut"
     />
+
+    <button type="button" class="notebook-floating-button" title="快捷记事本" aria-label="快捷记事本" @click="openNotebook">
+      <FileText :size="19" />
+    </button>
 
     <InternshipArchiveDetail
       v-model="archiveDetailVisible"
@@ -4104,6 +4185,14 @@
           </div>
         </div>
         <div class="taskbar-apps">
+          <template v-if="desktopStyleMode === 'mac'">
+            <button v-for="module in visibleDesktopModules" :key="`dock-${module.id}`" type="button"
+              class="dock-pinned-app" :title="module.name" :aria-label="module.name"
+              :class="{ active: isModuleFocused(module.id), running: isModuleOpen(module.id) }"
+              @click="openModule(module)">
+              <AppIcon class="taskbar-glyph" :icon="module.icon" :icon-url="module.iconUrl" :label="module.name" :color="module.color" :size="24" :backend-url="backendUrl" />
+            </button>
+          </template>
           <a
             v-for="win in taskbarWindows"
             :key="win.id"
@@ -4129,6 +4218,7 @@
       </div>
       <div class="taskbar-status" aria-label="系统状态">
         <span class="taskbar-online"><i />在线</span>
+        <span class="taskbar-version">v{{ clientVersion }}</span>
         <el-button text class="taskbar-operator-button" :title="isAdminRole ? '修改密码' : '个人设置'" @click="handleOperatorClick">
           <span class="top-avatar" :style="topAvatarStyle">
             <UserRound v-if="!profileState.form.avatar" :size="14" />
@@ -4202,7 +4292,7 @@
 
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
-import { ElMessage } from 'element-plus';
+import { ElMessage, ElMessageBox } from 'element-plus';
 import zhCn from 'element-plus/es/locale/lang/zh-cn';
 import {
   Bell,
@@ -4231,11 +4321,13 @@ import {
   LogOut,
   MapPin,
   MessageCircle,
+  Monitor,
   MoreHorizontal,
   Network,
   Plus,
   Printer,
   RefreshCw,
+  RotateCcw,
   Save,
   Search,
   Settings,
@@ -4267,6 +4359,7 @@ import PracticePeriodManager from './components/PracticePeriodManager.vue';
 import PracticeScheduleBoard from './components/PracticeScheduleBoard.vue';
 import DocCenter from './components/DocCenter.vue';
 import EducationPlanSyncPanel from './components/EducationPlanSyncPanel.vue';
+import EduDataPanel from './components/EduDataPanel.vue';
 import EnterpriseEvaluationPanel from './components/EnterpriseEvaluationPanel.vue';
 import ExportTaskCenter from './components/ExportTaskCenter.vue';
 import IconUpload from './components/IconUpload.vue';
@@ -4280,6 +4373,7 @@ import MenuEditDialog from './components/MenuEditDialog.vue';
 import ModuleCollection from './components/ModuleCollection.vue';
 import ModuleSidebar from './components/ModuleSidebar.vue';
 import OperationDialog from './components/OperationDialog.vue';
+import PluginPanel from './components/PluginPanel.vue';
 import ShortcutTile from './components/ShortcutTile.vue';
 import SocialPracticePanel from './components/SocialPracticePanel.vue';
 import StudentOwnPanel from './components/StudentOwnPanel.vue';
@@ -4364,6 +4458,7 @@ import {
   fetchProfileSettings,
   fetchRolePermissions,
   fetchWechatConfig,
+  checkWechatConfig,
   generateAdminLoginPasskey,
   importArchiveExcel,
   importInternshipArrangementAssignments,
@@ -4446,6 +4541,8 @@ const baseImportInputRef = ref(null);
 const syllabusGuideFileInputRef = ref(null);
 const focusedWindowId = ref(null);
 const zIndexSeed = ref(20);
+const desktopStyleMode = ref(localStorage.getItem('practical:desktop-style') === 'mac' ? 'mac' : 'windows');
+const clientVersion = window.__PRACTICAL_DESKTOP__?.version || 'Web';
 const wallpaperCacheKey = 'practical_pc_wallpaper';
 const loginBackgroundMaxSize = 8 * 1024 * 1024;
 const imageAssetTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
@@ -4531,6 +4628,7 @@ const desktopShortcutModuleAliases = {
   professionManage: 'dataCenter',
   classManage: 'dataCenter',
   companyManage: 'dataCenter',
+  eduData: 'dataCenter',
   dataManage: 'dataCenter',
   log: 'auditCenter',
   exportTask: 'auditCenter',
@@ -4538,12 +4636,15 @@ const desktopShortcutModuleAliases = {
   doc: 'resourceCenter',
   templateLib: 'resourceCenter',
 };
+const desktopGridRef = ref(null);
+const desktopPositionStorageKey = computed(() => `practical:pc:desktop-positions:${window.__PRACTICAL_DESKTOP__?.serverOrigin || window.location.origin}:${permissionState.context.account_id || 'guest'}`);
 const desktopLauncher = useDesktopLauncher({
-  allModules: computed(() => [...desktopEntryModules.value, ...allLaunchableModules.value.filter(module => ['favorite', 'notebook', 'releaseNotes'].includes(module.id))]),
+  allModules: computed(() => [...desktopEntryModules.value, ...allLaunchableModules.value.filter(module => ['pluginCenter', 'favorite', 'notebook', 'releaseNotes'].includes(module.id))]),
   favoriteItems: computed(() => favoriteState.items),
   defaultModuleIds: DEFAULT_DESKTOP_MODULE_IDS,
   moduleAliases: desktopShortcutModuleAliases,
   searchText: moduleSearchText,
+  orderStorageKey: () => `practical:pc:desktop-order:${window.__PRACTICAL_DESKTOP__?.serverOrigin || window.location.origin}:${permissionState.context.account_id || 'guest'}`,
 });
 const desktopLauncherState = desktopLauncher.state;
 const loginPageState = reactive({
@@ -4565,6 +4666,8 @@ const wechatProxy = reactive({
   selectedMenuIndex: -1,
   selectedSubMenuIndex: -1,
   loading: false,
+  checking: false,
+  checkResult: null,
   message: '',
 });
 const logState = reactive({
@@ -4585,6 +4688,7 @@ const logState = reactive({
     total: 0,
   },
 });
+const logDetailState = reactive({ visible: false, row: null });
 const messageState = reactive({
   loading: false,
   targetLoading: false,
@@ -4823,7 +4927,7 @@ const modules = [
     color: 'red',
     scope: '统计报表与学校基础数据',
     collection: true,
-    childIds: ['stat', 'userManage', 'gradeManage', 'departmentManage', 'professionManage', 'classManage', 'companyManage', 'dataManage'],
+    childIds: ['stat', 'userManage', 'gradeManage', 'departmentManage', 'professionManage', 'classManage', 'companyManage', 'eduData', 'dataManage'],
     adminOnly: true,
   },
   {
@@ -4843,7 +4947,7 @@ const modules = [
     color: 'blue',
     scope: '文件、文档、模板与收藏',
     collection: true,
-    childIds: ['file', 'doc', 'templateLib', 'favorite', 'notebook', 'releaseNotes'],
+    childIds: ['file', 'doc', 'templateLib', 'pluginCenter', 'favorite', 'notebook', 'releaseNotes'],
     childNames: { templateLib: '模板库' },
   },
   {
@@ -4909,6 +5013,17 @@ const modules = [
     managePermission: 'export:create',
     defaultPanel: 'taskList',
     collectionParent: 'auditCenter',
+  },
+  {
+    id: 'pluginCenter',
+    name: '插件中心',
+    icon: Globe2,
+    color: 'teal',
+    scope: '受控 Web/OAuth 应用入口',
+    viewPermission: '',
+    managePermission: '',
+    defaultPanel: 'pluginList',
+    collectionParent: 'resourceCenter',
   },
   {
     id: 'favorite',
@@ -5022,6 +5137,17 @@ const modules = [
     managePermission: 'internship:manage',
     defaultPanel: 'baseFlows',
     adminOnly: true,
+    collectionParent: 'dataCenter',
+  },
+  {
+    id: 'eduData',
+    name: '教务数据',
+    icon: Upload,
+    color: 'blue',
+    scope: '教务学生、课程计划与开课情况导入',
+    viewPermission: 'edu:data:view',
+    managePermission: 'edu:data:import',
+    defaultPanel: 'eduData',
     collectionParent: 'dataCenter',
   },
   {
@@ -5551,7 +5677,8 @@ const moduleSearchKeywords = {
   practice: '实验 实训 教学计划 课表 项目 过程记录 成绩 审核 课节',
   dataCenter: '数据管理 统计 用户 年级 学院 专业 班级 基地 测试数据',
   auditCenter: '日志审计 操作日志 导出任务',
-  resourceCenter: '资源中心 文件 文档 模板 收藏夹',
+  resourceCenter: '资源中心 文件 文档 模板 插件 网盘 收藏夹',
+  pluginCenter: '插件 应用 网盘 OAuth 外部服务',
   stat: '统计 报表 数据 概览 分析 学院 专业 学生 成绩',
   log: '日志 审计 操作 接口 账号 IP 登录 工作台 基础档案 流程配置',
   file: '文件 附件 上传 下载 预览 头像 壁纸 材料',
@@ -5567,6 +5694,7 @@ const moduleSearchKeywords = {
   professionManage: '专业',
   classManage: '班级',
   companyManage: '基地管理 基地建设 基地申报 基地使用 合作单位 企业',
+  eduData: '教务数据 学生 教师 开课计划 开课情况 导入 模板 差异 候选',
   dataManage: '数据 管理 清理 测试数据 初始化',
   config: '设置 配置 菜单 权限 角色 企业微信 操作说明 学校',
   profile: '个人设置 头像 壁纸 背景 消息接收 密码 资料',
@@ -5633,7 +5761,8 @@ const desktopShortcutPayloadItems = desktopLauncher.payloadItems;
 const favoriteDesktopShortcuts = desktopLauncher.favoriteDesktopShortcuts;
 const showGlobalSearchResults = computed(() => globalSearchKeyword.value && globalSearchResults.value.length > 0);
 const visibleWindows = computed(() => openWindows.filter(win => !win.minimized));
-const taskbarWindows = computed(() => openWindows.filter(win => win.module.id !== 'message'));
+const taskbarWindows = computed(() => openWindows.filter(win => win.module.id !== 'message'
+  && !(desktopStyleMode.value === 'mac' && visibleDesktopModules.value.some(module => module.id === win.module.id))));
 const canManageConfig = computed(() => hasPermission('config:manage') && ['super_admin', 'school_admin'].includes(permissionState.context.role_type));
 const canViewUserAdmin = computed(() => ['super_admin', 'school_admin', 'college_admin', 'profession_admin'].includes(permissionState.context.role_type));
 const canSendMessages = computed(() => ['super_admin', 'school_admin'].includes(currentRoleType.value));
@@ -5856,7 +5985,7 @@ function canShowModule(module) {
   if (module.id === 'profile') {
     return isLoggedIn.value;
   }
-  if (['favorite', 'notebook', 'releaseNotes'].includes(module.id)) {
+  if (['pluginCenter', 'favorite', 'notebook', 'releaseNotes'].includes(module.id)) {
     return isLoggedIn.value;
   }
   if (module.id === 'config') {
@@ -7498,6 +7627,18 @@ function openModule(module) {
   openModuleWindow(module, { reuse: module.id !== 'notebook' });
 }
 
+function setDesktopStyle(style) {
+  desktopStyleMode.value = style === 'mac' ? 'mac' : 'windows';
+  localStorage.setItem('practical:desktop-style', desktopStyleMode.value);
+}
+
+function openNotebook() {
+  const notebook = modules.find(item => item.id === 'notebook');
+  if (notebook) {
+    openModuleWindow(notebook, { reuse: false });
+  }
+}
+
 function openDesktopLauncher() {
   desktopLauncherState.visible = true;
   if (!favoriteState.loading) {
@@ -7516,6 +7657,10 @@ function openLauncherModule(module) {
 
 function isDesktopShortcut(moduleId) {
   return desktopLauncher.isShortcut(moduleId);
+}
+
+function setDesktopModuleOrder(ids) {
+  desktopLauncher.setModuleOrder(ids);
 }
 
 function isDefaultDesktopShortcut(moduleId) {
@@ -8135,7 +8280,7 @@ function openDesktopContextMenu(event) {
     return;
   }
   const width = 172;
-  const height = 92;
+  const height = 136;
   desktopContextMenu.x = Math.min(event.clientX, window.innerWidth - width - 8);
   desktopContextMenu.y = Math.min(event.clientY, window.innerHeight - height - 8);
   desktopContextMenu.visible = true;
@@ -8143,6 +8288,16 @@ function openDesktopContextMenu(event) {
 
 function closeDesktopContextMenu() {
   desktopContextMenu.visible = false;
+}
+
+async function resetDesktopPositions() {
+  closeDesktopContextMenu();
+  try {
+    await ElMessageBox.confirm('恢复当前账号的桌面图标默认位置？已添加的快捷方式不会移除。', '恢复默认布局', { type: 'warning', confirmButtonText: '恢复', cancelButtonText: '取消' });
+    desktopGridRef.value?.reset();
+  } catch {
+    // 取消时保留当前布局。
+  }
 }
 
 function openWallpaperSettings() {
@@ -8407,6 +8562,24 @@ async function submitLogin() {
     await refreshAuthenticatedSession(true);
   } catch (error) {
     loginState.message = error.message;
+  } finally {
+    loginState.loading = false;
+  }
+}
+
+async function submitDesktopBootstrapLogin() {
+  if (loginState.loading || !window.__PRACTICAL_DESKTOP__?.bootstrapLogin) {
+    return;
+  }
+  loginState.loading = true;
+  loginState.message = '';
+  try {
+    const result = await window.__PRACTICAL_DESKTOP__.bootstrapLogin();
+    if (result?.attempted === false) return;
+    if (result?.code !== 0) throw new Error(result?.message || '客户端登录失败，请手动登录');
+    await refreshAuthenticatedSession(true);
+  } catch (error) {
+    loginState.message = error.message || '客户端自动登录失败，请手动登录';
   } finally {
     loginState.loading = false;
   }
@@ -10010,6 +10183,26 @@ async function loadLogs(page = 1) {
   } finally {
     logState.loading = false;
   }
+}
+
+function openLogDetail(row) {
+  logDetailState.row = row;
+  logDetailState.visible = true;
+}
+
+function logDetailText(row) {
+  return JSON.stringify({
+    操作: row.operation || row.action || null,
+    接口: `${row.method || ''} ${row.path || ''}`.trim(),
+    HTTP状态: row.status_code,
+    业务码: row.response_code,
+    响应消息: row.response_message,
+    错误: row.error,
+    IP: row.ip,
+    设备: row.payload?.user_agent || null,
+    请求参数: row.payload?.query || null,
+    请求内容: row.payload?.input || null,
+  }, null, 2);
 }
 
 async function loadStats(page = 1) {
@@ -15947,6 +16140,7 @@ function applyWechatConfig(data) {
   wechatProxy.proxy_url = data.proxy_url || '';
   wechatProxy.proxy_enabled = Boolean(data.proxy_enabled);
   wechatProxy.menu = normalizeWechatMenu(data.menu || []);
+  wechatProxy.checkResult = null;
   wechatProxy.selectedMenuIndex = wechatProxy.menu.length ? 0 : -1;
   wechatProxy.selectedSubMenuIndex = -1;
 }
@@ -16108,6 +16302,29 @@ async function saveProxy() {
   }
 }
 
+async function checkProxyConfig() {
+  if (wechatProxy.checking || !hasPermission('wechat:proxy:test')) {
+    return;
+  }
+  wechatProxy.checking = true;
+  wechatProxy.message = '';
+  wechatProxy.checkResult = null;
+  try {
+    wechatProxy.checkResult = await checkWechatConfig({
+      corp_id: wechatProxy.corp_id,
+      agent_id: wechatProxy.agent_id,
+      secret: wechatProxy.secret,
+      proxy_url: wechatProxy.proxy_url,
+      proxy_enabled: wechatProxy.proxy_enabled,
+    });
+    wechatProxy.message = '企业微信配置检测成功';
+  } catch (error) {
+    wechatProxy.message = error.message;
+  } finally {
+    wechatProxy.checking = false;
+  }
+}
+
 watch(openWindows, (windows) => {
   if (windows.some(win => ['menuManage', 'roleMenus', 'organizationScope'].includes(win.panel))) {
     loadAdminFoundation();
@@ -16190,7 +16407,11 @@ onMounted(async () => {
   await loadLoginPageSettings();
   await loadRegisterOptions();
   await consumeUrlPasskey();
+  const desktopBridge = window.__PRACTICAL_DESKTOP__;
   await load();
+  if (!isLoggedIn.value && desktopBridge?.bootstrapLogin) {
+    await submitDesktopBootstrapLogin();
+  }
   await loadProfile();
   await loadDesktopShortcuts();
   await loadFavorites(1);

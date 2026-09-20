@@ -92,6 +92,8 @@ async function sendRequest(path, options = {}, canRefresh = true) {
   if (!response.ok || payload.code !== 0) {
     const error = new Error(payload.message || '请求失败');
     error.status = response.status;
+    error.code = Number(payload.code || response.status || 0);
+    error.apiPath = `${apiBase}${path}`;
     error.payload = payload;
     if (canRefresh && isAuthExpired(response, payload) && !isAuthPath(path)) {
       const refreshed = await refreshSession();

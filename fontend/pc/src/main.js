@@ -39,6 +39,7 @@ import {
 import 'element-plus/dist/index.css';
 import App from './App.vue';
 import './styles.css';
+import './desktop-appearance.css';
 
 const app = createApp(App);
 

@@ -8,7 +8,10 @@ use axum::{
 };
 use rust_embed::RustEmbed;
 use std::sync::Arc;
-use tokio::{net::TcpListener, sync::oneshot};
+use tokio::{
+    net::TcpListener,
+    sync::{oneshot, Mutex},
+};
 use url::Url;
 
 #[derive(RustEmbed)]
@@ -31,6 +34,7 @@ struct GatewayState {
     local: Url,
     cookie: String,
     token: String,
+    credentials: Mutex<Option<(String, String)>>,
 }
 
 impl Drop for Gateway {
@@ -48,6 +52,7 @@ pub async fn start(
     app: tauri::AppHandle,
     connection: Connection,
     reserved_ports: &[u16],
+    credentials: Option<(String, String)>,
 ) -> Result<Gateway, String> {
     let listener = bind_school_port(connection.school.port, reserved_ports).await?;
     let port = listener
@@ -69,6 +74,7 @@ pub async fn start(
         local: local.clone(),
         cookie: format!("practical_desktop_{port}"),
         token,
+        credentials: Mutex::new(credentials),
     });
     let router = Router::new().fallback(any(handle)).with_state(state);
     let (shutdown, receive) = oneshot::channel();
@@ -161,6 +167,53 @@ async fn handle(State(state): State<Arc<GatewayState>>, request: Request) -> Res
         .is_some_and(|cookies| cookies.split(';').any(|cookie| cookie.trim() == expected));
     if !authenticated {
         return error(StatusCode::UNAUTHORIZED, "请从客户端连接学校");
+    }
+    if path == "/_desktop/bootstrap-login" {
+        if request.method() != axum::http::Method::POST
+            || headers.get(header::ORIGIN).and_then(|v| v.to_str().ok())
+                != Some(state.local.origin().ascii_serialization().as_str())
+        {
+            return error(StatusCode::FORBIDDEN, "仅学校页面可以调用客户端登录");
+        }
+        let credentials = state.credentials.lock().await.take();
+        let Some((login_name, password)) = credentials else {
+            let mut result = Response::new(Body::from("{\"attempted\":false}"));
+            result.headers_mut().insert(
+                header::CONTENT_TYPE,
+                HeaderValue::from_static("application/json"),
+            );
+            result
+                .headers_mut()
+                .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+            return result;
+        };
+        let target = match state.connection.origin.join("api/auth/login") {
+            Ok(target) => target,
+            Err(_) => return error(StatusCode::BAD_GATEWAY, "学校登录地址无效"),
+        };
+        let response = match state.connection.client.post(target)
+            .timeout(std::time::Duration::from_secs(30))
+            .header(header::ORIGIN, state.connection.origin.origin().ascii_serialization())
+            .json(&serde_json::json!({"login_name": login_name, "password": password, "client": "WEB"}))
+            .send().await {
+            Ok(response) => response,
+            Err(_) => return error(StatusCode::BAD_GATEWAY, "学校登录接口连接失败"),
+        };
+        let status = response.status();
+        let body = match response.bytes().await {
+            Ok(body) => body,
+            Err(_) => return error(StatusCode::BAD_GATEWAY, "读取学校登录响应失败"),
+        };
+        let mut result = Response::new(Body::from(body));
+        *result.status_mut() = status;
+        result.headers_mut().insert(
+            header::CONTENT_TYPE,
+            HeaderValue::from_static("application/json; charset=utf-8"),
+        );
+        result
+            .headers_mut()
+            .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+        return result;
     }
     if path == "/_desktop/external" || path == "/_desktop/update" {
         if request.method() != axum::http::Method::POST
