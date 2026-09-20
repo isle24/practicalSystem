@@ -51,6 +51,7 @@
       </div>
       <small v-if="loginState.message">{{ loginState.message }}</small>
       <small v-if="registerState.message">{{ registerState.message }}</small>
+      <ClientDownloadButton />
     </section>
   </main>
 
@@ -2791,6 +2792,13 @@
                 </div>
 
                 <div v-else-if="win.module.id === 'message'" class="message-center-panel">
+                  <div class="message-mode-tabs">
+                    <button type="button" :class="{ active: !assistantVisible }" @click="assistantVisible = false">通知与待办</button>
+                    <button type="button" :class="{ active: assistantVisible }" @click="assistantVisible = true">问答助手</button>
+                    <small>{{ realtimeStatus === 'connected' ? '实时连接' : '自动重连中' }}</small>
+                  </div>
+                  <AssistantPanel v-if="assistantVisible" :key="noteSessionKey" :request="request" />
+                  <template v-else>
                   <div class="message-toolbar">
                     <el-select v-model="messageState.filters.type" placeholder="请选择消息类型" @change="loadMessages(1)">
                       <el-option
@@ -2928,6 +2936,7 @@
                     </div>
                   </section>
 
+                  </template>
                   <OperationDialog
                     :visible="messageState.sendDialog.visible"
                     title="发送消息"
@@ -4218,6 +4227,7 @@
         </div>
       </div>
       <div class="taskbar-status" aria-label="系统状态">
+        <ClientDownloadButton compact />
         <span class="taskbar-online"><i />在线</span>
         <span class="taskbar-version">v{{ clientVersion }}</span>
         <el-button text class="taskbar-operator-button" :title="isAdminRole ? '修改密码' : '个人设置'" @click="handleOperatorClick">
@@ -4294,6 +4304,7 @@
 <script setup>
 import { previewFile } from '../../shared/filePreview';
 import PreviewCacheSettings from './components/PreviewCacheSettings.vue';
+import ClientDownloadButton from './components/ClientDownloadButton.vue';
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import zhCn from 'element-plus/es/locale/lang/zh-cn';
@@ -4350,6 +4361,8 @@ import FavoritePanel from './components/FavoritePanel.vue';
 import ReleaseManager from './components/ReleaseManager.vue';
 import DesktopUpdateStatus from './components/DesktopUpdateStatus.vue';
 import ReleaseNotesPanel from '../../shared/components/ReleaseNotesPanel.vue';
+import AssistantPanel from '../../shared/components/AssistantPanel.vue';
+import { useRealtimeMessages } from '../../shared/useRealtimeMessages';
 import ReleaseNotice from '../../shared/components/ReleaseNotice.vue';
 import NotebookPanel from '../../shared/components/NotebookPanel.vue';
 import { openExternalLink } from './utils/externalLinks';
@@ -5536,6 +5549,17 @@ const fileState = reactive({
 const favoriteState = reactive({ items: [], loading: false, message: '', pagination: { page: 1 } });
 const notebookRefs = new Map();
 const noteSessionKey = computed(() => [window.location.origin, permissionState.context.school_database_id, permissionState.context.account_id].join(':'));
+const assistantVisible = ref(false);
+const { status: realtimeStatus } = useRealtimeMessages({
+  sessionKey: () => permissionState.context.account_id ? noteSessionKey.value : '',
+  request,
+  backendOrigin: backendUrl('/'),
+  invalidate: async (topic) => {
+    if (topic !== 'messages') return;
+    await loadMessageSummary();
+    if (openWindows.some(win => win.module.id === 'message' && !win.minimized)) await loadMessages(messageState.pagination.page || 1);
+  },
+});
 function setNotebookRef(id, el) { if (el) notebookRefs.set(id, el); else notebookRefs.delete(id); }
 
 const dataManageState = reactive({
