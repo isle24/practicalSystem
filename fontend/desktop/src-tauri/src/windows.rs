@@ -26,14 +26,17 @@ pub fn build(
     let popup_remote = remote.clone();
     let downloads = Arc::new(Downloads::default());
     let document_state = downloads.clone();
-    let context = serde_json::json!({ "serverOrigin": remote.origin().ascii_serialization(), "localOrigin": local.origin().ascii_serialization() });
+    let context = serde_json::json!({
+        "serverOrigin": remote.origin().ascii_serialization(),
+        "localOrigin": local.origin().ascii_serialization(),
+    });
     let mut builder = WebviewWindowBuilder::new(app, label, WebviewUrl::External(url))
         .title("实践管理系统")
         .inner_size(1360.0, 900.0)
         .min_inner_size(880.0, 580.0)
         .resizable(true)
         .center()
-        .initialization_script(format!("(() => {{ const bridge = async (action, payload) => {{ const response = await fetch('/_desktop/' + action, {{method:'POST',credentials:'same-origin',headers:{{'Content-Type':'application/json'}},body:JSON.stringify(payload)}}); if (!response.ok) throw new Error('客户端操作失败，请重试'); }}; Object.defineProperty(window, '__PRACTICAL_DESKTOP__', {{ value: Object.freeze({{...{context}, version:'{}', openExternal:(url,mode='client')=>bridge('external',{{url,mode}}),checkUpdate:(interactive=true)=>bridge('update',{{interactive}})}}), writable:false }}); }})();", env!("CARGO_PKG_VERSION")))
+        .initialization_script(format!("(() => {{ const bridge = async (action, payload) => {{ const response = await fetch('/_desktop/' + action, {{method:'POST',credentials:'same-origin',headers:{{'Content-Type':'application/json'}},body:JSON.stringify(payload)}}); if (!response.ok) throw new Error('客户端操作失败，请重试'); return response.json().catch(() => ({{}})); }}; Object.defineProperty(window, '__PRACTICAL_DESKTOP__', {{ value: Object.freeze({{...{context}, version:'{}', bootstrapLogin:()=>bridge('bootstrap-login',{{}}), openExternal:(url,mode='client')=>bridge('external',{{url,mode}}),checkUpdate:(interactive=true)=>bridge('update',{{interactive}})}}), writable:false }}); }})();", env!("CARGO_PKG_VERSION")))
         .on_navigation(move |url| {
             if url.origin() == navigation_local.origin() || url.as_str() == "about:blank" || url.scheme() == "blob" {
                 return true;

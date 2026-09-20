@@ -16,8 +16,38 @@ export function useDesktopLauncher(options) {
   const defaultModuleIdSet = new Set(defaultModuleIds);
   const moduleAliases = options.moduleAliases || {};
 
+  function orderStorageKey() {
+    return typeof options.orderStorageKey === 'function'
+      ? options.orderStorageKey()
+      : String(options.orderStorageKey || 'practical:pc:desktop-order');
+  }
+
+  function readLocalOrder() {
+    try {
+      const value = JSON.parse(localStorage.getItem(orderStorageKey()) || '[]');
+      return Array.isArray(value) ? value.map(String).filter(Boolean) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  function normalizeLocalOrder(modules, order = readLocalOrder()) {
+    const ids = new Set(modules.map(module => String(module.id)));
+    const known = order.filter(id => ids.has(id));
+    const appended = modules.map(module => String(module.id)).filter(id => !known.includes(id));
+    return [...known, ...appended];
+  }
+
+  function orderedModules(modules) {
+    const order = normalizeLocalOrder(modules);
+    const rank = new Map(order.map((id, index) => [id, index]));
+    return [...modules].sort((left, right) => (rank.get(String(left.id)) ?? 0) - (rank.get(String(right.id)) ?? 0));
+  }
+
+  const orderedAllModules = computed(() => orderedModules(options.allModules.value));
+
   const customShortcutItems = computed(() => state.items.filter(item => item?.type === 'module' || item?.type === 'favorite'));
-  const launchableModuleIds = computed(() => new Set(options.allModules.value
+  const launchableModuleIds = computed(() => new Set(orderedAllModules.value
     .filter(module => module?.type !== 'favoriteLink')
     .map(module => module.id)));
   const customModuleKeys = computed(() => Array.from(new Set(customShortcutItems.value
@@ -34,7 +64,7 @@ export function useDesktopLauncher(options) {
     .map(item => favoriteShortcutFromStoredItem(item)));
   const visibleDesktopModules = computed(() => {
     const shortcutIds = new Set(moduleShortcutKeys.value);
-    const desktopModules = options.allModules.value.filter(module => shortcutIds.has(module.id));
+    const desktopModules = orderedAllModules.value.filter(module => shortcutIds.has(module.id));
     return [...desktopModules, ...favoriteDesktopShortcuts.value];
   });
   const favoriteLauncherShortcuts = computed(() => {
@@ -52,7 +82,7 @@ export function useDesktopLauncher(options) {
     });
     return Array.from(rows.values());
   });
-  const launcherModules = computed(() => [...options.allModules.value, ...favoriteLauncherShortcuts.value]);
+  const launcherModules = computed(() => [...orderedAllModules.value, ...favoriteLauncherShortcuts.value]);
   const filteredModules = computed(() => {
     const value = state.keyword.trim().toLowerCase();
     if (!value) {
@@ -102,6 +132,16 @@ export function useDesktopLauncher(options) {
     state.message = '';
   }
 
+  function setModuleOrder(ids) {
+    const order = normalizeLocalOrder(options.allModules.value, Array.isArray(ids) ? ids : []);
+    try {
+      localStorage.setItem(orderStorageKey(), JSON.stringify(order));
+    } catch {
+      state.message = '客户端无法保存模块排序';
+    }
+    return order;
+  }
+
   function favoriteShortcutFromStoredItem(item) {
     return favoriteShortcutFromFavorite({
       id: item.ref_id,
@@ -135,6 +175,7 @@ export function useDesktopLauncher(options) {
     favoriteDesktopShortcuts,
     visibleDesktopModules,
     launcherModules,
+    orderedAllModules,
     filteredModules,
     payloadItems,
     isShortcut,
@@ -143,5 +184,6 @@ export function useDesktopLauncher(options) {
     normalizeShortcutItems,
     setItems,
     reset,
+    setModuleOrder,
   };
 }

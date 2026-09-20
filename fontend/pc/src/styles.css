@@ -1788,6 +1788,11 @@ a {
   white-space: nowrap;
 }
 
+.log-detail-content { display: grid; gap: 12px; min-height: 0; padding: 4px 2px; }
+.log-detail-summary { display: grid; gap: 4px; padding: 11px 13px; border: 1px solid var(--line); border-radius: 8px; background: #f7f9fc; }
+.log-detail-summary span { color: var(--muted); font-size: 12px; }
+.log-detail-content pre { margin: 0; max-height: 520px; overflow: auto; padding: 14px; border-radius: 8px; background: #18222e; color: #dbe7f2; font: 12px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+
 .log-endpoint {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
@@ -5309,6 +5314,42 @@ a {
   padding-bottom: 2px;
 }
 
+.message-im-layout {
+  min-height: 0;
+  flex: 1 1 auto;
+  display: grid;
+  grid-template-columns: 190px minmax(0, 1fr);
+  gap: 10px;
+  overflow: hidden;
+}
+
+.message-conversation-list {
+  display: grid;
+  align-content: start;
+  gap: 5px;
+  overflow: auto;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f7f9fc;
+}
+
+.message-conversation-list button {
+  width: 100%;
+  min-width: 0;
+  border-color: transparent;
+  background: transparent;
+  text-align: left;
+}
+
+.message-im-thread {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow: hidden;
+}
+
 .message-summary-strip button {
   min-width: 112px;
   height: 42px;
@@ -5381,6 +5422,12 @@ a {
   padding: 13px 14px 12px;
   cursor: pointer;
   box-shadow: 0 10px 24px rgba(15, 23, 42, .05);
+}
+
+@media (max-width: 780px) {
+  .message-im-layout { grid-template-columns: 1fr; }
+  .message-conversation-list { grid-template-columns: repeat(3, minmax(0, 1fr)); max-height: 54px; overflow: hidden; }
+  .message-summary-strip button { min-width: 0; height: 38px; }
 }
 
 .message-bubble.unread {

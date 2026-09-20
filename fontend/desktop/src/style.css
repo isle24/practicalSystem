@@ -15,6 +15,10 @@ h1 { font-size: 24px; line-height: 1.3; text-align: center; margin: 0; font-weig
 .domain-field input { width: 100%; min-width: 0; border: 0; padding: 0; outline: 0; color: #20252b; background: transparent; font-size: 15px; height: 100%; }
 .domain-field input:focus-visible { outline: 0; }
 .domain-field.invalid { border-color: #c44141; }
+.connection-form > input { width: 100%; height: 48px; margin: 0 0 14px; padding: 0 14px; border: 1px solid #d9dfe5; border-radius: 8px; outline: 0; background: white; color: #20252b; }
+.connection-form > input:focus { border-color: #1875dc; box-shadow: 0 0 0 3px #1875dc14; }
+.connection-options { display: flex; gap: 18px; align-items: center; margin-top: 2px; }
+.check-option { display: inline-flex !important; align-items: center; gap: 7px; color: #5f6b78; font-size: 13px !important; font-weight: 400 !important; }
 .error { display: flex; gap: 7px; align-items: flex-start; color: #b63737; font-size: 13px; line-height: 1.6; margin: 12px 0 0; overflow-wrap: anywhere; }
 .error svg { flex: none; margin-top: 2px; }
 .connect-button { display: flex; justify-content: center; align-items: center; gap: 10px; width: 100%; height: 46px; margin-top: 18px; background: #1875dc; color: #fff; border: 0; border-radius: 8px; font-weight: 600; transition: background .15s; }

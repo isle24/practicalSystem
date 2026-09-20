@@ -62,6 +62,7 @@
         :is-focused="isModuleFocused"
         :backend-url="backendUrl"
         @open="openModule"
+        @reorder="setDesktopModuleOrder"
       />
 
       <DesktopWindow
@@ -2752,6 +2753,7 @@
                   <ExportTaskCenter />
                 </div>
 
+                <PluginPanel v-else-if="win.module.id === 'pluginCenter'" :can-manage="isSchoolConfigRole()" />
                 <FavoritePanel v-else-if="win.module.id === 'favorite'" :is-desktop="isFavoriteDesktop" :set-desktop="setFavoriteDesktopShortcut" @changed="refreshFavoriteShortcuts" />
                 <NotebookPanel v-else-if="win.module.id === 'notebook'" :key="noteSessionKey" :ref="el => setNotebookRef(win.id, el)" :request="request" :session-key="noteSessionKey" />
                 <ReleaseNotesPanel v-else-if="win.module.id === 'releaseNotes'" :request="request" />
@@ -2842,7 +2844,8 @@
                     </el-button>
                   </div>
 
-                  <section class="message-summary-strip">
+                  <section class="message-im-layout">
+                    <aside class="message-summary-strip message-conversation-list">
                     <button
                       v-for="item in messageTypeOptions"
                       :key="`summary-${item.value}`"
@@ -2853,7 +2856,9 @@
                       <span>{{ item.label }}</span>
                       <strong>{{ messageTypeUnread(item.value) }}</strong>
                     </button>
-                  </section>
+                    </aside>
+
+                    <div class="message-im-thread">
 
                   <el-alert
                     v-if="messageState.message"
@@ -2916,6 +2921,8 @@
                       @current-change="loadMessages"
                     />
                   </div>
+                    </div>
+                  </section>
 
                   <OperationDialog
                     :visible="messageState.sendDialog.visible"
@@ -3668,6 +3675,11 @@
                       </template>
                     </el-table-column>
                     <el-table-column prop="source_table" label="分表" width="138" />
+                    <el-table-column label="详情" width="76" fixed="right">
+                      <template #default="{ row }">
+                        <el-button link type="primary" @click="openLogDetail(row)">查看</el-button>
+                      </template>
+                    </el-table-column>
                   </el-table>
                   <div class="file-pagination">
                     <span>共 {{ logState.pagination.total }} 条日志，{{ logState.tables.length }} 个分表</span>
@@ -3681,6 +3693,20 @@
                     />
                   </div>
                   <small v-if="logState.message">{{ logState.message }}</small>
+                  <OperationDialog
+                    :visible="logDetailState.visible"
+                    title="操作日志详情"
+                    dialog-class="log-detail-dialog"
+                    @close="logDetailState.visible = false"
+                  >
+                    <div class="log-detail-content" v-if="logDetailState.row">
+                      <div class="log-detail-summary">
+                        <strong>{{ logDetailState.row.operation || logDetailState.row.action || '未命名操作' }}</strong>
+                        <span>{{ logDetailState.row.created_at }} / {{ logDetailState.row.user_name || logDetailState.row.login_name || '-' }}</span>
+                      </div>
+                      <pre>{{ logDetailText(logDetailState.row) }}</pre>
+                    </div>
+                  </OperationDialog>
                 </div>
 
                 <div v-else-if="win.module.id === 'stat'" class="admin-panel stat-panel">
@@ -4330,6 +4356,7 @@ import MenuEditDialog from './components/MenuEditDialog.vue';
 import ModuleCollection from './components/ModuleCollection.vue';
 import ModuleSidebar from './components/ModuleSidebar.vue';
 import OperationDialog from './components/OperationDialog.vue';
+import PluginPanel from './components/PluginPanel.vue';
 import ShortcutTile from './components/ShortcutTile.vue';
 import SocialPracticePanel from './components/SocialPracticePanel.vue';
 import StudentOwnPanel from './components/StudentOwnPanel.vue';
@@ -4593,11 +4620,12 @@ const desktopShortcutModuleAliases = {
   templateLib: 'resourceCenter',
 };
 const desktopLauncher = useDesktopLauncher({
-  allModules: computed(() => [...desktopEntryModules.value, ...allLaunchableModules.value.filter(module => ['favorite', 'notebook', 'releaseNotes'].includes(module.id))]),
+  allModules: computed(() => [...desktopEntryModules.value, ...allLaunchableModules.value.filter(module => ['pluginCenter', 'favorite', 'notebook', 'releaseNotes'].includes(module.id))]),
   favoriteItems: computed(() => favoriteState.items),
   defaultModuleIds: DEFAULT_DESKTOP_MODULE_IDS,
   moduleAliases: desktopShortcutModuleAliases,
   searchText: moduleSearchText,
+  orderStorageKey: () => `practical:pc:desktop-order:${window.location.origin}:${permissionState.context.account_id || 'guest'}`,
 });
 const desktopLauncherState = desktopLauncher.state;
 const loginPageState = reactive({
@@ -4641,6 +4669,7 @@ const logState = reactive({
     total: 0,
   },
 });
+const logDetailState = reactive({ visible: false, row: null });
 const messageState = reactive({
   loading: false,
   targetLoading: false,
@@ -4899,7 +4928,7 @@ const modules = [
     color: 'blue',
     scope: '文件、文档、模板与收藏',
     collection: true,
-    childIds: ['file', 'doc', 'templateLib', 'favorite', 'notebook', 'releaseNotes'],
+    childIds: ['file', 'doc', 'templateLib', 'pluginCenter', 'favorite', 'notebook', 'releaseNotes'],
     childNames: { templateLib: '模板库' },
   },
   {
@@ -4965,6 +4994,17 @@ const modules = [
     managePermission: 'export:create',
     defaultPanel: 'taskList',
     collectionParent: 'auditCenter',
+  },
+  {
+    id: 'pluginCenter',
+    name: '插件中心',
+    icon: Globe2,
+    color: 'teal',
+    scope: '受控 Web/OAuth 应用入口',
+    viewPermission: '',
+    managePermission: '',
+    defaultPanel: 'pluginList',
+    collectionParent: 'resourceCenter',
   },
   {
     id: 'favorite',
@@ -5618,7 +5658,8 @@ const moduleSearchKeywords = {
   practice: '实验 实训 教学计划 课表 项目 过程记录 成绩 审核 课节',
   dataCenter: '数据管理 统计 用户 年级 学院 专业 班级 基地 测试数据',
   auditCenter: '日志审计 操作日志 导出任务',
-  resourceCenter: '资源中心 文件 文档 模板 收藏夹',
+  resourceCenter: '资源中心 文件 文档 模板 插件 网盘 收藏夹',
+  pluginCenter: '插件 应用 网盘 OAuth 外部服务',
   stat: '统计 报表 数据 概览 分析 学院 专业 学生 成绩',
   log: '日志 审计 操作 接口 账号 IP 登录 工作台 基础档案 流程配置',
   file: '文件 附件 上传 下载 预览 头像 壁纸 材料',
@@ -5924,7 +5965,7 @@ function canShowModule(module) {
   if (module.id === 'profile') {
     return isLoggedIn.value;
   }
-  if (['favorite', 'notebook', 'releaseNotes'].includes(module.id)) {
+  if (['pluginCenter', 'favorite', 'notebook', 'releaseNotes'].includes(module.id)) {
     return isLoggedIn.value;
   }
   if (module.id === 'config') {
@@ -7598,6 +7639,10 @@ function isDesktopShortcut(moduleId) {
   return desktopLauncher.isShortcut(moduleId);
 }
 
+function setDesktopModuleOrder(ids) {
+  desktopLauncher.setModuleOrder(ids);
+}
+
 function isDefaultDesktopShortcut(moduleId) {
   return desktopLauncher.isDefaultShortcut(moduleId);
 }
@@ -8487,6 +8532,22 @@ async function submitLogin() {
     await refreshAuthenticatedSession(true);
   } catch (error) {
     loginState.message = error.message;
+  } finally {
+    loginState.loading = false;
+  }
+}
+
+async function submitDesktopBootstrapLogin() {
+  if (loginState.loading || !window.__PRACTICAL_DESKTOP__?.bootstrapLogin) {
+    return;
+  }
+  loginState.loading = true;
+  loginState.message = '';
+  try {
+    await window.__PRACTICAL_DESKTOP__.bootstrapLogin();
+    await refreshAuthenticatedSession(true);
+  } catch (error) {
+    loginState.message = error.message || '客户端自动登录失败，请手动登录';
   } finally {
     loginState.loading = false;
   }
@@ -10090,6 +10151,26 @@ async function loadLogs(page = 1) {
   } finally {
     logState.loading = false;
   }
+}
+
+function openLogDetail(row) {
+  logDetailState.row = row;
+  logDetailState.visible = true;
+}
+
+function logDetailText(row) {
+  return JSON.stringify({
+    操作: row.operation || row.action || null,
+    接口: `${row.method || ''} ${row.path || ''}`.trim(),
+    HTTP状态: row.status_code,
+    业务码: row.response_code,
+    响应消息: row.response_message,
+    错误: row.error,
+    IP: row.ip,
+    设备: row.payload?.user_agent || null,
+    请求参数: row.payload?.query || null,
+    请求内容: row.payload?.input || null,
+  }, null, 2);
 }
 
 async function loadStats(page = 1) {
@@ -16294,7 +16375,11 @@ onMounted(async () => {
   await loadLoginPageSettings();
   await loadRegisterOptions();
   await consumeUrlPasskey();
+  const desktopBridge = window.__PRACTICAL_DESKTOP__;
   await load();
+  if (!isLoggedIn.value && desktopBridge?.bootstrapLogin) {
+    await submitDesktopBootstrapLogin();
+  }
   await loadProfile();
   await loadDesktopShortcuts();
   await loadFavorites(1);

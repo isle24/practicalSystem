@@ -18,6 +18,10 @@ pub struct School {
     pub name: String,
     #[serde(default)]
     pub port: u16,
+    #[serde(default)]
+    pub username: String,
+    #[serde(default)]
+    pub auto_login: bool,
 }
 
 pub struct Connection {
@@ -91,6 +95,59 @@ pub fn save(app: &AppHandle, settings: &Settings) -> Result<(), String> {
     Ok(())
 }
 
+/// 生成系统凭据库使用的稳定键名。
+fn credential_key(origin: &str, username: &str) -> String {
+    format!("{}:{}", origin.trim().to_ascii_lowercase(), username.trim())
+}
+
+/// 保存学校账号密码到系统凭据库。
+pub fn save_password(origin: &str, username: &str, password: &str) -> Result<(), String> {
+    if username.trim().is_empty() || password.is_empty() {
+        return Ok(());
+    }
+    let entry = keyring::Entry::new(
+        "com.2iwm.practical.desktop.school",
+        &credential_key(origin, username),
+    )
+    .map_err(|_| "无法初始化系统凭据库")?;
+    entry
+        .set_password(password)
+        .map_err(|_| "无法保存学校账号密码".to_owned())
+}
+
+/// 从系统凭据库读取学校账号密码。
+pub fn load_password(origin: &str, username: &str) -> Result<Option<String>, String> {
+    if username.trim().is_empty() {
+        return Ok(None);
+    }
+    let entry = keyring::Entry::new(
+        "com.2iwm.practical.desktop.school",
+        &credential_key(origin, username),
+    )
+    .map_err(|_| "无法初始化系统凭据库")?;
+    match entry.get_password() {
+        Ok(password) => Ok(Some(password)),
+        Err(keyring::Error::NoEntry) => Ok(None),
+        Err(_) => Err("无法读取已保存的学校账号密码".into()),
+    }
+}
+
+/// 删除学校账号密码。
+pub fn delete_password(origin: &str, username: &str) -> Result<(), String> {
+    if username.trim().is_empty() {
+        return Ok(());
+    }
+    let entry = keyring::Entry::new(
+        "com.2iwm.practical.desktop.school",
+        &credential_key(origin, username),
+    )
+    .map_err(|_| "无法初始化系统凭据库")?;
+    match entry.delete_credential() {
+        Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
+        Err(_) => Err("无法删除已保存的学校账号密码".into()),
+    }
+}
+
 /// 通过学校公开配置接口确认服务器，并创建独立会话容器。
 pub async fn connect(origin: Url, port: u16) -> Result<Connection, String> {
     let client = Client::builder()
@@ -143,6 +200,8 @@ pub async fn connect(origin: Url, port: u16) -> Result<Connection, String> {
             origin: origin.origin().ascii_serialization(),
             name: name.unwrap_or_default().to_owned(),
             port,
+            username: String::new(),
+            auto_login: false,
         },
         origin,
         client,
