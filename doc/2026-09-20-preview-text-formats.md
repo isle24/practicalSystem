@@ -18,4 +18,12 @@ TXT、LOG、Markdown、CSV、JSON、XML 和常见代码文件使用共享预览�
 - [x] 共用格式注册表，新增文本及 CSV/Markdown 查看组件。
 - [x] 接入 PC/H5 共享入口与 Rust 缓存，限制主动内容。
 - [x] 完成前端构建、Rust 编译检查和页面操作核验。
-- [ ] 提交源码及前端产物，GitHub Actions 构建 v0.3.3 并核对发布资产。
+- [x] 提交源码及前端产物，GitHub Actions 构建 v0.3.3 并核对发布资产。
+
+## 发布记录
+
+- Gitea 功能提交：`24c21ca`，包含 PC/H5 编译产物。
+- GitHub 前端发布提交：`7087fa7`，标签 `v0.3.3`。
+- Actions：`35498526755`，Windows x64、macOS universal、Linux x64 构建及发布成功。
+- 无新增 SQL，不自动发布学校内升级提示，未下载本地安装包。
+- 原生安装和缓存命中仍需安装后实机核验。
