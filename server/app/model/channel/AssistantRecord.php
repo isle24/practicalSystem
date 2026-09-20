@@ -38,16 +38,18 @@ class AssistantRecord extends TableRecord
     }
 
     /** 在事务中创建个人会话及待处理轮次。 */
-    public static function enqueue(int $accountId, int $threadId, string $requestId, string $question): array
+    public static function enqueue(int $accountId, int $threadId, string $requestId, string $question, string $mode = 'school', string $revision = ''): array
     {
-        return self::connection()->transaction(function () use ($accountId, $threadId, $requestId, $question): array {
+        return self::connection()->transaction(function () use ($accountId, $threadId, $requestId, $question, $mode, $revision): array {
             if ($existing = self::byRequest($accountId, $requestId)) return $existing;
             $now = date('Y-m-d H:i:s');
             if ($threadId > 0) {
-                if (!self::ownedThread($accountId, $threadId, true)) throw new RuntimeException('会话不存在', 404);
+                $thread = self::ownedThread($accountId, $threadId, true);
+                if (!$thread) throw new RuntimeException('会话不存在', 404);
+                if ($thread['provider_mode'] !== $mode) throw new RuntimeException('切换服务后请新建会话', 409);
             } else {
                 $threadId = (int) self::queryTable('assistant_thread')->insertGetId([
-                    'account_id' => $accountId, 'title' => mb_substr($question, 0, 80), 'created_at' => $now, 'updated_at' => $now,
+                    'account_id' => $accountId, 'title' => mb_substr($question, 0, 80), 'provider_mode' => $mode, 'created_at' => $now, 'updated_at' => $now,
                 ]);
             }
             self::expirePending($accountId);
@@ -56,6 +58,7 @@ class AssistantRecord extends TableRecord
             }
             $id = (int) self::queryTable('assistant_turn')->insertGetId([
                 'thread_id' => $threadId, 'account_id' => $accountId, 'request_id' => $requestId, 'question' => $question,
+                'provider_mode' => $mode, 'provider_revision' => $revision,
                 'status' => 'queued', 'created_at' => $now, 'updated_at' => $now,
             ]);
             self::queryTable('assistant_thread')->where('id', $threadId)->update(['updated_at' => $now]);
@@ -89,6 +92,7 @@ class AssistantRecord extends TableRecord
     {
         $rows = self::queryTable('assistant_turn')->where('account_id', $turn['account_id'])
             ->where('thread_id', $turn['thread_id'])->where('id', '<', $turn['id'])->where('status', 'completed')
+            ->where('provider_mode', $turn['provider_mode'])->where('provider_revision', $turn['provider_revision'])
             ->orderByDesc('id')->limit(6)->get()->toArray();
         $messages = [];
         foreach (array_reverse($rows) as $row) {

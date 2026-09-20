@@ -29,6 +29,10 @@ class OperationLogMiddleware implements MiddlewareInterface
         'encoding_aes_key',
         'content_md',
         'sql_content',
+        'identity_number',
+        'identity_last_six',
+        'id_card',
+        '证件号',
     ];
 
     /**

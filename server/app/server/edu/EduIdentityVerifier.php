@@ -2,7 +2,7 @@
 
 namespace app\server\edu;
 
-use app\model\channel\EduDataRecord;
+use app\model\channel\EduIdentityRecord;
 use app\server\CurrentContext;
 use InvalidArgumentException;
 use RuntimeException;
@@ -13,66 +13,63 @@ class EduIdentityVerifier
     private const MAX_ATTEMPTS = 5;
     private const ATTEMPT_TTL = 600;
 
+    /** 复用教务身份加密设施。 */
     public function __construct(private ?EduIdentityCipher $cipher = null)
     {
         $this->cipher ??= new EduIdentityCipher();
     }
 
-    public function verifyStudent(string $studentNum, string $name, ?string $mobile, ?string $identityLastSix): array
+    /** 比对学生档案；手机号所有权仍须由绑定流程通过短信核验。 */
+    public function verifyStudent(string $studentNum, string $name, ?string $mobile, ?string $identityNumber): array
     {
         $studentNum = $this->required($studentNum, '学号', 80);
         $name = $this->required($name, '姓名', 80);
         $this->guardAttempts('student', $studentNum);
 
-        $row = EduDataRecord::connection()->table('edu_student_source')
-            ->where('student_num', $studentNum)
-            ->where('source_status', 'active')
-            ->whereNull('deleted_at')
-            ->first(['student_id', 'student_name', 'mobile_hmac', 'identity_last_six_hmac']);
-        if (!$row || !$this->sameText($name, (string) $row->student_name)) {
+        $row = EduIdentityRecord::student($studentNum);
+        if (!$row || !$this->sameText($name, (string) $row['student_name'])) {
             throw new RuntimeException('学生信息校验失败', 422);
         }
 
         $verifiedBy = '';
         $mobileHash = $mobile ? $this->cipher->mobileHash($mobile) : '';
-        if ($row->mobile_hmac) {
-            if ($mobileHash === '' || !hash_equals((string) $row->mobile_hmac, $mobileHash)) {
+        if (!empty($row['mobile_hmac'])) {
+            if ($mobileHash === '' || !hash_equals((string) $row['mobile_hmac'], $mobileHash)) {
                 throw new RuntimeException('学生信息校验失败', 422);
             }
             $verifiedBy = 'mobile';
-        } elseif ($identityLastSix !== null && $identityLastSix !== '') {
-            $lastSixHash = $this->cipher->identityLastSixHash($identityLastSix);
-            if (!$row->identity_last_six_hmac || !hash_equals((string) $row->identity_last_six_hmac, $lastSixHash)) {
+        } elseif ($identityNumber !== null && trim($identityNumber) !== '') {
+            $sensitive = $this->cipher->decryptSensitive((string) ($row['sensitive_payload_cipher'] ?? ''));
+            $expected = strtoupper(trim((string) ($sensitive['证件号'] ?? '')));
+            $actual = strtoupper(trim($identityNumber));
+            if (!preg_match('/^(?:\d{15}|\d{17}[\dX])$/D', $actual) || $expected === '' || !hash_equals($expected, $actual)) {
                 throw new RuntimeException('学生信息校验失败', 422);
             }
-            $verifiedBy = 'identity_last_six';
+            $verifiedBy = 'identity_number';
         } else {
-            throw new InvalidArgumentException('请提供企业微信手机号或身份证后 6 位');
+            throw new InvalidArgumentException('档案缺少手机号，请填写完整身份证号；无证件资料时请联系管理员补齐');
         }
 
         return [
             'verified' => true,
-            'student_id' => (int) ($row->student_id ?? 0),
+            'student_id' => (int) ($row['student_id'] ?? 0),
             'verified_by' => $verifiedBy,
         ];
     }
 
+    /** 比对教师档案，不代替手机号所有权校验。 */
     public function verifyTeacher(string $teacherNum, string $name, ?string $mobile = null): array
     {
         $teacherNum = $this->required($teacherNum, '工号', 80);
         $name = $this->required($name, '姓名', 80);
         $this->guardAttempts('teacher', $teacherNum);
 
-        $row = EduDataRecord::connection()->table('teacher_list')
-            ->where('teacher_num', $teacherNum)
-            ->where('status', 'enabled')
-            ->whereNull('deleted_at')
-            ->first(['teacher_id', 'teacher_name', 'phone']);
-        if (!$row || !$this->sameText($name, (string) $row->teacher_name)) {
+        $row = EduIdentityRecord::teacher($teacherNum);
+        if (!$row || !$this->sameText($name, (string) $row['teacher_name'])) {
             throw new RuntimeException('教师信息校验失败', 422);
         }
-        if ($mobile !== null && trim($mobile) !== '' && trim((string) ($row->phone ?? '')) !== '') {
-            $expected = preg_replace('/\D+/', '', trim((string) $row->phone)) ?: '';
+        if ($mobile !== null && trim($mobile) !== '' && trim((string) ($row['phone'] ?? '')) !== '') {
+            $expected = preg_replace('/\D+/', '', trim((string) $row['phone'])) ?: '';
             $actual = preg_replace('/\D+/', '', trim($mobile)) ?: '';
             if ($expected === '' || $expected !== $actual) {
                 throw new RuntimeException('教师信息校验失败', 422);
@@ -81,11 +78,12 @@ class EduIdentityVerifier
 
         return [
             'verified' => true,
-            'teacher_id' => (int) $row->teacher_id,
+            'teacher_id' => (int) $row['teacher_id'],
             'verified_by' => $mobile ? 'teacher_num_name_mobile' : 'teacher_num_name',
         ];
     }
 
+    /** 按学校、档案编号和来源地址限制尝试次数。 */
     private function guardAttempts(string $type, string $identifier): void
     {
         $school = (string) (CurrentContext::schoolDatabaseId() ?: 'unknown');
@@ -102,6 +100,7 @@ class EduIdentityVerifier
         }
     }
 
+    /** 校验必填身份字段。 */
     private function required(string $value, string $label, int $maxLength): string
     {
         $value = trim($value);
@@ -111,6 +110,7 @@ class EduIdentityVerifier
         return function_exists('mb_substr') ? mb_substr($value, 0, $maxLength) : substr($value, 0, $maxLength);
     }
 
+    /** 忽略空白和大小写比对档案姓名。 */
     private function sameText(string $left, string $right): bool
     {
         $normalize = static function (string $value): string {

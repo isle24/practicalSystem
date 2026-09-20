@@ -11,7 +11,7 @@ class SecretCipher
     private const IV_LENGTH = 12;
     private const TAG_LENGTH = 16;
 
-    /** 加密同步密钥 */
+    /** 加密服务端配置密钥。 */
     public function encrypt(string $plaintext): string
     {
         if ($plaintext === '') {
@@ -31,25 +31,25 @@ class SecretCipher
             self::TAG_LENGTH
         );
         if (!is_string($ciphertext) || strlen($tag) !== self::TAG_LENGTH) {
-            throw new RuntimeException('教师同步密钥加密失败');
+            throw new RuntimeException('配置密钥加密失败');
         }
 
         return self::PREFIX . base64_encode($iv . $tag . $ciphertext);
     }
 
-    /** 解密同步密钥 */
+    /** 解密服务端配置密钥。 */
     public function decrypt(string $encrypted): string
     {
         if ($encrypted === '') {
             return '';
         }
         if (!str_starts_with($encrypted, self::PREFIX)) {
-            throw new RuntimeException('教师同步密钥未加密或格式无效');
+            throw new RuntimeException('配置密钥未加密或格式无效');
         }
 
         $payload = base64_decode(substr($encrypted, strlen(self::PREFIX)), true);
         if (!is_string($payload) || strlen($payload) <= self::IV_LENGTH + self::TAG_LENGTH) {
-            throw new RuntimeException('教师同步密钥密文无效');
+            throw new RuntimeException('配置密钥密文无效');
         }
 
         $iv = substr($payload, 0, self::IV_LENGTH);
@@ -64,7 +64,7 @@ class SecretCipher
             $tag
         );
         if (!is_string($plaintext)) {
-            throw new RuntimeException('教师同步密钥解密失败');
+            throw new RuntimeException('配置密钥解密失败');
         }
 
         return $plaintext;

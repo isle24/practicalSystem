@@ -11,19 +11,19 @@ use support\Request;
 use support\Response;
 use Throwable;
 
-/** 个人问答与学校助手配置接口。 */
+/** 个人问答与分级助手配置接口。 */
 class AssistantController
 {
     use Responds;
 
-    /** 读取启用状态和管理员脱敏配置。 */
+    /** 读取个人配置、学校启用状态及管理员可见配置。 */
     #[OperationLog('查看问答助手配置')]
     public function settings(Request $request): Response
     {
         return $this->handle(fn () => (new AssistantService())->settings());
     }
 
-    /** 保存学校助手配置。 */
+    /** 保存本人配置或经授权的学校配置。 */
     #[OperationLog('配置问答助手')]
     public function saveSettings(Request $request): Response
     {

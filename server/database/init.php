@@ -1630,6 +1630,10 @@ function schoolBusinessStatements(): array
     foreach (array_map('trim', explode(';', $messageSql)) as $statement) {
         if (str_starts_with($statement, 'CREATE TABLE')) $statements[] = $statement;
     }
+    $personalSql = file_get_contents(__DIR__ . '/updates/20260920-assistant-personal.sql');
+    foreach (array_map('trim', explode(';', $personalSql)) as $statement) {
+        if (str_starts_with($statement, 'CREATE TABLE')) $statements[] = $statement;
+    }
     return $statements;
 }
 

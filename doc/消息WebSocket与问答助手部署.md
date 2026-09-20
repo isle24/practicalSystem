@@ -3,7 +3,7 @@
 ## 升级顺序
 
 1. 先备份学校业务库。在每个学校业务库执行 `server/database/updates/0.3.4-message-assistant.sql`。该文件只新增三个表，不删除历史数据。
-2. 或在 `server` 目录执行 `php database/migrations/20260920_message_assistant.php 学校数据库编号`。
+2. 在 `server` 目录执行 `php database/migrations/20260920_assistant_personal.php 学校数据库编号`，幂等补充消息、个人助手配置及会话来源。手工升级旧版 0.3.4 可单次执行 `server/database/updates/20260920-assistant-personal.sql`；其中 ALTER 语句不要重复执行。新安装已包含所需字段。
 3. 部署 PHP 和前端编译文件后，重启 Webman，使新增进程生效：`php start.php restart -d`。仅 reload 不能保证创建新增进程。
 4. 消息 WebSocket 默认监听 `127.0.0.1:8788`，不要向公网开放此端口。HTTP 保持 `8787`。
 
@@ -60,21 +60,24 @@ location / {
 
 ## 问答助手
 
-先在服务端 `.env` 配置实际使用的接口域名（逗号分隔，不含协议和路径）：
+服务端 `.env` 保留密钥加密配置和实时消息监听地址：
 
 ```dotenv
-ASSISTANT_ALLOWED_HOSTS=ai.example.edu.cn
 TEACHER_SYNC_ENCRYPTION_KEY=替换为服务器保存的高强度随机密钥
 MESSAGE_WS_LISTEN=websocket://127.0.0.1:8788
 ```
 
-已有 `TEACHER_SYNC_ENCRYPTION_KEY` 请保留，不能随意覆盖，否则旧的同步密钥无法解密。助手复用该加密设施，不在客户端保存 API 密钥。
+已有 `TEACHER_SYNC_ENCRYPTION_KEY` 请保留，不能随意覆盖，否则旧的同步密钥和 AI 密钥无法解密。此项是服务端加密主密钥，不是 AI API Key；示例中文不是可用密钥。助手复用该加密设施，不在客户端保存 API 密钥。原 `ASSISTANT_ALLOWED_HOSTS` 不再读取，可移除，无需手工维护 AI 域名。`MESSAGE_WS_LISTEN` 只控制内部实时消息监听，与 AI 地址无关。
 
 学校管理员或超级管理员进入“消息中心 → 问答助手 → 配置”，填写完整 HTTPS Chat Completions 地址、模型、密钥，再启用。接口暂未提供时保持停用。
 
+每个用户均可在同一入口配置个人服务，按学校、账号隔离。个人密钥加密保存于学校服务器，PC/H5/客户端共用；请求经学校服务器转发。普通用户不能读取或修改学校密钥。留空保留密钥，勾选清除后同时停用。学校服务费用由学校 API 账户承担，个人服务由个人 API 账户承担。
+
+明确选择学校服务或个人服务；切换时新建会话，不自动发送另一服务的历史。任务保存来源和配置指纹，队列消费时按任务所属账号读取配置。配置停用或更改后，旧排队任务失败并提示重新发送，不回退到另一服务。旧版尚未完成且没有指纹的任务同样需要重新发送。历史上下文仅取相同来源、相同配置指纹的轮次。
+
 只发送用户输入及该个人会话最近六轮成功问答。无业务查询工具，无自动审核、修改成绩或 SQL 执行。响应以禁用原始 HTML 的 Markdown 展示，禁止外部图片。每账号每分钟最多十次提问，同一时刻只处理一个问题。请求失败不暴露提供方响应及密钥；可重新填写后发送。
 
-兼容接口须接受 `model`、`messages`、`stream=false`、`max_tokens`，返回 `choices[0].message.content`。必须通过 HTTPS 公网域名访问，禁止重定向，单次响应等待上限 45 秒。尚未配置真实接口前，不能认定模型回答已完成端到端联调。
+兼容接口须接受 `model`、`messages`、`stream=false`、`max_tokens`，返回 `choices[0].message.content`。必须通过 HTTPS 公网域名的 443 端口访问，目前使用 IPv4。每次实际请求重新校验解析结果并固定连接地址，拒绝内网、保留地址、重定向和代理，单次响应等待上限 45 秒。尚未配置真实接口前，不能认定模型回答已完成端到端联调。
 
 ## 安装包与分平台发布
 
