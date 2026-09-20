@@ -8,13 +8,7 @@ on:
         type: boolean
         default: false
   push:
-    branches: [main, master]
     tags: ['v*']
-    paths:
-      - 'fontend/desktop/**'
-      - 'fontend/pc/**'
-      - 'fontend/shared/**'
-      - '.github/workflows/desktop-build.yml'
 
 permissions:
   contents: read
