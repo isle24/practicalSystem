@@ -1,5 +1,6 @@
 <template>
-  <nav ref="gridRef" class="desktop-icons" :style="layoutStyle" aria-label="应用模块">
+  <nav ref="gridRef" class="desktop-icons desktop-canvas" :style="layoutStyle" aria-label="应用模块"
+    @pointerdown="start" @click.capture="captureClick" @dragstart.prevent>
     <ShortcutTile
       v-for="module in modules"
       :key="module.id"
@@ -8,6 +9,8 @@
       :href="moduleHref(module)"
       :active="isFocused(module.id)"
       :backend-url="backendUrl"
+      :style="tileStyle(module.id)"
+      :class="{ 'desktop-position-dragging': drag?.id === String(module.id) && drag.moved }"
       @open="emit('open', module)"
     />
   </nav>
@@ -16,18 +19,18 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import ShortcutTile from './ShortcutTile.vue';
-import { useShortcutDrag } from '../composables/useShortcutDrag';
+import { useDesktopPositions } from '../composables/useDesktopPositions';
 
 const props = defineProps({
   modules: { type: Array, default: () => [] },
   moduleHref: { type: Function, required: true },
   isFocused: { type: Function, required: true },
   backendUrl: { type: Function, required: true },
+  storageKey: { type: String, required: true },
 });
 
-const emit = defineEmits(['open', 'reorder']);
+const emit = defineEmits(['open', 'warning']);
 const gridRef = ref(null);
-useShortcutDrag(gridRef, () => props.modules, ids => emit('reorder', ids));
 const bounds = ref({ width: 0, height: 0 });
 let observer = null;
 
@@ -54,7 +57,7 @@ const layoutStyle = computed(() => {
     }
   }
 
-  const scale = Math.max(0.68, Math.min(1, best.scale));
+  const scale = Math.max(0.4, Math.min(1, best.scale));
   return {
     '--desktop-columns': best.columns,
     '--desktop-cell-width': `${Math.round(naturalWidth * scale)}px`,
@@ -68,6 +71,19 @@ const layoutStyle = computed(() => {
     '--desktop-tile-padding-top': `${Math.max(4, Math.round(10 * scale))}px`,
   };
 });
+
+const cell = computed(() => ({
+  width: Number.parseFloat(layoutStyle.value['--desktop-cell-width']),
+  height: Number.parseFloat(layoutStyle.value['--desktop-cell-height']),
+}));
+const { drag, tileStyle, start, captureClick, reset } = useDesktopPositions({
+  modules: () => props.modules,
+  storageKey: () => props.storageKey,
+  bounds,
+  cell,
+  notify: message => emit('warning', message),
+});
+defineExpose({ reset });
 
 function updateBounds(entry = null) {
   const rect = entry?.contentRect || gridRef.value?.getBoundingClientRect();

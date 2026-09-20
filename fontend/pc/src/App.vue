@@ -57,12 +57,14 @@
   <main v-else class="desktop-shell" :class="{ 'desktop-shell-mac': desktopStyleMode === 'mac' }" :style="desktopStyle" @click.left="closeDesktopContextMenu" @contextmenu.prevent="openDesktopContextMenu">
     <section class="workspace">
       <AdaptiveDesktopGrid
-        :modules="desktopStyleMode === 'mac' ? launcherFilteredModules : visibleDesktopModules"
+        ref="desktopGridRef"
+        :modules="visibleDesktopModules"
+        :storage-key="desktopPositionStorageKey"
         :module-href="moduleHref"
         :is-focused="isModuleFocused"
         :backend-url="backendUrl"
         @open="openModule"
-        @reorder="setDesktopModuleOrder"
+        @warning="ElMessage.warning"
       />
 
       <DesktopWindow
@@ -76,6 +78,7 @@
         :initial-width="win.width"
         :initial-height="win.height"
         :active="focusedWindowId === win.id"
+        :appearance="desktopStyleMode"
         @focus="focusWindow(win.id)"
         @minimize="minimizeWindow(win.id)"
         @close="closeWindow(win.id)"
@@ -220,7 +223,7 @@
                     @click="setDesktopStyle('mac')"
                   >
                     <LayoutGrid :size="18" />
-                    <span><strong>Mac 风格</strong><small>启动台和居中应用网格</small></span>
+                    <span><strong>Mac 风格</strong><small>悬浮 Dock 和独立启动台</small></span>
                   </button>
                 </div>
                 <small class="client-version">客户端版本 v{{ clientVersion }}</small>
@@ -4056,9 +4059,13 @@
         <ImagePlus :size="16" />
         <span>更换壁纸</span>
       </button>
-      <button type="button" @click="openProfile">
+      <button type="button" @click="closeDesktopContextMenu(); openProfile()">
         <UserRound :size="16" />
         <span>个人设置</span>
+      </button>
+      <button type="button" @click="resetDesktopPositions">
+        <RotateCcw :size="16" />
+        <span>恢复默认布局</span>
       </button>
     </div>
 
@@ -4178,6 +4185,14 @@
           </div>
         </div>
         <div class="taskbar-apps">
+          <template v-if="desktopStyleMode === 'mac'">
+            <button v-for="module in visibleDesktopModules" :key="`dock-${module.id}`" type="button"
+              class="dock-pinned-app" :title="module.name" :aria-label="module.name"
+              :class="{ active: isModuleFocused(module.id), running: isModuleOpen(module.id) }"
+              @click="openModule(module)">
+              <AppIcon class="taskbar-glyph" :icon="module.icon" :icon-url="module.iconUrl" :label="module.name" :color="module.color" :size="24" :backend-url="backendUrl" />
+            </button>
+          </template>
           <a
             v-for="win in taskbarWindows"
             :key="win.id"
@@ -4277,7 +4292,7 @@
 
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
-import { ElMessage } from 'element-plus';
+import { ElMessage, ElMessageBox } from 'element-plus';
 import zhCn from 'element-plus/es/locale/lang/zh-cn';
 import {
   Bell,
@@ -4312,6 +4327,7 @@ import {
   Plus,
   Printer,
   RefreshCw,
+  RotateCcw,
   Save,
   Search,
   Settings,
@@ -4620,6 +4636,8 @@ const desktopShortcutModuleAliases = {
   doc: 'resourceCenter',
   templateLib: 'resourceCenter',
 };
+const desktopGridRef = ref(null);
+const desktopPositionStorageKey = computed(() => `practical:pc:desktop-positions:${window.__PRACTICAL_DESKTOP__?.serverOrigin || window.location.origin}:${permissionState.context.account_id || 'guest'}`);
 const desktopLauncher = useDesktopLauncher({
   allModules: computed(() => [...desktopEntryModules.value, ...allLaunchableModules.value.filter(module => ['pluginCenter', 'favorite', 'notebook', 'releaseNotes'].includes(module.id))]),
   favoriteItems: computed(() => favoriteState.items),
@@ -5743,7 +5761,8 @@ const desktopShortcutPayloadItems = desktopLauncher.payloadItems;
 const favoriteDesktopShortcuts = desktopLauncher.favoriteDesktopShortcuts;
 const showGlobalSearchResults = computed(() => globalSearchKeyword.value && globalSearchResults.value.length > 0);
 const visibleWindows = computed(() => openWindows.filter(win => !win.minimized));
-const taskbarWindows = computed(() => openWindows.filter(win => win.module.id !== 'message'));
+const taskbarWindows = computed(() => openWindows.filter(win => win.module.id !== 'message'
+  && !(desktopStyleMode.value === 'mac' && visibleDesktopModules.value.some(module => module.id === win.module.id))));
 const canManageConfig = computed(() => hasPermission('config:manage') && ['super_admin', 'school_admin'].includes(permissionState.context.role_type));
 const canViewUserAdmin = computed(() => ['super_admin', 'school_admin', 'college_admin', 'profession_admin'].includes(permissionState.context.role_type));
 const canSendMessages = computed(() => ['super_admin', 'school_admin'].includes(currentRoleType.value));
@@ -8261,7 +8280,7 @@ function openDesktopContextMenu(event) {
     return;
   }
   const width = 172;
-  const height = 92;
+  const height = 136;
   desktopContextMenu.x = Math.min(event.clientX, window.innerWidth - width - 8);
   desktopContextMenu.y = Math.min(event.clientY, window.innerHeight - height - 8);
   desktopContextMenu.visible = true;
@@ -8269,6 +8288,16 @@ function openDesktopContextMenu(event) {
 
 function closeDesktopContextMenu() {
   desktopContextMenu.visible = false;
+}
+
+async function resetDesktopPositions() {
+  closeDesktopContextMenu();
+  try {
+    await ElMessageBox.confirm('恢复当前账号的桌面图标默认位置？已添加的快捷方式不会移除。', '恢复默认布局', { type: 'warning', confirmButtonText: '恢复', cancelButtonText: '取消' });
+    desktopGridRef.value?.reset();
+  } catch {
+    // 取消时保留当前布局。
+  }
 }
 
 function openWallpaperSettings() {

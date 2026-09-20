@@ -353,52 +353,6 @@ a {
   display: none;
 }
 
-.desktop-shell-mac .workspace {
-  padding: clamp(24px, 6vh, 72px) clamp(24px, 7vw, 110px) 24px;
-  background: radial-gradient(circle at 50% 35%, rgba(255, 255, 255, .18), transparent 48%);
-}
-
-.desktop-shell-mac .desktop-icons {
-  width: min(1120px, 100%);
-  margin: 0 auto;
-  align-content: center;
-  justify-content: center;
-  grid-template-columns: repeat(auto-fit, minmax(92px, 108px));
-  grid-auto-rows: 108px;
-  gap: 18px 22px;
-}
-
-.desktop-shell-mac .shortcut-tile-desktop {
-  padding-top: 10px;
-  border-radius: 14px;
-  text-shadow: 0 1px 4px rgba(0, 0, 0, .22);
-}
-
-.desktop-shell-mac .taskbar {
-  width: max-content;
-  min-width: 260px;
-  max-width: calc(100vw - 32px);
-  margin: 0 auto 10px;
-  padding: 4px 10px;
-  border: 1px solid rgba(255, 255, 255, .48);
-  border-radius: 16px;
-  background: rgba(246, 248, 251, .66);
-  box-shadow: 0 12px 30px rgba(24, 33, 43, .16);
-}
-
-.desktop-shell-mac .taskbar-brand,
-.desktop-shell-mac .taskbar-status {
-  display: none;
-}
-
-.desktop-shell-mac .taskbar-center {
-  width: auto;
-}
-
-.desktop-shell-mac .taskbar-apps {
-  max-width: min(620px, calc(100vw - 100px));
-}
-
 .shortcut-tile-desktop {
   height: 100%;
   display: grid;

@@ -1,0 +1,165 @@
+.desktop-canvas {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.desktop-canvas > .shortcut-tile {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: var(--desktop-cell-width);
+  height: var(--desktop-cell-height);
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.desktop-canvas .shortcut-tile-main { -webkit-user-drag: none; }
+.desktop-canvas .desktop-position-dragging {
+  z-index: 2;
+  cursor: grabbing;
+  will-change: transform;
+  background: rgba(255, 255, 255, .22);
+  outline: 1px solid rgba(255, 255, 255, .7);
+  border-radius: 8px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, .12);
+}
+.desktop-canvas .desktop-position-dragging * { cursor: grabbing; }
+
+.window-title { gap: 0; background: #f6f7fa; border-bottom-color: rgba(0, 0, 0, .07); }
+.window-name { flex: 1; padding-right: 16px; }
+.window-name span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.window-title-side { margin-left: auto; }
+.window-controls { flex-shrink: 0; }
+.window-guide-button { border-color: transparent; background: transparent; }
+.window-guide-button:hover { background: rgba(0, 0, 0, .05); }
+
+.desktop-shell:not(.desktop-shell-mac) {
+  font-family: "Segoe UI Variable", "Segoe UI", "Microsoft YaHei", sans-serif;
+}
+.desktop-shell:not(.desktop-shell-mac) .taskbar {
+  background: rgba(245, 247, 250, .88);
+  border-top-color: rgba(255, 255, 255, .72);
+}
+.taskbar-center { overflow: visible; }
+.taskbar .global-search svg { flex-shrink: 0; }
+.taskbar .taskbar-glyph,
+.taskbar .search-result-glyph { color: #fff; }
+.taskbar .taskbar-glyph img { border-radius: inherit; }
+.taskbar-apps { padding: 6px 4px; }
+.taskbar .global-search { border-radius: 18px; }
+.taskbar .global-search-results button {
+  width: 100%;
+  height: auto;
+  min-height: 46px;
+  flex: none;
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  justify-content: stretch;
+  padding: 8px 10px;
+  text-align: left;
+}
+.taskbar .global-search-results button > span { white-space: normal; }
+
+.desktop-shell-mac {
+  grid-template-rows: minmax(0, 1fr) 84px;
+  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif;
+}
+.desktop-shell-mac .taskbar {
+  display: flex;
+  align-self: end;
+  justify-self: center;
+  width: max-content;
+  min-width: 0;
+  max-width: calc(100% - 32px);
+  height: 68px;
+  margin-bottom: 10px;
+  padding: 4px 10px;
+  gap: 8px;
+  border: 1px solid rgba(255, 255, 255, .55);
+  border-radius: 20px;
+  background: rgba(244, 245, 248, .68);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, .17), inset 0 0 0 1px rgba(255, 255, 255, .18);
+  backdrop-filter: blur(32px) saturate(155%);
+}
+.desktop-shell-mac .taskbar-brand,
+.desktop-shell-mac .taskbar-online,
+.desktop-shell-mac .taskbar-operator-name,
+.desktop-shell-mac .taskbar-logout-button span { display: none; }
+.desktop-shell-mac .taskbar-center { width: auto; flex: 1 1 auto; gap: 4px; }
+.desktop-shell-mac .taskbar-apps { flex: 0 1 auto; max-width: none; gap: 5px; padding: 7px 4px; }
+.desktop-shell-mac .taskbar button,
+.desktop-shell-mac .taskbar a { flex-basis: 46px; width: 46px; height: 46px; border-radius: 12px; }
+.desktop-shell-mac .taskbar .taskbar-glyph { width: 38px; height: 38px; border-radius: 10px; box-shadow: inset 0 1px 0 rgba(255,255,255,.4), 0 2px 5px rgba(0,0,0,.12); }
+.desktop-shell-mac .taskbar a:hover,
+.desktop-shell-mac .taskbar .dock-pinned-app:hover { transform: translateY(-4px); }
+.desktop-shell-mac .taskbar a.active,
+.desktop-shell-mac .taskbar .dock-pinned-app.active { background: rgba(255,255,255,.3); border-color: transparent; box-shadow: none; }
+.desktop-shell-mac .taskbar .dock-pinned-app::after,
+.desktop-shell-mac .taskbar a::after,
+.desktop-shell-mac .taskbar .message-taskbar-button::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -5px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  transform: translateX(-50%);
+  background: transparent;
+}
+.desktop-shell-mac .taskbar .running::after,
+.desktop-shell-mac .taskbar .active::after { background: #48515b; }
+.desktop-shell-mac .taskbar-status { flex: 0 0 auto; gap: 3px; padding-left: 8px; border-left: 1px solid rgba(70, 80, 90, .2); }
+.desktop-shell-mac .taskbar-version { font-size: 10px; color: #59626d; }
+.desktop-shell-mac .taskbar-clock { font-size: 11px; }
+.desktop-shell-mac .taskbar .taskbar-operator-button,
+.desktop-shell-mac .taskbar .taskbar-logout-button,
+.desktop-shell-mac .taskbar .switch-account-button { width: 34px; height: 38px; flex-basis: 34px; padding: 0; }
+.desktop-shell-mac .taskbar .global-search-wrap { flex: 0 0 40px; width: 40px; }
+.desktop-shell-mac .taskbar .global-search { height: 40px; padding: 0 11px; border: 0; border-radius: 11px; background: rgba(255,255,255,.45); }
+.desktop-shell-mac .taskbar .global-search input { width: 0; min-width: 0; opacity: 0; }
+.desktop-shell-mac .taskbar .global-search-wrap:focus-within { width: 210px; flex-basis: 210px; }
+.desktop-shell-mac .taskbar .global-search-wrap:focus-within input { width: 100%; opacity: 1; }
+.desktop-shell-mac .taskbar .global-search-results button { width: 100%; height: auto; border-radius: 7px; }
+.desktop-shell-mac .taskbar .switch-account-item { width: 100%; height: auto; min-height: 52px; border-radius: 6px; }
+.desktop-shell-mac .notebook-floating-button { bottom: 100px; }
+
+.desktop-window-mac { border-color: rgba(0,0,0,.18); box-shadow: 0 20px 55px rgba(0,0,0,.2); }
+.desktop-window-mac .window-title { position: relative; padding: 0 12px; gap: 12px; background: #f1f1f3; }
+.desktop-window-mac .window-controls { order: -1; gap: 8px; align-items: center; }
+.desktop-window-mac .window-controls button { width: 13px; height: 13px; border-radius: 50%; border: 1px solid rgba(0,0,0,.12); color: rgba(0,0,0,.62); }
+.desktop-window-mac .window-controls .window-control-close { order: -1; background: #ff5f57; }
+.desktop-window-mac .window-controls .window-control-minimize { background: #febc2e; }
+.desktop-window-mac .window-controls .window-control-maximize { background: #28c840; }
+.desktop-window-mac:not(.active) .window-controls button { background: #c6c7c9; }
+.desktop-window-mac .window-controls button svg { width: 9px; height: 9px; opacity: 0; }
+.desktop-window-mac .window-controls:hover button svg,
+.desktop-window-mac .window-controls button:focus-visible svg { opacity: 1; }
+.desktop-window-mac .window-name { padding-left: 6px; }
+
+@media (max-width: 980px) {
+  .desktop-shell .taskbar { grid-template-columns: 36px minmax(0, 1fr) auto; gap: 6px; padding-inline: 8px; }
+  .desktop-shell .taskbar-center { width: 100%; }
+  .desktop-shell-mac .taskbar-center { width: auto; }
+  .desktop-shell-mac .taskbar-clock,
+  .desktop-shell-mac .taskbar-version { display: none; }
+  .desktop-shell-mac .taskbar .global-search-wrap:focus-within { flex-basis: min(180px, 30vw); width: min(180px, 30vw); }
+}
+@media (max-width: 600px) {
+  .desktop-shell .taskbar-brand,
+  .desktop-shell .taskbar-clock { display: none; }
+  .desktop-shell .taskbar { grid-template-columns: minmax(0, 1fr) auto; }
+  .desktop-shell .taskbar-center { grid-column: 1; }
+  .desktop-shell-mac .taskbar { max-width: calc(100% - 16px); padding-inline: 5px; gap: 3px; }
+  .desktop-shell-mac .taskbar-status { padding-left: 3px; }
+  .desktop-shell-mac .taskbar button,
+  .desktop-shell-mac .taskbar a { width: 38px; flex-basis: 38px; }
+  .desktop-shell-mac .taskbar .taskbar-glyph { width: 32px; height: 32px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .desktop-shell .taskbar button,
+  .desktop-shell .taskbar a { transition: none; }
+}
