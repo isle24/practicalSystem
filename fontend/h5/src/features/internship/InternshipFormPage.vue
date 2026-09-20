@@ -104,6 +104,7 @@
         <div v-for="file in internship.forms.journal.attachments" :key="file.id">
           <FileText :size="16" />
           <span>{{ file.name }}</span>
+          <FilePreviewButton :file="file" />
           <button type="button" aria-label="移除附件" @click="removeInternshipAttachment('journal', file.id)"><X :size="16" /></button>
         </div>
       </div>
@@ -180,6 +181,7 @@
         <div v-for="file in internship.forms.report.attachments" :key="file.id">
           <FileText :size="16" />
           <span>{{ file.name }}</span>
+          <FilePreviewButton :file="file" />
           <button type="button" aria-label="移除附件" @click="removeInternshipAttachment('report', file.id)"><X :size="16" /></button>
         </div>
       </div>
@@ -264,6 +266,7 @@
 </template>
 
 <script setup>
+import FilePreviewButton from '../../../../shared/components/FilePreviewButton.vue';
 import { CheckCircle2, Download, FileClock, FileText, MapPin, Paperclip, Upload, X } from '@lucide/vue';
 import AppActionBar from '../../components/ui/AppActionBar.vue';
 import AppButton from '../../components/ui/AppButton.vue';

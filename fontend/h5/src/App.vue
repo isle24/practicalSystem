@@ -140,6 +140,7 @@
 </template>
 
 <script setup>
+import { previewFile } from '../../shared/filePreview';
 import { computed, ref, watch } from 'vue';
 import { showConfirmDialog, showToast } from 'vant';
 import {
@@ -3460,7 +3461,7 @@ function openSafetyTemplate() {
     showToast('安全承诺模板暂不可用');
     return;
   }
-  window.open(backendUrl(url), '_blank', 'noopener,noreferrer');
+  previewFile(safetyTemplate.value.file);
 }
 
 async function uploadSafetyFinal(event) {

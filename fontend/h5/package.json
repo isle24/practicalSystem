@@ -8,11 +8,20 @@
     "build": "vite build",
     "preview": "vite preview --host 0.0.0.0 --port 4174"
   },
+  "overrides": {
+    "exceljs": {
+      "uuid": "11.1.1"
+    }
+  },
   "dependencies": {
     "@lucide/vue": "^1.17.0",
     "@vitejs/plugin-vue": "^6.0.1",
+    "docx-preview": "0.3.7",
     "dompurify": "^3.4.15",
+    "exceljs": "4.4.0",
+    "fflate": "0.8.3",
     "markdown-it": "^15.0.1",
+    "pdfjs-dist": "5.4.624",
     "vant": "^4.9.19",
     "vite": "^7.1.2",
     "vue": "^3.5.13"

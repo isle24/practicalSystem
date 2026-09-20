@@ -21,6 +21,13 @@ class FavoriteController
         return $this->respond(fn () => (new FavoriteService())->page($request->all()));
     }
 
+    /** 打开收藏前重新检查可见性及参数。 */
+    #[OperationLog('读取收藏链接')]
+    public function detail(Request $request): Response
+    {
+        return $this->respond(fn () => (new FavoriteService())->detail((int) $request->input('id', 0)));
+    }
+
     /** 保存收藏及共享设置。 */
     #[OperationLog('保存收藏夹')]
     public function save(Request $request): Response

@@ -40,6 +40,9 @@ import 'element-plus/dist/index.css';
 import App from './App.vue';
 import './styles.css';
 import './desktop-appearance.css';
+import { configureFilePreview } from '../../shared/filePreview';
+import { request, backendUrl } from './api/client';
+configureFilePreview({ request, backendUrl });
 
 const app = createApp(App);
 

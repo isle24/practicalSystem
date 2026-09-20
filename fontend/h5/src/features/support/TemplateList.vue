@@ -22,6 +22,7 @@
     >
       <template #icon><FileText :size="19" /></template>
       <template #actions>
+        <FilePreviewButton v-if="item.file?.url" :file="item.file" />
         <AppButton variant="secondary" size="small" @click="emit('download', item)">
           <template #icon><Download :size="15" /></template>
           下载
@@ -40,6 +41,7 @@
 </template>
 
 <script setup>
+import FilePreviewButton from '../../../../shared/components/FilePreviewButton.vue';
 import { Download, FileText, Search } from '@lucide/vue';
 import AppButton from '../../components/ui/AppButton.vue';
 import AppEmptyState from '../../components/ui/AppEmptyState.vue';

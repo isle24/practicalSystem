@@ -11,7 +11,7 @@ class DesktopToolsSchema extends TableRecord
     public static function apply(): void
     {
         $schema = self::connection()->getSchemaBuilder();
-        foreach (['scope', 'open_mode', 'updated_by', 'revision'] as $column) {
+        foreach (['scope', 'open_mode', 'updated_by', 'revision', 'request_config'] as $column) {
             if ($schema->hasColumn('favorite_link', $column)) continue;
             $schema->table('favorite_link', function (Blueprint $table) use ($column): void {
                 match ($column) {
@@ -19,6 +19,7 @@ class DesktopToolsSchema extends TableRecord
                     'open_mode' => $table->string('open_mode', 20)->default('client'),
                     'updated_by' => $table->unsignedBigInteger('updated_by')->nullable(),
                     'revision' => $table->unsignedInteger('revision')->default(1),
+                    'request_config' => $table->json('request_config')->nullable(),
                 };
             });
         }

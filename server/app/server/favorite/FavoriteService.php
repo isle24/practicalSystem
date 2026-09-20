@@ -45,7 +45,8 @@ class FavoriteService
         if ($scope === 'school' && !$this->canShare()) {
             throw new RuntimeException('没有全校共享权限', 403);
         }
-        return FavoriteRecord::connection()->transaction(function () use ($input, $title, $url, $scope, $mode): array {
+        $config = $this->requestConfig($input['request_config'] ?? []);
+        return FavoriteRecord::connection()->transaction(function () use ($input, $title, $url, $scope, $mode, $config): array {
             $id = (int) ($input['id'] ?? 0);
             $old = $id ? FavoriteRecord::lock($id) : null;
             if ($id) {
@@ -59,6 +60,7 @@ class FavoriteService
             }
             $now = date('Y-m-d H:i:s');
             $values = ['title' => $title, 'url' => $url, 'scope' => $scope, 'open_mode' => $mode,
+                'request_config' => json_encode($config, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR),
                 'icon_file_id' => $fileId ?: null, 'icon_url' => $icon['url'] ?? null,
                 'sort' => (int) ($input['sort'] ?? 0), 'status' => 'enabled',
                 'updated_by' => CurrentContext::accountId(), 'updated_at' => $now, 'revision' => (int) ($old['revision'] ?? 0) + 1];
@@ -99,9 +101,43 @@ class FavoriteService
     /** 输出可见字段，不暴露收藏所有者资料。 */
     private function present(array $row): array
     {
+        $row['request_config'] = is_string($row['request_config'] ?? null) ? json_decode($row['request_config'], true) : ($row['request_config'] ?? []);
         $row['can_open'] = ($row['scope'] ?? '') === 'school' || (int) ($row['account_id'] ?? 0) === CurrentContext::accountId();
         $row['can_edit'] = ($row['scope'] ?? '') === 'school' ? $this->canShare() : (int) ($row['account_id'] ?? 0) === CurrentContext::accountId();
         unset($row['account_id'], $row['user_id'], $row['updated_by'], $row['deleted_at']);
         return $row;
+    }
+
+    /** 读取当前账号可以打开的收藏。 */
+    public function detail(int $id): array
+    {
+        $row = FavoriteRecord::visible((int) CurrentContext::accountId(), $id);
+        if (!$row) throw new RuntimeException('收藏不存在或没有访问权限', 404);
+        return $this->present($row);
+    }
+
+    /** 仅允许可共享的普通查询和表单参数。 */
+    private function requestConfig(mixed $config): array
+    {
+        if (!is_array($config)) throw new RuntimeException('链接参数格式不正确', 400);
+        $result = ['method' => strtoupper((string) ($config['method'] ?? 'GET'))];
+        if (!in_array($result['method'], ['GET', 'POST'], true)) throw new RuntimeException('仅支持 GET/POST', 400);
+        if (array_diff(array_keys($config), ['method', 'query', 'form'])) throw new RuntimeException('敏感请求头和 Cookie 只能在客户端本机配置', 400);
+        foreach (['query', 'form'] as $group) {
+            $rows = $config[$group] ?? [];
+            if (!is_array($rows) || count($rows) > 20) throw new RuntimeException('每组最多配置 20 个参数', 400);
+            $result[$group] = [];
+            foreach ($rows as $row) {
+                if (!is_array($row)) throw new RuntimeException('参数必须包含名称和值', 400);
+                $key = trim((string) ($row['key'] ?? ''));
+                $value = (string) ($row['value'] ?? '');
+                if ($key === '' && $value === '') continue;
+                if (!preg_match('/^[A-Za-z0-9_.-]{1,80}$/', $key) || mb_strlen($value) > 1000) throw new RuntimeException('参数名或参数值无效', 400);
+                if (preg_match('/pass|secret|token|cookie|auth|session|credential|ticket|api.?key/i', $key)) throw new RuntimeException('凭据请在客户端的本机认证配置中维护，不可上传或共享', 400);
+                $result[$group][] = ['key' => $key, 'value' => $value];
+            }
+        }
+        if ($result['method'] === 'GET' && $result['form']) throw new RuntimeException('POST 参数需要选择 POST 方法', 400);
+        return $result;
     }
 }

@@ -225,6 +225,7 @@
             <div v-if="state.form.attachments.length" class="social-material-file-list">
               <article v-for="file in state.form.attachments" :key="file.id || file.file_id">
                 <a :href="backendUrl(file.url)" target="_blank" rel="noopener noreferrer">{{ file.download_name || file.name || `附件 #${file.id || file.file_id}` }}</a>
+                <FilePreviewButton :file="file" />
                 <el-button link type="danger" @click="removeMaterialFile(file)">移除</el-button>
               </article>
             </div>
@@ -274,7 +275,7 @@
         </section>
         <section v-if="state.detail.attachments?.length" class="social-detail-block">
           <strong>附件</strong>
-          <div class="social-material-file-list"><article v-for="file in state.detail.attachments" :key="file.id"><a :href="backendUrl(file.url)" target="_blank" rel="noopener noreferrer">{{ file.download_name || file.name || `附件 #${file.id}` }}</a></article></div>
+          <div class="social-material-file-list"><article v-for="file in state.detail.attachments" :key="file.id"><a :href="backendUrl(file.url)" target="_blank" rel="noopener noreferrer">{{ file.download_name || file.name || `附件 #${file.id}` }}</a><FilePreviewButton :file="file" /></article></div>
         </section>
         <section v-if="state.detail.teachers?.length" class="social-detail-block">
           <strong>指导教师</strong>
@@ -413,6 +414,7 @@
 </template>
 
 <script setup>
+import FilePreviewButton from '../../../shared/components/FilePreviewButton.vue';
 import { computed, reactive, ref, watch } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import {

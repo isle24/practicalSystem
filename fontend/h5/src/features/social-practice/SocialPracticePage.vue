@@ -29,7 +29,7 @@
         <div class="social-mobile-detail">
           <dl v-for="item in detailFacts" :key="item.label"><dt>{{ item.label }}</dt><dd>{{ item.value || '-' }}</dd></dl>
           <section v-if="state.detail.description || state.detail.content"><strong>内容</strong><p>{{ state.detail.description || state.detail.content }}</p></section>
-          <section v-if="state.detail.attachments?.length"><strong>附件</strong><a v-for="file in state.detail.attachments" :key="file.id" :href="backendUrl(file.url)" target="_blank" rel="noopener noreferrer">{{ file.download_name || file.name || `附件 #${file.id}` }}</a></section>
+          <section v-if="state.detail.attachments?.length"><strong>附件</strong><div v-for="file in state.detail.attachments" :key="file.id"><span>{{ file.download_name || file.name || `附件 #${file.id}` }}</span><FilePreviewButton :file="file" /></div></section>
           <section v-if="state.detail.teachers?.length" class="social-mobile-related-list"><strong>指导教师</strong><article v-for="teacher in state.detail.teachers" :key="teacher.id"><div><span>{{ teacher.teacher_name }}</span><small>{{ teacher.teacher_num || '-' }}</small></div><em>{{ teacher.teacher_role === 'leader' ? '负责人' : '指导教师' }} · 容量 {{ teacher.capacity || 0 }}</em></article></section>
           <section v-if="state.detail.participants?.length" class="social-mobile-related-list"><strong>参与学生</strong><article v-for="student in state.detail.participants" :key="student.id"><div><span>{{ student.student_name }}</span><small>{{ student.student_num || '-' }}</small></div><em>{{ student.teacher_name || '待分配教师' }}</em></article></section>
           <section v-if="scoreDetailItems.length" class="social-mobile-related-list"><strong>评分明细</strong><article v-for="item in scoreDetailItems" :key="item.item_code"><div><span>{{ item.item_name }}</span><small>权重 {{ item.weight }}%</small></div><b>{{ item.score_value }} 分</b></article></section>
@@ -90,6 +90,7 @@
 </template>
 
 <script setup>
+import FilePreviewButton from '../../../../shared/components/FilePreviewButton.vue';
 import { computed, reactive, ref, watch } from 'vue';
 import { showConfirmDialog, showToast } from 'vant';
 import { RefreshCw, Route, Workflow } from '@lucide/vue';

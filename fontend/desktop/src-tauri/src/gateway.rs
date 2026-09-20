@@ -215,7 +215,23 @@ async fn handle(State(state): State<Arc<GatewayState>>, request: Request) -> Res
             .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
         return result;
     }
-    if path == "/_desktop/external" || path == "/_desktop/update" {
+    if path == "/_desktop/preview-file" && request.method() == axum::http::Method::GET {
+        let id = url::form_urlencoded::parse(request.uri().query().unwrap_or("").as_bytes())
+            .find(|(key, _)| key == "id")
+            .and_then(|(_, value)| value.parse::<u64>().ok())
+            .unwrap_or(0);
+        return match crate::preview_cache::serve(&state.app, &state.connection, id, headers).await {
+            Ok(response) => response,
+            Err(message) => error(StatusCode::BAD_REQUEST, &message),
+        };
+    }
+    if matches!(
+        path,
+        "/_desktop/external"
+            | "/_desktop/update"
+            | "/_desktop/favorite-credentials"
+            | "/_desktop/preview-cache"
+    ) {
         if request.method() != axum::http::Method::POST
             || headers.get(header::ORIGIN).and_then(|v| v.to_str().ok())
                 != Some(state.local.origin().ascii_serialization().as_str())
@@ -223,7 +239,9 @@ async fn handle(State(state): State<Arc<GatewayState>>, request: Request) -> Res
             return error(StatusCode::FORBIDDEN, "仅学校页面可以调用客户端功能");
         }
         let update = path.ends_with("/update");
-        let bytes = match axum::body::to_bytes(request.into_body(), 8192).await {
+        let credentials = path.ends_with("/favorite-credentials");
+        let cache = path.ends_with("/preview-cache");
+        let bytes = match axum::body::to_bytes(request.into_body(), 65536).await {
             Ok(bytes) => bytes,
             Err(_) => return error(StatusCode::BAD_REQUEST, "参数过长"),
         };
@@ -231,6 +249,27 @@ async fn handle(State(state): State<Arc<GatewayState>>, request: Request) -> Res
             Ok(input) => input,
             Err(_) => return error(StatusCode::BAD_REQUEST, "参数无效"),
         };
+        if credentials || cache {
+            let result = if credentials {
+                crate::favorite_auth::configure(&state.connection, &input).await
+            } else {
+                crate::preview_cache::configure(&state.app, &input).await
+            };
+            return match result {
+                Ok(data) => {
+                    let mut response = Response::new(Body::from(data.to_string()));
+                    response.headers_mut().insert(
+                        header::CONTENT_TYPE,
+                        HeaderValue::from_static("application/json"),
+                    );
+                    response
+                        .headers_mut()
+                        .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+                    response
+                }
+                Err(message) => error(StatusCode::BAD_REQUEST, &message),
+            };
+        }
         if update {
             crate::updater::start(
                 state.app.clone(),
@@ -239,6 +278,17 @@ async fn handle(State(state): State<Arc<GatewayState>>, request: Request) -> Res
                 state.cancel.clone(),
                 input["interactive"].as_bool().unwrap_or(true),
             );
+        } else if input["favorite_id"].as_u64().unwrap_or(0) > 0 {
+            if let Err(message) = crate::favorite_auth::open(
+                &state.app,
+                &state.connection,
+                input["favorite_id"].as_u64().unwrap_or(0),
+                input["mode"].as_str().unwrap_or("client"),
+            )
+            .await
+            {
+                return error(StatusCode::BAD_REQUEST, &message);
+            }
         } else if let Err(message) = crate::external::open(
             &state.app,
             input["url"].as_str().unwrap_or(""),

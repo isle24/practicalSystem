@@ -229,6 +229,7 @@
                 <small class="client-version">客户端版本 v{{ clientVersion }}</small>
               </section>
 
+              <PreviewCacheSettings />
               <section v-if="canManageLoginBackground" class="profile-panel-card">
                 <header>
                   <strong>学校登录背景</strong>
@@ -3287,8 +3288,8 @@
                     </el-table-column>
                     <el-table-column label="操作" width="120" fixed="right">
                       <template #default="{ row }">
-                        <el-button link type="primary" :disabled="!row.url" @click="openFileUrl(row)">
-                          打开
+                        <el-button link type="primary" :disabled="!row.url || row.status === 'deleted'" @click="openFileUrl(row)">
+                          预览
                         </el-button>
                       </template>
                     </el-table-column>
@@ -4291,6 +4292,8 @@
 </template>
 
 <script setup>
+import { previewFile } from '../../shared/filePreview';
+import PreviewCacheSettings from './components/PreviewCacheSettings.vue';
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import zhCn from 'element-plus/es/locale/lang/zh-cn';
@@ -10152,11 +10155,7 @@ function compactUserAgent(userAgent) {
 }
 
 function openFileUrl(row) {
-  const url = typeof row === 'string' ? row : row?.url;
-  if (!url) {
-    return;
-  }
-  window.open(backendUrl(url), '_blank', 'noopener');
+  return previewFile(row);
 }
 
 async function loadLogs(page = 1) {

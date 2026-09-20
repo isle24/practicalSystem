@@ -129,6 +129,7 @@
 </template>
 
 <script setup>
+import { previewFile } from '../../../shared/filePreview';
 import { computed, reactive, ref, watch } from 'vue';
 import { FileText, Upload } from '@lucide/vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
@@ -325,7 +326,7 @@ async function uploadAttachment(event) {
 }
 
 function openAttachment() {
-  if (form.attachment?.url) window.open(backendUrl(form.attachment.url), '_blank', 'noopener,noreferrer');
+  if (form.attachment) previewFile(form.attachment);
 }
 
 async function changed() {

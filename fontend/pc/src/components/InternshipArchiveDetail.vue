@@ -195,6 +195,7 @@
 </template>
 
 <script setup>
+import { previewFile } from '../../../shared/filePreview';
 import { computed, ref, watch } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { backendUrl } from '../api/client';
@@ -373,12 +374,12 @@ function openTemplate(row) {
     ElMessage.warning('模板文件暂不可用');
     return;
   }
-  window.open(backendUrl(url), '_blank', 'noopener,noreferrer');
+  previewFile({ url, file_id: template?.file_id, name: template?.file?.name || template?.file_name });
 }
 
 function openFile(file) {
   if (file?.url) {
-    window.open(backendUrl(file.url), '_blank', 'noopener,noreferrer');
+    previewFile(file);
   }
 }
 

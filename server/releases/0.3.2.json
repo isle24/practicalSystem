@@ -1,0 +1,6 @@
+{
+  "version": "0.3.2",
+  "title": "文件内置预览、本机缓存与收藏认证配置",
+  "notes_html": "<ul><li>内置图片、音视频、PDF、Word DOCX、Excel XLSX 预览。</li><li>客户端预览缓存默认 8 GB，可在个人设置调整上限、关闭或清空；权限及版本校验通过后复用本机文件。</li><li>收藏支持非敏感 Query/POST 参数，本机认证参数存入系统凭据库。</li><li>修正 Mac 风格窗口控制图标居中。</li></ul>",
+  "sql": [{ "file": "0.3.2-file-preview-favorites.sql", "scope": "school" }]
+}
