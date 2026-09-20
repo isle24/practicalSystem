@@ -1,6 +1,6 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, reactive } from 'vue';
-import { ElMessageBox } from 'element-plus';
+import { ElCheckbox, ElMessageBox } from 'element-plus';
 import { Check, Download, RefreshCw, Upload } from '@lucide/vue';
 import {
   cancelEduBatch,
@@ -44,6 +44,7 @@ const state = reactive({
   candidates: [],
   candidatePagination: { page: 1, page_size: 20, total: 0 },
   candidateLoading: false,
+  candidateSubmitting: false,
   selectedCandidateIds: [],
   issues: [],
   issuePagination: { page: 1, page_size: 20, total: 0 },
@@ -269,16 +270,21 @@ async function classify(row, type) {
 }
 
 async function confirmSelectedCandidates() {
-  if (!props.canConfirm || !candidateSelectionReady.value) {
+  if (!props.canConfirm || !candidateSelectionReady.value || state.candidateSubmitting) {
     return;
   }
+  state.candidateSubmitting = true;
   try {
-    const result = await confirmEduCandidates(state.selectedCandidateIds);
+    const ids = [...state.selectedCandidateIds];
+    await ElMessageBox.confirm(`将为选中的 ${ids.length} 条课程记录生成业务草稿，不会自动提交审核，确认继续？`, '确认生成业务草稿', { type: 'warning' });
+    const result = await confirmEduCandidates(ids);
     state.message = `业务草稿生成完成：${result.created || 0} 条，失败 ${result.failed || 0} 条`;
     state.selectedCandidateIds = [];
     await loadCandidates(1);
   } catch (error) {
-    state.message = error.message;
+    if (error !== 'cancel' && error !== 'close') state.message = error.message;
+  } finally {
+    state.candidateSubmitting = false;
   }
 }
 
@@ -401,16 +407,16 @@ onBeforeUnmount(() => {
     <section v-else-if="state.tab === 'candidates'" class="edu-candidate-section">
       <div class="edu-candidate-toolbar">
         <span>待确认业务候选</span>
-        <el-button type="primary" :icon="Check" :disabled="!props.canConfirm || !candidateSelectionReady" @click="confirmSelectedCandidates">生成业务草稿</el-button>
+        <el-button type="primary" :icon="Check" :loading="state.candidateSubmitting" :disabled="!props.canConfirm || !candidateSelectionReady" @click="confirmSelectedCandidates">生成业务草稿</el-button>
       </div>
       <el-table :data="state.candidates" stripe size="small" v-loading="state.candidateLoading" class="edu-data-table">
         <el-table-column label="选择" width="60">
-          <template #default="{ row }"><el-checkbox :model-value="state.selectedCandidateIds.includes(Number(row.id))" @change="value => toggleCandidate(row, value)" /></template>
+          <template #default="{ row }"><el-checkbox :aria-label="`选择${row.name || '课程'}`" :disabled="!props.canConfirm || state.candidateSubmitting" :model-value="state.selectedCandidateIds.includes(Number(row.id))" @change="value => toggleCandidate(row, value)" /></template>
         </el-table-column>
         <el-table-column prop="name" label="课程" min-width="220" show-overflow-tooltip />
         <el-table-column prop="business_type" label="分类" width="130">
           <template #default="{ row }">
-            <el-select :model-value="row.business_type" size="small" :disabled="!props.canConfirm" @change="value => classify(row, value)">
+            <el-select :model-value="row.business_type" size="small" :disabled="!props.canConfirm || state.candidateSubmitting" @change="value => classify(row, value)">
               <el-option label="待分类" value="pending" /><el-option label="实习" value="internship" /><el-option label="实验" value="lab" /><el-option label="实训" value="training" /><el-option label="社会实践" value="social_practice" />
             </el-select>
           </template>
