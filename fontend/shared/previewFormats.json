@@ -1,0 +1,11 @@
+{
+  "image": ["jpg", "jpeg", "png", "webp", "gif", "bmp", "avif"],
+  "audio": ["mp3", "wav", "ogg", "m4a"],
+  "video": ["mp4", "webm", "mov"],
+  "pdf": ["pdf"],
+  "docx": ["docx"],
+  "xlsx": ["xlsx"],
+  "markdown": ["md", "markdown"],
+  "csv": ["csv", "tsv"],
+  "text": ["txt", "text", "log", "json", "jsonl", "ndjson", "xml", "yaml", "yml", "toml", "ini", "conf", "cfg", "env", "properties", "sql", "js", "mjs", "cjs", "ts", "jsx", "tsx", "vue", "css", "scss", "less", "html", "htm", "svg", "php", "py", "rs", "go", "java", "c", "h", "cpp", "hpp", "cs", "sh", "bash", "zsh", "bat", "ps1", "rb", "swift", "kt", "dart", "r"]
+}

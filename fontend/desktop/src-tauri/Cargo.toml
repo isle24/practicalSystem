@@ -1,6 +1,6 @@
 [package]
 name = "practical-system-desktop"
-version = "0.3.2"
+version = "0.3.3"
 description = "Practical System desktop client"
 edition = "2021"
 rust-version = "1.88"
