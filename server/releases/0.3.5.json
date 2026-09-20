@@ -3,7 +3,6 @@
   "title": "个人问答助手配置与身份校验优化",
   "notes_html": "<ul><li>问答助手支持个人服务和学校服务两种配置。</li><li>个人 API 密钥按账号加密保存，PC、H5 和客户端共用。</li><li>问答任务固定服务来源和配置版本，配置变更后需要重新发送。</li><li>无手机号学生身份校验改为完整身份证号。</li></ul>",
   "sql": [
-    { "file": "20260920-assistant-personal.sql", "scope": "school" },
-    { "file": "0.3.4-message-assistant.sql", "scope": "school", "note": "仅未执行 0.3.4 升级的学校库需要" }
+    { "file": "20260920-assistant-personal.sql", "scope": "school" }
   ]
 }
