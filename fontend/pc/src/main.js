@@ -2,6 +2,8 @@ import { createApp } from 'vue';
 import {
   ElAlert,
   ElButton,
+  ElCheckbox,
+  ElCheckboxGroup,
   ElCollapse,
   ElCollapseItem,
   ElConfigProvider,
@@ -49,6 +51,8 @@ const app = createApp(App);
 [
   ElAlert,
   ElButton,
+  ElCheckbox,
+  ElCheckboxGroup,
   ElCollapse,
   ElCollapseItem,
   ElConfigProvider,

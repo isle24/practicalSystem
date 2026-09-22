@@ -45,7 +45,9 @@ class AuthMiddleware implements MiddlewareInterface
         $token = $this->token($request);
         if ($token !== '') {
             try {
-                (new AuthService())->applyToken($token);
+                $path = '/' . trim($request->path(), '/');
+                $initializeSchema = !in_array($path, ['/api/config/database-schema/options', '/api/config/database-schema/check'], true);
+                (new AuthService())->applyToken($token, $initializeSchema);
             } catch (Throwable $exception) {
                 CurrentContext::set(['auth_error' => $exception->getMessage()]);
             }

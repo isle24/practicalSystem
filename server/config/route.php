@@ -38,3 +38,7 @@ Route::disableDefaultRoute([\app\controller\Api\ProfileController::class, 'saveN
 
 Route::get('/api/edu-data/period-options', [\app\controller\Api\EduDataController::class, 'periodOptions']);
 Route::disableDefaultRoute([\app\controller\Api\EduDataController::class, 'periodOptions']);
+
+Route::get('/api/config/database-schema/options', [\app\controller\Api\DatabaseSchemaController::class, 'options']);
+Route::post('/api/config/database-schema/check', [\app\controller\Api\DatabaseSchemaController::class, 'check']);
+Route::disableDefaultRoute(\app\controller\Api\DatabaseSchemaController::class);

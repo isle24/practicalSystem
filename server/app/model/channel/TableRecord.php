@@ -107,11 +107,11 @@ class TableRecord extends BaseModel
         ];
     }
 
-    public static function writeOperationLog(array $values, ?string $datetime = null): void
+    public static function writeOperationLog(array $values, ?string $datetime = null, bool $ensureTable = true): void
     {
         $datetime = $datetime ?: date('Y-m-d H:i:s');
         $table = 'operation_log_' . date('Ym', strtotime($datetime) ?: time());
-        self::ensureOperationLogTable($table);
+        if ($ensureTable) self::ensureOperationLogTable($table);
         self::queryTable($table)->insert([
             'uuid' => self::uuid(),
             'account_id' => $values['account_id'] ?? null,
@@ -130,7 +130,15 @@ class TableRecord extends BaseModel
             return;
         }
 
-        self::connection()->statement("CREATE TABLE IF NOT EXISTS `{$table}` (
+        self::connection()->statement(self::operationLogCreationStatement($table));
+    }
+
+    public static function operationLogCreationStatement(string $table): string
+    {
+        if (!preg_match('/^operation_log_\d{6}$/D', $table)) {
+            throw new \InvalidArgumentException('操作日志表名无效');
+        }
+        return "CREATE TABLE IF NOT EXISTS `{$table}` (
             `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
             `uuid` CHAR(36) DEFAULT NULL,
             `name` VARCHAR(180) DEFAULT NULL,
@@ -150,7 +158,7 @@ class TableRecord extends BaseModel
             KEY `idx_account_id` (`account_id`),
             KEY `idx_action` (`action`),
             KEY `idx_ip` (`ip`)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
     }
 
     public static function ensureRecordingTable(string $table): void
@@ -172,7 +180,17 @@ class TableRecord extends BaseModel
             throw new \RuntimeException('记录表尚未初始化，请先升级学校数据库结构');
         }
 
-        self::connection()->statement("CREATE TABLE IF NOT EXISTS `{$table}` (
+        self::connection()->statement(self::recordingCreationStatement($table));
+
+        $ensured[$key] = true;
+    }
+
+    public static function recordingCreationStatement(string $table): string
+    {
+        if (!preg_match('/^[a-z_]+_recording$/D', $table)) {
+            throw new \InvalidArgumentException('记录表名无效');
+        }
+        return "CREATE TABLE IF NOT EXISTS `{$table}` (
             `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
             `uuid` CHAR(36) DEFAULT NULL,
             `name` VARCHAR(180) DEFAULT NULL,
@@ -195,9 +213,7 @@ class TableRecord extends BaseModel
             KEY `idx_status` (`status`),
             KEY `idx_entity` (`entity_type`, `entity_id`),
             KEY `idx_parent` (`parent_id`)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-
-        $ensured[$key] = true;
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
     }
 
     /** 检查部署时初始化的业务表，不在业务事务内执行 DDL。 */

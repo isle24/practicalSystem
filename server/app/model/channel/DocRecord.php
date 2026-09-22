@@ -566,9 +566,9 @@ class DocRecord extends TableRecord
         self::ensureIndexes();
     }
 
-    private static function ensureColumns(): void
+    public static function columnDefinitions(): array
     {
-        $schemas = [
+        return [
             'doc_category' => [
                 'parent_id' => "ALTER TABLE `doc_category` ADD COLUMN `parent_id` BIGINT UNSIGNED DEFAULT 0 AFTER `deleted_at`",
                 'icon' => "ALTER TABLE `doc_category` ADD COLUMN `icon` VARCHAR(80) DEFAULT NULL AFTER `parent_id`",
@@ -593,8 +593,11 @@ class DocRecord extends TableRecord
                 'change_note' => "ALTER TABLE `doc_article_history` ADD COLUMN `change_note` VARCHAR(500) DEFAULT NULL AFTER `editor_id`",
             ],
         ];
+    }
 
-        foreach ($schemas as $table => $columns) {
+    private static function ensureColumns(): void
+    {
+        foreach (self::columnDefinitions() as $table => $columns) {
             foreach ($columns as $column => $ddl) {
                 self::ensureColumnExists($table, $column, $ddl);
             }

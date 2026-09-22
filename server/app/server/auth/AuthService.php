@@ -204,7 +204,7 @@ class AuthService
         return max(86400, (int) ($config['refresh_exp'] ?? 604800));
     }
 
-    public function applyToken(string $token): ?array
+    public function applyToken(string $token, bool $initializeSchema = true): ?array
     {
         $token = trim($token);
         if ($token === '') {
@@ -228,7 +228,7 @@ class AuthService
             throw new RuntimeException('设备已被移除，请重新登录');
         }
 
-        $context = $this->contextForAccount($accountId, (string) ($extend['client'] ?? JwtToken::TOKEN_CLIENT_WEB));
+        $context = $this->contextForAccount($accountId, (string) ($extend['client'] ?? JwtToken::TOKEN_CLIENT_WEB), $initializeSchema);
         if ($jti !== '') {
             CurrentContext::set(['device_jti' => $jti]);
         }
@@ -248,7 +248,7 @@ class AuthService
         return $context;
     }
 
-    public function contextForAccount(int $accountId, string $client = JwtToken::TOKEN_CLIENT_WEB): array
+    public function contextForAccount(int $accountId, string $client = JwtToken::TOKEN_CLIENT_WEB, bool $initializeSchema = true): array
     {
         $account = Account::enabledById($accountId);
 
@@ -301,7 +301,7 @@ class AuthService
         $context['data_scope'] = $dataScope;
 
         CurrentContext::set($context);
-        $this->ensureDefaultMessageTemplates();
+        if ($initializeSchema) $this->ensureDefaultMessageTemplates();
 
         return $context;
     }

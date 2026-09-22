@@ -9,12 +9,9 @@ class PluginRecord extends TableRecord
 {
     private static array $ready = [];
 
-    /** 确保插件目录表存在并写入内置入口。 */
-    public static function ensureSchema(): void
+    public static function creationStatement(): string
     {
-        $database = (string) self::connection()->getDatabaseName();
-        if (isset(self::$ready[$database])) return;
-        self::connection()->statement("CREATE TABLE IF NOT EXISTS `plugin_catalog` (
+        return "CREATE TABLE IF NOT EXISTS `plugin_catalog` (
             `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
             `uuid` CHAR(36) NOT NULL,
             `code` VARCHAR(80) NOT NULL,
@@ -32,7 +29,15 @@ class PluginRecord extends TableRecord
             `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             `deleted_at` DATETIME DEFAULT NULL,
             PRIMARY KEY (`id`), UNIQUE KEY `uk_plugin_code` (`code`), KEY `idx_plugin_status_sort` (`status`, `sort`)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+    }
+
+    /** 确保插件目录表存在并写入内置入口。 */
+    public static function ensureSchema(): void
+    {
+        $database = (string) self::connection()->getDatabaseName();
+        if (isset(self::$ready[$database])) return;
+        self::connection()->statement(self::creationStatement());
         self::queryTable('plugin_catalog')->insertOrIgnore([
             'uuid' => self::uuid(), 'code' => 'cloud-storage', 'name' => '网盘入口',
             'description' => '通过官方授权页面访问学校配置的网盘服务。', 'version' => '1.0.0',

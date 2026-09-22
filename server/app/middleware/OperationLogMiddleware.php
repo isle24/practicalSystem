@@ -68,6 +68,7 @@ class OperationLogMiddleware implements MiddlewareInterface
             $operation = $this->operationName($request);
             $statusCode = $exception ? 500 : $this->statusCode($response);
             $responsePayload = $this->responsePayload($response, $exception);
+            $ensureLogTable = !in_array($path, ['/api/config/database-schema/options', '/api/config/database-schema/check'], true);
             TableRecord::writeOperationLog([
                 'account_id' => CurrentContext::accountId() ?: null,
                 'action' => mb_substr($operation ?: $method . ' ' . $path, 0, 120),
@@ -87,7 +88,7 @@ class OperationLogMiddleware implements MiddlewareInterface
                     'response_message' => $responsePayload['message'],
                     'error' => $exception ? mb_substr($exception->getMessage(), 0, 500) : null,
                 ],
-            ]);
+            ], null, $ensureLogTable);
         } catch (Throwable) {
         }
     }

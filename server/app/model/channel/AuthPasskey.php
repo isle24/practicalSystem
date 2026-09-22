@@ -78,15 +78,9 @@ class AuthPasskey extends BaseModel
         });
     }
 
-    public static function ensureTable(): void
+    public static function creationStatement(): string
     {
-        $connection = self::connection();
-        $key = $connection->getName();
-        if (isset(self::$schemaReady[$key])) {
-            return;
-        }
-
-        $connection->statement("CREATE TABLE IF NOT EXISTS `auth_passkey` (
+        return "CREATE TABLE IF NOT EXISTS `auth_passkey` (
             `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
             `uuid` CHAR(36) DEFAULT NULL,
             `passkey` VARCHAR(160) NOT NULL,
@@ -105,7 +99,18 @@ class AuthPasskey extends BaseModel
             UNIQUE KEY `uk_passkey` (`passkey`),
             KEY `idx_creator_target` (`creator_account_id`, `target_account_id`, `purpose`, `status`, `expires_at`),
             KEY `idx_target` (`target_account_id`, `status`, `expires_at`)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='一次性登录凭证'");
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='一次性登录凭证'";
+    }
+
+    public static function ensureTable(): void
+    {
+        $connection = self::connection();
+        $key = $connection->getName();
+        if (isset(self::$schemaReady[$key])) {
+            return;
+        }
+
+        $connection->statement(self::creationStatement());
 
         self::$schemaReady[$key] = true;
     }

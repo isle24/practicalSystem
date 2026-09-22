@@ -1,115 +1,124 @@
 <?php
 
+use app\model\channel\AssistantProfile;
+use app\model\channel\AuthPasskey;
+use app\model\channel\DesktopToolsSchema;
+use app\model\channel\DocRecord;
 use app\model\channel\MessageRecord;
+use app\model\channel\PluginRecord;
+use app\model\channel\TableRecord;
 use app\server\edu\EduImportSchema;
 use Dotenv\Dotenv;
 
 require_once __DIR__ . '/../vendor/autoload.php';
 
-Dotenv::createImmutable(dirname(__DIR__))->safeLoad();
+function initializeDatabases(): void
+{
+    Dotenv::createImmutable(dirname(__DIR__))->safeLoad();
 
-$env = static function (string $key, mixed $default = null): mixed {
-    $value = $_ENV[$key] ?? getenv($key);
-    return $value === false || $value === null || $value === '' ? $default : $value;
-};
+    $env = static function (string $key, mixed $default = null): mixed {
+        $value = $_ENV[$key] ?? getenv($key);
+        return $value === false || $value === null || $value === '' ? $default : $value;
+    };
 
-$host = (string) $env('DB_HOST', '127.0.0.1');
-$port = (int) $env('DB_PORT', 3306);
-$user = (string) $env('DB_USER', 'root');
-$pass = (string) $env('DB_PASS', '');
-$charset = (string) $env('DB_CHARSET', 'utf8mb4');
-$masterDb = (string) $env('DB_NAME', 'practical_master');
-$templateDb = (string) $env('SCHOOL_TEMPLATE_DB', 'practical_template');
-$defaultSchoolDb = (string) $env('DEFAULT_SCHOOL_DB', 'practical_default');
-$defaultDomain = (string) $env('DEFAULT_SCHOOL_DOMAIN', '127.0.0.1');
-$appUrl = (string) $env('APP_URL', '');
-$wechatProxyUrl = (string) $env('WECHAT_PROXY_URL', '');
+    $host = (string) $env('DB_HOST', '127.0.0.1');
+    $port = (int) $env('DB_PORT', 3306);
+    $user = (string) $env('DB_USER', 'root');
+    $pass = (string) $env('DB_PASS', '');
+    $charset = (string) $env('DB_CHARSET', 'utf8mb4');
+    $masterDb = (string) $env('DB_NAME', 'practical_master');
+    $templateDb = (string) $env('SCHOOL_TEMPLATE_DB', 'practical_template');
+    $defaultSchoolDb = (string) $env('DEFAULT_SCHOOL_DB', 'practical_default');
+    $defaultDomain = (string) $env('DEFAULT_SCHOOL_DOMAIN', '127.0.0.1');
+    $appUrl = (string) $env('APP_URL', '');
+    $wechatProxyUrl = (string) $env('WECHAT_PROXY_URL', '');
 
-$pdo = new PDO(
-    "mysql:host={$host};port={$port};charset={$charset}",
-    $user,
-    $pass,
-    [
-        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-    ]
-);
+    $pdo = new PDO(
+        "mysql:host={$host};port={$port};charset={$charset}",
+        $user,
+        $pass,
+        [
+            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+        ]
+    );
 
-createDatabase($pdo, $masterDb, $charset);
-createDatabase($pdo, $templateDb, $charset);
-createDatabase($pdo, $defaultSchoolDb, $charset);
+    createDatabase($pdo, $masterDb, $charset);
+    createDatabase($pdo, $templateDb, $charset);
+    createDatabase($pdo, $defaultSchoolDb, $charset);
 
-$master = databasePdo($host, $port, $user, $pass, $masterDb, $charset);
-createMasterSchema($master);
-seedMaster($master, [
-    'host' => $host,
-    'port' => $port,
-    'user' => $user,
-    'pass' => $pass,
-    'charset' => $charset,
-    'defaultSchoolDb' => $defaultSchoolDb,
-    'defaultDomain' => $defaultDomain,
-    'appDomain' => appDomain($appUrl),
-]);
+    $master = databasePdo($host, $port, $user, $pass, $masterDb, $charset);
+    createMasterSchema($master);
+    seedMaster($master, [
+        'host' => $host,
+        'port' => $port,
+        'user' => $user,
+        'pass' => $pass,
+        'charset' => $charset,
+        'defaultSchoolDb' => $defaultSchoolDb,
+        'defaultDomain' => $defaultDomain,
+        'appDomain' => appDomain($appUrl),
+    ]);
 
-$schoolTargets = [[
-    'database_id' => null,
-    'database_host' => $host,
-    'database_port' => $port,
-    'database_user' => $user,
-    'database_pwd' => $pass,
-    'database_db' => $templateDb,
-    'database_charset' => $charset,
-    'database_prefix' => '',
-    'is_default_business_db' => 'false',
-]];
-$schoolTargets = array_merge($schoolTargets, enabledSchoolDatabaseTargets($master));
-$upgradedTargets = [];
-foreach ($schoolTargets as $target) {
-    $targetId = isset($target['database_id']) ? (int) $target['database_id'] : null;
-    $targetHost = trim((string) ($target['database_host'] ?? ''));
-    $targetPort = (int) ($target['database_port'] ?? 3306);
-    $targetUser = (string) ($target['database_user'] ?? '');
-    $targetPass = (string) ($target['database_pwd'] ?? '');
-    $targetDb = trim((string) ($target['database_db'] ?? ''));
-    $targetCharset = trim((string) ($target['database_charset'] ?? 'utf8mb4')) ?: 'utf8mb4';
-    $targetPrefix = trim((string) ($target['database_prefix'] ?? ''));
-    $isDefaultBusinessDb = (string) ($target['is_default_business_db'] ?? 'false') === 'true';
-    $label = $targetId === null
-        ? "模板库升级失败：database_db={$targetDb}"
-        : "学校业务库升级失败：database_id={$targetId}, database_db={$targetDb}";
-    if ($targetHost === '' || $targetPort < 1 || $targetPort > 65535 || $targetUser === '' || $targetDb === '') {
-        throw new RuntimeException($label . '：连接配置不完整');
-    }
-    if (!preg_match('/^[A-Za-z0-9_]+$/', $targetCharset)) {
-        throw new RuntimeException($label . '：database_charset 格式无效');
-    }
-    if ($targetPrefix !== '') {
-        throw new RuntimeException($label . "：当前初始化程序不支持带表前缀的学校业务库（database_prefix={$targetPrefix}）");
-    }
-    $targetKey = hash('sha256', strtolower($targetHost) . "\0" . $targetPort . "\0" . $targetDb);
-    if (isset($upgradedTargets[$targetKey])) {
-        continue;
-    }
-
-    try {
-        $school = databasePdo($targetHost, $targetPort, $targetUser, $targetPass, $targetDb, $targetCharset);
-        createSchoolSchema($school);
-        if ($targetId === null || $isDefaultBusinessDb || $targetDb === $defaultSchoolDb) {
-            seedSchool($school, $wechatProxyUrl);
+    $schoolTargets = [[
+        'database_id' => null,
+        'database_host' => $host,
+        'database_port' => $port,
+        'database_user' => $user,
+        'database_pwd' => $pass,
+        'database_db' => $templateDb,
+        'database_charset' => $charset,
+        'database_prefix' => '',
+        'is_default_business_db' => 'false',
+    ]];
+    $schoolTargets = array_merge($schoolTargets, enabledSchoolDatabaseTargets($master));
+    $upgradedTargets = [];
+    foreach ($schoolTargets as $target) {
+        $targetId = isset($target['database_id']) ? (int) $target['database_id'] : null;
+        $targetHost = trim((string) ($target['database_host'] ?? ''));
+        $targetPort = (int) ($target['database_port'] ?? 3306);
+        $targetUser = (string) ($target['database_user'] ?? '');
+        $targetPass = (string) ($target['database_pwd'] ?? '');
+        $targetDb = trim((string) ($target['database_db'] ?? ''));
+        $targetCharset = trim((string) ($target['database_charset'] ?? 'utf8mb4')) ?: 'utf8mb4';
+        $targetPrefix = trim((string) ($target['database_prefix'] ?? ''));
+        $isDefaultBusinessDb = (string) ($target['is_default_business_db'] ?? 'false') === 'true';
+        $label = $targetId === null
+            ? "模板库升级失败：database_db={$targetDb}"
+            : "学校业务库升级失败：database_id={$targetId}, database_db={$targetDb}";
+        if ($targetHost === '' || $targetPort < 1 || $targetPort > 65535 || $targetUser === '' || $targetDb === '') {
+            throw new RuntimeException($label . '：连接配置不完整');
         }
-    } catch (Throwable $exception) {
-        $detail = sanitizeDatabaseError($exception->getMessage(), $targetPass);
-        throw new RuntimeException($detail === '' ? $label : $label . '：' . $detail);
+        if (!preg_match('/^[A-Za-z0-9_]+$/', $targetCharset)) {
+            throw new RuntimeException($label . '：database_charset 格式无效');
+        }
+        if ($targetPrefix !== '') {
+            throw new RuntimeException($label . "：当前初始化程序不支持带表前缀的学校业务库（database_prefix={$targetPrefix}）");
+        }
+        $targetKey = hash('sha256', strtolower($targetHost) . "\0" . $targetPort . "\0" . $targetDb);
+        if (isset($upgradedTargets[$targetKey])) {
+            continue;
+        }
+
+        try {
+            $school = databasePdo($targetHost, $targetPort, $targetUser, $targetPass, $targetDb, $targetCharset);
+            createSchoolSchema($school);
+            if ($targetId === null || $isDefaultBusinessDb || $targetDb === $defaultSchoolDb) {
+                seedSchool($school, $wechatProxyUrl);
+            }
+        } catch (Throwable $exception) {
+            $detail = sanitizeDatabaseError($exception->getMessage(), $targetPass);
+            throw new RuntimeException($detail === '' ? $label : $label . '：' . $detail);
+        }
+
+        $upgradedTargets[$targetKey] = true;
     }
 
-    $upgradedTargets[$targetKey] = true;
+    echo "database initialized\n";
+    echo "master={$masterDb}\n";
+    echo "template={$templateDb}\n";
+    echo "default_school={$defaultSchoolDb}\n";
 }
-
-echo "database initialized\n";
-echo "master={$masterDb}\n";
-echo "template={$templateDb}\n";
-echo "default_school={$defaultSchoolDb}\n";
 
 function databasePdo(string $host, int $port, string $user, string $pass, string $db, string $charset): PDO
 {
@@ -379,11 +388,21 @@ function appDomain(string $appUrl): string
     return (string) $parts['host'] . (isset($parts['port']) ? ':' . (int) $parts['port'] : '');
 }
 
-function createSchoolSchema(PDO $pdo): void
+function createSchoolSchema(PDO $pdo, ?int $archiveYear = null): void
 {
+    $archiveYear ??= (int) date('Y');
     execSql($pdo, schoolCoreStatements());
-    execSql($pdo, schoolBusinessStatements());
+    execSql($pdo, schoolBusinessStatements($archiveYear));
     EduImportSchema::ensure($pdo);
+
+    foreach (DesktopToolsSchema::columnDefinitions() as $column => $ddl) {
+        ensureColumn($pdo, 'favorite_link', $column, $ddl);
+    }
+    foreach (AssistantProfile::schemaStatements() as $statement) {
+        if (preg_match('/^ALTER TABLE `(\w+)` ADD COLUMN `(\w+)`/', $statement, $match)) {
+            ensureColumn($pdo, $match[1], $match[2], $statement);
+        }
+    }
 
     ensureMenuSchema($pdo);
     ensureArchiveSchema($pdo);
@@ -398,7 +417,10 @@ function createSchoolSchema(PDO $pdo): void
     ensureDocSchema($pdo);
     ensureTemplateSchema($pdo);
     ensureExportTaskSchema($pdo);
-    ensureRecordingArchiveSchema($pdo, (int) date('Y'));
+    ensureRecordingArchiveSchema($pdo, $archiveYear);
+    foreach (['created_at', 'account_id', 'action', 'ip'] as $column) {
+        ensureIndex($pdo, 'operation_log_202606', 'idx_' . $column, "ALTER TABLE `operation_log_202606` ADD KEY `idx_{$column}` (`{$column}`)");
+    }
 }
 
 function ensureRecordingArchiveSchema(PDO $pdo, int $year): void
@@ -491,6 +513,8 @@ function ensureArchiveSchema(PDO $pdo): void
 function schoolCoreStatements(): array
 {
     return [
+        AuthPasskey::creationStatement(),
+        PluginRecord::creationStatement(),
         "CREATE TABLE IF NOT EXISTS `department` (
             `dep_id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
             `dep_uuid` CHAR(36) DEFAULT NULL,
@@ -866,7 +890,7 @@ function schoolCoreStatements(): array
     ];
 }
 
-function schoolBusinessStatements(): array
+function schoolBusinessStatements(?int $archiveYear = null): array
 {
     $statements = [
         ...EduImportSchema::statements(),
@@ -887,8 +911,8 @@ function schoolBusinessStatements(): array
             '`finished_at` DATETIME DEFAULT NULL',
             'KEY `idx_cleanup_status` (`status`, `created_at`)',
             'KEY `idx_cleanup_creator` (`created_by`, `created_at`)',
-        ]),
-        simpleTable('favorite_link', ['`scope` VARCHAR(20) NOT NULL DEFAULT \'personal\'', '`open_mode` VARCHAR(20) NOT NULL DEFAULT \'client\'', '`updated_by` BIGINT UNSIGNED DEFAULT NULL', '`revision` INT UNSIGNED DEFAULT 1', 'KEY `idx_scope_status` (`scope`, `status`, `deleted_at`)', '`account_id` BIGINT UNSIGNED DEFAULT NULL', '`user_id` BIGINT UNSIGNED DEFAULT NULL', '`title` VARCHAR(180) DEFAULT NULL', '`url` VARCHAR(500) DEFAULT NULL', '`icon_url` VARCHAR(500) DEFAULT NULL', '`icon_file_id` BIGINT UNSIGNED DEFAULT NULL', '`sort` INT DEFAULT 0', 'KEY `idx_account_status` (`account_id`, `status`)', 'KEY `idx_user_id` (`user_id`)']),
+        ], 'queued'),
+        simpleTable('favorite_link', ['`scope` VARCHAR(20) NOT NULL DEFAULT \'personal\'', '`open_mode` VARCHAR(20) NOT NULL DEFAULT \'client\'', '`updated_by` BIGINT UNSIGNED DEFAULT NULL', '`revision` INT UNSIGNED NOT NULL DEFAULT 1', 'KEY `idx_scope_status` (`scope`, `status`, `deleted_at`)', '`account_id` BIGINT UNSIGNED DEFAULT NULL', '`user_id` BIGINT UNSIGNED DEFAULT NULL', '`title` VARCHAR(180) DEFAULT NULL', '`url` VARCHAR(500) DEFAULT NULL', '`icon_url` VARCHAR(500) DEFAULT NULL', '`icon_file_id` BIGINT UNSIGNED DEFAULT NULL', '`sort` INT DEFAULT 0', 'KEY `idx_account_status` (`account_id`, `status`)', 'KEY `idx_user_id` (`user_id`)']),
         simpleTable('theme_preset', ['`theme_json` JSON DEFAULT NULL']),
         simpleTable('api_key', ['`account_id` BIGINT UNSIGNED DEFAULT NULL', '`api_key_hash` CHAR(64) DEFAULT NULL', '`enabled` ENUM(\'false\',\'true\') DEFAULT \'false\'']),
         simpleTable('internship_category', [
@@ -1202,7 +1226,7 @@ function schoolBusinessStatements(): array
         simpleTable('report_template', ['`template_json` JSON DEFAULT NULL']),
         simpleTable('review_opinion', entityColumns(['`reviewer_id` BIGINT UNSIGNED DEFAULT NULL', '`opinion` TEXT DEFAULT NULL'])),
         simpleTable('review_opinion_draft', entityColumns(['`reviewer_id` BIGINT UNSIGNED DEFAULT NULL', '`teacher_id` BIGINT UNSIGNED DEFAULT NULL', '`review_status` VARCHAR(40) DEFAULT NULL', '`opinion` TEXT DEFAULT NULL', '`score` DECIMAL(5,2) DEFAULT NULL', 'UNIQUE KEY `uk_review_draft` (`entity_type`, `entity_id`, `reviewer_id`)', 'KEY `idx_reviewer` (`reviewer_id`)'])),
-        simpleTable('recording_archive_' . date('Y'), recordingArchiveColumns()),
+        simpleTable('recording_archive_' . max(2000, min(2999, $archiveYear ?? (int) date('Y'))), recordingArchiveColumns()),
         simpleTable('apply_report_delay', entityColumns(['`student_id` BIGINT UNSIGNED DEFAULT NULL', '`config_key` VARCHAR(120) DEFAULT NULL', '`requested_date` DATE DEFAULT NULL', '`reason` TEXT DEFAULT NULL'])),
         simpleTable('apply_report_delay_recording', recordingColumns()),
         simpleTable('score', entityColumns(['`student_id` BIGINT UNSIGNED DEFAULT NULL', '`score_value` DECIMAL(5,2) DEFAULT NULL'])),
@@ -1336,6 +1360,7 @@ function schoolBusinessStatements(): array
         simpleTable('inspection_record', ['`inspector_id` BIGINT UNSIGNED DEFAULT NULL', '`entity_type` VARCHAR(40) DEFAULT NULL', '`entity_id` BIGINT UNSIGNED DEFAULT NULL']),
         simpleTable('inspection_recording', recordingColumns()),
         simpleTable('base_application', ['`base_id` BIGINT UNSIGNED DEFAULT NULL', '`dep_id` BIGINT UNSIGNED DEFAULT NULL', '`base_type` VARCHAR(40) DEFAULT NULL']),
+        TableRecord::recordingCreationStatement('base_application_recording'),
         simpleTable('base_usage', ['`base_id` BIGINT UNSIGNED DEFAULT NULL', '`dep_id` BIGINT UNSIGNED DEFAULT NULL', '`usage_type` VARCHAR(80) DEFAULT NULL']),
         simpleTable('base_result', ['`base_id` BIGINT UNSIGNED DEFAULT NULL', '`dep_id` BIGINT UNSIGNED DEFAULT NULL', '`result_type` VARCHAR(80) DEFAULT NULL']),
         simpleTable('base_expense', ['`base_id` BIGINT UNSIGNED DEFAULT NULL', '`dep_id` BIGINT UNSIGNED DEFAULT NULL', '`amount` DECIMAL(12,2) DEFAULT NULL']),
@@ -1631,21 +1656,22 @@ function schoolBusinessStatements(): array
     }
 
     foreach (['operation_log_template', 'stat_cache', 'export_task', 'doc_category', 'doc_article', 'doc_article_history', 'template_category', 'template'] as $table) {
-        $statements[] = simpleTable($table, ['`payload` JSON DEFAULT NULL']);
+        $statusDefault = match ($table) {
+            'export_task' => 'pending',
+            'doc_article' => 'draft',
+            default => 'enabled',
+        };
+        $statements[] = simpleTable($table, ['`payload` JSON DEFAULT NULL'], $statusDefault);
     }
 
-    $statements[] = simpleTable('operation_log_202606', ['`account_id` BIGINT UNSIGNED DEFAULT NULL', '`action` VARCHAR(120) DEFAULT NULL', '`ip` VARCHAR(80) DEFAULT NULL', '`payload` JSON DEFAULT NULL']);
+    $statements[] = TableRecord::operationLogCreationStatement('operation_log_202606');
 
-    $toolsSql = file_get_contents(__DIR__ . '/updates/0.2.0-school-tools.sql');
-    foreach (array_map('trim', explode(';', $toolsSql)) as $statement) {
-        if (str_starts_with($statement, 'CREATE TABLE')) $statements[] = $statement;
-    }
+    $statements = array_merge($statements, DesktopToolsSchema::creationStatements());
     $messageSql = file_get_contents(__DIR__ . '/updates/0.3.4-message-assistant.sql');
     foreach (array_map('trim', explode(';', $messageSql)) as $statement) {
         if (str_starts_with($statement, 'CREATE TABLE')) $statements[] = $statement;
     }
-    $personalSql = file_get_contents(__DIR__ . '/updates/20260920-assistant-personal.sql');
-    foreach (array_map('trim', explode(';', $personalSql)) as $statement) {
+    foreach (AssistantProfile::schemaStatements() as $statement) {
         if (str_starts_with($statement, 'CREATE TABLE')) $statements[] = $statement;
     }
     return $statements;
@@ -2734,30 +2760,7 @@ function ensureMessageSchema(PDO $pdo): void
 
 function ensureDocSchema(PDO $pdo): void
 {
-    $schemas = [
-        'doc_category' => [
-            'parent_id' => "ALTER TABLE `doc_category` ADD COLUMN `parent_id` BIGINT UNSIGNED DEFAULT 0 AFTER `deleted_at`",
-            'icon' => "ALTER TABLE `doc_category` ADD COLUMN `icon` VARCHAR(80) DEFAULT NULL AFTER `parent_id`",
-            'sort' => "ALTER TABLE `doc_category` ADD COLUMN `sort` INT DEFAULT 0 AFTER `icon`",
-        ],
-        'doc_article' => [
-            'category_id' => "ALTER TABLE `doc_article` ADD COLUMN `category_id` BIGINT UNSIGNED DEFAULT NULL AFTER `deleted_at`",
-            'title' => "ALTER TABLE `doc_article` ADD COLUMN `title` VARCHAR(180) DEFAULT NULL AFTER `category_id`",
-            'content' => "ALTER TABLE `doc_article` ADD COLUMN `content` MEDIUMTEXT DEFAULT NULL AFTER `title`",
-            'version' => "ALTER TABLE `doc_article` ADD COLUMN `version` VARCHAR(40) DEFAULT '1.0' AFTER `content`",
-            'author_id' => "ALTER TABLE `doc_article` ADD COLUMN `author_id` BIGINT UNSIGNED DEFAULT NULL AFTER `version`",
-            'view_count' => "ALTER TABLE `doc_article` ADD COLUMN `view_count` INT UNSIGNED DEFAULT 0 AFTER `author_id`",
-            'published_at' => "ALTER TABLE `doc_article` ADD COLUMN `published_at` DATETIME DEFAULT NULL AFTER `view_count`",
-        ],
-        'doc_article_history' => [
-            'article_id' => "ALTER TABLE `doc_article_history` ADD COLUMN `article_id` BIGINT UNSIGNED DEFAULT NULL AFTER `deleted_at`",
-            'title' => "ALTER TABLE `doc_article_history` ADD COLUMN `title` VARCHAR(180) DEFAULT NULL AFTER `article_id`",
-            'content' => "ALTER TABLE `doc_article_history` ADD COLUMN `content` MEDIUMTEXT DEFAULT NULL AFTER `title`",
-            'version' => "ALTER TABLE `doc_article_history` ADD COLUMN `version` VARCHAR(40) DEFAULT '1.0' AFTER `content`",
-            'editor_id' => "ALTER TABLE `doc_article_history` ADD COLUMN `editor_id` BIGINT UNSIGNED DEFAULT NULL AFTER `version`",
-            'change_note' => "ALTER TABLE `doc_article_history` ADD COLUMN `change_note` VARCHAR(500) DEFAULT NULL AFTER `editor_id`",
-        ],
-    ];
+    $schemas = DocRecord::columnDefinitions();
 
     foreach ($schemas as $table => $columns) {
         foreach ($columns as $column => $ddl) {
@@ -2839,8 +2842,11 @@ function ensureExportTaskSchema(PDO $pdo): void
     ensureIndex($pdo, 'export_task', 'idx_deleted_at', "ALTER TABLE `export_task` ADD KEY `idx_deleted_at` (`deleted_at`)");
 }
 
-function simpleTable(string $table, array $columns = []): string
+function simpleTable(string $table, array $columns = [], string $statusDefault = 'enabled'): string
 {
+    if (!preg_match('/^[A-Za-z_][A-Za-z0-9_]{0,39}$/D', $statusDefault)) {
+        throw new InvalidArgumentException('默认状态无效');
+    }
     $extra = $columns ? ",\n            " . implode(",\n            ", $columns) : '';
 
     return "CREATE TABLE IF NOT EXISTS `{$table}` (
@@ -2848,7 +2854,7 @@ function simpleTable(string $table, array $columns = []): string
             `uuid` CHAR(36) DEFAULT NULL,
             `name` VARCHAR(180) DEFAULT NULL,
             `code` VARCHAR(120) DEFAULT NULL,
-            `status` VARCHAR(40) DEFAULT 'enabled',
+            `status` VARCHAR(40) DEFAULT '{$statusDefault}',
             `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
             `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             `deleted_at` DATETIME DEFAULT NULL{$extra},
@@ -4347,4 +4353,8 @@ function seedConfig(PDO $pdo, string $wechatProxyUrl): void
     }
     $pdo->exec("UPDATE `config_group` SET `status` = 'disabled', `deleted_at` = COALESCE(`deleted_at`, NOW()) WHERE `id` = 4");
     $pdo->exec("UPDATE `config_item` SET `status` = 'disabled', `deleted_at` = COALESCE(`deleted_at`, NOW()) WHERE `group_id` = 4");
+}
+
+if (PHP_SAPI === 'cli' && realpath((string) ($_SERVER['SCRIPT_FILENAME'] ?? '')) === __FILE__) {
+    initializeDatabases();
 }

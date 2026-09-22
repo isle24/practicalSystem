@@ -25,8 +25,7 @@ class AssistantProfile extends TableRecord
     public static function install(): void
     {
         $schema = self::connection()->getSchemaBuilder();
-        $sql = file_get_contents(base_path('database/updates/20260920-assistant-personal.sql'));
-        foreach (array_filter(array_map('trim', explode(';', $sql))) as $statement) {
+        foreach (self::schemaStatements() as $statement) {
             if (preg_match('/^ALTER TABLE `(\w+)` ADD COLUMN `(\w+)`/', $statement, $match)
                 && $schema->hasColumn($match[1], $match[2])) continue;
             self::connection()->unprepared($statement);
@@ -34,5 +33,11 @@ class AssistantProfile extends TableRecord
         if (!$schema->hasColumn('assistant_profile', 'revision')) {
             self::connection()->statement("ALTER TABLE `assistant_profile` ADD COLUMN `revision` CHAR(32) NOT NULL DEFAULT ''");
         }
+    }
+
+    public static function schemaStatements(): array
+    {
+        $sql = file_get_contents(dirname(__DIR__, 3) . '/database/updates/20260920-assistant-personal.sql');
+        return array_values(array_filter(array_map('trim', explode(';', $sql))));
     }
 }

@@ -2824,6 +2824,7 @@
                 <NotebookPanel v-else-if="win.module.id === 'notebook'" :key="noteSessionKey" :ref="el => setNotebookRef(win.id, el)" :request="request" :session-key="noteSessionKey" />
                 <ReleaseNotesPanel v-else-if="win.module.id === 'releaseNotes'" :request="request" />
                 <ReleaseManager v-else-if="win.module.id === 'config' && win.panel === 'releases'" />
+                <DatabaseSchemaPanel v-else-if="win.module.id === 'config' && win.panel === 'databaseSchema' && canManageConfig" :session-key="[noteSessionKey, permissionState.context.school_id, permissionState.context.role_type].join(':')" />
 
                 <div v-else-if="win.module.source === 'menu'" class="module-content-panel menu-module-panel">
                   <section class="menu-module-card">
@@ -4456,6 +4457,7 @@ import {
 import DesktopWindow from './components/DesktopWindow.vue';
 import FavoritePanel from './components/FavoritePanel.vue';
 import ReleaseManager from './components/ReleaseManager.vue';
+import DatabaseSchemaPanel from './components/DatabaseSchemaPanel.vue';
 import DesktopUpdateStatus from './components/DesktopUpdateStatus.vue';
 import ReleaseNotesPanel from '../../shared/components/ReleaseNotesPanel.vue';
 import AssistantPanel from '../../shared/components/AssistantPanel.vue';
@@ -5831,6 +5833,7 @@ const launcherModuleIds = modules.filter(module => !module.collectionParent && !
 const launcherModuleIdSet = new Set(launcherModuleIds);
 const configSidebarDefinitions = [
   { key: 'releases', name: '版本与更新', permission: 'config:manage', schoolConfig: true, icon: Download },
+  { key: 'databaseSchema', name: '数据库结构', permission: 'config:manage', schoolConfig: true, icon: Table2 },
   { key: 'userManage', name: '用户管理', permission: 'config:user', icon: UsersRound },
   { key: 'gradeManage', name: '年级管理', permission: 'config:grade', icon: GraduationCap },
   { key: 'graduationCohortManage', name: '毕业届次管理', permission: 'config:graduation-cohort', icon: CalendarRange },
