@@ -14,7 +14,6 @@ export function useDesktopLauncher(options) {
 
   const defaultModuleIds = options.defaultModuleIds || DEFAULT_DESKTOP_MODULE_IDS;
   const defaultModuleIdSet = new Set(defaultModuleIds);
-  const moduleAliases = options.moduleAliases || {};
 
   function orderStorageKey() {
     return typeof options.orderStorageKey === 'function'
@@ -56,7 +55,6 @@ export function useDesktopLauncher(options) {
   const customModuleKeys = computed(() => Array.from(new Set(customShortcutItems.value
     .filter(item => item.type === 'module')
     .map(item => String(item.key || item.item_key || ''))
-    .map(key => moduleAliases[key] || key)
     .filter(key => key && !defaultModuleIdSet.has(key) && launchableModuleIds.value.has(key)))));
   const moduleShortcutKeys = computed(() => {
     const defaults = defaultModuleIds.filter(key => launchableModuleIds.value.has(key));
@@ -85,7 +83,11 @@ export function useDesktopLauncher(options) {
     });
     return Array.from(rows.values());
   });
-  const launcherModules = computed(() => orderedModules([...orderedAllModules.value, ...favoriteLauncherShortcuts.value]));
+  // 启动台分组不限制二级模块的桌面快捷方式。
+  const launcherModules = computed(() => orderedModules([
+    ...(options.launcherModules?.value || options.allModules.value),
+    ...favoriteLauncherShortcuts.value,
+  ]));
   const filteredModules = computed(() => {
     const value = state.keyword.trim().toLowerCase();
     if (!value) {

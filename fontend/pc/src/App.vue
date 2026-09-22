@@ -4682,29 +4682,13 @@ const switchAccountState = reactive({
   items: [],
   message: '',
 });
-const desktopShortcutModuleAliases = {
-  stat: 'dataCenter',
-  userManage: 'dataCenter',
-  gradeManage: 'dataCenter',
-  departmentManage: 'dataCenter',
-  professionManage: 'dataCenter',
-  classManage: 'dataCenter',
-  companyManage: 'dataCenter',
-  eduData: 'dataCenter',
-  dataManage: 'dataCenter',
-  log: 'auditCenter',
-  exportTask: 'auditCenter',
-  file: 'resourceCenter',
-  doc: 'resourceCenter',
-  templateLib: 'resourceCenter',
-};
 const desktopGridRef = ref(null);
 const desktopPositionStorageKey = computed(() => `practical:pc:desktop-positions:${window.__PRACTICAL_DESKTOP__?.serverOrigin || window.location.origin}:${permissionState.context.account_id || 'guest'}`);
 const desktopLauncher = useDesktopLauncher({
-  allModules: computed(() => [...desktopEntryModules.value, ...allLaunchableModules.value.filter(module => ['pluginCenter', 'favorite', 'notebook', 'releaseNotes'].includes(module.id))]),
+  allModules: computed(() => allLaunchableModules.value),
+  launcherModules: computed(() => [...desktopEntryModules.value, ...allLaunchableModules.value.filter(module => ['pluginCenter', 'favorite', 'notebook', 'releaseNotes'].includes(module.id))]),
   favoriteItems: computed(() => favoriteState.items),
   defaultModuleIds: DEFAULT_DESKTOP_MODULE_IDS,
-  moduleAliases: desktopShortcutModuleAliases,
   searchText: moduleSearchText,
   orderStorageKey: () => `practical:pc:desktop-order:${window.__PRACTICAL_DESKTOP__?.serverOrigin || window.location.origin}:${permissionState.context.account_id || 'guest'}`,
 });
@@ -7801,6 +7785,7 @@ async function persistDesktopShortcuts(items) {
   } catch (error) {
     desktopLauncherState.items = previous;
     desktopLauncherState.message = error.message;
+    ElMessage.error(error.message || '保存桌面快捷方式失败');
   } finally {
     desktopLauncherState.loading = false;
   }
