@@ -57,7 +57,7 @@ class MessageService
         $title = $this->requiredString($payload['title_tpl'] ?? '', '标题模板', 255);
         $content = $this->requiredString($payload['content_tpl'] ?? '', '内容模板', 10000);
         $variables = $this->jsonArray($payload['variables'] ?? []);
-        $channels = $this->jsonArray($payload['channels'] ?? ['internal']);
+        $channels = $this->normalizeChannels($this->jsonArray($payload['channels'] ?? ['internal']));
         $status = trim((string) ($payload['status'] ?? 'enabled')) === 'disabled' ? 'disabled' : 'enabled';
         $id = MessageRecord::saveTemplate([
             'id' => is_numeric($payload['id'] ?? null) ? (int) $payload['id'] : 0,
@@ -70,7 +70,7 @@ class MessageService
             'description' => $this->nullableString($payload['description'] ?? null, 500),
             'variables' => $variables,
             'link_url_tpl' => $this->nullableString($payload['link_url_tpl'] ?? null, 500),
-            'channels' => $channels ?: ['internal'],
+            ...(array_key_exists('channels', $payload) ? ['channels' => $channels] : []),
             'is_system' => !empty($payload['is_system']),
             'sort' => is_numeric($payload['sort'] ?? null) ? (int) $payload['sort'] : 100,
             'status' => $status,
@@ -108,6 +108,9 @@ class MessageService
                 'entity_id' => is_numeric($payload['entity_id'] ?? null) ? (int) $payload['entity_id'] : null,
                 'metadata' => is_array($payload['metadata'] ?? null) ? $payload['metadata'] : [],
             ];
+            if (array_key_exists('channels', $payload)) {
+                $override['channels'] = $this->normalizeChannels($this->jsonArray($payload['channels']));
+            }
             $linkUrl = $this->nullableString($payload['link_url'] ?? null, 500);
             if ($linkUrl !== null) {
                 $override['link_url'] = $linkUrl;
@@ -135,6 +138,7 @@ class MessageService
             'metadata' => is_array($payload['metadata'] ?? null) ? $payload['metadata'] : [],
         ];
 
+        $message['channels'] = $this->normalizeChannels($this->jsonArray($payload['channels'] ?? ['internal']));
         $messageId = MessageRecord::createMessage($message, $accountIds, date('Y-m-d H:i:s'));
 
         return [
@@ -179,7 +183,9 @@ class MessageService
             'sender_name' => '系统',
             'link_url' => $linkUrl !== '' ? $linkUrl : null,
             'metadata' => $metadata,
+            'channels' => $this->normalizeChannels($override['channels'] ?? ($template['channels'] ?? ['internal'])),
         ], $override);
+        $message['channels'] = $this->normalizeChannels($message['channels'] ?? ['internal']);
 
         $messageId = MessageRecord::createMessage($message, $accountIds, date('Y-m-d H:i:s'));
 
@@ -187,6 +193,19 @@ class MessageService
             'message_id' => $messageId,
             'template_code' => $code,
         ];
+    }
+
+    private function normalizeChannels(mixed $value): array
+    {
+        if (!is_array($value) || !array_is_list($value)) {
+            throw new InvalidArgumentException('消息渠道必须为数组');
+        }
+        foreach ($value as $channel) {
+            if (!is_string($channel) || !in_array($channel, ['internal', 'wechat'], true)) {
+                throw new InvalidArgumentException('不支持的消息渠道');
+            }
+        }
+        return array_values(array_unique(['internal', ...$value]));
     }
 
     private function ensureAccount(int $accountId): void

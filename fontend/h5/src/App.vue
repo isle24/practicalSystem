@@ -53,6 +53,7 @@
 
       <ProfilePage
         v-else-if="activeTab === 'mine'"
+        :key="state.context.account_id"
         :user-name="userText"
         :account-name="accountText"
         :role-name="roleDisplayText"
@@ -129,6 +130,7 @@
     </template>
 
     <template #overlays>
+    <WechatBindingGate :show="wechatBlocked" :state="wechatBinding.state" :status="wechatStatus" :account-name="userText" :role-name="roleDisplayText" @start="wechatBinding.start" @bind="wechatBinding.bind" @logout="confirmMobileLogout" />
     <ReleaseNotice v-if="isLoggedIn" :key="[state.context.school_database_id, state.context.account_id].join(':')" :request="request" :session-key="[locationOrigin, state.context.school_database_id, state.context.account_id].join(':')" @open="navigateMobileTab('releaseNotes')" />
     <DocumentDetail
       :visible="support.doc.detail.visible"
@@ -141,8 +143,10 @@
 </template>
 
 <script setup>
+import { useWechatBinding } from '../../shared/useWechatBinding';
+import WechatBindingGate from '../../shared/components/WechatBindingGate.vue';
 import { previewFile } from '../../shared/filePreview';
-import { computed, ref, watch } from 'vue';
+import { computed, reactive, ref, watch } from 'vue';
 import { showConfirmDialog, showToast } from 'vant';
 import {
   BriefcaseBusiness,
@@ -264,6 +268,9 @@ import {
 
 const { state, hasPermission, load } = useMobilePermissions();
 const mobileRefreshing = ref(false);
+const wechatBinding = useWechatBinding({ context: () => state.context, request, backendUrl });
+const wechatBlocked = wechatBinding.blocked;
+const wechatStatus = wechatBinding.status;
 
 const {
   support,
@@ -5541,6 +5548,8 @@ async function refreshMobileSession(resetWorkspace = false) {
   }
 
   await load();
+  await wechatBinding.refresh();
+  if (wechatBlocked.value) return;
   if (!isLoggedIn.value) {
     resetAccountChoices();
     return;
@@ -5554,6 +5563,8 @@ async function refreshMobileSession(resetWorkspace = false) {
     await loadPractice(activeTab.value);
   }
 }
+
+
 
 function openMobileMessages() {
   if (isLoggedIn.value && activeTab.value !== 'message') {

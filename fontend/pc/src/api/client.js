@@ -89,6 +89,8 @@ async function sendRequest(path, options = {}, canRefresh = true) {
     data: null,
   }));
 
+  if (payload.code === 40310) window.dispatchEvent(new CustomEvent('practical-wechat-required'));
+
   if (!response.ok || payload.code !== 0) {
     const error = new Error(payload.message || '请求失败');
     error.status = response.status;

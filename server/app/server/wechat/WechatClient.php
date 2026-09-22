@@ -35,6 +35,27 @@ class WechatClient
         ], ['button' => $buttons]);
     }
 
+    public function getUserInfo(string $accessToken, string $code): array
+    {
+        return $this->request('GET', '/cgi-bin/user/getuserinfo', [
+            'access_token' => $accessToken,
+            'code' => $code,
+        ]);
+    }
+
+    public function sendTextMessage(string $accessToken, string $toUser, string $content, string $agentId): array
+    {
+        return $this->request('POST', '/cgi-bin/message/send', [
+            'access_token' => $accessToken,
+        ], [
+            'touser' => $toUser,
+            'msgtype' => 'text',
+            'agentid' => (int) $agentId,
+            'text' => ['content' => $content],
+            'safe' => 0,
+        ]);
+    }
+
     public function request(string $method, string $path, array $query = [], array $body = []): array
     {
         $config = new ConfigService();

@@ -41,6 +41,7 @@ class CurrentContext
             'organization_scopes',
             'data_scope',
             'auth_error',
+            'wechat_binding',
         ];
 
         $context = [];

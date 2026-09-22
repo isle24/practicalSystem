@@ -305,6 +305,30 @@ class AdminController
         }
     }
 
+    #[OperationLog('解除用户企业微信绑定')]
+    public function unbindWechat(Request $request): Response
+    {
+        if ($request->method() !== 'POST') return $this->fail(40500, '请使用 POST 请求', 405);
+        if (!$this->isAdmin()) {
+            return $this->fail(40300, '无操作权限', 403);
+        }
+
+        try {
+            $accountId = $this->requiredInt($request, 'account_id');
+            $this->assertAccountRoleWritable($accountId, '');
+            $account = Account::adminDetail($accountId);
+            if (!$account) return $this->fail(40400, '账号不存在', 404);
+            $userId = (int) $account['user_id'];
+            foreach (Account::boundAccountsByUser($userId, 0) as $related) {
+                $this->assertAccountRoleWritable((int) $related['id'], '');
+            }
+            UserWechat::unbindByUser($userId);
+            return $this->ok([], '企业微信绑定已解除');
+        } catch (Throwable $exception) {
+            return $this->fail(40001, $exception->getMessage(), 400);
+        }
+    }
+
     /**
      * 生成管理员一键登录链接
      */

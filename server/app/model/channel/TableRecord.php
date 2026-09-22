@@ -746,11 +746,15 @@ class TableRecord extends BaseModel
 
     public static function notifySettings(int $accountId): array
     {
+        self::ensureNotifySettingColumns();
         return self::queryTable('user_notify_setting')
             ->where('account_id', $accountId)
             ->where('msg_type', 'system')
             ->whereNull('deleted_at')
-            ->get(['channel', 'enabled'])
+            ->orderByDesc('id')
+            ->get(['channel', 'enabled', 'quiet_start', 'quiet_end'])
+            ->unique('channel')
+            ->values()
             ->map(static fn ($row): array => $row->toArray())
             ->all();
     }
@@ -782,6 +786,42 @@ class TableRecord extends BaseModel
             'channel' => $channel,
             'created_at' => $now,
         ]));
+    }
+
+    public static function saveNotifyQuietTime(int $accountId, string $start, string $end, string $now): void
+    {
+        self::ensureNotifySettingColumns();
+        $row = self::queryTable('user_notify_setting')->where('account_id', $accountId)->where('msg_type', 'system')->where('channel', 'wechat')->whereNull('deleted_at')->orderByDesc('id')->first(['id']);
+        $values = ['quiet_start' => $start, 'quiet_end' => $end, 'updated_at' => $now];
+        if ($row) {
+            self::queryTable('user_notify_setting')->where('id', $row->id)->update($values);
+            return;
+        }
+        self::queryTable('user_notify_setting')->insert(array_merge($values, [
+            'account_id' => $accountId, 'msg_type' => 'system', 'channel' => 'wechat', 'enabled' => 'true', 'created_at' => $now,
+        ]));
+    }
+
+    public static function ensureNotifySettingColumns(): void
+    {
+        static $ready = [];
+        $connection = self::connection();
+        $database = (string) $connection->getDatabaseName();
+        if (isset($ready[$database])) return;
+        foreach ([
+            'quiet_start' => "ALTER TABLE `user_notify_setting` ADD COLUMN `quiet_start` VARCHAR(5) NOT NULL DEFAULT '00:00'",
+            'quiet_end' => "ALTER TABLE `user_notify_setting` ADD COLUMN `quiet_end` VARCHAR(5) NOT NULL DEFAULT '24:00'",
+        ] as $column => $ddl) {
+            $exists = $connection->table('information_schema.COLUMNS')->where('TABLE_SCHEMA', $database)->where('TABLE_NAME', 'user_notify_setting')->where('COLUMN_NAME', $column)->exists();
+            if (!$exists) {
+                if ($connection->transactionLevel() > 0) throw new \RuntimeException('请先升级学校数据库通知设置结构');
+                try { $connection->statement($ddl); }
+                catch (\Illuminate\Database\QueryException $exception) {
+                    if ((int) ($exception->errorInfo[1] ?? 0) !== 1060) throw $exception;
+                }
+            }
+        }
+        $ready[$database] = true;
     }
 
     /**

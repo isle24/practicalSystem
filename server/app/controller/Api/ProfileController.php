@@ -7,6 +7,7 @@ use app\controller\Api\Concerns\Responds;
 use app\model\channel\Account;
 use app\model\channel\TableRecord as ChannelTable;
 use app\model\channel\User;
+use app\model\channel\UserWechat;
 use app\server\auth\AccountMobileService;
 use app\server\auth\AuthService;
 use app\server\auth\DeviceBlacklist;
@@ -61,9 +62,11 @@ class ProfileController
                 'wallpaper_url' => $this->nullableString($request, 'wallpaper_url', 255),
             ];
             $notify = $this->notifyInput((array) $request->input('notify', []));
+            [$quietStart, $quietEnd] = $this->quietInput((array) $request->input('wechat_quiet', []));
+            ChannelTable::ensureNotifySettingColumns();
             $now = date('Y-m-d H:i:s');
 
-            ChannelTable::connection()->transaction(function () use ($userId, $accountId, $name, $avatar, $mobile, $email, $layout, $notify, $now): void {
+            ChannelTable::connection()->transaction(function () use ($userId, $accountId, $name, $avatar, $mobile, $email, $layout, $notify, $quietStart, $quietEnd, $now): void {
                 $current = User::lockProfile($userId);
                 if (!$current) {
                     throw new \RuntimeException('用户不存在或已停用', 403);
@@ -86,6 +89,7 @@ class ProfileController
                 foreach ($notify as $channel => $enabled) {
                     ChannelTable::saveNotifySetting($accountId, $channel, $enabled, $now);
                 }
+                ChannelTable::saveNotifyQuietTime($accountId, $quietStart, $quietEnd, $now);
             });
 
             return $this->ok($this->profileData(), '已保存');
@@ -278,9 +282,14 @@ class ProfileController
         $notifyRows = ChannelTable::notifySettings((int) $accountId);
 
         $notify = ['system' => true, 'wechat' => true, 'email' => false];
+        $quiet = ['start' => '00:00', 'end' => '24:00'];
         foreach ($notifyRows as $row) {
             if (in_array($row['channel'], self::NOTIFY_CHANNELS, true)) {
                 $notify[$row['channel']] = $row['enabled'] !== 'false';
+                if ($row['channel'] === 'wechat') {
+                    $quiet['start'] = (string) ($row['quiet_start'] ?: '00:00');
+                    $quiet['end'] = (string) ($row['quiet_end'] ?: '24:00');
+                }
             }
         }
 
@@ -300,6 +309,8 @@ class ProfileController
                 'wallpaper_url' => $layout['wallpaper_url'] ?? '',
             ],
             'notify' => $notify,
+            'wechat_quiet' => $quiet,
+            'wechat_binding' => ['bound' => UserWechat::currentByUser((int) $userId) !== null, 'required' => in_array(CurrentContext::roleType(), ['teacher', 'student'], true)],
         ];
     }
 
@@ -307,10 +318,47 @@ class ProfileController
     {
         $notify = [];
         foreach (self::NOTIFY_CHANNELS as $channel) {
-            $notify[$channel] = filter_var($input[$channel] ?? false, FILTER_VALIDATE_BOOL);
+            if (array_key_exists($channel, $input)) $notify[$channel] = filter_var($input[$channel], FILTER_VALIDATE_BOOL);
         }
 
         return $notify;
+    }
+
+    private function quietInput(array $input): array
+    {
+        $current = ['start' => '00:00', 'end' => '24:00'];
+        foreach (ChannelTable::notifySettings((int) CurrentContext::accountId()) as $row) {
+            if ($row['channel'] === 'wechat') $current = ['start' => $row['quiet_start'], 'end' => $row['quiet_end']];
+        }
+        $start = trim((string) ($input['start'] ?? $current['start']));
+        $end = trim((string) ($input['end'] ?? $current['end']));
+        if (!preg_match('/^(?:[01]\d|2[0-3]):[0-5]\d$/', $start)
+            || ($end !== '24:00' && !preg_match('/^(?:[01]\d|2[0-3]):[0-5]\d$/', $end))) {
+            throw new \InvalidArgumentException('通知接收时间格式不正确');
+        }
+        if ($start === $end) throw new \InvalidArgumentException('开始时间和结束时间不能相同，全天请选 00:00 至 24:00');
+        return [$start, $end];
+    }
+
+    #[OperationLog('保存个人通知设置')]
+    public function saveNotifications(Request $request): Response
+    {
+        if ($request->method() !== 'POST') return $this->fail(40500, '请使用 POST 请求', 405);
+        try {
+            $accountId = (int) CurrentContext::accountId();
+            if (!$accountId) return $this->fail(40100, '请先登录', 401);
+            $notify = $this->notifyInput((array) $request->input('notify', []));
+            [$start, $end] = $this->quietInput((array) $request->input('wechat_quiet', []));
+            ChannelTable::connection()->transaction(function () use ($accountId, $notify, $start, $end): void {
+                if (!User::lockProfile((int) CurrentContext::userId())) throw new \RuntimeException('用户不存在或已停用');
+                $now = date('Y-m-d H:i:s');
+                foreach ($notify as $channel => $enabled) ChannelTable::saveNotifySetting($accountId, $channel, $enabled, $now);
+                ChannelTable::saveNotifyQuietTime($accountId, $start, $end, $now);
+            });
+            return $this->ok($this->profileData(), '通知设置已保存');
+        } catch (Throwable $exception) {
+            return $this->fail(40001, $exception->getMessage(), 400);
+        }
     }
 
     private function assetType(Request $request): string

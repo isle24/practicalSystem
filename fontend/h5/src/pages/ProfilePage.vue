@@ -21,6 +21,37 @@
     <van-cell v-if="templateVisible" title="模板库" value="下载" is-link @click="emit('open-tab', 'templateLib')" />
   </van-cell-group>
 
+  <section class="app-profile-section app-notification-settings">
+    <header>
+      <strong>消息接收</strong>
+      <small>{{ notificationState.message || wechatBindingText }}</small>
+    </header>
+    <van-cell-group inset>
+      <van-cell title="企业微信通知" :label="wechatBindingText">
+        <template #right-icon>
+          <van-switch v-model="notificationState.notify.wechat" size="22" />
+        </template>
+      </van-cell>
+      <van-cell title="全天接收">
+        <template #right-icon>
+          <van-switch v-model="quietAllDay" size="22" />
+        </template>
+      </van-cell>
+      <van-cell v-if="!quietAllDay" title="接收时间" label="开始时间晚于结束时间时按跨午夜处理">
+        <template #value>
+          <div class="app-notification-time">
+            <input v-model="notificationState.wechat_quiet.start" type="time">
+            <span>至</span>
+            <input v-model="notificationState.wechat_quiet.end" type="time">
+          </div>
+        </template>
+      </van-cell>
+    </van-cell-group>
+    <AppButton block :disabled="notificationState.loading" @click="saveNotifications">
+      {{ notificationState.loading ? '保存中' : '保存通知设置' }}
+    </AppButton>
+  </section>
+
   <section v-if="switchState.items.length > 1" class="app-profile-section">
     <header>
       <strong>切换身份</strong>
@@ -50,9 +81,11 @@
 </template>
 
 <script setup>
+import { computed, onMounted, reactive } from 'vue';
 import { UserRound } from '@lucide/vue';
 import AppButton from '../components/ui/AppButton.vue';
 import MobileBinding from '../components/MobileBinding.vue';
+import { fetchProfileSettings, saveProfileNotifications } from '../api/system';
 
 const props = defineProps({
   userName: { type: String, default: '' },
@@ -68,6 +101,68 @@ const props = defineProps({
 });
 
 const emit = defineEmits(['logout', 'open-tab', 'switch-account', 'mobile-verified']);
+
+const notificationState = reactive({
+  loading: false,
+  message: '',
+  wechat_binding: { bound: false, required: true },
+  notify: { wechat: true },
+  wechat_quiet: { start: '00:00', end: '24:00' },
+});
+const quietAllDay = computed({
+  get: () => notificationState.wechat_quiet.start === '00:00' && notificationState.wechat_quiet.end === '24:00',
+  set: (value) => {
+    notificationState.wechat_quiet = value
+      ? { start: '00:00', end: '24:00' }
+      : { start: '08:00', end: '22:00' };
+  },
+});
+const wechatBindingText = computed(() => {
+  if (notificationState.wechat_binding.required === false) {
+    return '当前角色无需绑定';
+  }
+  return notificationState.wechat_binding.bound ? '已绑定企业微信' : '未绑定企业微信';
+});
+
+onMounted(loadNotifications);
+
+async function loadNotifications() {
+  notificationState.loading = true;
+  notificationState.message = '';
+  try {
+    applyNotificationData(await fetchProfileSettings());
+  } catch (error) {
+    notificationState.message = error.message;
+  } finally {
+    notificationState.loading = false;
+  }
+}
+
+async function saveNotifications() {
+  notificationState.loading = true;
+  notificationState.message = '';
+  try {
+    const data = await saveProfileNotifications({
+      notify: { wechat: Boolean(notificationState.notify.wechat) },
+      wechat_quiet: { ...notificationState.wechat_quiet },
+    });
+    applyNotificationData(data);
+    notificationState.message = '已保存';
+  } catch (error) {
+    notificationState.message = error.message;
+  } finally {
+    notificationState.loading = false;
+  }
+}
+
+function applyNotificationData(data) {
+  notificationState.wechat_binding = data.wechat_binding || { bound: false, required: true };
+  notificationState.notify.wechat = data.notify?.wechat !== false;
+  notificationState.wechat_quiet = {
+    start: data.wechat_quiet?.start || '00:00',
+    end: data.wechat_quiet?.end || '24:00',
+  };
+}
 
 function accountTitle(account) {
   return account?.name || account?.login_name || '未命名账号';
@@ -174,5 +269,29 @@ function accountLabel(account) {
 
 .app-profile-logout {
   margin-top: 16px;
+}
+
+.app-notification-settings :deep(.van-cell-group--inset) {
+  margin: 0;
+}
+
+.app-notification-settings > :deep(button) {
+  margin-top: 10px;
+}
+
+.app-notification-time {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.app-notification-time input {
+  width: 82px;
+  border: 1px solid var(--app-line);
+  border-radius: 4px;
+  padding: 5px 4px;
+  color: var(--app-text);
+  background: var(--app-surface);
 }
 </style>

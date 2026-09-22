@@ -4,6 +4,13 @@ export function fetchProfileSettings() {
   return request('/profile/settings');
 }
 
+export function saveProfileNotifications(payload) {
+  return request('/profile/save-notifications', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
 export function sendMobileCode(payload) {
   return request('/profile/send-mobile-code', { method: 'POST', body: JSON.stringify(payload) });
 }
@@ -15,6 +22,8 @@ export function verifyMobile(payload) {
 export function fetchContext() {
   return request('/auth/context');
 }
+
+
 
 export function login(payload) {
   return request('/auth/login', {

@@ -149,11 +149,52 @@ class MessageRecord extends TableRecord
             }
 
             self::queryTable('message_target')->insert($targetRows);
-            self::queryTable('message_channel_log')->insert($logRows);
+            if (in_array('wechat', $message['channels'] ?? [], true)) {
+                foreach ($logRows as $row) {
+                    $logRows[] = array_replace($row, [
+                        'uuid' => self::uuidValue(), 'channel' => 'wechat', 'status' => 'pending', 'sent_at' => null,
+                    ]);
+                }
+            }
+            foreach (array_chunk($logRows, 500) as $rows) {
+                self::queryTable('message_channel_log')->insert($rows);
+            }
             MessageRealtimeRecord::enqueueNotification($targets);
 
             return $messageId;
         });
+    }
+
+    public static function messageById(int $messageId): ?array
+    {
+        self::ensureSchema();
+        $row = self::queryTable('message')->where('id', $messageId)->where('status', 'enabled')->whereNull('deleted_at')->first([
+            'id', 'title', 'content', 'link_url', 'metadata', 'status',
+        ]);
+        return $row ? [
+            'id' => (int) $row->id,
+            'title' => (string) $row->title,
+            'content' => (string) $row->content,
+            'link_url' => (string) ($row->link_url ?? ''),
+            'metadata' => self::decodeJson($row->metadata),
+        ] : null;
+    }
+
+    public static function addChannelLog(int $messageId, int $accountId, string $channel, string $status, ?string $error = null): int
+    {
+        self::ensureSchema();
+        return (int) self::queryTable('message_channel_log')->insertGetId([
+            'uuid' => self::uuidValue(),
+            'message_id' => $messageId,
+            'account_id' => $accountId,
+            'channel' => $channel,
+            'status' => $status,
+            'error_message' => $error,
+            'sent_at' => $status === 'sent' ? date('Y-m-d H:i:s') : null,
+            'created_at' => date('Y-m-d H:i:s'),
+            'updated_at' => date('Y-m-d H:i:s'),
+            'deleted_at' => null,
+        ]);
     }
 
     /**
@@ -227,7 +268,7 @@ class MessageRecord extends TableRecord
 
         $id = (int) ($values['id'] ?? 0);
         $existing = $id > 0
-            ? self::queryTable('message_template')->where('id', $id)->whereNull('deleted_at')->first(['is_system'])
+            ? self::queryTable('message_template')->where('id', $id)->whereNull('deleted_at')->first(['is_system', 'channels'])
             : null;
         $data = [
             'name' => mb_substr((string) ($values['name'] ?? ''), 0, 180),
@@ -239,7 +280,7 @@ class MessageRecord extends TableRecord
             'description' => self::nullableString($values['description'] ?? null, 500),
             'variables' => self::jsonValue($values['variables'] ?? []),
             'link_url_tpl' => self::nullableString($values['link_url_tpl'] ?? null, 500),
-            'channels' => self::jsonValue($values['channels'] ?? ['internal']),
+            'channels' => self::jsonValue($values['channels'] ?? ($existing ? self::decodeJson($existing->channels) : ['internal'])),
             'is_system' => $existing ? (int) ($existing->is_system ?? 0) : 0,
             'sort' => (int) ($values['sort'] ?? 100),
             'status' => (string) ($values['status'] ?? 'enabled'),
@@ -698,6 +739,10 @@ class MessageRecord extends TableRecord
             `channel` VARCHAR(40) DEFAULT 'internal',
             `error_message` TEXT DEFAULT NULL,
             `sent_at` DATETIME DEFAULT NULL,
+            `attempts` INT NOT NULL DEFAULT 0,
+            `available_at` DATETIME DEFAULT NULL,
+            `locked_until` DATETIME DEFAULT NULL,
+            `claim_token` VARCHAR(64) DEFAULT NULL,
             PRIMARY KEY (`id`),
             UNIQUE KEY `uk_uuid` (`uuid`),
             KEY `idx_message_account` (`message_id`, `account_id`),
@@ -743,6 +788,10 @@ class MessageRecord extends TableRecord
                 'sort' => "ALTER TABLE `message_template` ADD COLUMN `sort` INT DEFAULT 100 AFTER `is_system`",
             ],
             'message_channel_log' => [
+                'attempts' => "ALTER TABLE `message_channel_log` ADD COLUMN `attempts` INT NOT NULL DEFAULT 0",
+                'available_at' => "ALTER TABLE `message_channel_log` ADD COLUMN `available_at` DATETIME DEFAULT NULL",
+                'locked_until' => "ALTER TABLE `message_channel_log` ADD COLUMN `locked_until` DATETIME DEFAULT NULL",
+                'claim_token' => "ALTER TABLE `message_channel_log` ADD COLUMN `claim_token` VARCHAR(64) DEFAULT NULL",
                 'message_id' => "ALTER TABLE `message_channel_log` ADD COLUMN `message_id` BIGINT UNSIGNED DEFAULT NULL AFTER `code`",
                 'account_id' => "ALTER TABLE `message_channel_log` ADD COLUMN `account_id` BIGINT UNSIGNED DEFAULT NULL AFTER `message_id`",
                 'channel' => "ALTER TABLE `message_channel_log` ADD COLUMN `channel` VARCHAR(40) DEFAULT 'internal' AFTER `account_id`",
@@ -769,6 +818,7 @@ class MessageRecord extends TableRecord
             ['message_target', 'idx_deleted_at', "ALTER TABLE `message_target` ADD KEY `idx_deleted_at` (`deleted_at`)"],
             ['message_template', 'uk_code', "ALTER TABLE `message_template` ADD UNIQUE KEY `uk_code` (`code`)"],
             ['message_template', 'idx_type_status', "ALTER TABLE `message_template` ADD KEY `idx_type_status` (`type`, `status`, `sort`)"],
+            ['message_channel_log', 'idx_channel_available', "ALTER TABLE `message_channel_log` ADD KEY `idx_channel_available` (`channel`, `status`, `available_at`)"],
             ['message_channel_log', 'idx_message_account', "ALTER TABLE `message_channel_log` ADD KEY `idx_message_account` (`message_id`, `account_id`)"],
             ['message_channel_log', 'idx_channel_status', "ALTER TABLE `message_channel_log` ADD KEY `idx_channel_status` (`channel`, `status`)"],
             ['message_channel_log', 'idx_deleted_at', "ALTER TABLE `message_channel_log` ADD KEY `idx_deleted_at` (`deleted_at`)"],

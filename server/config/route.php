@@ -14,6 +14,7 @@
 
 use app\controller\Api\WechatCallbackController;
 use app\controller\Api\WechatMenuController;
+use app\controller\Api\WechatBindingController;
 use Webman\Route;
 
 Route::add(['GET', 'POST'], '/api/wechat/callback', [WechatCallbackController::class, 'callback']);
@@ -21,3 +22,16 @@ Route::disableDefaultRoute(WechatCallbackController::class);
 
 Route::post('/api/wechat/sync-menu', [WechatMenuController::class, 'sync']);
 Route::disableDefaultRoute(WechatMenuController::class);
+
+Route::get('/api/wechat/binding-status', [WechatBindingController::class, 'status']);
+Route::get('/api/wechat/oauth/start', [WechatBindingController::class, 'start']);
+Route::get('/api/wechat/oauth/callback', [WechatBindingController::class, 'callback']);
+Route::post('/api/wechat/bind', [WechatBindingController::class, 'bind']);
+Route::disableDefaultRoute(WechatBindingController::class);
+
+Route::post('/api/admin/unbind-wechat', [\app\controller\Api\AdminController::class, 'unbindWechat']);
+
+Route::post('/api/profile/save-notifications', [\app\controller\Api\ProfileController::class, 'saveNotifications']);
+
+Route::disableDefaultRoute([\app\controller\Api\AdminController::class, 'unbindWechat']);
+Route::disableDefaultRoute([\app\controller\Api\ProfileController::class, 'saveNotifications']);

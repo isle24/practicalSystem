@@ -16,6 +16,8 @@ class AuthMiddleware implements MiddlewareInterface
      */
     private const PUBLIC_PATHS = [
         '/api/wechat/callback',
+        '/api/wechat/oauth/start',
+        '/api/wechat/oauth/callback',
         '/api/release/update-manifest',
         '/api/release/download',
         '/api/release/downloads',
@@ -52,6 +54,16 @@ class AuthMiddleware implements MiddlewareInterface
         if ($this->requiresAuth($request) && !CurrentContext::accountId()) {
             $message = (string) (CurrentContext::get('auth_error') ?: '请先登录');
             return json(['code' => 40100, 'message' => $message, 'data' => null])->withStatus(401);
+        }
+
+        $path = '/' . trim($request->path(), '/');
+        $binding = (array) CurrentContext::get('wechat_binding', []);
+        if (str_starts_with($path, '/api/') && CurrentContext::accountId()
+            && str_contains(strtolower((string) $request->header('user-agent', '')), 'wxwork')
+            && !empty($binding['required']) && empty($binding['bound'])
+            && !str_starts_with($path, '/api/auth/') && !str_starts_with($path, '/api/permission/')
+            && !in_array($path, ['/api/wechat/binding-status', '/api/wechat/bind', '/api/wechat/oauth/start', '/api/wechat/oauth/callback'], true)) {
+            return json(['code' => 40310, 'message' => '请先绑定企业微信', 'data' => null])->withStatus(403);
         }
 
         return $handler($request);

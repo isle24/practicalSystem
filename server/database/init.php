@@ -871,7 +871,7 @@ function schoolBusinessStatements(): array
     $statements = [
         ...EduImportSchema::statements(),
         simpleTable('user_device', ['`account_id` BIGINT UNSIGNED DEFAULT NULL', '`jti` VARCHAR(120) DEFAULT NULL', '`device_name` VARCHAR(120) DEFAULT NULL', '`ip` VARCHAR(80) DEFAULT NULL', '`user_agent` VARCHAR(255) DEFAULT NULL', '`last_active_at` DATETIME DEFAULT NULL']),
-        simpleTable('user_notify_setting', ['`account_id` BIGINT UNSIGNED DEFAULT NULL', '`msg_type` VARCHAR(80) DEFAULT NULL', '`channel` VARCHAR(80) DEFAULT NULL', '`enabled` ENUM(\'false\',\'true\') DEFAULT \'true\'']),
+        simpleTable('user_notify_setting', ['`account_id` BIGINT UNSIGNED DEFAULT NULL', '`msg_type` VARCHAR(80) DEFAULT NULL', '`channel` VARCHAR(80) DEFAULT NULL', '`enabled` ENUM(\'false\',\'true\') DEFAULT \'true\'', '`quiet_start` VARCHAR(5) NOT NULL DEFAULT \'00:00\'', '`quiet_end` VARCHAR(5) NOT NULL DEFAULT \'24:00\'']),
         simpleTable('user_desktop_config', ['`account_id` BIGINT UNSIGNED DEFAULT NULL', '`layout_json` JSON DEFAULT NULL']),
         simpleTable('user_desktop_shortcut', ['`account_id` BIGINT UNSIGNED DEFAULT NULL', '`item_type` VARCHAR(40) DEFAULT \'module\'', '`item_key` VARCHAR(120) DEFAULT NULL', '`ref_id` BIGINT UNSIGNED DEFAULT NULL', '`sort` INT DEFAULT 0', 'KEY `idx_account_type` (`account_id`, `item_type`)', 'KEY `idx_ref` (`ref_id`)']),
         simpleTable('data_cleanup_task', [
@@ -1806,6 +1806,11 @@ function messageTableStatements(): array
             `channel` VARCHAR(40) DEFAULT 'internal',
             `error_message` TEXT DEFAULT NULL,
             `sent_at` DATETIME DEFAULT NULL,
+            `attempts` INT UNSIGNED NOT NULL DEFAULT 0,
+            `available_at` DATETIME DEFAULT NULL,
+            `locked_until` DATETIME DEFAULT NULL,
+            `claim_token` VARCHAR(64) DEFAULT NULL,
+            KEY `idx_channel_available` (`channel`, `status`, `available_at`),
             PRIMARY KEY (`id`),
             UNIQUE KEY `uk_uuid` (`uuid`),
             KEY `idx_status` (`status`),
@@ -2689,7 +2694,16 @@ function ensureMessageSchema(PDO $pdo): void
             'is_system' => "ALTER TABLE `message_template` ADD COLUMN `is_system` TINYINT(1) DEFAULT 0 AFTER `channels`",
             'sort' => "ALTER TABLE `message_template` ADD COLUMN `sort` INT DEFAULT 100 AFTER `is_system`",
         ],
+        'user_notify_setting' => [
+            'quiet_start' => "ALTER TABLE `user_notify_setting` ADD COLUMN `quiet_start` VARCHAR(5) NOT NULL DEFAULT '00:00'",
+            'quiet_end' => "ALTER TABLE `user_notify_setting` ADD COLUMN `quiet_end` VARCHAR(5) NOT NULL DEFAULT '24:00'",
+        ],
         'message_channel_log' => [
+            'attempts' => "ALTER TABLE `message_channel_log` ADD COLUMN `attempts` INT UNSIGNED NOT NULL DEFAULT 0",
+            'available_at' => "ALTER TABLE `message_channel_log` ADD COLUMN `available_at` DATETIME DEFAULT NULL",
+            'locked_until' => "ALTER TABLE `message_channel_log` ADD COLUMN `locked_until` DATETIME DEFAULT NULL",
+            'claim_token' => "ALTER TABLE `message_channel_log` ADD COLUMN `claim_token` VARCHAR(64) DEFAULT NULL",
+
             'message_id' => "ALTER TABLE `message_channel_log` ADD COLUMN `message_id` BIGINT UNSIGNED DEFAULT NULL AFTER `code`",
             'account_id' => "ALTER TABLE `message_channel_log` ADD COLUMN `account_id` BIGINT UNSIGNED DEFAULT NULL AFTER `message_id`",
             'channel' => "ALTER TABLE `message_channel_log` ADD COLUMN `channel` VARCHAR(40) DEFAULT 'internal' AFTER `account_id`",
@@ -2712,6 +2726,7 @@ function ensureMessageSchema(PDO $pdo): void
     ensureIndex($pdo, 'message_target', 'idx_deleted_at', "ALTER TABLE `message_target` ADD KEY `idx_deleted_at` (`deleted_at`)");
     ensureIndex($pdo, 'message_template', 'uk_code', "ALTER TABLE `message_template` ADD UNIQUE KEY `uk_code` (`code`)");
     ensureIndex($pdo, 'message_template', 'idx_type_status', "ALTER TABLE `message_template` ADD KEY `idx_type_status` (`type`, `status`, `sort`)");
+    ensureIndex($pdo, 'message_channel_log', 'idx_channel_available', "ALTER TABLE `message_channel_log` ADD KEY `idx_channel_available` (`channel`, `status`, `available_at`)");
     ensureIndex($pdo, 'message_channel_log', 'idx_message_account', "ALTER TABLE `message_channel_log` ADD KEY `idx_message_account` (`message_id`, `account_id`)");
     ensureIndex($pdo, 'message_channel_log', 'idx_channel_status', "ALTER TABLE `message_channel_log` ADD KEY `idx_channel_status` (`channel`, `status`)");
     ensureIndex($pdo, 'message_channel_log', 'idx_deleted_at', "ALTER TABLE `message_channel_log` ADD KEY `idx_deleted_at` (`deleted_at`)");

@@ -214,6 +214,7 @@ export function useAuthSession(options = {}) {
     try {
       await showConfirmDialog({
         title: '退出登录',
+        zIndex: 100001,
         message: '确认退出当前账号？',
         confirmButtonText: '退出',
         cancelButtonText: '取消',

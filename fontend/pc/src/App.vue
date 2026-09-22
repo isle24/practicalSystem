@@ -274,7 +274,7 @@
                   <label>
                     <span>
                       <strong>企业微信</strong>
-                      <small>通过企业微信应用推送</small>
+                      <small>{{ profileWechatBindingText }}</small>
                     </span>
                     <el-switch v-model="profileState.form.notify.wechat" />
                   </label>
@@ -284,6 +284,24 @@
                       <small>发送到个人邮箱</small>
                     </span>
                     <el-switch v-model="profileState.form.notify.email" />
+                  </label>
+                  <label>
+                    <span>
+                      <strong>全天接收</strong>
+                      <small>关闭后可设置每日接收时间，支持跨午夜</small>
+                    </span>
+                    <el-switch v-model="profileQuietAllDay" />
+                  </label>
+                  <label v-if="!profileQuietAllDay">
+                    <span>
+                      <strong>接收时间</strong>
+                      <small>开始时间晚于结束时间时按跨午夜处理</small>
+                    </span>
+                    <span class="profile-notify-time-range">
+                      <input v-model="profileState.form.wechat_quiet.start" type="time">
+                      <em>至</em>
+                      <input v-model="profileState.form.wechat_quiet.end" type="time">
+                    </span>
                   </label>
                 </div>
               </section>
@@ -2527,6 +2545,11 @@
                               <el-table-column prop="mobile" label="手机" min-width="130" />
                               <el-table-column prop="email" label="邮箱" min-width="160" />
                               <el-table-column prop="last_synced_at" label="同步时间" width="168" />
+                              <el-table-column v-if="canUnbindUserWechat" label="操作" width="88" fixed="right">
+                                <template #default="{ row }">
+                                  <el-button link type="danger" :disabled="userAdminState.detailLoading" @click="unbindUserWechat(row)">解绑</el-button>
+                                </template>
+                              </el-table-column>
                             </el-table>
                           </section>
                         </template>
@@ -3092,6 +3115,13 @@
                             </el-select>
                           </label>
                         </div>
+                        <label class="message-send-field wide">
+                          <span>发送渠道</span>
+                          <el-checkbox-group v-model="messageState.sendDialog.form.channels">
+                            <el-checkbox value="internal" disabled>站内消息</el-checkbox>
+                            <el-checkbox value="wechat">企业微信</el-checkbox>
+                          </el-checkbox-group>
+                        </label>
                         <label v-if="messageState.sendDialog.form.send_mode === 'template'" class="message-send-field wide message-template-vars">
                           <span>模板变量 JSON</span>
                           <el-input
@@ -3241,6 +3271,13 @@
                         <label><span>消息级别</span><el-select v-model="messageState.templateEdit.form.level" placeholder="请选择消息级别"><el-option v-for="item in messageLevelOptions" :key="item.value" :label="item.label" :value="item.value" /></el-select></label>
                         <label><span>状态</span><el-switch v-model="messageState.templateEdit.form.status" active-value="enabled" inactive-value="disabled" active-text="启用" inactive-text="停用" /></label>
                         <label><span>排序</span><el-input v-model.number="messageState.templateEdit.form.sort" type="number" /></label>
+                        <label>
+                          <span>发送渠道</span>
+                          <el-checkbox-group v-model="messageState.templateEdit.form.channels">
+                            <el-checkbox value="internal" disabled>站内消息</el-checkbox>
+                            <el-checkbox value="wechat">企业微信</el-checkbox>
+                          </el-checkbox-group>
+                        </label>
                         <label class="wide"><span>标题模板</span><el-input v-model="messageState.templateEdit.form.title_tpl" maxlength="255" show-word-limit /></label>
                         <label class="wide"><span>内容模板</span><el-input v-model="messageState.templateEdit.form.content_tpl" type="textarea" :rows="4" /></label>
                         <label class="wide"><span>跳转地址模板</span><el-input v-model="messageState.templateEdit.form.link_url_tpl" placeholder="#panel={module_key}:{panel_key}" /></label>
@@ -4343,12 +4380,15 @@
       @change="handleSyllabusGuideFile"
     >
   </main>
+    <WechatBindingGate :show="wechatBlocked" :state="wechatBinding.state" :status="wechatStatus" :account-name="operatorName" :role-name="roleText" @start="wechatBinding.start" @bind="wechatBinding.bind" @logout="submitLogout" />
     <DesktopUpdateStatus />
     <ReleaseNotice v-if="isLoggedIn" :key="noteSessionKey" :request="request" :session-key="noteSessionKey" @open="openModule(modules.find(item => item.id === 'releaseNotes'))" />
   </el-config-provider>
 </template>
 
 <script setup>
+import { useWechatBinding } from '../../shared/useWechatBinding';
+import WechatBindingGate from '../../shared/components/WechatBindingGate.vue';
 import { previewFile } from '../../shared/filePreview';
 import PreviewCacheSettings from './components/PreviewCacheSettings.vue';
 import ClientDownloadButton from './components/ClientDownloadButton.vue';
@@ -4592,6 +4632,7 @@ import {
   uploadProfileAsset,
   uploadFile,
   deleteMessageTemplate,
+  unbindAdminWechat,
 } from './api/system';
 
 const { state: permissionState, hasPermission, load } = usePermissions();
@@ -4722,6 +4763,9 @@ const wechatProxy = reactive({
   syncing: false,
   message: '',
 });
+const wechatBinding = useWechatBinding({ context: () => permissionState.context, request, backendUrl });
+const wechatBlocked = wechatBinding.blocked;
+const wechatStatus = wechatBinding.status;
 const logState = reactive({
   loading: false,
   message: '',
@@ -5321,10 +5365,12 @@ function emptyMessageSendForm() {
     title: '',
     content: '',
     link_url: '',
+    channels: ['internal'],
   };
 }
 
 function emptyMessageTemplateForm(row = {}) {
+  const channels = Array.isArray(row.channels) ? row.channels : ['internal'];
   return {
     id: row.id || null,
     name: row.name || '',
@@ -5339,6 +5385,7 @@ function emptyMessageTemplateForm(row = {}) {
     status: row.status || 'enabled',
     sort: row.sort ?? 100,
     is_system: Boolean(row.is_system),
+    channels: ['internal', ...(channels.includes('wechat') ? ['wechat'] : [])],
   };
 }
 
@@ -5834,6 +5881,21 @@ const taskbarWindows = computed(() => openWindows.filter(win => win.module.id !=
 const canManageConfig = computed(() => hasPermission('config:manage') && ['super_admin', 'school_admin'].includes(permissionState.context.role_type));
 const canViewUserAdmin = computed(() => ['super_admin', 'school_admin', 'college_admin', 'profession_admin'].includes(permissionState.context.role_type));
 const canSendMessages = computed(() => ['super_admin', 'school_admin'].includes(currentRoleType.value));
+const canUnbindUserWechat = computed(() => ['super_admin', 'school_admin'].includes(currentRoleType.value));
+const profileQuietAllDay = computed({
+  get: () => profileState.form.wechat_quiet.start === '00:00' && profileState.form.wechat_quiet.end === '24:00',
+  set: (value) => {
+    profileState.form.wechat_quiet = value
+      ? { start: '00:00', end: '24:00' }
+      : { start: '08:00', end: '22:00' };
+  },
+});
+const profileWechatBindingText = computed(() => {
+  if (permissionState.context.wechat_binding?.required === false) {
+    return '当前角色无需绑定';
+  }
+  return permissionState.context.wechat_binding?.bound ? '已绑定企业微信' : '未绑定企业微信';
+});
 const canManageMessageTemplates = computed(() => ['super_admin', 'school_admin'].includes(currentRoleType.value) || hasPermission('template:manage'));
 const canViewMessageTemplates = computed(() => ['super_admin', 'school_admin'].includes(currentRoleType.value) || hasPermission('template:view') || hasPermission('template:manage'));
 const hasMessageTemplateFilters = computed(() => messageState.templateFilters.type !== 'all'
@@ -7183,6 +7245,8 @@ function formApplyMessageTemplate(form, template) {
   form.type = template.type || form.type;
   form.level = template.level || form.level;
   form.link_url = '';
+  const channels = Array.isArray(template.channels) ? template.channels : ['internal'];
+  form.channels = ['internal', ...(channels.includes('wechat') ? ['wechat'] : [])];
   if (!form.variables_text || form.variables_text === '{}') {
     form.variables_text = JSON.stringify(messageTemplateVariableDefaults(template), null, 2);
   }
@@ -7273,6 +7337,7 @@ async function submitMessageSend() {
     title: String(form.title || '').trim(),
     content: String(form.content || '').trim(),
     link_url: String(form.link_url || '').trim(),
+    channels: ['internal', ...((form.channels || []).includes('wechat') ? ['wechat'] : [])],
   };
 
   if (payload.send_scope === 'custom' && !payload.account_ids.length) {
@@ -7485,6 +7550,7 @@ async function submitMessageTemplate() {
       status: form.status,
       sort: Number(form.sort || 100),
       is_system: form.is_system,
+      channels: ['internal', ...((form.channels || []).includes('wechat') ? ['wechat'] : [])],
     });
     messageState.templateEdit.visible = false;
     await loadMessageTemplates(messageState.templatePagination.page || 1);
@@ -8671,6 +8737,8 @@ async function refreshAuthenticatedSession(resetWorkspace = false) {
   }
 
   await load();
+  await wechatBinding.refresh();
+  if (wechatBlocked.value) return;
   await loadProfile();
   await loadDesktopShortcuts();
   await loadFavorites(1);
@@ -8682,6 +8750,8 @@ async function refreshAuthenticatedSession(resetWorkspace = false) {
   scheduleDefaultWindow();
   loadAdminFoundation();
 }
+
+
 
 async function loadSwitchableAccounts() {
   if (!isLoggedIn.value) {
@@ -8818,6 +8888,10 @@ function emptyProfile() {
       system: true,
       wechat: true,
       email: false,
+    },
+    wechat_quiet: {
+      start: '00:00',
+      end: '24:00',
     },
   };
 }
@@ -9433,6 +9507,23 @@ async function loadUserDetailPage(page) {
   }
 
   await loadUserDetailData(account, page);
+}
+
+async function unbindUserWechat(row) {
+  const account = userAdminState.detail.account;
+  const accountId = Number(row?.account_id || account?.id || 0);
+  if (!canUnbindUserWechat.value || !accountId || !window.confirm('确认解除该账号的企业微信绑定？')) {
+    return;
+  }
+  userAdminState.detailLoading = true;
+  userAdminState.message = '';
+  try {
+    await unbindAdminWechat(accountId);
+    await loadUserDetailData(account, userAdminState.detailPagination.page || 1);
+  } catch (error) {
+    userAdminState.message = error.message;
+    userAdminState.detailLoading = false;
+  }
 }
 
 function closeUserDetailDialog() {
@@ -16083,6 +16174,10 @@ function applyProfileData(data) {
   profileState.form.notify.system = data.notify?.system !== false;
   profileState.form.notify.wechat = data.notify?.wechat !== false;
   profileState.form.notify.email = Boolean(data.notify?.email);
+  profileState.form.wechat_quiet = {
+    start: data.wechat_quiet?.start || '00:00',
+    end: data.wechat_quiet?.end || '24:00',
+  };
   cacheWallpaper();
 }
 
@@ -16235,6 +16330,7 @@ async function persistProfileSettings(message) {
     wallpaper: profileState.form.wallpaper,
     wallpaper_url: profileState.form.wallpaper_url,
     notify: { ...profileState.form.notify },
+    wechat_quiet: { ...profileState.form.wechat_quiet },
   });
   applyProfileData(data);
   permissionState.context.user_name = data.user?.name || permissionState.context.user_name;
@@ -16585,6 +16681,8 @@ onMounted(async () => {
   await consumeUrlPasskey();
   const desktopBridge = window.__PRACTICAL_DESKTOP__;
   await load();
+  await wechatBinding.refresh();
+  if (wechatBlocked.value) return;
   if (!isLoggedIn.value && desktopBridge?.bootstrapLogin) {
     await submitDesktopBootstrapLogin();
   }
