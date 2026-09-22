@@ -391,6 +391,15 @@ class InternshipService
         return (new InternshipBaseImportService())->preview($request, $this->scopeContext());
     }
 
+    /** 获取实习基地 Excel 导入模板。 */
+    public function baseImportTemplate(Request $request): array
+    {
+        $this->requirePermission('internship:manage');
+        $this->requireAdminRole();
+
+        return (new InternshipBaseImportService())->template();
+    }
+
     /** 确认导入实习基地汇总表 */
     public function confirmBaseImport(Request $request): array
     {

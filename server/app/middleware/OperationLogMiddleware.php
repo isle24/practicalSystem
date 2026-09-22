@@ -103,6 +103,9 @@ class OperationLogMiddleware implements MiddlewareInterface
         }
 
         $path = '/' . trim($request->path(), '/');
+        if ($path === '/api/wechat/callback') {
+            return false;
+        }
         return str_starts_with($path, '/api/');
     }
 

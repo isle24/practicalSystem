@@ -13,8 +13,16 @@
         :key="item.id"
         :item="item"
         mode="collection"
+        :draggable="true"
+        :show-action="showActions"
+        :added="isDesktopShortcut(item.id)"
+        :locked="isDefaultDesktopShortcut(item.id)"
+        :disabled="loading || isDefaultDesktopShortcut(item.id)"
+        :action-title="shortcutTitle(item.id)"
         :backend-url="backendUrl"
         @open="emit('open', item)"
+        @action="emit('toggle', item.id)"
+        @drag-module="emit('drag-module', $event)"
       />
     </div>
   </section>
@@ -28,7 +36,12 @@ defineProps({
   description: { type: String, default: '' },
   items: { type: Array, default: () => [] },
   backendUrl: { type: Function, required: true },
+  showActions: { type: Boolean, default: false },
+  loading: { type: Boolean, default: false },
+  isDesktopShortcut: { type: Function, default: () => false },
+  isDefaultDesktopShortcut: { type: Function, default: () => false },
+  shortcutTitle: { type: Function, default: () => '' },
 });
 
-const emit = defineEmits(['open']);
+const emit = defineEmits(['open', 'toggle', 'drag-module']);
 </script>

@@ -6,6 +6,7 @@ use app\attribute\OperationLog;
 use app\controller\Api\Concerns\Responds;
 use app\model\channel\Account;
 use app\model\channel\AcademicArchiveRecord;
+use app\server\maintenance\DataCleanupService;
 use app\model\channel\Menu;
 use app\model\channel\Role;
 use app\model\channel\RoleMenu;
@@ -473,9 +474,49 @@ class AdminController
                 return $this->fail(40001, '确认文本不正确', 400);
             }
 
-            return $this->ok(ChannelTable::clearTestData(date('Y-m-d H:i:s')), '已清除测试数据');
+            $scopes = array_column((new DataCleanupService())->options()['items'] ?? [], 'key');
+            return $this->ok((new DataCleanupService())->create([
+                'scopes' => $scopes,
+                'preserve_edu_data' => true,
+            ]), '清理任务已提交');
         } catch (Throwable $exception) {
             return $this->fail(40001, $exception->getMessage(), 400);
+        }
+    }
+
+    /** 查询可选的数据清理范围 */
+    #[OperationLog('查询数据清理范围')]
+    public function cleanupOptions(Request $request): Response
+    {
+        try {
+            return $this->ok((new DataCleanupService())->options());
+        } catch (Throwable $exception) {
+            return $this->fail((int) $exception->getCode() === 403 ? 40300 : 40001, $exception->getMessage(), (int) $exception->getCode() === 403 ? 403 : 400);
+        }
+    }
+
+    /** 创建异步数据清理任务 */
+    #[OperationLog('创建异步数据清理任务')]
+    public function createCleanupTask(Request $request): Response
+    {
+        try {
+            if ($this->requiredString($request, 'confirmation', 80) !== 'CLEAR_TEST_DATA') return $this->fail(40001, '确认文本不正确', 400);
+            return $this->ok((new DataCleanupService())->create((array) $request->all()), '清理任务已提交');
+        } catch (Throwable $exception) {
+            $status = (int) $exception->getCode() === 403 ? 403 : 400;
+            return $this->fail($status === 403 ? 40300 : 40001, $exception->getMessage(), $status);
+        }
+    }
+
+    /** 查询异步数据清理任务进度 */
+    #[OperationLog('查询数据清理任务进度')]
+    public function cleanupTask(Request $request): Response
+    {
+        try {
+            return $this->ok((new DataCleanupService())->detail($this->requiredInt($request, 'id')));
+        } catch (Throwable $exception) {
+            $status = (int) $exception->getCode() === 403 ? 403 : 400;
+            return $this->fail($status === 403 ? 40300 : 40001, $exception->getMessage(), $status);
         }
     }
 

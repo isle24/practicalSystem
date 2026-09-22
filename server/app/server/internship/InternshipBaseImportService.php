@@ -8,7 +8,12 @@ use app\server\WorkflowLock;
 use app\server\file\FileService;
 use DateTimeImmutable;
 use InvalidArgumentException;
+use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
 use PhpOffice\PhpSpreadsheet\IOFactory;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Style\Alignment;
+use PhpOffice\PhpSpreadsheet\Style\Fill;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use RuntimeException;
 use support\Request;
 use Webman\Http\UploadFile;
@@ -73,6 +78,39 @@ class InternshipBaseImportService
         'source_admin' => ['管理员'],
         'source_number' => ['数字'],
     ];
+
+    /** 生成并返回实习基地汇总表导入模板。 */
+    public function template(): array
+    {
+        $directory = rtrim(public_path(), DIRECTORY_SEPARATOR) . '/templates/internship';
+        if (!is_dir($directory) && !mkdir($directory, 0775, true) && !is_dir($directory)) {
+            throw new RuntimeException('模板目录创建失败');
+        }
+        $fileName = 'internship-base-import-template.xlsx';
+        $path = $directory . '/' . $fileName;
+        if (!is_file($path)) {
+            $temporaryPath = tempnam($directory, 'base-template-');
+            if ($temporaryPath === false) {
+                throw new RuntimeException('模板临时文件创建失败');
+            }
+            try {
+                $this->writeTemplate($temporaryPath);
+                if (!chmod($temporaryPath, 0644) || !rename($temporaryPath, $path)) {
+                    throw new RuntimeException('模板文件生成失败');
+                }
+            } finally {
+                if (is_file($temporaryPath)) {
+                    unlink($temporaryPath);
+                }
+            }
+        }
+
+        return [
+            'url' => '/templates/internship/' . $fileName,
+            'download_name' => '实习基地导入模板.xlsx',
+            'version' => '2026.09',
+        ];
+    }
 
     /** 解析基地 Excel 并保存导入文件 */
     public function preview(Request $request, array $scope): array
@@ -462,6 +500,85 @@ class InternshipBaseImportService
         }
 
         return $path;
+    }
+
+    /** 写入基地导入模板及字段说明。 */
+    private function writeTemplate(string $path): void
+    {
+        $spreadsheet = new Spreadsheet();
+        try {
+            $sheet = $spreadsheet->getActiveSheet();
+            $sheet->setTitle('基地导入');
+            $headers = array_map(static fn (array $aliases): string => $aliases[0], self::HEADERS);
+            $headers['company_contact_phone'] = '合作方联系电话';
+            $headers['base_level'] = '基地等级';
+            $sheet->fromArray(array_values($headers), null, 'A1');
+            $sheet->freezePane('A2');
+            $lastColumn = Coordinate::stringFromColumnIndex(count($headers));
+            $sheet->setAutoFilter('A1:' . $lastColumn . '1');
+            $sheet->getStyle('A1:' . $lastColumn . '1')->applyFromArray([
+                'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
+                'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '2563EB']],
+                'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER, 'wrapText' => true],
+            ]);
+            foreach (array_keys($headers) as $index => $field) {
+                $column = Coordinate::stringFromColumnIndex($index + 1);
+                $sheet->getColumnDimension($column)->setWidth(24);
+                if (in_array($field, self::REQUIRED_FIELDS, true)) {
+                    $sheet->getComment($column . '1')->getText()->createTextRun('必填；填写要求见字段说明页。');
+                }
+            }
+            $sheet->getRowDimension(1)->setRowHeight(58);
+
+            $guide = $spreadsheet->createSheet();
+            $guide->setTitle('字段说明');
+            $guideRows = [
+                ['字段名', '是否必填', '填写说明'],
+                ['导入范围', '-', '本模板用于长期基地及年度申报；临时基地通过新增基地录入。'],
+                ['填写方式', '-', '在基地导入页第2行开始填写，保留全部43列表头；不需要填写的字段留空。最多1000行、10MB。'],
+                ['校验规则', '-', '学院、专业必须已存在且在当前账号权限范围内；存在错误时整批禁止导入。'],
+                ['重复处理', '-', '已有基地复用，已有年度申报跳过，不覆盖原申报数据。'],
+            ];
+            $instructions = [
+                'base_name' => '填写长期基地完整名称。',
+                'dep_name' => '填写系统中已启用的学院完整名称。',
+                'declaration_year' => '填写2000至2100之间的四位年份，例如2026。',
+                'profession_text' => '填写所选学院已有的专业名称；多个专业用逗号、顿号或分号分隔。',
+                'company_name' => '填写企业、单位或基地依托主体的完整名称。',
+                'base_level' => '填写基地等级，例如核心基地、特色基地，不是长期/临时基地。',
+                'manager_phone' => '填写基地负责人电话；建议将单元格设为文本以保留前导零。',
+                'company_contact_phone' => '填写合作方联系电话，与基地负责人联系电话区分。',
+                'source_edited_at' => '填写可识别的日期时间，例如2026-09-22 09:00:00。',
+                'source_number' => '原汇总表兼容列，可留空，不作为业务字段写入。',
+            ];
+            $numericFields = ['service_profession_count', 'teacher_count', 'external_teacher_count', 'expected_student_visits', 'expected_student_days', 'reception_2023', 'reception_2024', 'reception_2025'];
+            foreach ($headers as $field => $label) {
+                $instruction = $instructions[$field] ?? '按实际情况填写，可留空。';
+                if (isset(self::BUDGET_FIELDS[$field]) || $field === 'approved_amount') {
+                    $instruction = '填写金额，最多保留两位小数；无效金额会警告并留空。';
+                } elseif (in_array($field, $numericFields, true)) {
+                    $instruction = '填写非负整数，不带人数、天数等单位；无效数值会警告并留空。';
+                }
+                $guideRows[] = [$label, in_array($field, self::REQUIRED_FIELDS, true) ? '是' : '否', $instruction];
+            }
+            $guide->fromArray($guideRows, null, 'A1');
+            $guide->getStyle('A1:C1')->applyFromArray([
+                'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
+                'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '2563EB']],
+                'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER],
+            ]);
+            $guide->getColumnDimension('A')->setWidth(28);
+            $guide->getColumnDimension('B')->setWidth(12);
+            $guide->getColumnDimension('C')->setWidth(90);
+            $guide->getStyle('A1:C' . $guide->getHighestRow())->getAlignment()->setWrapText(true)->setVertical(Alignment::VERTICAL_TOP);
+            $guide->getDefaultRowDimension()->setRowHeight(36);
+            $guide->freezePane('A2');
+            $spreadsheet->setActiveSheetIndex(0);
+
+            (new Xlsx($spreadsheet))->save($path);
+        } finally {
+            $spreadsheet->disconnectWorksheets();
+        }
     }
 
     /** 判断模板行是否为空 */

@@ -12,10 +12,8 @@
  * @license   http://www.opensource.org/licenses/mit-license.php MIT License
  */
 
+use app\controller\Api\WechatCallbackController;
 use Webman\Route;
 
-
-
-
-
-
+Route::add(['GET', 'POST'], '/api/wechat/callback', [WechatCallbackController::class, 'callback']);
+Route::disableDefaultRoute(WechatCallbackController::class);

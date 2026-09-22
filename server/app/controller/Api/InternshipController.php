@@ -143,6 +143,15 @@ class InternshipController
     }
 
     /**
+     * 获取实习基地 Excel 导入模板
+     */
+    #[OperationLog('获取实习基地Excel导入模板')]
+    public function baseImportTemplate(Request $request): Response
+    {
+        return $this->handle(fn (): array => $this->service()->baseImportTemplate($request));
+    }
+
+    /**
      * 确认实习基地 Excel 导入
      */
     #[OperationLog('确认实习基地Excel导入')]

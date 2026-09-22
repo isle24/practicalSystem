@@ -15,6 +15,7 @@ class AuthMiddleware implements MiddlewareInterface
      * 免登录接口白名单（完整路径）。
      */
     private const PUBLIC_PATHS = [
+        '/api/wechat/callback',
         '/api/release/update-manifest',
         '/api/release/download',
         '/api/release/downloads',

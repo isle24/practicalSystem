@@ -65,6 +65,7 @@
         :is-focused="isModuleFocused"
         :backend-url="backendUrl"
         @open="openModule"
+        @drop-module="addDesktopShortcutFromDrop"
         @warning="ElMessage.warning"
       />
 
@@ -295,8 +296,14 @@
           :title="win.module.name"
           :description="win.module.scope"
           :items="collectionModuleItems(win.module.id)"
+          :show-actions="isLoggedIn"
+          :loading="desktopLauncherState.loading"
+          :is-desktop-shortcut="isDesktopShortcut"
+          :is-default-desktop-shortcut="isDefaultDesktopShortcut"
+          :shortcut-title="launcherShortcutTitle"
           :backend-url="backendUrl"
           @open="openModule"
+          @toggle="toggleDesktopShortcut"
         />
 
         <div v-else class="app-body" :class="{ 'no-sidebar': !sidebarItems(win).length }">
@@ -390,12 +397,14 @@
                       />
 
                       <div v-else-if="internshipState.dialog.type === 'planImport'" class="plan-import-preview">
-                        <div class="plan-import-summary">
-                          <article><span>原始行</span><strong>{{ internshipState.planImport.summary.source_rows }}</strong></article>
-                          <article><span>拆分后</span><strong>{{ internshipState.planImport.summary.preview_rows }}</strong></article>
-                          <article><span>错误行</span><strong>{{ internshipState.planImport.summary.error_rows }}</strong></article>
-                          <article><span>重复行</span><strong>{{ internshipState.planImport.summary.duplicate_rows }}</strong></article>
-                          <el-button size="small" @click="confirmAllPlanImportTypes">确认全部建议分类</el-button>
+                        <div class="plan-import-header">
+                          <div class="plan-import-summary has-actions">
+                            <article><span>原始行</span><strong>{{ internshipState.planImport.summary.source_rows }}</strong></article>
+                            <article><span>拆分后</span><strong>{{ internshipState.planImport.summary.preview_rows }}</strong></article>
+                            <article><span>错误行</span><strong>{{ internshipState.planImport.summary.error_rows }}</strong></article>
+                            <article><span>重复行</span><strong>{{ internshipState.planImport.summary.duplicate_rows }}</strong></article>
+                            <el-button size="small" @click="confirmAllPlanImportTypes">确认全部建议分类</el-button>
+                          </div>
                         </div>
                         <el-table :data="internshipState.planImport.items" height="100%" stripe size="small">
                           <el-table-column prop="row_number" label="行" width="62" fixed="left" />
@@ -437,20 +446,34 @@
                       </div>
 
                       <div v-else-if="internshipState.dialog.type === 'baseImport'" class="plan-import-preview">
-                        <div class="plan-import-summary">
-                          <article><span>基地资料</span><strong>{{ internshipState.baseImport.summary.source_rows }}</strong></article>
-                          <article><span>错误行</span><strong>{{ internshipState.baseImport.summary.error_rows }}</strong></article>
-                          <article><span>警告行</span><strong>{{ internshipState.baseImport.summary.warning_rows }}</strong></article>
-                          <article><span>重复申报</span><strong>{{ internshipState.baseImport.summary.duplicate_rows }}</strong></article>
+                        <div class="plan-import-header">
+                          <div class="base-import-actions">
+                            <span>{{ internshipState.baseImport.file?.name || '实习基地汇总表' }}</span>
+                            <el-button :icon="Download" :disabled="internshipState.loading" @click="downloadBaseImportTemplate">下载模板</el-button>
+                            <el-button :icon="Upload" :disabled="internshipState.loading" @click="chooseBaseImportExcel">重新选择文件</el-button>
+                          </div>
+                          <div class="plan-import-summary">
+                            <article><span>基地资料</span><strong>{{ internshipState.baseImport.summary.source_rows }}</strong></article>
+                            <article><span>错误行</span><strong>{{ internshipState.baseImport.summary.error_rows }}</strong></article>
+                            <article><span>警告行</span><strong>{{ internshipState.baseImport.summary.warning_rows }}</strong></article>
+                            <article><span>重复申报</span><strong>{{ internshipState.baseImport.summary.duplicate_rows }}</strong></article>
+                          </div>
+                          <el-alert
+                            v-if="internshipState.message"
+                            type="error"
+                            :closable="false"
+                            show-icon
+                            :title="internshipState.message"
+                          />
+                          <el-alert
+                            v-if="!internshipState.baseImport.can_confirm"
+                            type="error"
+                            :closable="false"
+                            show-icon
+                            title="存在学院、专业或必填字段错误，必须全部修正后才能确认导入"
+                          />
                         </div>
-                        <el-alert
-                          v-if="!internshipState.baseImport.can_confirm"
-                          type="error"
-                          :closable="false"
-                          show-icon
-                          title="存在学院、专业或必填字段错误，必须全部修正后才能确认导入"
-                        />
-                        <el-table :data="internshipState.baseImport.items" height="100%" stripe size="small">
+                        <el-table :data="internshipState.baseImport.items" height="100%" stripe size="small" row-key="row_number" v-loading="internshipState.loading">
                           <el-table-column prop="row_number" label="行" width="62" fixed="left" />
                           <el-table-column prop="base_name" label="基地名称" min-width="210" fixed="left" />
                           <el-table-column prop="declaration_year" label="申报年份" width="92" />
@@ -461,10 +484,12 @@
                           <el-table-column prop="company_name" label="合作或依托单位" min-width="210" />
                           <el-table-column prop="base_category" label="基地类别" min-width="150" />
                           <el-table-column prop="base_level" label="基地等级" width="100" />
-                          <el-table-column label="校验结果" min-width="260">
+                          <el-table-column label="校验结果" width="300" fixed="right">
                             <template #default="{ row }">
-                              <span v-if="row.errors?.length" class="import-error-text">{{ row.errors.join('；') }}</span>
-                              <span v-else-if="row.warnings?.length" class="import-warning-text">{{ row.warnings.join('；') }}</span>
+                              <div v-if="row.errors?.length || row.warnings?.length" class="import-validation-message">
+                                <p v-for="(message, index) in row.errors || []" :key="`error-${index}`" class="import-error-text">错误：{{ message }}</p>
+                                <p v-for="(message, index) in row.warnings || []" :key="`warning-${index}`" class="import-warning-text">警告：{{ message }}</p>
+                              </div>
                               <span v-else-if="row.duplicate?.declaration_exists">重复申报，将跳过</span>
                               <span v-else-if="row.duplicate?.base_exists">复用基地，新增年度申报</span>
                               <span v-else class="import-ok-text">可导入</span>
@@ -1090,6 +1115,9 @@
                       <template #toolbar>
                         <el-button v-if="canManageInternship" :icon="Plus" @click="openBaseDialog()">
                           新增基地
+                        </el-button>
+                        <el-button v-if="canManageInternship" :icon="Download" :loading="internshipState.loading" @click="downloadBaseImportTemplate">
+                          下载模板
                         </el-button>
                         <el-button v-if="canManageInternship" :icon="Upload" :loading="internshipState.importing" @click="chooseBaseImportExcel">
                           导入基地
@@ -3587,20 +3615,35 @@
                     </header>
                     <p v-if="dataManageState.environmentLoading">正在读取运行模式...</p>
                     <p v-else-if="dataManageState.isTest">
-                      当前 APP_MODE={{ dataManageState.mode }}，允许超级管理员执行。执行前需输入确认文本，执行后无法从页面撤销。
+                      当前 APP_MODE={{ dataManageState.mode }}，仅超级管理员可执行。任务将异步分批处理，教务导入数据默认保留。
                     </p>
                     <p v-else>
                       当前 APP_MODE={{ dataManageState.mode }}，服务端已禁止执行测试数据清理。
                     </p>
+                    <div v-if="dataManageState.options.length" class="cleanup-scope-list">
+                      <label v-for="item in dataManageState.options" :key="item.key" class="cleanup-scope-item">
+                        <input v-model="dataManageState.selectedScopes" type="checkbox" :value="item.key" :disabled="dataManageState.clearLoading">
+                        <span>{{ item.name }}</span>
+                      </label>
+                    </div>
+                    <label class="cleanup-preserve-option">
+                      <input v-model="dataManageState.preserveEduData" type="checkbox" :disabled="dataManageState.clearLoading">
+                      保留教务导入的学生、教师和计划数据
+                    </label>
+                    <div v-if="dataManageState.task" class="cleanup-task-progress">
+                      <div><strong>{{ cleanupStatusName(dataManageState.task.status) }}</strong><span>{{ dataManageState.task.progress }}%</span></div>
+                      <el-progress :percentage="dataManageState.task.progress" :status="dataManageState.task.status === 'failed' ? 'exception' : undefined" />
+                      <small>已处理 {{ dataManageState.task.affected_rows || 0 }} / {{ dataManageState.task.total_rows || 0 }} 行</small>
+                    </div>
                     <footer>
                       <el-button
                         type="danger"
                         :icon="Trash2"
-                        :disabled="!dataManageState.clearAllowed || dataManageState.environmentLoading"
+                        :disabled="!dataManageState.clearAllowed || dataManageState.environmentLoading || ['queued', 'processing'].includes(dataManageState.task?.status)"
                         :loading="dataManageState.clearLoading"
                         @click="clearCurrentTestData"
                       >
-                        一键清除测试数据
+                        提交异步清理任务
                       </el-button>
                     </footer>
                   </section>
@@ -4402,7 +4445,7 @@ import { backendUrl, frontendPublicUrl, request } from './api/client';
 import {
   changeOwnPassword,
   changeAdminAccountStatus,
-  clearTestData,
+  createDataCleanupTask,
   deleteArchiveItem,
   exportInternshipBaseWord,
   exportInternshipImplementationPdf,
@@ -4414,6 +4457,8 @@ import {
   fetchArchiveList,
   fetchDesktopShortcuts,
   fetchDataEnvironment,
+  fetchDataCleanupOptions,
+  fetchDataCleanupTask,
   fetchFavorites,
   fetchFileList,
   fetchSwitchableAccounts,
@@ -4425,6 +4470,7 @@ import {
   fetchInternshipDelays,
   fetchInternshipBaseFlows,
   fetchInternshipBaseDetail,
+  fetchInternshipBaseImportTemplate,
   fetchInternshipBases,
   fetchInternshipCourseScores,
   fetchInternshipInsurances,
@@ -5568,8 +5614,13 @@ const dataManageState = reactive({
   mode: 'production',
   isTest: false,
   clearAllowed: false,
+  options: [],
+  selectedScopes: [],
+  preserveEduData: true,
+  task: null,
   message: '',
 });
+let cleanupPollTimer = null;
 const archiveRequirementVisible = ref(false);
 
 const internshipSidebarItems = [
@@ -7690,6 +7741,11 @@ function setDesktopModuleOrder(ids) {
   desktopLauncher.setModuleOrder(ids);
 }
 
+async function addDesktopShortcutFromDrop(moduleId) {
+  if (!moduleId || isDefaultDesktopShortcut(moduleId) || isDesktopShortcut(moduleId)) return;
+  await toggleDesktopShortcut(moduleId, true);
+}
+
 function isDefaultDesktopShortcut(moduleId) {
   return desktopLauncher.isDefaultShortcut(moduleId);
 }
@@ -7698,14 +7754,14 @@ function launcherShortcutTitle(moduleId) {
   return desktopLauncher.shortcutTitle(moduleId);
 }
 
-async function toggleDesktopShortcut(moduleId) {
+async function toggleDesktopShortcut(moduleId, forceAdd = false) {
   if (isDefaultDesktopShortcut(moduleId) || desktopLauncherState.loading) {
     return;
   }
 
   const items = desktopShortcutPayloadItems.value.slice();
   const index = items.findIndex(item => item.type === 'module' && item.key === moduleId);
-  if (index >= 0) {
+  if (index >= 0 && !forceAdd) {
     items.splice(index, 1);
   } else {
     items.push({ type: 'module', key: moduleId });
@@ -9182,14 +9238,19 @@ async function resetUserPassword() {
 }
 
 async function clearCurrentTestData() {
-  if (permissionState.context.role_type !== 'super_admin' || dataManageState.clearLoading) {
+  if (permissionState.context.role_type !== 'super_admin' || dataManageState.clearLoading
+    || ['queued', 'processing'].includes(dataManageState.task?.status)) {
     return;
   }
   if (!dataManageState.clearAllowed) {
     dataManageState.message = '当前不是测试环境，禁止清除测试数据';
     return;
   }
-  const confirmation = window.prompt('该操作会清除测试数据。请输入 CLEAR_TEST_DATA 确认：');
+  if (!dataManageState.selectedScopes.length) {
+    dataManageState.message = '请至少选择一个清理范围';
+    return;
+  }
+  const confirmation = window.prompt('该操作会异步清理选中的测试数据。请输入 CLEAR_TEST_DATA 确认：');
   if (confirmation !== 'CLEAR_TEST_DATA') {
     dataManageState.message = '已取消或确认文本不正确';
     return;
@@ -9198,18 +9259,60 @@ async function clearCurrentTestData() {
   dataManageState.clearLoading = true;
   dataManageState.message = '';
   try {
-    const data = await clearTestData({ confirmation });
-    const affectedTotal = Object.values(data.affected || {}).reduce((sum, value) => sum + Number(value || 0), 0);
-    dataManageState.message = `已清除测试数据，影响 ${affectedTotal} 行`;
-    await Promise.all([
-      loadAdminFoundation(),
-      loadDesktopShortcuts(),
-      loadFavorites(1),
-    ]);
+    const data = await createDataCleanupTask({
+      confirmation,
+      scopes: dataManageState.selectedScopes,
+      preserve_edu_data: dataManageState.preserveEduData,
+    });
+    dataManageState.task = data.task || null;
+    dataManageState.message = '清理任务已提交，可在本页查看进度';
+    pollDataCleanupTask();
   } catch (error) {
     dataManageState.message = error.message;
-  } finally {
     dataManageState.clearLoading = false;
+  }
+}
+
+function cleanupStatusName(status) {
+  return { queued: '排队中', processing: '清理中', completed: '已完成', failed: '执行失败' }[status] || status || '未开始';
+}
+
+function pollDataCleanupTask() {
+  if (cleanupPollTimer) clearTimeout(cleanupPollTimer);
+  const taskId = Number(dataManageState.task?.id || 0);
+  if (!taskId) return;
+  cleanupPollTimer = setTimeout(async () => {
+    try {
+    const data = await fetchDataCleanupTask(taskId);
+      dataManageState.task = data.task || dataManageState.task;
+      if (['completed', 'failed'].includes(dataManageState.task?.status)) {
+        dataManageState.clearLoading = false;
+        dataManageState.message = dataManageState.task.status === 'completed'
+          ? `清理完成，影响 ${dataManageState.task.affected_rows || 0} 行`
+          : (dataManageState.task.error_message || '清理任务执行失败');
+        dataManageState.clearLoading = false;
+        await loadAdminFoundation();
+        await loadDesktopShortcuts();
+        await loadFavorites(1);
+        return;
+      }
+      pollDataCleanupTask();
+    } catch (error) {
+      dataManageState.message = error.message;
+      dataManageState.clearLoading = false;
+    }
+  }, 1000);
+}
+
+async function loadDataCleanupOptions() {
+  try {
+    const data = await fetchDataCleanupOptions();
+    dataManageState.options = data.items || [];
+    if (!dataManageState.selectedScopes.length) {
+      dataManageState.selectedScopes = dataManageState.options.map(item => item.key);
+    }
+  } catch (error) {
+    dataManageState.message = error.message;
   }
 }
 
@@ -9225,6 +9328,7 @@ async function loadDataEnvironment() {
     dataManageState.mode = data.mode || 'production';
     dataManageState.isTest = data.is_test === true;
     dataManageState.clearAllowed = data.clear_allowed === true;
+    if (dataManageState.clearAllowed) await loadDataCleanupOptions();
   } catch (error) {
     dataManageState.mode = 'production';
     dataManageState.isTest = false;
@@ -14324,17 +14428,28 @@ async function openTaskFromPlan(plan) {
   handleArrangementPlanChange();
 }
 
-async function downloadPlanImportTemplate() {
+/** 下载计划表导入模板。 */
+function downloadPlanImportTemplate() {
+  return downloadInternshipImportTemplate(fetchInternshipPlanImportTemplate, '实习计划导入模板.xlsx');
+}
+
+/** 下载基地导入模板。 */
+function downloadBaseImportTemplate() {
+  return downloadInternshipImportTemplate(fetchInternshipBaseImportTemplate, '实习基地导入模板.xlsx');
+}
+
+/** 获取模板地址并触发文件下载。 */
+async function downloadInternshipImportTemplate(fetchTemplate, fallbackName) {
   if (internshipState.loading) {
     return;
   }
   internshipState.loading = true;
   internshipState.message = '';
   try {
-    const result = await fetchInternshipPlanImportTemplate();
+    const result = await fetchTemplate();
     const link = document.createElement('a');
     link.href = backendUrl(result.url);
-    link.download = result.download_name || '实习计划导入模板.xlsx';
+    link.download = result.download_name || fallbackName;
     document.body.appendChild(link);
     link.click();
     link.remove();
@@ -15933,6 +16048,10 @@ function resetAdminState() {
   dataManageState.mode = 'production';
   dataManageState.isTest = false;
   dataManageState.clearAllowed = false;
+  dataManageState.options = [];
+  dataManageState.selectedScopes = [];
+  dataManageState.preserveEduData = true;
+  dataManageState.task = null;
   dataManageState.message = '';
   resetInternshipState();
 }

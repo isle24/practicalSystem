@@ -386,6 +386,21 @@ export function clearTestData(payload) {
   });
 }
 
+export function fetchDataCleanupOptions() {
+  return request('/admin/data-cleanup-options');
+}
+
+export function createDataCleanupTask(payload) {
+  return request('/admin/data-cleanup-task', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function fetchDataCleanupTask(id) {
+  return request(`/admin/data-cleanup-task?id=${encodeURIComponent(id)}`);
+}
+
 export function fetchDataEnvironment() {
   return request('/admin/data-environment');
 }
@@ -730,6 +745,11 @@ export function saveInternshipMentor(payload) {
 
 export function fetchInternshipPlanImportTemplate() {
   return request('/internship/plan-import-template');
+}
+
+/** 获取基地汇总表导入模板。 */
+export function fetchInternshipBaseImportTemplate() {
+  return request('/internship/base-import-template');
 }
 
 export function previewInternshipPlanImport(file) {
