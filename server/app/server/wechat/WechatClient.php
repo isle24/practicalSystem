@@ -27,6 +27,14 @@ class WechatClient
         return $this->request('GET', '/cgi-bin/agent/get', ['access_token' => $accessToken, 'agentid' => $agentId]);
     }
 
+    public function createMenu(string $accessToken, string $agentId, array $buttons): array
+    {
+        return $this->request('POST', '/cgi-bin/menu/create', [
+            'access_token' => $accessToken,
+            'agentid' => $agentId,
+        ], ['button' => $buttons]);
+    }
+
     public function request(string $method, string $path, array $query = [], array $body = []): array
     {
         $config = new ConfigService();
@@ -90,7 +98,8 @@ class WechatClient
         }
         $parts = parse_url($url);
         $host = strtolower((string) ($parts['host'] ?? ''));
-        if (($parts['scheme'] ?? '') !== 'https' || $host === '' || isset($parts['user'], $parts['pass'], $parts['query'], $parts['fragment'])) {
+        if (($parts['scheme'] ?? '') !== 'https' || $host === ''
+            || isset($parts['user']) || isset($parts['pass']) || isset($parts['query']) || isset($parts['fragment'])) {
             throw new InvalidArgumentException('企业微信代理必须使用 HTTPS 域名，不能包含账号、参数或片段');
         }
         $allowed = array_values(array_filter(array_map('trim', explode(',', (string) (getenv('WECHAT_PROXY_ALLOWED_HOSTS') ?: '')))));

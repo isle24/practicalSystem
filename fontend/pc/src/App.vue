@@ -3999,15 +3999,18 @@
                   </section>
                 </div>
 
-                <div v-else-if="win.module.id === 'config' && win.panel === 'wechatProxy'" class="admin-panel wechat-config-panel">
+                <div v-else-if="win.module.id === 'config' && win.panel === 'wechatProxy'" v-loading="wechatProxy.syncing" element-loading-text="正在同步企业微信菜单" class="admin-panel wechat-config-panel">
                   <div class="admin-toolbar">
-                    <el-button type="primary" :icon="Save" :loading="wechatProxy.loading" :disabled="!hasPermission('wechat:proxy:save')" @click="saveProxy">
+                    <el-button type="primary" :icon="Save" :loading="wechatProxy.loading" :disabled="wechatProxy.syncing || wechatProxy.checking || !hasPermission('wechat:proxy:save')" @click="saveProxy">
                       保存配置
                     </el-button>
-                    <el-button :icon="CheckCircle2" :loading="wechatProxy.checking" :disabled="!hasPermission('wechat:proxy:test')" @click="checkProxyConfig">
+                    <el-button :icon="RefreshCw" :loading="wechatProxy.syncing" :disabled="wechatProxy.loading || wechatProxy.checking || !hasPermission('wechat:proxy:save')" @click="syncProxyMenu">
+                      立即同步菜单
+                    </el-button>
+                    <el-button :icon="CheckCircle2" :loading="wechatProxy.checking" :disabled="wechatProxy.loading || wechatProxy.syncing || !hasPermission('wechat:proxy:test')" @click="checkProxyConfig">
                       测试配置
                     </el-button>
-                    <el-button :icon="RefreshCw" :loading="wechatProxy.loading" @click="loadProxy">
+                    <el-button :icon="RefreshCw" :loading="wechatProxy.loading" :disabled="wechatProxy.syncing || wechatProxy.checking" @click="loadProxy">
                       重新读取
                     </el-button>
                     <el-button :icon="Plus" :disabled="wechatProxy.menu.length >= 3" @click="addWechatMenu()">
@@ -4022,13 +4025,13 @@
                   </div>
                   <div class="wechat-config-layout">
                     <section class="settings-form wechat-app-form">
-                      <label><span>应用 AppID</span><input v-model="wechatProxy.app_id" placeholder="第三方应用或自建应用标识"></label>
+                      <label><span>应用 AppID（可留空）</span><input v-model="wechatProxy.app_id" placeholder="企业微信自建应用无需填写"></label>
                       <label><span>企业 ID</span><input v-model="wechatProxy.corp_id" placeholder="wwxxxxxxxx"></label>
                       <label><span>AgentId</span><input v-model="wechatProxy.agent_id" placeholder="1000002"></label>
                       <label><span>应用 Secret</span><input v-model="wechatProxy.secret" placeholder="企业微信应用 Secret"></label>
                       <label><span>回调 Token</span><input v-model="wechatProxy.token"></label>
                       <label><span>EncodingAESKey</span><input v-model="wechatProxy.encoding_aes_key"></label>
-                      <label><span>代理地址</span><input v-model="wechatProxy.proxy_url" placeholder="http://127.0.0.1:9000/wechat-proxy"></label>
+                      <label><span>代理地址</span><input v-model="wechatProxy.proxy_url" placeholder="https://proxy.example.com/wechat-proxy"></label>
                       <label>
                         <span>启用代理</span>
                         <el-switch
@@ -4043,6 +4046,7 @@
                         <strong>应用菜单</strong>
                         <small>一级最多 3 个，每个一级菜单最多 5 个子菜单</small>
                       </header>
+                      <small>保存配置仅保存到本系统；立即同步会先保存当前配置，再覆盖企业微信应用菜单。</small>
                       <div class="wechat-menu-board">
                         <button
                           v-for="(menu, index) in wechatProxy.menu"
@@ -4075,7 +4079,7 @@
                             <el-option label="小程序" value="miniprogram" />
                           </el-select>
                         </label>
-                        <label v-if="selectedWechatMenu.type === 'view' || selectedWechatMenu.type === 'miniprogram'"><span>URL</span><input v-model="selectedWechatMenu.url"></label>
+                        <label v-if="selectedWechatMenu.type === 'view'"><span>URL</span><input v-model="selectedWechatMenu.url"></label>
                         <label v-if="selectedWechatMenu.type === 'click'"><span>Key</span><input v-model="selectedWechatMenu.key"></label>
                         <label v-if="selectedWechatMenu.type === 'miniprogram'"><span>AppID</span><input v-model="selectedWechatMenu.appid"></label>
                         <label v-if="selectedWechatMenu.type === 'miniprogram'"><span>页面路径</span><input v-model="selectedWechatMenu.pagepath"></label>
@@ -4580,6 +4584,7 @@ import {
   saveProfileSettings,
   saveRoleMenus,
   saveWechatConfig,
+  syncWechatMenu,
   switchAccount,
   removeInternshipPair,
   uploadLoginBackground,
@@ -4714,6 +4719,7 @@ const wechatProxy = reactive({
   loading: false,
   checking: false,
   checkResult: null,
+  syncing: false,
   message: '',
 });
 const logState = reactive({
@@ -16241,7 +16247,7 @@ function safeCssUrl(value) {
 }
 
 async function loadProxy() {
-  if (!isLoggedIn.value || !hasPermission('wechat:proxy')) {
+  if (wechatProxy.loading || wechatProxy.syncing || wechatProxy.checking || !isLoggedIn.value || !hasPermission('wechat:proxy')) {
     return;
   }
 
@@ -16305,7 +16311,6 @@ function wechatMenuPayload(items) {
     if (item.type === 'click') {
       payload.key = item.key;
     } else if (item.type === 'miniprogram') {
-      payload.url = item.url;
       payload.appid = item.appid;
       payload.pagepath = item.pagepath;
     } else {
@@ -16321,8 +16326,13 @@ function validateWechatMenus(items, allowChildren = true) {
   }
 
   for (const item of items) {
-    if (!String(item.name || '').trim()) {
+    const name = String(item.name || '').trim();
+    if (!name) {
       return '企业微信菜单名称不能为空';
+    }
+    const maxNameBytes = allowChildren ? 16 : 40;
+    if (new TextEncoder().encode(name).length > maxNameBytes) {
+      return `企业微信菜单名称不能超过 ${maxNameBytes} 字节`;
     }
     if (item.children?.length) {
       if (!allowChildren) {
@@ -16337,8 +16347,14 @@ function validateWechatMenus(items, allowChildren = true) {
     if (item.type === 'click' && !String(item.key || '').trim()) {
       return '点击菜单 Key 不能为空';
     }
+    if (item.type === 'click' && new TextEncoder().encode(String(item.key || '').trim()).length > 128) {
+      return '点击菜单 Key 不能超过 128 字节';
+    }
     if (item.type === 'view' && !String(item.url || '').trim()) {
       return '跳转菜单 URL 不能为空';
+    }
+    if (item.type === 'view' && new TextEncoder().encode(String(item.url || '').trim()).length > 1024) {
+      return '跳转菜单 URL 不能超过 1024 字节';
     }
     if (item.type === 'miniprogram' && (!String(item.appid || '').trim() || !String(item.pagepath || '').trim())) {
       return '小程序菜单 AppID 和路径不能为空';
@@ -16399,7 +16415,24 @@ function removeSelectedWechatMenu() {
   wechatProxy.selectedSubMenuIndex = -1;
 }
 
+function wechatConfigPayload() {
+  return {
+    app_id: wechatProxy.app_id,
+    corp_id: wechatProxy.corp_id,
+    agent_id: wechatProxy.agent_id,
+    secret: wechatProxy.secret,
+    token: wechatProxy.token,
+    encoding_aes_key: wechatProxy.encoding_aes_key,
+    proxy_url: wechatProxy.proxy_url,
+    proxy_enabled: wechatProxy.proxy_enabled,
+    menu: wechatMenuPayload(wechatProxy.menu),
+  };
+}
+
 async function saveProxy() {
+  if (wechatProxy.loading || wechatProxy.syncing || wechatProxy.checking || !hasPermission('wechat:proxy:save')) {
+    return;
+  }
   const menuError = validateWechatMenus(wechatProxy.menu);
   if (menuError) {
     wechatProxy.message = menuError;
@@ -16409,17 +16442,7 @@ async function saveProxy() {
   wechatProxy.loading = true;
   wechatProxy.message = '';
   try {
-    const data = await saveWechatConfig({
-      app_id: wechatProxy.app_id,
-      corp_id: wechatProxy.corp_id,
-      agent_id: wechatProxy.agent_id,
-      secret: wechatProxy.secret,
-      token: wechatProxy.token,
-      encoding_aes_key: wechatProxy.encoding_aes_key,
-      proxy_url: wechatProxy.proxy_url,
-      proxy_enabled: wechatProxy.proxy_enabled,
-      menu: wechatMenuPayload(wechatProxy.menu),
-    });
+    const data = await saveWechatConfig(wechatConfigPayload());
     applyWechatConfig(data);
     wechatProxy.message = '已保存';
   } catch (error) {
@@ -16429,8 +16452,34 @@ async function saveProxy() {
   }
 }
 
+async function syncProxyMenu() {
+  if (wechatProxy.loading || wechatProxy.syncing || wechatProxy.checking || !hasPermission('wechat:proxy:save')) {
+    return;
+  }
+  const menuError = wechatProxy.menu.length ? validateWechatMenus(wechatProxy.menu) : '请至少配置一个一级菜单';
+  if (menuError) {
+    wechatProxy.message = menuError;
+    return;
+  }
+
+  wechatProxy.syncing = true;
+  wechatProxy.message = '';
+  let saved = false;
+  try {
+    const data = await saveWechatConfig(wechatConfigPayload());
+    saved = true;
+    applyWechatConfig(data);
+    const result = await syncWechatMenu();
+    wechatProxy.message = `菜单已同步至企业微信（AgentId ${result.agent_id}），同步时间 ${result.synced_at}。可重新进入应用查看。`;
+  } catch (error) {
+    wechatProxy.message = saved ? `配置已保存，但菜单同步失败：${error.message}` : `配置保存失败：${error.message}`;
+  } finally {
+    wechatProxy.syncing = false;
+  }
+}
+
 async function checkProxyConfig() {
-  if (wechatProxy.checking || !hasPermission('wechat:proxy:test')) {
+  if (wechatProxy.loading || wechatProxy.syncing || wechatProxy.checking || !hasPermission('wechat:proxy:test')) {
     return;
   }
   wechatProxy.checking = true;

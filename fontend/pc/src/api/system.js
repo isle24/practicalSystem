@@ -93,6 +93,13 @@ export function checkWechatConfig(payload) {
   });
 }
 
+export function syncWechatMenu() {
+  return request('/wechat/sync-menu', {
+    method: 'POST',
+    timeoutMs: 45000,
+  });
+}
+
 export function fetchEduBatches(params = {}) {
   const query = new URLSearchParams(params).toString();
   return request(`/edu-data/batches${query ? `?${query}` : ''}`);
