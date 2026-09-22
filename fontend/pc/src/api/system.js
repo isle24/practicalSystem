@@ -106,6 +106,10 @@ export function unbindAdminWechat(accountId) {
   return request('/admin/unbind-wechat', { method: 'POST', body: JSON.stringify({ account_id: accountId }) });
 }
 
+export function fetchEduPeriodOptions() {
+  return request('/edu-data/period-options');
+}
+
 export function fetchEduBatches(params = {}) {
   const query = new URLSearchParams(params).toString();
   return request(`/edu-data/batches${query ? `?${query}` : ''}`);

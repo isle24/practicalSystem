@@ -35,3 +35,6 @@ Route::post('/api/profile/save-notifications', [\app\controller\Api\ProfileContr
 
 Route::disableDefaultRoute([\app\controller\Api\AdminController::class, 'unbindWechat']);
 Route::disableDefaultRoute([\app\controller\Api\ProfileController::class, 'saveNotifications']);
+
+Route::get('/api/edu-data/period-options', [\app\controller\Api\EduDataController::class, 'periodOptions']);
+Route::disableDefaultRoute([\app\controller\Api\EduDataController::class, 'periodOptions']);

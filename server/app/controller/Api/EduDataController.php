@@ -38,6 +38,11 @@ class EduDataController
         return $this->handle(fn (): array => $this->service()->batches($this->filters($request)));
     }
 
+    public function periodOptions(Request $request): Response
+    {
+        return $this->handle(fn (): array => $this->service()->periodOptions());
+    }
+
     #[OperationLog('查看教务导入批次详情')]
     public function batchDetail(Request $request): Response
     {

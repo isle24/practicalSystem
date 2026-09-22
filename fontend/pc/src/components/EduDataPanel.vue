@@ -13,6 +13,7 @@ import {
   fetchEduCandidates,
   fetchEduChanges,
   fetchEduIssues,
+  fetchEduPeriodOptions,
   fetchEduSource,
   publishEduBatch,
   resolveEduIssue,
@@ -25,14 +26,22 @@ const props = defineProps({
   canIssue: { type: Boolean, default: false },
 });
 
+const today = new Date();
+const academicStartYear = today.getFullYear() - (today.getMonth() < 8 ? 1 : 0);
+const currentAcademicYear = `${academicStartYear}-${academicStartYear + 1}`;
+const currentSemester = today.getMonth() >= 1 && today.getMonth() < 8 ? '2' : '1';
+
 const state = reactive({
   tab: 'batches',
   loading: false,
   message: '',
   uploadType: '',
   uploadLoading: false,
-  academic_year: '2026-2027',
-  semester: '1',
+  academic_year: '',
+  semester: '',
+  periodOptions: { academic_years: [], semesters: [] },
+  uploadPeriodVisible: false,
+  uploadPeriod: { academic_year: currentAcademicYear, semester: currentSemester },
   batches: [],
   batchPagination: { page: 1, page_size: 20, total: 0 },
   batchStatus: '',
@@ -56,6 +65,8 @@ const state = reactive({
 
 let inputElement = null;
 let refreshTimer = null;
+let batchRequestId = 0;
+let sourceRequestId = 0;
 
 const templateDefinitions = [
   { type: 'student', label: '在校学生模板' },
@@ -71,6 +82,29 @@ const sourceDefinitions = [
 
 const processing = computed(() => state.batches.some(item => ['queued', 'parsing', 'validating', 'publishing'].includes(item.status)));
 const candidateSelectionReady = computed(() => state.selectedCandidateIds.length > 0);
+const canFilterPeriod = computed(() => ['batches', 'teaching_plan', 'course_offering'].includes(state.tab));
+const academicYearOptions = computed(() => [...new Set([
+  ...Array.from({ length: 8 }, (_, index) => `${academicStartYear + 2 - index}-${academicStartYear + 3 - index}`),
+  ...state.periodOptions.academic_years,
+])].sort().reverse());
+const semesterOptions = computed(() => [...new Set(['1', '2', ...state.periodOptions.semesters])]);
+
+function semesterLabel(value) {
+  return ({ '1': '第一学期', '2': '第二学期' })[value] || value || '-';
+}
+
+async function loadPeriodOptions() {
+  try { state.periodOptions = await fetchEduPeriodOptions(); }
+  catch (error) { state.message = error.message; }
+}
+
+function refreshCurrentTab() {
+  handleTabChange(state.tab);
+}
+
+function handlePeriodChange() {
+  if (canFilterPeriod.value) refreshCurrentTab();
+}
 
 function statusLabel(status) {
   return {
@@ -109,6 +143,19 @@ function chooseUpload(type) {
     return;
   }
   state.uploadType = type;
+  if (type !== 'student') {
+    state.uploadPeriod = {
+      academic_year: state.academic_year || currentAcademicYear,
+      semester: state.semester || currentSemester,
+    };
+    state.uploadPeriodVisible = true;
+    return;
+  }
+  chooseFile();
+}
+
+function chooseFile() {
+  state.uploadPeriodVisible = false;
   if (!inputElement) {
     inputElement = document.createElement('input');
     inputElement.type = 'file';
@@ -132,11 +179,14 @@ async function handleFileChange(event) {
   state.uploadLoading = true;
   state.message = '';
   try {
-    await uploadEduData(type, file, type === 'student' ? {} : { academic_year: state.academic_year, semester: state.semester });
+    await uploadEduData(type, file, type === 'student' ? {} : { ...state.uploadPeriod });
+    state.academic_year = type === 'student' ? '' : state.uploadPeriod.academic_year;
+    state.semester = type === 'student' ? '' : state.uploadPeriod.semester;
     state.message = `${typeLabel(type)}导入任务已排队`;
     state.tab = 'batches';
     await loadBatches(1);
     ensurePolling();
+    await loadPeriodOptions();
   } catch (error) {
     state.message = error.message;
   } finally {
@@ -145,15 +195,18 @@ async function handleFileChange(event) {
 }
 
 async function loadBatches(page = 1) {
+  const requestId = ++batchRequestId;
   state.loading = true;
   try {
-    const data = await fetchEduBatches({ page, page_size: state.batchPagination.page_size, status: state.batchStatus });
+    const data = await fetchEduBatches({ page, page_size: state.batchPagination.page_size, status: state.batchStatus, academic_year: state.academic_year, semester: state.semester });
+    if (requestId !== batchRequestId) return;
     state.batches = data.items || [];
     state.batchPagination = { ...state.batchPagination, ...(data.pagination || {}), page };
+    ensurePolling();
   } catch (error) {
-    state.message = error.message;
+    if (requestId === batchRequestId) state.message = error.message;
   } finally {
-    state.loading = false;
+    if (requestId === batchRequestId) state.loading = false;
   }
 }
 
@@ -219,15 +272,19 @@ async function cancelBatch(row) {
 }
 
 async function loadSource(page = 1) {
+  const requestId = ++sourceRequestId;
+  const type = state.sourceType;
   state.sourceLoading = true;
   try {
-    const data = await fetchEduSource(state.sourceType, { page, page_size: state.sourcePagination.page_size });
+    const period = type === 'student' ? {} : { academic_year: state.academic_year, semester: state.semester };
+    const data = await fetchEduSource(type, { page, page_size: state.sourcePagination.page_size, ...period });
+    if (requestId !== sourceRequestId) return;
     state.sourceItems = data.items || [];
     state.sourcePagination = { ...state.sourcePagination, ...(data.pagination || {}), page };
   } catch (error) {
-    state.message = error.message;
+    if (requestId === sourceRequestId) state.message = error.message;
   } finally {
-    state.sourceLoading = false;
+    if (requestId === sourceRequestId) state.sourceLoading = false;
   }
 }
 
@@ -339,7 +396,7 @@ function ensurePolling() {
 }
 
 onMounted(async () => {
-  await loadBatches(1);
+  await Promise.all([loadBatches(1), loadPeriodOptions()]);
   ensurePolling();
 });
 
@@ -361,20 +418,26 @@ onBeforeUnmount(() => {
       </div>
       <label class="edu-period-field">
         <span>学年</span>
-        <input v-model.trim="state.academic_year" maxlength="40" placeholder="2026-2027">
+        <el-select v-model="state.academic_year" aria-label="筛选学年" placeholder="全部学年" :disabled="!canFilterPeriod" @change="handlePeriodChange">
+          <el-option label="全部学年" value="" />
+          <el-option v-for="year in academicYearOptions" :key="year" :label="year" :value="year" />
+        </el-select>
       </label>
       <label class="edu-period-field">
         <span>学期</span>
-        <input v-model.trim="state.semester" maxlength="20" placeholder="1">
+        <el-select v-model="state.semester" aria-label="筛选学期" placeholder="全部学期" :disabled="!canFilterPeriod" @change="handlePeriodChange">
+          <el-option label="全部学期" value="" />
+          <el-option v-for="semester in semesterOptions" :key="semester" :label="semesterLabel(semester)" :value="semester" />
+        </el-select>
       </label>
-      <el-button :icon="RefreshCw" :loading="state.loading" @click="loadBatches(1)">刷新</el-button>
+      <el-button :icon="RefreshCw" :loading="state.loading || state.sourceLoading || state.candidateLoading" @click="refreshCurrentTab">刷新</el-button>
     </header>
 
     <section class="edu-template-actions">
       <div v-for="item in templateDefinitions" :key="item.type" class="edu-template-item">
         <span>{{ item.label }}</span>
         <el-button link type="primary" :icon="Download" @click="downloadTemplate(item.type)">下载模板</el-button>
-        <el-button v-if="props.canImport" link type="success" :icon="Upload" :loading="state.uploadLoading && state.uploadType === item.type" @click="chooseUpload(item.type)">上传</el-button>
+        <el-button v-if="props.canImport" link type="success" :icon="Upload" :loading="state.uploadLoading && state.uploadType === item.type" @click="chooseUpload(item.type)">{{ item.type === 'student' ? '导入学生档案' : '上传' }}</el-button>
       </div>
     </section>
 
@@ -386,6 +449,7 @@ onBeforeUnmount(() => {
     </el-tabs>
 
     <el-alert v-if="state.message" :title="state.message" type="warning" :closable="false" show-icon />
+    <p v-if="state.tab === 'student'" class="edu-source-hint">学生名单为已发布的全校档案，不按学年、学期筛选。</p>
 
     <el-table v-if="state.tab === 'batches'" :data="state.batches" stripe size="small" v-loading="state.loading" class="edu-data-table">
       <el-table-column type="index" label="序号" width="60" />
@@ -411,15 +475,18 @@ onBeforeUnmount(() => {
 
     <el-table v-else-if="['student', 'teaching_plan', 'course_offering'].includes(state.tab)" :data="state.sourceItems" stripe size="small" v-loading="state.sourceLoading" class="edu-data-table">
       <el-table-column type="index" label="序号" width="60" />
-      <el-table-column prop="student_num" label="学号" width="120" />
-      <el-table-column prop="student_name" label="学生" width="110" />
-      <el-table-column prop="course_code" label="课程代码" width="130" />
-      <el-table-column prop="course_name" label="课程名称" min-width="190" show-overflow-tooltip />
+      <el-table-column v-if="state.tab === 'student'" prop="student_num" label="学号" width="120" />
+      <el-table-column v-if="state.tab === 'student'" prop="student_name" label="学生" width="110" />
+      <el-table-column v-if="state.tab !== 'student'" prop="course_code" label="课程代码" width="130" />
+      <el-table-column v-if="state.tab !== 'student'" prop="course_name" label="课程名称" min-width="190" show-overflow-tooltip />
+      <el-table-column v-if="state.tab !== 'student'" prop="academic_year" label="学年" width="120" />
+      <el-table-column v-if="state.tab !== 'student'" label="学期" width="100"><template #default="{ row }">{{ semesterLabel(row.semester) }}</template></el-table-column>
       <el-table-column prop="grade_name" label="年级" width="90" />
       <el-table-column label="学院" min-width="150" show-overflow-tooltip><template #default="{ row }">{{ row.dep_name || row.open_dep_name || '-' }}</template></el-table-column>
       <el-table-column prop="profession_name" label="专业" min-width="160" show-overflow-tooltip />
-      <el-table-column prop="source_status" label="来源状态" width="100" />
-      <el-table-column prop="mapping_status" label="映射状态" width="100" />
+      <el-table-column v-if="state.tab === 'student'" prop="class_name" label="班级" min-width="160" />
+      <el-table-column label="来源状态" width="120"><template #default="{ row }">{{ ({ active: '有效', missing: '本批次未出现', deleted: '已删除', inactive: '已失效' })[row.source_status] || row.source_status || '-' }}</template></el-table-column>
+      <el-table-column label="映射状态" width="100"><template #default="{ row }">{{ ({ matched: '已匹配', pending: '待匹配', failed: '匹配失败' })[row.mapping_status] || row.mapping_status || '-' }}</template></el-table-column>
     </el-table>
 
     <section v-else-if="state.tab === 'candidates'" class="edu-candidate-section">
@@ -477,6 +544,14 @@ onBeforeUnmount(() => {
       <span>共 {{ state.issuePagination.total || 0 }} 条</span>
       <el-pagination size="small" layout="prev, pager, next" :current-page="state.issuePagination.page" :page-size="state.issuePagination.page_size" :total="state.issuePagination.total" @current-change="loadIssues" />
     </div>
+
+    <OperationDialog :visible="state.uploadPeriodVisible" title="选择开课数据所属学期" dialog-class="menu-dialog" @close="state.uploadPeriodVisible = false">
+      <div class="operation-form menu-dialog-form">
+        <label><span>学年</span><el-select v-model="state.uploadPeriod.academic_year" aria-label="上传学年"><el-option v-for="year in academicYearOptions" :key="year" :label="year" :value="year" /></el-select></label>
+        <label><span>学期</span><el-select v-model="state.uploadPeriod.semester" aria-label="上传学期"><el-option v-for="semester in semesterOptions" :key="semester" :label="semesterLabel(semester)" :value="semester" /></el-select></label>
+      </div>
+      <footer><el-button @click="state.uploadPeriodVisible = false">取消</el-button><el-button type="primary" :disabled="!state.uploadPeriod.academic_year || !state.uploadPeriod.semester" @click="chooseFile">选择文件</el-button></footer>
+    </OperationDialog>
 
     <OperationDialog :visible="state.detailVisible" title="导入批次详情" dialog-class="edu-batch-detail-dialog" @close="state.detailVisible = false">
       <div class="edu-batch-detail-body">
@@ -545,9 +620,12 @@ onBeforeUnmount(() => {
   color: var(--text-secondary, #667085);
 }
 
-.edu-period-field input {
-  width: 118px;
+.edu-period-field {
+  width: 150px;
 }
+
+.edu-period-field .el-select { width: 100%; }
+.edu-source-hint { margin: 0; color: var(--text-secondary, #667085); font-size: 13px; }
 
 .edu-template-actions {
   display: grid;

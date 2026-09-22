@@ -63,6 +63,17 @@ class EduDataRecord extends BaseModel
         ];
     }
 
+    public static function periodOptions(): array
+    {
+        $query = self::connection()->table('edu_import_batch')->whereNull('deleted_at');
+        self::applyBatchScope($query);
+        $rows = $query->where('import_type', '<>', 'student')->distinct()->get(['academic_year', 'semester']);
+        return [
+            'academic_years' => $rows->pluck('academic_year')->filter()->unique()->sortDesc()->values()->all(),
+            'semesters' => $rows->pluck('semester')->filter()->unique()->sort()->values()->all(),
+        ];
+    }
+
     public static function batchDetail(int $id): ?array
     {
         $result = self::batchById($id);
@@ -234,6 +245,7 @@ class EduDataRecord extends BaseModel
         $query = self::connection()->table(self::sourceTable($type))->whereNull('deleted_at');
         self::applySourceScope($query, $type);
         foreach (['source_status', 'mapping_status', 'business_type', 'candidate_status', 'academic_year', 'semester'] as $field) {
+            if ($type === 'student' && in_array($field, ['business_type', 'candidate_status', 'academic_year', 'semester'], true)) continue;
             $value = trim((string) ($filters[$field] ?? ''));
             if ($value !== '') {
                 $query->where($field, $value);

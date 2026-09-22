@@ -417,6 +417,12 @@ class EduImportService
         return EduDataRecord::batchPage($filters);
     }
 
+    public function periodOptions(): array
+    {
+        $this->assertViewPermission();
+        return EduDataRecord::periodOptions();
+    }
+
     public function detail(int $id): array
     {
         $this->assertViewPermission();

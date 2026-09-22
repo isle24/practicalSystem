@@ -2308,9 +2308,15 @@
                       <el-button v-if="canManageConfig" type="primary" :icon="Plus" @click="openUserDialog()">
                         新增用户
                       </el-button>
+                      <el-button v-if="hasPermission('edu:data:import')" :icon="Upload" @click="openModule(modules.find(item => item.id === 'eduData'))">
+                        导入学生档案
+                      </el-button>
                       <el-button :icon="RefreshCw" :loading="userAdminState.loading" @click="loadUserAccounts(userAdminState.pagination.page || 1)">
                         刷新
                       </el-button>
+                    </template>
+                    <template #cell-wechat_bound="{ row }">
+                      <el-button link :type="row.wechat_bound ? 'success' : 'primary'" :aria-label="`${row.name || row.login_name}的企业微信绑定`" @click="openUserDetailDialog(row, 'wechat')">{{ row.wechat_bound ? '已绑定' : '未绑定' }}</el-button>
                     </template>
                     <template #actions="{ row }">
                       <el-button v-if="canManageConfig" link type="primary" :disabled="!canMaintainUser(row)" @click="openUserDialog(row)">
@@ -2341,7 +2347,10 @@
                         日志
                       </el-button>
                       <el-button link type="primary" @click="openUserDetailDialog(row, 'bindings')">
-                        绑定
+                        账号绑定信息
+                      </el-button>
+                      <el-button link type="primary" @click="openUserDetailDialog(row, 'wechat')">
+                        企业微信绑定 / 解绑
                       </el-button>
                     </template>
                   </DataListPanel>
@@ -2478,6 +2487,7 @@
                           <strong>{{ userAdminState.detail.account?.name || '-' }}</strong>
                           <span>{{ userAdminState.detail.account?.login_name || '-' }} / {{ userAdminState.detail.account?.role_name || '-' }}</span>
                         </section>
+                        <el-alert v-if="userAdminState.message" :title="userAdminState.message" type="warning" :closable="false" />
                         <template v-if="userAdminState.detailMode === 'logs'">
                           <el-table
                             :data="userAdminState.detail.logs"
@@ -2513,7 +2523,7 @@
                           </div>
                         </template>
                         <template v-else>
-                          <section class="detail-table-block">
+                          <section v-if="userAdminState.detailMode !== 'wechat'" class="detail-table-block">
                             <header>
                               <strong>其他登录账号</strong>
                               <small>{{ userAdminState.detail.boundAccounts.length }} 个</small>
@@ -2538,16 +2548,16 @@
                               <strong>企业微信绑定</strong>
                               <small>{{ userAdminState.detail.wechatAccounts.length }} 个</small>
                             </header>
-                            <el-table :data="userAdminState.detail.wechatAccounts" height="190" stripe v-loading="userAdminState.detailLoading">
+                            <el-table :data="userAdminState.detail.wechatAccounts" height="190" stripe empty-text="尚未绑定企业微信" v-loading="userAdminState.detailLoading">
                               <el-table-column type="index" label="序号" width="66" align="center" />
                               <el-table-column prop="wechat_userid" label="企业微信账号" min-width="150" />
                               <el-table-column prop="wechat_name" label="姓名" min-width="120" />
                               <el-table-column prop="mobile" label="手机" min-width="130" />
                               <el-table-column prop="email" label="邮箱" min-width="160" />
-                              <el-table-column prop="last_synced_at" label="同步时间" width="168" />
+                              <el-table-column prop="created_at" label="绑定时间" width="168" />
                               <el-table-column v-if="canUnbindUserWechat" label="操作" width="88" fixed="right">
                                 <template #default="{ row }">
-                                  <el-button link type="danger" :disabled="userAdminState.detailLoading" @click="unbindUserWechat(row)">解绑</el-button>
+                                  <el-button link type="danger" :disabled="userAdminState.detailLoading || !canMaintainUser(userAdminState.detail.account)" @click="unbindUserWechat(row)">解绑</el-button>
                                 </template>
                               </el-table-column>
                             </el-table>
@@ -5513,6 +5523,7 @@ const userListColumns = [
   { key: 'mobile', label: '手机', minWidth: 130 },
   { key: 'email', label: '邮箱', minWidth: 170 },
   { key: 'status', label: '账号状态', width: 100, tag: true, tagType: row => statusTagType(row.status), formatter: row => statusText(row.status) },
+  { key: 'wechat_bound', label: '企业微信', width: 112, fixed: 'right', required: true, tooltip: false },
   { key: 'created_at', label: '创建时间', minWidth: 160 },
 ];
 const userListFilters = computed(() => [
@@ -6070,7 +6081,7 @@ const loginBackgroundUploadStyle = computed(() => (loginPageState.login_backgrou
   backgroundImage: `url("${safeCssUrl(loginPageState.login_background_url)}")`,
 } : {}));
 const profileAlertType = computed(() => (profileState.saved ? 'success' : 'warning'));
-const userDetailTitle = computed(() => (userAdminState.detailMode === 'logs' ? '操作日志' : '绑定账号'));
+const userDetailTitle = computed(() => ({ logs: '操作日志', wechat: '企业微信绑定', bindings: '账号绑定信息' })[userAdminState.detailMode] || '用户详情');
 const reviewReasonLength = computed(() => textLength(internshipState.dialog.reason));
 const internshipTimelineCycles = computed(() => normalizeTimelineCycles(
   internshipState.dialog.cycles || [],
@@ -9520,6 +9531,7 @@ async function unbindUserWechat(row) {
   try {
     await unbindAdminWechat(accountId);
     await loadUserDetailData(account, userAdminState.detailPagination.page || 1);
+    await loadUserAccounts(userAdminState.pagination.page || 1);
   } catch (error) {
     userAdminState.message = error.message;
     userAdminState.detailLoading = false;
