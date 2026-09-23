@@ -93,6 +93,23 @@ export function checkWechatConfig(payload) {
   });
 }
 
+export function syncWechatMenu() {
+  return request('/wechat/sync-menu', {
+    method: 'POST',
+    timeoutMs: 45000,
+  });
+}
+
+
+
+export function unbindAdminWechat(accountId) {
+  return request('/admin/unbind-wechat', { method: 'POST', body: JSON.stringify({ account_id: accountId }) });
+}
+
+export function fetchEduPeriodOptions() {
+  return request('/edu-data/period-options');
+}
+
 export function fetchEduBatches(params = {}) {
   const query = new URLSearchParams(params).toString();
   return request(`/edu-data/batches${query ? `?${query}` : ''}`);
@@ -384,6 +401,21 @@ export function clearTestData(payload) {
     method: 'POST',
     body: JSON.stringify(payload),
   });
+}
+
+export function fetchDataCleanupOptions() {
+  return request('/admin/data-cleanup-options');
+}
+
+export function createDataCleanupTask(payload) {
+  return request('/admin/data-cleanup-task', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function fetchDataCleanupTask(id) {
+  return request(`/admin/data-cleanup-task?id=${encodeURIComponent(id)}`);
 }
 
 export function fetchDataEnvironment() {
@@ -730,6 +762,11 @@ export function saveInternshipMentor(payload) {
 
 export function fetchInternshipPlanImportTemplate() {
   return request('/internship/plan-import-template');
+}
+
+/** 获取基地汇总表导入模板。 */
+export function fetchInternshipBaseImportTemplate() {
+  return request('/internship/base-import-template');
 }
 
 export function previewInternshipPlanImport(file) {

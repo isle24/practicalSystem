@@ -34,6 +34,7 @@ export async function request(path, options = {}) {
 async function sendRequest(path, options = {}, canRefresh = true) {
   const {
     timeoutMs: rawTimeoutMs,
+    refreshOnUnauthorized = true,
     signal: externalSignal,
     headers = {},
     ...fetchOptions
@@ -89,6 +90,8 @@ async function sendRequest(path, options = {}, canRefresh = true) {
     data: null,
   }));
 
+  if (payload.code === 40310) window.dispatchEvent(new CustomEvent('practical-wechat-required'));
+
   if (!response.ok || payload.code !== 0) {
     const error = new Error(payload.message || '请求失败');
     error.status = response.status;
@@ -96,7 +99,7 @@ async function sendRequest(path, options = {}, canRefresh = true) {
     error.apiPath = `${apiBase}${path}`;
     error.payload = payload;
     if (canRefresh && isAuthExpired(response, payload) && !isAuthPath(path)) {
-      const refreshed = await refreshSession();
+      const refreshed = refreshOnUnauthorized ? await refreshSession() : false;
       if (refreshed) {
         return sendRequest(path, options, false);
       }

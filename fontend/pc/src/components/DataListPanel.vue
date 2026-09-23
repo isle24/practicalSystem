@@ -101,10 +101,12 @@
         :show-overflow-tooltip="column.tooltip !== false"
       >
         <template #default="{ row }">
-          <el-tag v-if="column.tag" :type="column.tagType ? column.tagType(row) : 'primary'">
-            {{ columnText(column, row) }}
-          </el-tag>
-          <span v-else>{{ columnText(column, row) }}</span>
+          <slot :name="`cell-${column.key || column.prop}`" :row="row" :column="column">
+            <el-tag v-if="column.tag" :type="column.tagType ? column.tagType(row) : 'primary'">
+              {{ columnText(column, row) }}
+            </el-tag>
+            <span v-else>{{ columnText(column, row) }}</span>
+          </slot>
         </template>
       </el-table-column>
       <el-table-column v-if="actions.length || $slots.actions" label="操作" width="82" fixed="right" align="center">

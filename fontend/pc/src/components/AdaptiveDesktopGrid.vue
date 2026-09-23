@@ -1,6 +1,7 @@
 <template>
   <nav ref="gridRef" class="desktop-icons desktop-canvas" :style="layoutStyle" aria-label="应用模块"
-    @pointerdown="start" @click.capture="captureClick" @dragstart.prevent>
+    @pointerdown="start" @click.capture="captureClick" @dragstart.prevent
+    @dragover.prevent @drop.prevent="handleDrop">
     <ShortcutTile
       v-for="module in modules"
       :key="module.id"
@@ -29,7 +30,7 @@ const props = defineProps({
   storageKey: { type: String, required: true },
 });
 
-const emit = defineEmits(['open', 'warning']);
+const emit = defineEmits(['open', 'warning', 'drop-module']);
 const gridRef = ref(null);
 const bounds = ref({ width: 0, height: 0 });
 let observer = null;
@@ -83,6 +84,11 @@ const { drag, tileStyle, start, captureClick, reset } = useDesktopPositions({
   cell,
   notify: message => emit('warning', message),
 });
+function handleDrop(event) {
+  const id = event.dataTransfer?.getData('application/x-practical-module')
+    || event.dataTransfer?.getData('text/plain');
+  if (id) emit('drop-module', id);
+}
 defineExpose({ reset });
 
 function updateBounds(entry = null) {

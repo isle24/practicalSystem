@@ -65,6 +65,7 @@
         :is-focused="isModuleFocused"
         :backend-url="backendUrl"
         @open="openModule"
+        @drop-module="addDesktopShortcutFromDrop"
         @warning="ElMessage.warning"
       />
 
@@ -273,7 +274,7 @@
                   <label>
                     <span>
                       <strong>企业微信</strong>
-                      <small>通过企业微信应用推送</small>
+                      <small>{{ profileWechatBindingText }}</small>
                     </span>
                     <el-switch v-model="profileState.form.notify.wechat" />
                   </label>
@@ -283,6 +284,24 @@
                       <small>发送到个人邮箱</small>
                     </span>
                     <el-switch v-model="profileState.form.notify.email" />
+                  </label>
+                  <label>
+                    <span>
+                      <strong>全天接收</strong>
+                      <small>关闭后可设置每日接收时间，支持跨午夜</small>
+                    </span>
+                    <el-switch v-model="profileQuietAllDay" />
+                  </label>
+                  <label v-if="!profileQuietAllDay">
+                    <span>
+                      <strong>接收时间</strong>
+                      <small>开始时间晚于结束时间时按跨午夜处理</small>
+                    </span>
+                    <span class="profile-notify-time-range">
+                      <input v-model="profileState.form.wechat_quiet.start" type="time">
+                      <em>至</em>
+                      <input v-model="profileState.form.wechat_quiet.end" type="time">
+                    </span>
                   </label>
                 </div>
               </section>
@@ -295,8 +314,14 @@
           :title="win.module.name"
           :description="win.module.scope"
           :items="collectionModuleItems(win.module.id)"
+          :show-actions="isLoggedIn"
+          :loading="desktopLauncherState.loading"
+          :is-desktop-shortcut="isDesktopShortcut"
+          :is-default-desktop-shortcut="isDefaultDesktopShortcut"
+          :shortcut-title="launcherShortcutTitle"
           :backend-url="backendUrl"
           @open="openModule"
+          @toggle="toggleDesktopShortcut"
         />
 
         <div v-else class="app-body" :class="{ 'no-sidebar': !sidebarItems(win).length }">
@@ -320,7 +345,11 @@
 
             <div class="module-workspace">
               <section class="module-content-panel">
-                <div v-if="['internship', 'companyManage'].includes(win.module.id)" class="internship-panel">
+                <BaseVisitPanel
+                  v-if="canViewBaseVisits && (win.module.id === 'baseVisits' || (win.module.id === 'companyManage' && win.panel === 'baseVisits'))"
+                  :session-key="[permissionState.context.school_id, permissionState.context.account_id, permissionState.context.role_type].join(':')"
+                />
+                <div v-else-if="['internship', 'companyManage'].includes(win.module.id)" class="internship-panel">
                   <el-alert
                     v-if="internshipState.message"
                     type="warning"
@@ -390,12 +419,14 @@
                       />
 
                       <div v-else-if="internshipState.dialog.type === 'planImport'" class="plan-import-preview">
-                        <div class="plan-import-summary">
-                          <article><span>原始行</span><strong>{{ internshipState.planImport.summary.source_rows }}</strong></article>
-                          <article><span>拆分后</span><strong>{{ internshipState.planImport.summary.preview_rows }}</strong></article>
-                          <article><span>错误行</span><strong>{{ internshipState.planImport.summary.error_rows }}</strong></article>
-                          <article><span>重复行</span><strong>{{ internshipState.planImport.summary.duplicate_rows }}</strong></article>
-                          <el-button size="small" @click="confirmAllPlanImportTypes">确认全部建议分类</el-button>
+                        <div class="plan-import-header">
+                          <div class="plan-import-summary has-actions">
+                            <article><span>原始行</span><strong>{{ internshipState.planImport.summary.source_rows }}</strong></article>
+                            <article><span>拆分后</span><strong>{{ internshipState.planImport.summary.preview_rows }}</strong></article>
+                            <article><span>错误行</span><strong>{{ internshipState.planImport.summary.error_rows }}</strong></article>
+                            <article><span>重复行</span><strong>{{ internshipState.planImport.summary.duplicate_rows }}</strong></article>
+                            <el-button size="small" @click="confirmAllPlanImportTypes">确认全部建议分类</el-button>
+                          </div>
                         </div>
                         <el-table :data="internshipState.planImport.items" height="100%" stripe size="small">
                           <el-table-column prop="row_number" label="行" width="62" fixed="left" />
@@ -437,20 +468,34 @@
                       </div>
 
                       <div v-else-if="internshipState.dialog.type === 'baseImport'" class="plan-import-preview">
-                        <div class="plan-import-summary">
-                          <article><span>基地资料</span><strong>{{ internshipState.baseImport.summary.source_rows }}</strong></article>
-                          <article><span>错误行</span><strong>{{ internshipState.baseImport.summary.error_rows }}</strong></article>
-                          <article><span>警告行</span><strong>{{ internshipState.baseImport.summary.warning_rows }}</strong></article>
-                          <article><span>重复申报</span><strong>{{ internshipState.baseImport.summary.duplicate_rows }}</strong></article>
+                        <div class="plan-import-header">
+                          <div class="base-import-actions">
+                            <span>{{ internshipState.baseImport.file?.name || '实习基地汇总表' }}</span>
+                            <el-button :icon="Download" :disabled="internshipState.loading" @click="downloadBaseImportTemplate">下载模板</el-button>
+                            <el-button :icon="Upload" :disabled="internshipState.loading" @click="chooseBaseImportExcel">重新选择文件</el-button>
+                          </div>
+                          <div class="plan-import-summary">
+                            <article><span>基地资料</span><strong>{{ internshipState.baseImport.summary.source_rows }}</strong></article>
+                            <article><span>错误行</span><strong>{{ internshipState.baseImport.summary.error_rows }}</strong></article>
+                            <article><span>警告行</span><strong>{{ internshipState.baseImport.summary.warning_rows }}</strong></article>
+                            <article><span>重复申报</span><strong>{{ internshipState.baseImport.summary.duplicate_rows }}</strong></article>
+                          </div>
+                          <el-alert
+                            v-if="internshipState.message"
+                            type="error"
+                            :closable="false"
+                            show-icon
+                            :title="internshipState.message"
+                          />
+                          <el-alert
+                            v-if="!internshipState.baseImport.can_confirm"
+                            type="error"
+                            :closable="false"
+                            show-icon
+                            title="存在学院、专业或必填字段错误，必须全部修正后才能确认导入"
+                          />
                         </div>
-                        <el-alert
-                          v-if="!internshipState.baseImport.can_confirm"
-                          type="error"
-                          :closable="false"
-                          show-icon
-                          title="存在学院、专业或必填字段错误，必须全部修正后才能确认导入"
-                        />
-                        <el-table :data="internshipState.baseImport.items" height="100%" stripe size="small">
+                        <el-table :data="internshipState.baseImport.items" height="100%" stripe size="small" row-key="row_number" v-loading="internshipState.loading">
                           <el-table-column prop="row_number" label="行" width="62" fixed="left" />
                           <el-table-column prop="base_name" label="基地名称" min-width="210" fixed="left" />
                           <el-table-column prop="declaration_year" label="申报年份" width="92" />
@@ -461,10 +506,12 @@
                           <el-table-column prop="company_name" label="合作或依托单位" min-width="210" />
                           <el-table-column prop="base_category" label="基地类别" min-width="150" />
                           <el-table-column prop="base_level" label="基地等级" width="100" />
-                          <el-table-column label="校验结果" min-width="260">
+                          <el-table-column label="校验结果" width="300" fixed="right">
                             <template #default="{ row }">
-                              <span v-if="row.errors?.length" class="import-error-text">{{ row.errors.join('；') }}</span>
-                              <span v-else-if="row.warnings?.length" class="import-warning-text">{{ row.warnings.join('；') }}</span>
+                              <div v-if="row.errors?.length || row.warnings?.length" class="import-validation-message">
+                                <p v-for="(message, index) in row.errors || []" :key="`error-${index}`" class="import-error-text">错误：{{ message }}</p>
+                                <p v-for="(message, index) in row.warnings || []" :key="`warning-${index}`" class="import-warning-text">警告：{{ message }}</p>
+                              </div>
                               <span v-else-if="row.duplicate?.declaration_exists">重复申报，将跳过</span>
                               <span v-else-if="row.duplicate?.base_exists">复用基地，新增年度申报</span>
                               <span v-else class="import-ok-text">可导入</span>
@@ -1090,6 +1137,9 @@
                       <template #toolbar>
                         <el-button v-if="canManageInternship" :icon="Plus" @click="openBaseDialog()">
                           新增基地
+                        </el-button>
+                        <el-button v-if="canManageInternship" :icon="Download" :loading="internshipState.loading" @click="downloadBaseImportTemplate">
+                          下载模板
                         </el-button>
                         <el-button v-if="canManageInternship" :icon="Upload" :loading="internshipState.importing" @click="chooseBaseImportExcel">
                           导入基地
@@ -2262,9 +2312,15 @@
                       <el-button v-if="canManageConfig" type="primary" :icon="Plus" @click="openUserDialog()">
                         新增用户
                       </el-button>
+                      <el-button v-if="hasPermission('edu:data:import')" :icon="Upload" @click="openModule(modules.find(item => item.id === 'eduData'))">
+                        导入学生档案
+                      </el-button>
                       <el-button :icon="RefreshCw" :loading="userAdminState.loading" @click="loadUserAccounts(userAdminState.pagination.page || 1)">
                         刷新
                       </el-button>
+                    </template>
+                    <template #cell-wechat_bound="{ row }">
+                      <el-button link :type="row.wechat_bound ? 'success' : 'primary'" :aria-label="`${row.name || row.login_name}的企业微信绑定`" @click="openUserDetailDialog(row, 'wechat')">{{ row.wechat_bound ? '已绑定' : '未绑定' }}</el-button>
                     </template>
                     <template #actions="{ row }">
                       <el-button v-if="canManageConfig" link type="primary" :disabled="!canMaintainUser(row)" @click="openUserDialog(row)">
@@ -2295,7 +2351,10 @@
                         日志
                       </el-button>
                       <el-button link type="primary" @click="openUserDetailDialog(row, 'bindings')">
-                        绑定
+                        账号绑定信息
+                      </el-button>
+                      <el-button link type="primary" @click="openUserDetailDialog(row, 'wechat')">
+                        企业微信绑定 / 解绑
                       </el-button>
                     </template>
                   </DataListPanel>
@@ -2432,6 +2491,7 @@
                           <strong>{{ userAdminState.detail.account?.name || '-' }}</strong>
                           <span>{{ userAdminState.detail.account?.login_name || '-' }} / {{ userAdminState.detail.account?.role_name || '-' }}</span>
                         </section>
+                        <el-alert v-if="userAdminState.message" :title="userAdminState.message" type="warning" :closable="false" />
                         <template v-if="userAdminState.detailMode === 'logs'">
                           <el-table
                             :data="userAdminState.detail.logs"
@@ -2467,7 +2527,7 @@
                           </div>
                         </template>
                         <template v-else>
-                          <section class="detail-table-block">
+                          <section v-if="userAdminState.detailMode !== 'wechat'" class="detail-table-block">
                             <header>
                               <strong>其他登录账号</strong>
                               <small>{{ userAdminState.detail.boundAccounts.length }} 个</small>
@@ -2492,13 +2552,18 @@
                               <strong>企业微信绑定</strong>
                               <small>{{ userAdminState.detail.wechatAccounts.length }} 个</small>
                             </header>
-                            <el-table :data="userAdminState.detail.wechatAccounts" height="190" stripe v-loading="userAdminState.detailLoading">
+                            <el-table :data="userAdminState.detail.wechatAccounts" height="190" stripe empty-text="尚未绑定企业微信" v-loading="userAdminState.detailLoading">
                               <el-table-column type="index" label="序号" width="66" align="center" />
                               <el-table-column prop="wechat_userid" label="企业微信账号" min-width="150" />
                               <el-table-column prop="wechat_name" label="姓名" min-width="120" />
                               <el-table-column prop="mobile" label="手机" min-width="130" />
                               <el-table-column prop="email" label="邮箱" min-width="160" />
-                              <el-table-column prop="last_synced_at" label="同步时间" width="168" />
+                              <el-table-column prop="created_at" label="绑定时间" width="168" />
+                              <el-table-column v-if="canUnbindUserWechat" label="操作" width="88" fixed="right">
+                                <template #default="{ row }">
+                                  <el-button link type="danger" :disabled="userAdminState.detailLoading || !canMaintainUser(userAdminState.detail.account)" @click="unbindUserWechat(row)">解绑</el-button>
+                                </template>
+                              </el-table-column>
                             </el-table>
                           </section>
                         </template>
@@ -2763,6 +2828,7 @@
                 <NotebookPanel v-else-if="win.module.id === 'notebook'" :key="noteSessionKey" :ref="el => setNotebookRef(win.id, el)" :request="request" :session-key="noteSessionKey" />
                 <ReleaseNotesPanel v-else-if="win.module.id === 'releaseNotes'" :request="request" />
                 <ReleaseManager v-else-if="win.module.id === 'config' && win.panel === 'releases'" />
+                <DatabaseSchemaPanel v-else-if="win.module.id === 'config' && win.panel === 'databaseSchema' && canManageConfig" :session-key="[noteSessionKey, permissionState.context.school_id, permissionState.context.role_type].join(':')" />
 
                 <div v-else-if="win.module.source === 'menu'" class="module-content-panel menu-module-panel">
                   <section class="menu-module-card">
@@ -3064,6 +3130,13 @@
                             </el-select>
                           </label>
                         </div>
+                        <label class="message-send-field wide">
+                          <span>发送渠道</span>
+                          <el-checkbox-group v-model="messageState.sendDialog.form.channels">
+                            <el-checkbox value="internal" disabled>站内消息</el-checkbox>
+                            <el-checkbox value="wechat">企业微信</el-checkbox>
+                          </el-checkbox-group>
+                        </label>
                         <label v-if="messageState.sendDialog.form.send_mode === 'template'" class="message-send-field wide message-template-vars">
                           <span>模板变量 JSON</span>
                           <el-input
@@ -3213,6 +3286,13 @@
                         <label><span>消息级别</span><el-select v-model="messageState.templateEdit.form.level" placeholder="请选择消息级别"><el-option v-for="item in messageLevelOptions" :key="item.value" :label="item.label" :value="item.value" /></el-select></label>
                         <label><span>状态</span><el-switch v-model="messageState.templateEdit.form.status" active-value="enabled" inactive-value="disabled" active-text="启用" inactive-text="停用" /></label>
                         <label><span>排序</span><el-input v-model.number="messageState.templateEdit.form.sort" type="number" /></label>
+                        <label>
+                          <span>发送渠道</span>
+                          <el-checkbox-group v-model="messageState.templateEdit.form.channels">
+                            <el-checkbox value="internal" disabled>站内消息</el-checkbox>
+                            <el-checkbox value="wechat">企业微信</el-checkbox>
+                          </el-checkbox-group>
+                        </label>
                         <label class="wide"><span>标题模板</span><el-input v-model="messageState.templateEdit.form.title_tpl" maxlength="255" show-word-limit /></label>
                         <label class="wide"><span>内容模板</span><el-input v-model="messageState.templateEdit.form.content_tpl" type="textarea" :rows="4" /></label>
                         <label class="wide"><span>跳转地址模板</span><el-input v-model="messageState.templateEdit.form.link_url_tpl" placeholder="#panel={module_key}:{panel_key}" /></label>
@@ -3587,20 +3667,35 @@
                     </header>
                     <p v-if="dataManageState.environmentLoading">正在读取运行模式...</p>
                     <p v-else-if="dataManageState.isTest">
-                      当前 APP_MODE={{ dataManageState.mode }}，允许超级管理员执行。执行前需输入确认文本，执行后无法从页面撤销。
+                      当前 APP_MODE={{ dataManageState.mode }}，仅超级管理员可执行。任务将异步分批处理，教务导入数据默认保留。
                     </p>
                     <p v-else>
                       当前 APP_MODE={{ dataManageState.mode }}，服务端已禁止执行测试数据清理。
                     </p>
+                    <div v-if="dataManageState.options.length" class="cleanup-scope-list">
+                      <label v-for="item in dataManageState.options" :key="item.key" class="cleanup-scope-item">
+                        <input v-model="dataManageState.selectedScopes" type="checkbox" :value="item.key" :disabled="dataManageState.clearLoading">
+                        <span>{{ item.name }}</span>
+                      </label>
+                    </div>
+                    <label class="cleanup-preserve-option">
+                      <input v-model="dataManageState.preserveEduData" type="checkbox" :disabled="dataManageState.clearLoading">
+                      保留教务导入的学生、教师和计划数据
+                    </label>
+                    <div v-if="dataManageState.task" class="cleanup-task-progress">
+                      <div><strong>{{ cleanupStatusName(dataManageState.task.status) }}</strong><span>{{ dataManageState.task.progress }}%</span></div>
+                      <el-progress :percentage="dataManageState.task.progress" :status="dataManageState.task.status === 'failed' ? 'exception' : undefined" />
+                      <small>已处理 {{ dataManageState.task.affected_rows || 0 }} / {{ dataManageState.task.total_rows || 0 }} 行</small>
+                    </div>
                     <footer>
                       <el-button
                         type="danger"
                         :icon="Trash2"
-                        :disabled="!dataManageState.clearAllowed || dataManageState.environmentLoading"
+                        :disabled="!dataManageState.clearAllowed || dataManageState.environmentLoading || ['queued', 'processing'].includes(dataManageState.task?.status)"
                         :loading="dataManageState.clearLoading"
                         @click="clearCurrentTestData"
                       >
-                        一键清除测试数据
+                        提交异步清理任务
                       </el-button>
                     </footer>
                   </section>
@@ -3956,15 +4051,18 @@
                   </section>
                 </div>
 
-                <div v-else-if="win.module.id === 'config' && win.panel === 'wechatProxy'" class="admin-panel wechat-config-panel">
+                <div v-else-if="win.module.id === 'config' && win.panel === 'wechatProxy'" v-loading="wechatProxy.syncing" element-loading-text="正在同步企业微信菜单" class="admin-panel wechat-config-panel">
                   <div class="admin-toolbar">
-                    <el-button type="primary" :icon="Save" :loading="wechatProxy.loading" :disabled="!hasPermission('wechat:proxy:save')" @click="saveProxy">
+                    <el-button type="primary" :icon="Save" :loading="wechatProxy.loading" :disabled="wechatProxy.syncing || wechatProxy.checking || !hasPermission('wechat:proxy:save')" @click="saveProxy">
                       保存配置
                     </el-button>
-                    <el-button :icon="CheckCircle2" :loading="wechatProxy.checking" :disabled="!hasPermission('wechat:proxy:test')" @click="checkProxyConfig">
+                    <el-button :icon="RefreshCw" :loading="wechatProxy.syncing" :disabled="wechatProxy.loading || wechatProxy.checking || !hasPermission('wechat:proxy:save')" @click="syncProxyMenu">
+                      立即同步菜单
+                    </el-button>
+                    <el-button :icon="CheckCircle2" :loading="wechatProxy.checking" :disabled="wechatProxy.loading || wechatProxy.syncing || !hasPermission('wechat:proxy:test')" @click="checkProxyConfig">
                       测试配置
                     </el-button>
-                    <el-button :icon="RefreshCw" :loading="wechatProxy.loading" @click="loadProxy">
+                    <el-button :icon="RefreshCw" :loading="wechatProxy.loading" :disabled="wechatProxy.syncing || wechatProxy.checking" @click="loadProxy">
                       重新读取
                     </el-button>
                     <el-button :icon="Plus" :disabled="wechatProxy.menu.length >= 3" @click="addWechatMenu()">
@@ -3979,13 +4077,13 @@
                   </div>
                   <div class="wechat-config-layout">
                     <section class="settings-form wechat-app-form">
-                      <label><span>应用 AppID</span><input v-model="wechatProxy.app_id" placeholder="第三方应用或自建应用标识"></label>
+                      <label><span>应用 AppID（可留空）</span><input v-model="wechatProxy.app_id" placeholder="企业微信自建应用无需填写"></label>
                       <label><span>企业 ID</span><input v-model="wechatProxy.corp_id" placeholder="wwxxxxxxxx"></label>
                       <label><span>AgentId</span><input v-model="wechatProxy.agent_id" placeholder="1000002"></label>
                       <label><span>应用 Secret</span><input v-model="wechatProxy.secret" placeholder="企业微信应用 Secret"></label>
                       <label><span>回调 Token</span><input v-model="wechatProxy.token"></label>
                       <label><span>EncodingAESKey</span><input v-model="wechatProxy.encoding_aes_key"></label>
-                      <label><span>代理地址</span><input v-model="wechatProxy.proxy_url" placeholder="http://127.0.0.1:9000/wechat-proxy"></label>
+                      <label><span>代理地址</span><input v-model="wechatProxy.proxy_url" placeholder="https://proxy.example.com/wechat-proxy"></label>
                       <label>
                         <span>启用代理</span>
                         <el-switch
@@ -4000,6 +4098,7 @@
                         <strong>应用菜单</strong>
                         <small>一级最多 3 个，每个一级菜单最多 5 个子菜单</small>
                       </header>
+                      <small>保存配置仅保存到本系统；立即同步会先保存当前配置，再覆盖企业微信应用菜单。</small>
                       <div class="wechat-menu-board">
                         <button
                           v-for="(menu, index) in wechatProxy.menu"
@@ -4032,7 +4131,7 @@
                             <el-option label="小程序" value="miniprogram" />
                           </el-select>
                         </label>
-                        <label v-if="selectedWechatMenu.type === 'view' || selectedWechatMenu.type === 'miniprogram'"><span>URL</span><input v-model="selectedWechatMenu.url"></label>
+                        <label v-if="selectedWechatMenu.type === 'view'"><span>URL</span><input v-model="selectedWechatMenu.url"></label>
                         <label v-if="selectedWechatMenu.type === 'click'"><span>Key</span><input v-model="selectedWechatMenu.key"></label>
                         <label v-if="selectedWechatMenu.type === 'miniprogram'"><span>AppID</span><input v-model="selectedWechatMenu.appid"></label>
                         <label v-if="selectedWechatMenu.type === 'miniprogram'"><span>页面路径</span><input v-model="selectedWechatMenu.pagepath"></label>
@@ -4296,12 +4395,15 @@
       @change="handleSyllabusGuideFile"
     >
   </main>
+    <WechatBindingGate :show="wechatBlocked" :state="wechatBinding.state" :status="wechatStatus" :account-name="operatorName" :role-name="roleText" @start="wechatBinding.start" @bind="wechatBinding.bind" @logout="submitLogout" />
     <DesktopUpdateStatus />
     <ReleaseNotice v-if="isLoggedIn" :key="noteSessionKey" :request="request" :session-key="noteSessionKey" @open="openModule(modules.find(item => item.id === 'releaseNotes'))" />
   </el-config-provider>
 </template>
 
 <script setup>
+import { useWechatBinding } from '../../shared/useWechatBinding';
+import WechatBindingGate from '../../shared/components/WechatBindingGate.vue';
 import { previewFile } from '../../shared/filePreview';
 import PreviewCacheSettings from './components/PreviewCacheSettings.vue';
 import ClientDownloadButton from './components/ClientDownloadButton.vue';
@@ -4359,6 +4461,8 @@ import {
 import DesktopWindow from './components/DesktopWindow.vue';
 import FavoritePanel from './components/FavoritePanel.vue';
 import ReleaseManager from './components/ReleaseManager.vue';
+import DatabaseSchemaPanel from './components/DatabaseSchemaPanel.vue';
+import BaseVisitPanel from './components/BaseVisitPanel.vue';
 import DesktopUpdateStatus from './components/DesktopUpdateStatus.vue';
 import ReleaseNotesPanel from '../../shared/components/ReleaseNotesPanel.vue';
 import AssistantPanel from '../../shared/components/AssistantPanel.vue';
@@ -4402,7 +4506,7 @@ import { backendUrl, frontendPublicUrl, request } from './api/client';
 import {
   changeOwnPassword,
   changeAdminAccountStatus,
-  clearTestData,
+  createDataCleanupTask,
   deleteArchiveItem,
   exportInternshipBaseWord,
   exportInternshipImplementationPdf,
@@ -4414,6 +4518,8 @@ import {
   fetchArchiveList,
   fetchDesktopShortcuts,
   fetchDataEnvironment,
+  fetchDataCleanupOptions,
+  fetchDataCleanupTask,
   fetchFavorites,
   fetchFileList,
   fetchSwitchableAccounts,
@@ -4425,6 +4531,7 @@ import {
   fetchInternshipDelays,
   fetchInternshipBaseFlows,
   fetchInternshipBaseDetail,
+  fetchInternshipBaseImportTemplate,
   fetchInternshipBases,
   fetchInternshipCourseScores,
   fetchInternshipInsurances,
@@ -4534,6 +4641,7 @@ import {
   saveProfileSettings,
   saveRoleMenus,
   saveWechatConfig,
+  syncWechatMenu,
   switchAccount,
   removeInternshipPair,
   uploadLoginBackground,
@@ -4541,6 +4649,7 @@ import {
   uploadProfileAsset,
   uploadFile,
   deleteMessageTemplate,
+  unbindAdminWechat,
 } from './api/system';
 
 const { state: permissionState, hasPermission, load } = usePermissions();
@@ -4636,29 +4745,13 @@ const switchAccountState = reactive({
   items: [],
   message: '',
 });
-const desktopShortcutModuleAliases = {
-  stat: 'dataCenter',
-  userManage: 'dataCenter',
-  gradeManage: 'dataCenter',
-  departmentManage: 'dataCenter',
-  professionManage: 'dataCenter',
-  classManage: 'dataCenter',
-  companyManage: 'dataCenter',
-  eduData: 'dataCenter',
-  dataManage: 'dataCenter',
-  log: 'auditCenter',
-  exportTask: 'auditCenter',
-  file: 'resourceCenter',
-  doc: 'resourceCenter',
-  templateLib: 'resourceCenter',
-};
 const desktopGridRef = ref(null);
 const desktopPositionStorageKey = computed(() => `practical:pc:desktop-positions:${window.__PRACTICAL_DESKTOP__?.serverOrigin || window.location.origin}:${permissionState.context.account_id || 'guest'}`);
 const desktopLauncher = useDesktopLauncher({
-  allModules: computed(() => [...desktopEntryModules.value, ...allLaunchableModules.value.filter(module => ['pluginCenter', 'favorite', 'notebook', 'releaseNotes'].includes(module.id))]),
+  allModules: computed(() => allLaunchableModules.value),
+  launcherModules: computed(() => [...desktopEntryModules.value, ...allLaunchableModules.value.filter(module => ['pluginCenter', 'favorite', 'notebook', 'releaseNotes'].includes(module.id))]),
   favoriteItems: computed(() => favoriteState.items),
   defaultModuleIds: DEFAULT_DESKTOP_MODULE_IDS,
-  moduleAliases: desktopShortcutModuleAliases,
   searchText: moduleSearchText,
   orderStorageKey: () => `practical:pc:desktop-order:${window.__PRACTICAL_DESKTOP__?.serverOrigin || window.location.origin}:${permissionState.context.account_id || 'guest'}`,
 });
@@ -4684,8 +4777,12 @@ const wechatProxy = reactive({
   loading: false,
   checking: false,
   checkResult: null,
+  syncing: false,
   message: '',
 });
+const wechatBinding = useWechatBinding({ context: () => permissionState.context, request, backendUrl });
+const wechatBlocked = wechatBinding.blocked;
+const wechatStatus = wechatBinding.status;
 const logState = reactive({
   loading: false,
   message: '',
@@ -5156,6 +5253,16 @@ const modules = [
     collectionParent: 'dataCenter',
   },
   {
+    id: 'baseVisits',
+    name: '基地巡查',
+    icon: CalendarCheck,
+    color: 'amber',
+    scope: '走访安排 / 时间填写 / 走访记录',
+    viewPermission: 'internship:view',
+    managePermission: 'internship:manage',
+    defaultPanel: 'baseVisits',
+  },
+  {
     id: 'eduData',
     name: '教务数据',
     icon: Upload,
@@ -5285,10 +5392,12 @@ function emptyMessageSendForm() {
     title: '',
     content: '',
     link_url: '',
+    channels: ['internal'],
   };
 }
 
 function emptyMessageTemplateForm(row = {}) {
+  const channels = Array.isArray(row.channels) ? row.channels : ['internal'];
   return {
     id: row.id || null,
     name: row.name || '',
@@ -5303,6 +5412,7 @@ function emptyMessageTemplateForm(row = {}) {
     status: row.status || 'enabled',
     sort: row.sort ?? 100,
     is_system: Boolean(row.is_system),
+    channels: ['internal', ...(channels.includes('wechat') ? ['wechat'] : [])],
   };
 }
 
@@ -5430,6 +5540,7 @@ const userListColumns = [
   { key: 'mobile', label: '手机', minWidth: 130 },
   { key: 'email', label: '邮箱', minWidth: 170 },
   { key: 'status', label: '账号状态', width: 100, tag: true, tagType: row => statusTagType(row.status), formatter: row => statusText(row.status) },
+  { key: 'wechat_bound', label: '企业微信', width: 112, fixed: 'right', required: true, tooltip: false },
   { key: 'created_at', label: '创建时间', minWidth: 160 },
 ];
 const userListFilters = computed(() => [
@@ -5568,8 +5679,13 @@ const dataManageState = reactive({
   mode: 'production',
   isTest: false,
   clearAllowed: false,
+  options: [],
+  selectedScopes: [],
+  preserveEduData: true,
+  task: null,
   message: '',
 });
+let cleanupPollTimer = null;
 const archiveRequirementVisible = ref(false);
 
 const internshipSidebarItems = [
@@ -5613,6 +5729,7 @@ const baseManagementSidebarItems = [
   { key: 'baseFlows', name: '基地建设', icon: Building2 },
   { key: 'baseApplications', name: '基地申报', icon: FileText },
   { key: 'baseUsage', name: '基地使用', icon: ClipboardList },
+  { key: 'baseVisits', name: '基地巡查', icon: CalendarCheck },
 ];
 
 const archiveDetailVisible = ref(false);
@@ -5732,6 +5849,7 @@ const launcherModuleIds = modules.filter(module => !module.collectionParent && !
 const launcherModuleIdSet = new Set(launcherModuleIds);
 const configSidebarDefinitions = [
   { key: 'releases', name: '版本与更新', permission: 'config:manage', schoolConfig: true, icon: Download },
+  { key: 'databaseSchema', name: '数据库结构', permission: 'config:manage', schoolConfig: true, icon: Table2 },
   { key: 'userManage', name: '用户管理', permission: 'config:user', icon: UsersRound },
   { key: 'gradeManage', name: '年级管理', permission: 'config:grade', icon: GraduationCap },
   { key: 'graduationCohortManage', name: '毕业届次管理', permission: 'config:graduation-cohort', icon: CalendarRange },
@@ -5752,6 +5870,7 @@ const currentRoleType = computed(() => permissionState.context.role_type || '');
 const isStudentRole = computed(() => currentRoleType.value === 'student');
 const isTeacherRole = computed(() => currentRoleType.value === 'teacher');
 const isAdminRole = computed(() => ['super_admin', 'school_admin', 'college_admin', 'profession_admin'].includes(currentRoleType.value));
+const canViewBaseVisits = computed(() => (isTeacherRole.value || isAdminRole.value) && hasPermission('internship:view'));
 const configChildModuleIds = new Set(['userManage', 'gradeManage', 'graduationCohortManage', 'internshipCategoryManage', 'departmentManage', 'professionManage', 'classManage']);
 const schoolConfigModuleIds = new Set(['gradeManage', 'graduationCohortManage', 'internshipCategoryManage', 'departmentManage', 'professionManage', 'classManage', 'dataManage']);
 const visibleModules = computed(() => modules.map(decorateModule).filter(canShowModule));
@@ -5793,6 +5912,21 @@ const taskbarWindows = computed(() => openWindows.filter(win => win.module.id !=
 const canManageConfig = computed(() => hasPermission('config:manage') && ['super_admin', 'school_admin'].includes(permissionState.context.role_type));
 const canViewUserAdmin = computed(() => ['super_admin', 'school_admin', 'college_admin', 'profession_admin'].includes(permissionState.context.role_type));
 const canSendMessages = computed(() => ['super_admin', 'school_admin'].includes(currentRoleType.value));
+const canUnbindUserWechat = computed(() => ['super_admin', 'school_admin'].includes(currentRoleType.value));
+const profileQuietAllDay = computed({
+  get: () => profileState.form.wechat_quiet.start === '00:00' && profileState.form.wechat_quiet.end === '24:00',
+  set: (value) => {
+    profileState.form.wechat_quiet = value
+      ? { start: '00:00', end: '24:00' }
+      : { start: '08:00', end: '22:00' };
+  },
+});
+const profileWechatBindingText = computed(() => {
+  if (permissionState.context.wechat_binding?.required === false) {
+    return '当前角色无需绑定';
+  }
+  return permissionState.context.wechat_binding?.bound ? '已绑定企业微信' : '未绑定企业微信';
+});
 const canManageMessageTemplates = computed(() => ['super_admin', 'school_admin'].includes(currentRoleType.value) || hasPermission('template:manage'));
 const canViewMessageTemplates = computed(() => ['super_admin', 'school_admin'].includes(currentRoleType.value) || hasPermission('template:view') || hasPermission('template:manage'));
 const hasMessageTemplateFilters = computed(() => messageState.templateFilters.type !== 'all'
@@ -5967,7 +6101,7 @@ const loginBackgroundUploadStyle = computed(() => (loginPageState.login_backgrou
   backgroundImage: `url("${safeCssUrl(loginPageState.login_background_url)}")`,
 } : {}));
 const profileAlertType = computed(() => (profileState.saved ? 'success' : 'warning'));
-const userDetailTitle = computed(() => (userAdminState.detailMode === 'logs' ? '操作日志' : '绑定账号'));
+const userDetailTitle = computed(() => ({ logs: '操作日志', wechat: '企业微信绑定', bindings: '账号绑定信息' })[userAdminState.detailMode] || '用户详情');
 const reviewReasonLength = computed(() => textLength(internshipState.dialog.reason));
 const internshipTimelineCycles = computed(() => normalizeTimelineCycles(
   internshipState.dialog.cycles || [],
@@ -6023,6 +6157,9 @@ function canShowModule(module) {
   }
   if (module.id === 'companyManage') {
     return isAdminRole.value && hasPermission('internship:view');
+  }
+  if (module.id === 'baseVisits') {
+    return canViewBaseVisits.value;
   }
   if (schoolConfigModuleIds.has(module.id)) {
     return canShowSchoolConfigModule(module);
@@ -6867,7 +7004,7 @@ function sidebarItems(win) {
   if (win.module.source === 'menu') {
     return [];
   }
-  if (['message', 'doc', 'templateLib', 'exportTask', 'favorite'].includes(win.module.id)) {
+  if (['message', 'doc', 'templateLib', 'exportTask', 'favorite', 'baseVisits'].includes(win.module.id)) {
     return [];
   }
   if (win.module.id === 'companyManage') {
@@ -7142,6 +7279,8 @@ function formApplyMessageTemplate(form, template) {
   form.type = template.type || form.type;
   form.level = template.level || form.level;
   form.link_url = '';
+  const channels = Array.isArray(template.channels) ? template.channels : ['internal'];
+  form.channels = ['internal', ...(channels.includes('wechat') ? ['wechat'] : [])];
   if (!form.variables_text || form.variables_text === '{}') {
     form.variables_text = JSON.stringify(messageTemplateVariableDefaults(template), null, 2);
   }
@@ -7232,6 +7371,7 @@ async function submitMessageSend() {
     title: String(form.title || '').trim(),
     content: String(form.content || '').trim(),
     link_url: String(form.link_url || '').trim(),
+    channels: ['internal', ...((form.channels || []).includes('wechat') ? ['wechat'] : [])],
   };
 
   if (payload.send_scope === 'custom' && !payload.account_ids.length) {
@@ -7444,6 +7584,7 @@ async function submitMessageTemplate() {
       status: form.status,
       sort: Number(form.sort || 100),
       is_system: form.is_system,
+      channels: ['internal', ...((form.channels || []).includes('wechat') ? ['wechat'] : [])],
     });
     messageState.templateEdit.visible = false;
     await loadMessageTemplates(messageState.templatePagination.page || 1);
@@ -7585,7 +7726,7 @@ function decorateModule(module) {
 }
 
 function moduleDisplayName(module) {
-  if (module.id === 'dataManage') {
+  if (['dataManage', 'baseVisits'].includes(module.id)) {
     return module.name;
   }
   const item = permissionState.menus.find(menu => moduleMatchesMenu(module, menu));
@@ -7690,6 +7831,11 @@ function setDesktopModuleOrder(ids) {
   desktopLauncher.setModuleOrder(ids);
 }
 
+async function addDesktopShortcutFromDrop(moduleId) {
+  if (!moduleId || isDefaultDesktopShortcut(moduleId) || isDesktopShortcut(moduleId)) return;
+  await toggleDesktopShortcut(moduleId, true);
+}
+
 function isDefaultDesktopShortcut(moduleId) {
   return desktopLauncher.isDefaultShortcut(moduleId);
 }
@@ -7698,14 +7844,14 @@ function launcherShortcutTitle(moduleId) {
   return desktopLauncher.shortcutTitle(moduleId);
 }
 
-async function toggleDesktopShortcut(moduleId) {
+async function toggleDesktopShortcut(moduleId, forceAdd = false) {
   if (isDefaultDesktopShortcut(moduleId) || desktopLauncherState.loading) {
     return;
   }
 
   const items = desktopShortcutPayloadItems.value.slice();
   const index = items.findIndex(item => item.type === 'module' && item.key === moduleId);
-  if (index >= 0) {
+  if (index >= 0 && !forceAdd) {
     items.splice(index, 1);
   } else {
     items.push({ type: 'module', key: moduleId });
@@ -7745,6 +7891,7 @@ async function persistDesktopShortcuts(items) {
   } catch (error) {
     desktopLauncherState.items = previous;
     desktopLauncherState.message = error.message;
+    ElMessage.error(error.message || '保存桌面快捷方式失败');
   } finally {
     desktopLauncherState.loading = false;
   }
@@ -8624,6 +8771,8 @@ async function refreshAuthenticatedSession(resetWorkspace = false) {
   }
 
   await load();
+  await wechatBinding.refresh();
+  if (wechatBlocked.value) return;
   await loadProfile();
   await loadDesktopShortcuts();
   await loadFavorites(1);
@@ -8635,6 +8784,8 @@ async function refreshAuthenticatedSession(resetWorkspace = false) {
   scheduleDefaultWindow();
   loadAdminFoundation();
 }
+
+
 
 async function loadSwitchableAccounts() {
   if (!isLoggedIn.value) {
@@ -8771,6 +8922,10 @@ function emptyProfile() {
       system: true,
       wechat: true,
       email: false,
+    },
+    wechat_quiet: {
+      start: '00:00',
+      end: '24:00',
     },
   };
 }
@@ -9182,14 +9337,19 @@ async function resetUserPassword() {
 }
 
 async function clearCurrentTestData() {
-  if (permissionState.context.role_type !== 'super_admin' || dataManageState.clearLoading) {
+  if (permissionState.context.role_type !== 'super_admin' || dataManageState.clearLoading
+    || ['queued', 'processing'].includes(dataManageState.task?.status)) {
     return;
   }
   if (!dataManageState.clearAllowed) {
     dataManageState.message = '当前不是测试环境，禁止清除测试数据';
     return;
   }
-  const confirmation = window.prompt('该操作会清除测试数据。请输入 CLEAR_TEST_DATA 确认：');
+  if (!dataManageState.selectedScopes.length) {
+    dataManageState.message = '请至少选择一个清理范围';
+    return;
+  }
+  const confirmation = window.prompt('该操作会异步清理选中的测试数据。请输入 CLEAR_TEST_DATA 确认：');
   if (confirmation !== 'CLEAR_TEST_DATA') {
     dataManageState.message = '已取消或确认文本不正确';
     return;
@@ -9198,18 +9358,60 @@ async function clearCurrentTestData() {
   dataManageState.clearLoading = true;
   dataManageState.message = '';
   try {
-    const data = await clearTestData({ confirmation });
-    const affectedTotal = Object.values(data.affected || {}).reduce((sum, value) => sum + Number(value || 0), 0);
-    dataManageState.message = `已清除测试数据，影响 ${affectedTotal} 行`;
-    await Promise.all([
-      loadAdminFoundation(),
-      loadDesktopShortcuts(),
-      loadFavorites(1),
-    ]);
+    const data = await createDataCleanupTask({
+      confirmation,
+      scopes: dataManageState.selectedScopes,
+      preserve_edu_data: dataManageState.preserveEduData,
+    });
+    dataManageState.task = data.task || null;
+    dataManageState.message = '清理任务已提交，可在本页查看进度';
+    pollDataCleanupTask();
   } catch (error) {
     dataManageState.message = error.message;
-  } finally {
     dataManageState.clearLoading = false;
+  }
+}
+
+function cleanupStatusName(status) {
+  return { queued: '排队中', processing: '清理中', completed: '已完成', failed: '执行失败' }[status] || status || '未开始';
+}
+
+function pollDataCleanupTask() {
+  if (cleanupPollTimer) clearTimeout(cleanupPollTimer);
+  const taskId = Number(dataManageState.task?.id || 0);
+  if (!taskId) return;
+  cleanupPollTimer = setTimeout(async () => {
+    try {
+    const data = await fetchDataCleanupTask(taskId);
+      dataManageState.task = data.task || dataManageState.task;
+      if (['completed', 'failed'].includes(dataManageState.task?.status)) {
+        dataManageState.clearLoading = false;
+        dataManageState.message = dataManageState.task.status === 'completed'
+          ? `清理完成，影响 ${dataManageState.task.affected_rows || 0} 行`
+          : (dataManageState.task.error_message || '清理任务执行失败');
+        dataManageState.clearLoading = false;
+        await loadAdminFoundation();
+        await loadDesktopShortcuts();
+        await loadFavorites(1);
+        return;
+      }
+      pollDataCleanupTask();
+    } catch (error) {
+      dataManageState.message = error.message;
+      dataManageState.clearLoading = false;
+    }
+  }, 1000);
+}
+
+async function loadDataCleanupOptions() {
+  try {
+    const data = await fetchDataCleanupOptions();
+    dataManageState.options = data.items || [];
+    if (!dataManageState.selectedScopes.length) {
+      dataManageState.selectedScopes = dataManageState.options.map(item => item.key);
+    }
+  } catch (error) {
+    dataManageState.message = error.message;
   }
 }
 
@@ -9225,6 +9427,7 @@ async function loadDataEnvironment() {
     dataManageState.mode = data.mode || 'production';
     dataManageState.isTest = data.is_test === true;
     dataManageState.clearAllowed = data.clear_allowed === true;
+    if (dataManageState.clearAllowed) await loadDataCleanupOptions();
   } catch (error) {
     dataManageState.mode = 'production';
     dataManageState.isTest = false;
@@ -9338,6 +9541,24 @@ async function loadUserDetailPage(page) {
   }
 
   await loadUserDetailData(account, page);
+}
+
+async function unbindUserWechat(row) {
+  const account = userAdminState.detail.account;
+  const accountId = Number(row?.account_id || account?.id || 0);
+  if (!canUnbindUserWechat.value || !accountId || !window.confirm('确认解除该账号的企业微信绑定？')) {
+    return;
+  }
+  userAdminState.detailLoading = true;
+  userAdminState.message = '';
+  try {
+    await unbindAdminWechat(accountId);
+    await loadUserDetailData(account, userAdminState.detailPagination.page || 1);
+    await loadUserAccounts(userAdminState.pagination.page || 1);
+  } catch (error) {
+    userAdminState.message = error.message;
+    userAdminState.detailLoading = false;
+  }
 }
 
 function closeUserDetailDialog() {
@@ -14324,17 +14545,28 @@ async function openTaskFromPlan(plan) {
   handleArrangementPlanChange();
 }
 
-async function downloadPlanImportTemplate() {
+/** 下载计划表导入模板。 */
+function downloadPlanImportTemplate() {
+  return downloadInternshipImportTemplate(fetchInternshipPlanImportTemplate, '实习计划导入模板.xlsx');
+}
+
+/** 下载基地导入模板。 */
+function downloadBaseImportTemplate() {
+  return downloadInternshipImportTemplate(fetchInternshipBaseImportTemplate, '实习基地导入模板.xlsx');
+}
+
+/** 获取模板地址并触发文件下载。 */
+async function downloadInternshipImportTemplate(fetchTemplate, fallbackName) {
   if (internshipState.loading) {
     return;
   }
   internshipState.loading = true;
   internshipState.message = '';
   try {
-    const result = await fetchInternshipPlanImportTemplate();
+    const result = await fetchTemplate();
     const link = document.createElement('a');
     link.href = backendUrl(result.url);
-    link.download = result.download_name || '实习计划导入模板.xlsx';
+    link.download = result.download_name || fallbackName;
     document.body.appendChild(link);
     link.click();
     link.remove();
@@ -15155,7 +15387,7 @@ async function loadInternshipFoundation() {
 }
 
 async function loadInternshipPanel(panel = 'overview', page = 1) {
-  if (!hasPermission('internship:view')) {
+  if (panel === 'baseVisits' || !hasPermission('internship:view')) {
     return;
   }
 
@@ -15933,6 +16165,10 @@ function resetAdminState() {
   dataManageState.mode = 'production';
   dataManageState.isTest = false;
   dataManageState.clearAllowed = false;
+  dataManageState.options = [];
+  dataManageState.selectedScopes = [];
+  dataManageState.preserveEduData = true;
+  dataManageState.task = null;
   dataManageState.message = '';
   resetInternshipState();
 }
@@ -15973,6 +16209,10 @@ function applyProfileData(data) {
   profileState.form.notify.system = data.notify?.system !== false;
   profileState.form.notify.wechat = data.notify?.wechat !== false;
   profileState.form.notify.email = Boolean(data.notify?.email);
+  profileState.form.wechat_quiet = {
+    start: data.wechat_quiet?.start || '00:00',
+    end: data.wechat_quiet?.end || '24:00',
+  };
   cacheWallpaper();
 }
 
@@ -16125,6 +16365,7 @@ async function persistProfileSettings(message) {
     wallpaper: profileState.form.wallpaper,
     wallpaper_url: profileState.form.wallpaper_url,
     notify: { ...profileState.form.notify },
+    wechat_quiet: { ...profileState.form.wechat_quiet },
   });
   applyProfileData(data);
   permissionState.context.user_name = data.user?.name || permissionState.context.user_name;
@@ -16137,7 +16378,7 @@ function safeCssUrl(value) {
 }
 
 async function loadProxy() {
-  if (!isLoggedIn.value || !hasPermission('wechat:proxy')) {
+  if (wechatProxy.loading || wechatProxy.syncing || wechatProxy.checking || !isLoggedIn.value || !hasPermission('wechat:proxy')) {
     return;
   }
 
@@ -16201,7 +16442,6 @@ function wechatMenuPayload(items) {
     if (item.type === 'click') {
       payload.key = item.key;
     } else if (item.type === 'miniprogram') {
-      payload.url = item.url;
       payload.appid = item.appid;
       payload.pagepath = item.pagepath;
     } else {
@@ -16217,8 +16457,13 @@ function validateWechatMenus(items, allowChildren = true) {
   }
 
   for (const item of items) {
-    if (!String(item.name || '').trim()) {
+    const name = String(item.name || '').trim();
+    if (!name) {
       return '企业微信菜单名称不能为空';
+    }
+    const maxNameBytes = allowChildren ? 16 : 40;
+    if (new TextEncoder().encode(name).length > maxNameBytes) {
+      return `企业微信菜单名称不能超过 ${maxNameBytes} 字节`;
     }
     if (item.children?.length) {
       if (!allowChildren) {
@@ -16233,8 +16478,14 @@ function validateWechatMenus(items, allowChildren = true) {
     if (item.type === 'click' && !String(item.key || '').trim()) {
       return '点击菜单 Key 不能为空';
     }
+    if (item.type === 'click' && new TextEncoder().encode(String(item.key || '').trim()).length > 128) {
+      return '点击菜单 Key 不能超过 128 字节';
+    }
     if (item.type === 'view' && !String(item.url || '').trim()) {
       return '跳转菜单 URL 不能为空';
+    }
+    if (item.type === 'view' && new TextEncoder().encode(String(item.url || '').trim()).length > 1024) {
+      return '跳转菜单 URL 不能超过 1024 字节';
     }
     if (item.type === 'miniprogram' && (!String(item.appid || '').trim() || !String(item.pagepath || '').trim())) {
       return '小程序菜单 AppID 和路径不能为空';
@@ -16295,7 +16546,24 @@ function removeSelectedWechatMenu() {
   wechatProxy.selectedSubMenuIndex = -1;
 }
 
+function wechatConfigPayload() {
+  return {
+    app_id: wechatProxy.app_id,
+    corp_id: wechatProxy.corp_id,
+    agent_id: wechatProxy.agent_id,
+    secret: wechatProxy.secret,
+    token: wechatProxy.token,
+    encoding_aes_key: wechatProxy.encoding_aes_key,
+    proxy_url: wechatProxy.proxy_url,
+    proxy_enabled: wechatProxy.proxy_enabled,
+    menu: wechatMenuPayload(wechatProxy.menu),
+  };
+}
+
 async function saveProxy() {
+  if (wechatProxy.loading || wechatProxy.syncing || wechatProxy.checking || !hasPermission('wechat:proxy:save')) {
+    return;
+  }
   const menuError = validateWechatMenus(wechatProxy.menu);
   if (menuError) {
     wechatProxy.message = menuError;
@@ -16305,17 +16573,7 @@ async function saveProxy() {
   wechatProxy.loading = true;
   wechatProxy.message = '';
   try {
-    const data = await saveWechatConfig({
-      app_id: wechatProxy.app_id,
-      corp_id: wechatProxy.corp_id,
-      agent_id: wechatProxy.agent_id,
-      secret: wechatProxy.secret,
-      token: wechatProxy.token,
-      encoding_aes_key: wechatProxy.encoding_aes_key,
-      proxy_url: wechatProxy.proxy_url,
-      proxy_enabled: wechatProxy.proxy_enabled,
-      menu: wechatMenuPayload(wechatProxy.menu),
-    });
+    const data = await saveWechatConfig(wechatConfigPayload());
     applyWechatConfig(data);
     wechatProxy.message = '已保存';
   } catch (error) {
@@ -16325,8 +16583,34 @@ async function saveProxy() {
   }
 }
 
+async function syncProxyMenu() {
+  if (wechatProxy.loading || wechatProxy.syncing || wechatProxy.checking || !hasPermission('wechat:proxy:save')) {
+    return;
+  }
+  const menuError = wechatProxy.menu.length ? validateWechatMenus(wechatProxy.menu) : '请至少配置一个一级菜单';
+  if (menuError) {
+    wechatProxy.message = menuError;
+    return;
+  }
+
+  wechatProxy.syncing = true;
+  wechatProxy.message = '';
+  let saved = false;
+  try {
+    const data = await saveWechatConfig(wechatConfigPayload());
+    saved = true;
+    applyWechatConfig(data);
+    const result = await syncWechatMenu();
+    wechatProxy.message = `菜单已同步至企业微信（AgentId ${result.agent_id}），同步时间 ${result.synced_at}。可重新进入应用查看。`;
+  } catch (error) {
+    wechatProxy.message = saved ? `配置已保存，但菜单同步失败：${error.message}` : `配置保存失败：${error.message}`;
+  } finally {
+    wechatProxy.syncing = false;
+  }
+}
+
 async function checkProxyConfig() {
-  if (wechatProxy.checking || !hasPermission('wechat:proxy:test')) {
+  if (wechatProxy.loading || wechatProxy.syncing || wechatProxy.checking || !hasPermission('wechat:proxy:test')) {
     return;
   }
   wechatProxy.checking = true;
@@ -16432,6 +16716,8 @@ onMounted(async () => {
   await consumeUrlPasskey();
   const desktopBridge = window.__PRACTICAL_DESKTOP__;
   await load();
+  await wechatBinding.refresh();
+  if (wechatBlocked.value) return;
   if (!isLoggedIn.value && desktopBridge?.bootstrapLogin) {
     await submitDesktopBootstrapLogin();
   }

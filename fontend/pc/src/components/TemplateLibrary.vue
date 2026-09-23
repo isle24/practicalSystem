@@ -255,6 +255,13 @@
             <span>排序</span>
             <el-input v-model.number="messageTemplateDialog.form.sort" type="number" />
           </label>
+          <label>
+            <span>发送渠道</span>
+            <el-checkbox-group v-model="messageTemplateDialog.form.channels">
+              <el-checkbox value="internal" disabled>站内消息</el-checkbox>
+              <el-checkbox value="wechat">企业微信</el-checkbox>
+            </el-checkbox-group>
+          </label>
           <label class="wide">
             <span>标题模板</span>
             <el-input v-model="messageTemplateDialog.form.title_tpl" maxlength="255" show-word-limit />
@@ -837,7 +844,7 @@ async function saveMessageTemplateDialog() {
       description: form.description,
       link_url_tpl: form.link_url_tpl,
       variables,
-      channels: ['internal'],
+      channels: ['internal', ...((form.channels || []).includes('wechat') ? ['wechat'] : [])],
       is_system: form.is_system,
     });
     messageTemplateDialog.visible = false;
@@ -940,6 +947,7 @@ function practiceTypesText(values) {
 }
 
 function emptyMessageTemplateForm(row = {}) {
+  const channels = Array.isArray(row.channels) ? row.channels : ['internal'];
   return {
     id: row.id || null,
     name: row.name || '',
@@ -954,6 +962,7 @@ function emptyMessageTemplateForm(row = {}) {
     link_url_tpl: row.link_url_tpl || '',
     variables_text: JSON.stringify(row.variables || {}, null, 2),
     is_system: Boolean(row.is_system),
+    channels: ['internal', ...(channels.includes('wechat') ? ['wechat'] : [])],
   };
 }
 

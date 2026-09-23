@@ -12,13 +12,14 @@
         <PanelLeftClose v-else :size="17" />
       </button>
     </header>
-    <nav>
+    <nav class="module-sidebar-nav" :aria-label="`${label}导航`">
       <a
         v-for="item in items"
         :key="item.key"
         :href="item.href || '#'"
         class="side-item"
         :class="{ active: activeKey === item.key }"
+        :aria-current="activeKey === item.key ? 'page' : undefined"
         :title="collapsed ? item.name : ''"
         :aria-label="item.name"
         @click.prevent.stop="emit('select', item.key)"

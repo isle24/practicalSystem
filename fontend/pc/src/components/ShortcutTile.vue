@@ -4,6 +4,8 @@
     :data-shortcut-id="item.id"
     :class="tileClasses"
     :title="title || item.scope || item.name"
+    :draggable="draggable"
+    @dragstart="handleDragStart"
   >
     <component
       :is="tagName"
@@ -61,9 +63,17 @@ const props = defineProps({
   disabled: { type: Boolean, default: false },
   actionTitle: { type: String, default: '' },
   backendUrl: { type: Function, required: true },
+  draggable: { type: Boolean, default: false },
 });
 
-const emit = defineEmits(['open', 'action']);
+const emit = defineEmits(['open', 'action', 'drag-module']);
+function handleDragStart(event) {
+  if (!props.draggable) return;
+  event.dataTransfer?.setData('application/x-practical-module', String(props.item.id));
+  event.dataTransfer?.setData('text/plain', String(props.item.id));
+  if (event.dataTransfer) event.dataTransfer.effectAllowed = 'copy';
+  emit('drag-module', props.item.id);
+}
 const tagName = computed(() => (props.href ? 'a' : 'button'));
 const iconSize = computed(() => (props.mode === 'launcher' ? 28 : 25));
 const actionIconSize = computed(() => (props.mode === 'launcher' ? 14 : 16));
