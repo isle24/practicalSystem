@@ -7,6 +7,7 @@ use app\controller\Api\Concerns\Responds;
 use app\server\CurrentContext;
 use app\server\config\ConfigService;
 use app\server\file\FileService;
+use InvalidArgumentException;
 use support\Request;
 use support\Response;
 use Throwable;
@@ -105,6 +106,8 @@ class ConfigController
             $description = (string) $request->input('description', '');
 
             return $this->ok((new ConfigService())->set($group, $key, $value, $description));
+        } catch (InvalidArgumentException $exception) {
+            return $this->fail(40001, $exception->getMessage(), 400);
         } catch (Throwable $exception) {
             return $this->fail(50000, $exception->getMessage(), 500);
         }

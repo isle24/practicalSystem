@@ -55,7 +55,7 @@
     </section>
   </main>
 
-  <main v-else class="desktop-shell" :class="{ 'desktop-shell-mac': desktopStyleMode === 'mac' }" :style="desktopStyle" @click.left="closeDesktopContextMenu" @contextmenu.prevent="openDesktopContextMenu">
+  <main v-else-if="!wechatBlocked" class="desktop-shell" :class="{ 'desktop-shell-mac': desktopStyleMode === 'mac' }" :style="desktopStyle" @click.left="closeDesktopContextMenu" @contextmenu.prevent="openDesktopContextMenu">
     <section class="workspace">
       <AdaptiveDesktopGrid
         ref="desktopGridRef"
@@ -275,6 +275,7 @@
                     <span>
                       <strong>企业微信</strong>
                       <small>{{ profileWechatBindingText }}</small>
+                      <el-button v-if="['teacher', 'student'].includes(currentRoleType) && !wechatStatus?.bound" link type="primary" @click.prevent="wechatBinding.open">绑定企业微信</el-button>
                     </span>
                     <el-switch v-model="profileState.form.notify.wechat" />
                   </label>
@@ -2312,6 +2313,8 @@
                       <el-button v-if="canManageConfig" type="primary" :icon="Plus" @click="openUserDialog()">
                         新增用户
                       </el-button>
+                      <el-button v-if="canManageAccounts" :icon="Upload" @click="openAccountImport('teacher')">导入教师</el-button>
+                      <el-button v-if="canManageAccounts" :icon="UsersRound" @click="openAccountImport('student')">学生导入用户</el-button>
                       <el-button v-if="hasPermission('edu:data:import')" :icon="Upload" @click="openModule(modules.find(item => item.id === 'eduData'))">
                         导入学生档案
                       </el-button>
@@ -3652,6 +3655,8 @@
                   :can-import="hasPermission('edu:data:import')"
                   :can-confirm="hasPermission('edu:data:confirm')"
                   :can-issue="hasPermission('edu:data:issue')"
+                  :can-manage-accounts="canManageAccounts"
+                  :session-key="accountImportSessionKey"
                 />
 
                 <div v-else-if="win.module.id === 'dataManage' || (win.module.id === 'config' && win.panel === 'dataManage')" class="admin-panel data-manage-panel">
@@ -4085,6 +4090,11 @@
                       <label><span>EncodingAESKey</span><input v-model="wechatProxy.encoding_aes_key"></label>
                       <label><span>代理地址</span><input v-model="wechatProxy.proxy_url" placeholder="https://proxy.example.com/wechat-proxy"></label>
                       <label>
+                        <span>允许未绑定企业微信登录</span>
+                        <el-switch v-model="wechatProxy.allow_unbound_login" active-text="允许" inactive-text="不允许" />
+                      </label>
+                      <small>关闭后，教师和学生须绑定企业微信后才能使用系统，管理员不受限制。</small>
+                      <label>
                         <span>启用代理</span>
                         <el-switch
                           v-model="wechatProxy.proxy_enabled"
@@ -4395,9 +4405,10 @@
       @change="handleSyllabusGuideFile"
     >
   </main>
-    <WechatBindingGate :show="wechatBlocked" :state="wechatBinding.state" :status="wechatStatus" :account-name="operatorName" :role-name="roleText" @start="wechatBinding.start" @bind="wechatBinding.bind" @logout="submitLogout" />
+    <AccountImportDialog :visible="accountImportState.visible" :mode="accountImportState.mode" :session-key="accountImportSessionKey" @close="accountImportState.visible = false" @completed="refreshImportedAccounts" />
+    <WechatBindingGate :show="wechatShow" :state="wechatBinding.state" :status="wechatStatus" :account-name="operatorName" :role-name="roleText" :in-wechat="wechatBinding.inWechat" :binding-url="wechatBindingUrl" :dismissible="!wechatBlocked" @start="wechatBinding.start" @bind="wechatBinding.bind" @recheck="wechatBinding.recheck" @copy="wechatBinding.copyLink" @close="wechatBinding.close" @logout="submitLogout" />
     <DesktopUpdateStatus />
-    <ReleaseNotice v-if="isLoggedIn" :key="noteSessionKey" :request="request" :session-key="noteSessionKey" @open="openModule(modules.find(item => item.id === 'releaseNotes'))" />
+    <ReleaseNotice v-if="isLoggedIn && !wechatBlocked" :key="noteSessionKey" :request="request" :session-key="noteSessionKey" @open="openModule(modules.find(item => item.id === 'releaseNotes'))" />
   </el-config-provider>
 </template>
 
@@ -4480,6 +4491,7 @@ import PracticeScheduleBoard from './components/PracticeScheduleBoard.vue';
 import DocCenter from './components/DocCenter.vue';
 import EducationPlanSyncPanel from './components/EducationPlanSyncPanel.vue';
 import EduDataPanel from './components/EduDataPanel.vue';
+import AccountImportDialog from './components/AccountImportDialog.vue';
 import EnterpriseEvaluationPanel from './components/EnterpriseEvaluationPanel.vue';
 import ExportTaskCenter from './components/ExportTaskCenter.vue';
 import IconUpload from './components/IconUpload.vue';
@@ -4771,6 +4783,7 @@ const wechatProxy = reactive({
   encoding_aes_key: '',
   proxy_url: '',
   proxy_enabled: false,
+  allow_unbound_login: false,
   menu: [],
   selectedMenuIndex: -1,
   selectedSubMenuIndex: -1,
@@ -4782,7 +4795,10 @@ const wechatProxy = reactive({
 });
 const wechatBinding = useWechatBinding({ context: () => permissionState.context, request, backendUrl });
 const wechatBlocked = wechatBinding.blocked;
+const wechatShow = wechatBinding.show;
+const wechatBindingUrl = wechatBinding.publicUrl;
 const wechatStatus = wechatBinding.status;
+const accountImportState = reactive({ visible: false, mode: 'teacher' });
 const logState = reactive({
   loading: false,
   message: '',
@@ -5662,11 +5678,11 @@ const notebookRefs = new Map();
 const noteSessionKey = computed(() => [window.location.origin, permissionState.context.school_database_id, permissionState.context.account_id].join(':'));
 const assistantVisible = ref(false);
 const { status: realtimeStatus } = useRealtimeMessages({
-  sessionKey: () => permissionState.context.account_id ? noteSessionKey.value : '',
+  sessionKey: () => permissionState.context.account_id && !wechatBlocked.value ? noteSessionKey.value : '',
   request,
   backendOrigin: backendUrl('/'),
   invalidate: async (topic) => {
-    if (topic !== 'messages') return;
+    if (topic !== 'messages' || wechatBlocked.value) return;
     await loadMessageSummary();
     if (openWindows.some(win => win.module.id === 'message' && !win.minimized)) await loadMessages(messageState.pagination.page || 1);
   },
@@ -5910,6 +5926,10 @@ const visibleWindows = computed(() => openWindows.filter(win => !win.minimized))
 const taskbarWindows = computed(() => openWindows.filter(win => win.module.id !== 'message'
   && !(desktopStyleMode.value === 'mac' && visibleDesktopModules.value.some(module => module.id === win.module.id))));
 const canManageConfig = computed(() => hasPermission('config:manage') && ['super_admin', 'school_admin'].includes(permissionState.context.role_type));
+const canManageAccounts = computed(() => ['super_admin', 'school_admin'].includes(permissionState.context.role_type));
+const accountImportSessionKey = computed(() => canManageAccounts.value && permissionState.context.account_id
+  ? [noteSessionKey.value, permissionState.context.school_id, permissionState.context.role_type].join(':')
+  : '');
 const canViewUserAdmin = computed(() => ['super_admin', 'school_admin', 'college_admin', 'profession_admin'].includes(permissionState.context.role_type));
 const canSendMessages = computed(() => ['super_admin', 'school_admin'].includes(currentRoleType.value));
 const canUnbindUserWechat = computed(() => ['super_admin', 'school_admin'].includes(currentRoleType.value));
@@ -5922,11 +5942,23 @@ const profileQuietAllDay = computed({
   },
 });
 const profileWechatBindingText = computed(() => {
-  if (permissionState.context.wechat_binding?.required === false) {
+  if (!['teacher', 'student'].includes(currentRoleType.value)) {
     return '当前角色无需绑定';
   }
-  return permissionState.context.wechat_binding?.bound ? '已绑定企业微信' : '未绑定企业微信';
+  return wechatStatus.value?.bound ? '已绑定企业微信' : '未绑定企业微信';
 });
+
+function openAccountImport(mode) {
+  if (!canManageAccounts.value) return;
+  accountImportState.mode = mode;
+  accountImportState.visible = true;
+}
+
+function refreshImportedAccounts() {
+  if (canManageAccounts.value) loadUserAccounts(userAdminState.pagination.page || 1);
+}
+
+watch(accountImportSessionKey, () => { accountImportState.visible = false; });
 const canManageMessageTemplates = computed(() => ['super_admin', 'school_admin'].includes(currentRoleType.value) || hasPermission('template:manage'));
 const canViewMessageTemplates = computed(() => ['super_admin', 'school_admin'].includes(currentRoleType.value) || hasPermission('template:view') || hasPermission('template:manage'));
 const hasMessageTemplateFilters = computed(() => messageState.templateFilters.type !== 'all'
@@ -7059,7 +7091,7 @@ function toggleMessageTaskWindow() {
 }
 
 async function loadMessageSummary() {
-  if (!isLoggedIn.value) {
+  if (!isLoggedIn.value || wechatBlocked.value) {
     resetMessageState();
     return;
   }
@@ -7076,7 +7108,7 @@ async function loadMessageSummary() {
 }
 
 async function loadMessages(page = messageState.pagination.page || 1) {
-  if (!isLoggedIn.value || messageState.loading) {
+  if (!isLoggedIn.value || wechatBlocked.value || messageState.loading) {
     return;
   }
 
@@ -7780,6 +7812,7 @@ function openGlobalSearchModule(module) {
 }
 
 function openModule(module) {
+  if (wechatBlocked.value) return;
   if (module?.type === 'favoriteLink' && module.url) {
     openExternalLink(module).catch(error => ElMessage.error(error.message));
     return;
@@ -7860,7 +7893,7 @@ async function toggleDesktopShortcut(moduleId, forceAdd = false) {
 }
 
 async function loadDesktopShortcuts() {
-  if (!isLoggedIn.value) {
+  if (!isLoggedIn.value || wechatBlocked.value) {
     desktopLauncher.reset();
     return;
   }
@@ -7915,6 +7948,7 @@ function isPrimaryWorkWindow(win) {
 }
 
 function ensureDefaultWindow() {
+  if (!isLoggedIn.value || wechatBlocked.value) return;
   const defaultModule = defaultWindowModule();
   if (!defaultModule) {
     return;
@@ -7931,7 +7965,7 @@ function ensureDefaultWindow() {
 function scheduleDefaultWindow() {
   [200, 1000].forEach((delay) => {
     window.setTimeout(() => {
-      if (isLoggedIn.value) {
+      if (isLoggedIn.value && !wechatBlocked.value) {
         ensureDefaultWindow();
         handleHashNavigation();
       }
@@ -7974,7 +8008,7 @@ function closeGuide() {
 
 /** 启动台收藏独立于列表分页和筛选。 */
 async function loadFavorites() {
-  if (!isLoggedIn.value || favoriteState.loading) return;
+  if (!isLoggedIn.value || wechatBlocked.value || favoriteState.loading) return;
   const account = permissionState.context.account_id;
   favoriteState.loading = true;
   try {
@@ -8289,6 +8323,7 @@ function defaultPanelForModule(module) {
 }
 
 function openModuleWindow(module, options = {}) {
+  if (wechatBlocked.value) return;
   const existing = options.reuse ? openWindows.find(win => win.module.id === module.id) : null;
   if (existing) {
     existing.minimized = false;
@@ -8526,6 +8561,7 @@ function toggleTaskWindow(id) {
 }
 
 async function handleHashNavigation() {
+  if (!isLoggedIn.value || wechatBlocked.value) return;
   const hash = window.location.hash.slice(1);
   if (!hash) {
     return;
@@ -15363,7 +15399,7 @@ function validateReviewReason(entity, status, reason, label = null) {
 }
 
 async function loadInternshipFoundation() {
-  if (!hasPermission('internship:view')) {
+  if (wechatBlocked.value || !hasPermission('internship:view')) {
     return;
   }
 
@@ -15387,7 +15423,7 @@ async function loadInternshipFoundation() {
 }
 
 async function loadInternshipPanel(panel = 'overview', page = 1) {
-  if (panel === 'baseVisits' || !hasPermission('internship:view')) {
+  if (wechatBlocked.value || panel === 'baseVisits' || !hasPermission('internship:view')) {
     return;
   }
 
@@ -16241,7 +16277,7 @@ function resetProfileState() {
 }
 
 async function loadProfile() {
-  if (!isLoggedIn.value) {
+  if (!isLoggedIn.value || wechatBlocked.value) {
     return;
   }
 
@@ -16403,6 +16439,7 @@ function applyWechatConfig(data) {
   wechatProxy.encoding_aes_key = data.encoding_aes_key || '';
   wechatProxy.proxy_url = data.proxy_url || '';
   wechatProxy.proxy_enabled = Boolean(data.proxy_enabled);
+  wechatProxy.allow_unbound_login = data.allow_unbound_login === true;
   wechatProxy.menu = normalizeWechatMenu(data.menu || []);
   wechatProxy.checkResult = null;
   wechatProxy.selectedMenuIndex = wechatProxy.menu.length ? 0 : -1;
@@ -16556,6 +16593,7 @@ function wechatConfigPayload() {
     encoding_aes_key: wechatProxy.encoding_aes_key,
     proxy_url: wechatProxy.proxy_url,
     proxy_enabled: wechatProxy.proxy_enabled,
+    allow_unbound_login: wechatProxy.allow_unbound_login,
     menu: wechatMenuPayload(wechatProxy.menu),
   };
 }
@@ -16633,6 +16671,7 @@ async function checkProxyConfig() {
 }
 
 watch(openWindows, (windows) => {
+  if (!isLoggedIn.value || wechatBlocked.value) return;
   if (windows.some(win => ['menuManage', 'roleMenus', 'organizationScope'].includes(win.panel))) {
     loadAdminFoundation();
   }
@@ -16662,8 +16701,8 @@ watch(openWindows, (windows) => {
   }
 }, { deep: true });
 
-watch(() => permissionState.context.account_id, (accountId) => {
-  if (accountId) {
+watch(() => [permissionState.context.account_id, wechatBlocked.value], ([accountId, blocked]) => {
+  if (accountId && !blocked) {
     loadAdminFoundation();
     loadInternshipFoundation();
     loadMessageSummary();
@@ -16679,7 +16718,7 @@ watch(() => permissionState.context.account_id, (accountId) => {
 });
 
 watch(allLaunchableModules, () => {
-  if (isLoggedIn.value) {
+  if (isLoggedIn.value && !wechatBlocked.value) {
     syncOpenWindowModules();
     ensureDefaultWindow();
     handleHashNavigation();
@@ -16721,6 +16760,7 @@ onMounted(async () => {
   if (!isLoggedIn.value && desktopBridge?.bootstrapLogin) {
     await submitDesktopBootstrapLogin();
   }
+  if (wechatBlocked.value) return;
   await loadProfile();
   await loadDesktopShortcuts();
   await loadFavorites(1);

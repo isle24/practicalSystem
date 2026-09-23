@@ -5,6 +5,7 @@ namespace app\middleware;
 use app\model\channel\FileAccessRecord;
 use app\model\channel\FileRecord;
 use app\server\CurrentContext;
+use app\server\wechat\WechatBindingService;
 use Webman\Http\Request;
 use Webman\Http\Response;
 use Webman\MiddlewareInterface;
@@ -27,6 +28,11 @@ class ProtectedFiles implements MiddlewareInterface
             (new AuthMiddleware())->process($request, function ($request) use ($path, $handler): Response {
                 foreach (FileRecord::idsByUrl($path) as $id) {
                     $file = FileRecord::detailById((int) $id);
+                    $binding = (array) CurrentContext::get('wechat_binding', []);
+                    if ($file && !FileAccessRecord::publicImage($file) && (new WechatBindingService())->isBlocked($binding)) {
+                        return json(['code' => 40310, 'message' => '请先完成企业微信绑定及身份确认', 'data' => null])
+                            ->withStatus(403)->withHeader('Cache-Control', 'no-store');
+                    }
                     if ($file && (FileAccessRecord::publicImage($file) || FileAccessRecord::readable($file))) {
                         return $handler($request)->withHeaders([
                             'Cache-Control' => FileAccessRecord::publicImage($file) ? 'public, max-age=3600' : 'private, no-store',

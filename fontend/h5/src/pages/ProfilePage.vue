@@ -13,6 +13,7 @@
     <van-cell title="个人记事本" is-link @click="emit('open-tab', 'notebook')" />
     <van-cell title="更新说明" is-link @click="emit('open-tab', 'releaseNotes')" />
     <van-cell title="登录账号" :value="accountName" />
+    <van-cell v-if="canBindWechat" title="企业微信绑定" :value="wechatBound ? '已绑定' : '未绑定，前往绑定'" :is-link="!wechatBound" :clickable="!wechatBound" @click="!wechatBound && emit('bind-wechat')" />
     <MobileBinding @verified="emit('mobile-verified')" />
     <van-cell title="当前角色" :value="roleName" />
     <van-cell title="所属学校" :value="schoolName" />
@@ -98,9 +99,11 @@ const props = defineProps({
   templateVisible: { type: Boolean, default: false },
   switchState: { type: Object, required: true },
   roleLabels: { type: Object, default: () => ({}) },
+  wechatBound: { type: Boolean, default: false },
+  canBindWechat: { type: Boolean, default: false },
 });
 
-const emit = defineEmits(['logout', 'open-tab', 'switch-account', 'mobile-verified']);
+const emit = defineEmits(['logout', 'open-tab', 'switch-account', 'mobile-verified', 'bind-wechat']);
 
 const notificationState = reactive({
   loading: false,

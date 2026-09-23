@@ -15,21 +15,46 @@ class WechatBindingService
     public const TTL = 600;
     public const IDENTITY_TTL = 3600;
 
+    public function contextForUser(int $userId, string $roleType): array
+    {
+        $config = new ConfigService();
+        $required = in_array($roleType, ['teacher', 'student'], true);
+        $allowUnbound = $config->get('wechat.allow_unbound_login') === true;
+        $corpId = trim((string) $config->get('wechat.corp_id'));
+        $binding = UserWechat::currentByUser($userId);
+        $bound = $binding !== null && $corpId !== '' && $binding['corp_id'] === $corpId && trim((string) $binding['wechat_userid']) !== '';
+
+        return [
+            'bound' => $bound,
+            'required' => $required,
+            'enforced' => $required && !$allowUnbound,
+            'allow_unbound_login' => $allowUnbound,
+            'binding_outdated' => $binding !== null && !$bound,
+            'wechat_name' => (string) ($binding['wechat_name'] ?? ''),
+        ];
+    }
+
     public function status(): array
     {
-        $required = in_array(CurrentContext::roleType(), ['teacher', 'student'], true);
-        $binding = UserWechat::currentByUser((int) CurrentContext::userId());
-        $identity = $required ? $this->identity() : null;
+        $context = $this->contextForUser((int) CurrentContext::userId(), (string) CurrentContext::roleType());
+        $identity = $context['required'] ? $this->identity() : null;
+        $binding = $identity ? UserWechat::currentByUser((int) CurrentContext::userId()) : null;
         $config = new ConfigService();
-        return [
-            'bound' => $binding !== null,
-            'required' => $required,
-            'enforced' => $required && $this->inWechat(),
+
+        return array_merge($context, [
             'identity_ready' => $identity !== null,
-            'identity_matches' => $identity && $binding && hash_equals($binding['wechat_userid'], $identity['wechat_userid']) && $binding['corp_id'] === $identity['corp'],
-            'wechat_name' => (string) ($binding['wechat_name'] ?? ''),
-            'configured' => (string) $config->get('wechat.corp_id') !== '' && (string) $config->get('wechat.secret') !== '',
-        ];
+            'identity_matches' => $context['bound'] && $identity && $binding && hash_equals($binding['wechat_userid'], $identity['wechat_userid']) && $binding['corp_id'] === $identity['corp'],
+            'configured' => trim((string) $config->get('wechat.corp_id')) !== '' && trim((string) $config->get('wechat.secret')) !== '',
+        ]);
+    }
+
+    public function isBlocked(array $binding): bool
+    {
+        if (empty($binding['enforced'])) return false;
+        if (empty($binding['bound'])) return true;
+        if (!$this->inWechat()) return false;
+        $status = $this->status();
+        return !$status['identity_ready'] || !$status['identity_matches'];
     }
 
     public function begin(string $returnPath): array
@@ -108,7 +133,7 @@ class WechatBindingService
         $data = json_decode((string) Redis::get($this->key('identity', $ticket)), true);
         if (!is_array($data) || (int) ($data['school'] ?? 0) !== CurrentContext::schoolDatabaseId()
             || !hash_equals($data['browser'], hash('sha256', $browser))
-            || $data['corp'] !== (string) (new ConfigService())->get('wechat.corp_id')) return null;
+            || $data['corp'] !== trim((string) (new ConfigService())->get('wechat.corp_id'))) return null;
         return $data;
     }
 

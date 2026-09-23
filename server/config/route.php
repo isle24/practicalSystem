@@ -51,3 +51,13 @@ Route::post('/api/base-visit/schedule', [\app\controller\Api\BaseVisitController
 Route::post('/api/base-visit/record', [\app\controller\Api\BaseVisitController::class, 'record']);
 Route::post('/api/base-visit/cancel', [\app\controller\Api\BaseVisitController::class, 'cancel']);
 Route::disableDefaultRoute(\app\controller\Api\BaseVisitController::class);
+
+Route::get('/api/account-import/tasks', [\app\controller\Api\AccountImportController::class, 'tasks']);
+Route::get('/api/account-import/detail', [\app\controller\Api\AccountImportController::class, 'detail']);
+Route::get('/api/account-import/teacher-template', [\app\controller\Api\AccountImportController::class, 'teacherTemplate']);
+Route::post('/api/account-import/teacher-preview', [\app\controller\Api\AccountImportController::class, 'teacherPreview']);
+Route::post('/api/account-import/teacher-start', [\app\controller\Api\AccountImportController::class, 'teacherStart']);
+Route::post('/api/account-import/student-preview', [\app\controller\Api\AccountImportController::class, 'studentPreview']);
+Route::post('/api/account-import/student-start', [\app\controller\Api\AccountImportController::class, 'studentStart']);
+Route::post('/api/account-import/retry', [\app\controller\Api\AccountImportController::class, 'retry']);
+Route::disableDefaultRoute(\app\controller\Api\AccountImportController::class);

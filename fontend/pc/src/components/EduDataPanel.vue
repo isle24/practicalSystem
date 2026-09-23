@@ -1,9 +1,10 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, reactive } from 'vue';
+import { computed, onBeforeUnmount, onMounted, reactive, watch } from 'vue';
 import { ElCheckbox, ElMessageBox } from 'element-plus';
 import { Check, Download, RefreshCw, Upload } from '@lucide/vue';
 import EduFieldChanges from './EduFieldChanges.vue';
 import OperationDialog from './OperationDialog.vue';
+import AccountImportDialog from './AccountImportDialog.vue';
 import {
   cancelEduBatch,
   classifyEduCandidate,
@@ -24,6 +25,8 @@ const props = defineProps({
   canImport: { type: Boolean, default: false },
   canConfirm: { type: Boolean, default: false },
   canIssue: { type: Boolean, default: false },
+  canManageAccounts: { type: Boolean, default: false },
+  sessionKey: { type: String, default: '' },
 });
 
 const today = new Date();
@@ -35,6 +38,7 @@ const state = reactive({
   tab: 'batches',
   loading: false,
   message: '',
+  accountImportVisible: false,
   uploadType: '',
   uploadLoading: false,
   academic_year: '',
@@ -407,6 +411,8 @@ onBeforeUnmount(() => {
   }
   inputElement?.removeEventListener('change', handleFileChange);
 });
+
+watch(() => props.sessionKey, () => { state.accountImportVisible = false; });
 </script>
 
 <template>
@@ -449,7 +455,10 @@ onBeforeUnmount(() => {
     </el-tabs>
 
     <el-alert v-if="state.message" :title="state.message" type="warning" :closable="false" show-icon />
-    <p v-if="state.tab === 'student'" class="edu-source-hint">学生名单为已发布的全校档案，不按学年、学期筛选。</p>
+    <div v-if="state.tab === 'student'" class="edu-candidate-toolbar">
+      <p class="edu-source-hint">学生名单为已发布的全校档案，不按学年、学期筛选。</p>
+      <el-button v-if="props.canManageAccounts" type="primary" @click="state.accountImportVisible = true">一键导入用户</el-button>
+    </div>
 
     <el-table v-if="state.tab === 'batches'" :data="state.batches" stripe size="small" v-loading="state.loading" class="edu-data-table">
       <el-table-column type="index" label="序号" width="60" />
@@ -545,6 +554,7 @@ onBeforeUnmount(() => {
       <el-pagination size="small" layout="prev, pager, next" :current-page="state.issuePagination.page" :page-size="state.issuePagination.page_size" :total="state.issuePagination.total" @current-change="loadIssues" />
     </div>
 
+    <AccountImportDialog :visible="state.accountImportVisible" mode="student" :session-key="props.sessionKey" @close="state.accountImportVisible = false" @completed="state.tab === 'student' && loadSource(state.sourcePagination.page || 1)" />
     <OperationDialog :visible="state.uploadPeriodVisible" title="选择开课数据所属学期" dialog-class="menu-dialog" @close="state.uploadPeriodVisible = false">
       <div class="operation-form menu-dialog-form">
         <label><span>学年</span><el-select v-model="state.uploadPeriod.academic_year" aria-label="上传学年"><el-option v-for="year in academicYearOptions" :key="year" :label="year" :value="year" /></el-select></label>

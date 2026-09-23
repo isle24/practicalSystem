@@ -4,6 +4,7 @@ namespace app\middleware;
 
 use app\server\auth\AuthService;
 use app\server\CurrentContext;
+use app\server\wechat\WechatBindingService;
 use Throwable;
 use Webman\Http\Request;
 use Webman\Http\Response;
@@ -37,6 +38,15 @@ class AuthMiddleware implements MiddlewareInterface
         '/api/open-enterprise-evaluation/submit',
     ];
 
+    private const BINDING_PATHS = [
+        '/api/auth/switchable-accounts',
+        '/api/auth/switch-account',
+        '/api/permission/menus',
+        '/api/permission/filter',
+        '/api/wechat/binding-status',
+        '/api/wechat/bind',
+    ];
+
     /**
      * 解析登录令牌并写入当前请求上下文，未登录访问受保护接口返回 401。
      */
@@ -61,11 +71,10 @@ class AuthMiddleware implements MiddlewareInterface
         $path = '/' . trim($request->path(), '/');
         $binding = (array) CurrentContext::get('wechat_binding', []);
         if (str_starts_with($path, '/api/') && CurrentContext::accountId()
-            && str_contains(strtolower((string) $request->header('user-agent', '')), 'wxwork')
-            && !empty($binding['required']) && empty($binding['bound'])
-            && !str_starts_with($path, '/api/auth/') && !str_starts_with($path, '/api/permission/')
-            && !in_array($path, ['/api/wechat/binding-status', '/api/wechat/bind', '/api/wechat/oauth/start', '/api/wechat/oauth/callback'], true)) {
-            return json(['code' => 40310, 'message' => '请先绑定企业微信', 'data' => null])->withStatus(403);
+            && !in_array($path, self::PUBLIC_PATHS, true)
+            && !in_array($path, self::BINDING_PATHS, true)
+            && (new WechatBindingService())->isBlocked($binding)) {
+            return json(['code' => 40310, 'message' => '请先完成企业微信绑定及身份确认', 'data' => null])->withStatus(403);
         }
 
         return $handler($request);

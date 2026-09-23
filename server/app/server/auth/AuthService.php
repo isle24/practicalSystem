@@ -10,7 +10,7 @@ use app\model\channel\User;
 use app\server\CurrentContext;
 use app\server\rbac\DataScopeService;
 use app\server\rbac\RbacService;
-use app\model\channel\UserWechat;
+use app\server\wechat\WechatBindingService;
 use Firebase\JWT\BeforeValidException;
 use Firebase\JWT\ExpiredException;
 use Firebase\JWT\JWT;
@@ -287,12 +287,7 @@ class AuthService
             'client' => $this->client($client),
             'permissions' => $rbac->permissionCodes($roleId),
         ];
-        $wechatBinding = UserWechat::currentByUser((int) $user->id);
-        $context['wechat_binding'] = [
-            'bound' => $wechatBinding !== null,
-            'required' => in_array((string) $role['role_type'], ['teacher', 'student'], true),
-            'wechat_name' => (string) ($wechatBinding['wechat_name'] ?? ''),
-        ];
+        $context['wechat_binding'] = (new WechatBindingService())->contextForUser((int) $user->id, (string) $role['role_type']);
 
         CurrentContext::set($context);
 

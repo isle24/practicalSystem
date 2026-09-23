@@ -7,12 +7,12 @@ use app\controller\Api\Concerns\Responds;
 use app\model\channel\Account;
 use app\model\channel\TableRecord as ChannelTable;
 use app\model\channel\User;
-use app\model\channel\UserWechat;
 use app\server\auth\AccountMobileService;
 use app\server\auth\AuthService;
 use app\server\auth\DeviceBlacklist;
 use app\server\CurrentContext;
 use app\server\file\FileService;
+use app\server\wechat\WechatBindingService;
 use support\Request;
 use support\Response;
 use Throwable;
@@ -310,7 +310,7 @@ class ProfileController
             ],
             'notify' => $notify,
             'wechat_quiet' => $quiet,
-            'wechat_binding' => ['bound' => UserWechat::currentByUser((int) $userId) !== null, 'required' => in_array(CurrentContext::roleType(), ['teacher', 'student'], true)],
+            'wechat_binding' => (new WechatBindingService())->contextForUser((int) $userId, (string) CurrentContext::roleType()),
         ];
     }
 

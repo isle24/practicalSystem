@@ -53,6 +53,9 @@ class ConfigService
         $this->assertSchoolConnection();
         $this->assertKey($groupCode);
         $this->assertKey($key);
+        if ($groupCode === 'wechat' && $key === 'allow_unbound_login' && !is_bool($value)) {
+            throw new InvalidArgumentException('允许未绑定企业微信登录必须为布尔值');
+        }
 
         $group = ConfigGroup::enabledOrCreate($groupCode, $this->groupName($groupCode));
 

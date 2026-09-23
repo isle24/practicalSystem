@@ -20,7 +20,7 @@
     @refresh="handleMobilePullRefresh"
   >
     <template #default>
-    <section class="page-content">
+    <section v-if="!wechatBlocked" class="page-content">
       <LoginPage
         v-if="!isLoggedIn"
         :school-name="schoolText"
@@ -64,9 +64,12 @@
         :template-visible="hasPermission('template:view')"
         :switch-state="switchAccountState"
         :role-labels="roleNameMap"
+        :wechat-bound="!!wechatStatus?.bound"
+        :can-bind-wechat="isStudentRole || isTeacherRole"
         @open-tab="activeTab = $event"
         @switch-account="switchMobileAccount"
         @mobile-verified="loadSwitchableAccounts"
+        @bind-wechat="wechatBinding.open"
         @logout="confirmMobileLogout"
       />
 
@@ -138,8 +141,8 @@
     </template>
 
     <template #overlays>
-    <WechatBindingGate :show="wechatBlocked" :state="wechatBinding.state" :status="wechatStatus" :account-name="userText" :role-name="roleDisplayText" @start="wechatBinding.start" @bind="wechatBinding.bind" @logout="confirmMobileLogout" />
-    <ReleaseNotice v-if="isLoggedIn" :key="[state.context.school_database_id, state.context.account_id].join(':')" :request="request" :session-key="[locationOrigin, state.context.school_database_id, state.context.account_id].join(':')" @open="navigateMobileTab('releaseNotes')" />
+    <WechatBindingGate :show="wechatShow" :state="wechatBinding.state" :status="wechatStatus" :account-name="userText" :role-name="roleDisplayText" :in-wechat="wechatBinding.inWechat" :binding-url="wechatBindingUrl" :dismissible="!wechatBlocked" @start="wechatBinding.start" @bind="wechatBinding.bind" @recheck="wechatBinding.recheck" @copy="wechatBinding.copyLink" @close="wechatBinding.close" @logout="confirmMobileLogout" />
+    <ReleaseNotice v-if="isLoggedIn && !wechatBlocked" :key="[state.context.school_database_id, state.context.account_id].join(':')" :request="request" :session-key="[locationOrigin, state.context.school_database_id, state.context.account_id].join(':')" @open="navigateMobileTab('releaseNotes')" />
     <DocumentDetail
       :visible="support.doc.detail.visible"
       :detail="support.doc.detail"
@@ -279,6 +282,8 @@ const { state, hasPermission, load } = useMobilePermissions();
 const mobileRefreshing = ref(false);
 const wechatBinding = useWechatBinding({ context: () => state.context, request, backendUrl });
 const wechatBlocked = wechatBinding.blocked;
+const wechatShow = wechatBinding.show;
+const wechatBindingUrl = wechatBinding.publicUrl;
 const wechatStatus = wechatBinding.status;
 
 const {
@@ -292,7 +297,7 @@ const {
   openDoc: openMobileDoc,
   reset: resetSupportState,
 } = useSupportCenter({
-  isLoggedIn: () => Boolean(state.context.account_id),
+  isLoggedIn: () => Boolean(state.context.account_id) && !wechatBlocked.value,
   hasPermission,
 });
 
@@ -360,7 +365,7 @@ const {
   typeText: messageTypeText,
   typeUnread: mobileMessageTypeUnread,
 } = useMessageCenter({
-  isLoggedIn: () => Boolean(state.context.account_id),
+  isLoggedIn: () => Boolean(state.context.account_id) && !wechatBlocked.value,
   currentAccountId: () => state.context.account_id,
   navigate: tab => { activeTab.value = tab; },
   canNavigate: isMobileModuleVisible,
@@ -480,11 +485,11 @@ const currentPage = computed(() => {
 
 const isLoggedIn = computed(() => Boolean(state.context.account_id));
 useRealtimeMessages({
-  sessionKey: () => state.context.account_id ? `${state.context.school_database_id}:${state.context.account_id}` : '',
+  sessionKey: () => state.context.account_id && !wechatBlocked.value ? `${state.context.school_database_id}:${state.context.account_id}` : '',
   request,
   backendOrigin: backendUrl('/'),
   invalidate: async (topic) => {
-    if (topic !== 'messages') return;
+    if (topic !== 'messages' || wechatBlocked.value) return;
     await loadMessageSummary();
     if (activeTab.value === 'message') await loadMessages(1);
   },
@@ -2660,7 +2665,7 @@ function practiceScheduleWeekParams(module) {
 }
 
 async function loadPractice(module) {
-  if (!isLoggedIn.value || !hasPermission('practice:view')) {
+  if (!isLoggedIn.value || wechatBlocked.value || !hasPermission('practice:view')) {
     return;
   }
   const state = practiceModule(module);
@@ -3150,7 +3155,7 @@ function applyDefaultInternshipSelection() {
 }
 
 async function loadInternship() {
-  if (!isLoggedIn.value || !hasPermission('internship:view')) {
+  if (!isLoggedIn.value || wechatBlocked.value || !hasPermission('internship:view')) {
     return;
   }
 
@@ -5537,6 +5542,8 @@ function expireMobileSession(message) {
 
 async function refreshMobilePage() {
   await load();
+  await wechatBinding.refresh();
+  if (wechatBlocked.value) return;
   await loadSwitchableAccounts();
   if (activeTab.value === 'message') {
     await loadMessages(1);
@@ -5792,6 +5799,7 @@ providePracticeContext({
 });
 
 watch(activeTab, (tab) => {
+  if (!isLoggedIn.value || wechatBlocked.value) return;
   if (tab === 'internship') {
     loadInternship();
   }

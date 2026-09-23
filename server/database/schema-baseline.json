@@ -1,6 +1,6 @@
 {
     "version": "2026-09-23",
-    "generated_at": "2026-09-23T02:28:52+00:00",
+    "generated_at": "2026-09-23T03:53:57+00:00",
     "source_hashes": {
         "app/model/channel/AssistantProfile.php": "125924c846b0eba3b9766e3d4e0fabb6e18d58fb8d1306797dce56d018e22e59",
         "app/model/channel/AuthPasskey.php": "5d4b38b432cffc9f16607bc7428673ddff5e412cf70564e61703a6bdf8569ba5",
@@ -18,7 +18,7 @@
         "app/server/database/SchemaMetadata.php": "40e8d728eb8d3846ee4535acbd7986061aeea9fd208988c076f80bfaec8f6034",
         "app/server/edu/EduImportSchema.php": "9d67ff3f1a405e6f68bf2d7ab41d71ab249f19814f3afed82aff548d3132e3e3",
         "database/build-schema-baseline.php": "257d3f0dd7f07bcf506acafdf2b1d78bab88cb99bfdf771bfa8efb1cc1b42d3b",
-        "database/init.php": "da1744d606f7056ff8620b805fe8ef3192fdb488b670a899738c394c5c6a982c",
+        "database/init.php": "c72b77b05ceb238827610c7948ea18d966d0cbd83087881177bc8302ee930ef5",
         "database/migrations/20260905_verified_mobile.php": "30da7b7b89944e87712974d8b445c899835bf24d29a2f9b0cecea1ac8e0d85c6",
         "database/migrations/20260910_desktop_tools.php": "fcb34e87f2708602b7047135a4517a685e9f5d1be268f156bcc37d1e7a840c7d",
         "database/migrations/20260917_edu_import.php": "559312ed80ad0c2b95758806518c1bbd08e84ad253af2d0a845acebb23552f91",
@@ -36,6 +36,7 @@
         "database/updates/20260920-assistant-personal.sql": "0a20d11b4262ef43b1b2b8a7c80eb603866bf54ed123549f084c613fbced4d8f",
         "database/updates/20260922-data-cleanup.sql": "f8f8f6331fb495dbbf4e241bb32840500d1dc84906d0a80fab5699c599f8577a",
         "database/updates/20260922-wechat-message.sql": "26e32372994ed8153b44544e0e3cfbda2f30123ed6cb5fbe9d9e02ea0b232b8c",
+        "database/updates/20260923-account-import.sql": "1a47b9719d24720c94dfda90e61e9e4036e42b93c52c011ffae84915f65ba966",
         "database/updates/20260923-base-visit.sql": "11978ae865e5f0fb140ad45becc69d17edafdcad3348b43883fb820711f43831"
     },
     "schemas": {
@@ -662,6 +663,320 @@
                         "columns": [
                             {
                                 "name": "user_id",
+                                "length": null,
+                                "order": "A",
+                                "expression": null
+                            }
+                        ],
+                        "unique": false,
+                        "type": "BTREE",
+                        "visible": "YES"
+                    }
+                },
+                "constraints": []
+            },
+            "account_import_task": {
+                "engine": "InnoDB",
+                "collation": "utf8mb4_0900_ai_ci",
+                "create_sql": "CREATE TABLE `account_import_task` (\n  `id` bigint unsigned NOT NULL AUTO_INCREMENT,\n  `uuid` char(36) NOT NULL,\n  `request_key` varchar(64) NOT NULL,\n  `type` varchar(20) NOT NULL,\n  `status` varchar(30) NOT NULL DEFAULT 'queued',\n  `created_by` bigint unsigned NOT NULL,\n  `file_id` bigint unsigned DEFAULT NULL,\n  `source_json` json DEFAULT NULL,\n  `password_hash` varchar(255) DEFAULT NULL,\n  `total_rows` int unsigned NOT NULL DEFAULT '0',\n  `processed_rows` int unsigned NOT NULL DEFAULT '0',\n  `created_count` int unsigned NOT NULL DEFAULT '0',\n  `linked_count` int unsigned NOT NULL DEFAULT '0',\n  `updated_count` int unsigned NOT NULL DEFAULT '0',\n  `skipped_count` int unsigned NOT NULL DEFAULT '0',\n  `failed_count` int unsigned NOT NULL DEFAULT '0',\n  `errors_json` json DEFAULT NULL,\n  `error_message` varchar(500) DEFAULT NULL,\n  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,\n  `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\n  `finished_at` datetime DEFAULT NULL,\n  PRIMARY KEY (`id`),\n  UNIQUE KEY `uk_account_import_uuid` (`uuid`),\n  UNIQUE KEY `uk_account_import_request` (`created_by`,`request_key`),\n  KEY `idx_account_import_owner` (`created_by`,`type`,`id`),\n  KEY `idx_account_import_status` (`status`,`updated_at`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci",
+                "columns": {
+                    "id": {
+                        "definition": "`id` bigint unsigned NOT NULL AUTO_INCREMENT",
+                        "type": "bigint unsigned",
+                        "nullable": false,
+                        "default": null,
+                        "extra": "auto_increment",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "uuid": {
+                        "definition": "`uuid` char(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL",
+                        "type": "char(36)",
+                        "nullable": false,
+                        "default": null,
+                        "extra": "",
+                        "charset": "utf8mb4",
+                        "collation": "utf8mb4_0900_ai_ci",
+                        "generation": ""
+                    },
+                    "request_key": {
+                        "definition": "`request_key` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL",
+                        "type": "varchar(64)",
+                        "nullable": false,
+                        "default": null,
+                        "extra": "",
+                        "charset": "utf8mb4",
+                        "collation": "utf8mb4_0900_ai_ci",
+                        "generation": ""
+                    },
+                    "type": {
+                        "definition": "`type` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL",
+                        "type": "varchar(20)",
+                        "nullable": false,
+                        "default": null,
+                        "extra": "",
+                        "charset": "utf8mb4",
+                        "collation": "utf8mb4_0900_ai_ci",
+                        "generation": ""
+                    },
+                    "status": {
+                        "definition": "`status` varchar(30) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL DEFAULT 'queued'",
+                        "type": "varchar(30)",
+                        "nullable": false,
+                        "default": "queued",
+                        "extra": "",
+                        "charset": "utf8mb4",
+                        "collation": "utf8mb4_0900_ai_ci",
+                        "generation": ""
+                    },
+                    "created_by": {
+                        "definition": "`created_by` bigint unsigned NOT NULL",
+                        "type": "bigint unsigned",
+                        "nullable": false,
+                        "default": null,
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "file_id": {
+                        "definition": "`file_id` bigint unsigned DEFAULT NULL",
+                        "type": "bigint unsigned",
+                        "nullable": true,
+                        "default": null,
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "source_json": {
+                        "definition": "`source_json` json DEFAULT NULL",
+                        "type": "json",
+                        "nullable": true,
+                        "default": null,
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "password_hash": {
+                        "definition": "`password_hash` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci DEFAULT NULL",
+                        "type": "varchar(255)",
+                        "nullable": true,
+                        "default": null,
+                        "extra": "",
+                        "charset": "utf8mb4",
+                        "collation": "utf8mb4_0900_ai_ci",
+                        "generation": ""
+                    },
+                    "total_rows": {
+                        "definition": "`total_rows` int unsigned NOT NULL DEFAULT '0'",
+                        "type": "int unsigned",
+                        "nullable": false,
+                        "default": "0",
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "processed_rows": {
+                        "definition": "`processed_rows` int unsigned NOT NULL DEFAULT '0'",
+                        "type": "int unsigned",
+                        "nullable": false,
+                        "default": "0",
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "created_count": {
+                        "definition": "`created_count` int unsigned NOT NULL DEFAULT '0'",
+                        "type": "int unsigned",
+                        "nullable": false,
+                        "default": "0",
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "linked_count": {
+                        "definition": "`linked_count` int unsigned NOT NULL DEFAULT '0'",
+                        "type": "int unsigned",
+                        "nullable": false,
+                        "default": "0",
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "updated_count": {
+                        "definition": "`updated_count` int unsigned NOT NULL DEFAULT '0'",
+                        "type": "int unsigned",
+                        "nullable": false,
+                        "default": "0",
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "skipped_count": {
+                        "definition": "`skipped_count` int unsigned NOT NULL DEFAULT '0'",
+                        "type": "int unsigned",
+                        "nullable": false,
+                        "default": "0",
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "failed_count": {
+                        "definition": "`failed_count` int unsigned NOT NULL DEFAULT '0'",
+                        "type": "int unsigned",
+                        "nullable": false,
+                        "default": "0",
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "errors_json": {
+                        "definition": "`errors_json` json DEFAULT NULL",
+                        "type": "json",
+                        "nullable": true,
+                        "default": null,
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "error_message": {
+                        "definition": "`error_message` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci DEFAULT NULL",
+                        "type": "varchar(500)",
+                        "nullable": true,
+                        "default": null,
+                        "extra": "",
+                        "charset": "utf8mb4",
+                        "collation": "utf8mb4_0900_ai_ci",
+                        "generation": ""
+                    },
+                    "created_at": {
+                        "definition": "`created_at` datetime DEFAULT CURRENT_TIMESTAMP",
+                        "type": "datetime",
+                        "nullable": true,
+                        "default": "CURRENT_TIMESTAMP",
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "updated_at": {
+                        "definition": "`updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP",
+                        "type": "datetime",
+                        "nullable": true,
+                        "default": "CURRENT_TIMESTAMP",
+                        "extra": "on update CURRENT_TIMESTAMP",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "finished_at": {
+                        "definition": "`finished_at` datetime DEFAULT NULL",
+                        "type": "datetime",
+                        "nullable": true,
+                        "default": null,
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    }
+                },
+                "indexes": {
+                    "PRIMARY": {
+                        "definition": "PRIMARY KEY (`id`)",
+                        "columns": [
+                            {
+                                "name": "id",
+                                "length": null,
+                                "order": "A",
+                                "expression": null
+                            }
+                        ],
+                        "unique": true,
+                        "type": "BTREE",
+                        "visible": "YES"
+                    },
+                    "uk_account_import_uuid": {
+                        "definition": "UNIQUE KEY `uk_account_import_uuid` (`uuid`)",
+                        "columns": [
+                            {
+                                "name": "uuid",
+                                "length": null,
+                                "order": "A",
+                                "expression": null
+                            }
+                        ],
+                        "unique": true,
+                        "type": "BTREE",
+                        "visible": "YES"
+                    },
+                    "uk_account_import_request": {
+                        "definition": "UNIQUE KEY `uk_account_import_request` (`created_by`,`request_key`)",
+                        "columns": [
+                            {
+                                "name": "created_by",
+                                "length": null,
+                                "order": "A",
+                                "expression": null
+                            },
+                            {
+                                "name": "request_key",
+                                "length": null,
+                                "order": "A",
+                                "expression": null
+                            }
+                        ],
+                        "unique": true,
+                        "type": "BTREE",
+                        "visible": "YES"
+                    },
+                    "idx_account_import_owner": {
+                        "definition": "KEY `idx_account_import_owner` (`created_by`,`type`,`id`)",
+                        "columns": [
+                            {
+                                "name": "created_by",
+                                "length": null,
+                                "order": "A",
+                                "expression": null
+                            },
+                            {
+                                "name": "type",
+                                "length": null,
+                                "order": "A",
+                                "expression": null
+                            },
+                            {
+                                "name": "id",
+                                "length": null,
+                                "order": "A",
+                                "expression": null
+                            }
+                        ],
+                        "unique": false,
+                        "type": "BTREE",
+                        "visible": "YES"
+                    },
+                    "idx_account_import_status": {
+                        "definition": "KEY `idx_account_import_status` (`status`,`updated_at`)",
+                        "columns": [
+                            {
+                                "name": "status",
+                                "length": null,
+                                "order": "A",
+                                "expression": null
+                            },
+                            {
+                                "name": "updated_at",
                                 "length": null,
                                 "order": "A",
                                 "expression": null

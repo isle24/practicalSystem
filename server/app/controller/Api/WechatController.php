@@ -65,6 +65,14 @@ class WechatController
 
         try {
             $config = new ConfigService();
+            $allowUnbound = $request->input('allow_unbound_login', $config->get('wechat.allow_unbound_login') === true);
+            if (!is_bool($allowUnbound)) {
+                throw new InvalidArgumentException('允许未绑定企业微信登录必须为布尔值');
+            }
+            if ($allowUnbound !== ($config->get('wechat.allow_unbound_login') === true)
+                && !in_array(CurrentContext::roleType(), ['super_admin', 'school_admin'], true)) {
+                return $this->fail(40300, '仅学校管理员可修改企业微信登录限制', 403);
+            }
             $values = [
                 'app_id' => $this->stringInput($request, 'app_id', 120),
                 'corp_id' => $this->stringInput($request, 'corp_id', 120),
@@ -74,6 +82,7 @@ class WechatController
                 'encoding_aes_key' => $this->stringInput($request, 'encoding_aes_key', 255),
                 'proxy_url' => $this->stringInput($request, 'proxy_url', 255),
                 'proxy_enabled' => filter_var($request->input('proxy_enabled', false), FILTER_VALIDATE_BOOL),
+                'allow_unbound_login' => $allowUnbound,
                 'menu_json' => json_encode($this->menuInput($request) ?: $this->defaultMenu($request), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
             ];
             if ($values['proxy_url'] !== '') {
@@ -89,6 +98,7 @@ class WechatController
                 'encoding_aes_key' => '企业微信回调 EncodingAESKey',
                 'proxy_url' => '服务端允许列表中的 HTTPS 代理地址，空值表示直连企业微信',
                 'proxy_enabled' => '是否启用企业微信代理地址',
+                'allow_unbound_login' => '是否允许未绑定企业微信的老师、学生使用系统',
                 'menu_json' => '企业微信应用菜单 JSON',
             ];
 
@@ -173,6 +183,7 @@ class WechatController
             'encoding_aes_key' => $config->get('wechat.encoding_aes_key') ?? '',
             'proxy_url' => $config->get('wechat.proxy_url') ?? '',
             'proxy_enabled' => (bool) $config->get('wechat.proxy_enabled'),
+            'allow_unbound_login' => $config->get('wechat.allow_unbound_login') === true,
             'menu' => is_array($menu) ? $menu : [],
         ];
     }

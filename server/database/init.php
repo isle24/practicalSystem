@@ -1667,7 +1667,7 @@ function schoolBusinessStatements(?int $archiveYear = null): array
     $statements[] = TableRecord::operationLogCreationStatement('operation_log_202606');
 
     $statements = array_merge($statements, DesktopToolsSchema::creationStatements());
-    foreach (['0.3.4-message-assistant.sql', '20260923-base-visit.sql'] as $file) {
+    foreach (['0.3.4-message-assistant.sql', '20260923-base-visit.sql', '20260923-account-import.sql'] as $file) {
         $sql = file_get_contents(__DIR__ . '/updates/' . $file);
         if ($sql === false) throw new RuntimeException('无法读取结构 SQL：' . $file);
         foreach (array_map('trim', explode(';', $sql)) as $statement) {
