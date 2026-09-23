@@ -75,7 +75,7 @@ function buildSchemaBaseline(): string
         $config['pass'],
         [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC, PDO::ATTR_TIMEOUT => 5]
     );
-    $version = '2026-09-22';
+    $version = '2026-09-23';
     $archiveYear = (int) substr($version, 0, 4);
     $prefix = 'practical_schema_build_' . bin2hex(random_bytes(12));
     $created = [];

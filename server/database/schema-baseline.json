@@ -1,6 +1,6 @@
 {
-    "version": "2026-09-22",
-    "generated_at": "2026-09-22T10:23:07+00:00",
+    "version": "2026-09-23",
+    "generated_at": "2026-09-23T02:28:52+00:00",
     "source_hashes": {
         "app/model/channel/AssistantProfile.php": "125924c846b0eba3b9766e3d4e0fabb6e18d58fb8d1306797dce56d018e22e59",
         "app/model/channel/AuthPasskey.php": "5d4b38b432cffc9f16607bc7428673ddff5e412cf70564e61703a6bdf8569ba5",
@@ -17,8 +17,8 @@
         "app/model/channel/TemplateRecord.php": "7b5882c727a5f8eb89886d3e5ce2af570b76e415afd65f7d3f0a03b9ce47ec26",
         "app/server/database/SchemaMetadata.php": "40e8d728eb8d3846ee4535acbd7986061aeea9fd208988c076f80bfaec8f6034",
         "app/server/edu/EduImportSchema.php": "9d67ff3f1a405e6f68bf2d7ab41d71ab249f19814f3afed82aff548d3132e3e3",
-        "database/build-schema-baseline.php": "8fd1759749953d48ec701c58a21f0b95c0728067cd8e62db5c488d6984593ff3",
-        "database/init.php": "29f3127d162f9b74513b98c55b9fec18a95e5288b858a2ac65861b80f91e915d",
+        "database/build-schema-baseline.php": "257d3f0dd7f07bcf506acafdf2b1d78bab88cb99bfdf771bfa8efb1cc1b42d3b",
+        "database/init.php": "da1744d606f7056ff8620b805fe8ef3192fdb488b670a899738c394c5c6a982c",
         "database/migrations/20260905_verified_mobile.php": "30da7b7b89944e87712974d8b445c899835bf24d29a2f9b0cecea1ac8e0d85c6",
         "database/migrations/20260910_desktop_tools.php": "fcb34e87f2708602b7047135a4517a685e9f5d1be268f156bcc37d1e7a840c7d",
         "database/migrations/20260917_edu_import.php": "559312ed80ad0c2b95758806518c1bbd08e84ad253af2d0a845acebb23552f91",
@@ -28,13 +28,15 @@
         "database/migrations/20260920_edu_email_cleanup.php": "f83f93fe5dc1045c6813d7ad5f3f3864df634fdff9bff420e4703adb9a6c62b3",
         "database/migrations/20260920_message_assistant.php": "8f6164db2d6a25502acc3ac35068c87a75201b03754c99ed0999c2db30709fdb",
         "database/migrations/20260922_data_cleanup.php": "a32aa2d7648ebc3489c80de01e31e2674ce36e250c67bce00e00e86ff13a28f8",
+        "database/migrations/20260923_base_visit.php": "ac9d45a5b568d23d6462ab90a9d38c0c7d02445d748d7ff3a7a97565a613019d",
         "database/updates/0.2.0-school-tools.sql": "c7df26fef345b79fd9032db24a4c01dff0fe36a8cf7a9e521549fb1c98572d61",
         "database/updates/0.3.0-client-platform.sql": "1eaba1770e4953d7b5c674b8a3b683db3d5f08aff5bfa194bbee496b7387fb81",
         "database/updates/0.3.2-file-preview-favorites.sql": "6ecd61c292679ef49f0a2af4b7ad2da97dc5eab40372e8e298765ac1cf87fd93",
         "database/updates/0.3.4-message-assistant.sql": "384a96b087345544c6d2f8759be41945df044accbc5309903578547410e25d3e",
         "database/updates/20260920-assistant-personal.sql": "0a20d11b4262ef43b1b2b8a7c80eb603866bf54ed123549f084c613fbced4d8f",
         "database/updates/20260922-data-cleanup.sql": "f8f8f6331fb495dbbf4e241bb32840500d1dc84906d0a80fab5699c599f8577a",
-        "database/updates/20260922-wechat-message.sql": "26e32372994ed8153b44544e0e3cfbda2f30123ed6cb5fbe9d9e02ea0b232b8c"
+        "database/updates/20260922-wechat-message.sql": "26e32372994ed8153b44544e0e3cfbda2f30123ed6cb5fbe9d9e02ea0b232b8c",
+        "database/updates/20260923-base-visit.sql": "11978ae865e5f0fb140ad45becc69d17edafdcad3348b43883fb820711f43831"
     },
     "schemas": {
         "master": {
@@ -7502,6 +7504,618 @@
                             }
                         ],
                         "unique": false,
+                        "type": "BTREE",
+                        "visible": "YES"
+                    }
+                },
+                "constraints": []
+            },
+            "base_visit_plan": {
+                "engine": "InnoDB",
+                "collation": "utf8mb4_0900_ai_ci",
+                "create_sql": "CREATE TABLE `base_visit_plan` (\n  `id` bigint unsigned NOT NULL AUTO_INCREMENT,\n  `uuid` char(36) NOT NULL,\n  `revision` int unsigned NOT NULL DEFAULT '1',\n  `title` varchar(180) NOT NULL,\n  `base_id` bigint unsigned NOT NULL,\n  `teacher_id` bigint unsigned NOT NULL,\n  `dep_id` bigint unsigned NOT NULL,\n  `base_name` varchar(180) NOT NULL,\n  `base_address` varchar(500) DEFAULT NULL,\n  `base_department` varchar(180) DEFAULT NULL,\n  `base_category` varchar(80) DEFAULT NULL,\n  `base_location` varchar(40) DEFAULT NULL,\n  `teacher_name` varchar(120) NOT NULL,\n  `teacher_department` varchar(180) DEFAULT NULL,\n  `contact_phone` varchar(40) DEFAULT NULL,\n  `visit_date` date DEFAULT NULL,\n  `visit_period` varchar(10) DEFAULT NULL,\n  `start_time` time DEFAULT NULL,\n  `end_time` time DEFAULT NULL,\n  `remark` text,\n  `status` varchar(40) NOT NULL DEFAULT 'pending_time',\n  `scheduled_at` datetime DEFAULT NULL,\n  `cancel_reason` varchar(1000) DEFAULT NULL,\n  `created_by` bigint unsigned NOT NULL,\n  `updated_by` bigint unsigned NOT NULL,\n  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,\n  `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\n  `deleted_at` datetime DEFAULT NULL,\n  PRIMARY KEY (`id`),\n  UNIQUE KEY `uk_visit_plan_uuid` (`uuid`),\n  KEY `idx_visit_teacher_status_date` (`teacher_id`,`status`,`visit_date`),\n  KEY `idx_visit_dep_status_date` (`dep_id`,`status`,`visit_date`),\n  KEY `idx_visit_date_period_status` (`visit_date`,`visit_period`,`status`),\n  KEY `idx_visit_base` (`base_id`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci",
+                "columns": {
+                    "id": {
+                        "definition": "`id` bigint unsigned NOT NULL AUTO_INCREMENT",
+                        "type": "bigint unsigned",
+                        "nullable": false,
+                        "default": null,
+                        "extra": "auto_increment",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "uuid": {
+                        "definition": "`uuid` char(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL",
+                        "type": "char(36)",
+                        "nullable": false,
+                        "default": null,
+                        "extra": "",
+                        "charset": "utf8mb4",
+                        "collation": "utf8mb4_0900_ai_ci",
+                        "generation": ""
+                    },
+                    "revision": {
+                        "definition": "`revision` int unsigned NOT NULL DEFAULT '1'",
+                        "type": "int unsigned",
+                        "nullable": false,
+                        "default": "1",
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "title": {
+                        "definition": "`title` varchar(180) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL",
+                        "type": "varchar(180)",
+                        "nullable": false,
+                        "default": null,
+                        "extra": "",
+                        "charset": "utf8mb4",
+                        "collation": "utf8mb4_0900_ai_ci",
+                        "generation": ""
+                    },
+                    "base_id": {
+                        "definition": "`base_id` bigint unsigned NOT NULL",
+                        "type": "bigint unsigned",
+                        "nullable": false,
+                        "default": null,
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "teacher_id": {
+                        "definition": "`teacher_id` bigint unsigned NOT NULL",
+                        "type": "bigint unsigned",
+                        "nullable": false,
+                        "default": null,
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "dep_id": {
+                        "definition": "`dep_id` bigint unsigned NOT NULL",
+                        "type": "bigint unsigned",
+                        "nullable": false,
+                        "default": null,
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "base_name": {
+                        "definition": "`base_name` varchar(180) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL",
+                        "type": "varchar(180)",
+                        "nullable": false,
+                        "default": null,
+                        "extra": "",
+                        "charset": "utf8mb4",
+                        "collation": "utf8mb4_0900_ai_ci",
+                        "generation": ""
+                    },
+                    "base_address": {
+                        "definition": "`base_address` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci DEFAULT NULL",
+                        "type": "varchar(500)",
+                        "nullable": true,
+                        "default": null,
+                        "extra": "",
+                        "charset": "utf8mb4",
+                        "collation": "utf8mb4_0900_ai_ci",
+                        "generation": ""
+                    },
+                    "base_department": {
+                        "definition": "`base_department` varchar(180) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci DEFAULT NULL",
+                        "type": "varchar(180)",
+                        "nullable": true,
+                        "default": null,
+                        "extra": "",
+                        "charset": "utf8mb4",
+                        "collation": "utf8mb4_0900_ai_ci",
+                        "generation": ""
+                    },
+                    "base_category": {
+                        "definition": "`base_category` varchar(80) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci DEFAULT NULL",
+                        "type": "varchar(80)",
+                        "nullable": true,
+                        "default": null,
+                        "extra": "",
+                        "charset": "utf8mb4",
+                        "collation": "utf8mb4_0900_ai_ci",
+                        "generation": ""
+                    },
+                    "base_location": {
+                        "definition": "`base_location` varchar(40) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci DEFAULT NULL",
+                        "type": "varchar(40)",
+                        "nullable": true,
+                        "default": null,
+                        "extra": "",
+                        "charset": "utf8mb4",
+                        "collation": "utf8mb4_0900_ai_ci",
+                        "generation": ""
+                    },
+                    "teacher_name": {
+                        "definition": "`teacher_name` varchar(120) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL",
+                        "type": "varchar(120)",
+                        "nullable": false,
+                        "default": null,
+                        "extra": "",
+                        "charset": "utf8mb4",
+                        "collation": "utf8mb4_0900_ai_ci",
+                        "generation": ""
+                    },
+                    "teacher_department": {
+                        "definition": "`teacher_department` varchar(180) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci DEFAULT NULL",
+                        "type": "varchar(180)",
+                        "nullable": true,
+                        "default": null,
+                        "extra": "",
+                        "charset": "utf8mb4",
+                        "collation": "utf8mb4_0900_ai_ci",
+                        "generation": ""
+                    },
+                    "contact_phone": {
+                        "definition": "`contact_phone` varchar(40) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci DEFAULT NULL",
+                        "type": "varchar(40)",
+                        "nullable": true,
+                        "default": null,
+                        "extra": "",
+                        "charset": "utf8mb4",
+                        "collation": "utf8mb4_0900_ai_ci",
+                        "generation": ""
+                    },
+                    "visit_date": {
+                        "definition": "`visit_date` date DEFAULT NULL",
+                        "type": "date",
+                        "nullable": true,
+                        "default": null,
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "visit_period": {
+                        "definition": "`visit_period` varchar(10) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci DEFAULT NULL",
+                        "type": "varchar(10)",
+                        "nullable": true,
+                        "default": null,
+                        "extra": "",
+                        "charset": "utf8mb4",
+                        "collation": "utf8mb4_0900_ai_ci",
+                        "generation": ""
+                    },
+                    "start_time": {
+                        "definition": "`start_time` time DEFAULT NULL",
+                        "type": "time",
+                        "nullable": true,
+                        "default": null,
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "end_time": {
+                        "definition": "`end_time` time DEFAULT NULL",
+                        "type": "time",
+                        "nullable": true,
+                        "default": null,
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "remark": {
+                        "definition": "`remark` text CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci",
+                        "type": "text",
+                        "nullable": true,
+                        "default": null,
+                        "extra": "",
+                        "charset": "utf8mb4",
+                        "collation": "utf8mb4_0900_ai_ci",
+                        "generation": ""
+                    },
+                    "status": {
+                        "definition": "`status` varchar(40) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL DEFAULT 'pending_time'",
+                        "type": "varchar(40)",
+                        "nullable": false,
+                        "default": "pending_time",
+                        "extra": "",
+                        "charset": "utf8mb4",
+                        "collation": "utf8mb4_0900_ai_ci",
+                        "generation": ""
+                    },
+                    "scheduled_at": {
+                        "definition": "`scheduled_at` datetime DEFAULT NULL",
+                        "type": "datetime",
+                        "nullable": true,
+                        "default": null,
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "cancel_reason": {
+                        "definition": "`cancel_reason` varchar(1000) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci DEFAULT NULL",
+                        "type": "varchar(1000)",
+                        "nullable": true,
+                        "default": null,
+                        "extra": "",
+                        "charset": "utf8mb4",
+                        "collation": "utf8mb4_0900_ai_ci",
+                        "generation": ""
+                    },
+                    "created_by": {
+                        "definition": "`created_by` bigint unsigned NOT NULL",
+                        "type": "bigint unsigned",
+                        "nullable": false,
+                        "default": null,
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "updated_by": {
+                        "definition": "`updated_by` bigint unsigned NOT NULL",
+                        "type": "bigint unsigned",
+                        "nullable": false,
+                        "default": null,
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "created_at": {
+                        "definition": "`created_at` datetime DEFAULT CURRENT_TIMESTAMP",
+                        "type": "datetime",
+                        "nullable": true,
+                        "default": "CURRENT_TIMESTAMP",
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "updated_at": {
+                        "definition": "`updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP",
+                        "type": "datetime",
+                        "nullable": true,
+                        "default": "CURRENT_TIMESTAMP",
+                        "extra": "on update CURRENT_TIMESTAMP",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "deleted_at": {
+                        "definition": "`deleted_at` datetime DEFAULT NULL",
+                        "type": "datetime",
+                        "nullable": true,
+                        "default": null,
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    }
+                },
+                "indexes": {
+                    "PRIMARY": {
+                        "definition": "PRIMARY KEY (`id`)",
+                        "columns": [
+                            {
+                                "name": "id",
+                                "length": null,
+                                "order": "A",
+                                "expression": null
+                            }
+                        ],
+                        "unique": true,
+                        "type": "BTREE",
+                        "visible": "YES"
+                    },
+                    "uk_visit_plan_uuid": {
+                        "definition": "UNIQUE KEY `uk_visit_plan_uuid` (`uuid`)",
+                        "columns": [
+                            {
+                                "name": "uuid",
+                                "length": null,
+                                "order": "A",
+                                "expression": null
+                            }
+                        ],
+                        "unique": true,
+                        "type": "BTREE",
+                        "visible": "YES"
+                    },
+                    "idx_visit_teacher_status_date": {
+                        "definition": "KEY `idx_visit_teacher_status_date` (`teacher_id`,`status`,`visit_date`)",
+                        "columns": [
+                            {
+                                "name": "teacher_id",
+                                "length": null,
+                                "order": "A",
+                                "expression": null
+                            },
+                            {
+                                "name": "status",
+                                "length": null,
+                                "order": "A",
+                                "expression": null
+                            },
+                            {
+                                "name": "visit_date",
+                                "length": null,
+                                "order": "A",
+                                "expression": null
+                            }
+                        ],
+                        "unique": false,
+                        "type": "BTREE",
+                        "visible": "YES"
+                    },
+                    "idx_visit_dep_status_date": {
+                        "definition": "KEY `idx_visit_dep_status_date` (`dep_id`,`status`,`visit_date`)",
+                        "columns": [
+                            {
+                                "name": "dep_id",
+                                "length": null,
+                                "order": "A",
+                                "expression": null
+                            },
+                            {
+                                "name": "status",
+                                "length": null,
+                                "order": "A",
+                                "expression": null
+                            },
+                            {
+                                "name": "visit_date",
+                                "length": null,
+                                "order": "A",
+                                "expression": null
+                            }
+                        ],
+                        "unique": false,
+                        "type": "BTREE",
+                        "visible": "YES"
+                    },
+                    "idx_visit_date_period_status": {
+                        "definition": "KEY `idx_visit_date_period_status` (`visit_date`,`visit_period`,`status`)",
+                        "columns": [
+                            {
+                                "name": "visit_date",
+                                "length": null,
+                                "order": "A",
+                                "expression": null
+                            },
+                            {
+                                "name": "visit_period",
+                                "length": null,
+                                "order": "A",
+                                "expression": null
+                            },
+                            {
+                                "name": "status",
+                                "length": null,
+                                "order": "A",
+                                "expression": null
+                            }
+                        ],
+                        "unique": false,
+                        "type": "BTREE",
+                        "visible": "YES"
+                    },
+                    "idx_visit_base": {
+                        "definition": "KEY `idx_visit_base` (`base_id`)",
+                        "columns": [
+                            {
+                                "name": "base_id",
+                                "length": null,
+                                "order": "A",
+                                "expression": null
+                            }
+                        ],
+                        "unique": false,
+                        "type": "BTREE",
+                        "visible": "YES"
+                    }
+                },
+                "constraints": []
+            },
+            "base_visit_record": {
+                "engine": "InnoDB",
+                "collation": "utf8mb4_0900_ai_ci",
+                "create_sql": "CREATE TABLE `base_visit_record` (\n  `id` bigint unsigned NOT NULL AUTO_INCREMENT,\n  `uuid` char(36) NOT NULL,\n  `visit_id` bigint unsigned NOT NULL,\n  `actual_at` datetime NOT NULL,\n  `participants` varchar(500) DEFAULT NULL,\n  `contact_person` varchar(180) DEFAULT NULL,\n  `content` mediumtext NOT NULL,\n  `problems` text,\n  `follow_up` text,\n  `attachment_ids` json DEFAULT NULL,\n  `created_by` bigint unsigned NOT NULL,\n  `updated_by` bigint unsigned NOT NULL,\n  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,\n  `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\n  `deleted_at` datetime DEFAULT NULL,\n  PRIMARY KEY (`id`),\n  UNIQUE KEY `uk_visit_record_uuid` (`uuid`),\n  UNIQUE KEY `uk_visit_record_plan` (`visit_id`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci",
+                "columns": {
+                    "id": {
+                        "definition": "`id` bigint unsigned NOT NULL AUTO_INCREMENT",
+                        "type": "bigint unsigned",
+                        "nullable": false,
+                        "default": null,
+                        "extra": "auto_increment",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "uuid": {
+                        "definition": "`uuid` char(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL",
+                        "type": "char(36)",
+                        "nullable": false,
+                        "default": null,
+                        "extra": "",
+                        "charset": "utf8mb4",
+                        "collation": "utf8mb4_0900_ai_ci",
+                        "generation": ""
+                    },
+                    "visit_id": {
+                        "definition": "`visit_id` bigint unsigned NOT NULL",
+                        "type": "bigint unsigned",
+                        "nullable": false,
+                        "default": null,
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "actual_at": {
+                        "definition": "`actual_at` datetime NOT NULL",
+                        "type": "datetime",
+                        "nullable": false,
+                        "default": null,
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "participants": {
+                        "definition": "`participants` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci DEFAULT NULL",
+                        "type": "varchar(500)",
+                        "nullable": true,
+                        "default": null,
+                        "extra": "",
+                        "charset": "utf8mb4",
+                        "collation": "utf8mb4_0900_ai_ci",
+                        "generation": ""
+                    },
+                    "contact_person": {
+                        "definition": "`contact_person` varchar(180) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci DEFAULT NULL",
+                        "type": "varchar(180)",
+                        "nullable": true,
+                        "default": null,
+                        "extra": "",
+                        "charset": "utf8mb4",
+                        "collation": "utf8mb4_0900_ai_ci",
+                        "generation": ""
+                    },
+                    "content": {
+                        "definition": "`content` mediumtext CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL",
+                        "type": "mediumtext",
+                        "nullable": false,
+                        "default": null,
+                        "extra": "",
+                        "charset": "utf8mb4",
+                        "collation": "utf8mb4_0900_ai_ci",
+                        "generation": ""
+                    },
+                    "problems": {
+                        "definition": "`problems` text CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci",
+                        "type": "text",
+                        "nullable": true,
+                        "default": null,
+                        "extra": "",
+                        "charset": "utf8mb4",
+                        "collation": "utf8mb4_0900_ai_ci",
+                        "generation": ""
+                    },
+                    "follow_up": {
+                        "definition": "`follow_up` text CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci",
+                        "type": "text",
+                        "nullable": true,
+                        "default": null,
+                        "extra": "",
+                        "charset": "utf8mb4",
+                        "collation": "utf8mb4_0900_ai_ci",
+                        "generation": ""
+                    },
+                    "attachment_ids": {
+                        "definition": "`attachment_ids` json DEFAULT NULL",
+                        "type": "json",
+                        "nullable": true,
+                        "default": null,
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "created_by": {
+                        "definition": "`created_by` bigint unsigned NOT NULL",
+                        "type": "bigint unsigned",
+                        "nullable": false,
+                        "default": null,
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "updated_by": {
+                        "definition": "`updated_by` bigint unsigned NOT NULL",
+                        "type": "bigint unsigned",
+                        "nullable": false,
+                        "default": null,
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "created_at": {
+                        "definition": "`created_at` datetime DEFAULT CURRENT_TIMESTAMP",
+                        "type": "datetime",
+                        "nullable": true,
+                        "default": "CURRENT_TIMESTAMP",
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "updated_at": {
+                        "definition": "`updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP",
+                        "type": "datetime",
+                        "nullable": true,
+                        "default": "CURRENT_TIMESTAMP",
+                        "extra": "on update CURRENT_TIMESTAMP",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "deleted_at": {
+                        "definition": "`deleted_at` datetime DEFAULT NULL",
+                        "type": "datetime",
+                        "nullable": true,
+                        "default": null,
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    }
+                },
+                "indexes": {
+                    "PRIMARY": {
+                        "definition": "PRIMARY KEY (`id`)",
+                        "columns": [
+                            {
+                                "name": "id",
+                                "length": null,
+                                "order": "A",
+                                "expression": null
+                            }
+                        ],
+                        "unique": true,
+                        "type": "BTREE",
+                        "visible": "YES"
+                    },
+                    "uk_visit_record_uuid": {
+                        "definition": "UNIQUE KEY `uk_visit_record_uuid` (`uuid`)",
+                        "columns": [
+                            {
+                                "name": "uuid",
+                                "length": null,
+                                "order": "A",
+                                "expression": null
+                            }
+                        ],
+                        "unique": true,
+                        "type": "BTREE",
+                        "visible": "YES"
+                    },
+                    "uk_visit_record_plan": {
+                        "definition": "UNIQUE KEY `uk_visit_record_plan` (`visit_id`)",
+                        "columns": [
+                            {
+                                "name": "visit_id",
+                                "length": null,
+                                "order": "A",
+                                "expression": null
+                            }
+                        ],
+                        "unique": true,
                         "type": "BTREE",
                         "visible": "YES"
                     }

@@ -110,6 +110,14 @@
         @download="downloadMobileTemplate"
       />
 
+      <BaseVisitPanel
+        v-else-if="activeTab === 'baseVisit'"
+        ref="baseVisitPanel"
+        :key="baseVisitSessionKey"
+        :session-key="baseVisitSessionKey"
+        :can-manage="hasPermission('internship:manage')"
+      />
+
       <InternshipPage v-else-if="activeTab === 'internship'" />
 
       <PracticePage v-else-if="isPracticeTab(activeTab)" module-type="all" />
@@ -168,6 +176,7 @@ import {
   Workflow,
 } from '@lucide/vue';
 import DocumentDetail from './features/support/DocumentDetail.vue';
+import BaseVisitPanel from './features/base-visit/BaseVisitPanel.vue';
 import InternshipPage from './features/internship/InternshipPage.vue';
 import { provideInternshipContext } from './features/internship/internshipContext';
 import PracticePage from './features/practice/PracticePage.vue';
@@ -313,7 +322,7 @@ const {
   goBack: goMobileBack,
   resetToHome: resetMobileNavigationToHome,
 } = useMobileNavigation({
-  beforeLeave: () => mobileNotebook.value?.beforeLeave() ?? true,
+  beforeLeave: canLeaveMobilePage,
   captureExtras: () => ({
     internshipPanel: internship.panel,
     internshipSubmitSection: internship.submitSection,
@@ -385,10 +394,16 @@ const {
 });
 
 const mobileNotebook = ref(null);
+const baseVisitPanel = ref(null);
 const locationOrigin = window.location.origin;
 async function navigateMobileTab(tab) {
-  if (tab === activeTab.value || !(await (mobileNotebook.value?.beforeLeave() ?? true))) return;
+  if (tab === activeTab.value || !(await canLeaveMobilePage())) return;
   activeTab.value = tab;
+}
+
+async function canLeaveMobilePage() {
+  if (!(await (mobileNotebook.value?.beforeLeave() ?? true))) return false;
+  return baseVisitPanel.value?.beforeLeave() ?? true;
 }
 
 const modules = [
@@ -420,6 +435,15 @@ const modules = [
     theme: 'green',
     permission: 'social_practice:view',
     flow: '按社会实践流程执行',
+  },
+  {
+    key: 'baseVisit',
+    title: '基地走访',
+    desc: '安排走访时间并填写走访记录',
+    icon: MapPin,
+    theme: 'green',
+    permission: 'internship:view',
+    flow: '-',
   },
   {
     key: 'doc',
@@ -468,7 +492,7 @@ useRealtimeMessages({
 const mobileHeaderTitle = computed(() => (isLoggedIn.value ? currentPage.value.title : '实践管理系统'));
 const showMobileHeaderBack = computed(() => (
   isLoggedIn.value
-  && ['message', 'doc', 'templateLib', 'notebook', 'releaseNotes'].includes(activeTab.value)
+  && ['message', 'doc', 'templateLib', 'notebook', 'releaseNotes', 'baseVisit'].includes(activeTab.value)
   && canGoMobileBack.value
 ));
 const roleType = computed(() => state.context.role_type || '');
@@ -476,7 +500,8 @@ const isStudentRole = computed(() => roleType.value === 'student');
 const isTeacherRole = computed(() => roleType.value === 'teacher');
 const isAdminRole = computed(() => ['super_admin', 'school_admin', 'college_admin', 'profession_admin'].includes(roleType.value));
 const visibleMobileModules = computed(() => modules.filter(canShowMobileModule));
-const supportHomeModules = computed(() => visibleMobileModules.value.filter(module => ['doc', 'templateLib'].includes(module.key)));
+const supportHomeModules = computed(() => visibleMobileModules.value.filter(module => ['baseVisit', 'doc', 'templateLib'].includes(module.key)));
+const baseVisitSessionKey = computed(() => [state.context.school_id || state.context.school_database_id, state.context.account_id, roleType.value].join(':'));
 const canReviewInternship = computed(() => hasPermission('internship:approve'));
 const canReviewArrangement = computed(() => (
   isAdminRole.value
@@ -537,6 +562,9 @@ function canShowMobileModule(module) {
   }
   if (module.key === 'socialPractice') {
     return ['student', 'teacher', 'super_admin', 'school_admin', 'college_admin', 'profession_admin'].includes(roleType.value);
+  }
+  if (module.key === 'baseVisit') {
+    return ['teacher', 'super_admin', 'school_admin', 'college_admin', 'profession_admin'].includes(roleType.value);
   }
   return true;
 }
@@ -5520,6 +5548,10 @@ async function refreshMobilePage() {
   }
   if (activeTab.value === 'templateLib') {
     await loadMobileTemplates(1);
+    return;
+  }
+  if (activeTab.value === 'baseVisit') {
+    await baseVisitPanel.value?.reload();
     return;
   }
   if (activeTab.value === 'internship') {

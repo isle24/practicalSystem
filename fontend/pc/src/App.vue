@@ -345,7 +345,11 @@
 
             <div class="module-workspace">
               <section class="module-content-panel">
-                <div v-if="['internship', 'companyManage'].includes(win.module.id)" class="internship-panel">
+                <BaseVisitPanel
+                  v-if="canViewBaseVisits && (win.module.id === 'baseVisits' || (win.module.id === 'companyManage' && win.panel === 'baseVisits'))"
+                  :session-key="[permissionState.context.school_id, permissionState.context.account_id, permissionState.context.role_type].join(':')"
+                />
+                <div v-else-if="['internship', 'companyManage'].includes(win.module.id)" class="internship-panel">
                   <el-alert
                     v-if="internshipState.message"
                     type="warning"
@@ -4458,6 +4462,7 @@ import DesktopWindow from './components/DesktopWindow.vue';
 import FavoritePanel from './components/FavoritePanel.vue';
 import ReleaseManager from './components/ReleaseManager.vue';
 import DatabaseSchemaPanel from './components/DatabaseSchemaPanel.vue';
+import BaseVisitPanel from './components/BaseVisitPanel.vue';
 import DesktopUpdateStatus from './components/DesktopUpdateStatus.vue';
 import ReleaseNotesPanel from '../../shared/components/ReleaseNotesPanel.vue';
 import AssistantPanel from '../../shared/components/AssistantPanel.vue';
@@ -5248,6 +5253,16 @@ const modules = [
     collectionParent: 'dataCenter',
   },
   {
+    id: 'baseVisits',
+    name: '基地巡查',
+    icon: CalendarCheck,
+    color: 'amber',
+    scope: '走访安排 / 时间填写 / 走访记录',
+    viewPermission: 'internship:view',
+    managePermission: 'internship:manage',
+    defaultPanel: 'baseVisits',
+  },
+  {
     id: 'eduData',
     name: '教务数据',
     icon: Upload,
@@ -5714,6 +5729,7 @@ const baseManagementSidebarItems = [
   { key: 'baseFlows', name: '基地建设', icon: Building2 },
   { key: 'baseApplications', name: '基地申报', icon: FileText },
   { key: 'baseUsage', name: '基地使用', icon: ClipboardList },
+  { key: 'baseVisits', name: '基地巡查', icon: CalendarCheck },
 ];
 
 const archiveDetailVisible = ref(false);
@@ -5854,6 +5870,7 @@ const currentRoleType = computed(() => permissionState.context.role_type || '');
 const isStudentRole = computed(() => currentRoleType.value === 'student');
 const isTeacherRole = computed(() => currentRoleType.value === 'teacher');
 const isAdminRole = computed(() => ['super_admin', 'school_admin', 'college_admin', 'profession_admin'].includes(currentRoleType.value));
+const canViewBaseVisits = computed(() => (isTeacherRole.value || isAdminRole.value) && hasPermission('internship:view'));
 const configChildModuleIds = new Set(['userManage', 'gradeManage', 'graduationCohortManage', 'internshipCategoryManage', 'departmentManage', 'professionManage', 'classManage']);
 const schoolConfigModuleIds = new Set(['gradeManage', 'graduationCohortManage', 'internshipCategoryManage', 'departmentManage', 'professionManage', 'classManage', 'dataManage']);
 const visibleModules = computed(() => modules.map(decorateModule).filter(canShowModule));
@@ -6140,6 +6157,9 @@ function canShowModule(module) {
   }
   if (module.id === 'companyManage') {
     return isAdminRole.value && hasPermission('internship:view');
+  }
+  if (module.id === 'baseVisits') {
+    return canViewBaseVisits.value;
   }
   if (schoolConfigModuleIds.has(module.id)) {
     return canShowSchoolConfigModule(module);
@@ -6984,7 +7004,7 @@ function sidebarItems(win) {
   if (win.module.source === 'menu') {
     return [];
   }
-  if (['message', 'doc', 'templateLib', 'exportTask', 'favorite'].includes(win.module.id)) {
+  if (['message', 'doc', 'templateLib', 'exportTask', 'favorite', 'baseVisits'].includes(win.module.id)) {
     return [];
   }
   if (win.module.id === 'companyManage') {
@@ -7706,7 +7726,7 @@ function decorateModule(module) {
 }
 
 function moduleDisplayName(module) {
-  if (module.id === 'dataManage') {
+  if (['dataManage', 'baseVisits'].includes(module.id)) {
     return module.name;
   }
   const item = permissionState.menus.find(menu => moduleMatchesMenu(module, menu));
@@ -15367,7 +15387,7 @@ async function loadInternshipFoundation() {
 }
 
 async function loadInternshipPanel(panel = 'overview', page = 1) {
-  if (!hasPermission('internship:view')) {
+  if (panel === 'baseVisits' || !hasPermission('internship:view')) {
     return;
   }
 

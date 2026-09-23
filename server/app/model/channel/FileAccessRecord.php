@@ -79,6 +79,9 @@ class FileAccessRecord extends TableRecord
         }
         $permissions = CurrentContext::permissionCodes();
         $scope = self::scope();
+        if ($entity === 'base_visit_record') {
+            return BaseVisitRecord::recordReadable($id);
+        }
         if ($entity === 'favorite_link') {
             return FavoriteRecord::visible((int) CurrentContext::accountId(), $id) !== null;
         }

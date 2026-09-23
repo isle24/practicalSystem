@@ -42,3 +42,12 @@ Route::disableDefaultRoute([\app\controller\Api\EduDataController::class, 'perio
 Route::get('/api/config/database-schema/options', [\app\controller\Api\DatabaseSchemaController::class, 'options']);
 Route::post('/api/config/database-schema/check', [\app\controller\Api\DatabaseSchemaController::class, 'check']);
 Route::disableDefaultRoute(\app\controller\Api\DatabaseSchemaController::class);
+
+Route::get('/api/base-visit/options', [\app\controller\Api\BaseVisitController::class, 'options']);
+Route::get('/api/base-visit/list', [\app\controller\Api\BaseVisitController::class, 'list']);
+Route::get('/api/base-visit/detail', [\app\controller\Api\BaseVisitController::class, 'detail']);
+Route::post('/api/base-visit/assign', [\app\controller\Api\BaseVisitController::class, 'assign']);
+Route::post('/api/base-visit/schedule', [\app\controller\Api\BaseVisitController::class, 'schedule']);
+Route::post('/api/base-visit/record', [\app\controller\Api\BaseVisitController::class, 'record']);
+Route::post('/api/base-visit/cancel', [\app\controller\Api\BaseVisitController::class, 'cancel']);
+Route::disableDefaultRoute(\app\controller\Api\BaseVisitController::class);
