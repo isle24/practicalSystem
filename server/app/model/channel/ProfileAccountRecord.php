@@ -24,12 +24,22 @@ class ProfileAccountRecord extends TableRecord
         $name = self::requiredText($values['teacher_name'] ?? null, '姓名', 80);
         $departmentName = self::requiredText($values['dep_name'] ?? null, '部门（学院）', 120);
         return self::connection()->transaction(function () use ($values, $number, $name, $departmentName): array {
-            $departments = self::queryTable('department')->where('dep_name', $departmentName)
-                ->where('flag', 'on')->whereNull('deleted_at')->lockForUpdate()->limit(2)->get(['dep_id']);
-            if ($departments->count() !== 1) {
-                throw new InvalidArgumentException('部门（学院）不存在、未启用或名称重复，请先维护学院档案');
+            $departmentId = (int) ($values['dep_id'] ?? 0);
+            if ($departmentId > 0) {
+                $department = self::queryTable('department')->where('dep_id', $departmentId)->where('flag', 'on')
+                    ->whereNull('deleted_at')->lockForUpdate()->first(['dep_id']);
+                if (!$department) {
+                    throw new InvalidArgumentException('匹配到的学院已停用或删除，请重新预览教师文件');
+                }
+            } else {
+                $departments = self::queryTable('department')->where('flag', 'on')->whereNull('deleted_at')
+                    ->lockForUpdate()->get(['dep_id', 'dep_name', 'dep_short_name']);
+                $match = self::matchDepartment($departmentName, self::departmentAliasMap($departments->map(static fn ($row): array => (array) $row)->all()));
+                if ($match['status'] !== 'matched') {
+                    throw new InvalidArgumentException($match['message']);
+                }
+                $departmentId = (int) $match['department']['dep_id'];
             }
-            $departmentId = (int) $departments->first()->dep_id;
             self::assertUniqueProfileNumber('teacher_list', 'teacher_num', $number);
             $profile = self::queryTable('teacher_list')->where('teacher_num', $number)->lockForUpdate()->first();
             $changed = false;
@@ -74,6 +84,54 @@ class ProfileAccountRecord extends TableRecord
             }
             return $result;
         });
+    }
+
+    public static function departmentAliasMap(array $departments): array
+    {
+        $map = ['exact' => [], 'alias' => []];
+        foreach ($departments as $department) {
+            $id = (int) ($department['dep_id'] ?? 0);
+            $name = trim((string) ($department['dep_name'] ?? ''));
+            if ($id < 1 || $name === '') {
+                continue;
+            }
+            $department['dep_name'] = $name;
+            $normalizedName = self::normalizeDepartmentName($name);
+            $map['exact'][$normalizedName][$id] = $department;
+            $aliases = [(string) ($department['dep_short_name'] ?? '')];
+            if (str_ends_with($normalizedName, '学院')) {
+                $aliases[] = mb_substr($normalizedName, 0, mb_strlen($normalizedName) - 2);
+            }
+            foreach ($aliases as $alias) {
+                $key = self::normalizeDepartmentName($alias);
+                if ($key !== '') {
+                    $map['alias'][$key][$id] = $department;
+                }
+            }
+        }
+        return $map;
+    }
+
+    public static function matchDepartment(string $name, array $map): array
+    {
+        $key = self::normalizeDepartmentName($name);
+        $matches = array_values($map['exact'][$key] ?? []);
+        if (!$matches) {
+            $matches = array_values($map['alias'][$key] ?? []);
+        }
+        if (count($matches) === 1) {
+            return ['status' => 'matched', 'department' => $matches[0], 'message' => ''];
+        }
+        if (count($matches) > 1) {
+            return ['status' => 'ambiguous', 'department' => null, 'message' => '学院简称对应多个学院，请填写学院全称或先维护唯一简称'];
+        }
+        return ['status' => 'not_found', 'department' => null, 'message' => '学院未匹配，请核对学院名称或在学院档案中维护简称'];
+    }
+
+    public static function normalizeDepartmentName(string $name): string
+    {
+        $name = trim($name);
+        return (string) (preg_replace('/[\p{Z}\s\p{Cc}\p{Cf}]+/u', '', $name) ?? '');
     }
 
     private static function provision(string $roleType, string $table, string $idColumn, string $numberColumn, object $profile, string $number, ?string $passwordHash): array

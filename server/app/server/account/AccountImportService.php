@@ -48,28 +48,32 @@ class AccountImportService
             throw new InvalidArgumentException('请上传有效的 xls 或 xlsx 教师文件');
         }
         $preview = $this->scanTeacher($file->getPathname());
+        $previewToken = $this->teacherPreviewToken(
+            (int) CurrentContext::accountId(),
+            hash_file('sha256', $file->getPathname()),
+            $preview,
+            $preview['row_numbers'],
+            $preview['department_ids']
+        );
         $stored = (new FileService())->upload($request, [
             'category' => 'teacher_account_import', 'is_temporary' => false, 'require_md5' => false,
             'allowed_extensions' => ['xls', 'xlsx'], 'max_size' => TeacherImportReader::MAX_FILE_SIZE,
         ]);
-        unset($preview['row_numbers']);
-        return array_merge(['file_id' => (int) $stored['file_id']], $preview);
+        unset($preview['row_numbers'], $preview['department_ids']);
+        return array_merge(['file_id' => (int) $stored['file_id'], 'preview_token' => $previewToken], $preview);
     }
 
-    public function teacherStart(int $fileId, string $requestKey): array
+    public function teacherStart(int $fileId, string $requestKey, string $previewToken): array
     {
         $this->assertAccess();
         if ($existing = $this->existingRequest($requestKey, 'teacher')) {
             return ['task' => $this->publicTask($existing)];
         }
         $path = $this->teacherFile($fileId, (int) CurrentContext::accountId());
-        $preview = $this->scanTeacher($path);
-        if ($preview['total_rows'] < 1 || $preview['invalid_rows'] > 0) {
-            throw new InvalidArgumentException('教师文件为空或仍有错误，请修正后重新预览');
-        }
+        $source = $this->decodePreviewToken($previewToken, $path, (int) CurrentContext::accountId());
+        if (!$source['row_numbers']) throw new InvalidArgumentException('教师文件为空，请重新预览');
         return $this->create('teacher', $requestKey, [
-            'file_id' => $fileId, 'total_rows' => $preview['total_rows'],
-            'source_json' => $this->encode(['row_numbers' => $preview['row_numbers'], 'sha256' => hash_file('sha256', $path)]),
+            'file_id' => $fileId, 'total_rows' => count($source['row_numbers']), 'source_json' => $this->encode($source),
         ]);
     }
 
@@ -220,9 +224,9 @@ class AccountImportService
     {
         $reader = new TeacherImportReader();
         $metadata = $reader->metadata($path);
-        $departments = AccountImportRecord::departmentCounts();
+        $departmentMap = ProfileAccountRecord::departmentAliasMap(AccountImportRecord::departments());
         $seen = [];
-        $result = ['total_rows' => 0, 'valid_rows' => 0, 'invalid_rows' => 0, 'items' => [], 'errors' => [], 'row_numbers' => []];
+        $result = ['total_rows' => 0, 'valid_rows' => 0, 'invalid_rows' => 0, 'items' => [], 'errors' => [], 'row_numbers' => [], 'department_ids' => []];
         for ($start = 2; $start <= $metadata['total_rows'] + 1; $start += 500) {
             foreach ($reader->rows($path, $start, 500) as $row) {
                 $number = mb_strtolower($row['values']['teacher_num']);
@@ -230,8 +234,12 @@ class AccountImportService
                     $row['errors'][] = '职工号在文件中重复';
                 }
                 $seen[$number] = true;
-                if (($departments[$row['values']['dep_name']] ?? 0) !== 1) {
-                    $row['errors'][] = '部门（学院）不存在、未启用或名称重复，请先维护学院档案';
+                $department = ProfileAccountRecord::matchDepartment($row['values']['dep_name'], $departmentMap);
+                if ($department['status'] !== 'matched') {
+                    $row['errors'][] = $department['message'];
+                } else {
+                    $row['values']['dep_name'] = (string) $department['department']['dep_name'];
+                    $result['department_ids'][$row['row_number']] = (int) $department['department']['dep_id'];
                 }
                 $result['total_rows']++;
                 $result[$row['errors'] ? 'invalid_rows' : 'valid_rows']++;
@@ -265,6 +273,7 @@ class AccountImportService
         for ($start = (int) min($numbers); $start <= max($numbers); $start += 500) {
             foreach ($reader->rows($path, $start, min(500, max($numbers) - $start + 1)) as $row) {
                 if (in_array($row['row_number'], $numbers, true)) {
+                    $row['values']['dep_id'] = (int) ($source['department_ids'][$row['row_number']] ?? 0);
                     $rows[] = $row;
                 }
             }
@@ -289,6 +298,56 @@ class AccountImportService
             throw new RuntimeException('导入文件已丢失或路径无效，请重新上传', 422);
         }
         return $path;
+    }
+
+    private function teacherPreviewToken(int $accountId, string|false $sha256, array $preview, array $rowNumbers, array $departmentIds): string
+    {
+        if (!is_string($sha256) || !preg_match('/^[a-f0-9]{64}$/D', $sha256)) {
+            throw new RuntimeException('教师文件校验失败');
+        }
+        $payload = $this->encode([
+            'account_id' => $accountId, 'sha256' => $sha256,
+            'row_numbers' => array_values($rowNumbers), 'department_ids' => $departmentIds,
+            'total_rows' => (int) ($preview['total_rows'] ?? 0),
+            'valid_rows' => (int) ($preview['valid_rows'] ?? 0),
+            'invalid_rows' => (int) ($preview['invalid_rows'] ?? 0),
+            'expires_at' => time() + 1800,
+        ]);
+        $encoded = rtrim(strtr(base64_encode($payload), '+/', '-_'), '=');
+        return $encoded . '.' . hash_hmac('sha256', $encoded, $this->previewTokenKey());
+    }
+
+    private function decodePreviewToken(string $token, string $path, int $accountId): array
+    {
+        if (strlen($token) > 2000000 || !preg_match('/^([A-Za-z0-9_-]+)\.([a-f0-9]{64})$/D', $token, $matches)
+            || !hash_equals(hash_hmac('sha256', $matches[1], $this->previewTokenKey()), $matches[2])) {
+            throw new InvalidArgumentException('教师文件预览凭证无效，请重新上传并预览');
+        }
+        $json = base64_decode(strtr($matches[1], '-_', '+/'), true);
+        $source = is_string($json) ? json_decode($json, true) : null;
+        if (!is_array($source) || (int) ($source['account_id'] ?? 0) !== $accountId
+            || (int) ($source['expires_at'] ?? 0) < time() || !is_array($source['row_numbers'] ?? null)
+            || !is_array($source['department_ids'] ?? null) || (int) ($source['invalid_rows'] ?? 1) !== 0
+            || (int) ($source['total_rows'] ?? 0) < 1 || (int) ($source['valid_rows'] ?? 0) !== count($source['row_numbers'])) {
+            throw new InvalidArgumentException('教师文件预览已过期，请重新上传并预览');
+        }
+        $sha256 = hash_file('sha256', $path);
+        if (!is_string($sha256) || !hash_equals((string) ($source['sha256'] ?? ''), $sha256)) {
+            throw new InvalidArgumentException('教师文件与预览时不一致，请重新上传并预览');
+        }
+        return [
+            'row_numbers' => array_values(array_map('intval', $source['row_numbers'])),
+            'department_ids' => array_map('intval', $source['department_ids']),
+            'sha256' => $sha256,
+        ];
+    }
+
+    private function previewTokenKey(): string
+    {
+        $config = (array) config('plugin.tinywan.jwt.app.jwt', []);
+        $key = (string) ($config['access_secret_key'] ?? '');
+        if (strlen($key) < 32) throw new RuntimeException('教师导入预览签名配置无效');
+        return $key;
     }
 
     private function existingRequest(string $key, string $type): ?array

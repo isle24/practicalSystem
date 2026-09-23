@@ -47,10 +47,10 @@ class AccountImportRecord extends TableRecord
             ->update(array_merge($values, ['updated_at' => date('Y-m-d H:i:s')]));
     }
 
-    public static function departmentCounts(): array
+    public static function departments(): array
     {
         return self::queryTable('department')->where('flag', 'on')->whereNull('deleted_at')
-            ->get(['dep_name'])->countBy('dep_name')->all();
+            ->get(['dep_id', 'dep_name', 'dep_short_name'])->map(static fn ($row): array => $row->toArray())->all();
     }
 
     public static function studentPreview(array $filters): array

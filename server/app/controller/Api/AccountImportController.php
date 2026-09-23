@@ -43,7 +43,11 @@ class AccountImportController
     #[OperationLog('提交教师账号导入')]
     public function teacherStart(Request $request): Response
     {
-        return $this->handle(fn (): array => $this->service()->teacherStart((int) $request->input('file_id', 0), (string) $request->input('request_key', '')));
+        return $this->handle(fn (): array => $this->service()->teacherStart(
+            (int) $request->input('file_id', 0),
+            (string) $request->input('request_key', ''),
+            (string) $request->input('preview_token', '')
+        ));
     }
 
     public function studentPreview(Request $request): Response

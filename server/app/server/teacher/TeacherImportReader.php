@@ -117,7 +117,7 @@ class TeacherImportReader
                 $values = [
                     'teacher_num' => $raw['职工号'],
                     'teacher_name' => $raw['姓名'],
-                    'dep_name' => $raw['部门（学院）'],
+                    'dep_name' => $this->cleanDepartmentName($raw['部门（学院）']),
                     'gender' => $raw['性别'],
                     'birth_date' => $raw['出生日期'],
                     'title' => $raw['职称'],
@@ -252,6 +252,11 @@ class TeacherImportReader
             return sprintf('%.0f', $value);
         }
         return trim((string) $value);
+    }
+
+    private function cleanDepartmentName(string $name): string
+    {
+        return trim((string) (preg_replace('/[\p{Z}\s\p{Cc}\p{Cf}]+/u', '', $name) ?? ''));
     }
 
     private function date(Cell $cell, int $calendar): string

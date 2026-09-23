@@ -18,6 +18,8 @@ class OperationLogMiddleware implements MiddlewareInterface
         'password',
         'passwd',
         'token',
+        'preview_token',
+        'previewToken',
         'secret',
         'authorization',
         'cookie',

@@ -207,7 +207,7 @@ async function startImport() {
   state.message = '';
   try {
     const pending = teacherMode.value
-      ? startTeacherAccounts({ file_id: state.preview.file_id, request_key: requestKey })
+      ? startTeacherAccounts({ file_id: state.preview.file_id, preview_token: state.preview.preview_token, request_key: requestKey })
       : startStudentAccounts({ password: state.password, request_key: requestKey });
     state.password = '';
     const data = await pending;
@@ -297,6 +297,7 @@ onBeforeUnmount(() => {
       <section class="account-import-section">
         <template v-if="teacherMode">
           <p>使用 39 列标准表头的教师名单，支持 .xls、.xlsx。工号作为登录名，新账号初始密码为工号后加“666”，已有账号密码保持不变。</p>
+          <small>学院名称会忽略空格和不可见字符，并匹配学院全称、已维护简称或去掉“学院”后缀的名称；简称有歧义时需先维护学院档案。</small>
           <div class="account-import-actions">
             <a :href="teacherAccountTemplateUrl()" class="account-import-template" target="_blank" rel="noopener noreferrer"><Download :size="15" />下载教师模板</a>
             <el-button :icon="Upload" :loading="state.previewLoading" :disabled="state.submitting" @click="fileInput?.click()">选择文件并预览</el-button>
