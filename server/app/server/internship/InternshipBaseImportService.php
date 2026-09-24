@@ -496,11 +496,13 @@ class InternshipBaseImportService
     private function savedFilePath(array $file): string
     {
         $relativePath = ltrim(str_replace('\\', '/', (string) ($file['blob']['path'] ?? '')), '/');
-        if ($relativePath === '' || str_contains($relativePath, '..')) {
+        if ($relativePath === '' || preg_match('#(^|/)\.\.(?:/|$)#', $relativePath)) {
             throw new RuntimeException('导入文件路径无效');
         }
-        $path = rtrim(public_path(), DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $relativePath);
-        if (!is_file($path)) {
+
+        $root = realpath(rtrim(public_path(), DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . 'files');
+        $path = realpath(rtrim(public_path(), DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $relativePath));
+        if (!$root || !$path || !str_starts_with($path, $root . DIRECTORY_SEPARATOR) || !is_file($path)) {
             throw new RuntimeException('导入文件已丢失，请重新上传');
         }
 

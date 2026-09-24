@@ -13,14 +13,10 @@ class InternshipBaseImportRecord extends TableRecord
             ->where('flag', 'on')
             ->whereNull('deleted_at');
         self::applyScope($departmentQuery, $scope, 'department.dep_id', null);
-        $departments = $departmentQuery->get(['dep_id', 'dep_name']);
-        $departmentMap = [];
-        foreach ($departments as $department) {
-            $departmentMap[self::nameKey((string) $department->dep_name)] = [
-                'dep_id' => (int) $department->dep_id,
-                'dep_name' => (string) $department->dep_name,
-            ];
-        }
+        $departments = $departmentQuery->get(['dep_id', 'dep_name', 'dep_short_name'])
+            ->map(static fn ($row): array => $row->toArray())
+            ->all();
+        $departmentMap = ProfileAccountRecord::departmentAliasMap($departments);
 
         $professionQuery = self::queryTable('profession')
             ->where('flag', 'on')
@@ -41,9 +37,12 @@ class InternshipBaseImportRecord extends TableRecord
         foreach ($rows as $row) {
             $errors = array_values(array_filter((array) ($row['errors'] ?? []), 'is_string'));
             $warnings = array_values(array_filter((array) ($row['warnings'] ?? []), 'is_string'));
-            $department = $departmentMap[self::nameKey((string) ($row['dep_name'] ?? ''))] ?? null;
-            if (!$department) {
-                $errors[] = '学院不存在或不在当前账号管理范围内';
+            $departmentMatch = ProfileAccountRecord::matchDepartment((string) ($row['dep_name'] ?? ''), $departmentMap);
+            $department = $departmentMatch['department'];
+            if ($departmentMatch['status'] !== 'matched') {
+                $errors[] = $departmentMatch['status'] === 'ambiguous'
+                    ? $departmentMatch['message']
+                    : '学院不存在或不在当前账号管理范围内';
             }
             $professionIds = [];
             $professionNames = [];
@@ -103,15 +102,16 @@ class InternshipBaseImportRecord extends TableRecord
             foreach ($rows as $row) {
                 $name = trim((string) ($row['dep_name'] ?? ''));
                 if ($name !== '') {
-                    $departmentNames[self::nameKey($name)] = $name;
+                    $departmentNames[ProfileAccountRecord::normalizeDepartmentName($name)] = $name;
                 }
             }
             asort($departmentNames, SORT_NATURAL);
             $departmentMap = self::departmentMap();
             $nextDepartmentCode = self::nextImportCode('department', 'dep_code', 'IMPORT_DEP_');
             $createdDepartments = 0;
-            foreach ($departmentNames as $key => $name) {
-                if (isset($departmentMap[$key])) {
+            foreach ($departmentNames as $name) {
+                $departmentMatch = ProfileAccountRecord::matchDepartment($name, $departmentMap);
+                if ($departmentMatch['status'] === 'matched' || $departmentMatch['status'] === 'ambiguous') {
                     continue;
                 }
                 $depId = (int) self::queryTable('department')->insertGetId([
@@ -126,7 +126,11 @@ class InternshipBaseImportRecord extends TableRecord
                     'updated_at' => $now,
                     'deleted_at' => null,
                 ], 'dep_id');
-                $departmentMap[$key] = ['dep_id' => $depId, 'dep_name' => $name];
+                self::addDepartmentToMap($departmentMap, [
+                    'dep_id' => $depId,
+                    'dep_name' => $name,
+                    'dep_short_name' => $name,
+                ]);
                 $createdDepartments++;
             }
 
@@ -134,7 +138,8 @@ class InternshipBaseImportRecord extends TableRecord
             $nextProfessionCode = self::nextImportCode('profession', 'profession_code', 'IMPORT_PRO_');
             $createdProfessions = 0;
             foreach ($rows as $row) {
-                $department = $departmentMap[self::nameKey((string) ($row['dep_name'] ?? ''))] ?? null;
+                $departmentMatch = ProfileAccountRecord::matchDepartment((string) ($row['dep_name'] ?? ''), $departmentMap);
+                $department = $departmentMatch['status'] === 'matched' ? $departmentMatch['department'] : null;
                 if (!$department) {
                     continue;
                 }
@@ -378,15 +383,31 @@ class InternshipBaseImportRecord extends TableRecord
     /** 返回学院名称索引 */
     private static function departmentMap(): array
     {
-        $map = [];
-        foreach (self::queryTable('department')->whereNull('deleted_at')->get(['dep_id', 'dep_name']) as $row) {
-            $map[self::nameKey((string) $row->dep_name)] = [
-                'dep_id' => (int) $row->dep_id,
-                'dep_name' => (string) $row->dep_name,
-            ];
-        }
+        $departments = self::queryTable('department')->whereNull('deleted_at')
+            ->get(['dep_id', 'dep_name', 'dep_short_name'])
+            ->map(static fn ($row): array => $row->toArray())
+            ->all();
 
-        return $map;
+        return ProfileAccountRecord::departmentAliasMap($departments);
+    }
+
+    /** 将新建学院加入全称和简称索引。 */
+    private static function addDepartmentToMap(array &$map, array $department): void
+    {
+        $id = (int) ($department['dep_id'] ?? 0);
+        $name = trim((string) ($department['dep_name'] ?? ''));
+        if ($id < 1 || $name === '') {
+            return;
+        }
+        $department['dep_name'] = $name;
+        $normalizedName = ProfileAccountRecord::normalizeDepartmentName($name);
+        $map['exact'][$normalizedName][$id] = $department;
+        foreach ([(string) ($department['dep_short_name'] ?? ''), str_ends_with($normalizedName, '学院') ? mb_substr($normalizedName, 0, mb_strlen($normalizedName) - 2) : ''] as $alias) {
+            $key = ProfileAccountRecord::normalizeDepartmentName($alias);
+            if ($key !== '') {
+                $map['alias'][$key][$id] = $department;
+            }
+        }
     }
 
     /** 返回学院下的专业名称索引 */
