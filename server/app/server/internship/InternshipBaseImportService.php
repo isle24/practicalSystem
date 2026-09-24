@@ -16,6 +16,8 @@ use PhpOffice\PhpSpreadsheet\Style\Fill;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use RuntimeException;
 use support\Request;
+use support\Redis;
+use Throwable;
 use Webman\Http\UploadFile;
 
 class InternshipBaseImportService
@@ -23,6 +25,7 @@ class InternshipBaseImportService
     private const EXCEL_EXTENSIONS = ['xls', 'xlsx'];
     private const EXCEL_MAX_SIZE = 10485760;
     private const EXCEL_MAX_ROWS = 1000;
+    private const PREVIEW_CACHE_TTL = 3600;
     private const REQUIRED_FIELDS = ['base_name', 'dep_name', 'declaration_year', 'profession_text', 'company_name'];
     private const BUDGET_FIELDS = [
         'budget_infrastructure' => '实习基地基础建设',
@@ -116,7 +119,8 @@ class InternshipBaseImportService
     public function preview(Request $request, array $scope): array
     {
         $file = $this->excelFile($request);
-        $items = $this->resolvedRows($this->readRows($file->getPathname()), $scope);
+        $rawRows = $this->readRows($file->getPathname());
+        $items = $this->resolvedRows($rawRows, $scope);
         $fileInfo = (new FileService())->upload($request, [
             'allowed_extensions' => self::EXCEL_EXTENSIONS,
             'max_size' => self::EXCEL_MAX_SIZE,
@@ -124,6 +128,7 @@ class InternshipBaseImportService
             'category' => 'internship_base_import',
             'is_temporary' => false,
         ]);
+        $this->cachePreviewRows((int) ($fileInfo['file_id'] ?? 0), CurrentContext::accountId(), $rawRows);
 
         return $this->previewResult($items, $fileInfo);
     }
@@ -143,7 +148,11 @@ class InternshipBaseImportService
             throw new RuntimeException('无权使用该导入文件', 40301);
         }
 
-        $items = $this->resolvedRows($this->readRows($this->savedFilePath($file)), $scope);
+        $rawRows = $this->cachedPreviewRows($fileId, $accountId);
+        if ($rawRows === null) {
+            $rawRows = $this->readRows($this->savedFilePath($file));
+        }
+        $items = $this->resolvedRows($rawRows, $scope);
         $errors = array_filter($items, static fn (array $item): bool => !empty($item['errors']));
         $skipErrors = filter_var($request->input('skip_errors', false), FILTER_VALIDATE_BOOL);
         if ($errors && !$skipErrors) {
@@ -157,7 +166,7 @@ class InternshipBaseImportService
             'base_import',
         ]);
 
-        return (new WorkflowLock())->run(
+        $result = (new WorkflowLock())->run(
             $lockKey,
             fn (): array => array_merge(
                 InternshipBaseImportRecord::importRows(array_values(array_filter($items, static fn (array $item): bool => empty($item['errors']))), $accountId, date('Y-m-d H:i:s')),
@@ -165,6 +174,9 @@ class InternshipBaseImportService
             ),
             60
         );
+        $this->forgetPreviewRows($fileId, $accountId);
+
+        return $result;
     }
 
     /** 读取本地工作簿并创建当前测试库缺失基础档案 */
@@ -510,6 +522,59 @@ class InternshipBaseImportService
         }
 
         return $path;
+    }
+
+    /** 缓存预览原始行，支持确认请求跨进程读取。 */
+    private function cachePreviewRows(int $fileId, int $accountId, array $rows): void
+    {
+        if ($fileId <= 0 || $accountId <= 0) {
+            return;
+        }
+
+        try {
+            Redis::setEx($this->previewCacheKey($fileId, $accountId), self::PREVIEW_CACHE_TTL, json_encode($rows, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
+        } catch (Throwable $exception) {
+            error_log('internship base import preview cache write failed: ' . $exception->getMessage());
+        }
+    }
+
+    /** 读取跨进程共享的预览原始行。 */
+    private function cachedPreviewRows(int $fileId, int $accountId): ?array
+    {
+        if ($fileId <= 0 || $accountId <= 0) {
+            return null;
+        }
+
+        try {
+            $payload = Redis::get($this->previewCacheKey($fileId, $accountId));
+            if (!is_string($payload) || $payload === '') {
+                return null;
+            }
+            $rows = json_decode($payload, true, 512, JSON_THROW_ON_ERROR);
+            return is_array($rows) ? $rows : null;
+        } catch (Throwable $exception) {
+            error_log('internship base import preview cache read failed: ' . $exception->getMessage());
+            return null;
+        }
+    }
+
+    /** 清理已完成导入的预览缓存。 */
+    private function forgetPreviewRows(int $fileId, int $accountId): void
+    {
+        if ($fileId <= 0 || $accountId <= 0) {
+            return;
+        }
+
+        try {
+            Redis::del($this->previewCacheKey($fileId, $accountId));
+        } catch (Throwable $exception) {
+            error_log('internship base import preview cache delete failed: ' . $exception->getMessage());
+        }
+    }
+
+    private function previewCacheKey(int $fileId, int $accountId): string
+    {
+        return 'internship:base-import-preview:' . (int) (CurrentContext::schoolDatabaseId() ?: 0) . ':' . $accountId . ':' . $fileId;
     }
 
     /** 写入基地导入模板及字段说明。 */
