@@ -1,4 +1,4 @@
-import { request } from './client';
+import { apiBase, request } from './client';
 
 export function sendMobileCode(payload) {
   return request('/profile/send-mobile-code', { method: 'POST', body: JSON.stringify(payload) });
