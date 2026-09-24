@@ -61,3 +61,7 @@ Route::post('/api/account-import/student-preview', [\app\controller\Api\AccountI
 Route::post('/api/account-import/student-start', [\app\controller\Api\AccountImportController::class, 'studentStart']);
 Route::post('/api/account-import/retry', [\app\controller\Api\AccountImportController::class, 'retry']);
 Route::disableDefaultRoute(\app\controller\Api\AccountImportController::class);
+
+Route::get('/api/archive/profession-template', [\app\controller\Api\ArchiveController::class, 'professionTemplate']);
+Route::post('/api/archive/profession-preview', [\app\controller\Api\ArchiveController::class, 'previewProfessionImport']);
+Route::post('/api/archive/profession-confirm', [\app\controller\Api\ArchiveController::class, 'confirmProfessionImport']);

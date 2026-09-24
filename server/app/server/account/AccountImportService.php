@@ -73,7 +73,10 @@ class AccountImportService
         $source = $this->decodePreviewToken($previewToken, $path, (int) CurrentContext::accountId());
         if (!$source['row_numbers']) throw new InvalidArgumentException('教师文件为空，请重新预览');
         return $this->create('teacher', $requestKey, [
-            'file_id' => $fileId, 'total_rows' => count($source['row_numbers']), 'source_json' => $this->encode($source),
+            'file_id' => $fileId,
+            'total_rows' => count($source['row_numbers']),
+            'skipped_count' => max(0, (int) ($source['total_rows'] ?? 0) - count($source['row_numbers'])),
+            'source_json' => $this->encode($source),
         ]);
     }
 
@@ -226,7 +229,7 @@ class AccountImportService
         $metadata = $reader->metadata($path);
         $departmentMap = ProfileAccountRecord::departmentAliasMap(AccountImportRecord::departments());
         $seen = [];
-        $result = ['total_rows' => 0, 'valid_rows' => 0, 'invalid_rows' => 0, 'items' => [], 'errors' => [], 'row_numbers' => [], 'department_ids' => []];
+        $result = ['total_rows' => 0, 'valid_rows' => 0, 'invalid_rows' => 0, 'warning_rows' => 0, 'items' => [], 'errors' => [], 'row_numbers' => [], 'department_ids' => []];
         for ($start = 2; $start <= $metadata['total_rows'] + 1; $start += 500) {
             foreach ($reader->rows($path, $start, 500) as $row) {
                 $number = mb_strtolower($row['values']['teacher_num']);
@@ -241,13 +244,18 @@ class AccountImportService
                     $row['values']['dep_name'] = (string) $department['department']['dep_name'];
                     $result['department_ids'][$row['row_number']] = (int) $department['department']['dep_id'];
                 }
+                if (!empty($row['warnings'])) {
+                    $result['warning_rows']++;
+                }
                 $result['total_rows']++;
                 $result[$row['errors'] ? 'invalid_rows' : 'valid_rows']++;
-                $result['row_numbers'][] = $row['row_number'];
+                if (!$row['errors']) {
+                    $result['row_numbers'][] = $row['row_number'];
+                }
                 if (count($result['items']) < 50) {
                     $result['items'][] = [
                         'values' => array_intersect_key($row['values'], array_flip(['teacher_num', 'teacher_name', 'dep_name'])),
-                        'row_number' => $row['row_number'], 'errors' => $row['errors'],
+                        'row_number' => $row['row_number'], 'errors' => $row['errors'], 'warnings' => $row['warnings'] ?? [],
                     ];
                 }
                 if ($row['errors'] && count($result['errors']) < 50) {
@@ -327,7 +335,7 @@ class AccountImportService
         $source = is_string($json) ? json_decode($json, true) : null;
         if (!is_array($source) || (int) ($source['account_id'] ?? 0) !== $accountId
             || (int) ($source['expires_at'] ?? 0) < time() || !is_array($source['row_numbers'] ?? null)
-            || !is_array($source['department_ids'] ?? null) || (int) ($source['invalid_rows'] ?? 1) !== 0
+            || !is_array($source['department_ids'] ?? null)
             || (int) ($source['total_rows'] ?? 0) < 1 || (int) ($source['valid_rows'] ?? 0) !== count($source['row_numbers'])) {
             throw new InvalidArgumentException('教师文件预览已过期，请重新上传并预览');
         }
@@ -338,6 +346,8 @@ class AccountImportService
         return [
             'row_numbers' => array_values(array_map('intval', $source['row_numbers'])),
             'department_ids' => array_map('intval', $source['department_ids']),
+            'total_rows' => (int) ($source['total_rows'] ?? 0),
+            'valid_rows' => (int) ($source['valid_rows'] ?? 0),
             'sha256' => $sha256,
         ];
     }

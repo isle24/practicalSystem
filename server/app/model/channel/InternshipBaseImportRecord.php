@@ -40,6 +40,7 @@ class InternshipBaseImportRecord extends TableRecord
         $resolvedRows = [];
         foreach ($rows as $row) {
             $errors = array_values(array_filter((array) ($row['errors'] ?? []), 'is_string'));
+            $warnings = array_values(array_filter((array) ($row['warnings'] ?? []), 'is_string'));
             $department = $departmentMap[self::nameKey((string) ($row['dep_name'] ?? ''))] ?? null;
             if (!$department) {
                 $errors[] = '学院不存在或不在当前账号管理范围内';
@@ -59,7 +60,10 @@ class InternshipBaseImportRecord extends TableRecord
                 $professionNames[] = $profession['profession_name'];
             }
             if ($missingProfessionNames) {
-                $errors[] = '专业不存在或不属于所选学院：' . implode('、', array_values(array_unique($missingProfessionNames)));
+                $warnings[] = '专业不存在或不属于所选学院，已跳过：' . implode('、', array_values(array_unique($missingProfessionNames)));
+            }
+            if (!$professionIds) {
+                $errors[] = '服务专业没有可导入的有效专业';
             }
 
             $resolvedRows[] = array_merge($row, [
@@ -67,6 +71,7 @@ class InternshipBaseImportRecord extends TableRecord
                 'profession_ids' => array_values(array_unique($professionIds)),
                 'resolved_profession_names' => array_values(array_unique($professionNames)),
                 'errors' => array_values(array_unique($errors)),
+                'warnings' => array_values(array_unique(array_merge((array) ($row['warnings'] ?? []), $warnings))),
             ]);
         }
 

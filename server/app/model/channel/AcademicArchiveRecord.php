@@ -76,6 +76,146 @@ class AcademicArchiveRecord extends BaseModel
         });
     }
 
+    /** 解析专业导入行的学院匹配和重复状态。 */
+    public static function resolveProfessionImportRows(array $rows): array
+    {
+        $departments = self::queryTable('department')
+            ->where('flag', 'on')
+            ->whereNull('deleted_at')
+            ->get(['dep_id', 'dep_name', 'dep_short_name'])
+            ->map(static fn ($row): array => $row->toArray())
+            ->all();
+        $departmentMap = ProfileAccountRecord::departmentAliasMap($departments);
+        $seen = [];
+        $resolved = [];
+
+        foreach ($rows as $row) {
+            $errors = array_values(array_filter((array) ($row['errors'] ?? []), 'is_string'));
+            $depName = trim((string) ($row['dep_name'] ?? ''));
+            $professionName = trim((string) ($row['profession_name'] ?? ''));
+            $professionCode = trim((string) ($row['profession_code'] ?? ''));
+            $professionShortName = trim((string) ($row['profession_short_name'] ?? ''));
+            $flagText = trim((string) ($row['flag_text'] ?? ''));
+            $flag = match ($flagText) {
+                '', '启用', '启用状态', 'on', 'enabled' => 'on',
+                '停用', 'off', 'disabled' => 'off',
+                default => null,
+            };
+            if ($depName === '') {
+                $errors[] = '所属学院不能为空';
+            }
+            if ($professionName === '') {
+                $errors[] = '专业名称不能为空';
+            }
+            if (mb_strlen($professionName) > 120) {
+                $errors[] = '专业名称长度超限';
+            }
+            if (mb_strlen($professionShortName) > 80) {
+                $errors[] = '专业简称长度超限';
+            }
+            if (mb_strlen($professionCode) > 80) {
+                $errors[] = '专业代码长度超限';
+            }
+            if ($flag === null) {
+                $errors[] = '启用状态仅支持启用或停用';
+            }
+
+            $departmentMatch = $depName === '' ? null : ProfileAccountRecord::matchDepartment($depName, $departmentMap);
+            if ($departmentMatch && $departmentMatch['status'] !== 'matched') {
+                $errors[] = $departmentMatch['message'];
+            }
+            $department = $departmentMatch['department'] ?? null;
+            $depId = (int) ($department['dep_id'] ?? 0);
+            $key = $depId . '|' . ($professionCode !== '' ? 'code:' . $professionCode : 'name:' . $professionName);
+            $duplicate = null;
+            if (!$errors && isset($seen[$key])) {
+                $duplicate = ['source' => 'file', 'row_number' => $seen[$key]];
+            } elseif (!$errors) {
+                $query = self::queryTable('profession')
+                    ->where('dep_id', $depId)
+                    ->whereNull('deleted_at');
+                if ($professionCode !== '') {
+                    $query->where('profession_code', $professionCode);
+                } else {
+                    $query->where('profession_name', $professionName);
+                }
+                $existing = $query->first(['profession_id', 'profession_name', 'profession_code']);
+                if ($existing) {
+                    $duplicate = [
+                        'source' => 'database',
+                        'id' => (int) $existing->profession_id,
+                        'profession_name' => (string) $existing->profession_name,
+                        'profession_code' => (string) ($existing->profession_code ?? ''),
+                    ];
+                }
+            }
+            if (!$errors) {
+                $seen[$key] = (int) ($row['row_number'] ?? 0);
+            }
+
+            $resolved[] = array_merge($row, [
+                'dep_id' => $depId,
+                'dep_name' => (string) ($department['dep_name'] ?? $depName),
+                'profession_name' => $professionName,
+                'profession_code' => $professionCode,
+                'profession_short_name' => $professionShortName,
+                'flag' => $flag ?: 'on',
+                'errors' => array_values(array_unique($errors)),
+                'duplicate' => $duplicate,
+                'can_import' => !$errors,
+            ]);
+        }
+
+        return $resolved;
+    }
+
+    /** 导入专业档案并返回逐行结果。 */
+    public static function importProfessionRows(array $rows, string $now): array
+    {
+        $summary = [
+            'total' => count($rows),
+            'created' => 0,
+            'skipped' => 0,
+            'failed' => 0,
+            'errors' => [],
+        ];
+
+        self::connection()->transaction(function () use (&$summary, $rows, $now): void {
+            foreach ($rows as $row) {
+                if (!empty($row['errors'])) {
+                    $summary['failed']++;
+                    if (count($summary['errors']) < 50) {
+                        $summary['errors'][] = [
+                            'row' => (int) ($row['row_number'] ?? 0),
+                            'message' => implode('；', (array) $row['errors']),
+                        ];
+                    }
+                    continue;
+                }
+                if (!empty($row['duplicate'])) {
+                    $summary['skipped']++;
+                    continue;
+                }
+                $payload = [
+                    'profession_uuid' => self::uuidValue(),
+                    'profession_name' => (string) $row['profession_name'],
+                    'profession_short_name' => (string) ($row['profession_short_name'] ?? '') ?: null,
+                    'profession_code' => (string) ($row['profession_code'] ?? '') ?: null,
+                    'dep_id' => (int) $row['dep_id'],
+                    'grade_id' => null,
+                    'sort' => 0,
+                    'flag' => (string) ($row['flag'] ?? 'on'),
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ];
+                self::queryTable('profession')->insert($payload);
+                $summary['created']++;
+            }
+        });
+
+        return $summary;
+    }
+
     /** 软删除基础档案。 */
     public static function softDelete(array $definition, int $id, string $now): void
     {

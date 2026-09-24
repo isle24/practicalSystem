@@ -41,6 +41,31 @@ class ArchiveController
         return $this->handle(fn (): array => (new ArchiveService())->importExcel($request), '导入完成');
     }
 
+    /** 下载专业导入模板。 */
+    public function professionTemplate(Request $request): Response
+    {
+        try {
+            $file = (new ArchiveService())->professionTemplate();
+            return (new Response())->download($file['path'], $file['download_name'])->withHeader('Cache-Control', 'private, no-store');
+        } catch (Throwable $exception) {
+            return $this->failure($exception);
+        }
+    }
+
+    /** 预览专业导入文件。 */
+    #[OperationLog('预览专业导入Excel')]
+    public function previewProfessionImport(Request $request): Response
+    {
+        return $this->handle(fn (): array => (new ArchiveService())->previewProfessionImport($request));
+    }
+
+    /** 确认专业导入文件。 */
+    #[OperationLog('确认专业导入Excel')]
+    public function confirmProfessionImport(Request $request): Response
+    {
+        return $this->handle(fn (): array => (new ArchiveService())->confirmProfessionImport($request), '导入完成');
+    }
+
     /** 统一处理档案接口响应。 */
     private function handle(callable $callback, string $message = 'ok'): Response
     {

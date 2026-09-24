@@ -407,7 +407,7 @@
       </div>
       <template #footer>
         <el-button :disabled="state.saving" @click="closeDialog">取消</el-button>
-        <el-button type="primary" :loading="state.saving" :disabled="!state.planImport.fileId || !state.planImport.items.length || state.planImport.items.some(item => item.errors?.length)" @click="confirmPlanImport">确认导入</el-button>
+        <el-button type="warning" :loading="state.saving" :disabled="!state.planImport.fileId || !state.planImport.items.some(item => !item.errors?.length)" @click="confirmPlanImport">{{ state.planImport.items.some(item => item.errors?.length) ? '跳过错误行并导入' : '确认导入' }}</el-button>
       </template>
     </OperationDialog>
   </section>
@@ -676,7 +676,8 @@ async function confirmPlanImport() {
   if (state.saving || !state.planImport.fileId) return;
   state.saving = true;
   try {
-    const data = await confirmSocialPracticePlanImport({ import_file_id: state.planImport.fileId, rows: state.planImport.items });
+    const rows = state.planImport.items.filter(item => !item.errors?.length);
+    const data = await confirmSocialPracticePlanImport({ import_file_id: state.planImport.fileId, rows });
     ElMessage.success(`导入完成：新增 ${data.created || 0} 条，更新 ${data.updated || 0} 条`);
     closeDialog();
     await loadList(1);

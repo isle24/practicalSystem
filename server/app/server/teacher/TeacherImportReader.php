@@ -105,7 +105,7 @@ class TeacherImportReader
                     try {
                         $raw[$header] = $header === '出生日期'
                             ? $this->date($cell, $spreadsheet->getExcelCalendar())
-                            : $this->text($cell, $header === '职工号');
+                            : ($header === 'E_mail地址' ? $this->rawText($cell) : $this->text($cell, $header === '职工号'));
                     } catch (InvalidArgumentException $exception) {
                         $errors[] = $exception->getMessage();
                         $raw[$header] = '';
@@ -144,10 +144,16 @@ class TeacherImportReader
                 if (preg_match('/[\x00-\x20\x7f]/u', $values['teacher_num'])) {
                     $errors[] = '职工号不能包含空白或控制字符';
                 }
+                $warnings = [];
                 if ($values['email'] !== '' && !filter_var($values['email'], FILTER_VALIDATE_EMAIL)) {
-                    $errors[] = 'E_mail地址格式无效';
+                    $warnings[] = 'E_mail地址格式无效，仍按原始字符串导入';
                 }
-                $result[] = ['row_number' => $rowNumber, 'values' => $values, 'errors' => array_values(array_unique($errors))];
+                $result[] = [
+                    'row_number' => $rowNumber,
+                    'values' => $values,
+                    'errors' => array_values(array_unique($errors)),
+                    'warnings' => array_values(array_unique($warnings)),
+                ];
             }
         } finally {
             $spreadsheet->disconnectWorksheets();
@@ -252,6 +258,15 @@ class TeacherImportReader
             return sprintf('%.0f', $value);
         }
         return trim((string) $value);
+    }
+
+    private function rawText(Cell $cell): string
+    {
+        $value = $cell->getValue();
+        if ($value instanceof RichText) {
+            return $value->getPlainText();
+        }
+        return $value === null ? '' : (string) $value;
     }
 
     private function cleanDepartmentName(string $name): string

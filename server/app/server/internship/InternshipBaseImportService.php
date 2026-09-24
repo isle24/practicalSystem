@@ -145,8 +145,9 @@ class InternshipBaseImportService
 
         $items = $this->resolvedRows($this->readRows($this->savedFilePath($file)), $scope);
         $errors = array_filter($items, static fn (array $item): bool => !empty($item['errors']));
-        if ($errors) {
-            throw new InvalidArgumentException('导入文件仍有 ' . count($errors) . ' 行错误，请修正基础档案或 Excel 后重新预览');
+        $skipErrors = filter_var($request->input('skip_errors', false), FILTER_VALIDATE_BOOL);
+        if ($errors && !$skipErrors) {
+            throw new InvalidArgumentException('存在错误行，请选择跳过错误行后继续导入');
         }
 
         $lockKey = implode(':', [
@@ -158,7 +159,10 @@ class InternshipBaseImportService
 
         return (new WorkflowLock())->run(
             $lockKey,
-            fn (): array => InternshipBaseImportRecord::importRows($items, $accountId, date('Y-m-d H:i:s')),
+            fn (): array => array_merge(
+                InternshipBaseImportRecord::importRows(array_values(array_filter($items, static fn (array $item): bool => empty($item['errors']))), $accountId, date('Y-m-d H:i:s')),
+                $errors && $skipErrors ? ['skipped_errors' => count($errors)] : []
+            ),
             60
         );
     }
@@ -209,6 +213,7 @@ class InternshipBaseImportService
             'summary' => [
                 'source_rows' => count($items),
                 'error_rows' => $errorCount,
+                'valid_rows' => count($items) - $errorCount,
                 'warning_rows' => $warningCount,
                 'duplicate_rows' => $duplicateCount,
             ],

@@ -493,7 +493,7 @@
                             type="error"
                             :closable="false"
                             show-icon
-                            title="存在学院、专业或必填字段错误，必须全部修正后才能确认导入"
+                            title="存在错误行，确认时可选择跳过错误行，只导入有效基地资料"
                           />
                         </div>
                         <el-table :data="internshipState.baseImport.items" height="100%" stripe size="small" row-key="row_number" v-loading="internshipState.loading">
@@ -990,11 +990,11 @@
                           <el-button :disabled="internshipState.loading" :loading="internshipState.loading" @click="saveInternshipDialogReviewDraft">保存草稿</el-button>
                           <el-button type="primary" :disabled="internshipState.loading" :loading="internshipState.loading" @click="confirmInternshipDialog">提交审核</el-button>
                         </template>
-                        <el-button v-else-if="internshipState.dialog.type === 'planImport'" type="primary" :disabled="internshipState.loading" :loading="internshipState.loading" @click="confirmPlanImportPreview">
-                          确认导入
+                        <el-button v-else-if="internshipState.dialog.type === 'planImport'" type="warning" :disabled="internshipState.loading" :loading="internshipState.loading" @click="confirmPlanImportPreview">
+                          {{ internshipState.planImport.summary.error_rows ? '跳过错误行并导入' : '确认导入' }}
                         </el-button>
-                        <el-button v-else-if="internshipState.dialog.type === 'baseImport'" type="primary" :disabled="internshipState.loading || !internshipState.baseImport.can_confirm" :loading="internshipState.loading" @click="confirmBaseImportPreview">
-                          确认导入
+                        <el-button v-else-if="internshipState.dialog.type === 'baseImport'" type="warning" :disabled="internshipState.loading || !internshipState.baseImport.summary.valid_rows" :loading="internshipState.loading" @click="confirmBaseImportPreview(true)">
+                          {{ internshipState.baseImport.summary.error_rows ? '跳过错误行并导入' : '确认导入' }}
                         </el-button>
                         <el-button v-else-if="!['timeline', 'contentDetail'].includes(internshipState.dialog.type)" type="primary" :disabled="internshipState.loading" :loading="internshipState.loading" @click="confirmInternshipDialog">
                           确认
@@ -2584,6 +2584,13 @@
                     <el-button :icon="Plus" @click="openArchiveDialog(archiveTypeForWindow(win))">
                       新增
                     </el-button>
+                    <a
+                      v-if="archiveTypeForWindow(win) === 'profession'"
+                      class="archive-template-link"
+                      :href="professionImportTemplateUrl()"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >下载模板</a>
                     <el-button
                       v-if="canImportArchiveExcel(archiveTypeForWindow(win))"
                       :icon="Upload"
@@ -4406,6 +4413,7 @@
     >
   </main>
     <AccountImportDialog :visible="accountImportState.visible" :mode="accountImportState.mode" :session-key="accountImportSessionKey" @close="accountImportState.visible = false" @completed="refreshImportedAccounts" />
+    <ProfessionImportDialog :visible="professionImportVisible" @close="professionImportVisible = false" @completed="handleProfessionImportCompleted" />
     <WechatBindingGate :show="wechatShow" :state="wechatBinding.state" :status="wechatStatus" :account-name="operatorName" :role-name="roleText" :in-wechat="wechatBinding.inWechat" :binding-url="wechatBindingUrl" :dismissible="!wechatBlocked" @start="wechatBinding.start" @bind="wechatBinding.bind" @recheck="wechatBinding.recheck" @copy="wechatBinding.copyLink" @close="wechatBinding.close" @logout="submitLogout" />
     <DesktopUpdateStatus />
     <ReleaseNotice v-if="isLoggedIn && !wechatBlocked" :key="noteSessionKey" :request="request" :session-key="noteSessionKey" @open="openModule(modules.find(item => item.id === 'releaseNotes'))" />
@@ -4492,6 +4500,7 @@ import DocCenter from './components/DocCenter.vue';
 import EducationPlanSyncPanel from './components/EducationPlanSyncPanel.vue';
 import EduDataPanel from './components/EduDataPanel.vue';
 import AccountImportDialog from './components/AccountImportDialog.vue';
+import ProfessionImportDialog from './components/ProfessionImportDialog.vue';
 import EnterpriseEvaluationPanel from './components/EnterpriseEvaluationPanel.vue';
 import ExportTaskCenter from './components/ExportTaskCenter.vue';
 import IconUpload from './components/IconUpload.vue';
@@ -4596,6 +4605,7 @@ import {
   checkWechatConfig,
   generateAdminLoginPasskey,
   importArchiveExcel,
+  professionImportTemplateUrl,
   importInternshipArrangementAssignments,
   previewInternshipPlanImport,
   confirmInternshipPlanImport,
@@ -5656,6 +5666,7 @@ const baseFlowTypes = [
 const archiveStates = reactive(Object.fromEntries(
   archiveDefinitions.map(definition => [definition.type, createArchiveState(definition.type)]),
 ));
+const professionImportVisible = ref(false);
 
 const fileState = reactive({
   items: [],
@@ -10221,11 +10232,23 @@ function chooseArchiveExcel(type) {
     return;
   }
 
+  if (type === 'profession') {
+    professionImportVisible.value = true;
+    return;
+  }
+
   archiveImportType.value = type;
   if (archiveImportInputRef.value) {
     archiveImportInputRef.value.value = '';
     archiveImportInputRef.value.click();
   }
+}
+
+async function handleProfessionImportCompleted() {
+  await Promise.all([
+    loadArchiveItems('profession', 1),
+    loadAdminFoundation(),
+  ]);
 }
 
 async function handleArchiveImportFile(event) {
@@ -14729,8 +14752,8 @@ async function handleBaseImportFile(event) {
   }
 }
 
-async function confirmBaseImportPreview() {
-  if (internshipState.loading || !internshipState.baseImport.can_confirm) {
+async function confirmBaseImportPreview(skipErrors = false) {
+  if (internshipState.loading || !internshipState.baseImport.summary.valid_rows) {
     return;
   }
   const fileId = internshipState.baseImport.file?.id || internshipState.baseImport.file?.file_id;
@@ -14743,7 +14766,7 @@ async function confirmBaseImportPreview() {
   internshipState.message = '';
   internshipState.savedMessage = '';
   try {
-    const result = await confirmInternshipBaseImport({ import_file_id: fileId });
+    const result = await confirmInternshipBaseImport({ import_file_id: fileId, skip_errors: skipErrors });
     closeInternshipDialog();
     await loadInternshipPanel('baseFlows', 1);
     internshipState.savedMessage = `基地导入完成：新增基地 ${result.created_bases || 0}，新增年度申报 ${result.created_declarations || 0}，复用基地 ${result.reused_bases || 0}，跳过重复申报 ${result.skipped_declarations || 0}`;

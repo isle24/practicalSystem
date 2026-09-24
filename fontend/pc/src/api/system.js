@@ -589,6 +589,20 @@ export function importArchiveExcel(type, file, params = {}) {
   });
 }
 
+export function previewProfessionImport(file) {
+  const body = new FormData();
+  body.append('file', file);
+  return request('/archive/profession-preview', { method: 'POST', body });
+}
+
+export function confirmProfessionImport(payload) {
+  return request('/archive/profession-confirm', { method: 'POST', body: JSON.stringify(payload) });
+}
+
+export function professionImportTemplateUrl() {
+  return `${apiBase}/archive/profession-template`;
+}
+
 export function fetchRolePermissions(roleId) {
   const query = new URLSearchParams({ role_id: roleId }).toString();
   return request(`/admin/role-permissions?${query}`);

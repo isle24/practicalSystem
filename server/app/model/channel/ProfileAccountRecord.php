@@ -48,7 +48,9 @@ class ProfileAccountRecord extends TableRecord
                 self::assertProfile($profile, '教师');
                 $payload = ['teacher_name' => $name, 'dep_id' => $departmentId];
                 foreach (['gender' => 20, 'birth_date' => 10, 'title' => 120, 'education' => 80, 'phone' => 40, 'email' => 120, 'employment_type' => 40] as $field => $limit) {
-                    $value = self::optionalText($values[$field] ?? null, $field, $limit);
+                    $value = $field === 'email'
+                        ? self::rawOptionalText($values[$field] ?? null, $field, $limit)
+                        : self::optionalText($values[$field] ?? null, $field, $limit);
                     if ($value !== null) {
                         $payload[$field] = $value;
                     }
@@ -65,7 +67,9 @@ class ProfileAccountRecord extends TableRecord
                     'created_at' => $now, 'updated_at' => $now,
                 ];
                 foreach (['gender' => 20, 'birth_date' => 10, 'title' => 120, 'education' => 80, 'phone' => 40, 'email' => 120, 'employment_type' => 40] as $field => $limit) {
-                    $payload[$field] = self::optionalText($values[$field] ?? null, $field, $limit);
+                    $payload[$field] = $field === 'email'
+                        ? self::rawOptionalText($values[$field] ?? null, $field, $limit)
+                        : self::optionalText($values[$field] ?? null, $field, $limit);
                 }
                 $teacherId = (int) self::queryTable('teacher_list')->insertGetId($payload, 'teacher_id');
                 $profile = self::queryTable('teacher_list')->where('teacher_id', $teacherId)->lockForUpdate()->first();
@@ -274,6 +278,18 @@ class ProfileAccountRecord extends TableRecord
             throw new InvalidArgumentException($label . '格式无效');
         }
         $text = trim((string) $value);
+        if (mb_strlen($text) > $limit || str_contains($text, "\0")) {
+            throw new InvalidArgumentException($label . '长度或格式无效');
+        }
+        return $text === '' ? null : $text;
+    }
+
+    private static function rawOptionalText(mixed $value, string $label, int $limit): ?string
+    {
+        if ($value !== null && !is_scalar($value)) {
+            throw new InvalidArgumentException($label . '格式无效');
+        }
+        $text = (string) $value;
         if (mb_strlen($text) > $limit || str_contains($text, "\0")) {
             throw new InvalidArgumentException($label . '长度或格式无效');
         }

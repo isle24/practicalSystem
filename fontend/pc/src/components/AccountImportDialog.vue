@@ -38,7 +38,7 @@ const passwordBytes = computed(() => new TextEncoder().encode(state.password).le
 const validPassword = computed(() => Array.from(state.password).length >= 6 && passwordBytes.value <= 72
   && !state.password.includes('\0') && !/^[ \t\n\r\v]*$/.test(state.password));
 const canStart = computed(() => !!state.preview && !state.previewLoading && !state.submitting && (teacherMode.value
-  ? Number(state.preview.valid_rows) > 0 && Number(state.preview.invalid_rows) === 0
+  ? Number(state.preview.valid_rows) > 0
   : Number(state.preview.eligible_rows) > 0 && validPassword.value));
 const pendingTasks = computed(() => state.tasks.some(task => isPending(task.status)));
 const taskProgress = computed(() => Math.min(100, Math.max(0, Number(state.task?.progress) || 0)));
@@ -305,14 +305,14 @@ onBeforeUnmount(() => {
             <input ref="fileInput" type="file" accept=".xls,.xlsx" hidden @change="handleFileChange">
           </div>
           <template v-if="state.preview">
-            <p>共 {{ state.preview.total_rows }} 行，可导入 {{ state.preview.valid_rows }} 行，问题 {{ state.preview.invalid_rows }} 行。预览最多显示 50 行。</p>
-            <el-alert v-if="Number(state.preview.invalid_rows) > 0" title="存在校验问题，请修正文件并重新预览后再提交。" type="warning" :closable="false" />
+            <p>共 {{ state.preview.total_rows }} 行，可导入 {{ state.preview.valid_rows }} 行，问题 {{ state.preview.invalid_rows }} 行，提示 {{ state.preview.warning_rows || 0 }} 行。预览最多显示 50 行。</p>
+            <el-alert v-if="Number(state.preview.invalid_rows) > 0" title="存在错误行，确认导入时将跳过错误行，只处理可导入数据；邮箱格式提示不影响导入。" type="warning" :closable="false" />
             <el-table :data="state.preview.items || []" max-height="220" stripe size="small">
               <el-table-column prop="row_number" label="行号" width="65" />
               <el-table-column prop="values.teacher_num" label="工号" min-width="110" />
               <el-table-column prop="values.teacher_name" label="姓名" min-width="100" />
               <el-table-column prop="values.dep_name" label="部门" min-width="150" />
-              <el-table-column label="校验结果" min-width="220"><template #default="{ row }">{{ row.errors?.length ? row.errors.join('；') : '可导入' }}</template></el-table-column>
+              <el-table-column label="校验结果" min-width="260"><template #default="{ row }"><span v-if="row.errors?.length">{{ row.errors.join('；') }}</span><span v-else-if="row.warnings?.length" class="account-import-warning">{{ row.warnings.join('；') }}</span><span v-else>可导入</span></template></el-table-column>
             </el-table>
             <ul v-if="state.preview.errors?.length" class="account-import-errors"><li v-for="(error, index) in state.preview.errors" :key="index">{{ error.row_number ? `第 ${error.row_number} 行：` : '' }}{{ error.message }}</li></ul>
           </template>
@@ -324,7 +324,10 @@ onBeforeUnmount(() => {
           <label class="account-import-password"><span>统一初始密码</span><el-input v-model="state.password" type="password" autocomplete="new-password" show-password :disabled="state.submitting" placeholder="至少 6 个字符，最多 72 字节" /></label>
           <small>仅用于本次新建账号，至少 6 个字符，按 UTF-8 编码不超过 72 字节。</small>
         </template>
-        <div class="account-import-actions account-import-confirm"><el-button type="primary" :disabled="!canStart" :loading="state.submitting" @click="startImport">确认导入并排队</el-button></div>
+        <div class="account-import-actions account-import-confirm">
+          <el-button v-if="teacherMode && Number(state.preview?.invalid_rows) > 0" type="warning" :disabled="!canStart" :loading="state.submitting" @click="startImport">跳过错误行并导入</el-button>
+          <el-button v-else type="primary" :disabled="!canStart" :loading="state.submitting" @click="startImport">确认导入并排队</el-button>
+        </div>
       </section>
 
       <el-alert v-if="state.message" :title="state.message" type="info" :closable="false" />
@@ -367,5 +370,6 @@ onBeforeUnmount(() => {
 .account-import-detail { display: grid; gap: 10px; padding: 12px; background: var(--el-fill-color-light); border-radius: 6px; }
 .account-import-errors { max-height: 140px; margin: 0; padding-left: 20px; overflow: auto; color: var(--el-color-danger); font-size: 12px; line-height: 1.8; }
 .account-import-error { color: var(--el-color-danger); }
+.account-import-warning { color: var(--el-color-warning); }
 @media (max-width: 600px) { .account-import-password { grid-template-columns: 1fr; } }
 </style>

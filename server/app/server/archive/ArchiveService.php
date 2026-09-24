@@ -5,8 +5,14 @@ namespace app\server\archive;
 use app\model\channel\AcademicArchiveRecord;
 use app\model\channel\TableRecord;
 use app\server\CurrentContext;
+use app\server\file\FileService;
 use InvalidArgumentException;
+use PhpOffice\PhpSpreadsheet\Cell\DataType;
 use PhpOffice\PhpSpreadsheet\IOFactory;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Style\Alignment;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
+use RuntimeException;
 use support\Request;
 use Webman\Http\UploadFile;
 
@@ -17,6 +23,10 @@ class ArchiveService
     private const EXCEL_EXTENSIONS = ['xls', 'xlsx'];
     private const EXCEL_MAX_SIZE = 10485760;
     private const EXCEL_MAX_ROWS = 5000;
+    private const PROFESSION_TEMPLATE_HEADERS = [
+        '所属学院', '专业代码', '专业名称', '专业简称', '专业英文名称', '学制', '培养层次', '是否国际化专业',
+        '建立年月', '启用状态', '专业简介', '专业英文简介', '备注', '专业负责人工号', '专业负责人', '培养对象',
+    ];
     private const EXCEL_HEADER_ALIASES = [
         'grade_name' => ['年级', '年级名称', 'grade', 'grade_name'],
         'dep_name' => ['学院', '学院名称', '院系', '院系名称', 'department', 'department_name', 'dep_name'],
@@ -117,6 +127,100 @@ class ArchiveService
         $rows = $this->excelRows($this->excelFile($request), $type);
         $summary = TableRecord::importAcademicArchiveRows($type, $rows, date('Y-m-d H:i:s'));
         return array_merge($summary, $this->items($type, $request));
+    }
+
+    /** 下载专业导入模板。 */
+    public function professionTemplate(): array
+    {
+        $this->assertAdmin();
+        $directory = runtime_path() . DIRECTORY_SEPARATOR . 'archive-templates';
+        if (!is_dir($directory) && !mkdir($directory, 0775, true) && !is_dir($directory)) {
+            throw new RuntimeException('专业模板目录创建失败');
+        }
+        $path = $directory . DIRECTORY_SEPARATOR . 'profession-import-template.xlsx';
+        if (!is_file($path)) {
+            $spreadsheet = new Spreadsheet();
+            $temporary = tempnam($directory, 'profession-');
+            if ($temporary === false) {
+                throw new RuntimeException('专业模板创建失败');
+            }
+            try {
+                $sheet = $spreadsheet->getActiveSheet();
+                $sheet->setTitle('专业导入');
+                foreach (self::PROFESSION_TEMPLATE_HEADERS as $index => $header) {
+                    $column = $index + 1;
+                    $sheet->setCellValueExplicit([$column, 1], $header, DataType::TYPE_STRING);
+                    $sheet->getColumnDimensionByColumn($column)->setWidth($index === 0 ? 24 : 18);
+                }
+                $sheet->getStyle('A1:P1')->getFont()->setBold(true);
+                $sheet->getStyle('A1:P1')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+                $sheet->freezePane('A2');
+                (new Xlsx($spreadsheet))->save($temporary);
+                if (!rename($temporary, $path)) {
+                    throw new RuntimeException('专业模板保存失败');
+                }
+            } finally {
+                $spreadsheet->disconnectWorksheets();
+                if (is_file($temporary)) {
+                    unlink($temporary);
+                }
+            }
+        }
+
+        return ['path' => $path, 'download_name' => '专业信息导入模板.xlsx'];
+    }
+
+    /** 预览专业导入文件。 */
+    public function previewProfessionImport(Request $request): array
+    {
+        $this->assertAdmin();
+        $file = $this->excelFile($request);
+        $rows = AcademicArchiveRecord::resolveProfessionImportRows($this->professionExcelRows($file));
+        $stored = (new FileService())->upload($request, [
+            'allowed_extensions' => self::EXCEL_EXTENSIONS,
+            'max_size' => self::EXCEL_MAX_SIZE,
+            'require_md5' => false,
+            'category' => 'profession_archive_import',
+            'is_temporary' => false,
+        ]);
+        $errorRows = array_values(array_filter($rows, static fn (array $row): bool => !empty($row['errors'])));
+        $duplicateRows = array_values(array_filter($rows, static fn (array $row): bool => !empty($row['duplicate'])));
+
+        return [
+            'file' => $stored,
+            'items' => array_slice($rows, 0, 100),
+            'summary' => [
+                'source_rows' => count($rows),
+                'error_rows' => count($errorRows),
+                'duplicate_rows' => count($duplicateRows),
+                'valid_rows' => count($rows) - count($errorRows),
+            ],
+        ];
+    }
+
+    /** 确认专业导入文件。 */
+    public function confirmProfessionImport(Request $request): array
+    {
+        $this->assertAdmin();
+        $fileId = $this->requiredInt($request, 'file_id');
+        $file = (new FileService())->info($fileId);
+        if (($file['category'] ?? '') !== 'profession_archive_import' || (int) ($file['uploader_id'] ?? 0) !== (int) CurrentContext::accountId()) {
+            throw new RuntimeException('专业导入文件不存在或无权使用', 403);
+        }
+        $rows = AcademicArchiveRecord::resolveProfessionImportRows($this->professionExcelRowsFromStoredFile($file));
+        $hasErrors = (bool) array_filter($rows, static fn (array $row): bool => !empty($row['errors']));
+        $skipErrors = filter_var($request->input('skip_errors', false), FILTER_VALIDATE_BOOL);
+        if ($hasErrors && !$skipErrors) {
+            throw new InvalidArgumentException('存在错误行，请选择跳过错误行后继续导入');
+        }
+        $summary = AcademicArchiveRecord::importProfessionRows(
+            array_values(array_filter($rows, static fn (array $row): bool => empty($row['errors']))),
+            date('Y-m-d H:i:s')
+        );
+        if ($hasErrors && $skipErrors) {
+            $summary['skipped_errors'] = count(array_filter($rows, static fn (array $row): bool => !empty($row['errors'])));
+        }
+        return $summary;
     }
 
     /** 校验学校档案管理角色。 */
@@ -265,6 +369,95 @@ class ArchiveService
         } finally {
             $spreadsheet->disconnectWorksheets();
         }
+    }
+
+    /** 解析专业导入模板。 */
+    private function professionExcelRows(UploadFile $file): array
+    {
+        return $this->professionExcelRowsFromPath($file->getPathname());
+    }
+
+    /** 解析已保存的专业导入文件。 */
+    private function professionExcelRowsFromStoredFile(array $file): array
+    {
+        $root = realpath(public_path() . '/files');
+        $relative = ltrim(str_replace('\\', '/', (string) ($file['blob']['path'] ?? '')), '/');
+        $path = realpath(public_path() . '/' . $relative);
+        if (!$root || !$path || !str_starts_with($path, $root . DIRECTORY_SEPARATOR) || !is_file($path)) {
+            throw new RuntimeException('专业导入文件已丢失，请重新上传');
+        }
+        return $this->professionExcelRowsFromPath($path);
+    }
+
+    /** 读取专业导入 Excel 行。 */
+    private function professionExcelRowsFromPath(string $path): array
+    {
+        $spreadsheet = IOFactory::load($path);
+        try {
+            $sheetRows = $spreadsheet->getActiveSheet()->toArray(null, false, true, true);
+            [$mapping, $startRow] = $this->professionHeader($sheetRows);
+            $items = [];
+            foreach ($sheetRows as $rowNumber => $row) {
+                if ((int) $rowNumber < $startRow) {
+                    continue;
+                }
+                $item = ['row_number' => (int) $rowNumber];
+                foreach ($mapping as $key => $column) {
+                    $item[$key] = $this->excelCellString($row[$column] ?? '');
+                }
+                if ($this->professionRowEmpty($item)) {
+                    continue;
+                }
+                $items[] = $item;
+                if (count($items) > self::EXCEL_MAX_ROWS) {
+                    throw new InvalidArgumentException('单次最多导入 5000 行专业资料');
+                }
+            }
+            if (!$items) {
+                throw new InvalidArgumentException('Excel 中没有可导入的专业资料');
+            }
+            return $items;
+        } finally {
+            $spreadsheet->disconnectWorksheets();
+        }
+    }
+
+    /** 定位专业导入表头。 */
+    private function professionHeader(array $sheetRows): array
+    {
+        $aliases = [
+            'dep_name' => ['所属学院', '学院', '学院名称', '院系'],
+            'profession_code' => ['专业代码', '专业编号', '代码'],
+            'profession_name' => ['专业名称', '专业'],
+            'profession_short_name' => ['专业简称', '简称'],
+            'flag_text' => ['启用状态', '状态'],
+        ];
+        foreach (array_slice($sheetRows, 0, 10, true) as $rowNumber => $row) {
+            $mapping = [];
+            foreach ($row as $column => $value) {
+                $header = $this->normalizeExcelText((string) $value);
+                foreach ($aliases as $key => $items) {
+                    foreach ($items as $alias) {
+                        if ($header === $this->normalizeExcelText($alias)) {
+                            $mapping[$key] = $column;
+                            break 2;
+                        }
+                    }
+                }
+            }
+            if (isset($mapping['dep_name'], $mapping['profession_name'])) {
+                return [$mapping, (int) $rowNumber + 1];
+            }
+        }
+        throw new InvalidArgumentException('未找到所属学院和专业名称表头');
+    }
+
+    /** 判断专业导入行是否为空。 */
+    private function professionRowEmpty(array $row): bool
+    {
+        return trim((string) ($row['dep_name'] ?? '')) === ''
+            && trim((string) ($row['profession_name'] ?? '')) === ''
+            && trim((string) ($row['profession_code'] ?? '')) === '';
     }
 
     /** 定位 Excel 表头。 */
