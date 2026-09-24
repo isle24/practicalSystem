@@ -495,36 +495,21 @@ class InternshipBaseImportService
     /** 解析已保存导入文件的绝对路径 */
     private function savedFilePath(array $file): string
     {
-        $storedPath = trim(str_replace('\\', '/', (string) ($file['blob']['path'] ?? '')));
-        if ($storedPath === '') {
+        $storedPath = (string) ($file['blob']['path'] ?? '');
+        if (trim($storedPath) === '') {
             throw new RuntimeException('导入文件路径无效');
         }
 
-        $publicPath = rtrim(str_replace('\\', '/', public_path()), '/');
-        $relativePath = ltrim($storedPath, '/');
-        if (str_starts_with($relativePath, 'public/')) {
-            $relativePath = substr($relativePath, 7);
-        }
-        if (preg_match('#(^|/)\.\.(?:/|$)#', $relativePath)) {
-            throw new RuntimeException('导入文件路径无效');
+        $path = (new FileService())->localPath($storedPath);
+        if ($path === null) {
+            if (preg_match('#(^|/)\.\.(?:/|$)#', str_replace('\\', '/', $storedPath))) {
+                throw new RuntimeException('导入文件路径无效');
+            }
+
+            throw new RuntimeException('导入文件已丢失，请重新上传');
         }
 
-        $candidates = [];
-        if (str_starts_with($storedPath, '/') && str_starts_with($storedPath, $publicPath . '/')) {
-            $candidates[] = $storedPath;
-        } else {
-            $candidates[] = $publicPath . '/' . $relativePath;
-            if (!str_starts_with($relativePath, 'files/')) {
-                $candidates[] = $publicPath . '/files/' . $relativePath;
-            }
-        }
-        foreach (array_unique($candidates) as $candidate) {
-            if (is_file($candidate)) {
-                return $candidate;
-            }
-        }
-
-        throw new RuntimeException('导入文件已丢失，请重新上传');
+        return $path;
     }
 
     /** 写入基地导入模板及字段说明。 */

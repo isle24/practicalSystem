@@ -554,6 +554,45 @@ class FileService
         ];
     }
 
+    /** 解析已保存文件的本地绝对路径。 */
+    public function localPath(string $storedPath): ?string
+    {
+        $storedPath = trim(str_replace('\\', '/', $storedPath));
+        if ($storedPath === '' || preg_match('#(^|/)\.\.(?:/|$)#', $storedPath)) {
+            return null;
+        }
+
+        $publicPath = rtrim(str_replace('\\', '/', public_path()), '/');
+        $relativePath = ltrim($storedPath, '/');
+        $candidates = [];
+
+        if (str_starts_with($storedPath, '/') && str_starts_with($storedPath, $publicPath . '/')) {
+            $candidates[] = $storedPath;
+        }
+
+        if (str_starts_with($relativePath, 'public/')) {
+            $relativePath = substr($relativePath, 7);
+        }
+        $candidates[] = $publicPath . '/' . $relativePath;
+        if (!str_starts_with($relativePath, 'files/')) {
+            $candidates[] = $publicPath . '/files/' . $relativePath;
+        }
+
+        $filesPosition = strpos('/' . ltrim($storedPath, '/'), '/files/');
+        if ($filesPosition !== false) {
+            $filesPath = ltrim(substr('/' . ltrim($storedPath, '/'), $filesPosition + 1), '/');
+            $candidates[] = $publicPath . '/' . $filesPath;
+        }
+
+        foreach (array_unique($candidates) as $candidate) {
+            if (is_file($candidate)) {
+                return $candidate;
+            }
+        }
+
+        return null;
+    }
+
     public function list(Request $request): array
     {
         $accountId = $this->accountId();
