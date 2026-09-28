@@ -324,6 +324,22 @@ class InternshipRecord extends TableRecord
         ];
     }
 
+    /** 软删除当前数据范围内的实习基地。 */
+    public static function softDeleteBases(array $scope, array $baseIds, string $deletedAt): int
+    {
+        $ids = array_values(array_unique(array_filter(array_map('intval', $baseIds), static fn (int $id): bool => $id > 0)));
+        if (!$ids) return 0;
+        $query = self::applyBaseScope(self::queryTable('base')
+            ->whereIn('base.id', $ids)
+            ->whereNull('base.deleted_at'), $scope);
+        return (int) $query->update([
+            'status' => 'disabled',
+            'deleted_at' => $deletedAt,
+            'updated_by' => CurrentContext::accountId(),
+            'updated_at' => $deletedAt,
+        ]);
+    }
+
     /** 查询已校验导出任务的基地资料 */
     public static function baseExportDetail(int $baseId): ?array
     {
@@ -505,7 +521,8 @@ class InternshipRecord extends TableRecord
             ->leftJoin('department', "{$table}.dep_id", '=', 'department.dep_id')
             ->leftJoin('account', "{$table}.submitter_id", '=', 'account.id')
             ->leftJoin('users', 'account.user_id', '=', 'users.id')
-            ->whereNull("{$table}.deleted_at"), $scope, $table);
+            ->whereNull("{$table}.deleted_at")
+            ->whereNull('base.deleted_at'), $scope, $table);
         self::filter($query, $filters, "{$table}.status", 'status');
         self::filter($query, $filters, "{$table}.base_id", 'base_id');
         self::filter($query, $filters, "{$table}.dep_id", 'dep_id');

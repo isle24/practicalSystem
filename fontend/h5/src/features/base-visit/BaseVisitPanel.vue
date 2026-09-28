@@ -15,7 +15,7 @@
         :select-filters="selectFilters"
         :status-options="statusOptions"
         :values="state.filters"
-        keyword-placeholder="基地、教师或走访事项"
+        keyword-placeholder="基地或教师"
         :loading="state.loading"
         @update-filter="updateFilter"
         @search="loadList(1)"
@@ -55,7 +55,7 @@
     <AppSheet v-model="state.detailVisible" title="走访详情" :subtitle="state.detail.item?.base_name || ''">
       <div v-if="state.detail.item" class="base-visit-detail">
         <van-notice-bar v-if="Number(state.detail.item.conflict_count) > 0" :text="`同校同日同时段另有 ${state.detail.item.conflict_count} 个安排，请协调时间`" />
-        <dl v-for="item in detailFacts" :key="item.label"><dt>{{ item.label }}</dt><dd>{{ item.value || '-' }}</dd></dl>
+        <dl v-for="item in detailFacts" :key="item.label"><dt>{{ item.label }}</dt><dd><a v-if="item.url" :href="item.url" target="_blank" rel="noopener noreferrer">{{ item.value }}</a><span v-else>{{ item.value || '-' }}</span></dd></dl>
         <section v-if="state.detail.item.remark"><strong>安排说明</strong><p>{{ state.detail.item.remark }}</p></section>
         <section v-if="state.detail.item.cancel_reason"><strong>取消原因</strong><p>{{ state.detail.item.cancel_reason }}</p></section>
         <section v-if="state.detail.record"><strong>走访记录</strong><p>{{ state.detail.record.content }}</p></section>
@@ -82,21 +82,24 @@
       <form class="base-visit-form" :inert="state.saving || state.uploading" @submit.prevent="submitForm">
         <template v-if="state.formType === 'assign'">
           <label><span>搜索基地</span><input v-model="state.optionSearch.base_keyword" placeholder="基地名称" @input="queueOptions"></label>
-          <label><span>基地</span><select v-model="state.form.base_id" required><option value="">请选择基地</option><option v-for="item in state.options.bases" :key="item.id" :value="item.id">{{ item.name }}{{ item.dep_name ? ` / ${item.dep_name}` : '' }}</option></select></label>
-          <label><span>搜索教师</span><input v-model="state.optionSearch.teacher_keyword" placeholder="姓名或工号" @input="queueOptions"></label>
-          <label><span>负责教师</span><select v-model="state.form.teacher_id" required><option value="">请选择教师</option><option v-for="item in state.options.teachers" :key="item.teacher_id" :value="item.teacher_id">{{ item.teacher_name }}{{ item.teacher_num ? ` / ${item.teacher_num}` : '' }}</option></select></label>
-          <label><span>走访事项</span><input v-model.trim="state.form.title" maxlength="180" required></label>
-          <label><span>基地类型</span><input v-model.trim="state.form.base_category" maxlength="80"></label>
-          <label><span>基地位置</span><input v-model.trim="state.form.base_location" maxlength="40"></label>
+          <label><span>基地</span><select v-model="state.form.base_id" required @change="selectBase"><option value="">请选择基地</option><option v-for="item in state.options.bases" :key="item.id" :value="item.id">{{ item.name }}{{ item.dep_name ? ` / ${item.dep_name}` : '' }}</option></select></label>
+          <dl v-if="state.form.base_id" class="base-visit-detail"><dt>基地名称</dt><dd>{{ state.form.base_name || '—' }}</dd><dt>所属学院</dt><dd>{{ state.form.base_department || '—' }}</dd><dt>基地地址</dt><dd>{{ state.form.base_address || '—' }}</dd><dt>基地类型</dt><dd>{{ state.form.base_category || '—' }}</dd><dt>基地负责人</dt><dd>{{ state.form.base_manager_name || '—' }}</dd><dt>负责人电话</dt><dd>{{ state.form.base_manager_phone || '—' }}</dd></dl>
+          <label><span>搜索走访人员</span><input v-model="state.optionSearch.participant_keyword" placeholder="姓名、工号或角色" @input="queueOptions"></label>
+          <label><span>走访人员</span><select v-model="state.form.participant_ids" multiple required size="5"><option v-for="item in state.options.participants" :key="personId(item)" :value="personId(item)">{{ accountLabel(item) }}</option></select></label>
+          <label><span>搜索主管院长</span><input v-model="state.optionSearch.supervisor_keyword" placeholder="姓名或账号" @input="queueOptions"></label>
+          <label><span>主管院长</span><select v-model="state.form.supervisor_id"><option value="">请选择</option><option v-for="item in state.options.supervisors" :key="personId(item)" :value="personId(item)">{{ accountLabel(item) }}</option></select></label>
+          <label><span>搜索联系人账号</span><input v-model="state.optionSearch.contact_keyword" placeholder="姓名、账号或手机" @input="queueOptions"></label>
+          <label><span>联系人账号</span><select v-model="state.form.contact_account_id" @change="selectContact"><option value="">可选系统账号</option><option v-for="item in state.options.contacts" :key="personId(item)" :value="personId(item)">{{ accountLabel(item) }}</option></select></label>
+          <label><span>联系人姓名</span><input v-model.trim="state.form.contact_person" maxlength="180"></label>
+          <label><span>联系电话</span><input v-model.trim="state.form.contact_phone" type="tel" maxlength="40"></label>
+          <label><span>新闻链接</span><input v-model.trim="state.form.news_url" type="url" maxlength="500" placeholder="可选，仅支持 http 或 https"></label>
           <label><span>安排说明</span><textarea v-model.trim="state.form.remark" rows="4" maxlength="10000" /></label>
         </template>
         <template v-else-if="state.formType === 'schedule'">
           <label><span>走访日期</span><input v-model="state.form.visit_date" type="date" required></label>
-          <label><span>时段</span><select v-model="state.form.visit_period" required><option value="am">上午</option><option value="pm">下午</option></select></label>
           <label><span>开始时间</span><input v-model="state.form.start_time" type="time" required></label>
-          <label><span>结束时间</span><input v-model="state.form.end_time" type="time"></label>
-          <label><span>联系电话</span><input v-model.trim="state.form.contact_phone" type="tel" maxlength="40"></label>
-          <small>时段按开始时间归类；同校同日同半天有其他安排时提示，仍可保存。</small>
+          <label><span>结束时间</span><input v-model="state.form.end_time" type="time" required></label>
+          <small>走访人员在同一时间段已有其他基地安排时，系统会阻止保存。</small>
         </template>
         <template v-else-if="state.formType === 'record'">
           <label><span>实际走访时间</span><input v-model="state.form.actual_at" type="datetime-local" required></label>
@@ -105,7 +108,7 @@
           <label><span>走访内容</span><textarea v-model.trim="state.form.content" rows="6" maxlength="20000" required /></label>
           <label><span>发现问题</span><textarea v-model.trim="state.form.problems" rows="4" maxlength="10000" /></label>
           <label><span>后续措施</span><textarea v-model.trim="state.form.follow_up" rows="4" maxlength="10000" /></label>
-          <label class="base-visit-upload"><span>附件</span><input type="file" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.zip,.txt" @change="uploadAttachments"><em>{{ state.uploading ? '正在上传' : '选择文件' }}</em></label>
+          <label class="base-visit-upload"><span>附件</span><input type="file" multiple accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.zip,.txt" @change="uploadAttachments"><em>{{ state.uploading ? '正在上传' : '选择文件' }}</em></label>
           <div class="base-visit-files">
             <article v-for="file in state.form.attachments" :key="file.id || file.file_id"><span>{{ file.download_name || file.name || `附件 ${file.id || file.file_id}` }}</span><button type="button" @click="removeAttachment(file)">移除</button></article>
           </div>
@@ -148,8 +151,8 @@ const state = reactive({
   items: [],
   pagination: { page: 1, page_size: 20, total: 0 },
   filters: { keyword: '', status: '', dep_id: '', visit_date: '' },
-  options: { can_assign: false, is_teacher: false, bases: [], teachers: [], departments: [] },
-  optionSearch: { base_keyword: '', teacher_keyword: '' },
+  options: { can_assign: false, is_teacher: false, bases: [], teachers: [], participants: [], supervisors: [], contacts: [], departments: [] },
+  optionSearch: { base_keyword: '', participant_keyword: '', supervisor_keyword: '', contact_keyword: '' },
   detailVisible: false,
   detail: { item: null, record: null, permissions: {} },
   formVisible: false,
@@ -181,8 +184,9 @@ const detailFacts = computed(() => {
   return [
     ['状态', statusText(row.status)], ['负责教师', row.teacher_name], ['所在部门', row.teacher_department], ['基地', row.base_name],
     ['基地学院', row.base_department], ['地址', row.base_address], ['类型', row.base_category], ['位置', row.base_location],
-    ['走访时间', scheduleText(row)], ['联系电话', row.contact_phone], ['填写时间', row.scheduled_at], ['创建时间', row.created_at],
-  ].map(([label, value]) => ({ label, value }));
+    ['主管院长', row.supervisor_name], ['走访人员', (row.participant_names || []).join('、')], ['联系人', row.contact_person],
+    ['走访时间', scheduleText(row)], ['联系电话', row.contact_phone], ['新闻链接', row.news_url, safeExternalUrl(row.news_url)], ['填写时间', row.scheduled_at], ['创建时间', row.created_at],
+  ].map(([label, value, url]) => ({ label, value, url }));
 });
 
 watch(() => props.sessionKey, async () => {
@@ -207,7 +211,7 @@ function resetState() {
   state.items = [];
   state.pagination = { page: 1, page_size: 20, total: 0 };
   state.filters = { keyword: '', status: '', dep_id: '', visit_date: '' };
-  state.options = { can_assign: false, is_teacher: false, bases: [], teachers: [], departments: [] };
+  state.options = { can_assign: false, is_teacher: false, bases: [], teachers: [], participants: [], supervisors: [], contacts: [], departments: [] };
   state.detailVisible = false;
   state.formVisible = false;
   state.detail = { item: null, record: null, permissions: {} };
@@ -233,11 +237,23 @@ async function loadOptions() {
   try {
     const data = await fetchBaseVisitOptions(params);
     if (!isCurrent(requestSession, sessionKey) || requestGeneration !== optionsGeneration) return;
-    for (const [key, idKey, selectedId] of [['bases', 'id', state.form.base_id], ['teachers', 'teacher_id', state.form.teacher_id]]) {
+    for (const [key, idKey, selectedId] of [['bases', 'id', state.form.base_id]]) {
       const selected = state.options[key].find(item => Number(item[idKey]) === Number(selectedId));
       if (selected && !(data[key] || []).some(item => Number(item[idKey]) === Number(selectedId))) data[key] = [selected, ...(data[key] || [])];
     }
-    state.options = { ...state.options, ...data };
+    const selectedParticipants = state.options.participants.filter(item => (state.form.participant_ids || []).map(Number).includes(personId(item)));
+    if (selectedParticipants.length) data.participants = [...selectedParticipants, ...(data.participants || []).filter(item => !selectedParticipants.some(selected => personId(selected) === personId(item)))];
+    const selectedSupervisor = state.options.supervisors.find(item => personId(item) === Number(state.form.supervisor_id));
+    if (selectedSupervisor && !(data.supervisors || []).some(item => personId(item) === Number(state.form.supervisor_id))) data.supervisors = [selectedSupervisor, ...(data.supervisors || [])];
+    const selectedContact = state.options.contacts.find(item => personId(item) === Number(state.form.contact_account_id));
+    if (selectedContact && !(data.contacts || []).some(item => personId(item) === Number(state.form.contact_account_id))) data.contacts = [selectedContact, ...(data.contacts || [])];
+    state.options = {
+      ...state.options,
+      ...data,
+      participants: data.participants || data.accounts || data.users || data.teachers || state.options.participants,
+      supervisors: data.supervisors || data.admins || data.participants || state.options.supervisors,
+      contacts: data.contacts || data.participants || state.options.contacts,
+    };
   } catch (error) {
     if (!isCurrent(requestSession, sessionKey) || requestGeneration !== optionsGeneration) return;
     state.message = error.message;
@@ -318,16 +334,21 @@ function openAssign(row = null) {
   if (!beforeLeave()) return;
   applyDetail({ item: row, permissions: row || {} });
   if (row) {
-    state.options.bases = [{ id: row.base_id, name: row.base_name, dep_name: row.base_department }];
-    state.options.teachers = [{ teacher_id: row.teacher_id, teacher_name: row.teacher_name }];
+    state.options.bases = [{ id: row.base_id, name: row.base_name, dep_name: row.base_department, address: row.base_address, base_category: row.base_category, manager_name: row.base_manager_name, manager_phone: row.base_manager_phone }];
+    const rows = row.participant_rows || (row.participant_ids || []).map(account_id => ({ account_id }));
+    state.options.participants = rows;
+    if (row.supervisor_id) state.options.supervisors = [{ account_id: row.supervisor_id, name: row.supervisor_name }];
+    if (row.contact_account_id) state.options.contacts = [{ account_id: row.contact_account_id, name: row.contact_account_name }];
   }
   beginForm('assign');
   state.form = {
-    id: row?.id || 0, revision: row?.revision, base_id: row?.base_id || '', teacher_id: row?.teacher_id || '', title: row?.title || '',
-    base_category: row?.base_category || '', base_location: row?.base_location || '', remark: row?.remark || '',
+    id: row?.id || 0, revision: row?.revision, base_id: row?.base_id || '', participant_ids: (row?.participant_ids || []).map(Number), supervisor_id: row?.supervisor_id || '', contact_account_id: row?.contact_account_id || '', contact_person: row?.contact_person || '', contact_phone: row?.contact_phone || '',
+    base_name: row?.base_name || '', base_department: row?.base_department || '', base_address: row?.base_address || '', base_category: row?.base_category || '', base_manager_name: row?.base_manager_name || '', base_manager_phone: row?.base_manager_phone || '', news_url: row?.news_url || '', remark: row?.remark || '',
   };
   state.optionSearch.base_keyword = row?.base_name || '';
-  state.optionSearch.teacher_keyword = row?.teacher_name || '';
+  state.optionSearch.participant_keyword = '';
+  state.optionSearch.supervisor_keyword = '';
+  state.optionSearch.contact_keyword = '';
   loadOptions();
   state.formVisible = true;
 }
@@ -336,7 +357,7 @@ function openSchedule(row) {
   if (!beforeLeave()) return;
   applyDetail({ item: row, permissions: row });
   beginForm('schedule');
-  state.form = { id: row.id, revision: row.revision, visit_date: row.visit_date || '', visit_period: row.visit_period || 'am', start_time: row.start_time || '', end_time: row.end_time || '', contact_phone: row.contact_phone || '' };
+  state.form = { id: row.id, revision: row.revision, visit_date: row.visit_date || '', start_time: row.start_time?.slice(0, 5) || '', end_time: row.end_time?.slice(0, 5) || '' };
   state.formVisible = true;
 }
 
@@ -406,13 +427,11 @@ function validateForm() {
   if (state.formType === 'assign') {
     if (!props.canManage || !state.options.can_assign) return '当前账号不能安排基地走访';
     if (!state.form.base_id) return '请选择基地';
-    if (!state.form.teacher_id) return '请选择负责教师';
-    if (!state.form.title) return '请填写走访事项';
+    if (!(state.form.participant_ids || []).length) return '请选择至少一名走访人员';
   }
   if (state.formType === 'schedule') {
-    if (!state.form.visit_date || !state.form.visit_period || !state.form.start_time) return '请完整填写走访日期、时段和开始时间';
-    if ((state.form.start_time < '12:00' ? 'am' : 'pm') !== state.form.visit_period) return '开始时间与上午/下午不一致';
-    if (state.form.end_time && state.form.end_time <= state.form.start_time) return '结束时间必须晚于开始时间';
+    if (!state.form.visit_date || !state.form.start_time || !state.form.end_time) return '请完整填写走访日期、开始时间和结束时间';
+    if (state.form.end_time <= state.form.start_time) return '结束时间必须晚于开始时间';
   }
   if (state.formType === 'record' && (!state.form.actual_at || !state.form.content)) return '请填写实际走访时间和走访内容';
   if (state.formType === 'cancel' && (!props.canManage || !state.form.reason)) return '请填写取消原因';
@@ -500,9 +519,34 @@ function planFacts(row) {
 
 function scheduleText(row) {
   if (!row?.visit_date) return '待填写走访时间';
-  const period = row.visit_period === 'pm' ? '下午' : '上午';
   const time = [row.start_time, row.end_time].filter(Boolean).join('-');
-  return `${row.visit_date} ${period}${time ? ` ${time}` : ''}`;
+  return `${row.visit_date}${time ? ` ${time}` : ''}`;
+}
+
+function personId(item) { return Number(item?.account_id || item?.id || item?.user_id || 0); }
+function accountLabel(item) { return [item?.name || item?.account_name || item?.real_name || '账号', item?.teacher_num || item?.mobile].filter(Boolean).join(' / '); }
+function selectContact(id) {
+  const person = (state.options.contacts || []).find(item => personId(item) === Number(id));
+  if (!person) return;
+  if (!state.form.contact_person) state.form.contact_person = person.name || person.account_name || '';
+  if (!state.form.contact_phone) state.form.contact_phone = person.mobile || person.phone || '';
+}
+function selectBase(id) {
+  const base = state.options.bases.find(item => Number(item.id) === Number(id));
+  if (!base) return;
+  const fields = { name: 'base_name', dep_name: 'base_department', address: 'base_address', base_category: 'base_category' };
+  for (const [source, target] of Object.entries(fields)) state.form[target] = base[source] || '';
+  state.form.base_manager_name = base.manager_name || '';
+  state.form.base_manager_phone = base.manager_phone || '';
+}
+
+function safeExternalUrl(value) {
+  try {
+    const url = new URL(String(value || ''));
+    return ['http:', 'https:'].includes(url.protocol) ? url.href : '';
+  } catch {
+    return '';
+  }
 }
 
 function statusText(status) {

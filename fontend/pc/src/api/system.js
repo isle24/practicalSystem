@@ -732,6 +732,10 @@ export function saveInternshipBase(payload) {
   return internshipPost('save-base', payload);
 }
 
+export function removeInternshipBase(payload) {
+  return internshipPost('remove-base', payload);
+}
+
 export function previewInternshipBaseImport(file) {
   const body = new FormData();
   body.append('file', file);

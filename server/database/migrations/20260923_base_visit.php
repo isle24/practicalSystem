@@ -23,6 +23,33 @@ foreach (array_unique($ids) as $id) {
     if ($connection->getTablePrefix() !== '') {
         throw new RuntimeException('基地巡查结构升级不支持带表前缀的学校数据库');
     }
-    foreach ($statements as $statement) $connection->unprepared($statement);
+    $deferred = [];
+    foreach ($statements as $statement) {
+        $upper = strtoupper($statement);
+        if (str_starts_with($upper, 'ALTER TABLE `BASE_VISIT_PLAN`')) continue;
+        if (str_starts_with($upper, 'INSERT INTO `BASE_VISIT_PARTICIPANT`')) { $deferred[] = $statement; continue; }
+        $connection->unprepared($statement);
+    }
+    $schema = $connection->getSchemaBuilder();
+    foreach ([
+        'base_manager_name' => 'VARCHAR(80) DEFAULT NULL AFTER `base_location`',
+        'base_manager_phone' => 'VARCHAR(40) DEFAULT NULL AFTER `base_manager_name`',
+        'contact_account_id' => 'BIGINT UNSIGNED DEFAULT NULL AFTER `teacher_department`',
+        'contact_person' => 'VARCHAR(180) DEFAULT NULL AFTER `contact_account_id`',
+        'supervisor_id' => 'BIGINT UNSIGNED DEFAULT NULL AFTER `contact_phone`',
+        'participant_ids' => 'JSON DEFAULT NULL AFTER `supervisor_id`',
+        'news_url' => 'VARCHAR(500) DEFAULT NULL AFTER `participant_ids`',
+    ] as $column => $definition) {
+        if (!$schema->hasColumn('base_visit_plan', $column)) {
+            $connection->statement("ALTER TABLE `base_visit_plan` ADD COLUMN `{$column}` {$definition}");
+        }
+    }
+    $teacherColumn = $connection->selectOne(
+        "SELECT IS_NULLABLE AS nullable_flag FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'base_visit_plan' AND COLUMN_NAME = 'teacher_id'"
+    );
+    if ($teacherColumn && strtoupper((string) $teacherColumn->nullable_flag) !== 'YES') {
+        $connection->statement('ALTER TABLE `base_visit_plan` MODIFY COLUMN `teacher_id` BIGINT UNSIGNED DEFAULT NULL');
+    }
+    foreach ($deferred as $statement) $connection->unprepared($statement);
     echo "学校数据库 {$id}: 基地巡查结构已更新\n";
 }

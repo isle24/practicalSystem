@@ -2,7 +2,7 @@
 
 namespace app\server\maintenance;
 
-use app\model\channel\Account;
+use app\model\channel\BaseVisitRecord;
 use app\model\channel\InternshipScheduledRecord;
 use app\model\channel\MessageRecord;
 use app\server\message\MessageService;
@@ -10,6 +10,69 @@ use Throwable;
 
 class InternshipScheduledService
 {
+    /**
+     * 发送基地走访预约前一小时提醒。
+     */
+    public function remindBaseVisits(): array
+    {
+        if (!BaseVisitRecord::installed()) {
+            return ['matched' => 0, 'sent' => 0, 'failed' => 0];
+        }
+
+        $now = time();
+        $from = date('Y-m-d H:i:s', $now + 3540);
+        $to = date('Y-m-d H:i:s', $now + 3660);
+        $rows = BaseVisitRecord::queryTable('base_visit_plan')
+            ->whereNull('deleted_at')
+            ->where('status', 'scheduled')
+            ->whereNotNull('visit_date')
+            ->whereNotNull('start_time')
+            ->whereRaw('TIMESTAMP(visit_date, start_time) BETWEEN ? AND ?', [$from, $to])
+            ->get(['id', 'base_name', 'visit_date', 'start_time', 'end_time', 'contact_person', 'contact_phone', 'participant_ids', 'teacher_id', 'supervisor_id', 'contact_account_id']);
+
+        $sent = 0;
+        $failed = 0;
+        foreach ($rows as $row) {
+            $visitId = (int) ($row->id ?? 0);
+            if ($visitId <= 0 || MessageRecord::messageExists('base_visit_reminder', 'base_visit_plan', $visitId)) {
+                continue;
+            }
+
+            $recipientIds = BaseVisitRecord::participantIds($row->toArray());
+            $recipientIds[] = (int) ($row->supervisor_id ?? 0);
+            $recipientIds[] = (int) ($row->contact_account_id ?? 0);
+            $recipientIds = array_values(array_unique(array_filter(array_map('intval', $recipientIds), static fn (int $id): bool => $id > 0)));
+            if (!$recipientIds) {
+                continue;
+            }
+            $accountIds = BaseVisitRecord::enabledAccountIds($recipientIds);
+            if (!$accountIds) {
+                continue;
+            }
+
+            try {
+                (new MessageService())->sendByTemplateCode('base_visit_reminder', $accountIds, [
+                    'base_name' => (string) ($row->base_name ?? '实习基地'),
+                    'visit_date' => (string) ($row->visit_date ?? ''),
+                    'start_time' => substr((string) ($row->start_time ?? ''), 0, 5),
+                    'end_time' => substr((string) ($row->end_time ?? ''), 0, 5),
+                    'contact_person' => (string) ($row->contact_person ?? ''),
+                    'contact_phone' => (string) ($row->contact_phone ?? ''),
+                ], [
+                    'channels' => ['wechat'],
+                    'entity_type' => 'base_visit_plan',
+                    'entity_id' => $visitId,
+                    'metadata' => ['reminder_window' => 'one_hour_before'],
+                ]);
+                $sent++;
+            } catch (Throwable) {
+                $failed++;
+            }
+        }
+
+        return ['matched' => $rows->count(), 'sent' => $sent, 'failed' => $failed];
+    }
+
     /**
      * 生成上一自然周实习简报并通知管理员。
      */

@@ -275,7 +275,7 @@
                     <span>
                       <strong>企业微信</strong>
                       <small>{{ profileWechatBindingText }}</small>
-                      <el-button v-if="['teacher', 'student'].includes(currentRoleType) && !wechatStatus?.bound" link type="primary" @click.prevent="wechatBinding.open">绑定企业微信</el-button>
+                      <el-button v-if="wechatBindingRoles.includes(currentRoleType)" link type="primary" @click.prevent="wechatBinding.open">{{ wechatStatus?.bound ? '重新绑定' : '绑定企业微信' }}</el-button>
                     </span>
                     <el-switch v-model="profileState.form.notify.wechat" />
                   </label>
@@ -1057,7 +1057,7 @@
                         :timeline-entity="studentTimelineEntity(activeOverviewTab)"
                         :title="studentPanelMeta(activeOverviewTab).title"
                         @page-change="page => loadInternshipPanel(activeOverviewTab, page)"
-                        @refresh="loadInternshipPanel(activeOverviewTab)"
+                        @refresh="refreshInternshipPanel(activeOverviewTab)"
                         @timeline="row => openTimelineDialog(studentTimelineEntity(activeOverviewTab), row)"
                       />
                       <section v-else-if="activeOverviewTab === 'arrangements'" class="internship-card overview-card-single">
@@ -1116,7 +1116,7 @@
                       :timeline-entity="studentTimelineEntity(win.panel)"
                       :title="studentPanelMeta(win.panel).title"
                       @page-change="page => loadInternshipPanel(win.panel, page)"
-                      @refresh="loadInternshipPanel(win.panel)"
+                      @refresh="refreshInternshipPanel(win.panel)"
                       @timeline="row => openTimelineDialog(studentTimelineEntity(win.panel), row)"
                     />
                   </template>
@@ -1126,6 +1126,7 @@
                       :columns="internshipListConfigs.baseFlows.columns"
                       :filters="internshipListConfigs.baseFlows.filters"
                       :filter-values="internshipState.filters.baseFlows"
+                      :selectable="canManageInternship"
                       :loading="internshipState.loading"
                       :pagination="internshipState.lists.baseFlows.pagination"
                       :rows="internshipState.lists.baseFlows.items"
@@ -1134,6 +1135,7 @@
                       @page-change="page => loadInternshipPanel('baseFlows', page)"
                       @reset="resetInternshipFilters('baseFlows')"
                       @search="loadInternshipPanel('baseFlows', 1)"
+                      @selection-change="selection => { internshipState.baseSelected = selection }"
                     >
                       <template #toolbar>
                         <el-button v-if="canManageInternship" :icon="Plus" @click="openBaseDialog()">
@@ -1145,6 +1147,9 @@
                         <el-button v-if="canManageInternship" :icon="Upload" :loading="internshipState.importing" @click="chooseBaseImportExcel">
                           导入基地
                         </el-button>
+                        <el-button v-if="canManageInternship" :icon="Trash2" type="danger" plain :disabled="!internshipState.baseSelected.length || internshipState.loading" @click="removeSelectedBases()">
+                          批量删除{{ internshipState.baseSelected.length ? `（${internshipState.baseSelected.length}）` : '' }}
+                        </el-button>
                       </template>
                       <template #actions="{ row }">
                         <el-button size="small" type="primary" plain @click="openBaseDialog(row, true)">
@@ -1155,6 +1160,9 @@
                         </el-button>
                         <el-button v-if="canManageInternship && row.base_type === 'long_term'" link type="success" @click="exportBaseDocument(row)">
                           导出 Word
+                        </el-button>
+                        <el-button v-if="canManageInternship" link type="danger" @click="removeSelectedBases([row])">
+                          删除
                         </el-button>
                       </template>
                     </DataListPanel>
@@ -1453,7 +1461,7 @@
                         :timeline-entity="studentTimelineEntity(activeInternshipRequestTab)"
                         :title="studentPanelMeta(activeInternshipRequestTab).title"
                         @page-change="page => loadInternshipPanel(activeInternshipRequestTab, page)"
-                        @refresh="loadInternshipPanel(activeInternshipRequestTab)"
+                        @refresh="refreshInternshipPanel(activeInternshipRequestTab)"
                         @timeline="row => openTimelineDialog(studentTimelineEntity(activeInternshipRequestTab), row)"
                       />
 
@@ -1711,7 +1719,7 @@
                       :status-tag-type="statusTagType"
                       :title="studentPanelMeta('archiveMaterials').title"
                       @page-change="page => loadInternshipPanel('documents', page)"
-                      @refresh="loadInternshipPanel('documents')"
+                      @refresh="refreshInternshipPanel('documents')"
                     >
                       <template #actions="{ row }">
                         <el-button size="small" type="primary" @click="openArchiveDetail(row)">查看材料</el-button>
@@ -4641,6 +4649,7 @@ import {
   saveInternshipArrangement,
   saveInternshipArrangementChange,
   saveInternshipBase,
+  removeInternshipBase,
   saveInternshipBaseFlow,
   saveInternshipCourseScore,
   saveInternshipPlan,
@@ -5774,6 +5783,7 @@ const internshipState = reactive({
   overview: emptyInternshipOverview(),
   options: emptyInternshipOptions(),
   baseDetail: {},
+  baseSelected: [],
   planDetail: {},
   implementationDetail: emptyImplementationDetail(),
   planImport: emptyPlanImportState(),
@@ -5836,6 +5846,12 @@ const internshipState = reactive({
     safetyLetters: emptyPagedList(),
   },
 });
+const internshipFoundationCache = {
+  key: '',
+  value: null,
+  promise: null,
+  appliedKey: '',
+};
 
 const practiceState = reactive({
   practice: createPracticeModuleState(),
@@ -5944,6 +5960,7 @@ const accountImportSessionKey = computed(() => canManageAccounts.value && permis
 const canViewUserAdmin = computed(() => ['super_admin', 'school_admin', 'college_admin', 'profession_admin'].includes(permissionState.context.role_type));
 const canSendMessages = computed(() => ['super_admin', 'school_admin'].includes(currentRoleType.value));
 const canUnbindUserWechat = computed(() => ['super_admin', 'school_admin'].includes(currentRoleType.value));
+const wechatBindingRoles = ['teacher', 'student', 'super_admin', 'school_admin', 'college_admin', 'profession_admin'];
 const profileQuietAllDay = computed({
   get: () => profileState.form.wechat_quiet.start === '00:00' && profileState.form.wechat_quiet.end === '24:00',
   set: (value) => {
@@ -5953,9 +5970,7 @@ const profileQuietAllDay = computed({
   },
 });
 const profileWechatBindingText = computed(() => {
-  if (!['teacher', 'student'].includes(currentRoleType.value)) {
-    return '当前角色无需绑定';
-  }
+  if (!wechatBindingRoles.includes(currentRoleType.value)) return '当前角色无需绑定';
   return wechatStatus.value?.bound ? '已绑定企业微信' : '未绑定企业微信';
 });
 
@@ -14383,6 +14398,7 @@ async function submitSyllabusGuide(status) {
     const panel = form.document_type === 'guide' ? 'guides' : 'syllabuses';
     internshipState.savedMessage = `${materialName}${status === 'published' ? '已发布' : '草稿已保存'}`;
     closeInternshipDialog();
+    invalidateInternshipFoundation();
     await loadInternshipPanel(panel, 1);
   } catch (error) {
     internshipState.message = error.message;
@@ -14562,8 +14578,33 @@ async function submitInternshipBase(form) {
       budgets: (form.budgets || []).map(item => ({ ...item, amount: numericOrNull(item.amount) })),
     });
     closeInternshipDialog();
+    invalidateInternshipFoundation();
     await loadInternshipPanel('baseFlows', 1);
     internshipState.savedMessage = '实习基地已保存';
+  } catch (error) {
+    internshipState.message = error.message;
+  } finally {
+    internshipState.loading = false;
+  }
+}
+
+async function removeSelectedBases(rows = null) {
+  if (!canManageInternship.value || internshipState.loading) return;
+  const selected = Array.isArray(rows) ? rows : internshipState.baseSelected;
+  const ids = [...new Set(selected.map(row => Number(row?.id || 0)).filter(Boolean))];
+  if (!ids.length) {
+    internshipState.message = '请选择要删除的实习基地';
+    return;
+  }
+  if (!window.confirm(`确认删除选中的 ${ids.length} 个实习基地？删除后基地及其流程记录将不再显示。`)) return;
+  internshipState.loading = true;
+  internshipState.message = '';
+  try {
+    const result = await removeInternshipBase({ ids });
+    internshipState.baseSelected = [];
+    internshipState.savedMessage = `已删除 ${result.deleted || ids.length} 个实习基地`;
+    invalidateInternshipFoundation();
+    await loadInternshipPanel('baseFlows', 1, true);
   } catch (error) {
     internshipState.message = error.message;
   } finally {
@@ -14708,6 +14749,7 @@ async function confirmPlanImportPreview() {
       rows,
     });
     closeInternshipDialog();
+    invalidateInternshipFoundation();
     await loadInternshipPanel('plans', 1);
     internshipState.savedMessage = `计划表导入完成：新增 ${result.created || 0}，更新 ${result.updated || 0}，分类 ${result.classified || 0}，跳过 ${result.skipped || 0}，失败 ${result.failed || 0}`;
   } catch (error) {
@@ -14768,6 +14810,7 @@ async function confirmBaseImportPreview(skipErrors = false) {
   try {
     const result = await confirmInternshipBaseImport({ import_file_id: fileId, skip_errors: skipErrors });
     closeInternshipDialog();
+    invalidateInternshipFoundation();
     await loadInternshipPanel('baseFlows', 1);
     internshipState.savedMessage = `基地导入完成：新增基地 ${result.created_bases || 0}，新增年度申报 ${result.created_declarations || 0}，复用基地 ${result.reused_bases || 0}，跳过重复申报 ${result.skipped_declarations || 0}`;
   } catch (error) {
@@ -14822,6 +14865,7 @@ async function bindImplementationStudent(payload) {
   internshipState.message = '';
   try {
     await saveInternshipPair(payload);
+    invalidateInternshipFoundation();
     await reloadImplementationDetail();
     internshipState.savedMessage = '学生已绑定到实习任务';
   } catch (error) {
@@ -14839,6 +14883,7 @@ async function unbindImplementationStudent(row) {
   internshipState.message = '';
   try {
     await removeInternshipPair({ id: row.id, remove_reason: '实习实施页面解除绑定' });
+    invalidateInternshipFoundation();
     await reloadImplementationDetail();
     internshipState.savedMessage = '学生任务绑定已解除';
   } catch (error) {
@@ -14857,6 +14902,7 @@ async function submitImplementationSheet(payload) {
   internshipState.savedMessage = '';
   try {
     const result = await saveInternshipImplementationSheet(payload);
+    invalidateInternshipFoundation();
     internshipState.implementationDetail = {
       ...emptyImplementationDetail(),
       ...(result.detail || await fetchInternshipImplementationDetail({ arrangement_id: payload.arrangement_id })),
@@ -15421,31 +15467,91 @@ function validateReviewReason(entity, status, reason, label = null) {
   return '';
 }
 
-async function loadInternshipFoundation() {
-  if (wechatBlocked.value || !hasPermission('internship:view')) {
-    return;
-  }
+function internshipFoundationSessionKey() {
+  return [
+    permissionState.context.school_id || '',
+    permissionState.context.school_database_id || '',
+    permissionState.context.account_id || '',
+    permissionState.context.role_type || '',
+  ].join(':');
+}
 
-  const [overview, options] = await Promise.all([
-    fetchInternshipOverview(),
-    fetchInternshipOptions(),
-  ]);
+function applyInternshipFoundation(data) {
+  const overview = data?.overview || {};
+  const options = data?.options || {};
   internshipState.overview = {
     ...emptyInternshipOverview(),
-    ...(overview || {}),
+    ...overview,
   };
   internshipState.options = {
     ...emptyInternshipOptions(),
-    ...(options || {}),
+    ...options,
   };
   if (!internshipState.arrangementForm.base_id && internshipState.options.bases.length) {
     internshipState.arrangementForm.base_id = internshipState.options.bases[0].id;
   }
   normalizeArrangementCascade();
   applyDefaultScopedFilters();
+  internshipFoundationCache.appliedKey = internshipFoundationSessionKey();
 }
 
-async function loadInternshipPanel(panel = 'overview', page = 1) {
+function invalidateInternshipFoundation() {
+  internshipFoundationCache.value = null;
+  internshipFoundationCache.promise = null;
+  internshipFoundationCache.appliedKey = '';
+}
+
+async function loadInternshipFoundation(force = false) {
+  if (wechatBlocked.value || !hasPermission('internship:view')) {
+    return;
+  }
+
+  const key = internshipFoundationSessionKey();
+  if (force) {
+    invalidateInternshipFoundation();
+  }
+  if (internshipFoundationCache.key === key && internshipFoundationCache.value) {
+    if (internshipFoundationCache.appliedKey !== key) {
+      applyInternshipFoundation(internshipFoundationCache.value);
+    }
+    return internshipFoundationCache.value;
+  }
+  if (internshipFoundationCache.key === key && internshipFoundationCache.promise) {
+    const data = await internshipFoundationCache.promise;
+    if (internshipFoundationSessionKey() === key) {
+      applyInternshipFoundation(data);
+    }
+    return data;
+  }
+
+  const requestPromise = Promise.all([
+    fetchInternshipOverview(),
+    fetchInternshipOptions(),
+  ]).then(([overview, options]) => {
+    const data = { overview, options };
+    if (internshipFoundationCache.key === key
+      && internshipFoundationCache.promise === requestPromise
+      && internshipFoundationSessionKey() === key) {
+      internshipFoundationCache.value = data;
+      applyInternshipFoundation(data);
+    }
+    return data;
+  }).finally(() => {
+    if (internshipFoundationCache.promise === requestPromise) {
+      internshipFoundationCache.promise = null;
+    }
+  });
+  internshipFoundationCache.key = key;
+  internshipFoundationCache.promise = requestPromise;
+  return requestPromise;
+}
+
+async function refreshInternshipPanel(panel = 'overview', page = 1) {
+  invalidateInternshipFoundation();
+  return loadInternshipPanel(panel, page, true);
+}
+
+async function loadInternshipPanel(panel = 'overview', page = 1, forceFoundation = false) {
   if (wechatBlocked.value || panel === 'baseVisits' || !hasPermission('internship:view')) {
     return;
   }
@@ -15453,7 +15559,7 @@ async function loadInternshipPanel(panel = 'overview', page = 1) {
   internshipState.loading = true;
   internshipState.message = '';
   try {
-    await loadInternshipFoundation();
+    await loadInternshipFoundation(forceFoundation);
     const params = (key) => internshipQueryParams(key, page);
     if (panel === 'overview') {
       const applicationParams = isStudentRole.value
@@ -15573,6 +15679,7 @@ async function saveBaseFlow() {
     internshipState.filters[panel].type = internshipState.baseFlowForm.type;
     internshipState.baseFlowForm = emptyBaseFlowForm();
     closeInternshipDialog();
+    invalidateInternshipFoundation();
     await loadInternshipPanel(panel);
   } catch (error) {
     internshipState.message = error.message;
@@ -15650,11 +15757,12 @@ async function saveArrangement() {
       credit: form.credit,
     };
     closeInternshipDialog();
+    invalidateInternshipFoundation();
     await Promise.all([
       loadInternshipPanel('arrangements'),
       loadInternshipPanel('arrangementChanges'),
       loadInternshipPanel('pairs'),
-      loadInternshipOptions(),
+      loadInternshipFoundation(),
     ]);
   } catch (error) {
     internshipState.message = error.message;
@@ -15676,11 +15784,12 @@ async function reviewArrangementChange(row, status, opinion = '') {
       opinion: opinion || (status === 'accept' ? '同意任务变更' : '任务变更退回，请调整后重新提交'),
     });
     closeInternshipDialog();
+    invalidateInternshipFoundation();
     await Promise.all([
       loadInternshipPanel('arrangementChanges'),
       loadInternshipPanel('arrangements'),
       loadInternshipPanel('pairs'),
-      loadInternshipOptions(),
+      loadInternshipFoundation(),
     ]);
   } catch (error) {
     internshipState.message = error.message;
@@ -15702,10 +15811,11 @@ async function reviewArrangement(row, status, opinion = '') {
       opinion: opinion || (status === 'accept' ? '同意任务安排' : '任务信息需要修改后重新提交'),
     });
     closeInternshipDialog();
+    invalidateInternshipFoundation();
     await Promise.all([
       loadInternshipPanel('arrangements'),
       loadInternshipPanel('implementationSheets'),
-      loadInternshipOptions(),
+      loadInternshipFoundation(),
     ]);
   } catch (error) {
     internshipState.message = error.message;
@@ -15736,6 +15846,7 @@ async function handleArrangementImportFile(event) {
   internshipState.message = '';
   try {
     const result = await importInternshipArrangementAssignments(file);
+    invalidateInternshipFoundation();
     const errors = (result.errors || []).map(item => `第${item.row}行：${item.message}`).join('；');
     const changeText = result.change_submitted ? `，提交变更 ${result.change_submitted}` : '';
     internshipState.savedMessage = `导入完成：新增 ${result.created || 0}，更新 ${result.updated || 0}${changeText}，失败 ${result.failed || 0}`;
@@ -15743,7 +15854,7 @@ async function handleArrangementImportFile(event) {
     await Promise.all([
       loadInternshipPanel('arrangements'),
       loadInternshipPanel('pairs'),
-      loadInternshipOptions(),
+      loadInternshipFoundation(),
     ]);
   } catch (error) {
     internshipState.message = error.message;
@@ -15766,6 +15877,7 @@ async function reviewApplication(row, status, opinion = '') {
       opinion: opinion || internshipState.reviewOpinion || (status === 'accept' ? '同意' : '请修改后重新提交'),
     });
     closeInternshipDialog();
+    invalidateInternshipFoundation();
     await Promise.all([
       loadInternshipPanel('applications'),
       loadInternshipPanel('pairs'),
@@ -15833,9 +15945,10 @@ async function savePlan() {
     });
     internshipState.planForm = emptyPlanForm();
     closeInternshipDialog();
+    invalidateInternshipFoundation();
     await Promise.all([
       loadInternshipPanel('plans'),
-      loadInternshipOptions(),
+      loadInternshipFoundation(),
     ]);
   } catch (error) {
     internshipState.message = error.message;
@@ -15858,6 +15971,7 @@ async function reviewPlan(row, status, opinion = '') {
       opinion: opinion || (status === 'accept' ? '同意' : '请修改后重新提交'),
     });
     closeInternshipDialog();
+    invalidateInternshipFoundation();
     await loadInternshipPanel('plans');
   } catch (error) {
     internshipState.message = error.message;
@@ -15879,6 +15993,7 @@ async function reviewDelay(row, status, opinion = '') {
       opinion: opinion || (status === 'accept' ? '同意延期' : '不同意延期'),
     });
     closeInternshipDialog();
+    invalidateInternshipFoundation();
     await loadInternshipPanel('delays');
   } catch (error) {
     internshipState.message = error.message;
@@ -15903,6 +16018,7 @@ async function reviewBaseFlow(row, status, opinion = '') {
       opinion: opinion || (status === 'accept' ? '同意' : '请修改后重新提交'),
     });
     closeInternshipDialog();
+    invalidateInternshipFoundation();
     await loadInternshipPanel(internshipReviewPanel(entity));
   } catch (error) {
     internshipState.message = error.message;
@@ -15925,12 +16041,15 @@ async function reviewStudentWork(type, row, status, opinion = '') {
     };
     if (type === 'journal') {
       await reviewInternshipJournal(payload);
+      invalidateInternshipFoundation();
       await loadInternshipPanel('journals');
     } else if (type === 'report') {
       await reviewInternshipReport(payload);
+      invalidateInternshipFoundation();
       await loadInternshipPanel('reports');
     } else if (isInternshipDocumentReviewEntity(type)) {
       await reviewInternshipDocument({ ...payload, entity: type });
+      invalidateInternshipFoundation();
       await loadInternshipPanel(internshipReviewPanel(type));
     } else {
       throw new Error('该业务不支持当前审核入口');
@@ -15957,6 +16076,7 @@ async function requestModification() {
       opinion: internshipState.dialog.reason,
     });
     closeInternshipDialog();
+    invalidateInternshipFoundation();
     await loadInternshipPanel(internshipReviewPanel(entity));
   } catch (error) {
     internshipState.message = error.message;
@@ -16025,6 +16145,7 @@ async function saveScore() {
     });
     internshipState.scoreForm = emptyScoreForm();
     closeInternshipDialog();
+    invalidateInternshipFoundation();
     await loadInternshipPanel('scores');
   } catch (error) {
     internshipState.message = error.message;
@@ -16054,6 +16175,7 @@ async function saveCourseScore() {
       remark: internshipState.courseScoreForm.remark,
     });
     closeInternshipDialog();
+    invalidateInternshipFoundation();
     await Promise.all([
       loadInternshipPanel('courseScores', internshipState.lists.courseScores.pagination.page || 1),
       loadInternshipPanel('scores', internshipState.lists.scores.pagination.page || 1),
@@ -16240,6 +16362,7 @@ function resetFavoriteState() {
 }
 
 function resetInternshipState() {
+  invalidateInternshipFoundation();
   internshipState.message = '';
   internshipState.savedMessage = '';
   internshipState.reviewOpinion = '';

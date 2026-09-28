@@ -21,6 +21,9 @@ class BaseVisitService
             'can_assign' => $assign, 'is_teacher' => CurrentContext::roleType() === 'teacher',
             'bases' => $assign ? BaseVisitRecord::bases($this->text($input, 'base_keyword', 180)) : [],
             'teachers' => $assign ? BaseVisitRecord::teachers($this->text($input, 'teacher_keyword', 180)) : [],
+            'participants' => $assign ? BaseVisitRecord::participants($this->text($input, 'participant_keyword', 180)) : [],
+            'supervisors' => $assign ? BaseVisitRecord::participants($this->text($input, 'supervisor_keyword', 180), ['super_admin', 'school_admin', 'college_admin', 'profession_admin']) : [],
+            'contacts' => $assign ? BaseVisitRecord::contacts($this->text($input, 'contact_keyword', 180)) : [],
             'departments' => CurrentContext::roleType() === 'teacher' ? [] : BaseVisitRecord::departments(),
         ];
     }
@@ -59,32 +62,50 @@ class BaseVisitService
         $this->assertReady();
         if (!$this->canAssign()) throw new RuntimeException('无安排基地巡查的权限', 403);
         $base = BaseVisitRecord::base($this->integer($input, 'base_id'));
-        $teacher = BaseVisitRecord::teacher($this->integer($input, 'teacher_id'));
-        if (!$base || !$teacher) throw new RuntimeException('基地或教师不在可选范围内', 403);
+        if (!$base) throw new RuntimeException('基地不在可选范围内', 403);
+        $participantIds = $this->participantIds($input);
+        if (!$participantIds) throw new RuntimeException('请选择走访人员', 400);
+        $participantRows = BaseVisitRecord::participantsByIds($participantIds);
+        $participantRows = array_values(array_reduce($participantRows, static function (array $carry, array $row): array { $carry[(int) $row['account_id']] = $row; return $carry; }, []));
+        if (count($participantRows) !== count($participantIds)) throw new RuntimeException('走访人员不在可选范围内', 403);
+        $teacher = null;
+        foreach ($participantRows as $row) if (($row['role_type'] ?? '') === 'teacher' && !empty($row['teacher_id'])) { $teacher = $row; break; }
+        $teacherId = $teacher ? (int) $teacher['teacher_id'] : null;
+        $supervisorId = $this->integer($input, 'supervisor_id', false) ?: null;
+        if ($supervisorId && !in_array($supervisorId, BaseVisitRecord::accountIds([$supervisorId], ['super_admin', 'school_admin', 'college_admin', 'profession_admin']), true)) {
+            throw new RuntimeException('主管院长不在可选范围内', 403);
+        }
+        $contactAccountId = $this->integer($input, 'contact_account_id', false) ?: null;
+        if ($contactAccountId && !in_array($contactAccountId, BaseVisitRecord::visibleEnabledAccountIds([$contactAccountId]), true)) throw new RuntimeException('联系人账号无效', 403);
         $values = [
-            'title' => $this->text($input, 'title', 180, true),
-            'base_id' => (int) $base['id'], 'teacher_id' => (int) $teacher['teacher_id'], 'dep_id' => (int) ($base['dep_id'] ?? 0),
+            'title' => $this->text($input, 'title', 180) ?: '基地走访',
+            'base_id' => (int) $base['id'], 'teacher_id' => $teacherId, 'dep_id' => (int) ($base['dep_id'] ?? 0),
             'base_name' => $base['name'], 'base_address' => $base['address'], 'base_department' => $base['dep_name'],
-            'base_category' => $this->text($input, 'base_category', 80) ?: ($base['base_category'] ?? ''),
-            'base_location' => $this->text($input, 'base_location', 40),
-            'teacher_name' => $teacher['teacher_name'], 'teacher_department' => $teacher['dep_name'],
-            'remark' => $this->text($input, 'remark', 10000),
+            'base_category' => $base['base_category'] ?? '', 'base_location' => $base['district'] ?? '',
+            'base_manager_name' => $base['manager_name'] ?? '', 'base_manager_phone' => $base['manager_phone'] ?? '',
+            'teacher_name' => $teacher['name'] ?? ($teacher['teacher_name'] ?? ''), 'teacher_department' => $teacher['dep_name'] ?? '',
+            'contact_account_id' => $contactAccountId, 'contact_person' => $this->text($input, 'contact_person', 180),
+            'contact_phone' => $this->text($input, 'contact_phone', 40), 'supervisor_id' => $supervisorId,
+            'participant_ids' => json_encode($participantIds, JSON_THROW_ON_ERROR), 'remark' => $this->text($input, 'remark', 10000),
+            'news_url' => $this->url($input, 'news_url', 500),
         ];
         $id = $this->integer($input, 'id', false);
         if (!$id) {
-            $id = BaseVisitRecord::connection()->transaction(fn () => BaseVisitRecord::createPlan($values + [
-                'contact_phone' => $teacher['phone'], 'status' => 'pending_time', 'revision' => 1,
-                'created_by' => CurrentContext::accountId(), 'updated_by' => CurrentContext::accountId(),
-                'created_at' => date('Y-m-d H:i:s'), 'updated_at' => date('Y-m-d H:i:s'),
-            ]));
+            $id = BaseVisitRecord::connection()->transaction(function () use ($values): int {
+                $id = BaseVisitRecord::createPlan($values + [
+                    'status' => 'pending_time', 'revision' => 1, 'created_by' => CurrentContext::accountId(), 'updated_by' => CurrentContext::accountId(),
+                    'created_at' => date('Y-m-d H:i:s'), 'updated_at' => date('Y-m-d H:i:s'),
+                ]);
+                BaseVisitRecord::syncParticipants($id, json_decode((string) $values['participant_ids'], true) ?: []);
+                return $id;
+            });
             return $this->detail($id);
         }
-        return $this->mutate($input, function ($plan) use ($values, $teacher): array {
+        return $this->mutate($input, function ($plan) use ($values, $participantIds, $teacherId): array {
             if (!$this->permissions($plan)['can_assign']) throw new RuntimeException('已完成或已取消的安排不能修改', 409);
-            if ((int) $plan['teacher_id'] !== $values['teacher_id'] || (int) $plan['base_id'] !== $values['base_id']) {
-                $values += ['visit_date' => null, 'visit_period' => null, 'start_time' => null, 'end_time' => null,
-                    'scheduled_at' => null, 'status' => 'pending_time', 'contact_phone' => $teacher['phone']];
-            }
+            $oldParticipants = BaseVisitRecord::participantIds($plan);
+            $changed = (int) $plan['base_id'] !== (int) $values['base_id'] || $oldParticipants !== $participantIds;
+            if ($changed) $values += ['visit_date' => null, 'visit_period' => null, 'start_time' => null, 'end_time' => null, 'scheduled_at' => null, 'status' => 'pending_time'];
             return $values;
         });
     }
@@ -93,18 +114,21 @@ class BaseVisitService
     {
         $date = $this->text($input, 'visit_date', 10, true);
         $this->date($date, 'Y-m-d', '走访日期');
-        $period = $this->text($input, 'visit_period', 10, true);
-        if (!in_array($period, ['am', 'pm'], true)) throw new RuntimeException('请选择上午或下午', 400);
         $start = $this->time($this->text($input, 'start_time', 8, true));
-        $endValue = $this->text($input, 'end_time', 8);
-        $end = $endValue === '' ? null : $this->time($endValue);
-        if (($start < '12:00:00' ? 'am' : 'pm') !== $period) throw new RuntimeException('开始时间与上午/下午不一致', 400);
-        if ($end !== null && $end <= $start) throw new RuntimeException('结束时间必须晚于开始时间', 400);
-        $phone = $this->text($input, 'contact_phone', 40);
-        return $this->mutate($input, function ($plan) use ($date, $period, $start, $end, $phone): array {
+        $end = $this->time($this->text($input, 'end_time', 8, true));
+        if ($end <= $start) throw new RuntimeException('结束时间必须晚于开始时间', 400);
+        $period = $start < '12:00:00' ? 'am' : 'pm';
+        return $this->mutate($input, function ($plan) use ($date, $period, $start, $end): array {
             if (!$this->permissions($plan)['can_schedule']) throw new RuntimeException('当前安排不能填写时间', 403);
+            $participantIds = BaseVisitRecord::participantIds($plan);
+            BaseVisitRecord::lockParticipants($participantIds);
+            $conflicts = BaseVisitRecord::conflictingParticipants((int) $plan['id'], $date, $start, $end, $participantIds);
+            if ($conflicts) {
+                $names = implode('、', array_values(array_unique(array_map(fn (array $row): string => (string) ($row['base_name'] ?? '其他基地'), $conflicts))));
+                throw new RuntimeException('走访人员存在时间冲突：' . $names, 409);
+            }
             return ['visit_date' => $date, 'visit_period' => $period, 'start_time' => $start, 'end_time' => $end,
-                'contact_phone' => $phone, 'status' => 'scheduled', 'scheduled_at' => date('Y-m-d H:i:s')];
+                'participant_ids' => json_encode($participantIds, JSON_THROW_ON_ERROR), 'status' => 'scheduled', 'scheduled_at' => date('Y-m-d H:i:s')];
         });
     }
 
@@ -140,6 +164,23 @@ class BaseVisitService
             if (!$this->permissions($plan)['can_cancel']) throw new RuntimeException('当前安排不能取消', 403);
             return ['status' => 'cancelled', 'cancel_reason' => $reason];
         });
+    }
+
+    private function participantIds(array $input): array
+    {
+        $raw = $input['participant_ids'] ?? $input['participants'] ?? [];
+        if (is_string($raw)) $raw = json_decode($raw, true);
+        if (!is_array($raw)) $raw = [];
+        $ids = array_values(array_unique(array_filter(array_map('intval', $raw), fn (int $id): bool => $id > 0)));
+        sort($ids, SORT_NUMERIC);
+        if (!$ids) {
+            $teacherId = $this->integer($input, 'teacher_id', false);
+            if ($teacherId) {
+                $accountId = BaseVisitRecord::teacherAccountId($teacherId);
+                if ($accountId) $ids[] = $accountId;
+            }
+        }
+        return $ids;
     }
 
     private function mutate(array $input, callable $callback): array
@@ -203,6 +244,16 @@ class BaseVisitService
         if (!is_string($value)) throw new RuntimeException($key . ' 参数无效', 400);
         $value = trim($value);
         if (($required && $value === '') || mb_strlen($value) > $max) throw new RuntimeException($key . ' 不能为空或超过长度限制', 400);
+        return $value;
+    }
+
+    private function url(array $input, string $key, int $max): ?string
+    {
+        $value = $this->text($input, $key, $max);
+        if ($value === '') return null;
+        if (!filter_var($value, FILTER_VALIDATE_URL) || !preg_match('/^https?:\\/\\//i', $value)) {
+            throw new RuntimeException($key . ' 必须是 http 或 https 链接', 400);
+        }
         return $value;
     }
 

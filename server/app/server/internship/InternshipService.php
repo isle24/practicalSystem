@@ -382,6 +382,26 @@ class InternshipService
         });
     }
 
+    /** 删除一个或多个实习基地。 */
+    public function removeBase(Request $request): array
+    {
+        $this->requirePermission('internship:manage');
+        $this->requireAdminRole();
+        $rawIds = $request->input('ids', []);
+        if (is_string($rawIds)) $rawIds = json_decode($rawIds, true) ?: preg_split('/[,\\s]+/', trim($rawIds));
+        $ids = $this->intArray($rawIds);
+        $singleId = $this->optionalInt($request, 'id');
+        if ($singleId) $ids[] = $singleId;
+        $ids = array_values(array_unique(array_filter($ids, static fn (int $id): bool => $id > 0)));
+        if (!$ids) throw new InvalidArgumentException('请选择要删除的实习基地');
+        if (count($ids) > 100) throw new InvalidArgumentException('单次最多删除 100 个实习基地');
+
+        $deletedAt = $this->now();
+        $count = $this->connection()->transaction(fn (): int => InternshipRecord::softDeleteBases($this->scopeContext(), $ids, $deletedAt));
+        if ($count !== count($ids)) throw new RuntimeException('部分实习基地不存在或无权限，请刷新列表后重试', 40301);
+        return ['deleted' => $count, 'ids' => $ids];
+    }
+
     /** 预览实习基地汇总表 */
     public function previewBaseImport(Request $request): array
     {

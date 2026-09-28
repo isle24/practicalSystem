@@ -10,6 +10,7 @@ use support\Redis;
 
 class WechatBindingService
 {
+    private const BINDING_ROLES = ['teacher', 'student', 'super_admin', 'school_admin', 'college_admin', 'profession_admin'];
     public const BROWSER_COOKIE = 'wechat_browser';
     public const IDENTITY_COOKIE = 'wechat_identity';
     public const TTL = 600;
@@ -18,7 +19,8 @@ class WechatBindingService
     public function contextForUser(int $userId, string $roleType): array
     {
         $config = new ConfigService();
-        $required = in_array($roleType, ['teacher', 'student'], true);
+        $required = in_array($roleType, self::BINDING_ROLES, true);
+        $enforced = in_array($roleType, ['teacher', 'student'], true);
         $allowUnbound = $config->get('wechat.allow_unbound_login') === true;
         $corpId = trim((string) $config->get('wechat.corp_id'));
         $binding = UserWechat::currentByUser($userId);
@@ -27,7 +29,7 @@ class WechatBindingService
         return [
             'bound' => $bound,
             'required' => $required,
-            'enforced' => $required && !$allowUnbound,
+            'enforced' => $enforced && !$allowUnbound,
             'allow_unbound_login' => $allowUnbound,
             'binding_outdated' => $binding !== null && !$bound,
             'wechat_name' => (string) ($binding['wechat_name'] ?? ''),
@@ -50,7 +52,9 @@ class WechatBindingService
 
     public function isBlocked(array $binding): bool
     {
-        if (empty($binding['enforced'])) return false;
+        $roleType = (string) CurrentContext::roleType();
+        $forceInWechat = $this->inWechat() && in_array($roleType, ['teacher', 'student'], true);
+        if (empty($binding['enforced']) && !$forceInWechat) return false;
         if (empty($binding['bound'])) return true;
         if (!$this->inWechat()) return false;
         $status = $this->status();
@@ -113,7 +117,7 @@ class WechatBindingService
 
     public function bind(): array
     {
-        if (!in_array(CurrentContext::roleType(), ['teacher', 'student'], true)) throw new RuntimeException('当前角色无需绑定企业微信');
+        if (!in_array(CurrentContext::roleType(), self::BINDING_ROLES, true)) throw new RuntimeException('当前角色无需绑定企业微信');
         $identity = $this->identity();
         if (!$identity) throw new RuntimeException('企业微信身份已失效，请重新获取身份');
         $key = $this->key('bind', (string) request()->cookie(self::IDENTITY_COOKIE, ''));

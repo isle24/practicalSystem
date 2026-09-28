@@ -1,6 +1,7 @@
 import { computed, onBeforeUnmount, onMounted, reactive, watch } from 'vue';
 
 export function useWechatBinding({ context, request, backendUrl }) {
+  const bindingRoles = ['teacher', 'student', 'super_admin', 'school_admin', 'college_admin', 'profession_admin'];
   const inWechat = /wxwork/i.test(navigator.userAgent);
   const callbackUrl = new URL(window.location.href);
   const oauthResult = callbackUrl.searchParams.get('wechat_oauth');
@@ -16,14 +17,15 @@ export function useWechatBinding({ context, request, backendUrl }) {
     const current = context();
     return current.account_id ? [window.__PRACTICAL_DESKTOP__?.serverOrigin || backendUrl('/'), current.school_database_id, current.school_code, current.school_id, current.account_id].join(':') : '';
   });
-  const required = computed(() => ['teacher', 'student'].includes(context().role_type));
+  const required = computed(() => bindingRoles.includes(context().role_type));
   const status = computed(() => state.sessionKey === sessionKey.value ? state.status : null);
   const blocked = computed(() => {
     const binding = status.value || context().wechat_binding || {};
-    if (!sessionKey.value || !required.value || binding.enforced === false) return false;
+    const forceInWechat = inWechat && ['teacher', 'student'].includes(context().role_type);
+    if (!sessionKey.value || !required.value || (binding.enforced === false && !forceInWechat)) return false;
     return !binding.bound || (inWechat && (!binding.identity_ready || !binding.identity_matches));
   });
-  const show = computed(() => Boolean(context().account_id && required.value && (blocked.value || state.open)));
+  const show = computed(() => Boolean(context().account_id && required.value && (blocked.value || state.open || (inWechat && status.value && !status.value.bound))));
   const publicUrl = computed(() => new URL('/h5/?wechat_bind=1', window.__PRACTICAL_DESKTOP__?.serverOrigin || backendUrl('/')).href);
 
   watch(sessionKey, (key, previous) => {

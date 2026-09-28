@@ -133,6 +133,13 @@ class InternshipController
         return $this->handle(fn (): array => $this->service()->saveBase($request));
     }
 
+    /** 删除实习基地。 */
+    #[OperationLog('删除实习基地')]
+    public function removeBase(Request $request): Response
+    {
+        return $this->handle(fn (): array => $this->service()->removeBase($request));
+    }
+
     /**
      * 预览实习基地 Excel 导入
      */

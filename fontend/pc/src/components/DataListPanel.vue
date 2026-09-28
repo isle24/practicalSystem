@@ -88,7 +88,8 @@
       </div>
     </div>
 
-    <el-table :data="rows" height="100%" size="small" stripe v-loading="loading">
+    <el-table :data="rows" row-key="id" height="100%" size="small" stripe v-loading="loading" @selection-change="selection => emit('selection-change', selection)">
+      <el-table-column v-if="selectable" type="selection" width="46" fixed="left" reserve-selection />
       <el-table-column type="index" label="序号" width="66" fixed="left" align="center" :index="index => tableSequence(index, pagination)" />
       <el-table-column
         v-for="column in visibleColumns"
@@ -206,13 +207,17 @@ const props = defineProps({
     type: Array,
     default: () => [],
   },
+  selectable: {
+    type: Boolean,
+    default: false,
+  },
   storageKey: {
     type: String,
     default: '',
   },
 });
 
-const emit = defineEmits(['filter-change', 'page-change', 'reset', 'row-action', 'search']);
+const emit = defineEmits(['filter-change', 'page-change', 'reset', 'row-action', 'search', 'selection-change']);
 const localFilterValues = reactive({});
 const filtersRef = ref(null);
 const columnMenuRef = ref(null);

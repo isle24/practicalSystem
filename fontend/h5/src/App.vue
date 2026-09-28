@@ -65,7 +65,7 @@
         :switch-state="switchAccountState"
         :role-labels="roleNameMap"
         :wechat-bound="!!wechatStatus?.bound"
-        :can-bind-wechat="isStudentRole || isTeacherRole"
+        :can-bind-wechat="isStudentRole || isTeacherRole || isAdminRole"
         @open-tab="activeTab = $event"
         @switch-account="switchMobileAccount"
         @mobile-verified="loadSwitchableAccounts"

@@ -64,6 +64,12 @@ class CronTask
                 return (new InternshipScheduledService())->remindExpiringInsurance();
             });
         });
+
+        new Crontab('35 * * * * *', function (): void {
+            $this->runForSchools('base_visit_reminder', date('YmdHi'), 55, function (int $_databaseId): array {
+                return (new InternshipScheduledService())->remindBaseVisits();
+            });
+        });
     }
 
     /**

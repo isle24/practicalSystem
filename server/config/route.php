@@ -52,6 +52,8 @@ Route::post('/api/base-visit/record', [\app\controller\Api\BaseVisitController::
 Route::post('/api/base-visit/cancel', [\app\controller\Api\BaseVisitController::class, 'cancel']);
 Route::disableDefaultRoute(\app\controller\Api\BaseVisitController::class);
 
+Route::post('/api/internship/remove-base', [\app\controller\Api\InternshipController::class, 'removeBase']);
+
 Route::get('/api/account-import/tasks', [\app\controller\Api\AccountImportController::class, 'tasks']);
 Route::get('/api/account-import/detail', [\app\controller\Api\AccountImportController::class, 'detail']);
 Route::get('/api/account-import/teacher-template', [\app\controller\Api\AccountImportController::class, 'teacherTemplate']);

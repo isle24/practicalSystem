@@ -1026,6 +1026,26 @@ class MessageRecord extends TableRecord
                 'link_url_tpl' => '#panel=internship:insurances',
                 'sort' => 100,
             ],
+            [
+                'uuid' => '00000000-0000-0000-0000-000000240011',
+                'name' => '基地走访预约提醒',
+                'code' => 'base_visit_reminder',
+                'title_tpl' => '基地走访提醒：{base_name}',
+                'content_tpl' => '你有一项基地走访安排：{visit_date} {start_time}—{end_time}，基地：{base_name}。联系人：{contact_person} {contact_phone}。',
+                'type' => 'todo',
+                'level' => 'important',
+                'description' => '基地走访预约开始前一小时提醒走访人员、主管院长和联系人。',
+                'variables' => [
+                    'base_name' => '基地名称',
+                    'visit_date' => '走访日期',
+                    'start_time' => '开始时间',
+                    'end_time' => '结束时间',
+                    'contact_person' => '联系人姓名',
+                    'contact_phone' => '联系电话',
+                ],
+                'link_url_tpl' => '#panel=internship:baseVisits',
+                'sort' => 110,
+            ],
             ...self::workflowTemplates(),
         ];
     }
