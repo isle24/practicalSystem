@@ -39,7 +39,17 @@ class AccountImportConsumer implements Consumer
             if ($connected) {
                 $service->markFailed($taskId, '任务执行中断，请检查管理员权限、数据结构及队列后重试', $cursor);
             }
-            Log::error('account import failed', ['database_id' => $databaseId, 'task_id' => $taskId, 'exception' => get_class($exception), 'code' => $exception->getCode()]);
+            Log::error('account import failed', [
+                'database_id' => $databaseId,
+                'task_id' => $taskId,
+                'cursor' => $cursor,
+                'exception' => get_class($exception),
+                'code' => $exception->getCode(),
+                'message' => $exception->getMessage(),
+                'file' => $exception->getFile(),
+                'line' => $exception->getLine(),
+                'trace' => mb_substr($exception->getTraceAsString(), 0, 12000),
+            ]);
             if (!$connected) {
                 throw $exception;
             }

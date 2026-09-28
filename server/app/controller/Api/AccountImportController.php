@@ -6,6 +6,7 @@ use app\attribute\OperationLog;
 use app\controller\Api\Concerns\Responds;
 use app\server\account\AccountImportService;
 use InvalidArgumentException;
+use support\Log;
 use support\Request;
 use support\Response;
 use Throwable;
@@ -96,6 +97,14 @@ class AccountImportController
         if (!in_array($status, [400, 403, 404, 409, 422, 503], true)) {
             $status = 500;
         }
+        Log::error('account import request failed', [
+            'exception' => get_class($exception),
+            'code' => $exception->getCode(),
+            'message' => $exception->getMessage(),
+            'file' => $exception->getFile(),
+            'line' => $exception->getLine(),
+            'trace' => mb_substr($exception->getTraceAsString(), 0, 12000),
+        ]);
         $message = $status === 500 ? '账号导入处理失败，请检查数据库结构与服务日志' : $exception->getMessage();
         return $this->fail($status * 100, $message, $status);
     }
