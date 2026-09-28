@@ -16,6 +16,7 @@ class MessageRelay
 {
     private array $schools = [];
     private int $lastErrorAt = 0;
+    private bool $running = false;
 
     /** 启动通知转发并缓存学校连接配置。 */
     public function onWorkerStart(): void
@@ -35,22 +36,28 @@ class MessageRelay
     /** 行锁防止多个服务实例同时消费同一通知。 */
     private function relay(): void
     {
-        foreach ($this->schools as $school) {
-            Context::reset();
-            try {
-                $id = (int) $school['database_id'];
-                (new SchoolConnectionManager())->ensureConnection($id, $school);
-                MessageRealtimeRecord::connection()->transaction(function () use ($id): void {
-                    $rows = MessageRealtimeRecord::pending();
-                    foreach ($rows as $row) {
-                        Redis::publish(config('message_realtime.channel'), json_encode([
-                            'school' => $id, 'accounts' => json_decode($row['account_ids'], true), 'topic' => $row['topic'],
-                        ]));
-                    }
-                    if ($rows) MessageRealtimeRecord::acknowledge(array_column($rows, 'id'));
-                });
-            } catch (Throwable $e) { $this->logError($e); }
-            finally { Context::reset(); }
+        if ($this->running) return;
+        $this->running = true;
+        try {
+            foreach ($this->schools as $school) {
+                Context::reset();
+                try {
+                    $id = (int) $school['database_id'];
+                    (new SchoolConnectionManager())->ensureConnection($id, $school);
+                    MessageRealtimeRecord::connection()->transaction(function () use ($id): void {
+                        $rows = MessageRealtimeRecord::pending();
+                        foreach ($rows as $row) {
+                            Redis::publish(config('message_realtime.channel'), json_encode([
+                                'school' => $id, 'accounts' => json_decode($row['account_ids'], true), 'topic' => $row['topic'],
+                            ]));
+                        }
+                        if ($rows) MessageRealtimeRecord::acknowledge(array_column($rows, 'id'));
+                    });
+                } catch (Throwable $e) { $this->logError($e); }
+                finally { Context::reset(); }
+            }
+        } finally {
+            $this->running = false;
         }
     }
 

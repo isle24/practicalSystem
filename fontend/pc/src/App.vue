@@ -1127,6 +1127,7 @@
                       :filters="internshipListConfigs.baseFlows.filters"
                       :filter-values="internshipState.filters.baseFlows"
                       :selectable="canManageInternship"
+                      :reserve-selection="false"
                       :loading="internshipState.loading"
                       :pagination="internshipState.lists.baseFlows.pagination"
                       :rows="internshipState.lists.baseFlows.items"

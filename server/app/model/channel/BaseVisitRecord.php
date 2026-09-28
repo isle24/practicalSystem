@@ -3,7 +3,6 @@
 namespace app\model\channel;
 
 use app\server\CurrentContext;
-use Illuminate\Database\Query\Builder;
 
 class BaseVisitRecord extends TableRecord
 {
@@ -42,7 +41,7 @@ class BaseVisitRecord extends TableRecord
             'super_admin', 'school_admin' => $query,
             'college_admin' => $query->whereIn('base_visit_plan.dep_id', self::scopeIds('dep_id')),
             'profession_admin' => $query->whereIn('base_visit_plan.base_id', self::professionBases()),
-            'teacher' => $query->where(function (Builder $builder): void {
+            'teacher' => $query->where(function ($builder): void {
                 $accountId = CurrentContext::accountId();
                 if ($accountId) $builder->whereExists(function ($sub) use ($accountId): void {
                     $sub->from('base_visit_participant')->whereColumn('base_visit_participant.visit_id', 'base_visit_plan.id')->where('base_visit_participant.account_id', $accountId)->whereNull('base_visit_participant.deleted_at');
@@ -103,7 +102,7 @@ class BaseVisitRecord extends TableRecord
             ->whereIn('conflict.status', ['scheduled', 'completed'])
             ->whereColumn('conflict.visit_date', 'base_visit_plan.visit_date')
             ->whereColumn('conflict.start_time', '<', 'base_visit_plan.end_time')
-            ->where(function (Builder $builder): void {
+            ->where(function ($builder): void {
                 $builder->whereNull('conflict.end_time')->orWhereColumn('conflict.end_time', '>', 'base_visit_plan.start_time');
             })
             ->whereColumn('conflict.id', '<>', 'base_visit_plan.id')
@@ -120,7 +119,7 @@ class BaseVisitRecord extends TableRecord
             ->where('base_visit_plan.id', '<>', $planId)->whereIn('base_visit_plan.status', ['scheduled', 'completed'])
             ->where('base_visit_plan.visit_date', $date)
             ->where('base_visit_plan.start_time', '<', $end)
-            ->where(function (Builder $builder) use ($start): void {
+            ->where(function ($builder) use ($start): void {
                 $builder->whereNull('base_visit_plan.end_time')->orWhere('base_visit_plan.end_time', '>', $start);
             });
         $query->whereExists(function ($sub) use ($participantIds): void {

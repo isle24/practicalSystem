@@ -113,6 +113,18 @@ class SchoolConnectionManager
             if ($resolver && method_exists($resolver, 'purge')) {
                 $resolver->purge($name);
             }
+            if (!$resolver) {
+                return;
+            }
+            $poolsProperty = new \ReflectionProperty($resolver, 'pools');
+            $poolsProperty->setAccessible(true);
+            $pools = (array) $poolsProperty->getValue();
+            $pool = $pools[$name] ?? null;
+            if ($pool && method_exists($pool, 'closeConnections')) {
+                $pool->closeConnections();
+            }
+            unset($pools[$name]);
+            $poolsProperty->setValue(null, $pools);
         } catch (Throwable) {
         }
     }

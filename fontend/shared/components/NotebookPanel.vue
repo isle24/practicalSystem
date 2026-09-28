@@ -1,5 +1,5 @@
 <template>
-  <section class="notebook" :class="{ 'note-mobile-detail': mobileDetail }">
+  <section ref="notebook" class="notebook" :class="{ 'note-mobile-detail': mobileDetail }">
     <aside class="note-list">
       <header><strong>记事本</strong><button title="新建笔记" :disabled="busy || trash" @click="createNote"><Plus :size="20" /></button></header>
       <div v-if="recovery" class="note-recovery"><span>有未保存的本机草稿</span><div><button @click="restoreDraft">恢复编辑</button><button @click="recovery = null">暂不恢复</button></div></div>
@@ -46,7 +46,7 @@ import { Plus, Search, ArrowRight, ChevronLeft, ChevronRight, Save, Trash2, Rota
 
 const props = defineProps({ request: { type: Function, required: true }, sessionKey: { type: String, required: true } });
 const items = ref([]), keyword = ref(''), trash = ref(false), loading = ref(false), busy = ref(false), error = ref('');
-const current = ref(null), baseline = ref(''), mobileDetail = ref(false), mode = ref('edit'), editor = ref(null);
+const current = ref(null), baseline = ref(''), mobileDetail = ref(false), mode = ref('edit'), editor = ref(null), notebook = ref(null);
 const pagination = ref({ page: 1, page_size: 20, total: 0 });
 const modes = [{ key: 'edit', name: '编辑' }, { key: 'preview', name: '预览' }, { key: 'split', name: '对照' }];
 const markdown = new MarkdownIt({ html: false, linkify: true, breaks: true });
@@ -61,7 +61,7 @@ const dirty = computed(() => Boolean(current.value && !current.value.deleted_at 
 const localDraft = claimNoteDraft(props.sessionKey);
 const recovery = ref(localDraft.draft);
 const draftKey = () => localDraft.key;
-let listSequence = 0, disposed = false;
+let listSequence = 0, disposed = false, autoSaveTimer = null;
 
 /** 获取分页摘要，不让旧请求覆盖新筛选。 */
 async function load(page = 1) {
@@ -127,7 +127,10 @@ async function save() {
     await load(pagination.value.page);
     return true;
   } catch (e) { if (!disposed) error.value = e.message; return false; }
-  finally { busy.value = false; }
+  finally {
+    busy.value = false;
+    if (!disposed && dirty.value) queueAutoSave(1000);
+  }
 }
 
 /** 变更回收站状态，永久删除必须显式确认。 */
@@ -148,6 +151,25 @@ async function back() { if (await beforeLeave()) mobileDetail.value = false; }
 function insert(value) { const el = editor.value; if (!el) return; const at = el.selectionStart; current.value.content_md = current.value.content_md.slice(0, at) + value + current.value.content_md.slice(at); nextTick(() => { el.focus(); el.setSelectionRange(at + value.length, at + value.length); }); }
 function unload(event) { if (dirty.value) { event.preventDefault(); event.returnValue = ''; } }
 
+function queueAutoSave(delay = 1000) {
+  if (autoSaveTimer) clearTimeout(autoSaveTimer);
+  if (!dirty.value || current.value?.deleted_at) return;
+  autoSaveTimer = setTimeout(() => {
+    autoSaveTimer = null;
+    if (dirty.value && !busy.value) save();
+    else if (dirty.value) queueAutoSave(500);
+  }, delay);
+}
+
+function handleShortcut(event) {
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's'
+    && notebook.value?.contains(document.activeElement) && current.value && dirty.value) {
+    event.preventDefault();
+    if (autoSaveTimer) { clearTimeout(autoSaveTimer); autoSaveTimer = null; }
+    save();
+  }
+}
+
 /** 用户主动恢复草稿，保留其他窗口的本机副本。 */
 async function restoreDraft() {
   if (!recovery.value || !(await beforeLeave())) return;
@@ -157,12 +179,21 @@ async function restoreDraft() {
 }
 
 watch(() => [current.value?.title, current.value?.content_md], () => {
-  if (dirty.value) { try { localStorage.setItem(draftKey(), JSON.stringify({ item: current.value, baseline: baseline.value })); } catch { error.value = '本机草稿存储不可用，请及时保存到服务器'; } }
+  if (dirty.value) {
+    try { localStorage.setItem(draftKey(), JSON.stringify({ item: current.value, baseline: baseline.value })); } catch { error.value = '本机草稿存储不可用，请及时保存到服务器'; }
+    queueAutoSave();
+  }
 });
 onMounted(() => {
-  load(1); window.addEventListener('beforeunload', unload);
+  load(1); window.addEventListener('beforeunload', unload); window.addEventListener('keydown', handleShortcut);
 });
-onBeforeUnmount(() => { disposed = true; localDraft.release(); window.removeEventListener('beforeunload', unload); });
+onBeforeUnmount(() => {
+  disposed = true;
+  if (autoSaveTimer) clearTimeout(autoSaveTimer);
+  localDraft.release();
+  window.removeEventListener('beforeunload', unload);
+  window.removeEventListener('keydown', handleShortcut);
+});
 defineExpose({ beforeLeave });
 </script>
 

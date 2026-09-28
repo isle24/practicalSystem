@@ -16,6 +16,7 @@ class WechatMessageRelay
 {
     private array $schools = [];
     private int $lastErrorAt = 0;
+    private bool $running = false;
 
     public function onWorkerStart(): void
     {
@@ -32,18 +33,24 @@ class WechatMessageRelay
 
     private function relay(): void
     {
-        foreach ($this->schools as $school) {
-            Context::reset();
-            try {
-                $id = (int) $school['database_id'];
-                (new SchoolConnectionManager())->ensureConnection($id, $school);
-                foreach (WechatMessageRecord::pendingIds() as $logId) {
-                    $key = 'wechat:dispatch:' . $id . ':' . (int) $logId;
-                    if (!Redis::set($key, '1', 'EX', 60, 'NX')) continue;
-                    RedisQueue::send('wechat-message', ['database_id' => $id, 'log_id' => (int) $logId]);
-                }
-            } catch (Throwable) { $this->logError(); }
-            finally { Context::reset(); }
+        if ($this->running) return;
+        $this->running = true;
+        try {
+            foreach ($this->schools as $school) {
+                Context::reset();
+                try {
+                    $id = (int) $school['database_id'];
+                    (new SchoolConnectionManager())->ensureConnection($id, $school);
+                    foreach (WechatMessageRecord::pendingIds() as $logId) {
+                        $key = 'wechat:dispatch:' . $id . ':' . (int) $logId;
+                        if (!Redis::set($key, '1', 'EX', 60, 'NX')) continue;
+                        RedisQueue::send('wechat-message', ['database_id' => $id, 'log_id' => (int) $logId]);
+                    }
+                } catch (Throwable) { $this->logError(); }
+                finally { Context::reset(); }
+            }
+        } finally {
+            $this->running = false;
         }
     }
 

@@ -14,7 +14,7 @@ class InternshipBaseImportRecord extends TableRecord
             ->whereNull('deleted_at');
         self::applyScope($departmentQuery, $scope, 'department.dep_id', null);
         $departments = $departmentQuery->get(['dep_id', 'dep_name', 'dep_short_name'])
-            ->map(static fn ($row): array => $row->toArray())
+            ->map(static fn ($row): array => self::rowArray($row))
             ->all();
         $departmentMap = ProfileAccountRecord::departmentAliasMap($departments);
 
@@ -25,11 +25,12 @@ class InternshipBaseImportRecord extends TableRecord
         $professions = $professionQuery->get(['profession_id', 'profession_name', 'dep_id', 'grade_id']);
         $professionMap = [];
         foreach ($professions as $profession) {
-            $professionMap[(int) $profession->dep_id][self::nameKey((string) $profession->profession_name)] = [
-                'profession_id' => (int) $profession->profession_id,
-                'profession_name' => (string) $profession->profession_name,
-                'dep_id' => (int) $profession->dep_id,
-                'grade_id' => (int) ($profession->grade_id ?? 0),
+            $profession = self::rowArray($profession);
+            $professionMap[(int) ($profession['dep_id'] ?? 0)][self::nameKey((string) ($profession['profession_name'] ?? ''))] = [
+                'profession_id' => (int) ($profession['profession_id'] ?? 0),
+                'profession_name' => (string) ($profession['profession_name'] ?? ''),
+                'dep_id' => (int) ($profession['dep_id'] ?? 0),
+                'grade_id' => (int) ($profession['grade_id'] ?? 0),
             ];
         }
 
@@ -385,7 +386,7 @@ class InternshipBaseImportRecord extends TableRecord
     {
         $departments = self::queryTable('department')->whereNull('deleted_at')
             ->get(['dep_id', 'dep_name', 'dep_short_name'])
-            ->map(static fn ($row): array => $row->toArray())
+            ->map(static fn ($row): array => self::rowArray($row))
             ->all();
 
         return ProfileAccountRecord::departmentAliasMap($departments);
@@ -415,9 +416,10 @@ class InternshipBaseImportRecord extends TableRecord
     {
         $map = [];
         foreach (self::queryTable('profession')->whereNull('deleted_at')->get(['profession_id', 'profession_name', 'dep_id']) as $row) {
-            $map[(int) $row->dep_id][self::nameKey((string) $row->profession_name)] = [
-                'profession_id' => (int) $row->profession_id,
-                'profession_name' => (string) $row->profession_name,
+            $row = self::rowArray($row);
+            $map[(int) ($row['dep_id'] ?? 0)][self::nameKey((string) ($row['profession_name'] ?? ''))] = [
+                'profession_id' => (int) ($row['profession_id'] ?? 0),
+                'profession_name' => (string) ($row['profession_name'] ?? ''),
             ];
         }
 
@@ -448,7 +450,7 @@ class InternshipBaseImportRecord extends TableRecord
         }
         $row = $query->first(['company_id', 'company_name']);
 
-        return $row ? $row->getAttributes() : null;
+        return $row ? self::rowArray($row) : null;
     }
 
     /** 按名称、学院和单位查询基地 */
@@ -467,7 +469,7 @@ class InternshipBaseImportRecord extends TableRecord
         }
         $row = $query->first(['id', 'name']);
 
-        return $row ? $row->getAttributes() : null;
+        return $row ? self::rowArray($row) : null;
     }
 
     /** 查询基地指定年份的申报资料 */
@@ -485,7 +487,7 @@ class InternshipBaseImportRecord extends TableRecord
         }
         $row = $query->first(['id', 'base_id', 'declaration_year']);
 
-        return $row ? $row->getAttributes() : null;
+        return $row ? self::rowArray($row) : null;
     }
 
     /** 恢复或创建基地专业关联 */
@@ -494,14 +496,18 @@ class InternshipBaseImportRecord extends TableRecord
         $existing = self::queryTable('base_profession')
             ->where('base_id', $baseId)
             ->where('profession_id', $professionId)
-            ->first(['id', 'deleted_at']);
+            ->first(['deleted_at']);
         if ($existing) {
-            if ($existing->deleted_at !== null) {
-                self::updateById('base_profession', (int) $existing->id, [
-                    'status' => 'enabled',
-                    'updated_at' => $now,
-                    'deleted_at' => null,
-                ]);
+            $existing = self::rowArray($existing);
+            if (($existing['deleted_at'] ?? null) !== null) {
+                self::queryTable('base_profession')
+                    ->where('base_id', $baseId)
+                    ->where('profession_id', $professionId)
+                    ->update([
+                        'status' => 'enabled',
+                        'updated_at' => $now,
+                        'deleted_at' => null,
+                    ]);
             }
             return false;
         }
@@ -600,5 +606,23 @@ class InternshipBaseImportRecord extends TableRecord
         $name = self::canonicalProfessionName($name);
         $name = function_exists('mb_strtolower') ? mb_strtolower($name) : strtolower($name);
         return (string) preg_replace('/[\s　]+/u', '', $name);
+    }
+
+    /** 将数据库查询行统一为数组，兼容 Eloquent 模型和 stdClass。 */
+    private static function rowArray(mixed $row): array
+    {
+        if (is_array($row)) {
+            return $row;
+        }
+        if (is_object($row)) {
+            if (method_exists($row, 'getAttributes')) {
+                return (array) $row->getAttributes();
+            }
+            if (method_exists($row, 'toArray')) {
+                return (array) $row->toArray();
+            }
+            return get_object_vars($row);
+        }
+        return [];
     }
 }
