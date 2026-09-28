@@ -2,6 +2,7 @@
 
 namespace app\model\channel;
 
+use Illuminate\Database\QueryException;
 use InvalidArgumentException;
 use RuntimeException;
 use Throwable;
@@ -96,9 +97,13 @@ class AccountImportRecord extends TableRecord
     public static function createTask(array $values): int
     {
         self::ensureSchema();
-        return (int) self::queryTable('account_import_task')->insertGetId(array_merge([
-            'uuid' => self::uuid(), 'created_at' => date('Y-m-d H:i:s'), 'updated_at' => date('Y-m-d H:i:s'),
-        ], $values));
+        try {
+            return (int) self::queryTable('account_import_task')->insertGetId(array_merge([
+                'uuid' => self::uuid(), 'created_at' => date('Y-m-d H:i:s'), 'updated_at' => date('Y-m-d H:i:s'),
+            ], $values));
+        } catch (QueryException $exception) {
+            throw new RuntimeException('账号导入任务表字段与当前版本不一致，请重新执行数据库结构升级 SQL', 422, $exception);
+        }
     }
 
     public static function updateTask(int $id, array $values): void
