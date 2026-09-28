@@ -5,6 +5,7 @@ namespace app\controller\Api;
 use app\attribute\OperationLog;
 use app\controller\Api\Concerns\Responds;
 use app\server\internship\BaseVisitService;
+use support\Log;
 use support\Request;
 use support\Response;
 use Throwable;
@@ -60,7 +61,13 @@ class BaseVisitController
             return $this->ok($callback())->withHeader('Cache-Control', 'private, no-store');
         } catch (Throwable $exception) {
             $status = in_array($exception->getCode(), [400, 403, 404, 409], true) ? $exception->getCode() : 500;
-            return $this->fail($status * 100, $status === 500 ? '基地巡查服务异常，请确认数据库结构已更新' : $exception->getMessage(), $status)
+            if ($status === 500) Log::error('基地巡查服务异常: ' . $exception);
+            $message = match ($status) {
+                409 => $exception->getMessage(),
+                500 => '基地巡查服务异常，请联系管理员查看服务日志',
+                default => $exception->getMessage(),
+            };
+            return $this->fail($status * 100, $message, $status)
                 ->withHeader('Cache-Control', 'private, no-store');
         }
     }

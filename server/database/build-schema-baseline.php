@@ -33,6 +33,7 @@ function schemaBaselineSourceHashes(): array
         'database/init.php',
         'database/build-schema-baseline.php',
         'app/server/database/SchemaMetadata.php',
+        'app/server/database/SchemaComparator.php',
         'app/server/edu/EduImportSchema.php',
         'app/model/channel/AssistantProfile.php',
         'app/model/channel/AuthPasskey.php',

@@ -12,7 +12,27 @@ class BaseVisitRecord extends TableRecord
     public static function installed(): bool
     {
         $schema = self::connection()->getSchemaBuilder();
-        return $schema->hasTable('base_visit_plan') && $schema->hasTable('base_visit_record') && $schema->hasTable('base_visit_participant');
+        $columns = [
+            'base_visit_plan' => [
+                'id', 'uuid', 'revision', 'title', 'base_id', 'teacher_id', 'dep_id', 'base_name', 'base_address',
+                'base_department', 'base_category', 'base_location', 'base_manager_name', 'base_manager_phone',
+                'teacher_name', 'teacher_department', 'contact_phone', 'contact_account_id', 'contact_person',
+                'supervisor_id', 'participant_ids', 'news_url', 'visit_date', 'visit_period', 'start_time', 'end_time',
+                'remark', 'status', 'scheduled_at', 'cancel_reason', 'created_by', 'updated_by', 'created_at', 'updated_at', 'deleted_at',
+            ],
+            'base_visit_record' => [
+                'id', 'uuid', 'visit_id', 'actual_at', 'participants', 'contact_person', 'content', 'problems',
+                'follow_up', 'attachment_ids', 'created_by', 'updated_by', 'created_at', 'updated_at', 'deleted_at',
+            ],
+            'base_visit_participant' => ['id', 'uuid', 'visit_id', 'account_id', 'created_at', 'updated_at', 'deleted_at'],
+        ];
+        foreach ($columns as $table => $required) {
+            if (!$schema->hasTable($table)) return false;
+            foreach ($required as $column) {
+                if (!$schema->hasColumn($table, $column)) return false;
+            }
+        }
+        return true;
     }
 
     public static function visiblePlans(): mixed

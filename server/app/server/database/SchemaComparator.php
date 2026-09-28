@@ -33,13 +33,17 @@ class SchemaComparator
             $pendingColumns = [];
             foreach ($target['columns'] as $column => $definition) {
                 $exists = isset($current['columns'][$column]);
-                if ($exists && $this->columnSignature($definition) === $this->columnSignature($current['columns'][$column])) continue;
+                $lengthChange = $exists ? $this->columnLengthChange($definition, $current['columns'][$column]) : null;
+                if ($exists && ($this->columnSignature($definition) === $this->columnSignature($current['columns'][$column]) || $lengthChange === 'compatible')) continue;
                 $safe = !$exists && ($definition['nullable'] || $definition['default'] !== null)
                     && $definition['generation'] === '' && !str_contains($definition['extra'], 'auto_increment');
+                $safeExpansion = $exists && $lengthChange === 'expand' && !$this->indexedColumn($column, $target, $current);
+                if ($safeExpansion) $safe = true;
                 $action = $safe ? 'add' : 'review';
                 if (!$safe) $pendingColumns[$column] = true;
                 $sql = "ALTER TABLE {$quoted} " . ($exists ? 'MODIFY' : 'ADD') . ' COLUMN ' . $definition['definition'] . ';';
-                $differences[] = $this->difference($name, $column, $exists ? '字段定义不同' : '缺少字段', $current['columns'][$column]['definition'] ?? '', $definition['definition'], $action, $sql);
+                $type = !$exists ? '缺少字段' : ($safeExpansion ? '字段长度不足（可扩展）' : '字段定义不同');
+                $differences[] = $this->difference($name, $column, $type, $current['columns'][$column]['definition'] ?? '', $definition['definition'], $action, $sql);
             }
             foreach (array_diff_key($current['columns'], $target['columns']) as $column => $definition) {
                 $differences[] = $this->difference($name, $column, '额外字段', $definition['definition'], '', 'keep');
@@ -54,7 +58,7 @@ class SchemaComparator
                     }
                 }
                 $exists = isset($current['indexes'][$index]);
-                $safe = !$exists && !$definition['unique'];
+                $safe = !$definition['unique'];
                 foreach ($definition['columns'] as $column) {
                     if ($column['name'] === null || isset($pendingColumns[$column['name']])) $safe = false;
                 }
@@ -87,7 +91,7 @@ class SchemaComparator
         $lines = ['-- 数据库结构升级 SQL', '-- 基准版本：' . $this->singleLine($version), '-- 检查时间：' . $checkedAt,
             '-- 结构快照仅适用于检查时的目标库；执行前备份，避免与其他升级并行。',
             '-- 人工审核区均已注释；核对现有数据后逐项执行。额外对象仅记录并保留。',
-            'USE ' . SchemaMetadata::identifier($database) . ';', '', '-- 补齐缺失结构'];
+            'USE ' . SchemaMetadata::identifier($database) . ';', '', '-- 安全补齐和扩展结构'];
         foreach ($differences as $difference) {
             if ($difference['action'] !== 'add') continue;
             $lines[] = '-- ' . $this->label($difference);
@@ -113,6 +117,34 @@ class SchemaComparator
     private function columnSignature(array $column): array
     {
         return array_map(static fn ($key) => $column[$key], ['type', 'nullable', 'default', 'extra', 'charset', 'collation', 'generation']);
+    }
+
+    private function columnLengthChange(array $expected, array $actual): ?string
+    {
+        $expectedType = strtolower((string) $expected['type']);
+        $actualType = strtolower((string) $actual['type']);
+        if (!preg_match('/^(char|varchar|binary|varbinary)\(([0-9]+)\)$/D', $expectedType, $expectedMatch)
+            || !preg_match('/^(char|varchar|binary|varbinary)\(([0-9]+)\)$/D', $actualType, $actualMatch)
+            || $expectedMatch[1] !== $actualMatch[1]) return null;
+        if ($this->columnSignatureWithoutType($expected) !== $this->columnSignatureWithoutType($actual)) return null;
+        return (int) $expectedMatch[2] > (int) $actualMatch[2] ? 'expand' : 'compatible';
+    }
+
+    private function columnSignatureWithoutType(array $column): array
+    {
+        return array_map(static fn ($key) => $column[$key], ['nullable', 'default', 'extra', 'charset', 'collation', 'generation']);
+    }
+
+    private function indexedColumn(string $column, array $expected, array $actual): bool
+    {
+        foreach ([$expected['indexes'], $actual['indexes']] as $indexes) {
+            foreach ($indexes as $index) {
+                foreach ($index['columns'] as $definition) {
+                    if (($definition['name'] ?? null) === $column) return true;
+                }
+            }
+        }
+        return false;
     }
 
     private function indexSignature(array $index): array

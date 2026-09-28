@@ -2,6 +2,7 @@
 
 namespace app\model\channel;
 
+use app\server\CurrentContext;
 use Illuminate\Database\Query\Expression;
 
 class InternshipRecord extends TableRecord
