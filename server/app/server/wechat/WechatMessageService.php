@@ -11,6 +11,7 @@ use app\model\channel\WechatMessageRecord;
 use app\server\config\ConfigService;
 use app\server\CurrentContext;
 use RuntimeException;
+use support\Log;
 use support\Redis;
 use Throwable;
 
@@ -87,7 +88,17 @@ class WechatMessageService
                 return;
             }
             WechatMessageRecord::finish($claim, 'sent');
-        } catch (Throwable) {
+        } catch (Throwable $exception) {
+            Log::error('企业微信消息投递异常', [
+                'database_id' => CurrentContext::schoolDatabaseId(),
+                'log_id' => (int) ($claim['id'] ?? $logId),
+                'exception' => $exception::class,
+                'code' => $exception->getCode(),
+                'message' => $exception->getMessage(),
+                'file' => $exception->getFile(),
+                'line' => $exception->getLine(),
+                'trace' => mb_substr($exception->getTraceAsString(), 0, 12000),
+            ]);
             WechatMessageRecord::finish($claim, 'pending', '企业微信投递暂不可用，等待重试', $this->retryDelay($claim));
         }
     }
@@ -102,7 +113,11 @@ class WechatMessageService
         $cached = (string) Redis::get($key);
         if ($cached !== '') return $cached;
         $response = $this->client->getToken($corpId, $secret);
-        if ((int) ($response['errcode'] ?? -1) !== 0 || empty($response['access_token'])) throw new RuntimeException('获取企业微信访问凭证失败');
+        if ((int) ($response['errcode'] ?? -1) !== 0 || empty($response['access_token'])) {
+            $code = (int) ($response['errcode'] ?? -1);
+            $message = trim((string) ($response['errmsg'] ?? ''));
+            throw new RuntimeException('获取企业微信访问凭证失败：' . $code . ($message !== '' ? ' ' . $message : ''));
+        }
         Redis::setEx($key, max(1, (int) ($response['expires_in'] ?? 7200) - 60), (string) $response['access_token']);
         return (string) $response['access_token'];
     }

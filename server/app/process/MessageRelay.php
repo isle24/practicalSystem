@@ -29,8 +29,13 @@ class MessageRelay
     /** 每分钟更新启用学校，不按消息访问主库。 */
     private function reloadSchools(): void
     {
-        try { $this->schools = Database::enabledConnectionConfigs(); }
-        catch (Throwable $e) { $this->logError($e); }
+        try {
+            $this->schools = Database::enabledConnectionConfigs();
+        } catch (Throwable $exception) {
+            $this->logError($exception);
+        } finally {
+            Context::destroy();
+        }
     }
 
     /** 行锁防止多个服务实例同时消费同一通知。 */
@@ -40,9 +45,9 @@ class MessageRelay
         $this->running = true;
         try {
             foreach ($this->schools as $school) {
-                Context::reset();
+                Context::destroy();
+                $id = (int) ($school['database_id'] ?? 0);
                 try {
-                    $id = (int) $school['database_id'];
                     (new SchoolConnectionManager())->ensureConnection($id, $school);
                     MessageRealtimeRecord::connection()->transaction(function () use ($id): void {
                         $rows = MessageRealtimeRecord::pending();
@@ -53,8 +58,11 @@ class MessageRelay
                         }
                         if ($rows) MessageRealtimeRecord::acknowledge(array_column($rows, 'id'));
                     });
-                } catch (Throwable $e) { $this->logError($e); }
-                finally { Context::reset(); }
+                } catch (Throwable $exception) {
+                    $this->logError($exception, $id);
+                } finally {
+                    Context::destroy();
+                }
             }
         } finally {
             $this->running = false;
@@ -62,10 +70,18 @@ class MessageRelay
     }
 
     /** 限制依赖故障时的重复错误日志。 */
-    private function logError(Throwable $e): void
+    private function logError(Throwable $exception, ?int $databaseId = null): void
     {
         if (time() - $this->lastErrorAt < 60) return;
         $this->lastErrorAt = time();
-        Log::error('消息实时转发失败: ' . $e->getMessage());
+        Log::error('消息实时转发失败', [
+            'database_id' => $databaseId ?? null,
+            'exception' => $exception::class,
+            'code' => $exception->getCode(),
+            'message' => $exception->getMessage(),
+            'file' => $exception->getFile(),
+            'line' => $exception->getLine(),
+            'trace' => mb_substr($exception->getTraceAsString(), 0, 12000),
+        ]);
     }
 }

@@ -15,14 +15,14 @@ class WechatMessageConsumer implements Consumer
 
     public function consume($data): void
     {
-        Context::reset();
+        Context::destroy();
         try {
             (new SchoolConnectionManager())->bootstrapById((int) ($data['database_id'] ?? 0));
             (new WechatMessageService())->send((int) ($data['log_id'] ?? 0));
         } catch (Throwable $exception) {
             throw $exception;
         } finally {
-            Context::reset();
+            Context::destroy();
         }
     }
 }

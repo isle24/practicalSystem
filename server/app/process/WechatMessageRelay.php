@@ -27,8 +27,13 @@ class WechatMessageRelay
 
     private function reloadSchools(): void
     {
-        try { $this->schools = Database::enabledConnectionConfigs(); }
-        catch (Throwable) { $this->logError(); }
+        try {
+            $this->schools = Database::enabledConnectionConfigs();
+        } catch (Throwable $exception) {
+            $this->logError($exception);
+        } finally {
+            Context::destroy();
+        }
     }
 
     private function relay(): void
@@ -37,27 +42,42 @@ class WechatMessageRelay
         $this->running = true;
         try {
             foreach ($this->schools as $school) {
-                Context::reset();
+                Context::destroy();
+                $id = (int) ($school['database_id'] ?? 0);
                 try {
-                    $id = (int) $school['database_id'];
                     (new SchoolConnectionManager())->ensureConnection($id, $school);
                     foreach (WechatMessageRecord::pendingIds() as $logId) {
                         $key = 'wechat:dispatch:' . $id . ':' . (int) $logId;
                         if (!Redis::set($key, '1', 'EX', 60, 'NX')) continue;
                         RedisQueue::send('wechat-message', ['database_id' => $id, 'log_id' => (int) $logId]);
                     }
-                } catch (Throwable) { $this->logError(); }
-                finally { Context::reset(); }
+                } catch (Throwable $exception) {
+                    $this->logError($exception, $id);
+                } finally {
+                    Context::destroy();
+                }
             }
         } finally {
             $this->running = false;
         }
     }
 
-    private function logError(): void
+    private function logError(?Throwable $exception = null, ?int $databaseId = null): void
     {
         if (time() - $this->lastErrorAt < 60) return;
         $this->lastErrorAt = time();
-        Log::error('企业微信消息转发失败，持久化任务将继续重试');
+        $context = [];
+        if ($databaseId !== null) $context['database_id'] = $databaseId;
+        if ($exception) {
+            $context += [
+                'exception' => $exception::class,
+                'code' => $exception->getCode(),
+                'message' => $exception->getMessage(),
+                'file' => $exception->getFile(),
+                'line' => $exception->getLine(),
+                'trace' => mb_substr($exception->getTraceAsString(), 0, 12000),
+            ];
+        }
+        Log::error('企业微信消息转发失败，持久化任务将继续重试', $context);
     }
 }
