@@ -13,7 +13,6 @@ use InvalidArgumentException;
 use RuntimeException;
 use support\Request;
 use Throwable;
-use Tinywan\Storage\Adapter\LocalAdapter;
 use Webman\Http\UploadFile;
 use ZipArchive;
 
@@ -130,7 +129,7 @@ class FileService
             throw new InvalidArgumentException('文件大小超出限制');
         }
 
-        $uploaded = $this->uploadToLocalStorage($category, $allowedExtensions, $maxSize);
+        $uploaded = $this->uploadToLocalStorage($file, $category, $allowedExtensions, $maxSize);
         $savedPath = (string) $uploaded['save_path'];
 
         try {
@@ -748,32 +747,35 @@ class FileService
         ]);
     }
 
-    private function uploadToLocalStorage(string $category, array $allowedExtensions, int $maxSize): array
+    private function uploadToLocalStorage(UploadFile $file, string $category, array $allowedExtensions, int $maxSize): array
     {
         $segment = $this->schoolSegment();
         $block = $this->storageBlock();
         $uri = "/files/{$block}/{$segment}/{$category}/";
-        $adapter = new LocalAdapter([
-            'root' => public_path() . $uri,
-            'dirname' => date('Ymd'),
-            'domain' => '',
-            'uri' => $uri,
-            'algo' => 'sha1',
-            'include' => $allowedExtensions,
-            'exclude' => ['exe', 'sh', 'php', 'js', 'html'],
-            'single_limit' => $maxSize,
-            'total_limit' => $maxSize,
-            'nums' => 1,
-            '_is_file_upload' => true,
-        ]);
-
-        $uploaded = $adapter->uploadFile();
-        $file = $uploaded['file'] ?? reset($uploaded);
-        if (!is_array($file) || empty($file['save_path'])) {
-            throw new RuntimeException('文件保存失败');
+        $extension = strtolower($file->getUploadExtension());
+        if (!in_array($extension, $allowedExtensions, true)) {
+            throw new InvalidArgumentException('文件扩展名不允许');
+        }
+        $uniqueId = hash_file('sha1', $file->getPathname());
+        if (!is_string($uniqueId) || $uniqueId === '') {
+            throw new RuntimeException('文件校验失败');
+        }
+        $size = (int) $file->getSize();
+        $mimeType = $file->getUploadMimeType();
+        $directory = rtrim(public_path() . $uri, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . date('Ymd');
+        $savePath = $directory . DIRECTORY_SEPARATOR . $uniqueId . '.' . $extension;
+        try {
+            $file->move($savePath);
+        } catch (Throwable $exception) {
+            throw new RuntimeException('文件保存失败', 0, $exception);
         }
 
-        return $file;
+        return [
+            'save_path' => $savePath,
+            'url' => $uri . date('Ymd') . '/' . $uniqueId . '.' . $extension,
+            'size' => $size,
+            'mime_type' => $mimeType,
+        ];
     }
 
     private function assertSavedFile(string $path, string $extension): string
