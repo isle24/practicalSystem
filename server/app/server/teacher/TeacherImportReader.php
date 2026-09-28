@@ -204,6 +204,9 @@ class TeacherImportReader
         if (!is_file($path) || !is_readable($path)) {
             throw new InvalidArgumentException('教师文件不存在或无法读取');
         }
+        if (strtolower((string) pathinfo($path, PATHINFO_EXTENSION)) !== 'xlsx') {
+            throw new InvalidArgumentException('教师文件仅支持 xlsx 格式');
+        }
         $size = (int) filesize($path);
         if ($size < 1 || $size > self::MAX_FILE_SIZE) {
             throw new InvalidArgumentException('教师文件大小必须在 1B 至 10MB 之间');
@@ -214,9 +217,9 @@ class TeacherImportReader
     private function reader(string $path): IReader
     {
         try {
-            $reader = IOFactory::createReaderForFile($path, ['Xls', 'Xlsx']);
+            $reader = IOFactory::createReaderForFile($path, ['Xlsx']);
         } catch (Throwable $exception) {
-            throw new InvalidArgumentException('教师文件必须为有效的 xls 或 xlsx 文件', 0, $exception);
+            throw new InvalidArgumentException('教师文件必须为有效的 xlsx 文件', 0, $exception);
         }
         $reader->setReadDataOnly(false);
         $reader->setReadEmptyCells(false);

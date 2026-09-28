@@ -44,8 +44,8 @@ class AccountImportService
         $this->assertAccess();
         $file = $request->file('file');
         if (!$file instanceof UploadFile || !$file->isValid()
-            || !in_array(strtolower($file->getUploadExtension()), ['xls', 'xlsx'], true)) {
-            throw new InvalidArgumentException('请上传有效的 xls 或 xlsx 教师文件');
+            || strtolower($file->getUploadExtension()) !== 'xlsx') {
+            throw new InvalidArgumentException('请上传有效的 xlsx 教师文件');
         }
         $preview = $this->scanTeacher($file->getPathname());
         $previewToken = $this->teacherPreviewToken(
@@ -57,7 +57,7 @@ class AccountImportService
         );
         $stored = (new FileService())->upload($request, [
             'category' => 'teacher_account_import', 'is_temporary' => false, 'require_md5' => false,
-            'allowed_extensions' => ['xls', 'xlsx'], 'max_size' => TeacherImportReader::MAX_FILE_SIZE,
+            'allowed_extensions' => ['xlsx'], 'max_size' => TeacherImportReader::MAX_FILE_SIZE,
         ]);
         unset($preview['row_numbers'], $preview['department_ids']);
         return array_merge(['file_id' => (int) $stored['file_id'], 'preview_token' => $previewToken], $preview);
@@ -296,7 +296,7 @@ class AccountImportService
     {
         $file = (new FileService())->info($fileId);
         if (($file['category'] ?? '') !== 'teacher_account_import' || (int) ($file['uploader_id'] ?? 0) !== $accountId
-            || !in_array(strtolower((string) ($file['blob']['ext'] ?? '')), ['xls', 'xlsx'], true)) {
+            || strtolower((string) ($file['blob']['ext'] ?? '')) !== 'xlsx') {
             throw new RuntimeException('无权使用该教师导入文件', 403);
         }
         $root = realpath(public_path() . '/files');

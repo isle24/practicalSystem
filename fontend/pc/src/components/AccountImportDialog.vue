@@ -168,8 +168,8 @@ async function handleFileChange(event) {
   state.preview = null;
   state.fileName = file.name;
   requestKey = '';
-  if (!/\.(xls|xlsx)$/i.test(file.name)) {
-    state.message = '请选择 .xls 或 .xlsx 文件';
+  if (!/\.xlsx$/i.test(file.name)) {
+    state.message = '请选择 .xlsx 文件';
     return;
   }
   const token = generation;
@@ -296,13 +296,13 @@ onBeforeUnmount(() => {
     <div class="account-import-body">
       <section class="account-import-section">
         <template v-if="teacherMode">
-          <p>使用 39 列标准表头的教师名单，支持 .xls、.xlsx。工号作为登录名，新账号初始密码为工号后加“666”，已有账号密码保持不变。</p>
+          <p>使用 39 列标准表头的教师名单，仅支持 .xlsx。工号作为登录名，新账号初始密码为工号后加“666”，已有账号密码保持不变。</p>
           <small>学院名称会忽略空格和不可见字符，并匹配学院全称、已维护简称或去掉“学院”后缀的名称；简称有歧义时需先维护学院档案。</small>
           <div class="account-import-actions">
             <a :href="teacherAccountTemplateUrl()" class="account-import-template" target="_blank" rel="noopener noreferrer"><Download :size="15" />下载教师模板</a>
             <el-button :icon="Upload" :loading="state.previewLoading" :disabled="state.submitting" @click="fileInput?.click()">选择文件并预览</el-button>
             <span>{{ state.fileName }}</span>
-            <input ref="fileInput" type="file" accept=".xls,.xlsx" hidden @change="handleFileChange">
+            <input ref="fileInput" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden @change="handleFileChange">
           </div>
           <template v-if="state.preview">
             <p>共 {{ state.preview.total_rows }} 行，可导入 {{ state.preview.valid_rows }} 行，问题 {{ state.preview.invalid_rows }} 行，提示 {{ state.preview.warning_rows || 0 }} 行。预览最多显示 50 行。</p>
