@@ -88,7 +88,16 @@ class FileService
 
             FileBlob::incrementRefCount((int) $lockedBlob->id, $this->now());
 
-            $fileId = $this->insertFile($lockedBlob, $name, $category, $isTemporary, $accountId, null, $device);
+            $fileId = $this->insertFile(
+                (int) $lockedBlob->id,
+                (string) $lockedBlob->url,
+                $name,
+                $category,
+                $isTemporary,
+                $accountId,
+                null,
+                $device
+            );
 
             return [
                 'action' => 'instant',
@@ -658,26 +667,29 @@ class FileService
         $result = $this->connection()->transaction(function () use ($blobData, $fileData, &$removeSavedFile): array {
             $now = $this->now();
             $blob = FileBlob::lockByMd5($blobData['md5']);
+            $activeBlobId = 0;
+            $activeBlobUrl = (string) $blobData['url'];
 
             if ($blob && $blob->deleted_at === null && $this->blobFileExists($blob)) {
                 $removeSavedFile = true;
-                FileBlob::incrementRefCount((int) $blob->id, $now);
-                $activeBlob = $blob;
+                $activeBlobId = (int) ($blob->id ?? 0);
+                $activeBlobUrl = (string) ($blob->url ?? $blobData['url']);
+                FileBlob::incrementRefCount($activeBlobId, $now);
             } elseif ($blob) {
-                FileBlob::updateBlob((int) $blob->id, array_merge($blobData, [
+                $activeBlobId = (int) ($blob->id ?? 0);
+                $activeBlobUrl = (string) ($blobData['url'] ?? '');
+                FileBlob::updateBlob($activeBlobId, array_merge($blobData, [
                     'ref_count' => 1,
                     'deleted_at' => null,
                     'updated_at' => $now,
                 ]));
-                $activeBlob = (object) array_merge((array) $blob, $blobData, ['deleted_at' => null, 'ref_count' => 1]);
             } else {
                 try {
-                    $blobId = FileBlob::createBlob(array_merge($blobData, [
+                    $activeBlobId = FileBlob::createBlob(array_merge($blobData, [
                         'ref_count' => 1,
                         'created_at' => $now,
                         'updated_at' => $now,
                     ]));
-                    $activeBlob = (object) array_merge($blobData, ['id' => $blobId, 'ref_count' => 1]);
                 } catch (QueryException $exception) {
                     if (!$this->isDuplicateMd5($exception)) {
                         throw $exception;
@@ -688,12 +700,15 @@ class FileService
                         throw $exception;
                     }
                     $removeSavedFile = true;
-                    FileBlob::incrementRefCount((int) $activeBlob->id, $now, true);
+                    $activeBlobId = (int) ($activeBlob->id ?? 0);
+                    $activeBlobUrl = (string) ($activeBlob->url ?? $blobData['url']);
+                    FileBlob::incrementRefCount($activeBlobId, $now, true);
                 }
             }
 
             $fileId = $this->insertFile(
-                $activeBlob,
+                $activeBlobId,
+                $activeBlobUrl,
                 $fileData['name'],
                 $fileData['category'],
                 (bool) $fileData['is_temporary'],
@@ -705,8 +720,8 @@ class FileService
             return [
                 'action' => 'uploaded',
                 'file_id' => $fileId,
-                'blob_id' => (int) $activeBlob->id,
-                'url' => (string) $activeBlob->url,
+                'blob_id' => $activeBlobId,
+                'url' => $activeBlobUrl,
                 'name' => $fileData['name'],
                 'download_name' => $fileData['download_name'],
                 'md5' => $blobData['md5'],
@@ -724,7 +739,8 @@ class FileService
     }
 
     private function insertFile(
-        object $blob,
+        int $blobId,
+        string $blobUrl,
         string $name,
         string $category,
         bool $isTemporary,
@@ -732,7 +748,7 @@ class FileService
         ?string $downloadName = null,
         array $device = []
     ): int {
-        return FileRecord::createFromBlob($blob, [
+        return FileRecord::createFromBlob($blobId, $blobUrl, [
             'uuid' => $this->uuid(),
             'name' => $name,
             'download_name' => $downloadName ?: $name,

@@ -153,14 +153,14 @@ class FileRecord extends BaseModel
         ];
     }
 
-    public static function createFromBlob(object $blob, array $values): int
+    public static function createFromBlob(int $blobId, string $blobUrl, array $values): int
     {
         return (int) self::query()->insertGetId([
             'uuid' => $values['uuid'],
-            'blob_id' => (int) $blob->id,
+            'blob_id' => $blobId,
             'name' => $values['name'],
             'download_name' => $values['download_name'],
-            'url' => (string) $blob->url,
+            'url' => $blobUrl,
             'is_temporary' => $values['is_temporary'] ? 1 : 0,
             'uploader_id' => (int) $values['uploader_id'],
             'client' => $values['client'] ?? null,
