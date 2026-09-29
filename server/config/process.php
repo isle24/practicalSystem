@@ -71,6 +71,10 @@ return [
         'listen' => $_ENV['MESSAGE_WS_LISTEN'] ?? getenv('MESSAGE_WS_LISTEN') ?: 'websocket://127.0.0.1:8788',
         'count' => 1,
     ],
+    'workflow_message_relay' => [
+        'handler' => app\process\WorkflowMessageRelay::class,
+        'count' => 1,
+    ],
     'wechat_message_relay' => [
         'handler' => app\process\WechatMessageRelay::class,
         'count' => 1,

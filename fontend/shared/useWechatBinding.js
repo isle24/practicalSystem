@@ -1,6 +1,6 @@
 import { computed, onBeforeUnmount, onMounted, reactive, watch } from 'vue';
 
-export function useWechatBinding({ context, request, backendUrl }) {
+export function useWechatBinding({ context, request, backendUrl, publicOrigin = () => backendUrl('/') }) {
   const bindingRoles = ['teacher', 'student', 'super_admin', 'school_admin', 'college_admin', 'profession_admin'];
   const inWechat = /wxwork/i.test(navigator.userAgent);
   const callbackUrl = new URL(window.location.href);
@@ -9,13 +9,17 @@ export function useWechatBinding({ context, request, backendUrl }) {
   callbackUrl.searchParams.delete('wechat_oauth');
   callbackUrl.searchParams.delete('wechat_bind');
   if (oauthResult || requested) window.history.replaceState(null, '', callbackUrl.pathname + callbackUrl.search + callbackUrl.hash);
-  const state = reactive({ loading: false, message: '', status: null, sessionKey: '', open: requested || Boolean(oauthResult) });
+  const state = reactive({ scan: null, scanLoading: false, loading: false, message: '', status: null, sessionKey: '', open: requested || Boolean(oauthResult) });
   let attempted = Boolean(oauthResult);
   let generation = 0;
   let pending = null;
+  let pollTimer = null;
+  let scanGeneration = 0;
+  let disposed = false;
+  const schoolOrigin = () => typeof publicOrigin === 'function' ? publicOrigin() : publicOrigin;
   const sessionKey = computed(() => {
     const current = context();
-    return current.account_id ? [window.__PRACTICAL_DESKTOP__?.serverOrigin || backendUrl('/'), current.school_database_id, current.school_code, current.school_id, current.account_id].join(':') : '';
+    return current.account_id ? [schoolOrigin(), current.school_database_id, current.school_code, current.school_id, current.account_id].join(':') : '';
   });
   const required = computed(() => bindingRoles.includes(context().role_type));
   const status = computed(() => state.sessionKey === sessionKey.value ? state.status : null);
@@ -26,9 +30,10 @@ export function useWechatBinding({ context, request, backendUrl }) {
     return !binding.bound || (inWechat && (!binding.identity_ready || !binding.identity_matches));
   });
   const show = computed(() => Boolean(context().account_id && required.value && (blocked.value || state.open || (inWechat && status.value && !status.value.bound))));
-  const publicUrl = computed(() => new URL('/h5/?wechat_bind=1', window.__PRACTICAL_DESKTOP__?.serverOrigin || backendUrl('/')).href);
+  const publicUrl = computed(() => new URL('/h5/?wechat_bind=1', schoolOrigin()).href);
 
   watch(sessionKey, (key, previous) => {
+    cancelScan();
     generation++;
     pending = null;
     state.status = null;
@@ -47,7 +52,7 @@ export function useWechatBinding({ context, request, backendUrl }) {
 
   function start() {
     state.open = true;
-    if (!inWechat) { state.message = '请在企业微信中打开系统完成绑定'; return; }
+    if (!inWechat) return createScan();
     if (status.value?.configured === false || status.value?.binding_outdated) return;
     const url = new URL(window.location.href);
     state.loading = true;
@@ -104,7 +109,10 @@ export function useWechatBinding({ context, request, backendUrl }) {
   }
 
   function close() {
-    if (!blocked.value) state.open = false;
+    if (!blocked.value) {
+      state.open = false;
+      cancelScan();
+    }
   }
 
   async function recheck() {
@@ -144,12 +152,99 @@ export function useWechatBinding({ context, request, backendUrl }) {
     }
   }
 
+  async function cancelScan() {
+    scanGeneration++;
+    clearTimeout(pollTimer);
+    pollTimer = null;
+    const scan = state.scan;
+    state.scan = null;
+    state.scanLoading = false;
+    if (!scan?.session_id || ['confirmed', 'expired', 'cancelled', 'failed'].includes(scan.state)) return;
+    try {
+      await request('/wechat/scan-cancel', { method: 'POST', body: JSON.stringify({ session_id: scan.session_id }), keepalive: true });
+    } catch {}
+  }
+
+  async function createScan() {
+    if (state.scanLoading || inWechat || !show.value || status.value?.configured === false || status.value?.binding_outdated) return;
+    const cancellation = cancelScan();
+    const key = sessionKey.value;
+    const version = generation;
+    const scanVersion = ++scanGeneration;
+    state.scanLoading = true;
+    state.message = '';
+    try {
+      await cancellation;
+      if (!currentSession(key, version) || scanVersion !== scanGeneration || !show.value || disposed) return;
+      const school = new URL(schoolOrigin());
+      if (school.protocol !== 'https:') throw new Error('扫码绑定需要学校 HTTPS 地址，请检查学校服务地址。');
+      const result = await request('/wechat/scan-session', { method: 'POST', body: '{}' });
+      if (!currentSession(key, version) || scanVersion !== scanGeneration || disposed) {
+        await request('/wechat/scan-cancel', { method: 'POST', body: JSON.stringify({ session_id: result.session_id }), keepalive: true }).catch(() => {});
+        return;
+      }
+      const scanUrl = new URL(result.scan_url);
+      if (scanUrl.protocol !== 'https:' || scanUrl.origin !== school.origin || scanUrl.pathname !== '/api/wechat/scan/start') {
+        await request('/wechat/scan-cancel', { method: 'POST', body: JSON.stringify({ session_id: result.session_id }) }).catch(() => {});
+        throw new Error('二维码学校地址不一致，请联系管理员检查配置。');
+      }
+      state.scan = { ...result, expiresAt: Date.now() + result.expires_in * 1000 };
+      pollTimer = setTimeout(() => pollScan(key, version, scanVersion), 2000);
+    } catch (error) {
+      if (currentSession(key, version) && scanVersion === scanGeneration) state.message = error.message;
+    } finally {
+      if (currentSession(key, version) && scanVersion === scanGeneration) state.scanLoading = false;
+    }
+  }
+
+  async function pollScan(key, version, scanVersion) {
+    if (!currentSession(key, version) || scanVersion !== scanGeneration || !state.scan || disposed) return;
+    if (Date.now() >= state.scan.expiresAt) {
+      state.scan.state = 'expired';
+      state.message = '二维码已过期，请刷新二维码。';
+      return;
+    }
+    try {
+      const result = await request(`/wechat/scan-status?session_id=${encodeURIComponent(state.scan.session_id)}`);
+      if (!currentSession(key, version) || scanVersion !== scanGeneration || !state.scan || disposed) return;
+      state.scan.state = result.state;
+      if (result.state === 'confirmed') {
+        await refresh(false);
+        if (currentSession(key, version)) window.location.reload();
+        return;
+      }
+      if (['expired', 'cancelled', 'failed'].includes(result.state)) {
+        state.message = result.state === 'failed' ? '绑定未完成，请在电脑刷新二维码后重试。' : '二维码已失效，请刷新二维码。';
+        return;
+      }
+      state.message = result.state === 'scanned' ? '已扫码，请在手机核对账号并确认绑定。' : '';
+    } catch (error) {
+      if (!currentSession(key, version) || scanVersion !== scanGeneration || !state.scan || disposed) return;
+      state.message = error.message;
+      if ([401, 403].includes(error.status)) { await cancelScan(); return; }
+    }
+    if (currentSession(key, version) && scanVersion === scanGeneration && state.scan && !disposed) pollTimer = setTimeout(() => pollScan(key, version, scanVersion), 2000);
+  }
+
+  watch(() => [show.value, status.value?.configured, status.value?.bound], ([visible, configured, bound]) => {
+    if (!visible || bound) { cancelScan(); return; }
+    if (!inWechat && configured && !state.scan && !state.scanLoading) createScan();
+  });
+
   async function expired() {
     const wasBlocked = blocked.value;
     const result = await refresh(false);
     if (result && wasBlocked && !blocked.value) window.location.reload();
   }
-  onMounted(() => window.addEventListener('practical-wechat-required', expired));
-  onBeforeUnmount(() => window.removeEventListener('practical-wechat-required', expired));
-  return { state, status, blocked, show, inWechat, publicUrl, refresh, start, bind, open, close, recheck, copyLink };
+  onMounted(() => {
+    window.addEventListener('practical-wechat-required', expired);
+    window.addEventListener('pagehide', cancelScan);
+  });
+  onBeforeUnmount(() => {
+    disposed = true;
+    window.removeEventListener('practical-wechat-required', expired);
+    window.removeEventListener('pagehide', cancelScan);
+    cancelScan();
+  });
+  return { state, status, cancelScan, createScan, blocked, show, inWechat, publicUrl, refresh, start, bind, open, close, recheck, copyLink };
 }

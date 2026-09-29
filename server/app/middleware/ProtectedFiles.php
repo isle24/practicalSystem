@@ -26,8 +26,25 @@ class ProtectedFiles implements MiddlewareInterface
         }
         return (new SchoolMiddleware())->process($request, fn ($request): Response =>
             (new AuthMiddleware())->process($request, function ($request) use ($path, $handler): Response {
-                foreach (FileRecord::idsByUrl($path) as $id) {
-                    $file = FileRecord::detailById((int) $id);
+                $ids = FileRecord::idsByUrl($path);
+                $files = array_values(array_filter(array_map(static fn ($id) => FileRecord::detailById((int) $id), $ids)));
+                $wallpapers = array_values(array_filter($files, static fn ($file) => (string) $file->category === 'wallpaper'));
+                if ($wallpapers) {
+                    $binding = (array) CurrentContext::get('wechat_binding', []);
+                    if ((new WechatBindingService())->isBlocked($binding)) {
+                        return json(['code' => 40310, 'message' => '请先完成企业微信绑定及身份确认', 'data' => null])
+                            ->withStatus(403)->withHeader('Cache-Control', 'no-store');
+                    }
+                    foreach ($wallpapers as $file) {
+                        if (FileAccessRecord::wallpaperReadable($file)) {
+                            return $handler($request)->withHeaders(['Cache-Control' => 'private, no-store', 'X-Content-Type-Options' => 'nosniff']);
+                        }
+                    }
+                    $status = CurrentContext::accountId() ? 403 : 401;
+                    return json(['code' => $status * 100, 'message' => $status === 401 ? '请先登录' : '无文件访问权限', 'data' => null])
+                        ->withStatus($status)->withHeader('Cache-Control', 'no-store');
+                }
+                foreach ($files as $file) {
                     $binding = (array) CurrentContext::get('wechat_binding', []);
                     if ($file && !FileAccessRecord::publicImage($file) && (new WechatBindingService())->isBlocked($binding)) {
                         return json(['code' => 40310, 'message' => '请先完成企业微信绑定及身份确认', 'data' => null])

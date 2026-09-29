@@ -19,6 +19,8 @@ class ExportGenerator
         return match ($type) {
             'internship_base_word' => (new InternshipDocumentExporter())->baseWord((int) ($params['base_id'] ?? 0)),
             'internship_implementation_pdf' => (new InternshipDocumentExporter())->implementationPdf((int) ($params['arrangement_id'] ?? 0)),
+            'expense_document' => (new ExpenseDocumentExporter())->generate((int) ($params['expense_id'] ?? 0), 'docx'),
+            'expense_document_pdf' => (new ExpenseDocumentExporter())->generate((int) ($params['expense_id'] ?? 0), 'pdf'),
             'practice_score_sheet' => (new PracticeScoreSheetExporter())->generate($params),
             default => $this->tabular($params),
         };

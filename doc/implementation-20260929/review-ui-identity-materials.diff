@@ -1,0 +1,3267 @@
+Review of current worktree against aa6fd8b. Excludes generated build assets. Shared App integration continues in parent.
+diff --git a/fontend/h5/src/components/WechatScanBinding.vue b/fontend/h5/src/components/WechatScanBinding.vue
+new file mode 100644
+index 0000000..6fef0a6
+--- /dev/null
++++ b/fontend/h5/src/components/WechatScanBinding.vue
+@@ -0,0 +1,66 @@
++<template>
++  <main class="wechat-scan-page">
++    <section aria-labelledby="scan-title">
++      <h1 id="scan-title">确认企业微信绑定</h1>
++      <p v-if="loading">正在读取扫码信息</p>
++      <p v-if="done" role="status">绑定成功，请返回电脑继续操作。</p>
++      <form v-else-if="details" @submit.prevent="confirm">
++        <dl>
++          <dt>系统账号</dt><dd>{{ details.account_name }}</dd>
++          <dt>用户姓名</dt><dd>{{ details.user_name }}</dd>
++          <dt>企业微信身份</dt><dd>{{ details.wechat_userid }}</dd>
++        </dl>
++        <p>请核对两端身份，仅绑定本人账号。输入该系统账号密码后确认，无需在手机登录。</p>
++        <label for="scan-account-password">系统账号密码</label>
++        <input id="scan-account-password" v-model="password" type="password" autocomplete="current-password" maxlength="4096" required :disabled="busy || expired">
++        <button type="submit" :disabled="busy || expired || !password">{{ busy ? '正在确认' : expired ? '二维码已过期' : '确认绑定' }}</button>
++      </form>
++      <p v-if="message" role="alert">{{ message }}</p>
++      <p v-if="!done">取消或过期后，请在电脑重新生成二维码。</p>
++    </section>
++  </main>
++</template>
++<script setup>
++import { onBeforeUnmount, onMounted, ref } from 'vue';
++import { request } from '../api/client';
++const details = ref(null);
++const password = ref('');
++const loading = ref(true);
++const busy = ref(false);
++const done = ref(false);
++const expired = ref(false);
++const message = ref('');
++let timer;
++onMounted(async () => {
++  try {
++    details.value = await request('/wechat/scan/context');
++    timer = setTimeout(() => { expired.value = true; password.value = ''; message.value = '二维码已过期，请在电脑重新生成。'; }, details.value.expires_in * 1000);
++  } catch (error) { message.value = error.message; }
++  finally { loading.value = false; }
++});
++onBeforeUnmount(() => { clearTimeout(timer); password.value = ''; });
++async function confirm() {
++  if (busy.value || expired.value) return;
++  busy.value = true;
++  message.value = '';
++  try {
++    await request('/wechat/scan/confirm', { method: 'POST', body: JSON.stringify({ nonce: details.value.nonce, password: password.value }) });
++    done.value = true;
++    clearTimeout(timer);
++  } catch (error) { message.value = error.message; }
++  finally { password.value = ''; busy.value = false; }
++}
++</script>
++<style scoped>
++.wechat-scan-page { min-height: 100dvh; display: grid; place-items: center; padding: 20px; box-sizing: border-box; background: #f1f5f9; color: #172033; }
++section { width: min(100%, 440px); box-sizing: border-box; padding: 24px; border-radius: 14px; background: #fff; }
++h1 { font-size: 22px; margin-top: 0; }
++p { line-height: 1.7; }
++dt { margin-top: 14px; color: #64748b; font-size: 13px; }
++dd { margin: 5px 0; overflow-wrap: anywhere; }
++label { display: block; margin-top: 20px; }
++input, button { box-sizing: border-box; width: 100%; margin-top: 10px; padding: 12px; border-radius: 8px; border: 1px solid #cbd5e1; font: inherit; }
++button { background: #2563eb; color: #fff; border: 0; }
++button:disabled { opacity: .5; }
++[role="alert"] { color: #b91c1c; }
++</style>
+diff --git a/fontend/h5/src/composables/useAuthSession.js b/fontend/h5/src/composables/useAuthSession.js
+index 01014e8..a98b22a 100644
+--- a/fontend/h5/src/composables/useAuthSession.js
++++ b/fontend/h5/src/composables/useAuthSession.js
+@@ -84,12 +84,13 @@ export function useAuthSession(options = {}) {
+       return;
+     }
+ 
+     switchAccountState.loading = true;
+     switchAccountState.message = '';
+     try {
++      await options.onBeforeSessionChange?.();
+       await switchAccount({ account_id: accountId, client: 'H5' });
+       resetAccountChoices();
+       await options.onAuthenticated?.(true);
+       showToast('已切换身份');
+     } catch (error) {
+       switchAccountState.message = error.message;
+@@ -229,12 +230,13 @@ export function useAuthSession(options = {}) {
+     if (loginState.loading) {
+       return;
+     }
+     loginState.loading = true;
+     loginState.message = '';
+     try {
++      await options.onBeforeSessionChange?.();
+       await logoutApi();
+       resetAccountChoices();
+       await options.onLoggedOut?.();
+       await loadRegisterOptions();
+     } catch (error) {
+       loginState.message = error.message;
+@@ -250,12 +252,13 @@ export function useAuthSession(options = {}) {
+     resetAccountChoices();
+     options.onExpired?.(message);
+     showToast(message);
+   }
+ 
+   onMounted(async () => {
++    if (options.enabled && !options.enabled()) return;
+     window.addEventListener('practical-auth-expired', handleAuthExpired);
+     await loadRegisterOptions();
+     await consumeUrlPasskey();
+     await options.onInitialLoad?.();
+   });
+ 
+diff --git a/fontend/h5/src/pages/SignaturePage.vue b/fontend/h5/src/pages/SignaturePage.vue
+new file mode 100644
+index 0000000..ce43952
+--- /dev/null
++++ b/fontend/h5/src/pages/SignaturePage.vue
+@@ -0,0 +1,67 @@
++<template>
++  <section class="signature-page">
++    <h2>个人电子签名</h2>
++    <p>请书写本人姓名。保存后产生新版本，原有审批签名不变。个人签名不替代安全承诺书签字文件。</p>
++    <p v-if="sessionId">本次签名来自电脑二维码，仅同一系统用户可保存。</p>
++    <div v-if="signature" class="preview"><img :src="backendUrl(signature.url)" alt="当前个人签名"><span>当前版本 {{ signature.version }}</span></div>
++    <p v-if="error" class="error" role="alert">{{ error }}</p>
++    <p v-if="message" role="status">{{ message }}</p>
++    <template v-if="ready && !completed">
++      <SignatureCanvas ref="canvas" :disabled="busy" @change="hasInk = $event" />
++      <label class="confirmation"><input v-model="confirmed" type="checkbox" :disabled="busy">确认这是本人书写的签名，用于后续本人确认的审批。</label>
++      <button type="button" :disabled="busy || !hasInk || !confirmed" @click="save">{{ busy ? '正在保存' : '保存个人签名' }}</button>
++    </template>
++    <button v-if="completed" type="button" @click="$emit('done')">返回我的</button>
++  </section>
++</template>
++<script setup>
++import { onMounted, ref } from 'vue';
++import SignatureCanvas from '../../../shared/components/SignatureCanvas.vue';
++import { backendUrl, request } from '../api/client';
++const props = defineProps({ sessionId: { type: String, default: '' } });
++defineEmits(['done']);
++const canvas = ref(null);
++const signature = ref(null);
++const ready = ref(false);
++const completed = ref(false);
++const busy = ref(false);
++const hasInk = ref(false);
++const confirmed = ref(false);
++const error = ref('');
++const message = ref('');
++onMounted(async () => {
++  try {
++    if (props.sessionId) {
++      const status = await request(`/signature/session-status?mobile=1&session_id=${encodeURIComponent(props.sessionId)}`);
++      if (status.state !== 'pending') throw new Error('本次二维码已使用或取消，请在电脑重新获取。');
++    }
++    signature.value = (await request('/signature/current')).signature;
++    ready.value = true;
++  } catch (failure) { error.value = failure.message; }
++});
++async function save() {
++  if (busy.value || !confirmed.value || !hasInk.value) return;
++  busy.value = true; error.value = '';
++  try {
++    const form = new FormData();
++    form.append('file', await canvas.value.blob(), 'signature.png');
++    if (props.sessionId) form.append('session_id', props.sessionId);
++    const result = await request('/signature/save', { method: 'POST', headers: { 'X-Signature-Intent': 'personal' }, body: form });
++    signature.value = result.signature; completed.value = true;
++    message.value = props.sessionId ? '签名已保存，请返回电脑继续操作。' : '个人签名已保存。';
++  } catch (failure) { error.value = failure.message; }
++  finally { busy.value = false; }
++}
++</script>
++<style scoped>
++.signature-page { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 18px; color: #334155; }
++h2 { margin: 0 0 12px; font-size: 20px; }
++p { font-size: 14px; line-height: 1.6; }
++.preview { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; margin: 16px 0; }
++.preview img { max-width: 200px; max-height: 90px; object-fit: contain; }
++.preview span { font-size: 13px; color: #64748b; }
++.confirmation { display: flex; align-items: flex-start; gap: 8px; line-height: 1.5; font-size: 14px; margin: 18px 0; }
++button { border: 1px solid #cbd5e1; background: #fff; color: #0f172a; border-radius: 6px; padding: 10px 14px; }
++button:disabled { opacity: .5; }
++.error { color: #b91c1c; }
++</style>
+diff --git a/fontend/pc/src/components/DesktopWindow.vue b/fontend/pc/src/components/DesktopWindow.vue
+index 7adc548..a4153cc 100644
+--- a/fontend/pc/src/components/DesktopWindow.vue
++++ b/fontend/pc/src/components/DesktopWindow.vue
+@@ -41,14 +41,15 @@
+       @mousedown="event => startResize(event, handle)"
+     />
+   </section>
+ </template>
+ 
+ <script setup>
+-import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
++import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
+ import { Minus, Square, X } from '@lucide/vue';
++import { useMaximizedWindow } from '../composables/useMaximizedWindows';
+ 
+ const props = defineProps({
+   title: { type: String, required: true },
+   icon: { type: null, required: true },
+   zIndex: { type: Number, default: 1 },
+   initialLeft: { type: Number, default: 184 },
+@@ -68,12 +69,14 @@ const frame = reactive({
+   width: props.initialWidth,
+   height: props.initialHeight,
+ });
+ const interaction = ref(null);
+ const baseMinFrame = { width: 680, height: 500 };
+ const maximized = ref(false);
++const registration = useMaximizedWindow();
++watch(maximized, value => value ? registration.register() : registration.unregister(), { flush: 'sync' });
+ const restoreFrame = ref(null);
+ let workspaceObserver = null;
+ 
+ const windowStyle = computed(() => ({
+   left: `${frame.left}px`,
+   top: `${frame.top}px`,
+diff --git a/fontend/pc/src/components/GraduationAppraisalDialog.vue b/fontend/pc/src/components/GraduationAppraisalDialog.vue
+index f213edf..c233ec6 100644
+--- a/fontend/pc/src/components/GraduationAppraisalDialog.vue
++++ b/fontend/pc/src/components/GraduationAppraisalDialog.vue
+@@ -1,8 +1,8 @@
+ <template>
+-  <el-dialog
++  <ManagedElementDialog
+     :model-value="modelValue"
+     append-to-body
+     destroy-on-close
+     class="graduation-appraisal-dialog"
+     width="min(980px, 92vw)"
+     @close="close"
+@@ -122,16 +122,17 @@
+         <span />
+         <el-button @click="close">关闭</el-button>
+         <el-button v-if="editable" :loading="saving" @click="save('draft')">保存草稿</el-button>
+         <el-button v-if="editable" type="primary" :loading="saving" @click="save('wait')">提交审核</el-button>
+       </div>
+     </template>
+-  </el-dialog>
++  </ManagedElementDialog>
+ </template>
+ 
+ <script setup>
++import ManagedElementDialog from './ManagedElementDialog.vue';
+ import { previewFile } from '../../../shared/filePreview';
+ import { computed, reactive, ref, watch } from 'vue';
+ import { FileText, Upload } from '@lucide/vue';
+ import { ElMessage, ElMessageBox } from 'element-plus';
+ import { backendUrl } from '../api/client';
+ import {
+diff --git a/fontend/pc/src/components/InternshipArchiveDetail.vue b/fontend/pc/src/components/InternshipArchiveDetail.vue
+index ab650bd..3f26232 100644
+--- a/fontend/pc/src/components/InternshipArchiveDetail.vue
++++ b/fontend/pc/src/components/InternshipArchiveDetail.vue
+@@ -1,8 +1,8 @@
+ <template>
+-  <el-dialog
++  <ManagedElementDialog
+     :model-value="modelValue"
+     append-to-body
+     destroy-on-close
+     class="internship-archive-dialog"
+     width="min(1480px, 94vw)"
+     @close="close"
+@@ -166,38 +166,39 @@
+         </el-tabs>
+       </template>
+     </div>
+ 
+     <input ref="uploadInput" type="file" accept=".pdf,.doc,.docx,.xls,.xlsx" hidden @change="uploadFinalFile">
+ 
+-    <el-dialog v-model="historyVisible" append-to-body title="材料历史版本" width="760px">
++    <ManagedElementDialog v-model="historyVisible" append-to-body title="材料历史版本" width="760px">
+       <el-table :data="historyItems" border empty-text="暂无历史版本">
+         <el-table-column type="index" label="序号" width="66" align="center" />
+         <el-table-column prop="archive_version" label="版本" width="80" />
+         <el-table-column prop="status" label="状态" width="100" />
+         <el-table-column prop="updated_at" label="更新时间" width="168" />
+         <el-table-column label="文件" min-width="220">
+           <template #default="{ row }">
+             <el-button v-if="row.signed_file" link type="primary" @click="openFile(row.signed_file)">查看定稿</el-button>
+             <el-button v-if="row.generated_file" link type="primary" @click="openFile(row.generated_file)">查看生成件</el-button>
+           </template>
+         </el-table-column>
+       </el-table>
+-    </el-dialog>
++    </ManagedElementDialog>
+ 
+     <GraduationAppraisalDialog
+       v-model="appraisalVisible"
+       :target="appraisalTarget"
+       :can-edit="canEditAppraisal"
+       :can-approve="canApprove"
+       @changed="changed"
+     />
+-  </el-dialog>
++  </ManagedElementDialog>
+ </template>
+ 
+ <script setup>
++import ManagedElementDialog from './ManagedElementDialog.vue';
+ import { previewFile } from '../../../shared/filePreview';
+ import { computed, ref, watch } from 'vue';
+ import { ElMessage, ElMessageBox } from 'element-plus';
+ import { backendUrl } from '../api/client';
+ import {
+   archiveInternshipMaterial,
+diff --git a/fontend/pc/src/components/ManagedElementDialog.vue b/fontend/pc/src/components/ManagedElementDialog.vue
+new file mode 100644
+index 0000000..c4811ed
+--- /dev/null
++++ b/fontend/pc/src/components/ManagedElementDialog.vue
+@@ -0,0 +1,42 @@
++<script setup>
++import { ref, useSlots, watch } from 'vue';
++import { Maximize2, Minimize2 } from '@lucide/vue';
++import { useMaximizedWindow } from '../composables/useMaximizedWindows';
++
++defineOptions({ inheritAttrs: false });
++const props = defineProps({ modelValue: Boolean });
++const emit = defineEmits(['update:modelValue']);
++const slots = useSlots();
++const maximized = ref(false);
++const registration = useMaximizedWindow();
++watch(() => [props.modelValue, maximized.value], ([visible, full]) => {
++  if (!visible) maximized.value = false;
++  if (visible && full) registration.register();
++  else registration.unregister();
++}, { flush: 'sync' });
++</script>
++
++<template>
++  <el-dialog v-bind="$attrs" :model-value="modelValue" :fullscreen="maximized" :class="{ 'managed-element-fullscreen': maximized }" @update:model-value="emit('update:modelValue', $event)">
++    <template #header="headerProps">
++      <div class="managed-element-header">
++        <div><slot name="header" v-bind="headerProps">{{ $attrs.title }}</slot></div>
++        <button type="button" :title="maximized ? '还原' : '最大化'" :aria-label="maximized ? '还原' : '最大化'" @click="maximized = !maximized">
++          <Minimize2 v-if="maximized" :size="16" /><Maximize2 v-else :size="16" />
++        </button>
++      </div>
++    </template>
++    <template v-for="name in Object.keys(slots).filter(name => name !== 'header')" :key="name" #[name]="slotProps">
++      <slot :name="name" v-bind="slotProps || {}" />
++    </template>
++  </el-dialog>
++</template>
++
++<style>
++.managed-element-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-right: 24px; }
++.managed-element-header button { display: grid; place-items: center; width: 28px; height: 28px; background: transparent; border-radius: 4px; color: #606873; }
++.managed-element-header button:hover { background: #edf1f7; }
++.el-dialog.managed-element-fullscreen { margin: 0; width: 100%; height: 100dvh; max-height: none; border-radius: 0; display: flex; flex-direction: column; }
++.managed-element-fullscreen > .el-dialog__body { min-height: 0; flex: 1; overflow: auto; max-height: none !important; }
++.managed-element-fullscreen .archive-detail-body, .managed-element-fullscreen .appraisal-body { max-height: none; }
++</style>
+diff --git a/fontend/pc/src/components/OperationDialog.vue b/fontend/pc/src/components/OperationDialog.vue
+index b52d07c..99ec892 100644
+--- a/fontend/pc/src/components/OperationDialog.vue
++++ b/fontend/pc/src/components/OperationDialog.vue
+@@ -1,9 +1,9 @@
+ <template>
+   <Teleport to="body">
+-    <div v-if="visible" class="operation-mask" @click.self="requestClose">
++    <div v-if="visible" :class="{ 'operation-mask-maximized': maximized }" class="operation-mask" @click.self="requestClose">
+       <section
+         ref="dialogRef"
+         class="operation-dialog operation-dialog-managed"
+         :class="[dialogClass, { 'is-maximized': maximized, 'is-resizing': resizing }]"
+         :style="dialogStyle"
+         role="dialog"
+@@ -50,12 +50,13 @@
+   </Teleport>
+ </template>
+ 
+ <script setup>
+ import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
+ import { Maximize2, Minimize2, X, ZoomIn } from '@lucide/vue';
++import { useMaximizedWindow } from '../composables/useMaximizedWindows';
+ 
+ const props = defineProps({
+   visible: { type: Boolean, default: false },
+   title: { type: String, default: '' },
+   dialogClass: { type: [String, Array, Object], default: '' },
+   busy: { type: Boolean, default: false },
+@@ -63,12 +64,17 @@ const props = defineProps({
+   maximizable: { type: Boolean, default: true },
+ });
+ 
+ const emit = defineEmits(['close']);
+ const dialogRef = ref(null);
+ const maximized = ref(false);
++const registration = useMaximizedWindow();
++watch(() => [props.visible, maximized.value], ([visible, full]) => {
++  if (visible && full) registration.register();
++  else registration.unregister();
++}, { flush: 'sync' });
+ const resizing = ref(false);
+ const customSize = ref(null);
+ let resizeState = null;
+ 
+ const dialogStyle = computed(() => customSize.value && !maximized.value
+   ? { width: `${customSize.value.width}px`, height: `${customSize.value.height}px`, maxHeight: 'none' }
+diff --git a/fontend/pc/src/components/SchoolSettingsPanel.vue b/fontend/pc/src/components/SchoolSettingsPanel.vue
+new file mode 100644
+index 0000000..8eb3c20
+--- /dev/null
++++ b/fontend/pc/src/components/SchoolSettingsPanel.vue
+@@ -0,0 +1,142 @@
++<script setup>
++import { onMounted, reactive } from 'vue';
++import { Building2, ImagePlus, RefreshCw } from '@lucide/vue';
++import { backendUrl, request } from '../api/client';
++
++const emit = defineEmits(['updated']);
++const state = reactive({ loading: false, uploading: '', error: '', school_name: '', school_logo_url: '', login_background_url: '', default_wallpaper_url: '', sharedWallpapers: [], wallpaperPage: 1, wallpaperTotal: 0 });
++const assets = [
++  { type: 'logo', label: '学校 Logo', field: 'school_logo_url', accept: 'image/png,image/jpeg,image/webp', limit: 2, hint: '推荐 256 × 256 px，透明 PNG / WebP，最大 2 MB。按原比例完整显示。' },
++  { type: 'background', label: '登录页背景', field: 'login_background_url', accept: 'image/png,image/jpeg,image/webp,image/gif', limit: 8, hint: '推荐 1920 × 1080 px 或更大横图，最大 8 MB。按比例铺满登录页。' },
++];
++
++async function load() {
++  state.loading = true;
++  state.error = '';
++  try { Object.assign(state, await request('/school-appearance/settings')); await loadShared(); }
++  catch (error) { state.error = error.message; }
++  finally { state.loading = false; }
++}
++
++async function loadShared() {
++  const data = await request(`/wallpaper/list?scope=shared&page=${state.wallpaperPage}&page_size=8`);
++  state.sharedWallpapers = data.items || [];
++  state.wallpaperTotal = data.pagination?.total || 0;
++}
++
++async function setWallpaper(id) {
++  state.uploading = 'wallpaper';
++  state.error = '';
++  try {
++    const data = await request('/school-appearance/wallpaper', { method: 'POST', body: JSON.stringify({ id }) });
++    Object.assign(state, data);
++    emit('updated', data);
++  } catch (error) { state.error = error.message; }
++  finally { state.uploading = ''; }
++}
++
++async function uploadWallpaper(event) {
++  const file = event.target.files?.[0];
++  event.target.value = '';
++  if (!file || state.uploading) return;
++  if (!['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(file.type) || file.size > 8 * 1024 * 1024) {
++    state.error = '请选择不超过 8 MB 的 JPG、PNG、WebP 或 GIF 图片';
++    return;
++  }
++  state.uploading = 'wallpaper';
++  state.error = '';
++  try {
++    const body = new FormData();
++    body.append('file', file);
++    const data = await request('/school-appearance/upload-wallpaper', { method: 'POST', body });
++    Object.assign(state, data);
++    emit('updated', data);
++  } catch (error) { state.error = error.message; }
++  finally { state.uploading = ''; }
++}
++
++async function upload(asset, event) {
++  const file = event.target.files?.[0];
++  event.target.value = '';
++  if (!file || state.uploading) return;
++  if (!asset.accept.split(',').includes(file.type) || file.size > asset.limit * 1024 * 1024) {
++    state.error = `请选择支持的图片格式，且不超过 ${asset.limit} MB`;
++    return;
++  }
++  state.uploading = asset.type;
++  state.error = '';
++  try {
++    const body = new FormData();
++    body.append('file', file);
++    const data = await request(`/school-appearance/upload-${asset.type}`, { method: 'POST', body });
++    Object.assign(state, data);
++    emit('updated', data);
++  } catch (error) { state.error = error.message; }
++  finally { state.uploading = ''; }
++}
++
++onMounted(load);
++</script>
++
++<template>
++  <section class="school-settings" v-loading="state.loading">
++    <header class="school-settings-heading">
++      <div><h2>学校设置</h2><p>{{ state.school_name }} · 学校标识与外观</p></div>
++      <el-button :icon="RefreshCw" :disabled="Boolean(state.uploading)" @click="load">刷新</el-button>
++    </header>
++    <el-alert v-if="state.error" :title="state.error" type="error" :closable="false" />
++    <section v-for="asset in assets" :key="asset.type" class="school-asset-card">
++      <div><h3>{{ asset.label }}</h3><p>{{ asset.hint }}</p></div>
++      <div class="school-asset-controls">
++        <div class="school-asset-preview" :class="asset.type">
++          <img v-if="state[asset.field]" :src="backendUrl(state[asset.field])" :alt="asset.label">
++          <Building2 v-else-if="asset.type === 'logo'" :size="40" />
++          <ImagePlus v-else :size="40" />
++        </div>
++        <label class="school-asset-upload" :class="{ disabled: state.loading || state.uploading }">
++          <ImagePlus :size="16" />
++          {{ state.uploading === asset.type ? '正在上传' : state[asset.field] ? '更换图片' : '上传图片' }}
++          <input type="file" :accept="asset.accept" :disabled="state.loading || Boolean(state.uploading)" @change="upload(asset, $event)">
++        </label>
++      </div>
++    </section>
++    <section class="school-asset-card">
++      <div><h3>学校默认桌面壁纸</h3><p>推荐 1920 × 1080 px 或更大横图，最大 8 MB。</p></div>
++      <div class="school-asset-controls">
++        <div class="school-asset-preview background"><img v-if="state.default_wallpaper_url" :src="backendUrl(state.default_wallpaper_url)" alt="学校默认桌面壁纸"><ImagePlus v-else :size="40" /></div>
++        <label class="school-asset-upload" :class="{ disabled: state.loading || state.uploading }"><ImagePlus :size="16" />{{ state.uploading === 'wallpaper' ? '正在上传' : '上传新壁纸' }}<input type="file" accept="image/png,image/jpeg,image/webp,image/gif" :disabled="state.loading || Boolean(state.uploading)" @change="uploadWallpaper"></label>
++      </div>
++      <h4>从壁纸库选择</h4>
++      <div class="school-wallpaper-list">
++        <button v-for="item in state.sharedWallpapers" :key="item.id" type="button" :disabled="Boolean(state.uploading)" @click="setWallpaper(item.id)"><img :src="backendUrl(item.url)" :alt="item.name"><span>{{ item.name }}</span></button>
++      </div>
++      <p v-if="!state.sharedWallpapers.length">暂无共享壁纸</p>
++      <el-pagination v-if="state.wallpaperTotal > 8" v-model:current-page="state.wallpaperPage" :page-size="8" :total="state.wallpaperTotal" layout="prev, pager, next" background @current-change="loadShared" />
++    </section>
++    <slot />
++  </section>
++</template>
++
++<style scoped>
++.school-settings { height: 100%; overflow: auto; padding: 24px; display: flex; flex-direction: column; gap: 20px; }
++.school-settings-heading { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
++.school-settings h2, .school-settings h3 { margin: 0; font-size: 18px; }
++.school-settings h3 { font-size: 15px; }
++.school-settings p { color: #6b7280; font-size: 13px; line-height: 1.6; margin: 8px 0 0; }
++.school-asset-card { border: 1px solid #e3e8ef; border-radius: 10px; padding: 20px; background: #fff; }
++.school-asset-controls { display: flex; align-items: center; gap: 20px; margin-top: 18px; flex-wrap: wrap; }
++.school-asset-preview { background: #f3f5f8; color: #8290a3; display: grid; place-items: center; border: 1px solid #e3e8ef; border-radius: 8px; overflow: hidden; }
++.school-asset-preview.logo { width: 96px; height: 96px; padding: 6px; }
++.school-asset-preview.background { width: min(320px, 100%); aspect-ratio: 16/9; }
++.school-asset-preview img { width: 100%; height: 100%; object-fit: cover; }
++.school-asset-preview.logo img { object-fit: contain; }
++.school-asset-upload { display: inline-flex; align-items: center; gap: 8px; padding: 10px 14px; border: 1px solid #ccd6e3; border-radius: 6px; color: #316aa9; cursor: pointer; position: relative; }
++.school-asset-upload input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
++.school-asset-upload:focus-within { outline: 2px solid #2563eb; outline-offset: 2px; }
++.school-asset-upload.disabled { opacity: .55; cursor: wait; }
++.school-asset-card h4 { font-size: 13px; margin: 20px 0 10px; }
++.school-wallpaper-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
++.school-wallpaper-list button { min-width: 0; border: 1px solid #d5dfe8; border-radius: 6px; overflow: hidden; background: #fff; padding: 0; text-align: left; cursor: pointer; }
++.school-wallpaper-list img { display: block; width: 100%; aspect-ratio: 16/9; object-fit: cover; }
++.school-wallpaper-list span { display: block; padding: 7px; font-size: 12px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
++</style>
+diff --git a/fontend/pc/src/components/WallpaperLibrary.vue b/fontend/pc/src/components/WallpaperLibrary.vue
+new file mode 100644
+index 0000000..9f345d5
+--- /dev/null
++++ b/fontend/pc/src/components/WallpaperLibrary.vue
+@@ -0,0 +1,166 @@
++<script setup>
++import { computed, onMounted, reactive, watch } from 'vue';
++import { Check, Images, ImagePlus, RefreshCw } from '@lucide/vue';
++import { backendUrl, request } from '../api/client';
++
++const props = defineProps({ selection: { type: Object, default: () => ({}) }, schoolDefaultUrl: { type: String, default: '' } });
++const emit = defineEmits(['applied']);
++const state = reactive({ scope: 'mine', items: [], total: 0, page: 1, size: 12, loading: false, busy: false, error: '', selected: null, importing: false, importItems: [], importPage: 1, importTotal: 0 });
++const activeId = computed(() => Number(state.selected?.wallpaper_id ?? props.selection?.wallpaper_id ?? 0));
++const activeMode = computed(() => state.selected?.wallpaper_mode ?? props.selection?.wallpaper_mode ?? 'school');
++
++async function load() {
++  state.loading = true;
++  state.error = '';
++  try {
++    const data = await request(`/wallpaper/list?scope=${state.scope}&page=${state.page}&page_size=${state.size}`);
++    state.items = data.items || [];
++    state.total = data.pagination?.total || 0;
++  } catch (error) { state.error = error.message; }
++  finally { state.loading = false; }
++}
++
++async function apply(id = null) {
++  if (state.busy) return;
++  state.busy = true;
++  state.error = '';
++  try {
++    const data = await request('/wallpaper/apply', { method: 'POST', body: JSON.stringify(id ? { id } : { mode: 'school' }) });
++    state.selected = data;
++    emit('applied', data);
++  } catch (error) { state.error = error.message; }
++  finally { state.busy = false; }
++}
++
++async function share(item, shared) {
++  if (state.busy) return;
++  state.busy = true;
++  state.error = '';
++  try {
++    const updated = await request('/wallpaper/share', { method: 'POST', body: JSON.stringify({ id: item.id, shared }) });
++    Object.assign(item, updated);
++  } catch (error) { state.error = error.message; }
++  finally { state.busy = false; }
++}
++
++async function upload(event) {
++  const file = event.target.files?.[0];
++  event.target.value = '';
++  if (!file || state.busy) return;
++  if (!['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(file.type) || file.size > 8 * 1024 * 1024) {
++    state.error = '请选择不超过 8 MB 的 JPG、PNG、WebP 或 GIF 图片';
++    return;
++  }
++  state.busy = true;
++  state.error = '';
++  try {
++    const body = new FormData();
++    body.append('file', file);
++    await request('/wallpaper/upload', { method: 'POST', body });
++    state.scope = 'mine';
++    state.page = 1;
++    await load();
++  } catch (error) { state.error = error.message; }
++  finally { state.busy = false; }
++}
++
++async function loadImportable() {
++  state.error = '';
++  try {
++    const data = await request(`/wallpaper/importable?page=${state.importPage}&page_size=12`);
++    state.importItems = data.items || [];
++    state.importTotal = data.pagination?.total || 0;
++  } catch (error) { state.error = error.message; }
++}
++
++async function openImport() {
++  state.importPage = 1;
++  state.importing = true;
++  await loadImportable();
++}
++
++async function importImage(fileId) {
++  if (state.busy) return;
++  state.busy = true;
++  state.error = '';
++  try {
++    await request('/wallpaper/import', { method: 'POST', body: JSON.stringify({ file_id: fileId }) });
++    state.importing = false;
++    state.scope = 'mine';
++    state.page = 1;
++    await load();
++  } catch (error) { state.error = error.message; }
++  finally { state.busy = false; }
++}
++
++watch(() => state.scope, () => { state.page = 1; load(); });
++watch(() => state.page, load);
++watch(() => props.selection, () => { state.selected = null; });
++onMounted(load);
++</script>
++
++<template>
++  <section class="wallpaper-library">
++    <header class="wallpaper-library-head">
++      <div class="wallpaper-library-tabs" role="tablist" aria-label="壁纸来源">
++        <button type="button" role="tab" :aria-selected="state.scope === 'mine'" :class="{ active: state.scope === 'mine' }" @click="state.scope = 'mine'">我的上传</button>
++        <button type="button" role="tab" :aria-selected="state.scope === 'shared'" :class="{ active: state.scope === 'shared' }" @click="state.scope = 'shared'">壁纸库</button>
++      </div>
++      <div class="wallpaper-library-actions">
++        <button v-if="state.scope === 'mine'" type="button" class="wallpaper-library-upload" :disabled="state.busy" @click="openImport"><Images :size="16" />历史图片</button>
++        <label class="wallpaper-library-upload" :class="{ disabled: state.busy }"><ImagePlus :size="16" />上传壁纸<input type="file" accept="image/jpeg,image/png,image/webp,image/gif" :disabled="state.busy" @change="upload"></label>
++        <button type="button" class="wallpaper-library-icon" title="刷新壁纸" :disabled="state.loading" @click="load"><RefreshCw :size="17" /></button>
++      </div>
++    </header>
++    <p class="wallpaper-library-hint">推荐 1920 × 1080 px 或更高的 16:9 横图，最大 8 MB。</p>
++    <p v-if="state.error" class="wallpaper-library-error" role="alert">{{ state.error }}</p>
++    <div class="wallpaper-library-grid">
++      <article class="wallpaper-library-item" :class="{ active: activeMode === 'school' }">
++        <div class="wallpaper-library-image school"><img v-if="schoolDefaultUrl" :src="backendUrl(schoolDefaultUrl)" alt="学校默认壁纸"><span v-else>学校默认</span></div>
++        <div class="wallpaper-library-item-footer"><strong>学校默认</strong><button type="button" :disabled="state.busy" @click="apply()"><Check v-if="activeMode === 'school'" :size="15" />{{ activeMode === 'school' ? '已应用' : '应用' }}</button></div>
++      </article>
++      <article v-for="item in state.items" :key="item.id" class="wallpaper-library-item" :class="{ active: activeMode === 'item' && activeId === item.id }">
++        <div class="wallpaper-library-image"><img :src="backendUrl(item.url)" :alt="item.name" loading="lazy"></div>
++        <div class="wallpaper-library-item-footer"><strong :title="item.name">{{ item.name }}</strong><button type="button" :disabled="state.busy" @click="apply(item.id)"><Check v-if="activeMode === 'item' && activeId === item.id" :size="15" />{{ activeMode === 'item' && activeId === item.id ? '已应用' : '应用' }}</button></div>
++        <label v-if="state.scope === 'mine'" class="wallpaper-library-share"><input type="checkbox" :checked="item.is_shared" :disabled="state.busy" @change="share(item, $event.target.checked)">分享到壁纸库</label>
++      </article>
++    </div>
++    <p v-if="!state.loading && !state.items.length" class="wallpaper-library-empty">{{ state.scope === 'mine' ? '暂无上传壁纸' : '壁纸库暂无共享图片' }}</p>
++    <el-pagination v-if="state.total > state.size" v-model:current-page="state.page" :page-size="state.size" :total="state.total" layout="prev, pager, next" background />
++    <el-dialog v-model="state.importing" title="选择历史图片" width="min(720px, 92vw)">
++      <div class="wallpaper-library-grid">
++        <button v-for="image in state.importItems" :key="image.file_id" type="button" class="wallpaper-library-import-item" :disabled="state.busy" @click="importImage(image.file_id)"><img :src="backendUrl(image.url)" :alt="image.name"><span>{{ image.name }}</span></button>
++      </div>
++      <p v-if="!state.importItems.length" class="wallpaper-library-empty">暂无可选图片</p>
++      <el-pagination v-if="state.importTotal > 12" v-model:current-page="state.importPage" :page-size="12" :total="state.importTotal" layout="prev, pager, next" background @current-change="loadImportable" />
++    </el-dialog>
++  </section>
++</template>
++
++<style scoped>
++.wallpaper-library { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
++.wallpaper-library-head, .wallpaper-library-actions, .wallpaper-library-item-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
++.wallpaper-library-tabs { display: inline-flex; border-bottom: 1px solid #d7dfe8; }
++.wallpaper-library-tabs button { border: 0; background: none; padding: 9px 16px; color: #596776; cursor: pointer; border-bottom: 2px solid transparent; }
++.wallpaper-library-tabs button.active { color: #18689a; border-color: #18689a; font-weight: 600; }
++.wallpaper-library-actions { justify-content: flex-end; }
++.wallpaper-library-upload { position: relative; display: inline-flex; align-items: center; gap: 6px; border: 1px solid #cbd6df; border-radius: 6px; padding: 8px 12px; cursor: pointer; color: #245e86; white-space: nowrap; }
++.wallpaper-library-upload input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
++.wallpaper-library-upload.disabled { opacity: .5; }
++.wallpaper-library-icon { width: 36px; height: 36px; display: grid; place-items: center; border: 1px solid #cbd6df; border-radius: 6px; background: #fff; cursor: pointer; }
++.wallpaper-library-hint, .wallpaper-library-empty { color: #697683; font-size: 12px; margin: 0; }
++.wallpaper-library-error { color: #b42318; font-size: 12px; margin: 0; }
++.wallpaper-library-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); gap: 12px; }
++.wallpaper-library-item { min-width: 0; border: 1px solid #dce3ea; border-radius: 6px; overflow: hidden; background: #fff; }
++.wallpaper-library-item.active { border-color: #2375a9; box-shadow: inset 0 0 0 1px #2375a9; }
++.wallpaper-library-image { aspect-ratio: 16 / 9; background: #e9eef2; display: grid; place-items: center; color: #607488; }
++.wallpaper-library-image img { width: 100%; height: 100%; object-fit: cover; }
++.wallpaper-library-item-footer { padding: 9px; min-height: 44px; }
++.wallpaper-library-item-footer strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
++.wallpaper-library-item-footer button { display: inline-flex; align-items: center; gap: 3px; border: 0; background: none; color: #17669a; cursor: pointer; font-size: 12px; white-space: nowrap; }
++.wallpaper-library-share { display: flex; align-items: center; gap: 5px; padding: 0 9px 9px; color: #516273; font-size: 12px; }
++.wallpaper-library-import-item { min-width: 0; border: 1px solid #dce3ea; border-radius: 6px; overflow: hidden; background: #fff; padding: 0; text-align: left; cursor: pointer; }
++.wallpaper-library-import-item img { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: cover; }
++.wallpaper-library-import-item span { display: block; padding: 8px; font-size: 12px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
++@media (max-width: 560px) { .wallpaper-library-head { align-items: stretch; flex-direction: column; } .wallpaper-library-actions { justify-content: flex-start; } .wallpaper-library-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
++</style>
+diff --git a/fontend/pc/src/components/profile/SignatureSettings.vue b/fontend/pc/src/components/profile/SignatureSettings.vue
+new file mode 100644
+index 0000000..0e779dd
+--- /dev/null
++++ b/fontend/pc/src/components/profile/SignatureSettings.vue
+@@ -0,0 +1,89 @@
++<template>
++  <section class="signature-settings">
++    <h3>个人电子签名</h3>
++    <p>用于审批时由本人确认使用。重新签名会生成新版本，历史审批保留原签名。此处不替代安全承诺书签字文件。</p>
++    <div v-if="signature" class="signature-preview">
++      <img :src="backendUrl(signature.url)" alt="当前个人签名">
++      <span>版本 {{ signature.version }} · {{ signature.created_at }}</span>
++    </div>
++    <p v-else-if="!loading">尚未设置个人签名</p>
++    <p v-if="message" role="status">{{ message }}</p>
++    <p v-if="error" class="error" role="alert">{{ error }}</p>
++    <button type="button" :disabled="busy || loading" @click="create">{{ signature ? '手机扫码重新签名' : '手机扫码签名' }}</button>
++    <div v-if="session" class="signature-session">
++      <QRCode :value="session.scan_url" label="手机签名二维码" />
++      <p>请在手机登录同一系统用户后签名。二维码 {{ seconds }} 秒后失效。</p>
++      <button type="button" :disabled="busy" @click="cancel">取消本次签名</button>
++    </div>
++  </section>
++</template>
++<script setup>
++import { onMounted, onBeforeUnmount, ref } from 'vue';
++import QRCode from '../../../../shared/components/QRCode.vue';
++import { backendUrl, request } from '../../api/client';
++const signature = ref(null);
++const session = ref(null);
++const loading = ref(true);
++const busy = ref(false);
++const error = ref('');
++const message = ref('');
++const seconds = ref(0);
++let pollTimer = null;
++let clockTimer = null;
++let generation = 0;
++let alive = true;
++function stop() { clearTimeout(pollTimer); clearInterval(clockTimer); pollTimer = null; clockTimer = null; generation++; }
++async function load() { signature.value = (await request('/signature/current')).signature; }
++async function create() {
++  busy.value = true; error.value = ''; message.value = ''; stop(); session.value = null;
++  try {
++    const created = await request('/signature/session', { method: 'POST', body: '{}' });
++    if (!alive) { await request('/signature/session-cancel', { method: 'POST', body: JSON.stringify({ session_id: created.session_id }) }); return; }
++    session.value = created; seconds.value = created.expires_in;
++    const expiresAt = Date.now() + seconds.value * 1000;
++    const revision = generation;
++    clockTimer = setInterval(() => { seconds.value = Math.max(0, Math.ceil((expiresAt - Date.now()) / 1000)); }, 1000);
++    pollTimer = setTimeout(() => poll(revision), 1800);
++  } catch (failure) { if (alive) error.value = failure.message; }
++  finally { busy.value = false; }
++}
++async function poll(revision) {
++  const current = session.value;
++  if (!current || revision !== generation || !alive) return;
++  try {
++    const status = await request(`/signature/session-status?session_id=${encodeURIComponent(current.session_id)}`);
++    if (revision !== generation || !alive) return;
++    if (status.state === 'confirmed') { stop(); session.value = null; await load(); message.value = '签名已保存，新版本将用于后续本人确认的审批。'; return; }
++    if (status.state !== 'pending') { stop(); session.value = null; message.value = '签名会话已结束，请重新获取二维码。'; return; }
++    pollTimer = setTimeout(() => poll(revision), 1800);
++  } catch (failure) {
++    if (revision !== generation || !alive) return;
++    stop(); session.value = null; error.value = failure.message;
++  }
++}
++async function cancel() {
++  const current = session.value;
++  if (!current) return;
++  busy.value = true; error.value = '';
++  try { await request('/signature/session-cancel', { method: 'POST', body: JSON.stringify({ session_id: current.session_id }) }); stop(); session.value = null; }
++  catch (failure) { error.value = failure.message; }
++  finally { busy.value = false; }
++}
++onMounted(async () => { try { await load(); } catch (failure) { error.value = failure.message; } finally { loading.value = false; } });
++onBeforeUnmount(() => {
++  alive = false; stop();
++  if (session.value) request('/signature/session-cancel', { method: 'POST', body: JSON.stringify({ session_id: session.value.session_id }) }).catch(() => {});
++});
++</script>
++<style scoped>
++.signature-settings { padding: 20px; border: 1px solid #e2e8f0; border-radius: 12px; background: #fff; color: #334155; }
++h3 { margin: 0 0 12px; }
++p { line-height: 1.6; font-size: 14px; }
++.signature-preview { display: flex; align-items: center; gap: 20px; margin: 18px 0; }
++.signature-preview img { object-fit: contain; max-width: 240px; max-height: 100px; }
++.signature-preview span { font-size: 13px; color: #64748b; }
++.signature-session { margin-top: 20px; text-align: center; }
++button { border: 1px solid #cbd5e1; padding: 9px 14px; border-radius: 6px; background: #fff; color: #0f172a; cursor: pointer; }
++button:disabled { opacity: .5; cursor: default; }
++.error { color: #b91c1c; }
++</style>
+diff --git a/fontend/pc/src/composables/useMaximizedWindows.js b/fontend/pc/src/composables/useMaximizedWindows.js
+new file mode 100644
+index 0000000..10bb8af
+--- /dev/null
++++ b/fontend/pc/src/composables/useMaximizedWindows.js
+@@ -0,0 +1,12 @@
++import { computed, onBeforeUnmount, reactive } from 'vue';
++
++const maximizedWindows = reactive(new Set());
++export const hasMaximizedWindow = computed(() => maximizedWindows.size > 0);
++
++export function useMaximizedWindow() {
++  const id = Symbol('window');
++  const register = () => maximizedWindows.add(id);
++  const unregister = () => maximizedWindows.delete(id);
++  onBeforeUnmount(unregister);
++  return { register, unregister };
++}
+diff --git a/fontend/pc/src/styles.css b/fontend/pc/src/styles.css
+index e2bebc4..5a86136 100644
+--- a/fontend/pc/src/styles.css
++++ b/fontend/pc/src/styles.css
+@@ -3629,14 +3629,16 @@ a {
+ 
+ .operation-dialog.operation-dialog-managed {
+   position: relative;
+ }
+ 
+ .operation-dialog.operation-dialog-managed.is-maximized {
+-  width: calc(100vw - 36px) !important;
+-  height: calc(100dvh - 104px) !important;
++  width: 100vw !important;
++  height: 100dvh !important;
++  border-radius: 0;
++  border: 0;
+   max-width: none;
+   max-height: none;
+   min-width: 0;
+   min-height: 0;
+   resize: none;
+ }
+@@ -5354,33 +5356,33 @@ a {
+ .login-panel select:focus {
+   border-color: rgba(37, 99, 235, .58);
+   background: #fff;
+   box-shadow: 0 0 0 3px rgba(37, 99, 235, .12);
+ }
+ 
+-.login-panel button {
++.login-panel .login-submit-button {
+   height: 40px;
+   border-radius: 8px;
+   display: inline-flex;
+   align-items: center;
+   justify-content: center;
+   gap: 7px;
+   color: #fff;
+   background: #2563eb;
+   transition: background .16s ease, transform .16s ease, opacity .16s ease;
+ }
+ 
+-.login-panel button:not(:disabled):hover {
++.login-panel .login-submit-button:not(:disabled):hover {
+   background: #1d4ed8;
+ }
+ 
+-.login-panel button:not(:disabled):active {
++.login-panel .login-submit-button:not(:disabled):active {
+   transform: translateY(1px);
+ }
+ 
+-.login-panel button:disabled {
++.login-panel .login-submit-button:disabled {
+   opacity: .58;
+   cursor: not-allowed;
+ }
+ 
+ .login-panel small {
+   min-height: 18px;
+@@ -7070,6 +7072,13 @@ a {
+   .template-library-panel .support-toolbar,
+   .export-task-panel .support-toolbar,
+   .support-layout {
+     grid-template-columns: minmax(0, 1fr);
+   }
+ }
++
++.login-school-logo { width: 42px; height: 42px; flex: 0 0 42px; object-fit: contain; }
++.login-panel .login-secondary-button { min-height: 40px; border-radius: 8px; }
++
++.desktop-shell.desktop-shell-maximized { grid-template-rows: minmax(0, 1fr); }
++.desktop-shell-maximized .taskbar, .desktop-shell-maximized .notebook-floating-button { display: none; }
++.operation-mask.operation-mask-maximized { padding: 0; }
+diff --git a/fontend/shared/components/SignatureCanvas.vue b/fontend/shared/components/SignatureCanvas.vue
+new file mode 100644
+index 0000000..1215493
+--- /dev/null
++++ b/fontend/shared/components/SignatureCanvas.vue
+@@ -0,0 +1,58 @@
++<template>
++  <div class="signature-canvas">
++    <canvas ref="canvas" width="1200" height="480" aria-label="手写签名区域" @pointerdown="start" @pointermove="move" @pointerup="finish" @pointercancel="finish" @lostpointercapture="finish" />
++    <div class="signature-tools">
++      <span>请在框内书写本人姓名</span>
++      <button type="button" :disabled="disabled" @click="clear">清空重写</button>
++    </div>
++  </div>
++</template>
++<script setup>
++import { ref } from 'vue';
++const props = defineProps({ disabled: Boolean });
++const emit = defineEmits(['change']);
++const canvas = ref(null);
++let active = null;
++let hasInk = false;
++function point(event) {
++  const bounds = canvas.value.getBoundingClientRect();
++  return [(event.clientX - bounds.left) * 1200 / bounds.width, (event.clientY - bounds.top) * 480 / bounds.height];
++}
++function start(event) {
++  if (props.disabled || active !== null || (event.pointerType === 'mouse' && event.button !== 0)) return;
++  event.preventDefault();
++  active = event.pointerId;
++  canvas.value.setPointerCapture(active);
++  const context = canvas.value.getContext('2d');
++  context.strokeStyle = '#111827'; context.lineWidth = 5; context.lineCap = 'round'; context.lineJoin = 'round';
++  context.beginPath(); context.moveTo(...point(event));
++}
++function move(event) {
++  if (active !== event.pointerId || props.disabled) return;
++  event.preventDefault();
++  const context = canvas.value.getContext('2d');
++  context.lineTo(...point(event)); context.stroke();
++  hasInk = true; emit('change', true);
++}
++function finish(event) {
++  if (active !== event.pointerId) return;
++  active = null;
++}
++function clear() {
++  if (props.disabled) return;
++  active = null; hasInk = false;
++  canvas.value.getContext('2d').clearRect(0, 0, 1200, 480);
++  emit('change', false);
++}
++async function blob() {
++  if (!hasInk) throw new Error('请先书写本人签名');
++  return new Promise((resolve, reject) => canvas.value.toBlob(value => value ? resolve(value) : reject(new Error('签名图像生成失败')), 'image/png'));
++}
++defineExpose({ blob, clear });
++</script>
++<style scoped>
++canvas { display: block; width: 100%; height: auto; aspect-ratio: 5 / 2; border: 1px solid #94a3b8; border-radius: 8px; background: #fff; touch-action: none; }
++.signature-tools { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 12px; font-size: 14px; color: #64748b; }
++button { border: 1px solid #cbd5e1; background: #fff; border-radius: 6px; padding: 8px 12px; color: #334155; cursor: pointer; }
++button:disabled { opacity: .5; cursor: default; }
++</style>
+diff --git a/fontend/shared/components/WechatBindingGate.vue b/fontend/shared/components/WechatBindingGate.vue
+index 4e4dcd0..70f379f 100644
+--- a/fontend/shared/components/WechatBindingGate.vue
++++ b/fontend/shared/components/WechatBindingGate.vue
+@@ -3,32 +3,33 @@
+     <div v-if="show" class="wechat-binding-gate" role="dialog" aria-modal="true" aria-label="企业微信绑定">
+       <section>
+         <h2>绑定企业微信</h2>
+         <p>当前账号：{{ accountName }}（{{ roleName }}）</p>
+         <p>{{ state.message || guidance }}</p>
+         <template v-if="!inWechat && !status?.bound">
+-          <label for="wechat-binding-url">学校网址</label>
+-          <input id="wechat-binding-url" :value="bindingUrl" readonly @focus="$event.target.select()">
+-          <button type="button" :disabled="state.loading" @click="$emit('copy')">复制学校网址</button>
++          <QRCode v-if="state.scan && ['pending', 'scanned'].includes(state.scan.state)" :value="state.scan.scan_url" label="企业微信扫码绑定二维码" />
++          <p v-if="state.scan && ['pending', 'scanned'].includes(state.scan.state)">二维码有效期 5 分钟，请使用企业微信扫码。</p>
++          <button type="button" :disabled="state.loading || state.scanLoading || status?.configured === false || status?.binding_outdated" @click="$emit('start')">{{ state.scanLoading ? '正在生成二维码' : state.scan ? '刷新二维码' : '生成绑定二维码' }}</button>
+         </template>
+         <button v-if="inWechat && status?.identity_ready && !status?.bound && !status?.binding_outdated" type="button" :disabled="state.loading" @click="$emit('bind')">确认绑定当前账号</button>
+         <button v-if="inWechat && (!status?.bound || !status?.identity_ready || !status?.identity_matches) && !status?.binding_outdated && status?.configured !== false" type="button" :disabled="state.loading" @click="$emit('start')">{{ state.loading ? '正在处理' : status?.bound || status?.identity_ready ? '重新获取企业微信身份' : '获取企业微信身份' }}</button>
+         <button type="button" :disabled="state.loading" @click="$emit('recheck')">{{ state.loading ? '正在检查' : '重新检查绑定状态' }}</button>
+         <button v-if="dismissible" type="button" :disabled="state.loading" @click="$emit('close')">返回系统</button>
+         <button type="button" :disabled="state.loading" @click="$emit('logout')">退出当前账号</button>
+       </section>
+     </div>
+   </Teleport>
+ </template>
+ <script setup>
+ import { computed } from 'vue';
++import QRCode from './QRCode.vue';
+ 
+ const props = defineProps({ show: Boolean, state: Object, status: Object, accountName: String, roleName: String, inWechat: Boolean, bindingUrl: String, dismissible: Boolean });
+ defineEmits(['bind', 'start', 'logout', 'recheck', 'copy', 'close']);
+ const guidance = computed(() => {
+-  if (!props.inWechat) return '请在企业微信中打开学校网址，登录当前系统账号完成绑定，再返回此页面重新检查。';
++  if (!props.inWechat) return '请使用企业微信扫码，在手机上核对当前账号并确认绑定，完成后本页自动更新。';
+   if (props.status?.identity_ready) return '已获取企业微信身份，请确认与当前系统账号绑定。';
+   return '请先获取企业微信身份，再确认绑定当前系统账号。';
+ });
+ </script>
+ <style scoped>
+ .wechat-binding-gate { position: fixed; inset: 0; z-index: 100000; display: grid; place-items: center; background: rgba(15,23,42,.65); padding: 20px; }
+diff --git a/fontend/shared/useWechatBinding.js b/fontend/shared/useWechatBinding.js
+index 33351d5..bc899b5 100644
+--- a/fontend/shared/useWechatBinding.js
++++ b/fontend/shared/useWechatBinding.js
+@@ -1,37 +1,42 @@
+ import { computed, onBeforeUnmount, onMounted, reactive, watch } from 'vue';
+ 
+-export function useWechatBinding({ context, request, backendUrl }) {
++export function useWechatBinding({ context, request, backendUrl, publicOrigin = () => backendUrl('/') }) {
+   const bindingRoles = ['teacher', 'student', 'super_admin', 'school_admin', 'college_admin', 'profession_admin'];
+   const inWechat = /wxwork/i.test(navigator.userAgent);
+   const callbackUrl = new URL(window.location.href);
+   const oauthResult = callbackUrl.searchParams.get('wechat_oauth');
+   const requested = callbackUrl.searchParams.get('wechat_bind') === '1';
+   callbackUrl.searchParams.delete('wechat_oauth');
+   callbackUrl.searchParams.delete('wechat_bind');
+   if (oauthResult || requested) window.history.replaceState(null, '', callbackUrl.pathname + callbackUrl.search + callbackUrl.hash);
+-  const state = reactive({ loading: false, message: '', status: null, sessionKey: '', open: requested || Boolean(oauthResult) });
++  const state = reactive({ scan: null, scanLoading: false, loading: false, message: '', status: null, sessionKey: '', open: requested || Boolean(oauthResult) });
+   let attempted = Boolean(oauthResult);
+   let generation = 0;
+   let pending = null;
++  let pollTimer = null;
++  let scanGeneration = 0;
++  let disposed = false;
++  const schoolOrigin = () => typeof publicOrigin === 'function' ? publicOrigin() : publicOrigin;
+   const sessionKey = computed(() => {
+     const current = context();
+-    return current.account_id ? [window.__PRACTICAL_DESKTOP__?.serverOrigin || backendUrl('/'), current.school_database_id, current.school_code, current.school_id, current.account_id].join(':') : '';
++    return current.account_id ? [schoolOrigin(), current.school_database_id, current.school_code, current.school_id, current.account_id].join(':') : '';
+   });
+   const required = computed(() => bindingRoles.includes(context().role_type));
+   const status = computed(() => state.sessionKey === sessionKey.value ? state.status : null);
+   const blocked = computed(() => {
+     const binding = status.value || context().wechat_binding || {};
+     const forceInWechat = inWechat && ['teacher', 'student'].includes(context().role_type);
+     if (!sessionKey.value || !required.value || (binding.enforced === false && !forceInWechat)) return false;
+     return !binding.bound || (inWechat && (!binding.identity_ready || !binding.identity_matches));
+   });
+   const show = computed(() => Boolean(context().account_id && required.value && (blocked.value || state.open || (inWechat && status.value && !status.value.bound))));
+-  const publicUrl = computed(() => new URL('/h5/?wechat_bind=1', window.__PRACTICAL_DESKTOP__?.serverOrigin || backendUrl('/')).href);
++  const publicUrl = computed(() => new URL('/h5/?wechat_bind=1', schoolOrigin()).href);
+ 
+   watch(sessionKey, (key, previous) => {
++    cancelScan();
+     generation++;
+     pending = null;
+     state.status = null;
+     state.sessionKey = '';
+     state.loading = false;
+     state.message = '';
+@@ -44,13 +49,13 @@ export function useWechatBinding({ context, request, backendUrl }) {
+   function currentSession(key, version) {
+     return key === sessionKey.value && version === generation;
+   }
+ 
+   function start() {
+     state.open = true;
+-    if (!inWechat) { state.message = '请在企业微信中打开系统完成绑定'; return; }
++    if (!inWechat) return createScan();
+     if (status.value?.configured === false || status.value?.binding_outdated) return;
+     const url = new URL(window.location.href);
+     state.loading = true;
+     window.location.assign(backendUrl(`/api/wechat/oauth/start?return_path=${encodeURIComponent(url.pathname + url.search + url.hash)}`));
+   }
+ 
+@@ -101,13 +106,16 @@ export function useWechatBinding({ context, request, backendUrl }) {
+   function open() {
+     state.open = true;
+     return refresh();
+   }
+ 
+   function close() {
+-    if (!blocked.value) state.open = false;
++    if (!blocked.value) {
++      state.open = false;
++      cancelScan();
++    }
+   }
+ 
+   async function recheck() {
+     if (state.loading) return;
+     const wasBlocked = blocked.value;
+     const result = await refresh(false);
+@@ -141,15 +149,102 @@ export function useWechatBinding({ context, request, backendUrl }) {
+       if (currentSession(key, version)) state.message = error.message;
+     } finally {
+       if (currentSession(key, version)) state.loading = false;
+     }
+   }
+ 
++  async function cancelScan() {
++    scanGeneration++;
++    clearTimeout(pollTimer);
++    pollTimer = null;
++    const scan = state.scan;
++    state.scan = null;
++    state.scanLoading = false;
++    if (!scan?.session_id || ['confirmed', 'expired', 'cancelled', 'failed'].includes(scan.state)) return;
++    try {
++      await request('/wechat/scan-cancel', { method: 'POST', body: JSON.stringify({ session_id: scan.session_id }), keepalive: true });
++    } catch {}
++  }
++
++  async function createScan() {
++    if (state.scanLoading || inWechat || !show.value || status.value?.configured === false || status.value?.binding_outdated) return;
++    const cancellation = cancelScan();
++    const key = sessionKey.value;
++    const version = generation;
++    const scanVersion = ++scanGeneration;
++    state.scanLoading = true;
++    state.message = '';
++    try {
++      await cancellation;
++      if (!currentSession(key, version) || scanVersion !== scanGeneration || !show.value || disposed) return;
++      const school = new URL(schoolOrigin());
++      if (school.protocol !== 'https:') throw new Error('扫码绑定需要学校 HTTPS 地址，请检查学校服务地址。');
++      const result = await request('/wechat/scan-session', { method: 'POST', body: '{}' });
++      if (!currentSession(key, version) || scanVersion !== scanGeneration || disposed) {
++        await request('/wechat/scan-cancel', { method: 'POST', body: JSON.stringify({ session_id: result.session_id }), keepalive: true }).catch(() => {});
++        return;
++      }
++      const scanUrl = new URL(result.scan_url);
++      if (scanUrl.protocol !== 'https:' || scanUrl.origin !== school.origin || scanUrl.pathname !== '/api/wechat/scan/start') {
++        await request('/wechat/scan-cancel', { method: 'POST', body: JSON.stringify({ session_id: result.session_id }) }).catch(() => {});
++        throw new Error('二维码学校地址不一致，请联系管理员检查配置。');
++      }
++      state.scan = { ...result, expiresAt: Date.now() + result.expires_in * 1000 };
++      pollTimer = setTimeout(() => pollScan(key, version, scanVersion), 2000);
++    } catch (error) {
++      if (currentSession(key, version) && scanVersion === scanGeneration) state.message = error.message;
++    } finally {
++      if (currentSession(key, version) && scanVersion === scanGeneration) state.scanLoading = false;
++    }
++  }
++
++  async function pollScan(key, version, scanVersion) {
++    if (!currentSession(key, version) || scanVersion !== scanGeneration || !state.scan || disposed) return;
++    if (Date.now() >= state.scan.expiresAt) {
++      state.scan.state = 'expired';
++      state.message = '二维码已过期，请刷新二维码。';
++      return;
++    }
++    try {
++      const result = await request(`/wechat/scan-status?session_id=${encodeURIComponent(state.scan.session_id)}`);
++      if (!currentSession(key, version) || scanVersion !== scanGeneration || !state.scan || disposed) return;
++      state.scan.state = result.state;
++      if (result.state === 'confirmed') {
++        await refresh(false);
++        if (currentSession(key, version)) window.location.reload();
++        return;
++      }
++      if (['expired', 'cancelled', 'failed'].includes(result.state)) {
++        state.message = result.state === 'failed' ? '绑定未完成，请在电脑刷新二维码后重试。' : '二维码已失效，请刷新二维码。';
++        return;
++      }
++      state.message = result.state === 'scanned' ? '已扫码，请在手机核对账号并确认绑定。' : '';
++    } catch (error) {
++      if (!currentSession(key, version) || scanVersion !== scanGeneration || !state.scan || disposed) return;
++      state.message = error.message;
++      if ([401, 403].includes(error.status)) { await cancelScan(); return; }
++    }
++    if (currentSession(key, version) && scanVersion === scanGeneration && state.scan && !disposed) pollTimer = setTimeout(() => pollScan(key, version, scanVersion), 2000);
++  }
++
++  watch(() => [show.value, status.value?.configured, status.value?.bound], ([visible, configured, bound]) => {
++    if (!visible || bound) { cancelScan(); return; }
++    if (!inWechat && configured && !state.scan && !state.scanLoading) createScan();
++  });
++
+   async function expired() {
+     const wasBlocked = blocked.value;
+     const result = await refresh(false);
+     if (result && wasBlocked && !blocked.value) window.location.reload();
+   }
+-  onMounted(() => window.addEventListener('practical-wechat-required', expired));
+-  onBeforeUnmount(() => window.removeEventListener('practical-wechat-required', expired));
+-  return { state, status, blocked, show, inWechat, publicUrl, refresh, start, bind, open, close, recheck, copyLink };
++  onMounted(() => {
++    window.addEventListener('practical-wechat-required', expired);
++    window.addEventListener('pagehide', cancelScan);
++  });
++  onBeforeUnmount(() => {
++    disposed = true;
++    window.removeEventListener('practical-wechat-required', expired);
++    window.removeEventListener('pagehide', cancelScan);
++    cancelScan();
++  });
++  return { state, status, cancelScan, createScan, blocked, show, inWechat, publicUrl, refresh, start, bind, open, close, recheck, copyLink };
+ }
+diff --git a/server/app/controller/Api/AuthController.php b/server/app/controller/Api/AuthController.php
+index 267213b..0b59234 100644
+--- a/server/app/controller/Api/AuthController.php
++++ b/server/app/controller/Api/AuthController.php
+@@ -58,12 +58,17 @@ class AuthController
+     /**
+      * 退出登录
+      */
+     #[OperationLog('退出登录')]
+     public function logout(Request $request): Response
+     {
++        try {
++            (new \app\server\wechat\WechatScanSessionService())->cancelCurrent();
++        } catch (Throwable $exception) {
++            return $this->fail(50300, '退出暂未完成，请稍后重试', 503);
++        }
+         $cookies = (new AuthService())->cookieNames();
+         return $this->ok()
+             ->cookie($cookies['access'], '', 0, '/', '', false, true, 'Lax')
+             ->cookie($cookies['refresh'], '', 0, '/', '', false, true, 'Lax');
+     }
+ 
+diff --git a/server/app/controller/Api/ConfigController.php b/server/app/controller/Api/ConfigController.php
+index 1c7fd90..9f24925 100644
+--- a/server/app/controller/Api/ConfigController.php
++++ b/server/app/controller/Api/ConfigController.php
+@@ -3,13 +3,13 @@
+ namespace app\controller\Api;
+ 
+ use app\attribute\OperationLog;
+ use app\controller\Api\Concerns\Responds;
+ use app\server\CurrentContext;
+ use app\server\config\ConfigService;
+-use app\server\file\FileService;
++use app\server\config\SchoolAppearanceService;
+ use InvalidArgumentException;
+ use support\Request;
+ use support\Response;
+ use Throwable;
+ 
+ class ConfigController
+@@ -60,28 +60,13 @@ class ConfigController
+     {
+         if (!$this->canManageSchoolConfig()) {
+             return $this->fail(40300, '无操作权限', 403);
+         }
+ 
+         try {
+-            $result = (new FileService())->upload($request, [
+-                'category' => 'login_background',
+-                'is_temporary' => false,
+-                'require_md5' => false,
+-                'max_size' => 8 * 1024 * 1024,
+-                'allowed_extensions' => ['jpg', 'jpeg', 'png', 'webp', 'gif'],
+-            ]);
+-
+-            (new ConfigService())->set(
+-                'system',
+-                'login_background_url',
+-                $result['url'],
+-                'PC 登录页学校背景图'
+-            );
+-
+-            return $this->ok($this->loginPageData(), '已上传');
++            return $this->ok((new SchoolAppearanceService())->upload($request, 'background'), '已上传');
+         } catch (Throwable $exception) {
+             return $this->fail(40001, $exception->getMessage(), 400);
+         }
+     }
+ 
+     /**
+@@ -112,21 +97,13 @@ class ConfigController
+             return $this->fail(50000, $exception->getMessage(), 500);
+         }
+     }
+ 
+     private function loginPageData(): array
+     {
+-        $backgroundUrl = '';
+-        if (CurrentContext::get('school_connection')) {
+-            $backgroundUrl = (string) ((new ConfigService())->get('system.login_background_url') ?? '');
+-        }
+-
+-        return [
+-            'school_name' => CurrentContext::get('school_name') ?: '成都锦城学院',
+-            'login_background_url' => $backgroundUrl,
+-        ];
++        return (new SchoolAppearanceService())->publicSettings();
+     }
+ 
+     private function canManageSchoolConfig(): bool
+     {
+         return in_array(CurrentContext::roleType(), self::SCHOOL_ADMIN_ROLE_TYPES, true);
+     }
+diff --git a/server/app/controller/Api/SchoolAppearanceController.php b/server/app/controller/Api/SchoolAppearanceController.php
+new file mode 100644
+index 0000000..73ce0b6
+--- /dev/null
++++ b/server/app/controller/Api/SchoolAppearanceController.php
+@@ -0,0 +1,55 @@
++<?php
++
++namespace app\controller\Api;
++
++use app\attribute\OperationLog;
++use app\controller\Api\Concerns\Responds;
++use app\server\config\SchoolAppearanceService;
++use support\Request;
++use support\Response;
++use Throwable;
++
++class SchoolAppearanceController
++{
++    use Responds;
++
++    #[OperationLog('查看学校外观设置')]
++    public function settings(Request $request): Response
++    {
++        return $this->handle(fn (): array => (new SchoolAppearanceService())->settings());
++    }
++
++    #[OperationLog('上传学校标识')]
++    public function uploadLogo(Request $request): Response
++    {
++        return $this->handle(fn (): array => (new SchoolAppearanceService())->upload($request, 'logo'));
++    }
++
++    #[OperationLog('上传学校登录背景')]
++    public function uploadBackground(Request $request): Response
++    {
++        return $this->handle(fn (): array => (new SchoolAppearanceService())->upload($request, 'background'));
++    }
++
++    #[OperationLog('上传学校默认壁纸')]
++    public function uploadWallpaper(Request $request): Response
++    {
++        return $this->handle(fn (): array => (new SchoolAppearanceService())->uploadWallpaper($request));
++    }
++
++    #[OperationLog('设置学校默认壁纸')]
++    public function setWallpaper(Request $request): Response
++    {
++        return $this->handle(fn (): array => (new SchoolAppearanceService())->selectWallpaper((int) $request->input('id', 0)));
++    }
++
++    private function handle(callable $action): Response
++    {
++        try {
++            return $this->ok($action());
++        } catch (Throwable $exception) {
++            $status = in_array((int) $exception->getCode(), [401, 403, 409, 422, 429], true) ? (int) $exception->getCode() : 400;
++            return $this->fail($status * 100, $exception->getMessage(), $status);
++        }
++    }
++}
+diff --git a/server/app/controller/Api/SignatureController.php b/server/app/controller/Api/SignatureController.php
+new file mode 100644
+index 0000000..96ac535
+--- /dev/null
++++ b/server/app/controller/Api/SignatureController.php
+@@ -0,0 +1,56 @@
++<?php
++
++namespace app\controller\Api;
++
++use app\controller\Api\Concerns\Responds;
++use app\server\signature\SignatureService;
++use support\Request;
++use support\Response;
++use Throwable;
++use Webman\Http\UploadFile;
++
++class SignatureController
++{
++    use Responds;
++
++    public function current(Request $request): Response
++    {
++        return $this->handle(fn () => (new SignatureService())->current());
++    }
++
++    public function save(Request $request): Response
++    {
++        return $this->handle(function () use ($request): array {
++            if ($request->header('x-signature-intent') !== 'personal') throw new \RuntimeException('请通过个人签名页面保存', 403);
++            $file = $request->file('file');
++            if (!$file instanceof UploadFile) throw new \RuntimeException('请上传 PNG 签名', 422);
++            return (new SignatureService())->save($file, (string) $request->post('session_id', ''));
++        });
++    }
++
++    public function session(Request $request): Response
++    {
++        return $this->handle(fn () => (new SignatureService())->createSession());
++    }
++
++    public function sessionStatus(Request $request): Response
++    {
++        return $this->handle(fn () => (new SignatureService())->sessionStatus((string) $request->get('session_id', ''), $request->get('mobile') === '1'));
++    }
++
++    public function cancelSession(Request $request): Response
++    {
++        return $this->handle(fn () => (new SignatureService())->cancelSession((string) $request->post('session_id', '')));
++    }
++
++    private function handle(callable $callback): Response
++    {
++        try { return $this->ok($callback()); }
++        catch (Throwable $exception) {
++            $code = (int) $exception->getCode();
++            $status = in_array($code, [401, 403, 404, 409, 410, 422, 429, 503], true) ? $code : ($exception instanceof \InvalidArgumentException ? 422 : 500);
++            if ($status === 500) \support\Log::error('Signature request failed', ['exception' => $exception]);
++            return $this->fail($status, $status === 500 ? '签名处理失败，请稍后重试' : $exception->getMessage(), $status);
++        }
++    }
++}
+diff --git a/server/app/controller/Api/WallpaperController.php b/server/app/controller/Api/WallpaperController.php
+new file mode 100644
+index 0000000..367ab1a
+--- /dev/null
++++ b/server/app/controller/Api/WallpaperController.php
+@@ -0,0 +1,60 @@
++<?php
++
++namespace app\controller\Api;
++
++use app\attribute\OperationLog;
++use app\controller\Api\Concerns\Responds;
++use app\server\wallpaper\WallpaperService;
++use support\Request;
++use support\Response;
++use Throwable;
++
++class WallpaperController
++{
++    use Responds;
++
++    #[OperationLog('查看壁纸库')]
++    public function list(Request $request): Response
++    {
++        return $this->handle(fn () => (new WallpaperService())->list((string) $request->get('scope', 'mine'), (int) $request->get('page', 1), (int) $request->get('page_size', 20)));
++    }
++
++    #[OperationLog('上传壁纸')]
++    public function upload(Request $request): Response
++    {
++        return $this->handle(fn () => (new WallpaperService())->upload($request));
++    }
++
++    #[OperationLog('查看可导入历史图片')]
++    public function importable(Request $request): Response
++    {
++        return $this->handle(fn () => (new WallpaperService())->importable((int) $request->get('page', 1), (int) $request->get('page_size', 20)));
++    }
++
++    #[OperationLog('导入历史图片为壁纸')]
++    public function import(Request $request): Response
++    {
++        return $this->handle(fn () => (new WallpaperService())->import((int) $request->input('file_id', 0)));
++    }
++
++    #[OperationLog('分享壁纸')]
++    public function share(Request $request): Response
++    {
++        return $this->handle(fn () => (new WallpaperService())->share((int) $request->input('id', 0), filter_var($request->input('shared', false), FILTER_VALIDATE_BOOL)));
++    }
++
++    #[OperationLog('应用壁纸')]
++    public function apply(Request $request): Response
++    {
++        return $this->handle(fn () => (new WallpaperService())->apply($request->input('id') === null ? null : (int) $request->input('id'), (string) $request->input('mode', 'item')));
++    }
++
++    private function handle(callable $action): Response
++    {
++        try { return $this->ok($action()); }
++        catch (Throwable $exception) {
++            $status = in_array((int) $exception->getCode(), [401, 403, 409, 422, 429], true) ? (int) $exception->getCode() : 400;
++            return $this->fail($status * 100, $exception->getMessage(), $status);
++        }
++    }
++}
+diff --git a/server/app/controller/Api/WechatBindingController.php b/server/app/controller/Api/WechatBindingController.php
+index 6d1f4eb..3c73c2f 100644
+--- a/server/app/controller/Api/WechatBindingController.php
++++ b/server/app/controller/Api/WechatBindingController.php
+@@ -2,12 +2,13 @@
+ 
+ namespace app\controller\Api;
+ 
+ use app\attribute\OperationLog;
+ use app\controller\Api\Concerns\Responds;
+ use app\server\wechat\WechatBindingService;
++use app\server\wechat\WechatScanSessionService;
+ use support\Request;
+ use support\Response;
+ use Throwable;
+ 
+ class WechatBindingController
+ {
+@@ -58,12 +59,68 @@ class WechatBindingController
+             return $this->ok((new WechatBindingService())->bind(), '企业微信绑定成功');
+         } catch (Throwable $exception) {
+             return $this->fail(40001, $exception->getMessage(), 400);
+         }
+     }
+ 
++    public function scanSession(Request $request): Response
++    {
++        return $this->scanResponse(fn () => (new WechatScanSessionService())->create());
++    }
++
++    public function scanStatus(Request $request): Response
++    {
++        return $this->scanResponse(fn () => (new WechatScanSessionService())->status((string) $request->get('session_id', '')));
++    }
++
++    public function scanCancel(Request $request): Response
++    {
++        return $this->scanResponse(fn () => (new WechatScanSessionService())->cancel((string) $request->post('session_id', '')));
++    }
++
++    public function scanStart(Request $request): Response
++    {
++        try {
++            $result = (new WechatScanSessionService())->start((string) $request->get('ticket', ''));
++            return redirect($result['url'], 302, ['Cache-Control' => 'no-store', 'Referrer-Policy' => 'no-referrer'])
++                ->cookie(WechatBindingService::BROWSER_COOKIE, $result['browser'], WechatScanSessionService::TTL, '/', '', true, true, 'Lax');
++        } catch (Throwable $exception) {
++            return $this->failurePage($exception->getMessage());
++        }
++    }
++
++    public function scanCallback(Request $request): Response
++    {
++        try {
++            $result = (new WechatScanSessionService())->callback((string) $request->get('code', ''), (string) $request->get('state', ''));
++            return redirect('/h5/?wechat_scan=1', 302, ['Cache-Control' => 'no-store', 'Referrer-Policy' => 'no-referrer'])
++                ->cookie(WechatScanSessionService::COOKIE, $result['credential'], $result['expires_in'], '/', '', true, true, 'Lax');
++        } catch (Throwable $exception) {
++            return $this->failurePage($exception->getMessage());
++        }
++    }
++
++    public function scanContext(Request $request): Response
++    {
++        return $this->scanResponse(fn () => (new WechatScanSessionService())->mobileContext());
++    }
++
++    public function scanConfirm(Request $request): Response
++    {
++        return $this->scanResponse(fn () => (new WechatScanSessionService())->confirm((string) $request->post('nonce', ''), (string) $request->post('password', '')));
++    }
++
++    private function scanResponse(callable $callback): Response
++    {
++        try {
++            return $this->ok($callback())->withHeader('Cache-Control', 'no-store')->withHeader('Referrer-Policy', 'no-referrer');
++        } catch (Throwable $exception) {
++            return $this->fail(40001, $exception->getMessage(), 400)->withHeader('Cache-Control', 'no-store');
++        }
++    }
++
+     private function failurePage(string $message): Response
+     {
+         $text = htmlspecialchars($message, ENT_QUOTES, 'UTF-8');
+         return response('<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>企业微信绑定</title><body><p>' . $text . '</p><a href="/?wechat_oauth=failed">返回系统重新绑定</a></body></html>', 400, ['Content-Type' => 'text/html; charset=utf-8', 'Cache-Control' => 'no-store', 'Referrer-Policy' => 'no-referrer']);
+     }
+ }
+diff --git a/server/app/middleware/AuthMiddleware.php b/server/app/middleware/AuthMiddleware.php
+index 7e412b4..efb057d 100644
+--- a/server/app/middleware/AuthMiddleware.php
++++ b/server/app/middleware/AuthMiddleware.php
+@@ -16,12 +16,16 @@ class AuthMiddleware implements MiddlewareInterface
+      * 免登录接口白名单（完整路径）。
+      */
+     private const PUBLIC_PATHS = [
+         '/api/wechat/callback',
+         '/api/wechat/oauth/start',
+         '/api/wechat/oauth/callback',
++        '/api/wechat/scan/start',
++        '/api/wechat/scan/callback',
++        '/api/wechat/scan/context',
++        '/api/wechat/scan/confirm',
+         '/api/release/update-manifest',
+         '/api/release/download',
+         '/api/release/downloads',
+         '/api/auth/login',
+         '/api/auth/register',
+         '/api/auth/register-options',
+@@ -42,12 +46,15 @@ class AuthMiddleware implements MiddlewareInterface
+         '/api/auth/switchable-accounts',
+         '/api/auth/switch-account',
+         '/api/permission/menus',
+         '/api/permission/filter',
+         '/api/wechat/binding-status',
+         '/api/wechat/bind',
++        '/api/wechat/scan-session',
++        '/api/wechat/scan-status',
++        '/api/wechat/scan-cancel',
+     ];
+ 
+     /**
+      * 解析登录令牌并写入当前请求上下文，未登录访问受保护接口返回 401。
+      */
+     public function process(Request $request, callable $handler): Response
+diff --git a/server/app/middleware/ProtectedFiles.php b/server/app/middleware/ProtectedFiles.php
+index a2816e5..60cd575 100644
+--- a/server/app/middleware/ProtectedFiles.php
++++ b/server/app/middleware/ProtectedFiles.php
+@@ -23,14 +23,31 @@ class ProtectedFiles implements MiddlewareInterface
+         }
+         if (!str_starts_with($path, '/files/')) {
+             return $handler($request);
+         }
+         return (new SchoolMiddleware())->process($request, fn ($request): Response =>
+             (new AuthMiddleware())->process($request, function ($request) use ($path, $handler): Response {
+-                foreach (FileRecord::idsByUrl($path) as $id) {
+-                    $file = FileRecord::detailById((int) $id);
++                $ids = FileRecord::idsByUrl($path);
++                $files = array_values(array_filter(array_map(static fn ($id) => FileRecord::detailById((int) $id), $ids)));
++                $wallpapers = array_values(array_filter($files, static fn ($file) => (string) $file->category === 'wallpaper'));
++                if ($wallpapers) {
++                    $binding = (array) CurrentContext::get('wechat_binding', []);
++                    if ((new WechatBindingService())->isBlocked($binding)) {
++                        return json(['code' => 40310, 'message' => '请先完成企业微信绑定及身份确认', 'data' => null])
++                            ->withStatus(403)->withHeader('Cache-Control', 'no-store');
++                    }
++                    foreach ($wallpapers as $file) {
++                        if (FileAccessRecord::wallpaperReadable($file)) {
++                            return $handler($request)->withHeaders(['Cache-Control' => 'private, no-store', 'X-Content-Type-Options' => 'nosniff']);
++                        }
++                    }
++                    $status = CurrentContext::accountId() ? 403 : 401;
++                    return json(['code' => $status * 100, 'message' => $status === 401 ? '请先登录' : '无文件访问权限', 'data' => null])
++                        ->withStatus($status)->withHeader('Cache-Control', 'no-store');
++                }
++                foreach ($files as $file) {
+                     $binding = (array) CurrentContext::get('wechat_binding', []);
+                     if ($file && !FileAccessRecord::publicImage($file) && (new WechatBindingService())->isBlocked($binding)) {
+                         return json(['code' => 40310, 'message' => '请先完成企业微信绑定及身份确认', 'data' => null])
+                             ->withStatus(403)->withHeader('Cache-Control', 'no-store');
+                     }
+                     if ($file && (FileAccessRecord::publicImage($file) || FileAccessRecord::readable($file))) {
+diff --git a/server/app/model/channel/FileAccessRecord.php b/server/app/model/channel/FileAccessRecord.php
+index 8419251..c8c4f05 100644
+--- a/server/app/model/channel/FileAccessRecord.php
++++ b/server/app/model/channel/FileAccessRecord.php
+@@ -1,29 +1,33 @@
+ <?php
+ 
+ namespace app\model\channel;
+ 
+ use app\server\CurrentContext;
++use app\server\wallpaper\WallpaperService;
+ 
+ /** 文件与业务对象的读取权限。 */
+ class FileAccessRecord extends TableRecord
+ {
+     /** 区分可公开展示的界面图片和业务附件。 */
+     public static function publicImage(object $file): bool
+     {
+-        return in_array((string) $file->category, ['profile', 'login_background', 'menu_icon', 'favorite_icon'], true)
++        return in_array((string) $file->category, ['profile', 'login_background', 'school_logo', 'menu_icon', 'favorite_icon'], true)
+             && in_array(strtolower((string) $file->ext), ['jpg', 'jpeg', 'png', 'gif', 'webp'], true)
+             && in_array((string) $file->mime_type, ['image/jpeg', 'image/png', 'image/gif', 'image/webp'], true);
+     }
+ 
+     /** 校验上传人、学校管理员或有权查看关联业务的账号。 */
+     public static function readable(object $file): bool
+     {
+         if (!CurrentContext::accountId()) {
+             return false;
+         }
++        if ((string) $file->category === 'wallpaper') {
++            return self::wallpaperReadable($file);
++        }
+         if ((int) $file->uploader_id === CurrentContext::accountId() || self::schoolAdmin()) {
+             return true;
+         }
+         if ((string) $file->category === 'favorite' && FavoriteRecord::iconVisible((int) CurrentContext::accountId(), (int) $file->id)) {
+             return true;
+         }
+@@ -65,12 +69,23 @@ class FileAccessRecord extends TableRecord
+                 }
+             }
+         }
+         return false;
+     }
+ 
++    /** 壁纸按上传人、分享状态和学校默认引用读取。 */
++    public static function wallpaperReadable(object $file): bool
++    {
++        $accountId = (int) CurrentContext::accountId();
++        if ($accountId <= 0) return false;
++        $service = new WallpaperService();
++        if ((int) $file->id === $service->defaultFileId()) return true;
++        $row = WallpaperRecord::byFile((int) $file->id);
++        return $row !== null && $service->visible($row, $accountId);
++    }
++
+     /** 附件读取沿用所属模块的数据范围。 */
+     public static function entityReadable(string $entity, int $id): bool
+     {
+         if ($id <= 0 || !CurrentContext::accountId()) {
+             return false;
+         }
+diff --git a/server/app/model/channel/FileBlob.php b/server/app/model/channel/FileBlob.php
+index ecac5ae..a23ff5c 100644
+--- a/server/app/model/channel/FileBlob.php
++++ b/server/app/model/channel/FileBlob.php
+@@ -7,32 +7,34 @@ use Illuminate\Database\Query\Expression;
+ class FileBlob extends BaseModel
+ {
+     protected $table = 'file_blob';
+     protected $primaryKey = 'id';
+     protected $guarded = [];
+ 
+-    public static function activeByMd5(string $md5): ?self
++    public static function activeByMd5(string $md5, string $scope = 'general'): ?self
+     {
+         return self::query()
+             ->where('md5', $md5)
++            ->where('storage_scope', $scope)
+             ->whereNull('deleted_at')
+             ->first();
+     }
+ 
+     public static function lockById(int $id): ?self
+     {
+         return self::query()
+             ->where('id', $id)
+             ->lockForUpdate()
+             ->first();
+     }
+ 
+-    public static function lockByMd5(string $md5): ?self
++    public static function lockByMd5(string $md5, string $scope = 'general'): ?self
+     {
+         return self::query()
+             ->where('md5', $md5)
++            ->where('storage_scope', $scope)
+             ->lockForUpdate()
+             ->first();
+     }
+ 
+     public static function incrementRefCount(int $id, string $now, bool $restore = false): int
+     {
+diff --git a/server/app/model/channel/FileStorageSchema.php b/server/app/model/channel/FileStorageSchema.php
+new file mode 100644
+index 0000000..cfb8c8c
+--- /dev/null
++++ b/server/app/model/channel/FileStorageSchema.php
+@@ -0,0 +1,40 @@
++<?php
++
++namespace app\model\channel;
++
++use PDO;
++use RuntimeException;
++
++class FileStorageSchema extends TableRecord
++{
++    public static function apply(): void
++    {
++        if (self::connection()->getTablePrefix() !== '' || self::connection()->transactionLevel() > 0) throw new RuntimeException('文件存储升级需要无表前缀且无活动事务');
++        self::applyToPdo(self::connection()->getPdo());
++    }
++
++    public static function applyToPdo(PDO $pdo): void
++    {
++        if ($pdo->inTransaction()) throw new RuntimeException('文件存储升级不能在事务内执行');
++        $columns = $pdo->query("SHOW COLUMNS FROM `file_blob` LIKE 'storage_scope'")->fetchAll(PDO::FETCH_ASSOC);
++        $indexes = $pdo->query('SHOW INDEX FROM `file_blob`')->fetchAll(PDO::FETCH_ASSOC);
++        $names = [];
++        foreach ($indexes as $index) {
++            $names[$index['Key_name']][(int) $index['Seq_in_index']] = $index['Column_name'];
++            if (in_array($index['Key_name'], ['uk_md5', 'uk_md5_scope'], true) && (int) $index['Non_unique'] !== 0) throw new RuntimeException('文件摘要索引必须唯一');
++        }
++        $clauses = [];
++        if (!$columns) $clauses[] = "ADD COLUMN `storage_scope` VARCHAR(40) NOT NULL DEFAULT 'general' AFTER `md5`";
++        if (isset($names['uk_md5'])) {
++            ksort($names['uk_md5']);
++            if (array_values($names['uk_md5']) !== ['md5']) throw new RuntimeException('file_blob.uk_md5 结构不符合预期');
++            $clauses[] = 'DROP INDEX `uk_md5`';
++        }
++        if (!isset($names['uk_md5_scope'])) $clauses[] = 'ADD UNIQUE KEY `uk_md5_scope` (`md5`,`storage_scope`)';
++        else {
++            ksort($names['uk_md5_scope']);
++            if (array_values($names['uk_md5_scope']) !== ['md5', 'storage_scope']) throw new RuntimeException('file_blob.uk_md5_scope 结构不符合预期');
++        }
++        if ($clauses) $pdo->exec('ALTER TABLE `file_blob` ' . implode(', ', $clauses));
++    }
++}
+diff --git a/server/app/model/channel/SignatureRecord.php b/server/app/model/channel/SignatureRecord.php
+new file mode 100644
+index 0000000..9a82389
+--- /dev/null
++++ b/server/app/model/channel/SignatureRecord.php
+@@ -0,0 +1,38 @@
++<?php
++
++namespace app\model\channel;
++
++use app\server\CurrentContext;
++
++class SignatureRecord extends TableRecord
++{
++    public static function signatures(): mixed
++    {
++        self::requireTables(['personal_signature', 'signature_session']);
++        return self::queryTable('personal_signature');
++    }
++
++    public static function sessions(): mixed
++    {
++        self::requireTables(['personal_signature', 'signature_session']);
++        return self::queryTable('signature_session');
++    }
++
++    public static function owned(?int $id = null): ?array
++    {
++        $query = self::signatures()->where('user_id', (int) CurrentContext::userId());
++        if ($id !== null) $query->where('id', $id);
++        $row = $query->orderByDesc('version')->first();
++        return $row ? $row->getAttributes() : null;
++    }
++
++    public static function fileReadable(int $fileId): bool
++    {
++        return CurrentContext::userId() && self::signatures()->where('file_id', $fileId)->where('user_id', CurrentContext::userId())->exists();
++    }
++
++    public static function isSignatureFile(int $fileId): bool
++    {
++        return self::queryTable('file')->where('id', $fileId)->where('category', 'personal_signature')->exists();
++    }
++}
+diff --git a/server/app/model/channel/SignatureSchema.php b/server/app/model/channel/SignatureSchema.php
+new file mode 100644
+index 0000000..e389cf6
+--- /dev/null
++++ b/server/app/model/channel/SignatureSchema.php
+@@ -0,0 +1,20 @@
++<?php
++
++namespace app\model\channel;
++
++class SignatureSchema extends TableRecord
++{
++    public static function apply(): void
++    {
++        if (self::connection()->getTablePrefix() !== '' || self::connection()->transactionLevel() > 0) throw new \RuntimeException('签名结构升级需要无表前缀且无活动事务');
++        foreach (self::creationStatements() as $sql) self::connection()->statement($sql);
++    }
++
++    public static function creationStatements(): array
++    {
++        return [
++            "CREATE TABLE IF NOT EXISTS `personal_signature` (`id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT, `user_id` BIGINT UNSIGNED NOT NULL, `account_id` BIGINT UNSIGNED NOT NULL, `file_id` BIGINT UNSIGNED NOT NULL, `version` INT UNSIGNED NOT NULL, `sha256` CHAR(64) NOT NULL, `width` INT UNSIGNED NOT NULL, `height` INT UNSIGNED NOT NULL, `created_at` DATETIME NOT NULL, PRIMARY KEY (`id`), UNIQUE KEY `uk_user_version` (`user_id`,`version`), UNIQUE KEY `uk_file` (`file_id`)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
++            "CREATE TABLE IF NOT EXISTS `signature_session` (`id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT, `token_hash` CHAR(64) NOT NULL, `school_id` BIGINT UNSIGNED NOT NULL, `user_id` BIGINT UNSIGNED NOT NULL, `account_id` BIGINT UNSIGNED NOT NULL, `device_jti` VARCHAR(255) NOT NULL, `state` VARCHAR(20) NOT NULL DEFAULT 'pending', `signature_id` BIGINT UNSIGNED DEFAULT NULL, `expires_at` DATETIME NOT NULL, `created_at` DATETIME NOT NULL, `updated_at` DATETIME NOT NULL, PRIMARY KEY (`id`), UNIQUE KEY `uk_token` (`token_hash`), KEY `idx_owner` (`account_id`,`state`), KEY `idx_expiry` (`expires_at`)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
++        ];
++    }
++}
+diff --git a/server/app/model/channel/UserWechat.php b/server/app/model/channel/UserWechat.php
+index d7d46c3..2964fa8 100644
+--- a/server/app/model/channel/UserWechat.php
++++ b/server/app/model/channel/UserWechat.php
+@@ -10,43 +10,34 @@ class UserWechat extends BaseModel
+ 
+     public static function byUser(int $userId): array
+     {
+         return self::query()
+             ->where('user_id', $userId)
+             ->orderByDesc('id')
+-            ->get([
+-                'id',
+-                'user_id',
+-                'wechat_userid',
+-                'wechat_name',
+-                'wechat_avatar',
+-                'department',
+-                'position',
+-                'mobile',
+-                'email',
+-                'last_synced_at',
+-                'created_at',
+-                'updated_at',
+-            ])
+-            ->map(static fn ($row): array => [
+-                'id' => (int) $row->id,
+-                'user_id' => (int) $row->user_id,
+-                'wechat_userid' => $row->wechat_userid,
+-                'wechat_name' => $row->wechat_name,
+-                'wechat_avatar' => $row->wechat_avatar,
+-                'department' => self::decodeJson($row->department),
+-                'position' => $row->position,
+-                'mobile' => $row->mobile,
+-                'email' => $row->email,
+-                'last_synced_at' => $row->last_synced_at,
+-                'created_at' => $row->created_at,
+-                'updated_at' => $row->updated_at,
+-            ])
++            ->get()
++            ->map(static fn ($row): array => array_merge(self::row($row), [
++                'valid' => self::isValidBinding(self::row($row), trim((string) (new \app\server\config\ConfigService())->get('wechat.corp_id'))),
++            ]))
+             ->all();
+     }
+ 
++    public static function isValidBinding(?array $binding, string $corpId): bool
++    {
++        return $binding !== null && $corpId !== '' && ($binding['corp_id'] ?? '') === $corpId
++            && trim((string) ($binding['wechat_userid'] ?? '')) !== ''
++            && empty($binding['invalidated_at'])
++            && (empty($binding['expires_at']) || strtotime((string) $binding['expires_at']) > time());
++    }
++
++    public static function validUserIds(array $userIds, string $corpId): array
++    {
++        return self::query()->whereIn('user_id', $userIds)->get()
++            ->filter(static fn ($row): bool => self::isValidBinding(self::row($row), $corpId))
++            ->pluck('user_id')->all();
++    }
++
+     public static function currentByUser(int $userId): ?array
+     {
+         if ($userId <= 0) {
+             return null;
+         }
+ 
+@@ -69,12 +60,13 @@ class UserWechat extends BaseModel
+     {
+         try {
+             User::connection()->transaction(function () use ($userId, $wechatUserId, $corpId): void {
+                 if (!User::lockProfile($userId)) throw new \RuntimeException('用户不存在或已停用');
+                 $current = self::currentByUser($userId);
+                 if ($current && ($current['wechat_userid'] !== $wechatUserId || $current['corp_id'] !== $corpId)) throw new \RuntimeException('当前用户已绑定其他企业微信，请管理员先解除绑定');
++                if ($current && !self::isValidBinding($current, $corpId)) throw new \RuntimeException('当前绑定已失效，请管理员先解除绑定');
+                 $owner = self::byWechatUserId($wechatUserId);
+                 if ($owner && $owner['user_id'] !== $userId) throw new \RuntimeException('该企业微信已绑定其他用户，请管理员先解除绑定');
+                 if (!$current) self::query()->insert([
+                     'user_id' => $userId, 'wechat_userid' => $wechatUserId, 'raw_data' => json_encode(['corp_id' => $corpId]),
+                     'created_at' => date('Y-m-d H:i:s'), 'updated_at' => date('Y-m-d H:i:s'),
+                 ]);
+@@ -97,12 +89,14 @@ class UserWechat extends BaseModel
+     {
+         return [
+             'id' => (int) $row->id,
+             'user_id' => (int) $row->user_id,
+             'wechat_userid' => $row->wechat_userid,
+             'corp_id' => (string) (self::decodeJson($row->raw_data ?? null)['corp_id'] ?? ''),
++            'invalidated_at' => self::decodeJson($row->raw_data ?? null)['invalidated_at'] ?? null,
++            'expires_at' => self::decodeJson($row->raw_data ?? null)['expires_at'] ?? null,
+             'wechat_name' => $row->wechat_name,
+             'wechat_avatar' => $row->wechat_avatar,
+             'department' => self::decodeJson($row->department),
+             'position' => $row->position,
+             'mobile' => $row->mobile,
+             'email' => $row->email,
+diff --git a/server/app/model/channel/WallpaperRecord.php b/server/app/model/channel/WallpaperRecord.php
+new file mode 100644
+index 0000000..583140f
+--- /dev/null
++++ b/server/app/model/channel/WallpaperRecord.php
+@@ -0,0 +1,47 @@
++<?php
++
++namespace app\model\channel;
++
++class WallpaperRecord extends TableRecord
++{
++    public static function byId(int $id): ?object
++    {
++        return self::queryTable('wallpaper')->where('id', $id)->whereNull('deleted_at')->first();
++    }
++
++    public static function byFile(int $fileId): ?object
++    {
++        return self::queryTable('wallpaper')->where('file_id', $fileId)->whereNull('deleted_at')->first();
++    }
++
++    public static function ownedByFile(int $fileId, int $accountId): ?object
++    {
++        return self::queryTable('wallpaper')->where('file_id', $fileId)
++            ->where('owner_account_id', $accountId)->whereNull('deleted_at')->first();
++    }
++
++    public static function page(string $scope, int $accountId, int $page, int $size): array
++    {
++        $query = self::queryTable('wallpaper')->whereNull('deleted_at');
++        if ($scope === 'mine') $query->where('owner_account_id', $accountId);
++        else $query->where('is_shared', 1);
++        return [
++            'total' => (int) (clone $query)->count(),
++            'items' => $query->orderByDesc('id')->forPage($page, $size)->get()->all(),
++        ];
++    }
++
++    public static function createForFile(int $fileId, int $accountId, string $name): int
++    {
++        return (int) self::queryTable('wallpaper')->insertGetId([
++            'file_id' => $fileId, 'owner_account_id' => $accountId, 'name' => $name,
++            'is_shared' => 0, 'created_at' => date('Y-m-d H:i:s'), 'updated_at' => date('Y-m-d H:i:s'),
++        ]);
++    }
++
++    public static function setShared(int $id, int $accountId, bool $shared): bool
++    {
++        return self::queryTable('wallpaper')->where('id', $id)->where('owner_account_id', $accountId)
++            ->whereNull('deleted_at')->update(['is_shared' => $shared ? 1 : 0, 'updated_at' => date('Y-m-d H:i:s')]) > 0;
++    }
++}
+diff --git a/server/app/model/channel/WallpaperSchema.php b/server/app/model/channel/WallpaperSchema.php
+new file mode 100644
+index 0000000..bf1dec9
+--- /dev/null
++++ b/server/app/model/channel/WallpaperSchema.php
+@@ -0,0 +1,69 @@
++<?php
++
++namespace app\model\channel;
++
++use app\server\file\FileService;
++
++class WallpaperSchema extends TableRecord
++{
++    public static function apply(): void
++    {
++        if (self::connection()->getTablePrefix() !== '') throw new \RuntimeException('壁纸结构升级不支持数据库表前缀');
++        if (self::connection()->transactionLevel() > 0) throw new \RuntimeException('壁纸结构升级不能在事务内执行');
++        self::connection()->statement(self::creationStatement());
++        self::migrateCurrentSelections();
++    }
++
++    public static function creationStatement(): string
++    {
++        return "CREATE TABLE IF NOT EXISTS `wallpaper` (
++            `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
++            `file_id` BIGINT UNSIGNED NOT NULL,
++            `owner_account_id` BIGINT UNSIGNED NOT NULL,
++            `name` VARCHAR(255) NOT NULL,
++            `is_shared` TINYINT(1) NOT NULL DEFAULT 0,
++            `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
++            `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
++            `deleted_at` DATETIME DEFAULT NULL,
++            PRIMARY KEY (`id`),
++            UNIQUE KEY `uk_file_owner` (`file_id`, `owner_account_id`),
++            KEY `idx_owner` (`owner_account_id`, `deleted_at`, `id`),
++            KEY `idx_shared` (`is_shared`, `deleted_at`, `id`)
++        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
++    }
++
++    private static function migrateCurrentSelections(): void
++    {
++        $files = new FileService();
++        $wallpaper = new \app\server\wallpaper\WallpaperService();
++        self::queryTable('user_desktop_config')->whereNull('deleted_at')
++            ->whereRaw('user_desktop_config.id = (SELECT MAX(c2.id) FROM user_desktop_config c2 WHERE c2.account_id = user_desktop_config.account_id AND c2.deleted_at IS NULL)')
++            ->chunkById(200, function ($configs) use ($files, $wallpaper): void {
++                foreach ($configs as $config) {
++                    $accountId = (int) $config->account_id;
++                    $layout = json_decode((string) $config->layout_json, true);
++                    if (!is_array($layout) || !empty($layout['wallpaper_mode'])) continue;
++                    $url = (string) ($layout['wallpaper_url'] ?? '');
++                    if ($url === '') continue;
++                    foreach (FileRecord::idsByUrl($url) as $fileId) {
++                        $source = FileRecord::detailById((int) $fileId);
++                        if (!$source || (int) $source->uploader_id !== $accountId || !$wallpaper->validImage($source)) continue;
++                        $target = (string) $source->category === 'wallpaper'
++                            ? ['file_id' => (int) $source->id, 'url' => (string) $source->url]
++                            : $files->copyExistingImage((int) $source->id, 'wallpaper', $accountId);
++                        $targetId = (int) $target['file_id'];
++                        $record = WallpaperRecord::ownedByFile($targetId, $accountId);
++                        $wallpaperId = $record ? (int) $record->id : WallpaperRecord::createForFile($targetId, $accountId, (string) $source->name);
++                        $layout['wallpaper_mode'] = 'item';
++                        $layout['wallpaper_id'] = $wallpaperId;
++                        $layout['wallpaper_url'] = (string) $target['url'];
++                        self::queryTable('user_desktop_config')->where('id', (int) $config->id)->update([
++                            'layout_json' => json_encode($layout, JSON_UNESCAPED_UNICODE),
++                            'updated_at' => date('Y-m-d H:i:s'),
++                        ]);
++                        break;
++                    }
++                }
++            }, 'user_desktop_config.id', 'id');
++    }
++}
+diff --git a/server/app/server/auth/AuthService.php b/server/app/server/auth/AuthService.php
+index 95356a3..a165802 100644
+--- a/server/app/server/auth/AuthService.php
++++ b/server/app/server/auth/AuthService.php
+@@ -64,12 +64,13 @@ class AuthService
+             throw new RuntimeException('目标账号无效');
+         }
+         if (!Account::canSwitchBetween($currentAccountId, $targetAccountId)) {
+             throw new RuntimeException('只能切换同一用户或同手机号绑定的账号');
+         }
+ 
++        (new \app\server\wechat\WechatScanSessionService())->cancelCurrent();
+         return $this->issueSessionForAccount($targetAccountId, $client);
+     }
+ 
+     public function adminLoginPasskey(int $targetAccountId, string $client = JwtToken::TOKEN_CLIENT_WEB, string $returnUrl = ''): array
+     {
+         $creatorAccountId = CurrentContext::accountId();
+diff --git a/server/app/server/config/SchoolAppearanceService.php b/server/app/server/config/SchoolAppearanceService.php
+new file mode 100644
+index 0000000..5368375
+--- /dev/null
++++ b/server/app/server/config/SchoolAppearanceService.php
+@@ -0,0 +1,106 @@
++<?php
++
++namespace app\server\config;
++
++use app\model\channel\TableRecord;
++use app\model\channel\FileRecord;
++use app\model\channel\WallpaperRecord;
++use app\server\CurrentContext;
++use app\server\file\FileService;
++use app\server\wallpaper\WallpaperService;
++use app\server\WorkflowLock;
++use RuntimeException;
++use support\Request;
++
++class SchoolAppearanceService
++{
++    public function publicSettings(): array
++    {
++        $config = new ConfigService();
++        $connected = (bool) CurrentContext::get('school_connection');
++        return [
++            'school_name' => CurrentContext::get('school_name') ?: '成都锦城学院',
++            'school_logo_url' => $connected ? (string) ($config->get('system.school_logo_url') ?? '') : '',
++            'login_background_url' => $connected ? (string) ($config->get('system.login_background_url') ?? '') : '',
++            'default_wallpaper_url' => $connected ? (string) ($config->get('system.default_wallpaper_url') ?? '') : '',
++        ];
++    }
++
++    public function uploadWallpaper(Request $request): array
++    {
++        $this->requireManager();
++        $files = new FileService();
++        $uploaded = $files->upload($request, [
++            'category' => 'wallpaper', 'is_temporary' => false, 'require_md5' => false,
++            'max_size' => 8 * 1024 * 1024, 'allowed_extensions' => ['jpg', 'jpeg', 'png', 'webp', 'gif'],
++        ]);
++        return $this->saveDefaultWallpaper((int) $uploaded['file_id']);
++    }
++
++    public function selectWallpaper(int $wallpaperId): array
++    {
++        $this->requireManager();
++        $row = WallpaperRecord::byId($wallpaperId);
++        if (!$row || !(bool) $row->is_shared) throw new RuntimeException('请选择已共享壁纸', 422);
++        return $this->saveDefaultWallpaper((int) $row->file_id);
++    }
++
++    private function saveDefaultWallpaper(int $fileId): array
++    {
++        $file = FileRecord::detailById($fileId);
++        if (!$file || !(new WallpaperService())->validImage($file)) throw new RuntimeException('壁纸文件无效', 422);
++        $schoolId = (int) CurrentContext::get('school_id');
++        return (new WorkflowLock())->run(WorkflowLock::key('school', 'wallpaper', $schoolId), function () use ($fileId, $file, $schoolId): array {
++            return TableRecord::connection()->transaction(function () use ($fileId, $file, $schoolId): array {
++                $config = new ConfigService();
++                $config->set('system', 'default_wallpaper_url', (string) $file->url);
++                $config->set('system', 'default_wallpaper_file_id', $fileId);
++                (new FileService())->replaceRelations([$fileId], 'school_appearance', $schoolId, 'default_wallpaper');
++                return $this->settings();
++            });
++        });
++    }
++
++    public function settings(): array
++    {
++        $this->requireManager();
++        return $this->publicSettings();
++    }
++
++    public function upload(Request $request, string $type): array
++    {
++        $this->requireManager();
++        $logo = $type === 'logo';
++        if (!$logo && $type !== 'background') {
++            throw new RuntimeException('学校素材类型无效', 422);
++        }
++        $files = new FileService();
++        $uploaded = $files->upload($request, [
++            'category' => $logo ? 'school_logo' : 'login_background',
++            'is_temporary' => false,
++            'require_md5' => false,
++            'max_size' => ($logo ? 2 : 8) * 1024 * 1024,
++            'allowed_extensions' => $logo ? ['jpg', 'jpeg', 'png', 'webp'] : ['jpg', 'jpeg', 'png', 'webp', 'gif'],
++        ]);
++        $schoolId = (int) CurrentContext::get('school_id');
++        return (new WorkflowLock())->run(WorkflowLock::key('school', 'appearance', $schoolId), function () use ($logo, $uploaded, $files, $schoolId): array {
++            return TableRecord::connection()->transaction(function () use ($logo, $uploaded, $files, $schoolId): array {
++                $key = $logo ? 'school_logo' : 'login_background';
++                $config = new ConfigService();
++                $config->set('system', $key . '_url', $uploaded['url']);
++                $config->set('system', $key . '_file_id', (int) $uploaded['file_id']);
++                $files->replaceRelations([(int) $uploaded['file_id']], 'school_appearance', $schoolId, $key);
++                return $this->publicSettings();
++            });
++        });
++    }
++
++    public function requireManager(): void
++    {
++        if (!CurrentContext::accountId()
++            || !in_array(CurrentContext::roleType(), ['super_admin', 'school_admin'], true)
++            || !in_array('config:manage', CurrentContext::permissionCodes(), true)) {
++            throw new RuntimeException('无学校设置管理权限', 403);
++        }
++    }
++}
+diff --git a/server/app/server/export/SignatureRenderer.php b/server/app/server/export/SignatureRenderer.php
+new file mode 100644
+index 0000000..f34c1f1
+--- /dev/null
++++ b/server/app/server/export/SignatureRenderer.php
+@@ -0,0 +1,66 @@
++<?php
++
++namespace app\server\export;
++
++use app\model\channel\FileRecord;
++use app\model\channel\SignatureRecord;
++use app\server\CurrentContext;
++use app\server\file\FileService;
++use RuntimeException;
++
++class SignatureRenderer
++{
++    /** 调用方须先授权所属审批记录或导出任务。 */
++    public function image(?array $snapshot, int $maxWidth = 150, int $maxHeight = 70): ?array
++    {
++        if (!$snapshot) return null;
++        if ((int) ($snapshot['school_id'] ?? 0) !== (int) CurrentContext::schoolDatabaseId() || !CurrentContext::schoolDatabaseId()) throw new RuntimeException('签名快照学校不匹配', 403);
++        $row = SignatureRecord::signatures()->where('id', (int) ($snapshot['signature_id'] ?? 0))->where('file_id', (int) ($snapshot['file_id'] ?? 0))->where('user_id', (int) ($snapshot['user_id'] ?? 0))->where('version', (int) ($snapshot['version'] ?? 0))->first();
++        $hash = (string) ($snapshot['sha256'] ?? '');
++        $signedAt = (string) ($snapshot['signed_at'] ?? '');
++        if (!$row || !preg_match('/^[a-f0-9]{64}$/D', $hash) || !hash_equals((string) $row->sha256, $hash) || !preg_match('/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/D', $signedAt)) throw new RuntimeException('签名快照无效', 409);
++        $file = FileRecord::detailById((int) $row->file_id);
++        $path = $file ? (new FileService())->localPath((string) $file->path) : null;
++        if (!$file || $file->category !== 'personal_signature' || $file->mime_type !== 'image/png' || !$path || !hash_equals($hash, (string) hash_file('sha256', $path))) throw new RuntimeException('历史签名文件缺失或摘要不匹配', 409);
++        $size = getimagesize($path);
++        if (!$size || $size[2] !== IMAGETYPE_PNG || $size[0] !== (int) $row->width || $size[1] !== (int) $row->height) throw new RuntimeException('历史签名尺寸不匹配', 409);
++        $ratio = min(max(1, $maxWidth) / $size[0], max(1, $maxHeight) / $size[1], 1);
++        return ['path' => $path, 'width' => max(1, (int) round($size[0] * $ratio)), 'height' => max(1, (int) round($size[1] * $ratio)), 'signed_at' => $signedAt];
++    }
++
++    public function html(?array $snapshot, int $maxWidth = 150, int $maxHeight = 70): string
++    {
++        $image = $this->image($snapshot, $maxWidth, $maxHeight);
++        if (!$image) return '';
++        $data = base64_encode((string) file_get_contents($image['path']));
++        $date = htmlspecialchars(substr($image['signed_at'], 0, 10), ENT_QUOTES, 'UTF-8');
++        return '<span class="approval-signature"><img alt="审批签名" src="data:image/png;base64,' . $data . '" width="' . $image['width'] . '" height="' . $image['height'] . '"><br>' . $date . '</span>';
++    }
++
++    public function appendToWord(object $container, ?array $snapshot, int $maxWidth = 150, int $maxHeight = 70): void
++    {
++        $image = $this->image($snapshot, $maxWidth, $maxHeight);
++        if (!$image) return;
++        $container->addImage($image['path'], ['width' => $image['width'], 'height' => $image['height'], 'wrappingStyle' => 'inline']);
++        $container->addText(substr($image['signed_at'], 0, 10));
++    }
++
++    public function appendToSheet(\PhpOffice\PhpSpreadsheet\Worksheet\Worksheet $sheet, string $cell, ?array $snapshot, int $maxWidth = 150, int $maxHeight = 70): void
++    {
++        $image = $this->image($snapshot, $maxWidth, $maxHeight);
++        if (!$image) return;
++        $drawing = new \PhpOffice\PhpSpreadsheet\Worksheet\Drawing();
++        $drawing->setName('审批签名');
++        $drawing->setDescription('审批日期 ' . substr($image['signed_at'], 0, 10));
++        $drawing->setPath($image['path']);
++        $drawing->setCoordinates($cell);
++        $drawing->setOffsetY(20);
++        $sheet->setCellValue($cell, substr($image['signed_at'], 0, 10));
++        [, $rowNumber] = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::coordinateFromString($cell);
++        $row = $sheet->getRowDimension((int) $rowNumber);
++        $row->setRowHeight(max($row->getRowHeight(), ($image['height'] + 24) * 0.75));
++        $drawing->setResizeProportional(true);
++        $drawing->setWidth($image['width']);
++        $drawing->setWorksheet($sheet);
++    }
++}
+diff --git a/server/app/server/file/FileService.php b/server/app/server/file/FileService.php
+index 1c93a18..892953c 100644
+--- a/server/app/server/file/FileService.php
++++ b/server/app/server/file/FileService.php
+@@ -3,12 +3,13 @@
+ namespace app\server\file;
+ 
+ use app\model\channel\FileBlob;
+ use app\model\channel\FileRecord;
+ use app\model\channel\FileAccessRecord;
+ use app\model\channel\FileRelation;
++use app\model\channel\SignatureRecord;
+ use app\server\config\ConfigService;
+ use app\server\CurrentContext;
+ use Illuminate\Database\QueryException;
+ use InvalidArgumentException;
+ use RuntimeException;
+ use support\Request;
+@@ -64,19 +65,20 @@ class FileService
+     public function check(Request $request): array
+     {
+         $accountId = $this->accountId();
+         $md5 = $this->md5Input((string) $request->input('md5', ''));
+         $name = $this->fileName((string) $request->input('name', ''));
+         $category = $this->category((string) $request->input('category', 'general'));
++        if ($category === 'personal_signature') throw new RuntimeException('请通过个人签名页面保存', 403);
+         $isTemporary = false;
+         $device = $this->deviceInfo($request);
+ 
+         if (!$this->instantUploadEnabled()) {
+             return $this->uploadRequired($md5);
+         }
+-        $blob = FileBlob::activeByMd5($md5);
++        $blob = FileBlob::activeByMd5($md5, $this->storageScope($category));
+ 
+         if (!$blob || !$this->blobFileExists($blob) || !FileRecord::ownsBlob((int) $blob->id, $accountId)) {
+             return $this->uploadRequired($md5);
+         }
+ 
+         return $this->connection()->transaction(function () use ($blob, $name, $category, $isTemporary, $accountId, $device): array {
+@@ -114,12 +116,13 @@ class FileService
+         $accountId = (int) ($options['uploader_id'] ?? $this->accountId());
+         $this->limitUploadRate($accountId);
+ 
+         $file = $this->requestFile($request);
+         $name = $this->fileName((string) ($options['name'] ?? $request->input('name', $file->getUploadName() ?: '')));
+         $category = $this->category((string) ($options['category'] ?? $request->input('category', 'general')));
++        if ($category === 'personal_signature') throw new RuntimeException('请通过个人签名页面保存', 403);
+         $downloadName = $this->fileName((string) ($options['download_name'] ?? $request->input('download_name', $name)));
+         $isTemporary = $this->boolInput($options['is_temporary'] ?? false);
+         $requireMd5 = $this->boolInput($options['require_md5'] ?? $request->input('require_md5', true));
+         $declaredMd5 = $this->optionalMd5((string) ($options['md5'] ?? $request->header('x-file-md5', $request->input('md5', ''))));
+         $device = $this->deviceInfo($request);
+ 
+@@ -257,12 +260,31 @@ class FileService
+             }
+         } finally {
+             @unlink($sourcePath);
+         }
+     }
+ 
++    /** 为历史壁纸复制独立存储引用，调用方负责迁移对象授权。 */
++    public function copyExistingImage(int $fileId, string $category, int $ownerAccountId): array
++    {
++        if ($category !== 'wallpaper' || $ownerAccountId <= 0) throw new InvalidArgumentException('壁纸复制参数无效');
++        $file = FileRecord::detailById($fileId);
++        if (!$file || !in_array((string) $file->category, ['profile', 'wallpaper'], true)
++            || !in_array((string) $file->mime_type, ['image/jpeg', 'image/png', 'image/webp', 'image/gif'], true)) throw new RuntimeException('原壁纸文件不可用');
++        $path = $this->localPath((string) $file->path);
++        if (!$path) throw new RuntimeException('原壁纸文件不存在');
++        $temporary = tempnam(sys_get_temp_dir(), 'wallpaper-copy-');
++        if (!$temporary) throw new RuntimeException('无法创建壁纸副本');
++        try {
++            if (!copy($path, $temporary)) throw new RuntimeException('复制壁纸失败');
++            return $this->storeGeneratedFile($temporary, ['category' => 'wallpaper', 'ext' => (string) $file->ext, 'name' => (string) $file->name, 'uploader_id' => $ownerAccountId, 'is_temporary' => false]);
++        } finally {
++            if (is_file($temporary)) unlink($temporary);
++        }
++    }
++
+     public function info(int $fileId): array
+     {
+         $this->accountId();
+         if ($fileId <= 0) {
+             throw new InvalidArgumentException('file_id 无效');
+         }
+@@ -287,12 +309,13 @@ class FileService
+         $attachments = $values['attachment_ids'] ?? [];
+         if (is_string($attachments)) {
+             $attachments = json_decode($attachments, true, 512, JSON_THROW_ON_ERROR);
+         }
+         foreach (array_unique(array_merge($ids, array_map('intval', (array) $attachments))) as $id) {
+             if ($id > 0) {
++                if (SignatureRecord::isSignatureFile($id)) throw new RuntimeException('个人签名仅可通过审批快照引用', 403);
+                 $this->info($id);
+             }
+         }
+     }
+ 
+     /** 回收失去执行权的后台生成文件 */
+@@ -321,12 +344,13 @@ class FileService
+             $this->fileInfo($row)
+         ))->all();
+     }
+ 
+     public function attach(int $fileId, string $entityType, int $entityId, string $tag = ''): array
+     {
++        if ($entityType === 'personal_signature' || SignatureRecord::isSignatureFile($fileId)) throw new RuntimeException('个人签名仅可通过审批快照引用', 403);
+         $this->accountId();
+         $entityType = $this->entityType($entityType);
+         $tag = $tag === '' ? '' : $this->tag($tag);
+         if ($fileId <= 0 || $entityId <= 0) {
+             throw new InvalidArgumentException('关联参数无效');
+         }
+@@ -361,12 +385,13 @@ class FileService
+         });
+     }
+ 
+     /** 替换实体的文件关联。 */
+     public function replaceRelations(array $fileIds, string $entityType, int $entityId, string $tag = ''): array
+     {
++        if ($entityType === 'personal_signature') throw new RuntimeException('个人签名版本不可修改', 403);
+         $this->accountId();
+         $entityType = $this->entityType($entityType);
+         $tag = $tag === '' ? '' : $this->tag($tag);
+         if ($entityId <= 0) {
+             throw new InvalidArgumentException('关联参数无效');
+         }
+@@ -488,12 +513,13 @@ class FileService
+ 
+     /**
+      * 删除文件记录，并在无有效引用时删除物理文件。
+      */
+     private function deleteFile(int $fileId, bool $force, ?string $temporaryBefore = null): array
+     {
++        if (SignatureRecord::isSignatureFile($fileId)) throw new RuntimeException('个人签名历史版本不可删除', 403);
+ 
+         $deletePath = null;
+         $result = $this->connection()->transaction(function () use ($fileId, $force, $temporaryBefore, &$deletePath): array {
+             $now = $this->now();
+             $file = FileRecord::lockActiveById($fileId);
+ 
+@@ -660,16 +686,17 @@ class FileService
+         ];
+     }
+ 
+     private function persistUploadedFile(array $blobData, array $fileData, string $savedPath): array
+     {
+         $removeSavedFile = false;
++        $blobData['storage_scope'] = $this->storageScope((string) $fileData['category']);
+ 
+         $result = $this->connection()->transaction(function () use ($blobData, $fileData, &$removeSavedFile): array {
+             $now = $this->now();
+-            $blob = FileBlob::lockByMd5($blobData['md5']);
++            $blob = FileBlob::lockByMd5($blobData['md5'], $blobData['storage_scope']);
+             $activeBlobId = 0;
+             $activeBlobUrl = (string) $blobData['url'];
+ 
+             if ($blob && $blob->deleted_at === null && $this->blobFileExists($blob)) {
+                 $removeSavedFile = true;
+                 $activeBlobId = (int) ($blob->id ?? 0);
+@@ -692,13 +719,13 @@ class FileService
+                     ]));
+                 } catch (QueryException $exception) {
+                     if (!$this->isDuplicateMd5($exception)) {
+                         throw $exception;
+                     }
+ 
+-                    $activeBlob = FileBlob::lockByMd5($blobData['md5']);
++                    $activeBlob = FileBlob::lockByMd5($blobData['md5'], $blobData['storage_scope']);
+                     if (!$activeBlob) {
+                         throw $exception;
+                     }
+                     $removeSavedFile = true;
+                     $activeBlobId = (int) ($activeBlob->id ?? 0);
+                     $activeBlobUrl = (string) ($activeBlob->url ?? $blobData['url']);
+@@ -965,12 +992,17 @@ class FileService
+             throw new InvalidArgumentException('文件名不能为空');
+         }
+ 
+         return $this->limit($name, 255);
+     }
+ 
++    private function storageScope(string $category): string
++    {
++        return in_array($category, ['wallpaper', 'personal_signature'], true) ? $category : 'general';
++    }
++
+     private function category(string $category): string
+     {
+         $category = strtolower(trim($category));
+         if ($category === '') {
+             return 'general';
+         }
+diff --git a/server/app/server/signature/SignatureService.php b/server/app/server/signature/SignatureService.php
+new file mode 100644
+index 0000000..ca0d341
+--- /dev/null
++++ b/server/app/server/signature/SignatureService.php
+@@ -0,0 +1,209 @@
++<?php
++
++namespace app\server\signature;
++
++use app\model\channel\Account;
++use app\model\channel\FileRecord;
++use app\model\channel\FileRelation;
++use app\model\channel\SignatureRecord;
++use app\model\channel\TableRecord;
++use app\model\channel\User;
++use app\server\CurrentContext;
++use app\server\file\FileService;
++use app\server\wechat\WechatBindingService;
++use RuntimeException;
++use support\Redis;
++use Webman\Http\UploadFile;
++
++class SignatureService
++{
++    public const TTL = 300;
++
++    public function current(): array
++    {
++        $this->identity();
++        $row = SignatureRecord::owned();
++        return ['signature' => $row ? $this->present($row) : null];
++    }
++
++    public function save(UploadFile $file, string $session = ''): array
++    {
++        $this->identity();
++        $key = 'signature:upload:' . CurrentContext::schoolDatabaseId() . ':' . CurrentContext::userId();
++        $count = (int) Redis::eval("local n=redis.call('INCR',KEYS[1]); if n==1 then redis.call('EXPIRE',KEYS[1],60) end; return n", 1, $key);
++        if ($count > 20) throw new RuntimeException('签名保存过于频繁，请稍后重试', 429);
++        $path = $this->normalize($file);
++        try {
++            return SignatureRecord::connection()->transaction(function () use ($path, $session): array {
++                $this->lockUser();
++                $target = $session !== '' ? $this->session($session, true) : null;
++                if ($target) {
++                    $this->assertTarget($target);
++                    if ((int) $target['user_id'] !== CurrentContext::userId()) throw new RuntimeException('请使用与电脑相同的系统用户登录', 403);
++                    if ($target['state'] !== 'pending') throw new RuntimeException('签名会话已使用或取消', 409);
++                }
++                $version = 1 + (int) SignatureRecord::signatures()->where('user_id', CurrentContext::userId())->max('version');
++                $size = getimagesize($path);
++                $hash = hash_file('sha256', $path);
++                $stored = (new FileService())->storeGeneratedFile($path, ['category' => 'personal_signature', 'ext' => 'png', 'name' => '个人签名.png', 'uploader_id' => CurrentContext::accountId(), 'is_temporary' => false]);
++                $now = date('Y-m-d H:i:s');
++                $row = ['user_id' => CurrentContext::userId(), 'account_id' => CurrentContext::accountId(), 'file_id' => (int) $stored['file_id'], 'version' => $version, 'sha256' => $hash, 'width' => $size[0], 'height' => $size[1], 'created_at' => $now];
++                $row['id'] = SignatureRecord::signatures()->insertGetId($row);
++                FileRelation::createRelation($row['file_id'], 'personal_signature', $row['id'], 'signature', $now);
++                if ($target) SignatureRecord::sessions()->where('id', $target['id'])->update(['state' => 'confirmed', 'signature_id' => $row['id'], 'updated_at' => $now]);
++                return ['signature' => $this->present($row), 'state' => 'confirmed'];
++            });
++        } finally {
++            if (is_file($path)) unlink($path);
++        }
++    }
++
++    public function createSession(): array
++    {
++        $this->identity();
++        $origin = (new WechatBindingService())->origin();
++        if (!str_starts_with($origin, 'https://')) throw new RuntimeException('手机签名需要学校 HTTPS 地址', 422);
++        $device = (string) CurrentContext::deviceJti();
++        if ($device === '') throw new RuntimeException('请重新登录后创建签名会话', 401);
++        return SignatureRecord::connection()->transaction(function () use ($origin, $device): array {
++            $this->lockUser();
++            $now = date('Y-m-d H:i:s');
++            SignatureRecord::sessions()->where('account_id', CurrentContext::accountId())->where('device_jti', $device)->where('state', 'pending')->update(['state' => 'cancelled', 'updated_at' => $now]);
++            $token = bin2hex(random_bytes(32));
++            $row = ['token_hash' => hash('sha256', $token), 'school_id' => CurrentContext::schoolDatabaseId(), 'user_id' => CurrentContext::userId(), 'account_id' => CurrentContext::accountId(), 'device_jti' => $device, 'state' => 'pending', 'expires_at' => date('Y-m-d H:i:s', time() + self::TTL), 'created_at' => $now, 'updated_at' => $now];
++            $this->assertTarget($row);
++            SignatureRecord::sessions()->insert($row);
++            return ['session_id' => $token, 'scan_url' => $origin . '/h5/?signature_session=' . $token, 'expires_in' => self::TTL, 'state' => 'pending'];
++        });
++    }
++
++    public function sessionStatus(string $token, bool $mobile = false): array
++    {
++        $this->identity();
++        $row = $this->session($token);
++        if ($mobile) {
++            if ((int) $row['user_id'] !== CurrentContext::userId()) throw new RuntimeException('请使用与电脑相同的系统用户登录', 403);
++        } else $this->assertOwner($row);
++        $this->assertTarget($row);
++        return ['state' => $row['state'], 'expires_in' => max(0, strtotime($row['expires_at']) - time()), 'signature_id' => (int) ($row['signature_id'] ?? 0)];
++    }
++
++    public function cancelSession(string $token): array
++    {
++        $this->identity();
++        return SignatureRecord::connection()->transaction(function () use ($token): array {
++            $this->lockUser();
++            $row = $this->session($token, true);
++            $this->assertOwner($row);
++            if ($row['state'] === 'pending') SignatureRecord::sessions()->where('id', $row['id'])->update(['state' => 'cancelled', 'updated_at' => date('Y-m-d H:i:s')]);
++            return ['state' => $row['state'] === 'pending' ? 'cancelled' : $row['state']];
++        });
++    }
++
++    public function cancelCurrent(): void
++    {
++        if (!CurrentContext::userId() || !CurrentContext::accountId() || !CurrentContext::deviceJti()) return;
++        SignatureRecord::connection()->transaction(function (): void {
++            $this->lockUser();
++            SignatureRecord::sessions()->where('account_id', CurrentContext::accountId())->where('device_jti', CurrentContext::deviceJti())->where('state', 'pending')->update(['state' => 'cancelled', 'updated_at' => date('Y-m-d H:i:s')]);
++        });
++    }
++
++    public function snapshotForApproval(int $signatureId): array
++    {
++        if ($signatureId <= 0) throw new RuntimeException('请选择本人电子签名', 422);
++        return $this->snapshotForCurrentUser($signatureId);
++    }
++
++    public function snapshotForCurrentUser(?int $signatureId = null): array
++    {
++        $this->identity();
++        $row = SignatureRecord::owned($signatureId);
++        if (!$row) throw new RuntimeException('个人签名不存在或不属于本人', 422);
++        $snapshot = ['signature_id' => (int) $row['id'], 'school_id' => CurrentContext::schoolDatabaseId(), 'file_id' => (int) $row['file_id'], 'version' => (int) $row['version'], 'sha256' => $row['sha256'], 'user_id' => (int) $row['user_id'], 'signed_at' => date('Y-m-d H:i:s')];
++        (new \app\server\export\SignatureRenderer())->image($snapshot);
++        return $snapshot;
++    }
++
++    private function identity(): void
++    {
++        $account = Account::enabledById((int) CurrentContext::accountId());
++        if (!CurrentContext::schoolDatabaseId() || !$account || (int) $account->user_id !== CurrentContext::userId() || !User::enabledById((int) CurrentContext::userId())) throw new RuntimeException('请登录有效系统账号', 401);
++    }
++
++    private function lockUser(): void
++    {
++        $user = User::query()->where('id', CurrentContext::userId())->lockForUpdate()->first();
++        if (!$user || $user->deleted_at || $user->status !== 'enabled') throw new RuntimeException('用户已停用', 403);
++    }
++
++    private function session(string $token, bool $lock = false): array
++    {
++        if (!preg_match('/^[a-f0-9]{64}$/D', $token)) throw new RuntimeException('签名会话无效', 422);
++        $query = SignatureRecord::sessions()->where('token_hash', hash('sha256', $token))->where('school_id', CurrentContext::schoolDatabaseId());
++        if ($lock) $query->lockForUpdate();
++        $row = $query->first();
++        if (!$row || strtotime($row->expires_at) <= time()) throw new RuntimeException('签名会话已过期，请在电脑重新获取', 410);
++        return $row->getAttributes();
++    }
++
++    private function assertOwner(array $row): void
++    {
++        if ((int) $row['account_id'] !== CurrentContext::accountId() || (int) $row['user_id'] !== CurrentContext::userId() || !hash_equals($row['device_jti'], (string) CurrentContext::deviceJti())) throw new RuntimeException('无权操作此电脑签名会话', 403);
++    }
++
++    private function assertTarget(array $row): void
++    {
++        $account = Account::enabledById((int) $row['account_id']);
++        $device = TableRecord::queryTable('user_device')->where('account_id', $row['account_id'])->where('jti', $row['device_jti'])->where('status', 'enabled')->whereNull('deleted_at')->exists();
++        if (!$account || (int) $account->user_id !== (int) $row['user_id'] || !$device || Redis::exists('jwt_blacklist:' . $row['school_id'] . ':' . $row['device_jti'])) throw new RuntimeException('电脑登录已失效，请重新创建签名会话', 403);
++    }
++
++    private function present(array $row): array
++    {
++        $file = FileRecord::detailById((int) $row['file_id']);
++        if (!$file) throw new RuntimeException('签名文件不可用', 409);
++        return ['id' => (int) $row['id'], 'file_id' => (int) $row['file_id'], 'version' => (int) $row['version'], 'url' => (string) $file->url, 'width' => (int) $row['width'], 'height' => (int) $row['height'], 'created_at' => $row['created_at']];
++    }
++
++    private function normalize(UploadFile $file): string
++    {
++        if (!function_exists('imagecreatefrompng')) throw new RuntimeException('服务器缺少 PNG 图像处理支持', 503);
++        if (!$file->isValid() || $file->getSize() > 2097152) throw new RuntimeException('请上传不超过 2MB 的 PNG 签名', 422);
++        $source = $file->getPathname();
++        $size = @getimagesize($source);
++        if (!$size || $size[2] !== IMAGETYPE_PNG || $size[0] > 2048 || $size[1] > 2048 || $size[0] * $size[1] > 2097152) throw new RuntimeException('签名必须是有效 PNG，尺寸不超过 2048 且像素不超过 2097152', 422);
++        $image = @imagecreatefrompng($source);
++        if (!$image) throw new RuntimeException('PNG 图像损坏', 422);
++        $output = null;
++        try {
++            if (!imageistruecolor($image)) imagepalettetotruecolor($image);
++            imagealphablending($image, false);
++            imagesavealpha($image, true);
++            $white = imagecolorallocatealpha($image, 0, 0, 0, 127);
++            $minX = $size[0]; $minY = $size[1]; $maxX = -1; $maxY = -1; $ink = 0;
++            for ($y = 0; $y < $size[1]; $y++) {
++                for ($x = 0; $x < $size[0]; $x++) {
++                    $pixel = imagecolorat($image, $x, $y);
++                    $alpha = ($pixel >> 24) & 127;
++                    $light = min(($pixel >> 16) & 255, ($pixel >> 8) & 255, $pixel & 255);
++                    if ($alpha >= 120 || $light >= 245) { imagesetpixel($image, $x, $y, $white); continue; }
++                    $minX = min($minX, $x); $minY = min($minY, $y); $maxX = max($maxX, $x); $maxY = max($maxY, $y); $ink++;
++                }
++            }
++            if ($ink < 20 || $maxX - $minX < 5 || $maxY - $minY < 3) throw new RuntimeException('签名为空白或笔迹不足，请重新书写', 422);
++            $width = $maxX - $minX + 17; $height = $maxY - $minY + 17;
++            $output = imagecreatetruecolor($width, $height);
++            imagealphablending($output, false); imagesavealpha($output, true);
++            imagefill($output, 0, 0, imagecolorallocatealpha($output, 0, 0, 0, 127));
++            imagecopy($output, $image, 8, 8, $minX, $minY, $maxX - $minX + 1, $maxY - $minY + 1);
++            $path = tempnam(sys_get_temp_dir(), 'signature-');
++            if (!$path) throw new RuntimeException('无法创建签名临时文件');
++            if (!imagepng($output, $path)) { unlink($path); throw new RuntimeException('签名保存失败'); }
++            return $path;
++        } finally {
++            imagedestroy($image);
++            if ($output) imagedestroy($output);
++        }
++    }
++}
+diff --git a/server/app/server/wallpaper/WallpaperService.php b/server/app/server/wallpaper/WallpaperService.php
+new file mode 100644
+index 0000000..3be0585
+--- /dev/null
++++ b/server/app/server/wallpaper/WallpaperService.php
+@@ -0,0 +1,167 @@
++<?php
++
++namespace app\server\wallpaper;
++
++use app\model\channel\FileRecord;
++use app\model\channel\TableRecord;
++use app\model\channel\WallpaperRecord;
++use app\server\config\ConfigService;
++use app\server\CurrentContext;
++use app\server\file\FileService;
++use RuntimeException;
++use support\Request;
++
++class WallpaperService
++{
++    public function list(string $scope, int $page, int $size): array
++    {
++        $accountId = $this->accountId();
++        if (!in_array($scope, ['mine', 'shared'], true)) throw new RuntimeException('壁纸范围无效', 422);
++        $page = max(1, $page);
++        $size = min(50, max(1, $size));
++        $result = WallpaperRecord::page($scope, $accountId, $page, $size);
++        $items = [];
++        foreach ($result['items'] as $row) {
++            $file = FileRecord::detailById((int) $row->file_id);
++            if ($file && $this->validImage($file)) $items[] = $this->item($row, $file);
++        }
++        return ['items' => $items, 'pagination' => ['page' => $page, 'page_size' => $size, 'total' => $result['total']]];
++    }
++
++    public function upload(Request $request): array
++    {
++        $accountId = $this->accountId();
++        $result = (new FileService())->upload($request, [
++            'category' => 'wallpaper', 'is_temporary' => false, 'require_md5' => false,
++            'max_size' => 8 * 1024 * 1024, 'allowed_extensions' => ['jpg', 'jpeg', 'png', 'webp', 'gif'],
++        ]);
++        $file = FileRecord::detailById((int) $result['file_id']);
++        if (!$file || !$this->validImage($file)) throw new RuntimeException('壁纸文件无效', 422);
++        $id = WallpaperRecord::createForFile((int) $file->id, $accountId, (string) $file->name);
++        return $this->item(WallpaperRecord::byId($id), $file);
++    }
++
++    public function importable(int $page, int $size): array
++    {
++        $accountId = $this->accountId();
++        $page = max(1, $page);
++        $size = min(50, max(1, $size));
++        $query = FileRecord::query()->join('file_blob', 'file.blob_id', '=', 'file_blob.id')
++            ->where('file.uploader_id', $accountId)->where('file.category', 'profile')
++            ->whereNull('file.deleted_at')->whereNull('file_blob.deleted_at')
++            ->whereIn('file_blob.mime_type', ['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
++        $total = (int) (clone $query)->count();
++        $rows = $query->orderByDesc('file.id')->forPage($page, $size)
++            ->get(['file.id', 'file.name', 'file.url', 'file.created_at']);
++        return ['items' => $rows->map(static fn ($row) => ['file_id' => (int) $row->id,
++            'name' => (string) $row->name, 'url' => (string) $row->url,
++            'created_at' => (string) $row->created_at])->all(),
++            'pagination' => ['page' => $page, 'page_size' => $size, 'total' => $total]];
++    }
++
++    public function import(int $fileId): array
++    {
++        $accountId = $this->accountId();
++        $source = FileRecord::detailById($fileId);
++        if (!$source || (int) $source->uploader_id !== $accountId || (string) $source->category !== 'profile'
++            || !$this->validImage($source)) throw new RuntimeException('历史图片不存在或无权限', 403);
++        $copied = (new FileService())->copyExistingImage($fileId, 'wallpaper', $accountId);
++        $file = FileRecord::detailById((int) $copied['file_id']);
++        $id = WallpaperRecord::createForFile((int) $file->id, $accountId, (string) $source->name);
++        return $this->item(WallpaperRecord::byId($id), $file);
++    }
++
++    public function share(int $id, bool $shared): array
++    {
++        if ($id <= 0) throw new RuntimeException('壁纸标识无效', 422);
++        $row = WallpaperRecord::byId($id);
++        if (!$row || (int) $row->owner_account_id !== $this->accountId()) throw new RuntimeException('壁纸不存在或无权限', 403);
++        $file = FileRecord::detailById((int) $row->file_id);
++        if (!$file || !$this->validImage($file) || (int) $file->uploader_id !== $this->accountId()) throw new RuntimeException('文件归属无效', 403);
++        WallpaperRecord::setShared($id, $this->accountId(), $shared);
++        return $this->item(WallpaperRecord::byId($id), $file);
++    }
++
++    public function apply(?int $id, string $mode): array
++    {
++        $accountId = $this->accountId();
++        if ($mode !== 'school') {
++            if (!$id || $id <= 0) throw new RuntimeException('壁纸标识无效', 422);
++            $row = WallpaperRecord::byId($id);
++            if (!$row || !$this->visible($row, $accountId)) throw new RuntimeException('壁纸不可用', 403);
++            $file = FileRecord::detailById((int) $row->file_id);
++            if (!$file || !$this->validImage($file)) throw new RuntimeException('壁纸文件无效', 422);
++        }
++        TableRecord::connection()->transaction(function () use ($accountId, $id, $mode): void {
++            $row = TableRecord::latestDesktopConfig($accountId, ['layout_json']);
++            $layout = json_decode((string) ($row->layout_json ?? ''), true);
++            if (!is_array($layout)) $layout = [];
++            $layout['wallpaper_mode'] = $mode === 'school' ? 'school' : 'item';
++            $layout['wallpaper_id'] = $mode === 'school' ? null : $id;
++            unset($layout['wallpaper_url']);
++            TableRecord::saveDesktopConfig($accountId, ['layout_json' => json_encode($layout, JSON_UNESCAPED_UNICODE), 'updated_at' => date('Y-m-d H:i:s')]);
++        });
++        return $this->selection($accountId);
++    }
++
++    public function selection(int $accountId): array
++    {
++        $row = TableRecord::latestDesktopConfig($accountId, ['layout_json']);
++        $layout = json_decode((string) ($row->layout_json ?? ''), true);
++        if (!is_array($layout)) $layout = [];
++        $mode = (string) ($layout['wallpaper_mode'] ?? '');
++        $id = (int) ($layout['wallpaper_id'] ?? 0);
++        if ($mode === 'item' && $id > 0) {
++            $wallpaper = WallpaperRecord::byId($id);
++            if ($wallpaper && $this->visible($wallpaper, $accountId)) {
++                $file = FileRecord::detailById((int) $wallpaper->file_id);
++                if ($file && $this->validImage($file)) return ['wallpaper_mode' => 'item', 'wallpaper_id' => $id, 'wallpaper' => 'custom', 'wallpaper_url' => (string) $file->url];
++            }
++        }
++        if ($mode === '' && !empty($layout['wallpaper_url'])) {
++            foreach (FileRecord::idsByUrl((string) $layout['wallpaper_url']) as $fileId) {
++                $wallpaper = WallpaperRecord::ownedByFile((int) $fileId, $accountId);
++                if ($wallpaper) {
++                    $file = FileRecord::detailById((int) $fileId);
++                    if ($file && $this->validImage($file)) return ['wallpaper_mode' => 'item', 'wallpaper_id' => (int) $wallpaper->id, 'wallpaper' => 'custom', 'wallpaper_url' => (string) $file->url];
++                }
++            }
++        }
++        $defaultId = (int) ((new ConfigService())->get('system.default_wallpaper_file_id') ?? 0);
++        $defaultFile = $defaultId > 0 ? FileRecord::detailById($defaultId) : null;
++        return ['wallpaper_mode' => 'school', 'wallpaper_id' => null,
++            'wallpaper' => $mode === '' && empty($layout['wallpaper_url']) ? (string) ($layout['wallpaper'] ?? 'default') : 'default',
++            'wallpaper_url' => $defaultFile && $this->validImage($defaultFile) ? (string) $defaultFile->url : ''];
++    }
++
++    public function defaultFileId(): int
++    {
++        return (int) ((new ConfigService())->get('system.default_wallpaper_file_id') ?? 0);
++    }
++
++    public function visible(object $row, int $accountId): bool
++    {
++        return (int) $row->owner_account_id === $accountId || (int) $row->is_shared === 1
++            || (int) $row->file_id === $this->defaultFileId();
++    }
++
++    public function validImage(object $file): bool
++    {
++        return in_array(strtolower((string) $file->ext), ['jpg', 'jpeg', 'png', 'webp', 'gif'], true)
++            && in_array((string) $file->mime_type, ['image/jpeg', 'image/png', 'image/webp', 'image/gif'], true);
++    }
++
++    private function item(object $row, object $file): array
++    {
++        return ['id' => (int) $row->id, 'file_id' => (int) $row->file_id, 'name' => (string) $row->name,
++            'url' => (string) $file->url, 'owner_account_id' => (int) $row->owner_account_id,
++            'is_shared' => (bool) $row->is_shared, 'created_at' => (string) $row->created_at];
++    }
++
++    private function accountId(): int
++    {
++        $id = (int) CurrentContext::accountId();
++        if ($id <= 0) throw new RuntimeException('请先登录', 401);
++        return $id;
++    }
++}
+diff --git a/server/app/server/wechat/WechatBindingService.php b/server/app/server/wechat/WechatBindingService.php
+index 3673bed..b56a1a4 100644
+--- a/server/app/server/wechat/WechatBindingService.php
++++ b/server/app/server/wechat/WechatBindingService.php
+@@ -21,13 +21,13 @@ class WechatBindingService
+         $config = new ConfigService();
+         $required = in_array($roleType, self::BINDING_ROLES, true);
+         $enforced = in_array($roleType, ['teacher', 'student'], true);
+         $allowUnbound = $config->get('wechat.allow_unbound_login') === true;
+         $corpId = trim((string) $config->get('wechat.corp_id'));
+         $binding = UserWechat::currentByUser($userId);
+-        $bound = $binding !== null && $corpId !== '' && $binding['corp_id'] === $corpId && trim((string) $binding['wechat_userid']) !== '';
++        $bound = UserWechat::isValidBinding($binding, $corpId);
+ 
+         return [
+             'bound' => $bound,
+             'required' => $required,
+             'enforced' => $enforced && !$allowUnbound,
+             'allow_unbound_login' => $allowUnbound,
+@@ -93,31 +93,39 @@ class WechatBindingService
+             || $browser === '' || !hash_equals($stateData['browser'], hash('sha256', $browser))) {
+             throw new RuntimeException('企业微信授权已失效，请重新获取身份');
+         }
+         $config = new ConfigService();
+         $corpId = trim((string) $config->get('wechat.corp_id'));
+         if ($corpId !== $stateData['corp']) throw new RuntimeException('企业微信配置已变更，请重新获取身份');
+-        $client = new WechatClient();
+-        $token = $client->getToken($corpId, (string) $config->get('wechat.secret'));
+-        $this->assertResponse($token, '获取企业微信访问凭证失败');
+-        if (empty($token['access_token'])) throw new RuntimeException('企业微信未返回访问凭证');
+-        $info = $client->getUserInfo($token['access_token'], $code);
+-        $this->assertResponse($info, '获取企业微信身份失败');
+-        $userId = trim((string) ($info['UserId'] ?? $info['userid'] ?? ''));
+-        if ($userId === '' || strlen($userId) > 120) throw new RuntimeException('未获取到企业成员 UserId，请确认已加入应用可见范围');
++        $userId = $this->resolveIdentity($code, $corpId);
+         $ticket = bin2hex(random_bytes(32));
+         $identity = [
+             'school' => CurrentContext::schoolDatabaseId(), 'corp' => $corpId,
+             'account' => (int) ($stateData['account'] ?? 0), 'browser' => $stateData['browser'],
+             'wechat_userid' => $userId, 'created_at' => time(),
+         ];
+         Redis::setEx($this->key('identity', $ticket), self::IDENTITY_TTL, json_encode($identity));
+         Redis::setEx($this->key('bind', $ticket), self::TTL, json_encode($identity));
+         return ['ticket' => $ticket, 'return_path' => $this->safePath($stateData['return_path'])];
+     }
+ 
++    public function resolveIdentity(string $code, string $corpId): string
++    {
++        if ($code === '' || strlen($code) > 1024) throw new RuntimeException('企业微信授权参数无效');
++        $config = new ConfigService();
++        $client = new WechatClient();
++        $token = $client->getToken($corpId, (string) $config->get('wechat.secret'));
++        $this->assertResponse($token, '获取企业微信访问凭证失败');
++        if (empty($token['access_token'])) throw new RuntimeException('企业微信未返回访问凭证');
++        $info = $client->getUserInfo($token['access_token'], $code);
++        $this->assertResponse($info, '获取企业微信身份失败');
++        $userId = trim((string) ($info['UserId'] ?? $info['userid'] ?? ''));
++        if ($userId === '' || strlen($userId) > 120) throw new RuntimeException('未获取到企业成员 UserId，请确认已加入应用可见范围');
++        return $userId;
++    }
++
+     public function bind(): array
+     {
+         if (!in_array(CurrentContext::roleType(), self::BINDING_ROLES, true)) throw new RuntimeException('当前角色无需绑定企业微信');
+         $identity = $this->identity();
+         if (!$identity) throw new RuntimeException('企业微信身份已失效，请重新获取身份');
+         $key = $this->key('bind', (string) request()->cookie(self::IDENTITY_COOKIE, ''));
+diff --git a/server/app/server/wechat/WechatScanSessionService.php b/server/app/server/wechat/WechatScanSessionService.php
+new file mode 100644
+index 0000000..7d99d1c
+--- /dev/null
++++ b/server/app/server/wechat/WechatScanSessionService.php
+@@ -0,0 +1,262 @@
++<?php
++
++namespace app\server\wechat;
++
++use app\model\channel\Account;
++use app\model\channel\TableRecord;
++use app\model\channel\User;
++use app\model\channel\UserWechat;
++use app\server\CurrentContext;
++use app\server\config\ConfigService;
++use RuntimeException;
++use support\Redis;
++
++class WechatScanSessionService
++{
++    public const TTL = 300;
++    public const COOKIE = 'wechat_scan_identity';
++
++    public function create(): array
++    {
++        $binding = (new WechatBindingService())->contextForUser((int) CurrentContext::userId(), (string) CurrentContext::roleType());
++        if (!$binding['required'] || $binding['bound'] || $binding['binding_outdated']) throw new RuntimeException('当前账号不能发起扫码绑定');
++        $corp = $this->corp();
++        $device = (string) CurrentContext::deviceJti();
++        if ($device === '') throw new RuntimeException('登录设备信息缺失，请重新登录');
++        $origin = (new WechatBindingService())->origin();
++        if (!str_starts_with($origin, 'https://')) throw new RuntimeException('扫码绑定需要学校 HTTPS 地址');
++        return $this->locked('owner:' . $device, function () use ($corp, $device, $origin): array {
++            $ownerKey = $this->key('owner', $device);
++            $previous = (string) Redis::get($ownerKey);
++            if ($previous !== '') $this->cancel($previous);
++            $id = bin2hex(random_bytes(32));
++            $ticket = bin2hex(random_bytes(32));
++            $data = [
++                'id' => $id, 'school' => CurrentContext::schoolDatabaseId(), 'account' => CurrentContext::accountId(),
++                'user' => CurrentContext::userId(), 'device' => $device, 'corp' => $corp,
++                'state' => 'pending', 'expires_at' => time() + self::TTL,
++            ];
++            $this->assertTarget($data);
++            $this->save($data);
++            Redis::setEx($this->key('ticket', $ticket), self::TTL, $id);
++            Redis::setEx($ownerKey, self::TTL, $id);
++            return ['session_id' => $id, 'scan_url' => $origin . '/api/wechat/scan/start?ticket=' . $ticket, 'expires_in' => self::TTL, 'state' => 'pending'];
++        });
++    }
++
++    public function cancelCurrent(): void
++    {
++        $device = (string) CurrentContext::deviceJti();
++        if ($device === '' || !CurrentContext::accountId()) return;
++        $id = (string) Redis::get($this->key('owner', $device));
++        if ($id !== '') $this->cancel($id);
++    }
++
++    public function status(string $id): array
++    {
++        $data = $this->read($id);
++        if (!$data) return ['state' => 'expired'];
++        $this->assertOwner($data);
++        return ['state' => $data['state'], 'expires_in' => max(0, $data['expires_at'] - time())];
++    }
++
++    public function cancel(string $id): array
++    {
++        return $this->locked($id, function () use ($id): array {
++            $data = $this->read($id);
++            if (!$data) return ['state' => 'expired'];
++            $this->assertOwner($data);
++            if (in_array($data['state'], ['pending', 'scanned'], true)) {
++                $data['state'] = 'cancelled';
++                $this->save($data);
++            }
++            return ['state' => $data['state']];
++        });
++    }
++
++    public function start(string $ticket): array
++    {
++        if (!(new WechatBindingService())->inWechat()) throw new RuntimeException('请使用企业微信扫描二维码');
++        $this->assertToken($ticket);
++        $id = (string) $this->consume($this->key('ticket', $ticket));
++        $data = $this->active($id);
++        $this->assertTarget($data);
++        $browser = bin2hex(random_bytes(32));
++        $state = bin2hex(random_bytes(32));
++        Redis::setEx($this->key('oauth', $state), $this->remaining($data), json_encode([
++            'id' => $id, 'browser' => hash('sha256', $browser), 'corp' => $data['corp'],
++        ]));
++        return ['browser' => $browser, 'url' => 'https://open.weixin.qq.com/connect/oauth2/authorize?' . http_build_query([
++            'appid' => $data['corp'], 'redirect_uri' => (new WechatBindingService())->origin() . '/api/wechat/scan/callback',
++            'response_type' => 'code', 'scope' => 'snsapi_base', 'state' => $state,
++        ]) . '#wechat_redirect'];
++    }
++
++    public function callback(string $code, string $state): array
++    {
++        $this->assertToken($state);
++        $oauth = json_decode((string) $this->consume($this->key('oauth', $state)), true);
++        $browser = (string) request()->cookie(WechatBindingService::BROWSER_COOKIE, '');
++        if (!$oauth || !hash_equals($oauth['browser'], hash('sha256', $browser))) throw new RuntimeException('企业微信授权已失效，请在电脑刷新二维码');
++        $data = $this->active($oauth['id']);
++        $this->assertTarget($data);
++        $wechatUser = (new WechatBindingService())->resolveIdentity($code, $data['corp']);
++        return $this->locked($data['id'], function () use ($data, $oauth, $wechatUser): array {
++            $data = $this->active($data['id']);
++            if ($data['state'] !== 'pending') throw new RuntimeException('二维码已使用，请在电脑重新获取');
++            $credential = bin2hex(random_bytes(32));
++            $identity = [
++                'id' => $data['id'], 'browser' => $oauth['browser'], 'corp' => $data['corp'],
++                'wechat_userid' => $wechatUser, 'nonce' => bin2hex(random_bytes(32)),
++            ];
++            Redis::setEx($this->key('identity', $credential), $this->remaining($data), json_encode($identity));
++            $data['state'] = 'scanned';
++            $this->save($data);
++            return ['credential' => $credential, 'expires_in' => $this->remaining($data)];
++        });
++    }
++
++    public function mobileContext(): array
++    {
++        $identity = $this->identity();
++        $data = $this->active($identity['id']);
++        $account = $this->assertTarget($data);
++        $user = User::enabledById($data['user']);
++        return [
++            'account_name' => (string) $account->login_name, 'user_name' => (string) $user->name,
++            'wechat_userid' => $identity['wechat_userid'], 'nonce' => $identity['nonce'],
++            'expires_in' => $this->remaining($data),
++        ];
++    }
++
++    public function confirm(string $nonce, string $password): array
++    {
++        $this->assertSameOrigin();
++        $identity = $this->identity();
++        if (!hash_equals($identity['nonce'], $nonce)) throw new RuntimeException('确认凭证无效，请重新扫码');
++        return $this->locked($identity['id'], function () use ($identity, $password): array {
++            $data = $this->active($identity['id']);
++            if ($data['state'] !== 'scanned') throw new RuntimeException('二维码已使用或失效');
++            $this->throttle('session:' . $data['id'], 5);
++            $this->throttle('account:' . $data['account'], 10);
++            $account = $this->assertTarget($data);
++            if ($password === '' || strlen($password) > 4096 || !password_verify($password, (string) $account->password)) throw new RuntimeException('目标系统账号密码错误');
++            $credential = (string) request()->cookie(self::COOKIE, '');
++            if (!$this->consume($this->key('identity', $credential))) throw new RuntimeException('确认凭证已使用');
++            $data['state'] = 'confirming';
++            $this->save($data);
++            try {
++                User::connection()->transaction(function () use ($data, $identity, $account): void {
++                    $verifiedHash = (string) $account->password;
++                    $account = Account::query()->where('id', $data['account'])->lockForUpdate()->first();
++                    if (!$account || $account->status !== 'enabled' || $account->deleted_at || (int) $account->user_id !== $data['user']) throw new RuntimeException('目标账号已停用或变更');
++                    if (!hash_equals($verifiedHash, (string) $account->password)) throw new RuntimeException('账号密码已变更，请重新扫码');
++                    $this->assertTarget($data);
++                    UserWechat::bindUser($data['user'], $identity['wechat_userid'], $data['corp']);
++                });
++                $data['state'] = 'confirmed';
++            } catch (\Throwable $exception) {
++                $data['state'] = 'failed';
++                $this->save($data);
++                throw $exception;
++            }
++            $this->save($data);
++            return ['state' => 'confirmed'];
++        });
++    }
++
++    private function identity(): array
++    {
++        $ticket = (string) request()->cookie(self::COOKIE, '');
++        $this->assertToken($ticket);
++        $identity = json_decode((string) Redis::get($this->key('identity', $ticket)), true);
++        $browser = (string) request()->cookie(WechatBindingService::BROWSER_COOKIE, '');
++        if (!$identity || $identity['corp'] !== $this->corp() || !hash_equals($identity['browser'], hash('sha256', $browser))) throw new RuntimeException('手机确认已失效，请重新扫码');
++        return $identity;
++    }
++
++    private function assertTarget(array $data): Account
++    {
++        if ($data['expires_at'] <= time()) throw new RuntimeException('二维码已过期，请重新获取');
++        $account = Account::enabledById($data['account']);
++        $activeDevice = TableRecord::queryTable('user_device')->where('account_id', $data['account'])->where('jti', $data['device'])
++            ->where('status', 'enabled')->whereNull('deleted_at')->exists();
++        $revoked = Redis::exists('jwt_blacklist:' . CurrentContext::schoolDatabaseId() . ':' . $data['device']);
++        if (!$account || (int) $account->user_id !== $data['user'] || !User::enabledById($data['user']) || !$activeDevice || $revoked) throw new RuntimeException('电脑登录会话或目标账号已失效，请重新登录');
++        if ($data['corp'] !== $this->corp()) throw new RuntimeException('学校企业微信配置已变更，请重新扫码');
++        return $account;
++    }
++
++    private function assertOwner(array $data): void
++    {
++        if ($data['account'] !== CurrentContext::accountId() || $data['user'] !== CurrentContext::userId()
++            || !hash_equals($data['device'], (string) CurrentContext::deviceJti())) throw new RuntimeException('无权访问此扫码会话');
++    }
++
++    private function active(string $id): array
++    {
++        $data = $this->read($id);
++        if (!$data || !in_array($data['state'], ['pending', 'scanned'], true)) throw new RuntimeException('二维码已过期、取消或使用，请在电脑重新获取');
++        return $data;
++    }
++
++    private function read(string $id): ?array
++    {
++        $this->assertToken($id);
++        $data = json_decode((string) Redis::get($this->key('session', $id)), true);
++        return is_array($data) && $data['school'] === CurrentContext::schoolDatabaseId() && $data['expires_at'] > time() ? $data : null;
++    }
++
++    private function save(array $data): void
++    {
++        Redis::setEx($this->key('session', $data['id']), $this->remaining($data), json_encode($data));
++    }
++
++    private function remaining(array $data): int { return max(1, $data['expires_at'] - time()); }
++
++    private function assertToken(string $value): void
++    {
++        if (!preg_match('/^[a-f0-9]{64}$/', $value)) throw new RuntimeException('扫码凭证无效，请重新获取二维码');
++    }
++
++    private function corp(): string
++    {
++        $config = new ConfigService();
++        $corp = trim((string) $config->get('wechat.corp_id'));
++        if ($corp === '' || trim((string) $config->get('wechat.secret')) === '') throw new RuntimeException('请管理员先配置企业微信');
++        return $corp;
++    }
++
++    private function assertSameOrigin(): void
++    {
++        $origin = (string) request()->header('origin', '');
++        if ($origin === '' || !hash_equals((new WechatBindingService())->origin(), $origin)
++            || !str_contains(strtolower((string) request()->header('content-type', '')), 'application/json')) throw new RuntimeException('请通过学校手机确认页面操作');
++    }
++
++    private function throttle(string $scope, int $limit): void
++    {
++        $count = (int) Redis::eval("local n=redis.call('INCR',KEYS[1]); if n==1 then redis.call('EXPIRE',KEYS[1],900) end; return n", 1, $this->key('attempt', $scope));
++        if ($count > $limit) throw new RuntimeException('确认尝试过于频繁，请十五分钟后重试');
++    }
++
++    private function consume(string $key): mixed
++    {
++        return Redis::eval("local v=redis.call('GET',KEYS[1]); if v then redis.call('DEL',KEYS[1]) end; return v", 1, $key);
++    }
++
++    private function locked(string $id, callable $callback): mixed
++    {
++        $key = $this->key('lock', $id);
++        $token = bin2hex(random_bytes(16));
++        $acquired = Redis::eval("if redis.call('SET',KEYS[1],ARGV[1],'NX','EX',15) then return 1 else return 0 end", 1, $key, $token);
++        if (!$acquired) throw new RuntimeException('扫码会话正在处理，请稍后重试');
++        try { return $callback(); }
++        finally { Redis::eval("if redis.call('GET',KEYS[1])==ARGV[1] then return redis.call('DEL',KEYS[1]) else return 0 end", 1, $key, $token); }
++    }
++
++    private function key(string $kind, string $value): string
++    {
++        return 'wechat:scan:' . CurrentContext::schoolDatabaseId() . ':' . $kind . ':' . hash('sha256', $value);
++    }
++}
+diff --git a/server/database/migrations/20260929_signature.php b/server/database/migrations/20260929_signature.php
+new file mode 100644
+index 0000000..ee9ef96
+--- /dev/null
++++ b/server/database/migrations/20260929_signature.php
+@@ -0,0 +1,15 @@
++<?php
++
++$ids = array_slice($argv ?? [], 1);
++if (!$ids) throw new RuntimeException('用法: php database/migrations/20260929_signature.php 学校数据库编号 [学校数据库编号...]');
++foreach ($ids as $id) {
++    if (filter_var($id, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]) === false) throw new InvalidArgumentException('学校数据库编号必须为正整数');
++}
++require_once dirname(__DIR__, 2) . '/vendor/autoload.php';
++require_once dirname(__DIR__, 2) . '/support/bootstrap.php';
++foreach (array_unique($ids) as $id) {
++    \support\Context::reset();
++    (new \app\server\school\SchoolConnectionManager())->bootstrapById((int) $id);
++    \app\model\channel\SignatureSchema::apply();
++    echo "学校数据库 {$id}: 签名结构已更新\n";
++}
+diff --git a/server/database/migrations/20260929_wallpaper.php b/server/database/migrations/20260929_wallpaper.php
+new file mode 100644
+index 0000000..fa0e77f
+--- /dev/null
++++ b/server/database/migrations/20260929_wallpaper.php
+@@ -0,0 +1,15 @@
++<?php
++
++$ids = array_slice($argv ?? [], 1);
++if (!$ids) throw new RuntimeException('用法: php database/migrations/20260929_wallpaper.php 学校数据库编号 [学校数据库编号...]');
++foreach ($ids as $id) {
++    if (filter_var($id, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]) === false) throw new InvalidArgumentException('学校数据库编号必须为正整数');
++}
++require_once dirname(__DIR__, 2) . '/vendor/autoload.php';
++require_once dirname(__DIR__, 2) . '/support/bootstrap.php';
++foreach (array_unique($ids) as $id) {
++    \support\Context::reset();
++    (new \app\server\school\SchoolConnectionManager())->bootstrapById((int) $id);
++    \app\model\channel\WallpaperSchema::apply();
++    echo "学校数据库 {$id}: 壁纸结构已更新\n";
++}

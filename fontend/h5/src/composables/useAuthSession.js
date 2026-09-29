@@ -87,6 +87,7 @@ export function useAuthSession(options = {}) {
     switchAccountState.loading = true;
     switchAccountState.message = '';
     try {
+      await options.onBeforeSessionChange?.();
       await switchAccount({ account_id: accountId, client: 'H5' });
       resetAccountChoices();
       await options.onAuthenticated?.(true);
@@ -232,6 +233,7 @@ export function useAuthSession(options = {}) {
     loginState.loading = true;
     loginState.message = '';
     try {
+      await options.onBeforeSessionChange?.();
       await logoutApi();
       resetAccountChoices();
       await options.onLoggedOut?.();
@@ -253,6 +255,7 @@ export function useAuthSession(options = {}) {
   }
 
   onMounted(async () => {
+    if (options.enabled && !options.enabled()) return;
     window.addEventListener('practical-auth-expired', handleAuthExpired);
     await loadRegisterOptions();
     await consumeUrlPasskey();

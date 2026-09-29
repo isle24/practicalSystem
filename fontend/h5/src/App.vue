@@ -1,5 +1,6 @@
 <template>
-  <MobileAppShell
+  <WechatScanBinding v-if="isWechatScan" />
+  <MobileAppShell v-else
     :active-tab="activeTab"
     @update:active-tab="navigateMobileTab"
     v-model:refreshing="mobileRefreshing"
@@ -34,6 +35,8 @@
         @register="submitRegister"
         @toggle-register="toggleRegisterForm"
       />
+
+      <SignaturePage v-else-if="signatureSession || activeTab === 'signature'" :key="`${state.context.account_id}:${signatureSession}`" :session-id="signatureSession" @done="finishMobileSignature" />
 
       <HomePage
         v-else-if="activeTab === 'home'"
@@ -73,6 +76,16 @@
         @logout="confirmMobileLogout"
       />
 
+      <ExpenseApproval
+        v-else-if="activeTab === 'expense'"
+        :request="request"
+        :backend-url="backendUrl"
+        :account-id="state.context.account_id"
+        :expense-id="expenseId"
+        :can-view="hasPermission('expense:view')"
+        @clear-expense="expenseId = 0"
+      />
+
       <MessagePage
         v-else-if="activeTab === 'message'"
         :key="`${state.context.school_database_id}:${state.context.account_id}`"
@@ -85,8 +98,10 @@
         :time-text="messageTimeText"
         :type-text="messageTypeText"
         :type-unread="mobileMessageTypeUnread"
+        :account-id="state.context.account_id"
         @filter="setMobileMessageFilter"
         @type="setMobileMessageType"
+        @open-expense="openMobileExpense"
         @open="handleMobileMessageClick"
         @linked="openMobileMessageLink"
         @read-all="markAllMobileMessagesRead"
@@ -156,6 +171,9 @@
 <script setup>
 import { useWechatBinding } from '../../shared/useWechatBinding';
 import WechatBindingGate from '../../shared/components/WechatBindingGate.vue';
+import WechatScanBinding from './components/WechatScanBinding.vue';
+import SignaturePage from './pages/SignaturePage.vue';
+import ExpenseApproval from './features/expense/ExpenseApproval.vue';
 import { previewFile } from '../../shared/filePreview';
 import { computed, reactive, ref, watch } from 'vue';
 import { showConfirmDialog, showToast } from 'vant';
@@ -280,6 +298,8 @@ import {
 
 const { state, hasPermission, load } = useMobilePermissions();
 const mobileRefreshing = ref(false);
+const isWechatScan = new URL(window.location.href).searchParams.get('wechat_scan') === '1';
+const signatureSession = ref(new URL(window.location.href).searchParams.get('signature_session') || '');
 const wechatBinding = useWechatBinding({ context: () => state.context, request, backendUrl });
 const wechatBlocked = wechatBinding.blocked;
 const wechatShow = wechatBinding.show;
@@ -386,6 +406,8 @@ const {
   switchMobileAccount,
   toggleRegisterForm,
 } = useAuthSession({
+  enabled: () => !isWechatScan,
+  onBeforeSessionChange: () => wechatBinding.cancelScan(),
   isLoggedIn: () => Boolean(state.context.account_id),
   roleLabel: type => roleNameMap[type] || '',
   onAuthenticated: refreshMobileSession,
@@ -399,6 +421,7 @@ const {
 });
 
 const mobileNotebook = ref(null);
+const expenseId = ref(Number(new URL(window.location.href).searchParams.get('expense_id') || 0));
 const baseVisitPanel = ref(null);
 const locationOrigin = window.location.origin;
 async function navigateMobileTab(tab) {
@@ -414,6 +437,7 @@ async function canLeaveMobilePage() {
 const modules = [
   { key: 'releaseNotes', title: '更新说明', icon: FileText, theme: 'teal', permission: '', flow: '-' },
   { key: 'notebook', title: '记事本', icon: FileText, theme: 'teal', permission: '', flow: '-' },
+  { key: 'expense', title: '经费管理', desc: '基地建设费用申请与审批', icon: ClipboardList, theme: 'amber', permission: 'expense:view', flow: '按审批流程处理' },
   {
     key: 'internship',
     title: '实习管理',
@@ -471,6 +495,7 @@ const modules = [
 ];
 
 const currentPage = computed(() => {
+  if (signatureSession.value || activeTab.value === 'signature') return { title: '个人电子签名', desc: '本人手写签名', theme: 'gray', icon: UserRound, permission: '', flow: '-' };
   if (activeTab.value === 'home') {
     return { title: '首页', desc: '移动端工作台', theme: 'blue', icon: Home, permission: '', flow: '-' };
   }
@@ -497,7 +522,7 @@ useRealtimeMessages({
 const mobileHeaderTitle = computed(() => (isLoggedIn.value ? currentPage.value.title : '实践管理系统'));
 const showMobileHeaderBack = computed(() => (
   isLoggedIn.value
-  && ['message', 'doc', 'templateLib', 'notebook', 'releaseNotes', 'baseVisit'].includes(activeTab.value)
+  && ['message', 'expense', 'doc', 'templateLib', 'notebook', 'releaseNotes', 'baseVisit'].includes(activeTab.value)
   && canGoMobileBack.value
 ));
 const roleType = computed(() => state.context.role_type || '');
@@ -505,7 +530,7 @@ const isStudentRole = computed(() => roleType.value === 'student');
 const isTeacherRole = computed(() => roleType.value === 'teacher');
 const isAdminRole = computed(() => ['super_admin', 'school_admin', 'college_admin', 'profession_admin'].includes(roleType.value));
 const visibleMobileModules = computed(() => modules.filter(canShowMobileModule));
-const supportHomeModules = computed(() => visibleMobileModules.value.filter(module => ['baseVisit', 'doc', 'templateLib'].includes(module.key)));
+const supportHomeModules = computed(() => visibleMobileModules.value.filter(module => ['baseVisit', 'doc', 'templateLib', 'expense'].includes(module.key)));
 const baseVisitSessionKey = computed(() => [state.context.school_id || state.context.school_database_id, state.context.account_id, roleType.value].join(':'));
 const canReviewInternship = computed(() => hasPermission('internship:approve'));
 const canReviewArrangement = computed(() => (
@@ -556,6 +581,7 @@ const roleNameMap = {
 
 function canShowMobileModule(module) {
   if (['notebook', 'releaseNotes'].includes(module.key)) return isLoggedIn.value;
+  if (module.key === 'expense' && activeTab.value === 'expense') return true;
   if (!hasPermission(module.permission)) {
     return false;
   }
@@ -5541,6 +5567,7 @@ function expireMobileSession(message) {
 }
 
 async function refreshMobilePage() {
+  if (isWechatScan) return;
   await load();
   await wechatBinding.refresh();
   if (wechatBlocked.value) return;
@@ -5582,6 +5609,7 @@ async function handleMobilePullRefresh() {
 }
 
 async function refreshMobileSession(resetWorkspace = false) {
+  if (isWechatScan) return;
   if (resetWorkspace) {
     resetMobileLocalState();
   }
@@ -5605,10 +5633,23 @@ async function refreshMobileSession(resetWorkspace = false) {
 
 
 
+function finishMobileSignature() {
+  signatureSession.value = '';
+  const url = new URL(window.location.href);
+  url.searchParams.delete('signature_session');
+  history.replaceState(null, '', url.pathname + url.search + url.hash);
+  activeTab.value = 'mine';
+}
+
 function openMobileMessages() {
   if (isLoggedIn.value && activeTab.value !== 'message') {
     navigateMobileTab('message');
   }
+}
+
+function openMobileExpense(id) {
+  expenseId.value = Number(id || 0);
+  if (expenseId.value) activeTab.value = 'expense';
 }
 
 provideInternshipContext({
@@ -5818,7 +5859,7 @@ watch(activeTab, (tab) => {
 });
 
 watch(roleType, () => {
-  if (!['home', 'mine', 'message'].includes(activeTab.value) && !visibleMobileModules.value.some(module => module.key === activeTab.value)) {
+  if (!['home', 'mine', 'message', 'signature'].includes(activeTab.value) && !visibleMobileModules.value.some(module => module.key === activeTab.value)) {
     activeTab.value = 'home';
   }
   const panels = internshipPanels.value.map(item => item.key);
@@ -5830,7 +5871,7 @@ watch(roleType, () => {
 });
 
 watch(visibleMobileModules, () => {
-  if (!['home', 'mine', 'message'].includes(activeTab.value) && !visibleMobileModules.value.some(module => module.key === activeTab.value)) {
+  if (!['home', 'mine', 'message', 'signature'].includes(activeTab.value) && !visibleMobileModules.value.some(module => module.key === activeTab.value)) {
     activeTab.value = 'home';
   }
 });

@@ -10,10 +10,11 @@ class FileBlob extends BaseModel
     protected $primaryKey = 'id';
     protected $guarded = [];
 
-    public static function activeByMd5(string $md5): ?self
+    public static function activeByMd5(string $md5, string $scope = 'general'): ?self
     {
         return self::query()
             ->where('md5', $md5)
+            ->where('storage_scope', $scope)
             ->whereNull('deleted_at')
             ->first();
     }
@@ -26,10 +27,11 @@ class FileBlob extends BaseModel
             ->first();
     }
 
-    public static function lockByMd5(string $md5): ?self
+    public static function lockByMd5(string $md5, string $scope = 'general'): ?self
     {
         return self::query()
             ->where('md5', $md5)
+            ->where('storage_scope', $scope)
             ->lockForUpdate()
             ->first();
     }

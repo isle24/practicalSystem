@@ -618,6 +618,18 @@ class InternshipController
         return $this->handle(fn (): array => $this->service()->plans($request));
     }
 
+    #[OperationLog('查询实习计划删除影响')]
+    public function planDeleteImpact(Request $request): Response
+    {
+        return $this->handle(fn (): array => $this->service()->planDeleteImpact($request));
+    }
+
+    #[OperationLog('删除实习计划')]
+    public function removePlan(Request $request): Response
+    {
+        return $this->handle(fn (): array => $this->service()->removePlan($request));
+    }
+
     /**
      * 保存实习计划
      */

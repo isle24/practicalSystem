@@ -61,6 +61,12 @@ class AuthController
     #[OperationLog('退出登录')]
     public function logout(Request $request): Response
     {
+        try {
+            (new \app\server\wechat\WechatScanSessionService())->cancelCurrent();
+            (new \app\server\signature\SignatureService())->cancelCurrent();
+        } catch (Throwable $exception) {
+            return $this->fail(50300, '退出暂未完成，请稍后重试', 503);
+        }
         $cookies = (new AuthService())->cookieNames();
         return $this->ok()
             ->cookie($cookies['access'], '', 0, '/', '', false, true, 'Lax')

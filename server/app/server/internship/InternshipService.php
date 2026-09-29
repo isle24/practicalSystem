@@ -24,8 +24,81 @@ use support\Request;
 use Throwable;
 use Webman\Http\UploadFile;
 
-class InternshipService
+class InternshipService implements \app\server\workflow\LegacyWorkflowAdapter
 {
+    public function reviewBaseFlow(Request $request): array
+    {
+        return (new \app\server\workflow\WorkflowService())->legacy($this, 'reviewBaseFlow', $request);
+    }
+
+    public function reviewArrangement(Request $request): array
+    {
+        return (new \app\server\workflow\WorkflowService())->legacy($this, 'reviewArrangement', $request);
+    }
+
+    public function reviewArrangementChange(Request $request): array
+    {
+        return (new \app\server\workflow\WorkflowService())->legacy($this, 'reviewArrangementChange', $request);
+    }
+
+    public function reviewApplication(Request $request): array
+    {
+        return (new \app\server\workflow\WorkflowService())->legacy($this, 'reviewApplication', $request);
+    }
+
+    public function reviewJournal(Request $request): array
+    {
+        return (new \app\server\workflow\WorkflowService())->legacy($this, 'reviewJournal', $request);
+    }
+
+    public function reviewReport(Request $request): array
+    {
+        return (new \app\server\workflow\WorkflowService())->legacy($this, 'reviewReport', $request);
+    }
+
+    public function reviewDelay(Request $request): array
+    {
+        return (new \app\server\workflow\WorkflowService())->legacy($this, 'reviewDelay', $request);
+    }
+
+    public function reviewPlan(Request $request): array
+    {
+        return (new \app\server\workflow\WorkflowService())->legacy($this, 'reviewPlan', $request);
+    }
+
+    public function reviewDocument(Request $request): array
+    {
+        return (new \app\server\workflow\WorkflowService())->legacy($this, 'reviewDocument', $request);
+    }
+
+    public function timeline(Request $request): array
+    {
+        return (new \app\server\workflow\WorkflowService())->legacy($this, 'timeline', $request);
+    }
+
+    public function requestModification(Request $request): array
+    {
+        return (new \app\server\workflow\WorkflowService())->legacy($this, 'requestModification', $request);
+    }
+
+    public function executeLegacyWorkflow(string $operation, Request $request): array
+    {
+        return match ($operation) {
+            'requestModification' => $this->legacyRequestModification($request),
+            'reviewBaseFlow' => $this->legacyReviewBaseFlow($request),
+            'reviewArrangement' => $this->legacyReviewArrangement($request),
+            'reviewArrangementChange' => $this->legacyReviewArrangementChange($request),
+            'reviewApplication' => $this->legacyReviewApplication($request),
+            'reviewJournal' => $this->legacyReviewJournal($request),
+            'reviewReport' => $this->legacyReviewReport($request),
+            'reviewDelay' => $this->legacyReviewDelay($request),
+            'reviewPlan' => $this->legacyReviewPlan($request),
+            'reviewDocument' => $this->legacyReviewDocument($request),
+            'timeline' => $this->legacyTimeline($request),
+            default => throw new RuntimeException('未注册的兼容流程操作', 422),
+        };
+    }
+
     private const ADMIN_ROLE_TYPES = ['super_admin', 'school_admin', 'college_admin', 'profession_admin'];
     private const WORKFLOW_STATUS = ['draft', 'wait', 'accept', 'modify', 'enabled', 'completed', 'changing', 'changed', 'disabled'];
     private const APPLICATION_REVIEW_STATUS = ['accept', 'modify', 'skipped'];
@@ -243,7 +316,7 @@ class InternshipService
 
         return InternshipRecord::basePage($this->scopeContext(), $this->requestFilters($request, [
             'page', 'page_size', 'per_page', 'keyword', 'dep_id', 'profession_id', 'base_type',
-            'status', 'base_category', 'base_level', 'company_id', 'declaration_year',
+            'status', 'base_category', 'base_level', 'company_id', 'declaration_year', 'is_project_approved',
         ]));
     }
 
@@ -371,6 +444,15 @@ class InternshipService
             'updated_at' => $now,
             'deleted_at' => null,
         ];
+        if ($request->input('is_project_approved') !== null) {
+            $approved = $request->input('is_project_approved');
+            if (!in_array($approved, [true, false, 1, 0, '1', '0', 'true', 'false'], true)) {
+                throw new InvalidArgumentException('是否立项只能选择是或否');
+            }
+            $values['is_project_approved'] = in_array($approved, [true, 1, '1', 'true'], true) ? 1 : 0;
+        } elseif (!$id) {
+            $values['is_project_approved'] = 0;
+        }
         if (!$id) {
             $values['created_by'] = CurrentContext::accountId();
         }
@@ -434,9 +516,15 @@ class InternshipService
         $this->requirePermission('internship:view');
         $table = $this->baseFlowTable($request);
 
-        return InternshipRecord::baseFlowPage($table, $this->scopeContext(), $this->requestFilters($request, [
+        $page = InternshipRecord::baseFlowPage($table, $this->scopeContext(), $this->requestFilters($request, [
             'page', 'page_size', 'per_page', 'keyword', 'status', 'base_id', 'dep_id',
         ]));
+        if ($table === 'base_application') {
+            $workflow = new \app\server\workflow\WorkflowService();
+            foreach ($page['items'] as &$item) $item['workflow'] = $workflow->latest('base_application', (int) $item['id']);
+            unset($item);
+        }
+        return $page;
     }
 
     public function saveBaseFlow(Request $request): array
@@ -454,6 +542,7 @@ class InternshipService
         }
         $baseId = $this->requiredInt($request, 'base_id');
         $base = $this->row('base', $baseId);
+        if ($type === 'application' && !empty($base->dep_id)) $this->assertDepartmentVisible((int) $base->dep_id);
         $depId = $this->optionalInt($request, 'dep_id') ?? (int) ($base->dep_id ?? 0) ?: null;
         if ($depId) {
             $this->assertDepartmentVisible($depId);
@@ -482,6 +571,28 @@ class InternshipService
             $values['amount'] = $this->decimalInput($request, 'amount');
         }
 
+        if ($type === 'application') {
+            $submit = $values['status'] === 'wait';
+            $values['status'] = 'draft';
+            return $this->connection()->transaction(function () use ($request, $values, $existingId, $submit): array {
+                if ($existingId) {
+                    $row = InternshipRecord::lockActiveRowById('base_application', $existingId);
+                    if (!$row) throw new RuntimeException('基地申报不存在', 404);
+                    $this->authorizeBaseWorkflow('start', (array) $row->getAttributes());
+                    if (!in_array($row->status, ['draft', 'modify'], true)) throw new RuntimeException('申报状态已变化', 409);
+                }
+                $result = $this->saveRow('base_application', $request, $values);
+                $workflow = new \app\server\workflow\WorkflowService();
+                $result['workflow'] = $submit
+                    ? $workflow->startInTransaction('base_application', (int) $result['id'], [
+                        'request_id' => trim((string) $request->input('request_id', '')) ?: 'base:' . $this->uuid(),
+                    ])
+                    : $workflow->latest('base_application', (int) $result['id']);
+                $result['status'] = $submit ? $result['workflow']['status'] : 'draft';
+                return $result;
+            });
+        }
+
         $entity = array_search($type, self::BASE_FLOW_ENTITIES, true) ?: 'base_application';
         return $this->saveWorkflowRow($table, $entity, $entity . '_recording', $request, $values, $this->workflowContent('保存' . $this->entityDisplayName($entity), $values, [
             'title' => '标题',
@@ -490,7 +601,7 @@ class InternshipService
         ]));
     }
 
-    public function reviewBaseFlow(Request $request): array
+    private function legacyReviewBaseFlow(Request $request): array
     {
         $this->requirePermission('internship:approve');
         $entity = $this->baseFlowReviewEntity($request);
@@ -498,6 +609,15 @@ class InternshipService
         $id = $this->requiredRowId($request, $config['table']);
         $status = $this->enum($request, 'status', ['accept', 'modify'], 'accept');
         $opinion = $this->reviewOpinionInput($request, $entity, $status);
+        if ($entity === 'base_application') {
+            $workflow = new \app\server\workflow\WorkflowService();
+            $instance = $workflow->latest($entity, $id);
+            if ($instance) {
+                $result = $workflow->review($instance['instance_id'], $status, $opinion ?? '',
+                    $this->optionalInt($request, 'signature_id'), (string) $request->input('revision', ''));
+                return ['id' => $id, 'status' => $result['status'], 'workflow' => $result];
+            }
+        }
         $this->ensureRecordingTable($config['recording']);
 
         return $this->workflowLock('internship', $entity, $id, function () use ($entity, $config, $id, $status, $opinion): array {
@@ -505,6 +625,9 @@ class InternshipService
                 $row = InternshipRecord::lockActiveRowById($config['table'], $id);
                 if (!$row) {
                     throw new RuntimeException('数据不存在');
+                }
+                if ($entity === 'base_application' && (new \app\server\workflow\WorkflowService())->latest($entity, $id)) {
+                    throw new RuntimeException('申报已进入新版流程，请刷新后审批', 409);
                 }
                 $this->assertReviewEntityWritable($entity, $row);
                 if ((string) $row->status !== 'wait') {
@@ -609,7 +732,7 @@ class InternshipService
     }
 
     /** 审核实习任务并在通过后发布给任课老师和学生。 */
-    public function reviewArrangement(Request $request): array
+    private function legacyReviewArrangement(Request $request): array
     {
         $this->requireReviewPermission('arrangement');
 
@@ -681,7 +804,7 @@ class InternshipService
         return $this->submitArrangementChange($arrangementId, $detail, $payload, $reason, $status, $changeId);
     }
 
-    public function reviewArrangementChange(Request $request): array
+    private function legacyReviewArrangementChange(Request $request): array
     {
         $this->requireAnyPermission(['internship:approve', 'internship:manage']);
         $this->requireAdminRole();
@@ -926,7 +1049,7 @@ class InternshipService
         });
     }
 
-    public function reviewApplication(Request $request): array
+    private function legacyReviewApplication(Request $request): array
     {
         $this->requirePermission('internship:approve');
         $id = $this->requiredRowId($request, 'application');
@@ -980,7 +1103,7 @@ class InternshipService
         });
     }
 
-    public function timeline(Request $request): array
+    private function legacyTimeline(Request $request): array
     {
         $this->requirePermission('internship:view');
         $entity = $this->reviewEntity($request);
@@ -999,10 +1122,11 @@ class InternshipService
             'reviews' => $reviews,
             'cycles' => $this->timelineCycles($records, $reviews),
             'items' => $this->timelineItems($records, $reviews),
+            'workflow' => $entity === 'base_application' ? (new \app\server\workflow\WorkflowService())->history($entity, $id) : null,
         ];
     }
 
-    public function requestModification(Request $request): array
+    private function legacyRequestModification(Request $request): array
     {
         $entity = $this->reviewEntity($request);
         $this->requireReviewPermission($entity);
@@ -1346,7 +1470,7 @@ class InternshipService
         return $result;
     }
 
-    public function reviewJournal(Request $request): array
+    private function legacyReviewJournal(Request $request): array
     {
         return $this->reviewStudentWork($request, 'journal', 'journal_recording');
     }
@@ -1430,7 +1554,7 @@ class InternshipService
         return $result;
     }
 
-    public function reviewReport(Request $request): array
+    private function legacyReviewReport(Request $request): array
     {
         return $this->reviewStudentWork($request, 'report', 'report_recording');
     }
@@ -1498,7 +1622,7 @@ class InternshipService
             : $save();
     }
 
-    public function reviewDelay(Request $request): array
+    private function legacyReviewDelay(Request $request): array
     {
         $this->requirePermission('internship:approve');
         $id = $this->requiredRowId($request, 'apply_report_delay');
@@ -2143,6 +2267,54 @@ class InternshipService
         ]), self::PLAN_APPROVAL_LEVELS);
     }
 
+    public function planDeleteImpact(Request $request): array
+    {
+        $this->requirePermission('internship:plan');
+        $this->requireAdminRole();
+        $id = $this->requiredInt($request, 'id');
+        if (!InternshipRecord::planVisible($this->scopeContext(), $id)) {
+            throw new RuntimeException('实习计划不存在或无权限', 40301);
+        }
+
+        return InternshipRecord::planDeleteImpact($id);
+    }
+
+    public function removePlan(Request $request): array
+    {
+        $this->requirePermission('internship:plan');
+        $this->requireAdminRole();
+        $id = $this->requiredInt($request, 'id');
+        $revision = $this->requiredString($request, 'revision', 64);
+        $includeArrangements = $request->input('include_arrangements');
+        if (!in_array($includeArrangements, [true, false, 1, 0, '1', '0'], true)) {
+            throw new InvalidArgumentException('请选择是否一并删除关联任务');
+        }
+
+        return $this->workflowLock('internship', 'plan', $id, function () use ($id, $revision, $includeArrangements): array {
+            return $this->connection()->transaction(function () use ($id, $revision, $includeArrangements): array {
+                $plan = InternshipRecord::lockPlanForDeletion($this->scopeContext(), $id);
+                if (!$plan) {
+                    throw new RuntimeException('实习计划不存在或无权限', 40301);
+                }
+                if ($plan->deleted_at !== null) {
+                    return ['id' => $id, 'deleted' => false, 'arrangement_ids' => []];
+                }
+                $impact = InternshipRecord::planDeleteImpact($id, true);
+                if (!hash_equals($impact['revision'], $revision)) {
+                    throw new InvalidArgumentException('关联任务或计划已变化，请重新确认', 409);
+                }
+                $arrangementIds = array_column($impact['arrangements'], 'id');
+                if ($arrangementIds && !(bool) $includeArrangements) {
+                    throw new InvalidArgumentException('请确认一并删除关联任务', 409);
+                }
+                InternshipRecord::softDeletePlanAndArrangements($id, $arrangementIds, $this->now());
+                (new \app\server\workflow\WorkflowService())->cancelDeletedInternshipPlan($id);
+
+                return ['id' => $id, 'deleted' => true, 'arrangement_ids' => $arrangementIds];
+            });
+        });
+    }
+
     public function savePlan(Request $request): array
     {
         $this->requirePermission('internship:plan');
@@ -2275,7 +2447,7 @@ class InternshipService
         );
     }
 
-    public function reviewPlan(Request $request): array
+    private function legacyReviewPlan(Request $request): array
     {
         $this->requirePermission('internship:plan');
         $this->requireAdminRole();
@@ -2835,7 +3007,7 @@ class InternshipService
         ]));
     }
 
-    public function reviewDocument(Request $request): array
+    private function legacyReviewDocument(Request $request): array
     {
         $this->requirePermission('internship:approve');
         $entity = $this->reviewEntity($request);
@@ -3012,6 +3184,9 @@ class InternshipService
 
         $result = $this->connection()->transaction(function () use ($classRows, $endDate, $existingId, $input, $plan, $planId, $planScope, $source, $startDate, $status, $taskNo, $teacherId, $title): array {
             $now = $this->now();
+            if (!InternshipRecord::lockActiveRowById('internship_plan', $planId)) {
+                throw new InvalidArgumentException('实习计划已变更，请刷新后重试', 409);
+            }
             if ($existingId > 0 && !InternshipRecord::lockCurrentArrangement($existingId)) {
                 throw new InvalidArgumentException('实习任务已变更，请刷新后重试', 409);
             }
@@ -4798,6 +4973,23 @@ class InternshipService
         }
 
         return $value === '' ? null : $value;
+    }
+
+    public function authorizeBaseWorkflow(string $operation, array $entity): void
+    {
+        if (!in_array($operation, ['view', 'start', 'review', 'cancel'], true)) throw new RuntimeException('流程操作无效', 422);
+        $this->requirePermission(match ($operation) {
+            'start', 'cancel' => 'internship:manage',
+            'review' => 'internship:approve',
+            default => 'internship:view',
+        });
+        $this->assertReviewEntityVisible('base_application', (object) $entity);
+        if (in_array($operation, ['start', 'cancel'], true)) {
+            $this->requireAdminRole();
+            if ((int) ($entity['submitter_id'] ?? 0) !== $this->accountId()) throw new RuntimeException('仅申报人可提交或撤回', 403);
+        }
+        $base = $this->row('base', (int) ($entity['base_id'] ?? 0));
+        if (!empty($base->dep_id)) $this->assertDepartmentVisible((int) $base->dep_id);
     }
 
     private function baseFlowType(Request $request): string

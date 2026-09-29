@@ -6,9 +6,9 @@
         <p>当前账号：{{ accountName }}（{{ roleName }}）</p>
         <p>{{ state.message || guidance }}</p>
         <template v-if="!inWechat && !status?.bound">
-          <label for="wechat-binding-url">学校网址</label>
-          <input id="wechat-binding-url" :value="bindingUrl" readonly @focus="$event.target.select()">
-          <button type="button" :disabled="state.loading" @click="$emit('copy')">复制学校网址</button>
+          <QRCode v-if="state.scan && ['pending', 'scanned'].includes(state.scan.state)" :value="state.scan.scan_url" label="企业微信扫码绑定二维码" />
+          <p v-if="state.scan && ['pending', 'scanned'].includes(state.scan.state)">二维码有效期 5 分钟，请使用企业微信扫码。</p>
+          <button type="button" :disabled="state.loading || state.scanLoading || status?.configured === false || status?.binding_outdated" @click="$emit('start')">{{ state.scanLoading ? '正在生成二维码' : state.scan ? '刷新二维码' : '生成绑定二维码' }}</button>
         </template>
         <button v-if="inWechat && status?.identity_ready && !status?.bound && !status?.binding_outdated" type="button" :disabled="state.loading" @click="$emit('bind')">确认绑定当前账号</button>
         <button v-if="inWechat && (!status?.bound || !status?.identity_ready || !status?.identity_matches) && !status?.binding_outdated && status?.configured !== false" type="button" :disabled="state.loading" @click="$emit('start')">{{ state.loading ? '正在处理' : status?.bound || status?.identity_ready ? '重新获取企业微信身份' : '获取企业微信身份' }}</button>
@@ -21,11 +21,12 @@
 </template>
 <script setup>
 import { computed } from 'vue';
+import QRCode from './QRCode.vue';
 
 const props = defineProps({ show: Boolean, state: Object, status: Object, accountName: String, roleName: String, inWechat: Boolean, bindingUrl: String, dismissible: Boolean });
 defineEmits(['bind', 'start', 'logout', 'recheck', 'copy', 'close']);
 const guidance = computed(() => {
-  if (!props.inWechat) return '请在企业微信中打开学校网址，登录当前系统账号完成绑定，再返回此页面重新检查。';
+  if (!props.inWechat) return '请使用企业微信扫码，在手机上核对当前账号并确认绑定，完成后本页自动更新。';
   if (props.status?.identity_ready) return '已获取企业微信身份，请确认与当前系统账号绑定。';
   return '请先获取企业微信身份，再确认绑定当前系统账号。';
 });

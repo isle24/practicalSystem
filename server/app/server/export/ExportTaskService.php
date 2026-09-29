@@ -13,7 +13,7 @@ class ExportTaskService
 {
     private const ADMIN_ROLES = ['super_admin', 'school_admin', 'college_admin', 'profession_admin'];
     private const MANAGE_ALL_ROLES = ['super_admin', 'school_admin'];
-    private const BUSINESS_EXPORT_TYPES = ['internship_base_word', 'internship_implementation_pdf', 'practice_score_sheet', 'social_practice_statistics'];
+    private const BUSINESS_EXPORT_TYPES = ['internship_base_word', 'internship_implementation_pdf', 'practice_score_sheet', 'social_practice_statistics', 'expense_document', 'expense_document_pdf'];
 
     public const QUEUE = 'export_task';
 
@@ -27,13 +27,15 @@ class ExportTaskService
     public function create(array $payload, bool $businessValidated = false): array
     {
         $accountId = $this->accountId();
-        if (!in_array('export:create', CurrentContext::permissionCodes(), true) && !$this->isAdminRole()) {
-            throw new InvalidArgumentException('无操作权限', 403);
-        }
-
         $type = $this->requiredString($payload['type'] ?? '', '导出类型', 80);
         if (in_array($type, self::BUSINESS_EXPORT_TYPES, true) && !$businessValidated) {
             throw new InvalidArgumentException('请从对应业务页面创建导出任务');
+        }
+        $expenseExport = $businessValidated
+            && in_array($type, ['expense_document', 'expense_document_pdf'], true)
+            && in_array('expense:export', CurrentContext::permissionCodes(), true);
+        if (!in_array('export:create', CurrentContext::permissionCodes(), true) && !$this->isAdminRole() && !$expenseExport) {
+            throw new InvalidArgumentException('无操作权限', 403);
         }
         $fileName = $this->nullableString($payload['file_name'] ?? null, 255) ?: $this->defaultFileName($type);
         $taskId = ExportTaskRecord::createTask([
@@ -166,6 +168,7 @@ class ExportTaskService
     private function defaultFileName(string $type): string
     {
         $extension = match ($type) {
+            'expense_document', 'expense_document_pdf' => $type === 'expense_document_pdf' ? 'pdf' : 'docx',
             'internship_base_word' => 'docx',
             'internship_implementation_pdf' => 'pdf',
             default => 'xlsx',

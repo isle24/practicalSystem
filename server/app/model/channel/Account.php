@@ -90,7 +90,7 @@ class Account extends BaseModel
             ], self::organizationProfile((int) $row->user_id, (string) $row->role_type)))
             ->all();
 
-        $boundUserIds = UserWechat::query()->whereIn('user_id', array_column($items, 'user_id'))->pluck('user_id')->all();
+        $boundUserIds = UserWechat::validUserIds(array_column($items, 'user_id'), trim((string) (new \app\server\config\ConfigService())->get('wechat.corp_id')));
         $boundUsers = array_fill_keys($boundUserIds, true);
         foreach ($items as &$item) {
             $item['wechat_bound'] = isset($boundUsers[$item['user_id']]);

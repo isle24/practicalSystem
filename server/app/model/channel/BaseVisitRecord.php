@@ -387,7 +387,7 @@ class BaseVisitRecord extends TableRecord
 
     private static function baseColumns(): array
     {
-        return ['base.id', 'base.name', 'base.dep_id', 'department.dep_name', 'base.address',
+        return ['base.id', 'base.name', 'base.dep_id', 'base.base_type', 'department.dep_name', 'base.address',
             self::connection()->raw("COALESCE((SELECT NULLIF(base_level, '') FROM base_declaration WHERE base_id = base.id AND deleted_at IS NULL ORDER BY id DESC LIMIT 1), base.category) as base_category"),
             'base.manager_name', 'base.manager_phone', 'base.district'];
     }

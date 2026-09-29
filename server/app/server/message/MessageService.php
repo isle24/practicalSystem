@@ -201,11 +201,11 @@ class MessageService
             throw new InvalidArgumentException('消息渠道必须为数组');
         }
         foreach ($value as $channel) {
-            if (!is_string($channel) || !in_array($channel, ['internal', 'wechat'], true)) {
+            if (!is_string($channel) || !in_array($channel, ['internal', 'wechat', 'sms'], true)) {
                 throw new InvalidArgumentException('不支持的消息渠道');
             }
         }
-        return array_values(array_unique(['internal', ...$value]));
+        return array_values(array_unique($value));
     }
 
     private function ensureAccount(int $accountId): void

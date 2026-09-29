@@ -19,6 +19,10 @@ class AuthMiddleware implements MiddlewareInterface
         '/api/wechat/callback',
         '/api/wechat/oauth/start',
         '/api/wechat/oauth/callback',
+        '/api/wechat/scan/start',
+        '/api/wechat/scan/callback',
+        '/api/wechat/scan/context',
+        '/api/wechat/scan/confirm',
         '/api/release/update-manifest',
         '/api/release/download',
         '/api/release/downloads',
@@ -45,6 +49,9 @@ class AuthMiddleware implements MiddlewareInterface
         '/api/permission/filter',
         '/api/wechat/binding-status',
         '/api/wechat/bind',
+        '/api/wechat/scan-session',
+        '/api/wechat/scan-status',
+        '/api/wechat/scan-cancel',
     ];
 
     /**

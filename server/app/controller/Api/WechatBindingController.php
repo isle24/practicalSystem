@@ -5,6 +5,7 @@ namespace app\controller\Api;
 use app\attribute\OperationLog;
 use app\controller\Api\Concerns\Responds;
 use app\server\wechat\WechatBindingService;
+use app\server\wechat\WechatScanSessionService;
 use support\Request;
 use support\Response;
 use Throwable;
@@ -58,6 +59,62 @@ class WechatBindingController
             return $this->ok((new WechatBindingService())->bind(), '企业微信绑定成功');
         } catch (Throwable $exception) {
             return $this->fail(40001, $exception->getMessage(), 400);
+        }
+    }
+
+    public function scanSession(Request $request): Response
+    {
+        return $this->scanResponse(fn () => (new WechatScanSessionService())->create());
+    }
+
+    public function scanStatus(Request $request): Response
+    {
+        return $this->scanResponse(fn () => (new WechatScanSessionService())->status((string) $request->get('session_id', '')));
+    }
+
+    public function scanCancel(Request $request): Response
+    {
+        return $this->scanResponse(fn () => (new WechatScanSessionService())->cancel((string) $request->post('session_id', '')));
+    }
+
+    public function scanStart(Request $request): Response
+    {
+        try {
+            $result = (new WechatScanSessionService())->start((string) $request->get('ticket', ''));
+            return redirect($result['url'], 302, ['Cache-Control' => 'no-store', 'Referrer-Policy' => 'no-referrer'])
+                ->cookie(WechatBindingService::BROWSER_COOKIE, $result['browser'], WechatScanSessionService::TTL, '/', '', true, true, 'Lax');
+        } catch (Throwable $exception) {
+            return $this->failurePage($exception->getMessage());
+        }
+    }
+
+    public function scanCallback(Request $request): Response
+    {
+        try {
+            $result = (new WechatScanSessionService())->callback((string) $request->get('code', ''), (string) $request->get('state', ''));
+            return redirect('/h5/?wechat_scan=1', 302, ['Cache-Control' => 'no-store', 'Referrer-Policy' => 'no-referrer'])
+                ->cookie(WechatScanSessionService::COOKIE, $result['credential'], $result['expires_in'], '/', '', true, true, 'Lax');
+        } catch (Throwable $exception) {
+            return $this->failurePage($exception->getMessage());
+        }
+    }
+
+    public function scanContext(Request $request): Response
+    {
+        return $this->scanResponse(fn () => (new WechatScanSessionService())->mobileContext());
+    }
+
+    public function scanConfirm(Request $request): Response
+    {
+        return $this->scanResponse(fn () => (new WechatScanSessionService())->confirm((string) $request->post('nonce', ''), (string) $request->post('password', '')));
+    }
+
+    private function scanResponse(callable $callback): Response
+    {
+        try {
+            return $this->ok($callback())->withHeader('Cache-Control', 'no-store')->withHeader('Referrer-Policy', 'no-referrer');
+        } catch (Throwable $exception) {
+            return $this->fail(40001, $exception->getMessage(), 400)->withHeader('Cache-Control', 'no-store');
         }
     }
 

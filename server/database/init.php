@@ -7,6 +7,14 @@ use app\model\channel\DocRecord;
 use app\model\channel\MessageRecord;
 use app\model\channel\PluginRecord;
 use app\model\channel\TableRecord;
+use app\model\channel\WorkflowSchema;
+use app\model\channel\WallpaperSchema;
+use app\model\channel\SignatureSchema;
+use app\model\channel\FileStorageSchema;
+use app\model\channel\WorkflowDeliverySchema;
+use app\model\channel\ExpenseSchema;
+use app\server\internship\InternshipUpgradeSchema;
+use app\server\expense\ExpenseUpgradeSchema;
 use app\server\edu\EduImportSchema;
 use Dotenv\Dotenv;
 
@@ -417,6 +425,7 @@ function createSchoolSchema(PDO $pdo, ?int $archiveYear = null): void
     ensureDocSchema($pdo);
     ensureTemplateSchema($pdo);
     ensureExportTaskSchema($pdo);
+    ExpenseSchema::applyToPdo($pdo);
     ensureRecordingArchiveSchema($pdo, $archiveYear);
     foreach (['created_at', 'account_id', 'action', 'ip'] as $column) {
         ensureIndex($pdo, 'operation_log_202606', 'idx_' . $column, "ALTER TABLE `operation_log_202606` ADD KEY `idx_{$column}` (`{$column}`)");
@@ -926,6 +935,7 @@ function schoolBusinessStatements(?int $archiveYear = null): array
             '`company_id` BIGINT UNSIGNED DEFAULT NULL',
             '`dep_id` BIGINT UNSIGNED DEFAULT NULL',
             '`base_type` VARCHAR(20) DEFAULT \'long_term\'',
+            '`is_project_approved` TINYINT(1) NOT NULL DEFAULT 0',
             '`address` VARCHAR(255) DEFAULT NULL',
             '`district` VARCHAR(120) DEFAULT NULL',
             '`area` DECIMAL(12,2) DEFAULT NULL',
@@ -1667,6 +1677,8 @@ function schoolBusinessStatements(?int $archiveYear = null): array
     $statements[] = TableRecord::operationLogCreationStatement('operation_log_202606');
 
     $statements = array_merge($statements, DesktopToolsSchema::creationStatements());
+    $statements = array_merge($statements, WorkflowSchema::creationStatements(), SignatureSchema::creationStatements(), ExpenseSchema::creationStatements());
+    $statements[] = WallpaperSchema::creationStatement();
     foreach (['0.3.4-message-assistant.sql', '20260923-base-visit.sql', '20260923-account-import.sql'] as $file) {
         $sql = file_get_contents(__DIR__ . '/updates/' . $file);
         if ($sql === false) throw new RuntimeException('无法读取结构 SQL：' . $file);
@@ -1686,6 +1698,7 @@ function fileTableStatements(): array
         "CREATE TABLE IF NOT EXISTS `file_blob` (
             `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
             `md5` CHAR(32) NOT NULL,
+            `storage_scope` VARCHAR(40) NOT NULL DEFAULT 'general',
             `sha1` CHAR(40) DEFAULT NULL,
             `path` VARCHAR(500) NOT NULL,
             `url` VARCHAR(500) NOT NULL,
@@ -1700,7 +1713,7 @@ function fileTableStatements(): array
             `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             `deleted_at` DATETIME DEFAULT NULL,
             PRIMARY KEY (`id`),
-            UNIQUE KEY `uk_md5` (`md5`),
+            UNIQUE KEY `uk_md5_scope` (`md5`, `storage_scope`),
             KEY `idx_category` (`category`),
             KEY `idx_ref_count` (`ref_count`),
             KEY `idx_deleted_at` (`deleted_at`)
@@ -1870,7 +1883,7 @@ function ensureFileSchema(PDO $pdo): void
         ensureColumn($pdo, 'file_blob', $column, $ddl);
     }
 
-    ensureIndex($pdo, 'file_blob', 'uk_md5', "ALTER TABLE `file_blob` ADD UNIQUE KEY `uk_md5` (`md5`)");
+    FileStorageSchema::applyToPdo($pdo);
     ensureIndex($pdo, 'file_blob', 'idx_category', "ALTER TABLE `file_blob` ADD KEY `idx_category` (`category`)");
     ensureIndex($pdo, 'file_blob', 'idx_ref_count', "ALTER TABLE `file_blob` ADD KEY `idx_ref_count` (`ref_count`)");
     ensureIndex($pdo, 'file_blob', 'idx_deleted_at', "ALTER TABLE `file_blob` ADD KEY `idx_deleted_at` (`deleted_at`)");
@@ -2945,6 +2958,8 @@ function seedSchool(PDO $pdo, string $wechatProxyUrl): void
     seedPermissionAccounts($pdo);
     seedPracticeUsers($pdo);
     seedMenus($pdo);
+    InternshipUpgradeSchema::syncBaseMenus($pdo);
+    ExpenseUpgradeSchema::syncMenus($pdo);
     seedOperationGuides($pdo);
     seedCommonSupportData($pdo);
     seedMessageTemplates($pdo);

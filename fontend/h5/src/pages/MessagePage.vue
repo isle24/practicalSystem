@@ -1,9 +1,17 @@
 <template>
   <section class="assistant-mode-tabs">
-    <button type="button" :class="{ active: !assistantVisible }" @click="assistantVisible = false">通知与待办</button>
-    <button type="button" :class="{ active: assistantVisible }" @click="assistantVisible = true">问答助手</button>
+    <button type="button" :class="{ active: view === 'messages' }" @click="view = 'messages'">通知</button>
+    <button type="button" :class="{ active: view === 'workflow' }" @click="view = 'workflow'">审批待办</button>
+    <button type="button" :class="{ active: view === 'assistant' }" @click="view = 'assistant'">问答助手</button>
   </section>
-  <AssistantPanel v-if="assistantVisible" :request="request" />
+  <AssistantPanel v-if="view === 'assistant'" :request="request" />
+  <WorkflowInbox
+    v-else-if="view === 'workflow'"
+    :request="request"
+    :backend-url="backendUrl"
+    :account-id="accountId"
+    @open-expense="emit('open-expense', $event)"
+  />
   <template v-else>
   <AppErrorState
     v-if="state.message && !state.items.length"
@@ -91,7 +99,8 @@
 <script setup>
 import { computed, ref } from 'vue';
 import AssistantPanel from '../../../shared/components/AssistantPanel.vue';
-import { request } from '../api/client';
+import WorkflowInbox from '../../../shared/components/WorkflowInbox.vue';
+import { backendUrl, request } from '../api/client';
 import AppButton from '../components/ui/AppButton.vue';
 import AppEmptyState from '../components/ui/AppEmptyState.vue';
 import AppErrorState from '../components/ui/AppErrorState.vue';
@@ -107,10 +116,11 @@ const props = defineProps({
   timeText: { type: Function, required: true },
   typeText: { type: Function, required: true },
   typeUnread: { type: Function, required: true },
+  accountId: { type: [Number, String], required: true },
 });
 
-const emit = defineEmits(['filter', 'linked', 'load-more', 'open', 'read-all', 'reload', 'type']);
-const assistantVisible = ref(false);
+const emit = defineEmits(['filter', 'linked', 'load-more', 'open', 'open-expense', 'read-all', 'reload', 'type']);
+const view = ref('messages');
 const filterItems = computed(() => [
   { value: 'all', label: '全部' },
   { value: 'unread', label: `未读 ${props.unreadCount}` },

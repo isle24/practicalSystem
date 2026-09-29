@@ -128,7 +128,8 @@ class ConfigService
     private function isEncryptedSecret(string $groupCode, string $key): bool
     {
         return (in_array($groupCode, ['teacher_sync', 'education_plan_sync'], true) && $key === 'pull_app_secret')
-            || ($groupCode === 'assistant' && $key === 'api_key');
+            || ($groupCode === 'assistant' && $key === 'api_key')
+            || ($groupCode === 'workflow_message' && $key === 'sms_token');
     }
 
     /** 校验配置键格式 */

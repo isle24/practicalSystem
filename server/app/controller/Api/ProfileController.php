@@ -5,6 +5,8 @@ namespace app\controller\Api;
 use app\attribute\OperationLog;
 use app\controller\Api\Concerns\Responds;
 use app\model\channel\Account;
+use app\model\channel\FileRecord;
+use app\model\channel\WallpaperRecord;
 use app\model\channel\TableRecord as ChannelTable;
 use app\model\channel\User;
 use app\server\auth\AccountMobileService;
@@ -13,6 +15,7 @@ use app\server\auth\DeviceBlacklist;
 use app\server\CurrentContext;
 use app\server\file\FileService;
 use app\server\wechat\WechatBindingService;
+use app\server\wallpaper\WallpaperService;
 use support\Request;
 use support\Response;
 use Throwable;
@@ -21,7 +24,7 @@ class ProfileController
 {
     use Responds;
 
-    private const NOTIFY_CHANNELS = ['system', 'wechat', 'email'];
+    private const NOTIFY_CHANNELS = ['system', 'wechat', 'email', 'sms'];
 
     /**
      * 获取个人设置
@@ -57,16 +60,12 @@ class ProfileController
             $avatar = $this->nullableString($request, 'avatar', 255);
             $mobile = $this->nullableString($request, 'mobile', 40);
             $email = $this->nullableString($request, 'email', 120);
-            $layout = [
-                'wallpaper' => $this->nullableString($request, 'wallpaper', 80),
-                'wallpaper_url' => $this->nullableString($request, 'wallpaper_url', 255),
-            ];
             $notify = $this->notifyInput((array) $request->input('notify', []));
             [$quietStart, $quietEnd] = $this->quietInput((array) $request->input('wechat_quiet', []));
             ChannelTable::ensureNotifySettingColumns();
             $now = date('Y-m-d H:i:s');
 
-            ChannelTable::connection()->transaction(function () use ($userId, $accountId, $name, $avatar, $mobile, $email, $layout, $notify, $quietStart, $quietEnd, $now): void {
+            ChannelTable::connection()->transaction(function () use ($userId, $accountId, $name, $avatar, $mobile, $email, $notify, $quietStart, $quietEnd, $now): void {
                 $current = User::lockProfile($userId);
                 if (!$current) {
                     throw new \RuntimeException('用户不存在或已停用', 403);
@@ -81,16 +80,31 @@ class ProfileController
                     'updated_at' => $now,
                 ]);
 
-                ChannelTable::saveDesktopConfig($accountId, [
-                    'layout_json' => json_encode($layout, JSON_UNESCAPED_UNICODE),
-                    'updated_at' => $now,
-                ]);
-
                 foreach ($notify as $channel => $enabled) {
                     ChannelTable::saveNotifySetting($accountId, $channel, $enabled, $now);
                 }
                 ChannelTable::saveNotifyQuietTime($accountId, $quietStart, $quietEnd, $now);
             });
+
+            $legacyUrl = $this->nullableString($request, 'wallpaper_url', 255);
+            $desktopConfig = ChannelTable::latestDesktopConfig((int) $accountId, ['layout_json']);
+            $desktopLayout = $this->decodeJson($desktopConfig->layout_json ?? null);
+            if (empty($desktopLayout['wallpaper_mode']) && $legacyUrl) {
+                foreach (FileRecord::idsByUrl($legacyUrl) as $fileId) {
+                    $wallpaper = WallpaperRecord::ownedByFile((int) $fileId, (int) $accountId);
+                    if ($wallpaper) {
+                        (new WallpaperService())->apply((int) $wallpaper->id, 'item');
+                        break;
+                    }
+                }
+            } elseif (empty($desktopLayout['wallpaper_mode']) && $request->input('wallpaper') !== null) {
+                $desktopLayout['wallpaper'] = $this->stringInput($request, 'wallpaper', 80);
+                $desktopLayout['wallpaper_url'] = '';
+                ChannelTable::saveDesktopConfig((int) $accountId, [
+                    'layout_json' => json_encode($desktopLayout, JSON_UNESCAPED_UNICODE),
+                    'updated_at' => date('Y-m-d H:i:s'),
+                ]);
+            }
 
             return $this->ok($this->profileData(), '已保存');
         } catch (Throwable $exception) {
@@ -168,6 +182,10 @@ class ProfileController
 
         try {
             $type = $this->assetType($request);
+            if ($type === 'wallpaper') {
+                $wallpaper = (new WallpaperService())->upload($request);
+                return $this->ok(['type' => $type, 'file_id' => $wallpaper['file_id'], 'wallpaper_id' => $wallpaper['id'], 'url' => $wallpaper['url']], '已上传');
+            }
             $result = (new FileService())->upload($request, [
                 'category' => 'profile',
                 'is_temporary' => false,
@@ -278,10 +296,9 @@ class ProfileController
         $accountId = CurrentContext::accountId();
         $userId = CurrentContext::userId();
         $user = User::activeById((int) $userId, ['id', 'name', 'avatar', 'mobile', 'email', 'verified_mobile']);
-        $desktopRow = ChannelTable::latestDesktopConfig((int) $accountId, ['layout_json']);
         $notifyRows = ChannelTable::notifySettings((int) $accountId);
 
-        $notify = ['system' => true, 'wechat' => true, 'email' => false];
+        $notify = ['system' => true, 'wechat' => true, 'email' => false, 'sms' => false];
         $quiet = ['start' => '00:00', 'end' => '24:00'];
         foreach ($notifyRows as $row) {
             if (in_array($row['channel'], self::NOTIFY_CHANNELS, true)) {
@@ -293,8 +310,6 @@ class ProfileController
             }
         }
 
-        $layout = $this->decodeJson($desktopRow->layout_json ?? null);
-
         return [
             'user' => [
                 'id' => $user?->id,
@@ -304,10 +319,7 @@ class ProfileController
                 'mobile_verified' => !empty($user?->mobile) && $user->mobile === $user->verified_mobile,
                 'email' => $user?->email ?? '',
             ],
-            'desktop' => [
-                'wallpaper' => $layout['wallpaper'] ?? 'default',
-                'wallpaper_url' => $layout['wallpaper_url'] ?? '',
-            ],
+            'desktop' => (new WallpaperService())->selection((int) $accountId),
             'notify' => $notify,
             'wechat_quiet' => $quiet,
             'wechat_binding' => (new WechatBindingService())->contextForUser((int) $userId, (string) CurrentContext::roleType()),
