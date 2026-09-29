@@ -155,6 +155,9 @@ class InternshipRecord extends TableRecord
         self::filter($query, $filters, 'base.company_id', 'company_id');
         self::filter($query, $filters, 'base.base_type', 'base_type');
         self::filter($query, $filters, 'base.status', 'status');
+        if (($filters['is_project_approved'] ?? null) !== null && $filters['is_project_approved'] !== '') {
+            $query->where('base.is_project_approved', in_array($filters['is_project_approved'], [true, 1, '1', 'true'], true) ? 1 : 0);
+        }
         if (($filters['profession_id'] ?? '') !== '') {
             $professionId = (int) $filters['profession_id'];
             $query->whereExists(function ($subQuery) use ($professionId): void {
@@ -171,17 +174,22 @@ class InternshipRecord extends TableRecord
             $query->whereNotNull('base_declaration_ref.declaration_id');
         }
 
-        return self::paginate($query->orderByDesc('base.id'), $filters, [
+        $page = self::paginate($query->orderByDesc('base.id'), $filters, [
             'base.id', 'base.uuid', 'base.name', 'base.code', 'base.company_id', 'base.dep_id',
             'base.base_type', 'base.address', 'base.area', 'base.annual_student_count',
             'base.current_student_count', 'base.service_courses', 'base.category',
             'base.manager_name', 'base.manager_phone', 'base.capacity', 'base.used_count',
-            'base.status', 'base.created_at',
+            'base.status', 'base.is_project_approved', 'base.created_at',
             'companies.company_name', 'department.dep_name', 'base_profession_names.profession_names',
             'latest_declaration.declaration_year', 'latest_declaration.base_category',
             'latest_declaration.base_level', 'latest_declaration.project_status',
             'latest_declaration.approved_amount',
         ]);
+        foreach ($page['items'] as &$item) {
+            $item['is_project_approved'] = (bool) $item['is_project_approved'];
+        }
+        unset($item);
+        return $page;
     }
 
     /** 查询当前数据范围内的基地申报筛选选项 */
@@ -307,8 +315,10 @@ class InternshipRecord extends TableRecord
             ));
             return $declaration;
         }, self::rows($declarations));
+        $baseItem = self::rows([$item])[0];
+        $baseItem['is_project_approved'] = (bool) $baseItem['is_project_approved'];
         return [
-            'item' => self::rows([$item])[0],
+            'item' => $baseItem,
             'profession_ids' => array_values(array_map(static fn ($row): int => (int) $row->profession_id, $professions->all())),
             'professions' => self::rows($professions),
             'manager' => array_values(array_filter($people, static fn (array $row): bool => ($row['person_type'] ?? '') === 'manager'))[0] ?? null,
@@ -1773,10 +1783,10 @@ class InternshipRecord extends TableRecord
     /** 锁定当前实习任务 */
     public static function lockCurrentArrangement(int $arrangementId): ?object
     {
-        return self::queryTable('arrangement')
+        return self::whereArrangementPlanActive(self::queryTable('arrangement')
             ->where('id', $arrangementId)
             ->where('status', '<>', self::HISTORY_ARRANGEMENT_STATUS)
-            ->whereNull('deleted_at')
+            ->whereNull('deleted_at'), 'arrangement.plan_id')
             ->lockForUpdate()
             ->first();
     }
@@ -1816,6 +1826,57 @@ class InternshipRecord extends TableRecord
             ->whereNull('internship_plan.deleted_at');
         self::applyDepProfessionScope($query, $scope, 'internship_plan.dep_id', 'internship_plan.profession_id');
         return $query->exists();
+    }
+
+    public static function lockPlanForDeletion(array $scope, int $planId): ?object
+    {
+        $query = self::queryTable('internship_plan')->where('internship_plan.id', $planId);
+        self::applyDepProfessionScope($query, $scope, 'internship_plan.dep_id', 'internship_plan.profession_id');
+        return $query->lockForUpdate()->first(['internship_plan.id', 'internship_plan.deleted_at']);
+    }
+
+    public static function planDeleteImpact(int $planId, bool $lock = false): array
+    {
+        $plan = self::queryTable('internship_plan')->where('id', $planId)->whereNull('deleted_at')
+            ->first(['id', 'course_name', 'status', 'updated_at']);
+        if (!$plan) {
+            throw new \RuntimeException('实习计划不存在');
+        }
+        $query = self::queryTable('arrangement')
+            ->where('plan_id', $planId)
+            ->whereNull('deleted_at')
+            ->orderBy('id');
+        if ($lock) {
+            $query->lockForUpdate();
+        }
+        $rows = self::rows($query->get(['id', 'title', 'status', 'updated_at']));
+        $revision = hash('sha256', json_encode([
+            (int) $plan->id, $plan->course_name, $plan->status, $plan->updated_at,
+            array_map(static fn (array $row): array => [
+                (int) $row['id'], $row['title'], $row['status'], $row['updated_at'],
+            ], $rows),
+        ], JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR));
+
+        return [
+            'id' => (int) $plan->id,
+            'course_name' => (string) $plan->course_name,
+            'arrangements' => array_map(static fn (array $row): array => [
+                'id' => (int) $row['id'], 'title' => (string) ($row['title'] ?? ''),
+            ], $rows),
+            'arrangement_count' => count($rows),
+            'revision' => $revision,
+        ];
+    }
+
+    public static function softDeletePlanAndArrangements(int $planId, array $arrangementIds, string $deletedAt): void
+    {
+        if ($arrangementIds) {
+            self::queryTable('arrangement')->where('plan_id', $planId)
+                ->whereIn('id', $arrangementIds)->whereNull('deleted_at')
+                ->update(['deleted_at' => $deletedAt, 'updated_at' => $deletedAt]);
+        }
+        self::queryTable('internship_plan')->where('id', $planId)->whereNull('deleted_at')
+            ->update(['deleted_at' => $deletedAt, 'updated_at' => $deletedAt]);
     }
 
     /** 查询启用实习类别。 */
@@ -3317,19 +3378,24 @@ class InternshipRecord extends TableRecord
 
     public static function activeRowById(string $table, int $id): ?object
     {
-        return self::queryTable($table)
+        $query = self::queryTable($table)
             ->where('id', $id)
-            ->whereNull('deleted_at')
-            ->first();
+            ->whereNull('deleted_at');
+        if ($table === 'arrangement') {
+            self::whereArrangementPlanActive($query, 'arrangement.plan_id');
+        }
+        return $query->first();
     }
 
     public static function lockActiveRowById(string $table, int $id): ?object
     {
-        return self::queryTable($table)
+        $query = self::queryTable($table)
             ->where('id', $id)
-            ->whereNull('deleted_at')
-            ->lockForUpdate()
-            ->first();
+            ->whereNull('deleted_at');
+        if ($table === 'arrangement') {
+            self::whereArrangementPlanActive($query, 'arrangement.plan_id');
+        }
+        return $query->lockForUpdate()->first();
     }
 
     public static function rowById(string $table, int $id): ?object
@@ -5226,6 +5292,7 @@ class InternshipRecord extends TableRecord
 
     private static function applyArrangementScope(mixed $query, array $scope): mixed
     {
+        self::whereArrangementPlanActive($query, 'arrangement.plan_id');
         $roleType = (string) ($scope['role_type'] ?? '');
         if (in_array($roleType, ['super_admin', 'school_admin'], true)) {
             return $query;
@@ -5248,7 +5315,19 @@ class InternshipRecord extends TableRecord
 
     private static function currentArrangementQuery(mixed $query, string $statusColumn = 'arrangement.status'): mixed
     {
-        return $query->where($statusColumn, '<>', self::HISTORY_ARRANGEMENT_STATUS);
+        return self::whereArrangementPlanActive(
+            $query->where($statusColumn, '<>', self::HISTORY_ARRANGEMENT_STATUS),
+            'arrangement.plan_id'
+        );
+    }
+
+    private static function whereArrangementPlanActive(mixed $query, string $planColumn): mixed
+    {
+        return $query->whereNotExists(function ($subQuery) use ($planColumn): void {
+            $subQuery->selectRaw('1')->from('internship_plan as deleted_plan')
+                ->whereColumn('deleted_plan.id', $planColumn)
+                ->whereNotNull('deleted_plan.deleted_at');
+        });
     }
 
     private static function whereCurrentArrangementExists(mixed $query, string $arrangementColumn): mixed
@@ -5259,6 +5338,7 @@ class InternshipRecord extends TableRecord
                 ->whereColumn('current_arrangement.id', $arrangementColumn)
                 ->where('current_arrangement.status', '<>', self::HISTORY_ARRANGEMENT_STATUS)
                 ->whereNull('current_arrangement.deleted_at');
+            self::whereArrangementPlanActive($subQuery, 'current_arrangement.plan_id');
         });
     }
 
@@ -5271,6 +5351,7 @@ class InternshipRecord extends TableRecord
                 ->whereColumn('published_arrangement.id', $arrangementColumn)
                 ->where('published_arrangement.status', 'accept')
                 ->whereNull('published_arrangement.deleted_at');
+            self::whereArrangementPlanActive($subQuery, 'published_arrangement.plan_id');
         });
     }
 

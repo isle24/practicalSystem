@@ -1,7 +1,8 @@
 <template>
   <section class="mobile-login app-login-page">
     <header>
-      <UserRound :size="30" />
+      <img v-if="schoolLogoUrl" class="mobile-school-logo" :src="schoolLogoUrl" :alt="schoolName">
+      <UserRound v-else :size="30" />
       <div>
         <strong>账号登录</strong>
         <span>{{ schoolName }}</span>
@@ -51,8 +52,10 @@
 </template>
 
 <script setup>
+import { onMounted, ref } from 'vue';
 import { LogIn, UserRound } from '@lucide/vue';
 import AppButton from '../components/ui/AppButton.vue';
+import { backendUrl, request } from '../api/client';
 
 defineProps({
   schoolName: { type: String, default: '' },
@@ -65,11 +68,28 @@ defineProps({
 });
 
 const emit = defineEmits(['login', 'register', 'toggle-register']);
+const schoolLogoUrl = ref('');
+
+onMounted(async () => {
+  try {
+    const settings = await request('/config/login-page');
+    schoolLogoUrl.value = backendUrl(settings?.school_logo_url || '');
+  } catch {
+    schoolLogoUrl.value = '';
+  }
+});
 </script>
 
 <style scoped>
 .app-login-page {
   box-shadow: 0 18px 48px rgba(24, 33, 43, .12);
+}
+
+.mobile-school-logo {
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
+  object-fit: contain;
 }
 
 .app-login-page :deep(.app-field input),

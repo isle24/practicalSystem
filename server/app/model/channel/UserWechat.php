@@ -13,35 +13,26 @@ class UserWechat extends BaseModel
         return self::query()
             ->where('user_id', $userId)
             ->orderByDesc('id')
-            ->get([
-                'id',
-                'user_id',
-                'wechat_userid',
-                'wechat_name',
-                'wechat_avatar',
-                'department',
-                'position',
-                'mobile',
-                'email',
-                'last_synced_at',
-                'created_at',
-                'updated_at',
-            ])
-            ->map(static fn ($row): array => [
-                'id' => (int) $row->id,
-                'user_id' => (int) $row->user_id,
-                'wechat_userid' => $row->wechat_userid,
-                'wechat_name' => $row->wechat_name,
-                'wechat_avatar' => $row->wechat_avatar,
-                'department' => self::decodeJson($row->department),
-                'position' => $row->position,
-                'mobile' => $row->mobile,
-                'email' => $row->email,
-                'last_synced_at' => $row->last_synced_at,
-                'created_at' => $row->created_at,
-                'updated_at' => $row->updated_at,
-            ])
+            ->get()
+            ->map(static fn ($row): array => array_merge(self::row($row), [
+                'valid' => self::isValidBinding(self::row($row), trim((string) (new \app\server\config\ConfigService())->get('wechat.corp_id'))),
+            ]))
             ->all();
+    }
+
+    public static function isValidBinding(?array $binding, string $corpId): bool
+    {
+        return $binding !== null && $corpId !== '' && ($binding['corp_id'] ?? '') === $corpId
+            && trim((string) ($binding['wechat_userid'] ?? '')) !== ''
+            && empty($binding['invalidated_at'])
+            && (empty($binding['expires_at']) || strtotime((string) $binding['expires_at']) > time());
+    }
+
+    public static function validUserIds(array $userIds, string $corpId): array
+    {
+        return self::query()->whereIn('user_id', $userIds)->get()
+            ->filter(static fn ($row): bool => self::isValidBinding(self::row($row), $corpId))
+            ->pluck('user_id')->all();
     }
 
     public static function currentByUser(int $userId): ?array
@@ -72,6 +63,7 @@ class UserWechat extends BaseModel
                 if (!User::lockProfile($userId)) throw new \RuntimeException('用户不存在或已停用');
                 $current = self::currentByUser($userId);
                 if ($current && ($current['wechat_userid'] !== $wechatUserId || $current['corp_id'] !== $corpId)) throw new \RuntimeException('当前用户已绑定其他企业微信，请管理员先解除绑定');
+                if ($current && !self::isValidBinding($current, $corpId)) throw new \RuntimeException('当前绑定已失效，请管理员先解除绑定');
                 $owner = self::byWechatUserId($wechatUserId);
                 if ($owner && $owner['user_id'] !== $userId) throw new \RuntimeException('该企业微信已绑定其他用户，请管理员先解除绑定');
                 if (!$current) self::query()->insert([
@@ -100,6 +92,8 @@ class UserWechat extends BaseModel
             'user_id' => (int) $row->user_id,
             'wechat_userid' => $row->wechat_userid,
             'corp_id' => (string) (self::decodeJson($row->raw_data ?? null)['corp_id'] ?? ''),
+            'invalidated_at' => self::decodeJson($row->raw_data ?? null)['invalidated_at'] ?? null,
+            'expires_at' => self::decodeJson($row->raw_data ?? null)['expires_at'] ?? null,
             'wechat_name' => $row->wechat_name,
             'wechat_avatar' => $row->wechat_avatar,
             'department' => self::decodeJson($row->department),

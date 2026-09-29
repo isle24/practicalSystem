@@ -14,8 +14,39 @@ use RuntimeException;
 use support\Request;
 use Throwable;
 
-class SocialPracticeService
+class SocialPracticeService implements \app\server\workflow\LegacyWorkflowAdapter
 {
+    public function review(Request $request): array
+    {
+        return (new \app\server\workflow\WorkflowService())->legacy($this, 'review', $request);
+    }
+
+    public function confirmTeacher(Request $request): array
+    {
+        return (new \app\server\workflow\WorkflowService())->legacy($this, 'confirmTeacher', $request);
+    }
+
+    public function timeline(Request $request): array
+    {
+        return (new \app\server\workflow\WorkflowService())->legacy($this, 'timeline', $request);
+    }
+
+    public function requestModification(Request $request): array
+    {
+        return (new \app\server\workflow\WorkflowService())->legacy($this, 'requestModification', $request);
+    }
+
+    public function executeLegacyWorkflow(string $operation, Request $request): array
+    {
+        return match ($operation) {
+            'requestModification' => $this->legacyRequestModification($request),
+            'review' => $this->legacyReview($request),
+            'confirmTeacher' => $this->legacyConfirmTeacher($request),
+            'timeline' => $this->legacyTimeline($request),
+            default => throw new RuntimeException('未注册的兼容流程操作', 422),
+        };
+    }
+
     private const RESOURCES = [
         'plan', 'project', 'implementation', 'declaration', 'participant', 'teacher',
         'safety', 'material', 'attendance', 'patch_sign', 'score', 'archive',
@@ -182,7 +213,7 @@ class SocialPracticeService
     }
 
     /** 读取社会实践时间线。 */
-    public function timeline(Request $request): array
+    private function legacyTimeline(Request $request): array
     {
         $this->requirePermission('view');
         $resource = $this->workflowResource($request);
@@ -281,7 +312,7 @@ class SocialPracticeService
     }
 
     /** 审核社会实践业务。 */
-    public function review(Request $request): array
+    private function legacyReview(Request $request): array
     {
         $resource = $this->workflowResource($request);
         $id = $this->requiredId($request);
@@ -386,7 +417,7 @@ class SocialPracticeService
     }
 
     /** 发起通过后修改。 */
-    public function requestModification(Request $request): array
+    private function legacyRequestModification(Request $request): array
     {
         $resource = $this->workflowResource($request);
         $id = $this->requiredId($request);
@@ -597,7 +628,7 @@ class SocialPracticeService
     }
 
     /** 确认分散实践指导教师。 */
-    public function confirmTeacher(Request $request): array
+    private function legacyConfirmTeacher(Request $request): array
     {
         $this->requirePermission('teacher_confirm');
         $this->requireTeacherRole();

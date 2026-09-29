@@ -3,7 +3,8 @@
   <main v-if="!isLoggedIn" class="login-shell" :style="loginPageStyle">
     <section class="login-panel">
       <header>
-        <UserRound :size="26" />
+        <img v-if="loginPageState.school_logo_url" class="login-school-logo" :src="backendUrl(loginPageState.school_logo_url)" :alt="loginSchoolName">
+        <Building2 v-else :size="32" />
         <div>
           <strong>实践管理系统</strong>
           <span>{{ loginSchoolName }}</span>
@@ -17,7 +18,7 @@
         <span>密码</span>
         <input v-model="loginForm.password" autocomplete="current-password" placeholder="请输入密码" type="password">
       </label>
-      <button type="button" :disabled="loginState.loading" @click="submitLogin">
+      <button type="button" class="login-submit-button" :disabled="loginState.loading" @click="submitLogin">
         <LogIn :size="17" />
         登录
       </button>
@@ -44,7 +45,7 @@
           <label><span>手机</span><input v-model="registerForm.mobile" autocomplete="tel"></label>
           <label v-if="registerForm.role_type === 'student'"><span>学号</span><input v-model="registerForm.student_num"></label>
           <label v-if="registerForm.role_type === 'teacher'"><span>工号</span><input v-model="registerForm.teacher_num"></label>
-          <button type="button" :disabled="registerState.loading" @click="submitRegister">
+          <button type="button" class="login-submit-button" :disabled="registerState.loading" @click="submitRegister">
             创建并登录
           </button>
         </div>
@@ -55,7 +56,7 @@
     </section>
   </main>
 
-  <main v-else-if="!wechatBlocked" class="desktop-shell" :class="{ 'desktop-shell-mac': desktopStyleMode === 'mac' }" :style="desktopStyle" @click.left="closeDesktopContextMenu" @contextmenu.prevent="openDesktopContextMenu">
+  <main v-else-if="!wechatBlocked" class="desktop-shell" :class="{ 'desktop-shell-mac': desktopStyleMode === 'mac', 'desktop-shell-maximized': hasMaximizedWindow }" :style="desktopStyle" @click.left="closeDesktopContextMenu" @contextmenu.prevent="openDesktopContextMenu">
     <section class="workspace">
       <AdaptiveDesktopGrid
         ref="desktopGridRef"
@@ -167,39 +168,17 @@
               >
                 <header>
                   <strong>桌面壁纸</strong>
-                  <small>保存后立即应用到 PC 工作台。</small>
+                  <small>选择后立即应用到 PC 工作台。</small>
                 </header>
-                <div class="wallpaper-grid">
-                  <button
-                    v-for="preset in wallpaperPresets"
-                    :key="preset.key"
-                    type="button"
-                    :class="{ active: profileState.form.wallpaper === preset.key && !profileState.form.wallpaper_url }"
-                    @click="selectWallpaper(preset.key)"
-                  >
-                    <span class="wallpaper-swatch" :style="{ background: preset.background }" />
-                    <span>{{ preset.name }}</span>
-                  </button>
-                </div>
-                <label
-                  for="profile-wallpaper-file"
-                  class="wallpaper-upload-button"
-                  :class="{ active: Boolean(profileState.form.wallpaper_url), disabled: profileState.loading }"
-                  :style="wallpaperUploadStyle"
-                  aria-label="上传壁纸"
-                  @click="guardProfileAssetClick"
-                >
-                  <ImagePlus v-if="!profileState.form.wallpaper_url" :size="22" />
-                  <span class="asset-action"><ImagePlus :size="15" /></span>
-                </label>
-                <input
-                  id="profile-wallpaper-file"
-                  class="hidden-file"
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp,image/gif"
-                  @change="event => handleAssetSelected('wallpaper', event)"
-                >
+                <WallpaperLibrary
+                  :key="`${permissionState.context.school_database_id}:${permissionState.context.account_id}`"
+                  :selection="profileState.form"
+                  :school-default-url="loginPageState.default_wallpaper_url"
+                  @applied="applyWallpaperSelection"
+                />
               </section>
+
+              <SignatureSettings :key="`${permissionState.context.school_database_id}:${permissionState.context.account_id}`" />
 
               <section class="profile-panel-card">
                 <header>
@@ -232,32 +211,6 @@
               </section>
 
               <PreviewCacheSettings />
-              <section v-if="canManageLoginBackground" class="profile-panel-card">
-                <header>
-                  <strong>学校登录背景</strong>
-                  <small>用于未登录页面，上传后全校 PC 登录页立即生效。</small>
-                </header>
-                <label
-                  for="school-login-background-file"
-                  class="login-background-upload-button"
-                  :class="{ active: Boolean(loginPageState.login_background_url), disabled: loginPageState.loading }"
-                  :style="loginBackgroundUploadStyle"
-                  aria-label="上传学校登录背景"
-                  @click="guardLoginBackgroundClick"
-                >
-                  <ImagePlus v-if="!loginPageState.login_background_url" :size="22" />
-                  <span>{{ loginPageState.login_background_url ? '点击更换背景' : '点击上传背景' }}</span>
-                </label>
-                <input
-                  id="school-login-background-file"
-                  class="hidden-file"
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp,image/gif"
-                  @change="handleLoginBackgroundSelected"
-                >
-                <small v-if="loginPageState.message" class="profile-inline-message">{{ loginPageState.message }}</small>
-              </section>
-
               <section class="profile-panel-card">
                 <header>
                   <strong>消息接收</strong>
@@ -285,6 +238,13 @@
                       <small>发送到个人邮箱</small>
                     </span>
                     <el-switch v-model="profileState.form.notify.email" />
+                  </label>
+                  <label>
+                    <span>
+                      <strong>业务短信</strong>
+                      <small>仅接收已配置流程的业务通知，需先绑定已验证手机号</small>
+                    </span>
+                    <el-switch v-model="profileState.form.notify.sms" />
                   </label>
                   <label>
                     <span>
@@ -521,6 +481,8 @@
                         </el-table>
                       </div>
 
+                      <WorkflowHistory v-else-if="internshipState.dialog.type === 'workflow'" entity-type="base_application" :entity-id="internshipState.dialog.row.id" :account-id="permissionState.context.account_id" :request="request" :backend-url="backendUrl" @updated="loadInternshipPanel('baseApplications', 1)" />
+
                       <div v-else-if="internshipState.dialog.type === 'contentDetail'" class="content-detail-view">
                         <section v-for="field in internshipState.dialog.fields || []" :key="field.label">
                           <span>{{ field.label }}</span>
@@ -539,6 +501,7 @@
                           </div>
                           <pre v-else>{{ detailFieldText(field.value) }}</pre>
                         </section>
+                        <WorkflowHistory v-if="internshipState.dialog.entity === 'base_application' && internshipState.dialog.row?.workflow" entity-type="base_application" :entity-id="internshipState.dialog.row.id" :account-id="permissionState.context.account_id" :request="request" :backend-url="backendUrl" @updated="loadInternshipPanel('baseApplications', 1)" />
                       </div>
 
                       <div v-else-if="internshipState.dialog.type === 'syllabusGuide'" class="operation-form single syllabus-guide-form">
@@ -996,7 +959,7 @@
                         <el-button v-else-if="internshipState.dialog.type === 'baseImport'" type="warning" :disabled="internshipState.loading || !internshipState.baseImport.summary.valid_rows" :loading="internshipState.loading" @click="confirmBaseImportPreview(true)">
                           {{ internshipState.baseImport.summary.error_rows ? '跳过错误行并导入' : '确认导入' }}
                         </el-button>
-                        <el-button v-else-if="!['timeline', 'contentDetail'].includes(internshipState.dialog.type)" type="primary" :disabled="internshipState.loading" :loading="internshipState.loading" @click="confirmInternshipDialog">
+                        <el-button v-else-if="!['timeline', 'contentDetail', 'workflow'].includes(internshipState.dialog.type)" type="primary" :disabled="internshipState.loading" :loading="internshipState.loading" @click="confirmInternshipDialog">
                           确认
                         </el-button>
                       </footer>
@@ -1342,6 +1305,7 @@
                         <el-button size="small" type="primary" plain @click="openTimelineDialog('plan', row)">
                           记录
                         </el-button>
+                        <el-button v-if="canManageInternshipPlan" link type="danger" :disabled="internshipState.loading" @click="deleteInternshipPlan(row)">删除</el-button>
                       </template>
                     </DataListPanel>
                   </template>
@@ -2562,7 +2526,7 @@
                           <section class="detail-table-block">
                             <header>
                               <strong>企业微信绑定</strong>
-                              <small>{{ userAdminState.detail.wechatAccounts.length }} 个</small>
+                              <small>{{ userAdminState.detail.wechatAccounts.filter(item => item.valid).length }} 个有效绑定</small>
                             </header>
                             <el-table :data="userAdminState.detail.wechatAccounts" height="190" stripe empty-text="尚未绑定企业微信" v-loading="userAdminState.detailLoading">
                               <el-table-column type="index" label="序号" width="66" align="center" />
@@ -2570,6 +2534,7 @@
                               <el-table-column prop="wechat_name" label="姓名" min-width="120" />
                               <el-table-column prop="mobile" label="手机" min-width="130" />
                               <el-table-column prop="email" label="邮箱" min-width="160" />
+                              <el-table-column label="状态" width="100"><template #default="{ row }"><el-tag :type="row.valid ? 'success' : 'warning'">{{ row.valid ? '有效' : '已失效' }}</el-tag></template></el-table-column>
                               <el-table-column prop="created_at" label="绑定时间" width="168" />
                               <el-table-column v-if="canUnbindUserWechat" label="操作" width="88" fixed="right">
                                 <template #default="{ row }">
@@ -2838,6 +2803,10 @@
                   />
                 </div>
 
+                <div v-else-if="win.module.id === 'expenseManage'" class="module-content-panel">
+                  <ExpensePanel :request="request" :backend-url="backendUrl" :account-id="permissionState.context.account_id" :open-expense-id="expenseInboxSelection" :can-view="hasPermission('expense:view')" :can-create="hasPermission('expense:manage')" :can-export="hasPermission('expense:export')" />
+                </div>
+
                 <div v-else-if="win.module.id === 'exportTask'" class="module-content-panel">
                   <ExportTaskCenter />
                 </div>
@@ -2846,6 +2815,9 @@
                 <FavoritePanel v-else-if="win.module.id === 'favorite'" :is-desktop="isFavoriteDesktop" :set-desktop="setFavoriteDesktopShortcut" @changed="refreshFavoriteShortcuts" />
                 <NotebookPanel v-else-if="win.module.id === 'notebook'" :key="noteSessionKey" :ref="el => setNotebookRef(win.id, el)" :request="request" :session-key="noteSessionKey" />
                 <ReleaseNotesPanel v-else-if="win.module.id === 'releaseNotes'" :request="request" />
+                <SchoolSettingsPanel v-else-if="win.module.id === 'config' && win.panel === 'schoolAppearance' && canManageConfig" @updated="applyLoginPageData" />
+                <WorkflowSettingsPanel v-else-if="win.module.id === 'config' && win.panel === 'workflowSettings' && canManageConfig" />
+                <MessageChannelSettings v-else-if="win.module.id === 'config' && win.panel === 'messageChannels' && canManageConfig" />
                 <ReleaseManager v-else-if="win.module.id === 'config' && win.panel === 'releases'" />
                 <DatabaseSchemaPanel v-else-if="win.module.id === 'config' && win.panel === 'databaseSchema' && canManageConfig" :session-key="[noteSessionKey, permissionState.context.school_id, permissionState.context.role_type].join(':')" />
 
@@ -2878,11 +2850,13 @@
 
                 <div v-else-if="win.module.id === 'message'" class="message-center-panel">
                   <div class="message-mode-tabs">
-                    <button type="button" :class="{ active: !assistantVisible }" @click="assistantVisible = false">通知与待办</button>
-                    <button type="button" :class="{ active: assistantVisible }" @click="assistantVisible = true">问答助手</button>
+                    <button type="button" :class="{ active: !assistantVisible && !workflowInboxVisible }" @click="assistantVisible = false; workflowInboxVisible = false">通知与待办</button>
+                    <button type="button" :class="{ active: workflowInboxVisible }" @click="assistantVisible = false; workflowInboxVisible = true">审批待办</button>
+                    <button type="button" :class="{ active: assistantVisible }" @click="assistantVisible = true; workflowInboxVisible = false">问答助手</button>
                     <small>{{ realtimeStatus === 'connected' ? '实时连接' : '自动重连中' }}</small>
                   </div>
                   <AssistantPanel v-if="assistantVisible" :key="noteSessionKey" :request="request" />
+                  <WorkflowInbox v-else-if="workflowInboxVisible" :request="request" :backend-url="backendUrl" :account-id="permissionState.context.account_id" @open-expense="openExpenseFromWorkflowInbox" />
                   <template v-else>
                   <div class="message-toolbar">
                     <el-select v-model="messageState.filters.type" placeholder="请选择消息类型" @change="loadMessages(1)">
@@ -4285,7 +4259,7 @@
       @saved="loadInternshipPanel('documents')"
     />
 
-    <footer class="taskbar">
+    <footer v-show="!hasMaximizedWindow" class="taskbar">
       <div class="taskbar-brand">
         <span class="brand-mark">实</span>
         <strong>实践管理系统</strong>
@@ -4435,6 +4409,15 @@ import WechatBindingGate from '../../shared/components/WechatBindingGate.vue';
 import { previewFile } from '../../shared/filePreview';
 import PreviewCacheSettings from './components/PreviewCacheSettings.vue';
 import ClientDownloadButton from './components/ClientDownloadButton.vue';
+import SchoolSettingsPanel from './components/SchoolSettingsPanel.vue';
+import WorkflowSettingsPanel from './components/WorkflowSettingsPanel.vue';
+import MessageChannelSettings from './components/MessageChannelSettings.vue';
+import WallpaperLibrary from './components/WallpaperLibrary.vue';
+import SignatureSettings from './components/profile/SignatureSettings.vue';
+import WorkflowHistory from '../../shared/components/WorkflowHistory.vue';
+import WorkflowInbox from '../../shared/components/WorkflowInbox.vue';
+import ExpensePanel from './components/ExpensePanel.vue';
+import { hasMaximizedWindow } from './composables/useMaximizedWindows';
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import zhCn from 'element-plus/es/locale/lang/zh-cn';
@@ -4570,6 +4553,8 @@ import {
   fetchInternshipOverview,
   fetchInternshipPairs,
   fetchInternshipPlans,
+  fetchInternshipPlanDeleteImpact,
+  removeInternshipPlan,
   fetchInternshipReports,
   fetchInternshipReviewDraft,
   fetchInternshipSafetyLetters,
@@ -4792,6 +4777,7 @@ const loginPageState = reactive({
   loading: false,
   message: '',
   school_name: '成都锦城学院',
+  school_logo_url: '',
   login_background_url: '',
 });
 const wechatProxy = reactive({
@@ -4813,7 +4799,10 @@ const wechatProxy = reactive({
   syncing: false,
   message: '',
 });
-const wechatBinding = useWechatBinding({ context: () => permissionState.context, request, backendUrl });
+const wechatBinding = useWechatBinding({
+  context: () => permissionState.context, request, backendUrl,
+  publicOrigin: () => window.__PRACTICAL_DESKTOP__?.serverOrigin || backendUrl('/'),
+});
 const wechatBlocked = wechatBinding.blocked;
 const wechatShow = wechatBinding.show;
 const wechatBindingUrl = wechatBinding.publicUrl;
@@ -4838,6 +4827,8 @@ const logState = reactive({
   },
 });
 const logDetailState = reactive({ visible: false, row: null });
+const workflowInboxVisible = ref(false);
+const expenseInboxSelection = ref(0);
 const messageState = reactive({
   loading: false,
   targetLoading: false,
@@ -5277,14 +5268,24 @@ const modules = [
     collectionParent: 'dataCenter',
   },
   {
+    id: 'expenseManage',
+    name: '经费管理',
+    icon: ClipboardList,
+    color: 'amber',
+    scope: '基地建设费用申请 / 审批',
+    viewPermission: 'expense:view',
+    managePermission: 'expense:manage',
+    defaultPanel: 'expenses',
+  },
+  {
     id: 'companyManage',
     name: '基地管理',
     icon: Building2,
     color: 'amber',
-    scope: '基地建设 / 基地申报 / 基地使用',
+    scope: '基地汇总统计 / 基地申报 / 审批表',
     viewPermission: 'internship:view',
     managePermission: 'internship:manage',
-    defaultPanel: 'baseFlows',
+    defaultPanel: 'baseApplications',
     adminOnly: true,
     collectionParent: 'dataCenter',
   },
@@ -5329,7 +5330,7 @@ const modules = [
     scope: '学校设置',
     viewPermission: 'config:view',
     managePermission: 'config:manage',
-    defaultPanel: 'menuManage',
+    defaultPanel: 'schoolAppearance',
   },
   {
     id: 'profile',
@@ -5670,7 +5671,7 @@ const defaultInternshipReviewRules = {
 
 const baseFlowTypes = [
   { value: 'application', label: '基地申报' },
-  { value: 'usage', label: '基地使用' },
+  { value: 'usage', label: '审批表' },
 ];
 
 const archiveStates = reactive(Object.fromEntries(
@@ -5763,9 +5764,9 @@ const socialPracticeSidebarItems = [
 ];
 const syllabusGuidePanels = ['syllabuses', 'guides'];
 const baseManagementSidebarItems = [
-  { key: 'baseFlows', name: '基地建设', icon: Building2 },
   { key: 'baseApplications', name: '基地申报', icon: FileText },
-  { key: 'baseUsage', name: '基地使用', icon: ClipboardList },
+  { key: 'baseFlows', name: '基地汇总统计', icon: Building2 },
+  { key: 'baseUsage', name: '审批表', icon: ClipboardList },
   { key: 'baseVisits', name: '基地巡查', icon: CalendarCheck },
 ];
 
@@ -5881,7 +5882,7 @@ const moduleSearchKeywords = {
   departmentManage: '学院 院系 部门',
   professionManage: '专业',
   classManage: '班级',
-  companyManage: '基地管理 基地建设 基地申报 基地使用 合作单位 企业',
+  companyManage: '基地管理 基地汇总统计 基地申报 审批表 合作单位 企业',
   eduData: '教务数据 学生 教师 开课计划 开课情况 导入 模板 差异 候选',
   dataManage: '数据 管理 清理 测试数据 初始化',
   config: '设置 配置 菜单 权限 角色 企业微信 操作说明 学校',
@@ -5892,6 +5893,9 @@ const defaultDesktopModuleIds = DEFAULT_DESKTOP_MODULE_IDS;
 const launcherModuleIds = modules.filter(module => !module.collectionParent && !module.launcherHidden).map(module => module.id);
 const launcherModuleIdSet = new Set(launcherModuleIds);
 const configSidebarDefinitions = [
+  { key: 'schoolAppearance', name: '学校设置', permission: 'config:manage', schoolConfig: true, icon: Building2 },
+  { key: 'workflowSettings', name: '审批流程', permission: 'config:manage', schoolConfig: true, icon: ClipboardList },
+  { key: 'messageChannels', name: '消息渠道', permission: 'config:manage', schoolConfig: true, icon: MessageCircle },
   { key: 'releases', name: '版本与更新', permission: 'config:manage', schoolConfig: true, icon: Download },
   { key: 'databaseSchema', name: '数据库结构', permission: 'config:manage', schoolConfig: true, icon: Table2 },
   { key: 'userManage', name: '用户管理', permission: 'config:user', icon: UsersRound },
@@ -6217,6 +6221,9 @@ function canShowModule(module) {
   if (module.id === 'companyManage') {
     return isAdminRole.value && hasPermission('internship:view');
   }
+  if (module.id === 'expenseManage') {
+    return hasPermission('expense:view');
+  }
   if (module.id === 'baseVisits') {
     return canViewBaseVisits.value;
   }
@@ -6332,10 +6339,10 @@ function syllabusGuideListConfig(listKey, filename) {
 const internshipListConfigs = computed(() => ({
   baseFlows: {
     listKey: 'baseFlows',
-    filename: '基地建设',
+    filename: '基地汇总统计',
     filters: internshipListFilters('baseFlows', [
       'dep_id', 'profession_id', 'base_type', 'status', 'base_category',
-      'base_level', 'company_id', 'declaration_year', 'keyword',
+      'base_level', 'is_project_approved', 'company_id', 'declaration_year', 'keyword',
     ]),
     columns: [
       { prop: 'name', label: '基地名称', minWidth: 180 },
@@ -6346,6 +6353,7 @@ const internshipListConfigs = computed(() => ({
       { prop: 'declaration_year', label: '申报年份', width: 92 },
       { prop: 'base_category', label: '基地类别', minWidth: 150 },
       { prop: 'base_level', label: '基地等级', width: 100 },
+      { prop: 'is_project_approved', label: '是否立项', width: 100, formatter: row => row.is_project_approved ? '是' : '否' },
       { prop: 'address', label: '基地位置', minWidth: 200 },
       { prop: 'service_courses', label: '服务课程', minWidth: 180, formatter: row => contentSummary(row.service_courses) },
       { prop: 'manager_name', label: '负责人', width: 110 },
@@ -6356,7 +6364,7 @@ const internshipListConfigs = computed(() => ({
     ],
   },
   baseApplications: baseManagementFlowConfig('baseApplications', 'application', '基地申报'),
-  baseUsage: baseManagementFlowConfig('baseUsage', 'usage', '基地使用'),
+  baseUsage: baseManagementFlowConfig('baseUsage', 'usage', '审批表'),
   arrangements: {
     listKey: 'arrangements',
     filename: '实习任务',
@@ -6741,7 +6749,7 @@ function openInternshipContentDetail(panel, row) {
       ],
     },
     baseUsage: {
-      title: row.title || '基地使用',
+      title: row.title || '审批表',
       fields: [
         { label: '实习基地', value: row.base_name },
         { label: '所属学院', value: row.dep_name },
@@ -6823,6 +6831,8 @@ function openInternshipContentDetail(panel, row) {
     type: 'contentDetail',
     title: definition.title,
     fields: definition.fields,
+    row,
+    entity: panel === 'baseApplications' ? 'base_application' : '',
   };
 }
 
@@ -7855,6 +7865,14 @@ function openModule(module) {
   openModuleWindow(module, { reuse: module.id !== 'notebook' });
 }
 
+function openExpenseFromWorkflowInbox(expenseId) {
+  const module = modules.find(item => item.id === 'expenseManage');
+  if (!module) return;
+  expenseInboxSelection.value = 0;
+  openModule(module);
+  nextTick(() => { expenseInboxSelection.value = Number(expenseId || 0); });
+}
+
 function setDesktopStyle(style) {
   desktopStyleMode.value = style === 'mac' ? 'mac' : 'windows';
   localStorage.setItem('practical:desktop-style', desktopStyleMode.value);
@@ -8326,7 +8344,7 @@ function normalizeInternshipPanel(panel) {
 }
 
 function normalizeBaseManagementPanel(panel) {
-  return baseManagementSidebarItems.some(item => item.key === panel) ? panel : 'baseFlows';
+  return baseManagementSidebarItems.some(item => item.key === panel) ? panel : 'baseApplications';
 }
 
 function internshipRequestEntity(tab) {
@@ -8894,6 +8912,7 @@ async function switchLoginAccount(accountId) {
   switchAccountState.open = false;
   switchAccountState.message = '';
   try {
+    await wechatBinding.cancelScan();
     await switchAccount({
       account_id: targetId,
       client: 'WEB',
@@ -8951,6 +8970,7 @@ async function submitLogout() {
   loginState.loading = true;
   loginState.message = '';
   try {
+    await wechatBinding.cancelScan();
     await logoutApi();
     resetAdminState();
     resetProfileState();
@@ -8979,12 +8999,15 @@ function emptyProfile() {
     avatar: '',
     mobile: '',
     email: '',
+    wallpaper_mode: cachedDesktop.wallpaper_mode || 'school',
+    wallpaper_id: cachedDesktop.wallpaper_id || null,
     wallpaper: cachedDesktop.wallpaper || 'default',
     wallpaper_url: cachedDesktop.wallpaper_url || '',
     notify: {
       system: true,
       wechat: true,
       email: false,
+      sms: false,
     },
     wechat_quiet: {
       start: '00:00',
@@ -9003,7 +9026,10 @@ function emptyPasswordForm() {
 
 function readWallpaperCache() {
   try {
-    const value = localStorage.getItem(wallpaperCacheKey);
+    const account = permissionState.context.account_id;
+    if (!account) return {};
+    const key = [wallpaperCacheKey, window.__PRACTICAL_DESKTOP__?.serverOrigin || window.location.origin, permissionState.context.school_database_id, account].join(':');
+    const value = localStorage.getItem(key);
     const data = value ? JSON.parse(value) : {};
     return typeof data === 'object' && data ? data : {};
   } catch {
@@ -9013,7 +9039,12 @@ function readWallpaperCache() {
 
 function cacheWallpaper() {
   try {
-    localStorage.setItem(wallpaperCacheKey, JSON.stringify({
+    const account = permissionState.context.account_id;
+    if (!account) return;
+    const key = [wallpaperCacheKey, window.__PRACTICAL_DESKTOP__?.serverOrigin || window.location.origin, permissionState.context.school_database_id, account].join(':');
+    localStorage.setItem(key, JSON.stringify({
+      wallpaper_mode: profileState.form.wallpaper_mode,
+      wallpaper_id: profileState.form.wallpaper_id,
       wallpaper: profileState.form.wallpaper,
       wallpaper_url: profileState.form.wallpaper_url,
     }));
@@ -10947,6 +10978,7 @@ function emptyInternshipFilters() {
     base_type: '',
     base_category: '',
     base_level: '',
+    is_project_approved: '',
     company_id: '',
     declaration_year: '',
     profession_id: '',
@@ -13087,6 +13119,7 @@ function internshipFilters(keys, values = {}, options = internshipState.options)
     base_id: { key: 'base_id', label: '实习基地', type: 'select', options: optionItems(internshipState.options.bases, 'id', 'name') },
     base_type: { key: 'base_type', label: '基地性质', type: 'select', options: [{ value: 'long_term', label: '长期基地' }, { value: 'temporary', label: '临时基地' }] },
     base_category: { key: 'base_category', label: '基地类别', type: 'select', options: valueOptions(options.base_categories) },
+    is_project_approved: { key: 'is_project_approved', label: '是否立项', type: 'select', options: [{ value: '1', label: '是' }, { value: '0', label: '否' }] },
     base_level: { key: 'base_level', label: '基地等级', type: 'select', options: valueOptions(options.base_levels) },
     company_id: { key: 'company_id', label: '合作单位', type: 'select', options: optionItems(options.companies, 'company_id', 'company_name') },
     declaration_year: { key: 'declaration_year', label: '申报年份', type: 'select', options: valueOptions(options.base_declaration_years) },
@@ -13833,7 +13866,7 @@ function delayConfigText(value) {
 function baseFlowTypeText(value) {
   const names = {
     application: '基地申报',
-    usage: '基地使用',
+    usage: '审批表',
     result: '基地成果',
     expense: '基地费用',
   };
@@ -14408,6 +14441,33 @@ async function submitSyllabusGuide(status) {
   }
 }
 
+async function deleteInternshipPlan(row) {
+  if (!canManageInternshipPlan.value || internshipState.loading) return;
+  internshipState.loading = true;
+  internshipState.message = '';
+  try {
+    const impact = await fetchInternshipPlanDeleteImpact(row.id);
+    const count = Number(impact.arrangement_count || 0);
+    const titles = (impact.arrangements || []).slice(0, 8).map(item => item.title || `任务 ${item.id}`).join('、');
+    const message = count
+      ? `计划「${impact.course_name || row.course_name}」关联 ${count} 个实习任务：${titles}${count > 8 ? '等' : ''}。是否一并删除？历史材料、附件和审核记录仍保留。`
+      : `确认删除计划「${impact.course_name || row.course_name}」？数据将保留用于历史追溯。`;
+    try {
+      await ElMessageBox.confirm(message, '删除实习计划', {
+        confirmButtonText: count ? '一并删除' : '删除计划', cancelButtonText: '取消', type: 'warning',
+      });
+    } catch { return; }
+    await removeInternshipPlan({ id: row.id, include_arrangements: count > 0, revision: impact.revision });
+    invalidateInternshipFoundation();
+    await loadInternshipPanel('plans', internshipState.lists.plans.pagination.page || 1);
+    internshipState.message = count ? `已删除计划及 ${count} 个关联实习任务` : '已删除实习计划';
+  } catch (error) {
+    internshipState.message = error.message;
+  } finally {
+    internshipState.loading = false;
+  }
+}
+
 function openPlanDialog(row = null) {
   if (row) {
     const content = typeof row.plan_content === 'object' && row.plan_content !== null ? row.plan_content : {};
@@ -14935,6 +14995,7 @@ async function exportImplementationDocument(row) {
 }
 
 async function openReviewDialog(entity, row, status) {
+  if (entity === 'base_application' && row?.workflow) { openBaseWorkflowDialog(row); return; }
   if (!canReviewRow(row, entity)) {
     internshipState.message = '仅待审核数据可处理';
     return;
@@ -14972,7 +15033,12 @@ function openReopenDialog(entity, row) {
   };
 }
 
+function openBaseWorkflowDialog(row) {
+  internshipState.dialog = { ...emptyOperationDialog(), type: 'workflow', title: '基地申报审批', entity: 'base_application', row };
+}
+
 async function openTimelineDialog(entity, row) {
+  if (entity === 'base_application' && row?.workflow) { openBaseWorkflowDialog(row); return; }
   internshipState.dialog = {
     ...emptyOperationDialog(),
     type: 'timeline',
@@ -15181,7 +15247,7 @@ function reviewEntityName(entity) {
     teacher_work_report: '教师工作报告',
     inspection: '巡查记录',
     base_application: '基地申报',
-    base_usage: '基地使用',
+    base_usage: '审批表',
     base_result: '基地成果',
     base_expense: '基地费用',
   };
@@ -15365,6 +15431,7 @@ function submissionSnapshotText(entity, row) {
 }
 
 function canReviewRow(row, entity) {
+  if (entity === 'base_application' && row?.workflow) return Boolean(row.workflow.can_review);
   if (!row || row.status !== 'wait') {
     return false;
   }
@@ -16382,16 +16449,24 @@ function resetInternshipState() {
   });
 }
 
+function applyWallpaperSelection(data) {
+  profileState.form.wallpaper_mode = data.wallpaper_mode || 'school';
+  profileState.form.wallpaper_id = data.wallpaper_id || null;
+  profileState.form.wallpaper = data.wallpaper || 'default';
+  profileState.form.wallpaper_url = data.wallpaper_url || '';
+  cacheWallpaper();
+}
+
 function applyProfileData(data) {
   profileState.form.name = data.user?.name || '';
   profileState.form.avatar = data.user?.avatar || '';
   profileState.form.mobile = data.user?.mobile || '';
   profileState.form.email = data.user?.email || '';
-  profileState.form.wallpaper = data.desktop?.wallpaper || 'default';
-  profileState.form.wallpaper_url = data.desktop?.wallpaper_url || '';
+  applyWallpaperSelection(data.desktop || {});
   profileState.form.notify.system = data.notify?.system !== false;
   profileState.form.notify.wechat = data.notify?.wechat !== false;
   profileState.form.notify.email = Boolean(data.notify?.email);
+  profileState.form.notify.sms = Boolean(data.notify?.sms);
   profileState.form.wechat_quiet = {
     start: data.wechat_quiet?.start || '00:00',
     end: data.wechat_quiet?.end || '24:00',
@@ -16402,6 +16477,12 @@ function applyProfileData(data) {
 function applyLoginPageData(data) {
   const payload = data?.data && typeof data.data === 'object' ? data.data : data || {};
   loginPageState.school_name = payload.school_name || '成都锦城学院';
+  loginPageState.school_logo_url = payload.school_logo_url || '';
+  loginPageState.default_wallpaper_url = payload.default_wallpaper_url || '';
+  if (isLoggedIn.value && profileState.form.wallpaper_mode === 'school') {
+    profileState.form.wallpaper_url = loginPageState.default_wallpaper_url;
+    cacheWallpaper();
+  }
   loginPageState.login_background_url = payload.login_background_url || payload.url || '';
 }
 

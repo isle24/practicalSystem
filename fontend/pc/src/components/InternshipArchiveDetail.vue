@@ -1,5 +1,5 @@
 <template>
-  <el-dialog
+  <ManagedElementDialog
     :model-value="modelValue"
     append-to-body
     destroy-on-close
@@ -169,7 +169,7 @@
 
     <input ref="uploadInput" type="file" accept=".pdf,.doc,.docx,.xls,.xlsx" hidden @change="uploadFinalFile">
 
-    <el-dialog v-model="historyVisible" append-to-body title="材料历史版本" width="760px">
+    <ManagedElementDialog v-model="historyVisible" append-to-body title="材料历史版本" width="760px">
       <el-table :data="historyItems" border empty-text="暂无历史版本">
         <el-table-column type="index" label="序号" width="66" align="center" />
         <el-table-column prop="archive_version" label="版本" width="80" />
@@ -182,7 +182,7 @@
           </template>
         </el-table-column>
       </el-table>
-    </el-dialog>
+    </ManagedElementDialog>
 
     <GraduationAppraisalDialog
       v-model="appraisalVisible"
@@ -191,10 +191,11 @@
       :can-approve="canApprove"
       @changed="changed"
     />
-  </el-dialog>
+  </ManagedElementDialog>
 </template>
 
 <script setup>
+import ManagedElementDialog from './ManagedElementDialog.vue';
 import { previewFile } from '../../../shared/filePreview';
 import { computed, ref, watch } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';

@@ -16,6 +16,10 @@ class OperationLogMiddleware implements MiddlewareInterface
 {
     private const SENSITIVE_KEYS = [
         'password',
+        'ticket',
+        'session_id',
+        'state',
+        'nonce',
         'passwd',
         'token',
         'preview_token',

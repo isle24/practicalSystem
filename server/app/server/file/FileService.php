@@ -6,6 +6,7 @@ use app\model\channel\FileBlob;
 use app\model\channel\FileRecord;
 use app\model\channel\FileAccessRecord;
 use app\model\channel\FileRelation;
+use app\model\channel\SignatureRecord;
 use app\server\config\ConfigService;
 use app\server\CurrentContext;
 use Illuminate\Database\QueryException;
@@ -67,13 +68,14 @@ class FileService
         $md5 = $this->md5Input((string) $request->input('md5', ''));
         $name = $this->fileName((string) $request->input('name', ''));
         $category = $this->category((string) $request->input('category', 'general'));
+        if ($category === 'personal_signature') throw new RuntimeException('请通过个人签名页面保存', 403);
         $isTemporary = false;
         $device = $this->deviceInfo($request);
 
         if (!$this->instantUploadEnabled()) {
             return $this->uploadRequired($md5);
         }
-        $blob = FileBlob::activeByMd5($md5);
+        $blob = FileBlob::activeByMd5($md5, $this->storageScope($category));
 
         if (!$blob || !$this->blobFileExists($blob) || !FileRecord::ownsBlob((int) $blob->id, $accountId)) {
             return $this->uploadRequired($md5);
@@ -117,6 +119,7 @@ class FileService
         $file = $this->requestFile($request);
         $name = $this->fileName((string) ($options['name'] ?? $request->input('name', $file->getUploadName() ?: '')));
         $category = $this->category((string) ($options['category'] ?? $request->input('category', 'general')));
+        if ($category === 'personal_signature') throw new RuntimeException('请通过个人签名页面保存', 403);
         $downloadName = $this->fileName((string) ($options['download_name'] ?? $request->input('download_name', $name)));
         $isTemporary = $this->boolInput($options['is_temporary'] ?? false);
         $requireMd5 = $this->boolInput($options['require_md5'] ?? $request->input('require_md5', true));
@@ -260,6 +263,25 @@ class FileService
         }
     }
 
+    /** 为历史壁纸复制独立存储引用，调用方负责迁移对象授权。 */
+    public function copyExistingImage(int $fileId, string $category, int $ownerAccountId): array
+    {
+        if ($category !== 'wallpaper' || $ownerAccountId <= 0) throw new InvalidArgumentException('壁纸复制参数无效');
+        $file = FileRecord::detailById($fileId);
+        if (!$file || !in_array((string) $file->category, ['profile', 'wallpaper'], true)
+            || !in_array((string) $file->mime_type, ['image/jpeg', 'image/png', 'image/webp', 'image/gif'], true)) throw new RuntimeException('原壁纸文件不可用');
+        $path = $this->localPath((string) $file->path);
+        if (!$path) throw new RuntimeException('原壁纸文件不存在');
+        $temporary = tempnam(sys_get_temp_dir(), 'wallpaper-copy-');
+        if (!$temporary) throw new RuntimeException('无法创建壁纸副本');
+        try {
+            if (!copy($path, $temporary)) throw new RuntimeException('复制壁纸失败');
+            return $this->storeGeneratedFile($temporary, ['category' => 'wallpaper', 'ext' => (string) $file->ext, 'name' => (string) $file->name, 'uploader_id' => $ownerAccountId, 'is_temporary' => false]);
+        } finally {
+            if (is_file($temporary)) unlink($temporary);
+        }
+    }
+
     public function info(int $fileId): array
     {
         $this->accountId();
@@ -290,6 +312,7 @@ class FileService
         }
         foreach (array_unique(array_merge($ids, array_map('intval', (array) $attachments))) as $id) {
             if ($id > 0) {
+                if (SignatureRecord::isSignatureFile($id)) throw new RuntimeException('个人签名仅可通过审批快照引用', 403);
                 $this->info($id);
             }
         }
@@ -324,6 +347,7 @@ class FileService
 
     public function attach(int $fileId, string $entityType, int $entityId, string $tag = ''): array
     {
+        if ($entityType === 'personal_signature' || SignatureRecord::isSignatureFile($fileId)) throw new RuntimeException('个人签名仅可通过审批快照引用', 403);
         $this->accountId();
         $entityType = $this->entityType($entityType);
         $tag = $tag === '' ? '' : $this->tag($tag);
@@ -364,6 +388,7 @@ class FileService
     /** 替换实体的文件关联。 */
     public function replaceRelations(array $fileIds, string $entityType, int $entityId, string $tag = ''): array
     {
+        if ($entityType === 'personal_signature') throw new RuntimeException('个人签名版本不可修改', 403);
         $this->accountId();
         $entityType = $this->entityType($entityType);
         $tag = $tag === '' ? '' : $this->tag($tag);
@@ -491,6 +516,7 @@ class FileService
      */
     private function deleteFile(int $fileId, bool $force, ?string $temporaryBefore = null): array
     {
+        if (SignatureRecord::isSignatureFile($fileId)) throw new RuntimeException('个人签名历史版本不可删除', 403);
 
         $deletePath = null;
         $result = $this->connection()->transaction(function () use ($fileId, $force, $temporaryBefore, &$deletePath): array {
@@ -663,10 +689,11 @@ class FileService
     private function persistUploadedFile(array $blobData, array $fileData, string $savedPath): array
     {
         $removeSavedFile = false;
+        $blobData['storage_scope'] = $this->storageScope((string) $fileData['category']);
 
         $result = $this->connection()->transaction(function () use ($blobData, $fileData, &$removeSavedFile): array {
             $now = $this->now();
-            $blob = FileBlob::lockByMd5($blobData['md5']);
+            $blob = FileBlob::lockByMd5($blobData['md5'], $blobData['storage_scope']);
             $activeBlobId = 0;
             $activeBlobUrl = (string) $blobData['url'];
 
@@ -695,7 +722,7 @@ class FileService
                         throw $exception;
                     }
 
-                    $activeBlob = FileBlob::lockByMd5($blobData['md5']);
+                    $activeBlob = FileBlob::lockByMd5($blobData['md5'], $blobData['storage_scope']);
                     if (!$activeBlob) {
                         throw $exception;
                     }
@@ -772,10 +799,7 @@ class FileService
         if (!in_array($extension, $allowedExtensions, true)) {
             throw new InvalidArgumentException('文件扩展名不允许');
         }
-        $uniqueId = hash_file('sha1', $file->getPathname());
-        if (!is_string($uniqueId) || $uniqueId === '') {
-            throw new RuntimeException('文件校验失败');
-        }
+        $uniqueId = $this->uuid();
         $size = (int) $file->getSize();
         $mimeType = $file->getUploadMimeType();
         $directory = rtrim(public_path() . $uri, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . date('Ymd');
@@ -966,6 +990,11 @@ class FileService
         }
 
         return $this->limit($name, 255);
+    }
+
+    private function storageScope(string $category): string
+    {
+        return in_array($category, ['wallpaper', 'personal_signature'], true) ? $category : 'general';
     }
 
     private function category(string $category): string

@@ -14,8 +14,21 @@ use support\Request;
 use Throwable;
 
 /** 学生实习资料变更及校内指导教师审核服务。 */
-class InternshipStudentChangeService
+class InternshipStudentChangeService implements \app\server\workflow\LegacyWorkflowAdapter
 {
+    public function review(Request $request): array
+    {
+        return (new \app\server\workflow\WorkflowService())->legacy($this, 'review', $request);
+    }
+
+    public function executeLegacyWorkflow(string $operation, Request $request): array
+    {
+        return match ($operation) {
+            'review' => $this->legacyReview($request),
+            default => throw new RuntimeException('未注册的兼容流程操作', 422),
+        };
+    }
+
     /** 查询当前账号可见的学生实习资料。 */
     public function profiles(Request $request): array
     {
@@ -165,7 +178,7 @@ class InternshipStudentChangeService
     }
 
     /** 由校内指导教师审核学生个人实习资料变更。 */
-    public function review(Request $request): array
+    private function legacyReview(Request $request): array
     {
         $this->requireApprove();
         if (!$this->isTeacher()) {

@@ -6,7 +6,7 @@ use app\attribute\OperationLog;
 use app\controller\Api\Concerns\Responds;
 use app\server\CurrentContext;
 use app\server\config\ConfigService;
-use app\server\file\FileService;
+use app\server\config\SchoolAppearanceService;
 use InvalidArgumentException;
 use support\Request;
 use support\Response;
@@ -63,22 +63,7 @@ class ConfigController
         }
 
         try {
-            $result = (new FileService())->upload($request, [
-                'category' => 'login_background',
-                'is_temporary' => false,
-                'require_md5' => false,
-                'max_size' => 8 * 1024 * 1024,
-                'allowed_extensions' => ['jpg', 'jpeg', 'png', 'webp', 'gif'],
-            ]);
-
-            (new ConfigService())->set(
-                'system',
-                'login_background_url',
-                $result['url'],
-                'PC 登录页学校背景图'
-            );
-
-            return $this->ok($this->loginPageData(), '已上传');
+            return $this->ok((new SchoolAppearanceService())->upload($request, 'background'), '已上传');
         } catch (Throwable $exception) {
             return $this->fail(40001, $exception->getMessage(), 400);
         }
@@ -101,6 +86,7 @@ class ConfigController
 
         try {
             $group = (string) $request->input('group');
+            if ($group === 'workflow_message') return $this->fail(42200, '请通过审批消息通道设置维护此配置', 422);
             $key = (string) $request->input('key');
             $value = $request->input('value');
             $description = (string) $request->input('description', '');
@@ -115,15 +101,7 @@ class ConfigController
 
     private function loginPageData(): array
     {
-        $backgroundUrl = '';
-        if (CurrentContext::get('school_connection')) {
-            $backgroundUrl = (string) ((new ConfigService())->get('system.login_background_url') ?? '');
-        }
-
-        return [
-            'school_name' => CurrentContext::get('school_name') ?: '成都锦城学院',
-            'login_background_url' => $backgroundUrl,
-        ];
+        return (new SchoolAppearanceService())->publicSettings();
     }
 
     private function canManageSchoolConfig(): bool

@@ -35,6 +35,23 @@ class WechatMessageService
                 WechatMessageRecord::finish($claim, 'skipped', '消息或接收人已停用');
                 return;
             }
+            $outboxId = (int) ($message['metadata']['workflow_outbox_id'] ?? 0);
+            if ($outboxId > 0) {
+                $outbox = \app\model\channel\WorkflowRecord::q('outbox')->where('id', $outboxId)->first();
+                if (!$outbox || !in_array($outbox->status, ['pending', 'retry', 'processing', 'queued'], true)) {
+                    WechatMessageRecord::finish($claim, 'skipped', '流程通知已失效');
+                    return;
+                }
+                $eligibility = (new \app\server\workflow\WorkflowDeliveryService())->eligibility(\app\model\channel\WorkflowRecord::row($outbox));
+                if ($eligibility['reason'] !== '') {
+                    WechatMessageRecord::finish($claim, 'skipped', $eligibility['reason']);
+                    return;
+                }
+                if ((int) $claim['attempts'] > 10) {
+                    WechatMessageRecord::finish($claim, 'failed', '通知投递超过重试次数');
+                    return;
+                }
+            }
             $binding = UserWechat::currentByUser((int) $account->user_id);
             $recipient = trim((string) ($binding['wechat_userid'] ?? ''));
             if ($recipient === '' || $recipient === '@all' || str_contains($recipient, '|')) {
@@ -59,7 +76,7 @@ class WechatMessageService
                 WechatMessageRecord::finish($claim, 'pending', '企业微信配置不完整', 300);
                 return;
             }
-            if ((string) ($binding['corp_id'] ?? '') !== $corpId) {
+            if (!UserWechat::isValidBinding($binding, $corpId)) {
                 WechatMessageRecord::finish($claim, 'skipped', '企业微信绑定所属企业已变更，请重新绑定');
                 return;
             }
@@ -135,7 +152,7 @@ class WechatMessageService
         return ['enabled' => true, 'quiet_start' => '00:00', 'quiet_end' => '24:00'];
     }
 
-    private function delayForSetting(string $start, string $end): int
+    public function delayForSetting(string $start, string $end): int
     {
         $now = time();
         $minutes = (int) date('G', $now) * 60 + (int) date('i', $now);

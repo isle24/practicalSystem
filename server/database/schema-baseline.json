@@ -1,25 +1,33 @@
 {
-    "version": "2026-09-28",
-    "generated_at": "2026-09-28T00:00:00+00:00",
+    "version": "2026-09-29",
+    "generated_at": "2026-09-29T12:57:15+00:00",
     "source_hashes": {
         "app/model/channel/AssistantProfile.php": "125924c846b0eba3b9766e3d4e0fabb6e18d58fb8d1306797dce56d018e22e59",
         "app/model/channel/AuthPasskey.php": "5d4b38b432cffc9f16607bc7428673ddff5e412cf70564e61703a6bdf8569ba5",
         "app/model/channel/DataCleanupRecord.php": "d299503edeef2d7c2a3b74f8f6ae290f93b1c0e53c137d2510c93accd30b3da5",
         "app/model/channel/DesktopToolsSchema.php": "e96dc511f04e324b74382d8bce774e1bd23607fb405d9f8a4dcfde477a8dcee0",
         "app/model/channel/DocRecord.php": "7790a6aa679d3473a8064a2d4d17a6535d78fd591f6529615c341b5250f2f739",
+        "app/model/channel/ExpenseSchema.php": "4e57e632e28ced39afd636a4bb1093b25e2c618bde0eb8d664363b1b5f32fe32",
         "app/model/channel/ExportTaskRecord.php": "57620ae61e46a3b390bbb212bd0dbc97c4646babb31e24d6837f99edf6fe0ebf",
+        "app/model/channel/FileStorageSchema.php": "bb53abad69572a0c230948047debd7bdd0a74f074651d86e8a27527084d6de2b",
         "app/model/channel/InternshipScheduledRecord.php": "39298f81d732c80a3fae6343dacce29f5f6dc442dc2acf9d4476ad2592eaa49e",
         "app/model/channel/MessageRealtimeRecord.php": "f68b79f7cb7c642f9dcf9f84724baa3f4884fefd32cbe69fda841ae552ba4d62",
-        "app/model/channel/MessageRecord.php": "79bce0c3a8af4640dad9642964e5310904e02ad4af6ab4b3e4f90f93d1044fb7",
+        "app/model/channel/MessageRecord.php": "6217dc7247c9ae9a9ca23d8b48d1b02ea4d15ec20cbaca2d8a454ed61897a284",
         "app/model/channel/PluginRecord.php": "74519a538e0848f9f31cfd3c696dbc229118ae4c00e79f6040fba65adb1e1aa4",
         "app/model/channel/RecordingArchiveRecord.php": "cddd99140847348e59533e2cb7570ca77802cbca44eff4c08756d06b2a9a8220",
+        "app/model/channel/SignatureSchema.php": "fba7e5b276c6b1fd61ddea1e7bbe90dfee89efce70420e75e568841ad45c65d1",
         "app/model/channel/TableRecord.php": "a6d33fb5befd8bed3e934b54b6d081012ce7b52100074f587c81bed62ae4c9a5",
         "app/model/channel/TemplateRecord.php": "7b5882c727a5f8eb89886d3e5ce2af570b76e415afd65f7d3f0a03b9ce47ec26",
+        "app/model/channel/WallpaperSchema.php": "eedfe17d07b6625414a0e09142688f00b9443c015b2d6de0b7afcf760a49c0c3",
+        "app/model/channel/WorkflowDeliverySchema.php": "a154a0155d09ca198a8ba7cda36881ab2e8e7561df488dc6f5223cfbeebe68ff",
+        "app/model/channel/WorkflowSchema.php": "437117305c30b2d59d10df5a16d27887443416e4a45a1887d130a6fa4202b011",
         "app/server/database/SchemaComparator.php": "706e5c760c539c2efb2f3b530bbf3830cfc21f4b3dd2d49ada21b2732517af6d",
         "app/server/database/SchemaMetadata.php": "40e8d728eb8d3846ee4535acbd7986061aeea9fd208988c076f80bfaec8f6034",
         "app/server/edu/EduImportSchema.php": "9d67ff3f1a405e6f68bf2d7ab41d71ab249f19814f3afed82aff548d3132e3e3",
-        "database/build-schema-baseline.php": "401d87d1e3457ecf930777898a94387608d8d78e7e924be9b646275a1a1d3db9",
-        "database/init.php": "c72b77b05ceb238827610c7948ea18d966d0cbd83087881177bc8302ee930ef5",
+        "app/server/expense/ExpenseUpgradeSchema.php": "041c8e8ec912c4f1790fcfc693cc754f717cc728a3123005e27d3f51118ed7bf",
+        "app/server/internship/InternshipUpgradeSchema.php": "c4046efd71c00d73c5968e6a1bfc41575c6bf023a21b327c7f973062677417fd",
+        "database/build-schema-baseline.php": "7c7d275707aa21c3212f5475f12716c2a14822f134f8752272fba079a136b2d9",
+        "database/init.php": "13fcf177a84878aa0c5b95d7f070c1b1a7474fb4317f1b10a315e13c425d9b9d",
         "database/migrations/20260905_verified_mobile.php": "30da7b7b89944e87712974d8b445c899835bf24d29a2f9b0cecea1ac8e0d85c6",
         "database/migrations/20260910_desktop_tools.php": "fcb34e87f2708602b7047135a4517a685e9f5d1be268f156bcc37d1e7a840c7d",
         "database/migrations/20260917_edu_import.php": "559312ed80ad0c2b95758806518c1bbd08e84ad253af2d0a845acebb23552f91",
@@ -30,6 +38,13 @@
         "database/migrations/20260920_message_assistant.php": "8f6164db2d6a25502acc3ac35068c87a75201b03754c99ed0999c2db30709fdb",
         "database/migrations/20260922_data_cleanup.php": "a32aa2d7648ebc3489c80de01e31e2674ce36e250c67bce00e00e86ff13a28f8",
         "database/migrations/20260923_base_visit.php": "28bf0d8efd85d2aa17c63b80cfafe4a8a213444a1b66e6f390b45de2838e196f",
+        "database/migrations/20260929_expense.php": "2e2552084ae171b689922f8e98b512184ea08faf2982a1f2ff6e3e75c687b96e",
+        "database/migrations/20260929_file_storage.php": "61f8914966c0598a0d02cfcb157186133e8e8f041391fd51b4f1476672e6cf9c",
+        "database/migrations/20260929_internship_base_project.php": "ac7b389fdf3ad154e2751ebf7217b908a6e15705c7f059387e01e082fc1f9f66",
+        "database/migrations/20260929_signature.php": "935e40b7d00f0eb8886e14725dfd3c270b362d00a65cb7f8a7cd77377af78df6",
+        "database/migrations/20260929_wallpaper.php": "8158d91056eebaeca5735d2af36ac9b88af5b0daae662fb6212c069ba7779070",
+        "database/migrations/20260929_workflow.php": "9b8b5533b92225a5f190eccbf3905325f7eb36046c7c382043250e82a0bb74a1",
+        "database/migrations/20260929_workflow_delivery.php": "4e2fb80b59c1bbb8bbb1202ff8707c9a9072707a87abaedcaec9c8de25f146a1",
         "database/updates/0.2.0-school-tools.sql": "c7df26fef345b79fd9032db24a4c01dff0fe36a8cf7a9e521549fb1c98572d61",
         "database/updates/0.3.0-client-platform.sql": "1eaba1770e4953d7b5c674b8a3b683db3d5f08aff5bfa194bbee496b7387fb81",
         "database/updates/0.3.2-file-preview-favorites.sql": "6ecd61c292679ef49f0a2af4b7ad2da97dc5eab40372e8e298765ac1cf87fd93",
@@ -4137,7 +4152,7 @@
             "base": {
                 "engine": "InnoDB",
                 "collation": "utf8mb4_0900_ai_ci",
-                "create_sql": "CREATE TABLE `base` (\n  `id` bigint unsigned NOT NULL AUTO_INCREMENT,\n  `uuid` char(36) DEFAULT NULL,\n  `name` varchar(180) DEFAULT NULL,\n  `code` varchar(120) DEFAULT NULL,\n  `status` varchar(40) DEFAULT 'enabled',\n  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,\n  `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\n  `deleted_at` datetime DEFAULT NULL,\n  `company_id` bigint unsigned DEFAULT NULL,\n  `dep_id` bigint unsigned DEFAULT NULL,\n  `base_type` varchar(20) DEFAULT 'long_term',\n  `address` varchar(255) DEFAULT NULL,\n  `capacity` int unsigned DEFAULT '0',\n  `used_count` int unsigned DEFAULT '0',\n  `district` varchar(120) DEFAULT NULL,\n  `area` decimal(12,2) DEFAULT NULL,\n  `annual_student_count` int unsigned DEFAULT '0',\n  `current_student_count` int unsigned DEFAULT '0',\n  `service_courses` text,\n  `category` varchar(80) DEFAULT NULL,\n  `manager_name` varchar(80) DEFAULT NULL,\n  `manager_phone` varchar(40) DEFAULT NULL,\n  `created_by` bigint unsigned DEFAULT NULL,\n  `updated_by` bigint unsigned DEFAULT NULL,\n  PRIMARY KEY (`id`),\n  UNIQUE KEY `uk_uuid` (`uuid`),\n  KEY `idx_status` (`status`),\n  KEY `idx_base_scope` (`dep_id`,`base_type`,`status`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci",
+                "create_sql": "CREATE TABLE `base` (\n  `id` bigint unsigned NOT NULL AUTO_INCREMENT,\n  `uuid` char(36) DEFAULT NULL,\n  `name` varchar(180) DEFAULT NULL,\n  `code` varchar(120) DEFAULT NULL,\n  `status` varchar(40) DEFAULT 'enabled',\n  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,\n  `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\n  `deleted_at` datetime DEFAULT NULL,\n  `company_id` bigint unsigned DEFAULT NULL,\n  `dep_id` bigint unsigned DEFAULT NULL,\n  `base_type` varchar(20) DEFAULT 'long_term',\n  `is_project_approved` tinyint(1) NOT NULL DEFAULT '0',\n  `address` varchar(255) DEFAULT NULL,\n  `capacity` int unsigned DEFAULT '0',\n  `used_count` int unsigned DEFAULT '0',\n  `district` varchar(120) DEFAULT NULL,\n  `area` decimal(12,2) DEFAULT NULL,\n  `annual_student_count` int unsigned DEFAULT '0',\n  `current_student_count` int unsigned DEFAULT '0',\n  `service_courses` text,\n  `category` varchar(80) DEFAULT NULL,\n  `manager_name` varchar(80) DEFAULT NULL,\n  `manager_phone` varchar(40) DEFAULT NULL,\n  `created_by` bigint unsigned DEFAULT NULL,\n  `updated_by` bigint unsigned DEFAULT NULL,\n  PRIMARY KEY (`id`),\n  UNIQUE KEY `uk_uuid` (`uuid`),\n  KEY `idx_status` (`status`),\n  KEY `idx_base_scope` (`dep_id`,`base_type`,`status`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci",
                 "columns": {
                     "id": {
                         "definition": "`id` bigint unsigned NOT NULL AUTO_INCREMENT",
@@ -4247,6 +4262,16 @@
                         "extra": "",
                         "charset": "utf8mb4",
                         "collation": "utf8mb4_0900_ai_ci",
+                        "generation": ""
+                    },
+                    "is_project_approved": {
+                        "definition": "`is_project_approved` tinyint(1) NOT NULL DEFAULT '0'",
+                        "type": "tinyint",
+                        "nullable": false,
+                        "default": "0",
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
                         "generation": ""
                     },
                     "address": {
@@ -6229,7 +6254,7 @@
             "base_expense": {
                 "engine": "InnoDB",
                 "collation": "utf8mb4_0900_ai_ci",
-                "create_sql": "CREATE TABLE `base_expense` (\n  `id` bigint unsigned NOT NULL AUTO_INCREMENT,\n  `uuid` char(36) DEFAULT NULL,\n  `name` varchar(180) DEFAULT NULL,\n  `code` varchar(120) DEFAULT NULL,\n  `status` varchar(40) DEFAULT 'enabled',\n  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,\n  `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\n  `deleted_at` datetime DEFAULT NULL,\n  `base_id` bigint unsigned DEFAULT NULL,\n  `dep_id` bigint unsigned DEFAULT NULL,\n  `amount` decimal(12,2) DEFAULT NULL,\n  `title` varchar(180) DEFAULT NULL,\n  `content` text,\n  `submitter_id` bigint unsigned DEFAULT NULL,\n  PRIMARY KEY (`id`),\n  UNIQUE KEY `uk_uuid` (`uuid`),\n  KEY `idx_status` (`status`),\n  KEY `idx_base_expense_base` (`base_id`,`dep_id`,`status`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci",
+                "create_sql": "CREATE TABLE `base_expense` (\n  `id` bigint unsigned NOT NULL AUTO_INCREMENT,\n  `uuid` char(36) DEFAULT NULL,\n  `name` varchar(180) DEFAULT NULL,\n  `code` varchar(120) DEFAULT NULL,\n  `status` varchar(40) DEFAULT 'enabled',\n  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,\n  `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\n  `deleted_at` datetime DEFAULT NULL,\n  `base_id` bigint unsigned DEFAULT NULL,\n  `dep_id` bigint unsigned DEFAULT NULL,\n  `amount` decimal(12,2) DEFAULT NULL,\n  `title` varchar(180) DEFAULT NULL,\n  `content` text,\n  `submitter_id` bigint unsigned DEFAULT NULL,\n  `term_id` bigint unsigned DEFAULT NULL,\n  `semester` varchar(80) DEFAULT NULL,\n  `base_type` varchar(80) DEFAULT NULL,\n  `base_category` varchar(120) DEFAULT NULL,\n  `expense_type` varchar(80) DEFAULT NULL,\n  `total_amount` decimal(12,2) DEFAULT NULL,\n  `amount_upper` varchar(180) DEFAULT NULL,\n  `attachment_ids` text,\n  `remark` text,\n  `workflow_status` varchar(30) NOT NULL DEFAULT 'draft',\n  PRIMARY KEY (`id`),\n  UNIQUE KEY `uk_uuid` (`uuid`),\n  KEY `idx_status` (`status`),\n  KEY `idx_base_expense_base` (`base_id`,`dep_id`,`status`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci",
                 "columns": {
                     "id": {
                         "definition": "`id` bigint unsigned NOT NULL AUTO_INCREMENT",
@@ -6370,6 +6395,106 @@
                         "charset": null,
                         "collation": null,
                         "generation": ""
+                    },
+                    "term_id": {
+                        "definition": "`term_id` bigint unsigned DEFAULT NULL",
+                        "type": "bigint unsigned",
+                        "nullable": true,
+                        "default": null,
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "semester": {
+                        "definition": "`semester` varchar(80) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci DEFAULT NULL",
+                        "type": "varchar(80)",
+                        "nullable": true,
+                        "default": null,
+                        "extra": "",
+                        "charset": "utf8mb4",
+                        "collation": "utf8mb4_0900_ai_ci",
+                        "generation": ""
+                    },
+                    "base_type": {
+                        "definition": "`base_type` varchar(80) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci DEFAULT NULL",
+                        "type": "varchar(80)",
+                        "nullable": true,
+                        "default": null,
+                        "extra": "",
+                        "charset": "utf8mb4",
+                        "collation": "utf8mb4_0900_ai_ci",
+                        "generation": ""
+                    },
+                    "base_category": {
+                        "definition": "`base_category` varchar(120) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci DEFAULT NULL",
+                        "type": "varchar(120)",
+                        "nullable": true,
+                        "default": null,
+                        "extra": "",
+                        "charset": "utf8mb4",
+                        "collation": "utf8mb4_0900_ai_ci",
+                        "generation": ""
+                    },
+                    "expense_type": {
+                        "definition": "`expense_type` varchar(80) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci DEFAULT NULL",
+                        "type": "varchar(80)",
+                        "nullable": true,
+                        "default": null,
+                        "extra": "",
+                        "charset": "utf8mb4",
+                        "collation": "utf8mb4_0900_ai_ci",
+                        "generation": ""
+                    },
+                    "total_amount": {
+                        "definition": "`total_amount` decimal(12,2) DEFAULT NULL",
+                        "type": "decimal(12,2)",
+                        "nullable": true,
+                        "default": null,
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "amount_upper": {
+                        "definition": "`amount_upper` varchar(180) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci DEFAULT NULL",
+                        "type": "varchar(180)",
+                        "nullable": true,
+                        "default": null,
+                        "extra": "",
+                        "charset": "utf8mb4",
+                        "collation": "utf8mb4_0900_ai_ci",
+                        "generation": ""
+                    },
+                    "attachment_ids": {
+                        "definition": "`attachment_ids` text CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci",
+                        "type": "text",
+                        "nullable": true,
+                        "default": null,
+                        "extra": "",
+                        "charset": "utf8mb4",
+                        "collation": "utf8mb4_0900_ai_ci",
+                        "generation": ""
+                    },
+                    "remark": {
+                        "definition": "`remark` text CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci",
+                        "type": "text",
+                        "nullable": true,
+                        "default": null,
+                        "extra": "",
+                        "charset": "utf8mb4",
+                        "collation": "utf8mb4_0900_ai_ci",
+                        "generation": ""
+                    },
+                    "workflow_status": {
+                        "definition": "`workflow_status` varchar(30) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL DEFAULT 'draft'",
+                        "type": "varchar(30)",
+                        "nullable": false,
+                        "default": "draft",
+                        "extra": "",
+                        "charset": "utf8mb4",
+                        "collation": "utf8mb4_0900_ai_ci",
+                        "generation": ""
                     }
                 },
                 "indexes": {
@@ -6432,6 +6557,114 @@
                             },
                             {
                                 "name": "status",
+                                "length": null,
+                                "order": "A",
+                                "expression": null
+                            }
+                        ],
+                        "unique": false,
+                        "type": "BTREE",
+                        "visible": "YES"
+                    }
+                },
+                "constraints": []
+            },
+            "base_expense_item": {
+                "engine": "InnoDB",
+                "collation": "utf8mb4_0900_ai_ci",
+                "create_sql": "CREATE TABLE `base_expense_item` (\n  `id` bigint unsigned NOT NULL AUTO_INCREMENT,\n  `expense_id` bigint unsigned NOT NULL,\n  `project` varchar(180) NOT NULL,\n  `amount` decimal(12,2) NOT NULL,\n  `sort` int NOT NULL DEFAULT '0',\n  `created_at` datetime NOT NULL,\n  `updated_at` datetime NOT NULL,\n  PRIMARY KEY (`id`),\n  KEY `idx_expense` (`expense_id`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci",
+                "columns": {
+                    "id": {
+                        "definition": "`id` bigint unsigned NOT NULL AUTO_INCREMENT",
+                        "type": "bigint unsigned",
+                        "nullable": false,
+                        "default": null,
+                        "extra": "auto_increment",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "expense_id": {
+                        "definition": "`expense_id` bigint unsigned NOT NULL",
+                        "type": "bigint unsigned",
+                        "nullable": false,
+                        "default": null,
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "project": {
+                        "definition": "`project` varchar(180) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL",
+                        "type": "varchar(180)",
+                        "nullable": false,
+                        "default": null,
+                        "extra": "",
+                        "charset": "utf8mb4",
+                        "collation": "utf8mb4_0900_ai_ci",
+                        "generation": ""
+                    },
+                    "amount": {
+                        "definition": "`amount` decimal(12,2) NOT NULL",
+                        "type": "decimal(12,2)",
+                        "nullable": false,
+                        "default": null,
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "sort": {
+                        "definition": "`sort` int NOT NULL DEFAULT '0'",
+                        "type": "int",
+                        "nullable": false,
+                        "default": "0",
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "created_at": {
+                        "definition": "`created_at` datetime NOT NULL",
+                        "type": "datetime",
+                        "nullable": false,
+                        "default": null,
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "updated_at": {
+                        "definition": "`updated_at` datetime NOT NULL",
+                        "type": "datetime",
+                        "nullable": false,
+                        "default": null,
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    }
+                },
+                "indexes": {
+                    "PRIMARY": {
+                        "definition": "PRIMARY KEY (`id`)",
+                        "columns": [
+                            {
+                                "name": "id",
+                                "length": null,
+                                "order": "A",
+                                "expression": null
+                            }
+                        ],
+                        "unique": true,
+                        "type": "BTREE",
+                        "visible": "YES"
+                    },
+                    "idx_expense": {
+                        "definition": "KEY `idx_expense` (`expense_id`)",
+                        "columns": [
+                            {
+                                "name": "expense_id",
                                 "length": null,
                                 "order": "A",
                                 "expression": null
@@ -7814,6 +8047,160 @@
                             },
                             {
                                 "name": "status",
+                                "length": null,
+                                "order": "A",
+                                "expression": null
+                            }
+                        ],
+                        "unique": false,
+                        "type": "BTREE",
+                        "visible": "YES"
+                    }
+                },
+                "constraints": []
+            },
+            "base_visit_participant": {
+                "engine": "InnoDB",
+                "collation": "utf8mb4_0900_ai_ci",
+                "create_sql": "CREATE TABLE `base_visit_participant` (\n  `id` bigint unsigned NOT NULL AUTO_INCREMENT,\n  `uuid` char(36) NOT NULL,\n  `visit_id` bigint unsigned NOT NULL,\n  `account_id` bigint unsigned NOT NULL,\n  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,\n  `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\n  `deleted_at` datetime DEFAULT NULL,\n  PRIMARY KEY (`id`),\n  UNIQUE KEY `uk_visit_participant_uuid` (`uuid`),\n  UNIQUE KEY `uk_visit_participant_active` (`visit_id`,`account_id`),\n  KEY `idx_visit_participant_account` (`account_id`,`deleted_at`,`visit_id`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci",
+                "columns": {
+                    "id": {
+                        "definition": "`id` bigint unsigned NOT NULL AUTO_INCREMENT",
+                        "type": "bigint unsigned",
+                        "nullable": false,
+                        "default": null,
+                        "extra": "auto_increment",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "uuid": {
+                        "definition": "`uuid` char(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL",
+                        "type": "char(36)",
+                        "nullable": false,
+                        "default": null,
+                        "extra": "",
+                        "charset": "utf8mb4",
+                        "collation": "utf8mb4_0900_ai_ci",
+                        "generation": ""
+                    },
+                    "visit_id": {
+                        "definition": "`visit_id` bigint unsigned NOT NULL",
+                        "type": "bigint unsigned",
+                        "nullable": false,
+                        "default": null,
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "account_id": {
+                        "definition": "`account_id` bigint unsigned NOT NULL",
+                        "type": "bigint unsigned",
+                        "nullable": false,
+                        "default": null,
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "created_at": {
+                        "definition": "`created_at` datetime DEFAULT CURRENT_TIMESTAMP",
+                        "type": "datetime",
+                        "nullable": true,
+                        "default": "CURRENT_TIMESTAMP",
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "updated_at": {
+                        "definition": "`updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP",
+                        "type": "datetime",
+                        "nullable": true,
+                        "default": "CURRENT_TIMESTAMP",
+                        "extra": "on update CURRENT_TIMESTAMP",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "deleted_at": {
+                        "definition": "`deleted_at` datetime DEFAULT NULL",
+                        "type": "datetime",
+                        "nullable": true,
+                        "default": null,
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    }
+                },
+                "indexes": {
+                    "PRIMARY": {
+                        "definition": "PRIMARY KEY (`id`)",
+                        "columns": [
+                            {
+                                "name": "id",
+                                "length": null,
+                                "order": "A",
+                                "expression": null
+                            }
+                        ],
+                        "unique": true,
+                        "type": "BTREE",
+                        "visible": "YES"
+                    },
+                    "uk_visit_participant_uuid": {
+                        "definition": "UNIQUE KEY `uk_visit_participant_uuid` (`uuid`)",
+                        "columns": [
+                            {
+                                "name": "uuid",
+                                "length": null,
+                                "order": "A",
+                                "expression": null
+                            }
+                        ],
+                        "unique": true,
+                        "type": "BTREE",
+                        "visible": "YES"
+                    },
+                    "uk_visit_participant_active": {
+                        "definition": "UNIQUE KEY `uk_visit_participant_active` (`visit_id`,`account_id`)",
+                        "columns": [
+                            {
+                                "name": "visit_id",
+                                "length": null,
+                                "order": "A",
+                                "expression": null
+                            },
+                            {
+                                "name": "account_id",
+                                "length": null,
+                                "order": "A",
+                                "expression": null
+                            }
+                        ],
+                        "unique": true,
+                        "type": "BTREE",
+                        "visible": "YES"
+                    },
+                    "idx_visit_participant_account": {
+                        "definition": "KEY `idx_visit_participant_account` (`account_id`,`deleted_at`,`visit_id`)",
+                        "columns": [
+                            {
+                                "name": "account_id",
+                                "length": null,
+                                "order": "A",
+                                "expression": null
+                            },
+                            {
+                                "name": "deleted_at",
+                                "length": null,
+                                "order": "A",
+                                "expression": null
+                            },
+                            {
+                                "name": "visit_id",
                                 "length": null,
                                 "order": "A",
                                 "expression": null
@@ -16195,7 +16582,7 @@
             "file_blob": {
                 "engine": "InnoDB",
                 "collation": "utf8mb4_0900_ai_ci",
-                "create_sql": "CREATE TABLE `file_blob` (\n  `id` bigint unsigned NOT NULL AUTO_INCREMENT,\n  `md5` char(32) NOT NULL,\n  `sha1` char(40) DEFAULT NULL,\n  `path` varchar(500) NOT NULL,\n  `url` varchar(500) NOT NULL,\n  `ext` varchar(20) NOT NULL,\n  `size` bigint unsigned NOT NULL DEFAULT '0',\n  `mime_type` varchar(120) DEFAULT NULL,\n  `disk` varchar(40) DEFAULT 'public',\n  `block` varchar(40) DEFAULT 'b1',\n  `category` varchar(80) DEFAULT NULL,\n  `ref_count` int unsigned DEFAULT '0',\n  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,\n  `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\n  `deleted_at` datetime DEFAULT NULL,\n  PRIMARY KEY (`id`),\n  UNIQUE KEY `uk_md5` (`md5`),\n  KEY `idx_category` (`category`),\n  KEY `idx_ref_count` (`ref_count`),\n  KEY `idx_deleted_at` (`deleted_at`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci",
+                "create_sql": "CREATE TABLE `file_blob` (\n  `id` bigint unsigned NOT NULL AUTO_INCREMENT,\n  `md5` char(32) NOT NULL,\n  `storage_scope` varchar(40) NOT NULL DEFAULT 'general',\n  `sha1` char(40) DEFAULT NULL,\n  `path` varchar(500) NOT NULL,\n  `url` varchar(500) NOT NULL,\n  `ext` varchar(20) NOT NULL,\n  `size` bigint unsigned NOT NULL DEFAULT '0',\n  `mime_type` varchar(120) DEFAULT NULL,\n  `disk` varchar(40) DEFAULT 'public',\n  `block` varchar(40) DEFAULT 'b1',\n  `category` varchar(80) DEFAULT NULL,\n  `ref_count` int unsigned DEFAULT '0',\n  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,\n  `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\n  `deleted_at` datetime DEFAULT NULL,\n  PRIMARY KEY (`id`),\n  UNIQUE KEY `uk_md5_scope` (`md5`,`storage_scope`),\n  KEY `idx_category` (`category`),\n  KEY `idx_ref_count` (`ref_count`),\n  KEY `idx_deleted_at` (`deleted_at`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci",
                 "columns": {
                     "id": {
                         "definition": "`id` bigint unsigned NOT NULL AUTO_INCREMENT",
@@ -16212,6 +16599,16 @@
                         "type": "char(32)",
                         "nullable": false,
                         "default": null,
+                        "extra": "",
+                        "charset": "utf8mb4",
+                        "collation": "utf8mb4_0900_ai_ci",
+                        "generation": ""
+                    },
+                    "storage_scope": {
+                        "definition": "`storage_scope` varchar(40) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL DEFAULT 'general'",
+                        "type": "varchar(40)",
+                        "nullable": false,
+                        "default": "general",
                         "extra": "",
                         "charset": "utf8mb4",
                         "collation": "utf8mb4_0900_ai_ci",
@@ -16363,11 +16760,17 @@
                         "type": "BTREE",
                         "visible": "YES"
                     },
-                    "uk_md5": {
-                        "definition": "UNIQUE KEY `uk_md5` (`md5`)",
+                    "uk_md5_scope": {
+                        "definition": "UNIQUE KEY `uk_md5_scope` (`md5`,`storage_scope`)",
                         "columns": [
                             {
                                 "name": "md5",
+                                "length": null,
+                                "order": "A",
+                                "expression": null
+                            },
+                            {
+                                "name": "storage_scope",
                                 "length": null,
                                 "order": "A",
                                 "expression": null
@@ -29842,6 +30245,154 @@
                 },
                 "constraints": []
             },
+            "personal_signature": {
+                "engine": "InnoDB",
+                "collation": "utf8mb4_0900_ai_ci",
+                "create_sql": "CREATE TABLE `personal_signature` (\n  `id` bigint unsigned NOT NULL AUTO_INCREMENT,\n  `user_id` bigint unsigned NOT NULL,\n  `account_id` bigint unsigned NOT NULL,\n  `file_id` bigint unsigned NOT NULL,\n  `version` int unsigned NOT NULL,\n  `sha256` char(64) NOT NULL,\n  `width` int unsigned NOT NULL,\n  `height` int unsigned NOT NULL,\n  `created_at` datetime NOT NULL,\n  PRIMARY KEY (`id`),\n  UNIQUE KEY `uk_user_version` (`user_id`,`version`),\n  UNIQUE KEY `uk_file` (`file_id`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci",
+                "columns": {
+                    "id": {
+                        "definition": "`id` bigint unsigned NOT NULL AUTO_INCREMENT",
+                        "type": "bigint unsigned",
+                        "nullable": false,
+                        "default": null,
+                        "extra": "auto_increment",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "user_id": {
+                        "definition": "`user_id` bigint unsigned NOT NULL",
+                        "type": "bigint unsigned",
+                        "nullable": false,
+                        "default": null,
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "account_id": {
+                        "definition": "`account_id` bigint unsigned NOT NULL",
+                        "type": "bigint unsigned",
+                        "nullable": false,
+                        "default": null,
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "file_id": {
+                        "definition": "`file_id` bigint unsigned NOT NULL",
+                        "type": "bigint unsigned",
+                        "nullable": false,
+                        "default": null,
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "version": {
+                        "definition": "`version` int unsigned NOT NULL",
+                        "type": "int unsigned",
+                        "nullable": false,
+                        "default": null,
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "sha256": {
+                        "definition": "`sha256` char(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL",
+                        "type": "char(64)",
+                        "nullable": false,
+                        "default": null,
+                        "extra": "",
+                        "charset": "utf8mb4",
+                        "collation": "utf8mb4_0900_ai_ci",
+                        "generation": ""
+                    },
+                    "width": {
+                        "definition": "`width` int unsigned NOT NULL",
+                        "type": "int unsigned",
+                        "nullable": false,
+                        "default": null,
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "height": {
+                        "definition": "`height` int unsigned NOT NULL",
+                        "type": "int unsigned",
+                        "nullable": false,
+                        "default": null,
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "created_at": {
+                        "definition": "`created_at` datetime NOT NULL",
+                        "type": "datetime",
+                        "nullable": false,
+                        "default": null,
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    }
+                },
+                "indexes": {
+                    "PRIMARY": {
+                        "definition": "PRIMARY KEY (`id`)",
+                        "columns": [
+                            {
+                                "name": "id",
+                                "length": null,
+                                "order": "A",
+                                "expression": null
+                            }
+                        ],
+                        "unique": true,
+                        "type": "BTREE",
+                        "visible": "YES"
+                    },
+                    "uk_user_version": {
+                        "definition": "UNIQUE KEY `uk_user_version` (`user_id`,`version`)",
+                        "columns": [
+                            {
+                                "name": "user_id",
+                                "length": null,
+                                "order": "A",
+                                "expression": null
+                            },
+                            {
+                                "name": "version",
+                                "length": null,
+                                "order": "A",
+                                "expression": null
+                            }
+                        ],
+                        "unique": true,
+                        "type": "BTREE",
+                        "visible": "YES"
+                    },
+                    "uk_file": {
+                        "definition": "UNIQUE KEY `uk_file` (`file_id`)",
+                        "columns": [
+                            {
+                                "name": "file_id",
+                                "length": null,
+                                "order": "A",
+                                "expression": null
+                            }
+                        ],
+                        "unique": true,
+                        "type": "BTREE",
+                        "visible": "YES"
+                    }
+                },
+                "constraints": []
+            },
             "plan_recording": {
                 "engine": "InnoDB",
                 "collation": "utf8mb4_0900_ai_ci",
@@ -38840,6 +39391,188 @@
                             },
                             {
                                 "name": "created_at",
+                                "length": null,
+                                "order": "A",
+                                "expression": null
+                            }
+                        ],
+                        "unique": false,
+                        "type": "BTREE",
+                        "visible": "YES"
+                    }
+                },
+                "constraints": []
+            },
+            "signature_session": {
+                "engine": "InnoDB",
+                "collation": "utf8mb4_0900_ai_ci",
+                "create_sql": "CREATE TABLE `signature_session` (\n  `id` bigint unsigned NOT NULL AUTO_INCREMENT,\n  `token_hash` char(64) NOT NULL,\n  `school_id` bigint unsigned NOT NULL,\n  `user_id` bigint unsigned NOT NULL,\n  `account_id` bigint unsigned NOT NULL,\n  `device_jti` varchar(255) NOT NULL,\n  `state` varchar(20) NOT NULL DEFAULT 'pending',\n  `signature_id` bigint unsigned DEFAULT NULL,\n  `expires_at` datetime NOT NULL,\n  `created_at` datetime NOT NULL,\n  `updated_at` datetime NOT NULL,\n  PRIMARY KEY (`id`),\n  UNIQUE KEY `uk_token` (`token_hash`),\n  KEY `idx_owner` (`account_id`,`state`),\n  KEY `idx_expiry` (`expires_at`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci",
+                "columns": {
+                    "id": {
+                        "definition": "`id` bigint unsigned NOT NULL AUTO_INCREMENT",
+                        "type": "bigint unsigned",
+                        "nullable": false,
+                        "default": null,
+                        "extra": "auto_increment",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "token_hash": {
+                        "definition": "`token_hash` char(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL",
+                        "type": "char(64)",
+                        "nullable": false,
+                        "default": null,
+                        "extra": "",
+                        "charset": "utf8mb4",
+                        "collation": "utf8mb4_0900_ai_ci",
+                        "generation": ""
+                    },
+                    "school_id": {
+                        "definition": "`school_id` bigint unsigned NOT NULL",
+                        "type": "bigint unsigned",
+                        "nullable": false,
+                        "default": null,
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "user_id": {
+                        "definition": "`user_id` bigint unsigned NOT NULL",
+                        "type": "bigint unsigned",
+                        "nullable": false,
+                        "default": null,
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "account_id": {
+                        "definition": "`account_id` bigint unsigned NOT NULL",
+                        "type": "bigint unsigned",
+                        "nullable": false,
+                        "default": null,
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "device_jti": {
+                        "definition": "`device_jti` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL",
+                        "type": "varchar(255)",
+                        "nullable": false,
+                        "default": null,
+                        "extra": "",
+                        "charset": "utf8mb4",
+                        "collation": "utf8mb4_0900_ai_ci",
+                        "generation": ""
+                    },
+                    "state": {
+                        "definition": "`state` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL DEFAULT 'pending'",
+                        "type": "varchar(20)",
+                        "nullable": false,
+                        "default": "pending",
+                        "extra": "",
+                        "charset": "utf8mb4",
+                        "collation": "utf8mb4_0900_ai_ci",
+                        "generation": ""
+                    },
+                    "signature_id": {
+                        "definition": "`signature_id` bigint unsigned DEFAULT NULL",
+                        "type": "bigint unsigned",
+                        "nullable": true,
+                        "default": null,
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "expires_at": {
+                        "definition": "`expires_at` datetime NOT NULL",
+                        "type": "datetime",
+                        "nullable": false,
+                        "default": null,
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "created_at": {
+                        "definition": "`created_at` datetime NOT NULL",
+                        "type": "datetime",
+                        "nullable": false,
+                        "default": null,
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "updated_at": {
+                        "definition": "`updated_at` datetime NOT NULL",
+                        "type": "datetime",
+                        "nullable": false,
+                        "default": null,
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    }
+                },
+                "indexes": {
+                    "PRIMARY": {
+                        "definition": "PRIMARY KEY (`id`)",
+                        "columns": [
+                            {
+                                "name": "id",
+                                "length": null,
+                                "order": "A",
+                                "expression": null
+                            }
+                        ],
+                        "unique": true,
+                        "type": "BTREE",
+                        "visible": "YES"
+                    },
+                    "uk_token": {
+                        "definition": "UNIQUE KEY `uk_token` (`token_hash`)",
+                        "columns": [
+                            {
+                                "name": "token_hash",
+                                "length": null,
+                                "order": "A",
+                                "expression": null
+                            }
+                        ],
+                        "unique": true,
+                        "type": "BTREE",
+                        "visible": "YES"
+                    },
+                    "idx_owner": {
+                        "definition": "KEY `idx_owner` (`account_id`,`state`)",
+                        "columns": [
+                            {
+                                "name": "account_id",
+                                "length": null,
+                                "order": "A",
+                                "expression": null
+                            },
+                            {
+                                "name": "state",
+                                "length": null,
+                                "order": "A",
+                                "expression": null
+                            }
+                        ],
+                        "unique": false,
+                        "type": "BTREE",
+                        "visible": "YES"
+                    },
+                    "idx_expiry": {
+                        "definition": "KEY `idx_expiry` (`expires_at`)",
+                        "columns": [
+                            {
+                                "name": "expires_at",
                                 "length": null,
                                 "order": "A",
                                 "expression": null
@@ -50126,6 +50859,182 @@
                 },
                 "constraints": []
             },
+            "wallpaper": {
+                "engine": "InnoDB",
+                "collation": "utf8mb4_0900_ai_ci",
+                "create_sql": "CREATE TABLE `wallpaper` (\n  `id` bigint unsigned NOT NULL AUTO_INCREMENT,\n  `file_id` bigint unsigned NOT NULL,\n  `owner_account_id` bigint unsigned NOT NULL,\n  `name` varchar(255) NOT NULL,\n  `is_shared` tinyint(1) NOT NULL DEFAULT '0',\n  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,\n  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,\n  `deleted_at` datetime DEFAULT NULL,\n  PRIMARY KEY (`id`),\n  UNIQUE KEY `uk_file_owner` (`file_id`,`owner_account_id`),\n  KEY `idx_owner` (`owner_account_id`,`deleted_at`,`id`),\n  KEY `idx_shared` (`is_shared`,`deleted_at`,`id`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci",
+                "columns": {
+                    "id": {
+                        "definition": "`id` bigint unsigned NOT NULL AUTO_INCREMENT",
+                        "type": "bigint unsigned",
+                        "nullable": false,
+                        "default": null,
+                        "extra": "auto_increment",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "file_id": {
+                        "definition": "`file_id` bigint unsigned NOT NULL",
+                        "type": "bigint unsigned",
+                        "nullable": false,
+                        "default": null,
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "owner_account_id": {
+                        "definition": "`owner_account_id` bigint unsigned NOT NULL",
+                        "type": "bigint unsigned",
+                        "nullable": false,
+                        "default": null,
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "name": {
+                        "definition": "`name` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL",
+                        "type": "varchar(255)",
+                        "nullable": false,
+                        "default": null,
+                        "extra": "",
+                        "charset": "utf8mb4",
+                        "collation": "utf8mb4_0900_ai_ci",
+                        "generation": ""
+                    },
+                    "is_shared": {
+                        "definition": "`is_shared` tinyint(1) NOT NULL DEFAULT '0'",
+                        "type": "tinyint",
+                        "nullable": false,
+                        "default": "0",
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "created_at": {
+                        "definition": "`created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP",
+                        "type": "datetime",
+                        "nullable": false,
+                        "default": "CURRENT_TIMESTAMP",
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "updated_at": {
+                        "definition": "`updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP",
+                        "type": "datetime",
+                        "nullable": false,
+                        "default": "CURRENT_TIMESTAMP",
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "deleted_at": {
+                        "definition": "`deleted_at` datetime DEFAULT NULL",
+                        "type": "datetime",
+                        "nullable": true,
+                        "default": null,
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    }
+                },
+                "indexes": {
+                    "PRIMARY": {
+                        "definition": "PRIMARY KEY (`id`)",
+                        "columns": [
+                            {
+                                "name": "id",
+                                "length": null,
+                                "order": "A",
+                                "expression": null
+                            }
+                        ],
+                        "unique": true,
+                        "type": "BTREE",
+                        "visible": "YES"
+                    },
+                    "uk_file_owner": {
+                        "definition": "UNIQUE KEY `uk_file_owner` (`file_id`,`owner_account_id`)",
+                        "columns": [
+                            {
+                                "name": "file_id",
+                                "length": null,
+                                "order": "A",
+                                "expression": null
+                            },
+                            {
+                                "name": "owner_account_id",
+                                "length": null,
+                                "order": "A",
+                                "expression": null
+                            }
+                        ],
+                        "unique": true,
+                        "type": "BTREE",
+                        "visible": "YES"
+                    },
+                    "idx_owner": {
+                        "definition": "KEY `idx_owner` (`owner_account_id`,`deleted_at`,`id`)",
+                        "columns": [
+                            {
+                                "name": "owner_account_id",
+                                "length": null,
+                                "order": "A",
+                                "expression": null
+                            },
+                            {
+                                "name": "deleted_at",
+                                "length": null,
+                                "order": "A",
+                                "expression": null
+                            },
+                            {
+                                "name": "id",
+                                "length": null,
+                                "order": "A",
+                                "expression": null
+                            }
+                        ],
+                        "unique": false,
+                        "type": "BTREE",
+                        "visible": "YES"
+                    },
+                    "idx_shared": {
+                        "definition": "KEY `idx_shared` (`is_shared`,`deleted_at`,`id`)",
+                        "columns": [
+                            {
+                                "name": "is_shared",
+                                "length": null,
+                                "order": "A",
+                                "expression": null
+                            },
+                            {
+                                "name": "deleted_at",
+                                "length": null,
+                                "order": "A",
+                                "expression": null
+                            },
+                            {
+                                "name": "id",
+                                "length": null,
+                                "order": "A",
+                                "expression": null
+                            }
+                        ],
+                        "unique": false,
+                        "type": "BTREE",
+                        "visible": "YES"
+                    }
+                },
+                "constraints": []
+            },
             "wechat_menu_config": {
                 "engine": "InnoDB",
                 "collation": "utf8mb4_0900_ai_ci",
@@ -50254,10 +51163,10 @@
                 },
                 "constraints": []
             },
-            "base_visit_participant": {
+            "workflow_definition": {
                 "engine": "InnoDB",
                 "collation": "utf8mb4_0900_ai_ci",
-                "create_sql": "CREATE TABLE `base_visit_participant` (\n  `id` bigint unsigned NOT NULL AUTO_INCREMENT,\n  `uuid` char(36) NOT NULL,\n  `visit_id` bigint unsigned NOT NULL,\n  `account_id` bigint unsigned NOT NULL,\n  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,\n  `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\n  `deleted_at` datetime DEFAULT NULL,\n  PRIMARY KEY (`id`),\n  UNIQUE KEY `uk_visit_participant_uuid` (`uuid`),\n  UNIQUE KEY `uk_visit_participant_active` (`visit_id`,`account_id`),\n  KEY `idx_visit_participant_account` (`account_id`,`deleted_at`,`visit_id`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci",
+                "create_sql": "CREATE TABLE `workflow_definition` (\n  `id` bigint unsigned NOT NULL AUTO_INCREMENT,\n  `entity_type` varchar(80) NOT NULL,\n  `dep_id` bigint unsigned NOT NULL DEFAULT '0',\n  `name` varchar(180) NOT NULL,\n  `current_version_id` bigint unsigned DEFAULT NULL,\n  `created_by` bigint unsigned NOT NULL,\n  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,\n  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,\n  PRIMARY KEY (`id`),\n  UNIQUE KEY `uk_scope` (`entity_type`,`dep_id`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci",
                 "columns": {
                     "id": {
                         "definition": "`id` bigint unsigned NOT NULL AUTO_INCREMENT",
@@ -50269,9 +51178,9 @@
                         "collation": null,
                         "generation": ""
                     },
-                    "uuid": {
-                        "definition": "`uuid` char(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL",
-                        "type": "char(36)",
+                    "entity_type": {
+                        "definition": "`entity_type` varchar(80) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL",
+                        "type": "varchar(80)",
                         "nullable": false,
                         "default": null,
                         "extra": "",
@@ -50279,18 +51188,38 @@
                         "collation": "utf8mb4_0900_ai_ci",
                         "generation": ""
                     },
-                    "visit_id": {
-                        "definition": "`visit_id` bigint unsigned NOT NULL",
+                    "dep_id": {
+                        "definition": "`dep_id` bigint unsigned NOT NULL DEFAULT '0'",
                         "type": "bigint unsigned",
                         "nullable": false,
+                        "default": "0",
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "name": {
+                        "definition": "`name` varchar(180) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL",
+                        "type": "varchar(180)",
+                        "nullable": false,
+                        "default": null,
+                        "extra": "",
+                        "charset": "utf8mb4",
+                        "collation": "utf8mb4_0900_ai_ci",
+                        "generation": ""
+                    },
+                    "current_version_id": {
+                        "definition": "`current_version_id` bigint unsigned DEFAULT NULL",
+                        "type": "bigint unsigned",
+                        "nullable": true,
                         "default": null,
                         "extra": "",
                         "charset": null,
                         "collation": null,
                         "generation": ""
                     },
-                    "account_id": {
-                        "definition": "`account_id` bigint unsigned NOT NULL",
+                    "created_by": {
+                        "definition": "`created_by` bigint unsigned NOT NULL",
                         "type": "bigint unsigned",
                         "nullable": false,
                         "default": null,
@@ -50300,9 +51229,9 @@
                         "generation": ""
                     },
                     "created_at": {
-                        "definition": "`created_at` datetime DEFAULT CURRENT_TIMESTAMP",
+                        "definition": "`created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP",
                         "type": "datetime",
-                        "nullable": true,
+                        "nullable": false,
                         "default": "CURRENT_TIMESTAMP",
                         "extra": "",
                         "charset": null,
@@ -50310,20 +51239,10 @@
                         "generation": ""
                     },
                     "updated_at": {
-                        "definition": "`updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP",
+                        "definition": "`updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP",
                         "type": "datetime",
-                        "nullable": true,
+                        "nullable": false,
                         "default": "CURRENT_TIMESTAMP",
-                        "extra": "on update CURRENT_TIMESTAMP",
-                        "charset": null,
-                        "collation": null,
-                        "generation": ""
-                    },
-                    "deleted_at": {
-                        "definition": "`deleted_at` datetime DEFAULT NULL",
-                        "type": "datetime",
-                        "nullable": true,
-                        "default": null,
                         "extra": "",
                         "charset": null,
                         "collation": null,
@@ -50345,11 +51264,181 @@
                         "type": "BTREE",
                         "visible": "YES"
                     },
-                    "uk_visit_participant_uuid": {
-                        "definition": "UNIQUE KEY `uk_visit_participant_uuid` (`uuid`)",
+                    "uk_scope": {
+                        "definition": "UNIQUE KEY `uk_scope` (`entity_type`,`dep_id`)",
                         "columns": [
                             {
-                                "name": "uuid",
+                                "name": "entity_type",
+                                "length": null,
+                                "order": "A",
+                                "expression": null
+                            },
+                            {
+                                "name": "dep_id",
+                                "length": null,
+                                "order": "A",
+                                "expression": null
+                            }
+                        ],
+                        "unique": true,
+                        "type": "BTREE",
+                        "visible": "YES"
+                    }
+                },
+                "constraints": []
+            },
+            "workflow_history": {
+                "engine": "InnoDB",
+                "collation": "utf8mb4_0900_ai_ci",
+                "create_sql": "CREATE TABLE `workflow_history` (\n  `id` bigint unsigned NOT NULL AUTO_INCREMENT,\n  `instance_id` bigint unsigned NOT NULL,\n  `position` int unsigned NOT NULL DEFAULT '0',\n  `actor_id` bigint unsigned NOT NULL,\n  `action` varchar(30) NOT NULL,\n  `from_status` varchar(20) NOT NULL,\n  `to_status` varchar(20) NOT NULL,\n  `opinion` text NOT NULL,\n  `signature_json` json DEFAULT NULL,\n  `idempotency_key` char(64) NOT NULL,\n  `request_hash` char(64) NOT NULL,\n  `result_json` json NOT NULL,\n  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,\n  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,\n  PRIMARY KEY (`id`),\n  UNIQUE KEY `uk_operation` (`idempotency_key`),\n  KEY `idx_instance` (`instance_id`,`id`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci",
+                "columns": {
+                    "id": {
+                        "definition": "`id` bigint unsigned NOT NULL AUTO_INCREMENT",
+                        "type": "bigint unsigned",
+                        "nullable": false,
+                        "default": null,
+                        "extra": "auto_increment",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "instance_id": {
+                        "definition": "`instance_id` bigint unsigned NOT NULL",
+                        "type": "bigint unsigned",
+                        "nullable": false,
+                        "default": null,
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "position": {
+                        "definition": "`position` int unsigned NOT NULL DEFAULT '0'",
+                        "type": "int unsigned",
+                        "nullable": false,
+                        "default": "0",
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "actor_id": {
+                        "definition": "`actor_id` bigint unsigned NOT NULL",
+                        "type": "bigint unsigned",
+                        "nullable": false,
+                        "default": null,
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "action": {
+                        "definition": "`action` varchar(30) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL",
+                        "type": "varchar(30)",
+                        "nullable": false,
+                        "default": null,
+                        "extra": "",
+                        "charset": "utf8mb4",
+                        "collation": "utf8mb4_0900_ai_ci",
+                        "generation": ""
+                    },
+                    "from_status": {
+                        "definition": "`from_status` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL",
+                        "type": "varchar(20)",
+                        "nullable": false,
+                        "default": null,
+                        "extra": "",
+                        "charset": "utf8mb4",
+                        "collation": "utf8mb4_0900_ai_ci",
+                        "generation": ""
+                    },
+                    "to_status": {
+                        "definition": "`to_status` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL",
+                        "type": "varchar(20)",
+                        "nullable": false,
+                        "default": null,
+                        "extra": "",
+                        "charset": "utf8mb4",
+                        "collation": "utf8mb4_0900_ai_ci",
+                        "generation": ""
+                    },
+                    "opinion": {
+                        "definition": "`opinion` text CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL",
+                        "type": "text",
+                        "nullable": false,
+                        "default": null,
+                        "extra": "",
+                        "charset": "utf8mb4",
+                        "collation": "utf8mb4_0900_ai_ci",
+                        "generation": ""
+                    },
+                    "signature_json": {
+                        "definition": "`signature_json` json DEFAULT NULL",
+                        "type": "json",
+                        "nullable": true,
+                        "default": null,
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "idempotency_key": {
+                        "definition": "`idempotency_key` char(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL",
+                        "type": "char(64)",
+                        "nullable": false,
+                        "default": null,
+                        "extra": "",
+                        "charset": "utf8mb4",
+                        "collation": "utf8mb4_0900_ai_ci",
+                        "generation": ""
+                    },
+                    "request_hash": {
+                        "definition": "`request_hash` char(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL",
+                        "type": "char(64)",
+                        "nullable": false,
+                        "default": null,
+                        "extra": "",
+                        "charset": "utf8mb4",
+                        "collation": "utf8mb4_0900_ai_ci",
+                        "generation": ""
+                    },
+                    "result_json": {
+                        "definition": "`result_json` json NOT NULL",
+                        "type": "json",
+                        "nullable": false,
+                        "default": null,
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "created_at": {
+                        "definition": "`created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP",
+                        "type": "datetime",
+                        "nullable": false,
+                        "default": "CURRENT_TIMESTAMP",
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "updated_at": {
+                        "definition": "`updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP",
+                        "type": "datetime",
+                        "nullable": false,
+                        "default": "CURRENT_TIMESTAMP",
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    }
+                },
+                "indexes": {
+                    "PRIMARY": {
+                        "definition": "PRIMARY KEY (`id`)",
+                        "columns": [
+                            {
+                                "name": "id",
                                 "length": null,
                                 "order": "A",
                                 "expression": null
@@ -50359,17 +51448,11 @@
                         "type": "BTREE",
                         "visible": "YES"
                     },
-                    "uk_visit_participant_active": {
-                        "definition": "UNIQUE KEY `uk_visit_participant_active` (`visit_id`,`account_id`)",
+                    "uk_operation": {
+                        "definition": "UNIQUE KEY `uk_operation` (`idempotency_key`)",
                         "columns": [
                             {
-                                "name": "visit_id",
-                                "length": null,
-                                "order": "A",
-                                "expression": null
-                            },
-                            {
-                                "name": "account_id",
+                                "name": "idempotency_key",
                                 "length": null,
                                 "order": "A",
                                 "expression": null
@@ -50379,29 +51462,885 @@
                         "type": "BTREE",
                         "visible": "YES"
                     },
-                    "idx_visit_participant_account": {
-                        "definition": "KEY `idx_visit_participant_account` (`account_id`,`deleted_at`,`visit_id`)",
+                    "idx_instance": {
+                        "definition": "KEY `idx_instance` (`instance_id`,`id`)",
                         "columns": [
                             {
-                                "name": "account_id",
+                                "name": "instance_id",
                                 "length": null,
                                 "order": "A",
                                 "expression": null
                             },
                             {
-                                "name": "deleted_at",
-                                "length": null,
-                                "order": "A",
-                                "expression": null
-                            },
-                            {
-                                "name": "visit_id",
+                                "name": "id",
                                 "length": null,
                                 "order": "A",
                                 "expression": null
                             }
                         ],
                         "unique": false,
+                        "type": "BTREE",
+                        "visible": "YES"
+                    }
+                },
+                "constraints": []
+            },
+            "workflow_instance": {
+                "engine": "InnoDB",
+                "collation": "utf8mb4_0900_ai_ci",
+                "create_sql": "CREATE TABLE `workflow_instance` (\n  `id` bigint unsigned NOT NULL AUTO_INCREMENT,\n  `entity_type` varchar(80) NOT NULL,\n  `entity_id` bigint unsigned NOT NULL,\n  `round` int unsigned NOT NULL,\n  `definition_version_id` bigint unsigned NOT NULL,\n  `applicant_id` bigint unsigned NOT NULL,\n  `status` varchar(20) NOT NULL,\n  `active_position` int unsigned NOT NULL DEFAULT '0',\n  `revision` bigint unsigned NOT NULL DEFAULT '1',\n  `request_key` char(64) NOT NULL,\n  `snapshot_json` json NOT NULL,\n  `nodes_json` json NOT NULL,\n  `finished_at` datetime DEFAULT NULL,\n  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,\n  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,\n  PRIMARY KEY (`id`),\n  UNIQUE KEY `uk_round` (`entity_type`,`entity_id`,`round`),\n  UNIQUE KEY `uk_request` (`request_key`),\n  KEY `idx_status` (`status`,`applicant_id`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci",
+                "columns": {
+                    "id": {
+                        "definition": "`id` bigint unsigned NOT NULL AUTO_INCREMENT",
+                        "type": "bigint unsigned",
+                        "nullable": false,
+                        "default": null,
+                        "extra": "auto_increment",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "entity_type": {
+                        "definition": "`entity_type` varchar(80) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL",
+                        "type": "varchar(80)",
+                        "nullable": false,
+                        "default": null,
+                        "extra": "",
+                        "charset": "utf8mb4",
+                        "collation": "utf8mb4_0900_ai_ci",
+                        "generation": ""
+                    },
+                    "entity_id": {
+                        "definition": "`entity_id` bigint unsigned NOT NULL",
+                        "type": "bigint unsigned",
+                        "nullable": false,
+                        "default": null,
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "round": {
+                        "definition": "`round` int unsigned NOT NULL",
+                        "type": "int unsigned",
+                        "nullable": false,
+                        "default": null,
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "definition_version_id": {
+                        "definition": "`definition_version_id` bigint unsigned NOT NULL",
+                        "type": "bigint unsigned",
+                        "nullable": false,
+                        "default": null,
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "applicant_id": {
+                        "definition": "`applicant_id` bigint unsigned NOT NULL",
+                        "type": "bigint unsigned",
+                        "nullable": false,
+                        "default": null,
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "status": {
+                        "definition": "`status` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL",
+                        "type": "varchar(20)",
+                        "nullable": false,
+                        "default": null,
+                        "extra": "",
+                        "charset": "utf8mb4",
+                        "collation": "utf8mb4_0900_ai_ci",
+                        "generation": ""
+                    },
+                    "active_position": {
+                        "definition": "`active_position` int unsigned NOT NULL DEFAULT '0'",
+                        "type": "int unsigned",
+                        "nullable": false,
+                        "default": "0",
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "revision": {
+                        "definition": "`revision` bigint unsigned NOT NULL DEFAULT '1'",
+                        "type": "bigint unsigned",
+                        "nullable": false,
+                        "default": "1",
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "request_key": {
+                        "definition": "`request_key` char(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL",
+                        "type": "char(64)",
+                        "nullable": false,
+                        "default": null,
+                        "extra": "",
+                        "charset": "utf8mb4",
+                        "collation": "utf8mb4_0900_ai_ci",
+                        "generation": ""
+                    },
+                    "snapshot_json": {
+                        "definition": "`snapshot_json` json NOT NULL",
+                        "type": "json",
+                        "nullable": false,
+                        "default": null,
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "nodes_json": {
+                        "definition": "`nodes_json` json NOT NULL",
+                        "type": "json",
+                        "nullable": false,
+                        "default": null,
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "finished_at": {
+                        "definition": "`finished_at` datetime DEFAULT NULL",
+                        "type": "datetime",
+                        "nullable": true,
+                        "default": null,
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "created_at": {
+                        "definition": "`created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP",
+                        "type": "datetime",
+                        "nullable": false,
+                        "default": "CURRENT_TIMESTAMP",
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "updated_at": {
+                        "definition": "`updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP",
+                        "type": "datetime",
+                        "nullable": false,
+                        "default": "CURRENT_TIMESTAMP",
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    }
+                },
+                "indexes": {
+                    "PRIMARY": {
+                        "definition": "PRIMARY KEY (`id`)",
+                        "columns": [
+                            {
+                                "name": "id",
+                                "length": null,
+                                "order": "A",
+                                "expression": null
+                            }
+                        ],
+                        "unique": true,
+                        "type": "BTREE",
+                        "visible": "YES"
+                    },
+                    "uk_round": {
+                        "definition": "UNIQUE KEY `uk_round` (`entity_type`,`entity_id`,`round`)",
+                        "columns": [
+                            {
+                                "name": "entity_type",
+                                "length": null,
+                                "order": "A",
+                                "expression": null
+                            },
+                            {
+                                "name": "entity_id",
+                                "length": null,
+                                "order": "A",
+                                "expression": null
+                            },
+                            {
+                                "name": "round",
+                                "length": null,
+                                "order": "A",
+                                "expression": null
+                            }
+                        ],
+                        "unique": true,
+                        "type": "BTREE",
+                        "visible": "YES"
+                    },
+                    "uk_request": {
+                        "definition": "UNIQUE KEY `uk_request` (`request_key`)",
+                        "columns": [
+                            {
+                                "name": "request_key",
+                                "length": null,
+                                "order": "A",
+                                "expression": null
+                            }
+                        ],
+                        "unique": true,
+                        "type": "BTREE",
+                        "visible": "YES"
+                    },
+                    "idx_status": {
+                        "definition": "KEY `idx_status` (`status`,`applicant_id`)",
+                        "columns": [
+                            {
+                                "name": "status",
+                                "length": null,
+                                "order": "A",
+                                "expression": null
+                            },
+                            {
+                                "name": "applicant_id",
+                                "length": null,
+                                "order": "A",
+                                "expression": null
+                            }
+                        ],
+                        "unique": false,
+                        "type": "BTREE",
+                        "visible": "YES"
+                    }
+                },
+                "constraints": []
+            },
+            "workflow_node": {
+                "engine": "InnoDB",
+                "collation": "utf8mb4_0900_ai_ci",
+                "create_sql": "CREATE TABLE `workflow_node` (\n  `id` bigint unsigned NOT NULL AUTO_INCREMENT,\n  `version_id` bigint unsigned NOT NULL,\n  `position` int unsigned NOT NULL,\n  `config_json` json NOT NULL,\n  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,\n  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,\n  PRIMARY KEY (`id`),\n  UNIQUE KEY `uk_position` (`version_id`,`position`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci",
+                "columns": {
+                    "id": {
+                        "definition": "`id` bigint unsigned NOT NULL AUTO_INCREMENT",
+                        "type": "bigint unsigned",
+                        "nullable": false,
+                        "default": null,
+                        "extra": "auto_increment",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "version_id": {
+                        "definition": "`version_id` bigint unsigned NOT NULL",
+                        "type": "bigint unsigned",
+                        "nullable": false,
+                        "default": null,
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "position": {
+                        "definition": "`position` int unsigned NOT NULL",
+                        "type": "int unsigned",
+                        "nullable": false,
+                        "default": null,
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "config_json": {
+                        "definition": "`config_json` json NOT NULL",
+                        "type": "json",
+                        "nullable": false,
+                        "default": null,
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "created_at": {
+                        "definition": "`created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP",
+                        "type": "datetime",
+                        "nullable": false,
+                        "default": "CURRENT_TIMESTAMP",
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "updated_at": {
+                        "definition": "`updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP",
+                        "type": "datetime",
+                        "nullable": false,
+                        "default": "CURRENT_TIMESTAMP",
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    }
+                },
+                "indexes": {
+                    "PRIMARY": {
+                        "definition": "PRIMARY KEY (`id`)",
+                        "columns": [
+                            {
+                                "name": "id",
+                                "length": null,
+                                "order": "A",
+                                "expression": null
+                            }
+                        ],
+                        "unique": true,
+                        "type": "BTREE",
+                        "visible": "YES"
+                    },
+                    "uk_position": {
+                        "definition": "UNIQUE KEY `uk_position` (`version_id`,`position`)",
+                        "columns": [
+                            {
+                                "name": "version_id",
+                                "length": null,
+                                "order": "A",
+                                "expression": null
+                            },
+                            {
+                                "name": "position",
+                                "length": null,
+                                "order": "A",
+                                "expression": null
+                            }
+                        ],
+                        "unique": true,
+                        "type": "BTREE",
+                        "visible": "YES"
+                    }
+                },
+                "constraints": []
+            },
+            "workflow_outbox": {
+                "engine": "InnoDB",
+                "collation": "utf8mb4_0900_ai_ci",
+                "create_sql": "CREATE TABLE `workflow_outbox` (\n  `id` bigint unsigned NOT NULL AUTO_INCREMENT,\n  `message_id` bigint unsigned DEFAULT NULL,\n  `instance_id` bigint unsigned NOT NULL,\n  `position` int unsigned NOT NULL,\n  `recipient_id` bigint unsigned NOT NULL,\n  `channel` varchar(20) NOT NULL,\n  `template` varchar(120) NOT NULL,\n  `payload_json` json NOT NULL,\n  `dedupe_key` char(64) NOT NULL,\n  `status` varchar(20) NOT NULL DEFAULT 'pending',\n  `attempts` int unsigned NOT NULL DEFAULT '0',\n  `available_at` datetime NOT NULL,\n  `locked_until` datetime DEFAULT NULL,\n  `claim_token` char(32) DEFAULT NULL,\n  `last_error` text,\n  `sent_at` datetime DEFAULT NULL,\n  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,\n  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,\n  PRIMARY KEY (`id`),\n  UNIQUE KEY `uk_dedupe` (`dedupe_key`),\n  KEY `idx_delivery` (`status`,`available_at`,`locked_until`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci",
+                "columns": {
+                    "id": {
+                        "definition": "`id` bigint unsigned NOT NULL AUTO_INCREMENT",
+                        "type": "bigint unsigned",
+                        "nullable": false,
+                        "default": null,
+                        "extra": "auto_increment",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "message_id": {
+                        "definition": "`message_id` bigint unsigned DEFAULT NULL",
+                        "type": "bigint unsigned",
+                        "nullable": true,
+                        "default": null,
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "instance_id": {
+                        "definition": "`instance_id` bigint unsigned NOT NULL",
+                        "type": "bigint unsigned",
+                        "nullable": false,
+                        "default": null,
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "position": {
+                        "definition": "`position` int unsigned NOT NULL",
+                        "type": "int unsigned",
+                        "nullable": false,
+                        "default": null,
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "recipient_id": {
+                        "definition": "`recipient_id` bigint unsigned NOT NULL",
+                        "type": "bigint unsigned",
+                        "nullable": false,
+                        "default": null,
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "channel": {
+                        "definition": "`channel` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL",
+                        "type": "varchar(20)",
+                        "nullable": false,
+                        "default": null,
+                        "extra": "",
+                        "charset": "utf8mb4",
+                        "collation": "utf8mb4_0900_ai_ci",
+                        "generation": ""
+                    },
+                    "template": {
+                        "definition": "`template` varchar(120) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL",
+                        "type": "varchar(120)",
+                        "nullable": false,
+                        "default": null,
+                        "extra": "",
+                        "charset": "utf8mb4",
+                        "collation": "utf8mb4_0900_ai_ci",
+                        "generation": ""
+                    },
+                    "payload_json": {
+                        "definition": "`payload_json` json NOT NULL",
+                        "type": "json",
+                        "nullable": false,
+                        "default": null,
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "dedupe_key": {
+                        "definition": "`dedupe_key` char(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL",
+                        "type": "char(64)",
+                        "nullable": false,
+                        "default": null,
+                        "extra": "",
+                        "charset": "utf8mb4",
+                        "collation": "utf8mb4_0900_ai_ci",
+                        "generation": ""
+                    },
+                    "status": {
+                        "definition": "`status` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL DEFAULT 'pending'",
+                        "type": "varchar(20)",
+                        "nullable": false,
+                        "default": "pending",
+                        "extra": "",
+                        "charset": "utf8mb4",
+                        "collation": "utf8mb4_0900_ai_ci",
+                        "generation": ""
+                    },
+                    "attempts": {
+                        "definition": "`attempts` int unsigned NOT NULL DEFAULT '0'",
+                        "type": "int unsigned",
+                        "nullable": false,
+                        "default": "0",
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "available_at": {
+                        "definition": "`available_at` datetime NOT NULL",
+                        "type": "datetime",
+                        "nullable": false,
+                        "default": null,
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "locked_until": {
+                        "definition": "`locked_until` datetime DEFAULT NULL",
+                        "type": "datetime",
+                        "nullable": true,
+                        "default": null,
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "claim_token": {
+                        "definition": "`claim_token` char(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci DEFAULT NULL",
+                        "type": "char(32)",
+                        "nullable": true,
+                        "default": null,
+                        "extra": "",
+                        "charset": "utf8mb4",
+                        "collation": "utf8mb4_0900_ai_ci",
+                        "generation": ""
+                    },
+                    "last_error": {
+                        "definition": "`last_error` text CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci",
+                        "type": "text",
+                        "nullable": true,
+                        "default": null,
+                        "extra": "",
+                        "charset": "utf8mb4",
+                        "collation": "utf8mb4_0900_ai_ci",
+                        "generation": ""
+                    },
+                    "sent_at": {
+                        "definition": "`sent_at` datetime DEFAULT NULL",
+                        "type": "datetime",
+                        "nullable": true,
+                        "default": null,
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "created_at": {
+                        "definition": "`created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP",
+                        "type": "datetime",
+                        "nullable": false,
+                        "default": "CURRENT_TIMESTAMP",
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "updated_at": {
+                        "definition": "`updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP",
+                        "type": "datetime",
+                        "nullable": false,
+                        "default": "CURRENT_TIMESTAMP",
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    }
+                },
+                "indexes": {
+                    "PRIMARY": {
+                        "definition": "PRIMARY KEY (`id`)",
+                        "columns": [
+                            {
+                                "name": "id",
+                                "length": null,
+                                "order": "A",
+                                "expression": null
+                            }
+                        ],
+                        "unique": true,
+                        "type": "BTREE",
+                        "visible": "YES"
+                    },
+                    "uk_dedupe": {
+                        "definition": "UNIQUE KEY `uk_dedupe` (`dedupe_key`)",
+                        "columns": [
+                            {
+                                "name": "dedupe_key",
+                                "length": null,
+                                "order": "A",
+                                "expression": null
+                            }
+                        ],
+                        "unique": true,
+                        "type": "BTREE",
+                        "visible": "YES"
+                    },
+                    "idx_delivery": {
+                        "definition": "KEY `idx_delivery` (`status`,`available_at`,`locked_until`)",
+                        "columns": [
+                            {
+                                "name": "status",
+                                "length": null,
+                                "order": "A",
+                                "expression": null
+                            },
+                            {
+                                "name": "available_at",
+                                "length": null,
+                                "order": "A",
+                                "expression": null
+                            },
+                            {
+                                "name": "locked_until",
+                                "length": null,
+                                "order": "A",
+                                "expression": null
+                            }
+                        ],
+                        "unique": false,
+                        "type": "BTREE",
+                        "visible": "YES"
+                    }
+                },
+                "constraints": []
+            },
+            "workflow_task": {
+                "engine": "InnoDB",
+                "collation": "utf8mb4_0900_ai_ci",
+                "create_sql": "CREATE TABLE `workflow_task` (\n  `id` bigint unsigned NOT NULL AUTO_INCREMENT,\n  `instance_id` bigint unsigned NOT NULL,\n  `position` int unsigned NOT NULL,\n  `account_id` bigint unsigned NOT NULL,\n  `status` varchar(20) NOT NULL,\n  `kind` varchar(20) NOT NULL,\n  `handled_at` datetime DEFAULT NULL,\n  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,\n  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,\n  PRIMARY KEY (`id`),\n  UNIQUE KEY `uk_assignee` (`instance_id`,`position`,`account_id`),\n  KEY `idx_inbox` (`account_id`,`status`,`kind`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci",
+                "columns": {
+                    "id": {
+                        "definition": "`id` bigint unsigned NOT NULL AUTO_INCREMENT",
+                        "type": "bigint unsigned",
+                        "nullable": false,
+                        "default": null,
+                        "extra": "auto_increment",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "instance_id": {
+                        "definition": "`instance_id` bigint unsigned NOT NULL",
+                        "type": "bigint unsigned",
+                        "nullable": false,
+                        "default": null,
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "position": {
+                        "definition": "`position` int unsigned NOT NULL",
+                        "type": "int unsigned",
+                        "nullable": false,
+                        "default": null,
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "account_id": {
+                        "definition": "`account_id` bigint unsigned NOT NULL",
+                        "type": "bigint unsigned",
+                        "nullable": false,
+                        "default": null,
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "status": {
+                        "definition": "`status` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL",
+                        "type": "varchar(20)",
+                        "nullable": false,
+                        "default": null,
+                        "extra": "",
+                        "charset": "utf8mb4",
+                        "collation": "utf8mb4_0900_ai_ci",
+                        "generation": ""
+                    },
+                    "kind": {
+                        "definition": "`kind` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL",
+                        "type": "varchar(20)",
+                        "nullable": false,
+                        "default": null,
+                        "extra": "",
+                        "charset": "utf8mb4",
+                        "collation": "utf8mb4_0900_ai_ci",
+                        "generation": ""
+                    },
+                    "handled_at": {
+                        "definition": "`handled_at` datetime DEFAULT NULL",
+                        "type": "datetime",
+                        "nullable": true,
+                        "default": null,
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "created_at": {
+                        "definition": "`created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP",
+                        "type": "datetime",
+                        "nullable": false,
+                        "default": "CURRENT_TIMESTAMP",
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "updated_at": {
+                        "definition": "`updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP",
+                        "type": "datetime",
+                        "nullable": false,
+                        "default": "CURRENT_TIMESTAMP",
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    }
+                },
+                "indexes": {
+                    "PRIMARY": {
+                        "definition": "PRIMARY KEY (`id`)",
+                        "columns": [
+                            {
+                                "name": "id",
+                                "length": null,
+                                "order": "A",
+                                "expression": null
+                            }
+                        ],
+                        "unique": true,
+                        "type": "BTREE",
+                        "visible": "YES"
+                    },
+                    "uk_assignee": {
+                        "definition": "UNIQUE KEY `uk_assignee` (`instance_id`,`position`,`account_id`)",
+                        "columns": [
+                            {
+                                "name": "instance_id",
+                                "length": null,
+                                "order": "A",
+                                "expression": null
+                            },
+                            {
+                                "name": "position",
+                                "length": null,
+                                "order": "A",
+                                "expression": null
+                            },
+                            {
+                                "name": "account_id",
+                                "length": null,
+                                "order": "A",
+                                "expression": null
+                            }
+                        ],
+                        "unique": true,
+                        "type": "BTREE",
+                        "visible": "YES"
+                    },
+                    "idx_inbox": {
+                        "definition": "KEY `idx_inbox` (`account_id`,`status`,`kind`)",
+                        "columns": [
+                            {
+                                "name": "account_id",
+                                "length": null,
+                                "order": "A",
+                                "expression": null
+                            },
+                            {
+                                "name": "status",
+                                "length": null,
+                                "order": "A",
+                                "expression": null
+                            },
+                            {
+                                "name": "kind",
+                                "length": null,
+                                "order": "A",
+                                "expression": null
+                            }
+                        ],
+                        "unique": false,
+                        "type": "BTREE",
+                        "visible": "YES"
+                    }
+                },
+                "constraints": []
+            },
+            "workflow_version": {
+                "engine": "InnoDB",
+                "collation": "utf8mb4_0900_ai_ci",
+                "create_sql": "CREATE TABLE `workflow_version` (\n  `id` bigint unsigned NOT NULL AUTO_INCREMENT,\n  `definition_id` bigint unsigned NOT NULL,\n  `version` int unsigned NOT NULL,\n  `name` varchar(180) NOT NULL,\n  `created_by` bigint unsigned NOT NULL,\n  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,\n  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,\n  PRIMARY KEY (`id`),\n  UNIQUE KEY `uk_version` (`definition_id`,`version`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci",
+                "columns": {
+                    "id": {
+                        "definition": "`id` bigint unsigned NOT NULL AUTO_INCREMENT",
+                        "type": "bigint unsigned",
+                        "nullable": false,
+                        "default": null,
+                        "extra": "auto_increment",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "definition_id": {
+                        "definition": "`definition_id` bigint unsigned NOT NULL",
+                        "type": "bigint unsigned",
+                        "nullable": false,
+                        "default": null,
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "version": {
+                        "definition": "`version` int unsigned NOT NULL",
+                        "type": "int unsigned",
+                        "nullable": false,
+                        "default": null,
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "name": {
+                        "definition": "`name` varchar(180) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL",
+                        "type": "varchar(180)",
+                        "nullable": false,
+                        "default": null,
+                        "extra": "",
+                        "charset": "utf8mb4",
+                        "collation": "utf8mb4_0900_ai_ci",
+                        "generation": ""
+                    },
+                    "created_by": {
+                        "definition": "`created_by` bigint unsigned NOT NULL",
+                        "type": "bigint unsigned",
+                        "nullable": false,
+                        "default": null,
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "created_at": {
+                        "definition": "`created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP",
+                        "type": "datetime",
+                        "nullable": false,
+                        "default": "CURRENT_TIMESTAMP",
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    },
+                    "updated_at": {
+                        "definition": "`updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP",
+                        "type": "datetime",
+                        "nullable": false,
+                        "default": "CURRENT_TIMESTAMP",
+                        "extra": "",
+                        "charset": null,
+                        "collation": null,
+                        "generation": ""
+                    }
+                },
+                "indexes": {
+                    "PRIMARY": {
+                        "definition": "PRIMARY KEY (`id`)",
+                        "columns": [
+                            {
+                                "name": "id",
+                                "length": null,
+                                "order": "A",
+                                "expression": null
+                            }
+                        ],
+                        "unique": true,
+                        "type": "BTREE",
+                        "visible": "YES"
+                    },
+                    "uk_version": {
+                        "definition": "UNIQUE KEY `uk_version` (`definition_id`,`version`)",
+                        "columns": [
+                            {
+                                "name": "definition_id",
+                                "length": null,
+                                "order": "A",
+                                "expression": null
+                            },
+                            {
+                                "name": "version",
+                                "length": null,
+                                "order": "A",
+                                "expression": null
+                            }
+                        ],
+                        "unique": true,
                         "type": "BTREE",
                         "visible": "YES"
                     }

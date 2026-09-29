@@ -67,6 +67,8 @@ class AuthService
             throw new RuntimeException('只能切换同一用户或同手机号绑定的账号');
         }
 
+        (new \app\server\wechat\WechatScanSessionService())->cancelCurrent();
+        (new \app\server\signature\SignatureService())->cancelCurrent();
         return $this->issueSessionForAccount($targetAccountId, $client);
     }
 

@@ -933,6 +933,14 @@ export function fetchInternshipPlans(params = {}) {
   return internshipList('plans', params);
 }
 
+export function fetchInternshipPlanDeleteImpact(id) {
+  return internshipList('plan-delete-impact', { id });
+}
+
+export function removeInternshipPlan(payload) {
+  return internshipPost('remove-plan', payload);
+}
+
 export function saveInternshipPlan(payload) {
   return internshipPost('save-plan', payload);
 }

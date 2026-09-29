@@ -148,18 +148,22 @@ class MessageRecord extends TableRecord
                 ];
             }
 
-            self::queryTable('message_target')->insert($targetRows);
-            if (in_array('wechat', $message['channels'] ?? [], true)) {
-                foreach ($logRows as $row) {
+            $channels = !empty($message['exact_channels']) ? ($message['channels'] ?? []) : array_unique(['internal', ...($message['channels'] ?? [])]);
+            if (in_array('internal', $channels, true)) self::queryTable('message_target')->insert($targetRows);
+            $baseRows = $logRows;
+            if (!in_array('internal', $channels, true)) $logRows = [];
+            if (in_array('wechat', $channels, true)) {
+                foreach ($baseRows as $row) {
                     $logRows[] = array_replace($row, [
                         'uuid' => self::uuidValue(), 'channel' => 'wechat', 'status' => 'pending', 'sent_at' => null,
                     ]);
                 }
             }
+            if (in_array('sms', $channels, true)) foreach ($baseRows as $row) $logRows[] = array_replace($row, ['uuid' => self::uuidValue(), 'channel' => 'sms', 'status' => 'pending', 'sent_at' => null]);
             foreach (array_chunk($logRows, 500) as $rows) {
                 self::queryTable('message_channel_log')->insert($rows);
             }
-            MessageRealtimeRecord::enqueueNotification($targets);
+            if (in_array('internal', $channels, true)) MessageRealtimeRecord::enqueueNotification($targets);
 
             return $messageId;
         });
@@ -388,6 +392,7 @@ class MessageRecord extends TableRecord
         foreach (self::defaultTemplates() as $template) {
             $existing = $connection->table('message_template')->where('code', $template['code'])->first(['id', 'deleted_at']);
             if ($existing) {
+                if ($template['code'] === 'workflow_pending') continue;
                 $updates = ['is_system' => 1];
                 if (!empty($existing->deleted_at)) {
                     $updates['status'] = 'enabled';
@@ -431,6 +436,7 @@ class MessageRecord extends TableRecord
             $existingStmt->execute([$template['code']]);
             $existingId = $existingStmt->fetchColumn();
             if ($existingId) {
+                if ($template['code'] === 'workflow_pending') continue;
                 $restoreStmt->execute([$now, (int) $existingId]);
                 continue;
             }
@@ -1096,6 +1102,7 @@ class MessageRecord extends TableRecord
         ];
 
         $templates = [
+            self::systemTemplate(500, '审批与抄送通知', 'workflow_pending', '{node_name}', '你收到一项{kind_text}：{entity_title}，请登录系统查看。', 'todo', 'important', '通用工作流节点通知', ['node_name' => '节点名称', 'kind_text' => '通知类型', 'entity_title' => '事项名称'], '', 500),
             self::resultTemplate(190, '实习成绩核定结果', 'internship_score_result', '实习成绩已核定：{entity_title}', '你的实习成绩已核定，{score_text}。{opinion_text}', '#panel=internship:scores', 190),
             self::systemTemplate(430, '社会实践计划发布', 'social_practice_plan_published', '社会实践计划已发布：{entity_title}', '{entity_title}已发布，实践时间：{date_text}。', 'todo', 'important', '社会实践计划发布后通知适用学生和相关教师。', [
                 'entity_title' => '计划标题',

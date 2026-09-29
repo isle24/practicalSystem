@@ -24,7 +24,7 @@ class WechatBindingService
         $allowUnbound = $config->get('wechat.allow_unbound_login') === true;
         $corpId = trim((string) $config->get('wechat.corp_id'));
         $binding = UserWechat::currentByUser($userId);
-        $bound = $binding !== null && $corpId !== '' && $binding['corp_id'] === $corpId && trim((string) $binding['wechat_userid']) !== '';
+        $bound = UserWechat::isValidBinding($binding, $corpId);
 
         return [
             'bound' => $bound,
@@ -96,14 +96,7 @@ class WechatBindingService
         $config = new ConfigService();
         $corpId = trim((string) $config->get('wechat.corp_id'));
         if ($corpId !== $stateData['corp']) throw new RuntimeException('企业微信配置已变更，请重新获取身份');
-        $client = new WechatClient();
-        $token = $client->getToken($corpId, (string) $config->get('wechat.secret'));
-        $this->assertResponse($token, '获取企业微信访问凭证失败');
-        if (empty($token['access_token'])) throw new RuntimeException('企业微信未返回访问凭证');
-        $info = $client->getUserInfo($token['access_token'], $code);
-        $this->assertResponse($info, '获取企业微信身份失败');
-        $userId = trim((string) ($info['UserId'] ?? $info['userid'] ?? ''));
-        if ($userId === '' || strlen($userId) > 120) throw new RuntimeException('未获取到企业成员 UserId，请确认已加入应用可见范围');
+        $userId = $this->resolveIdentity($code, $corpId);
         $ticket = bin2hex(random_bytes(32));
         $identity = [
             'school' => CurrentContext::schoolDatabaseId(), 'corp' => $corpId,
@@ -113,6 +106,21 @@ class WechatBindingService
         Redis::setEx($this->key('identity', $ticket), self::IDENTITY_TTL, json_encode($identity));
         Redis::setEx($this->key('bind', $ticket), self::TTL, json_encode($identity));
         return ['ticket' => $ticket, 'return_path' => $this->safePath($stateData['return_path'])];
+    }
+
+    public function resolveIdentity(string $code, string $corpId): string
+    {
+        if ($code === '' || strlen($code) > 1024) throw new RuntimeException('企业微信授权参数无效');
+        $config = new ConfigService();
+        $client = new WechatClient();
+        $token = $client->getToken($corpId, (string) $config->get('wechat.secret'));
+        $this->assertResponse($token, '获取企业微信访问凭证失败');
+        if (empty($token['access_token'])) throw new RuntimeException('企业微信未返回访问凭证');
+        $info = $client->getUserInfo($token['access_token'], $code);
+        $this->assertResponse($info, '获取企业微信身份失败');
+        $userId = trim((string) ($info['UserId'] ?? $info['userid'] ?? ''));
+        if ($userId === '' || strlen($userId) > 120) throw new RuntimeException('未获取到企业成员 UserId，请确认已加入应用可见范围');
+        return $userId;
     }
 
     public function bind(): array

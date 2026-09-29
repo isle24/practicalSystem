@@ -3632,8 +3632,10 @@ a {
 }
 
 .operation-dialog.operation-dialog-managed.is-maximized {
-  width: calc(100vw - 36px) !important;
-  height: calc(100dvh - 104px) !important;
+  width: 100vw !important;
+  height: 100dvh !important;
+  border-radius: 0;
+  border: 0;
   max-width: none;
   max-height: none;
   min-width: 0;
@@ -5357,7 +5359,7 @@ a {
   box-shadow: 0 0 0 3px rgba(37, 99, 235, .12);
 }
 
-.login-panel button {
+.login-panel .login-submit-button {
   height: 40px;
   border-radius: 8px;
   display: inline-flex;
@@ -5369,15 +5371,15 @@ a {
   transition: background .16s ease, transform .16s ease, opacity .16s ease;
 }
 
-.login-panel button:not(:disabled):hover {
+.login-panel .login-submit-button:not(:disabled):hover {
   background: #1d4ed8;
 }
 
-.login-panel button:not(:disabled):active {
+.login-panel .login-submit-button:not(:disabled):active {
   transform: translateY(1px);
 }
 
-.login-panel button:disabled {
+.login-panel .login-submit-button:disabled {
   opacity: .58;
   cursor: not-allowed;
 }
@@ -7073,3 +7075,10 @@ a {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+.login-school-logo { width: 42px; height: 42px; flex: 0 0 42px; object-fit: contain; }
+.login-panel .login-secondary-button { min-height: 40px; border-radius: 8px; }
+
+.desktop-shell.desktop-shell-maximized { grid-template-rows: minmax(0, 1fr); }
+.desktop-shell-maximized .taskbar, .desktop-shell-maximized .notebook-floating-button { display: none; }
+.operation-mask.operation-mask-maximized { padding: 0; }

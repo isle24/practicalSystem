@@ -3,6 +3,7 @@
 namespace app\model\channel;
 
 use app\server\CurrentContext;
+use app\server\wallpaper\WallpaperService;
 
 /** 文件与业务对象的读取权限。 */
 class FileAccessRecord extends TableRecord
@@ -10,7 +11,7 @@ class FileAccessRecord extends TableRecord
     /** 区分可公开展示的界面图片和业务附件。 */
     public static function publicImage(object $file): bool
     {
-        return in_array((string) $file->category, ['profile', 'login_background', 'menu_icon', 'favorite_icon'], true)
+        return in_array((string) $file->category, ['profile', 'login_background', 'school_logo', 'menu_icon', 'favorite_icon'], true)
             && in_array(strtolower((string) $file->ext), ['jpg', 'jpeg', 'png', 'gif', 'webp'], true)
             && in_array((string) $file->mime_type, ['image/jpeg', 'image/png', 'image/gif', 'image/webp'], true);
     }
@@ -20,6 +21,12 @@ class FileAccessRecord extends TableRecord
     {
         if (!CurrentContext::accountId()) {
             return false;
+        }
+        if ((string) $file->category === 'personal_signature') {
+            return SignatureRecord::fileReadable((int) $file->id);
+        }
+        if ((string) $file->category === 'wallpaper') {
+            return self::wallpaperReadable($file);
         }
         if ((int) $file->uploader_id === CurrentContext::accountId() || self::schoolAdmin()) {
             return true;
@@ -65,13 +72,34 @@ class FileAccessRecord extends TableRecord
                 }
             }
         }
+        $expenseIds = self::queryTable('base_expense')->whereNull('deleted_at')
+            ->whereJsonContains('attachment_ids', (int) $file->id)->pluck('id');
+        foreach ($expenseIds as $id) {
+            if (self::entityReadable('base_expense', (int) $id)) {
+                return true;
+            }
+        }
         return false;
+    }
+
+    /** 壁纸按上传人、分享状态和学校默认引用读取。 */
+    public static function wallpaperReadable(object $file): bool
+    {
+        $accountId = (int) CurrentContext::accountId();
+        if ($accountId <= 0) return false;
+        $service = new WallpaperService();
+        if ((int) $file->id === $service->defaultFileId()) return true;
+        $row = WallpaperRecord::byFile((int) $file->id);
+        return $row !== null && $service->visible($row, $accountId);
     }
 
     /** 附件读取沿用所属模块的数据范围。 */
     public static function entityReadable(string $entity, int $id): bool
     {
         if ($id <= 0 || !CurrentContext::accountId()) {
+            return false;
+        }
+        if ($entity === 'personal_signature') {
             return false;
         }
         if (self::schoolAdmin()) {
@@ -81,6 +109,11 @@ class FileAccessRecord extends TableRecord
         $scope = self::scope();
         if ($entity === 'base_visit_record') {
             return BaseVisitRecord::recordReadable($id);
+        }
+        if ($entity === 'base_expense') {
+            return (in_array('expense:view', $permissions, true)
+                    && ExpenseRecord::visible()->where('base_expense.id', $id)->exists())
+                || ExpenseRecord::activeWorkflowParticipant($id, (int) CurrentContext::accountId());
         }
         if ($entity === 'favorite_link') {
             return FavoriteRecord::visible((int) CurrentContext::accountId(), $id) !== null;

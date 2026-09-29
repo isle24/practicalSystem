@@ -11,6 +11,7 @@
   <van-cell-group inset class="app-profile-group">
     <van-cell title="姓名" :value="userName" />
     <van-cell title="个人记事本" is-link @click="emit('open-tab', 'notebook')" />
+    <van-cell title="个人电子签名" is-link @click="emit('open-tab', 'signature')" />
     <van-cell title="更新说明" is-link @click="emit('open-tab', 'releaseNotes')" />
     <van-cell title="登录账号" :value="accountName" />
     <van-cell v-if="canBindWechat" title="企业微信绑定" :value="wechatBound ? '已绑定，点击重新绑定' : '未绑定，前往绑定'" is-link clickable @click="emit('bind-wechat')" />
@@ -31,6 +32,11 @@
       <van-cell title="企业微信通知" :label="wechatBindingText">
         <template #right-icon>
           <van-switch v-model="notificationState.notify.wechat" size="22" />
+        </template>
+      </van-cell>
+      <van-cell title="短信通知" label="发送到已验证手机号">
+        <template #right-icon>
+          <van-switch v-model="notificationState.notify.sms" size="22" />
         </template>
       </van-cell>
       <van-cell title="全天接收">
@@ -109,7 +115,7 @@ const notificationState = reactive({
   loading: false,
   message: '',
   wechat_binding: { bound: false, required: true },
-  notify: { wechat: true },
+  notify: { wechat: true, sms: false },
   wechat_quiet: { start: '00:00', end: '24:00' },
 });
 const quietAllDay = computed({
@@ -146,7 +152,7 @@ async function saveNotifications() {
   notificationState.message = '';
   try {
     const data = await saveProfileNotifications({
-      notify: { wechat: Boolean(notificationState.notify.wechat) },
+      notify: { wechat: Boolean(notificationState.notify.wechat), sms: Boolean(notificationState.notify.sms) },
       wechat_quiet: { ...notificationState.wechat_quiet },
     });
     applyNotificationData(data);
@@ -161,6 +167,7 @@ async function saveNotifications() {
 function applyNotificationData(data) {
   notificationState.wechat_binding = data.wechat_binding || { bound: false, required: true };
   notificationState.notify.wechat = data.notify?.wechat !== false;
+  notificationState.notify.sms = data.notify?.sms === true;
   notificationState.wechat_quiet = {
     start: data.wechat_quiet?.start || '00:00',
     end: data.wechat_quiet?.end || '24:00',

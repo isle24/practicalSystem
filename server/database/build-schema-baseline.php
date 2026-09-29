@@ -47,7 +47,15 @@ function schemaBaselineSourceHashes(): array
         'app/model/channel/PluginRecord.php',
         'app/model/channel/RecordingArchiveRecord.php',
         'app/model/channel/TableRecord.php',
+        'app/model/channel/WorkflowSchema.php',
+        'app/model/channel/WorkflowDeliverySchema.php',
+        'app/model/channel/WallpaperSchema.php',
+        'app/model/channel/SignatureSchema.php',
+        'app/model/channel/FileStorageSchema.php',
+        'app/server/internship/InternshipUpgradeSchema.php',
         'app/model/channel/TemplateRecord.php',
+        'app/model/channel/ExpenseSchema.php',
+        'app/server/expense/ExpenseUpgradeSchema.php',
     ];
     foreach (['database/updates/*.sql', 'database/migrations/*.php'] as $pattern) {
         foreach (glob($root . '/' . $pattern) ?: [] as $path) {
@@ -76,7 +84,7 @@ function buildSchemaBaseline(): string
         $config['pass'],
         [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC, PDO::ATTR_TIMEOUT => 5]
     );
-    $version = '2026-09-28';
+    $version = '2026-09-29';
     $archiveYear = (int) substr($version, 0, 4);
     $prefix = 'practical_schema_build_' . bin2hex(random_bytes(12));
     $created = [];

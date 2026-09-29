@@ -14,8 +14,45 @@ use RuntimeException;
 use support\Request;
 use Throwable;
 
-class PracticeService
+class PracticeService implements \app\server\workflow\LegacyWorkflowAdapter
 {
+    public function review(Request $request): array
+    {
+        return (new \app\server\workflow\WorkflowService())->legacy($this, 'review', $request);
+    }
+
+    public function reviewJournal(Request $request): array
+    {
+        return (new \app\server\workflow\WorkflowService())->legacy($this, 'reviewJournal', $request);
+    }
+
+    public function reviewReport(Request $request): array
+    {
+        return (new \app\server\workflow\WorkflowService())->legacy($this, 'reviewReport', $request);
+    }
+
+    public function timeline(Request $request): array
+    {
+        return (new \app\server\workflow\WorkflowService())->legacy($this, 'timeline', $request);
+    }
+
+    public function requestModification(Request $request): array
+    {
+        return (new \app\server\workflow\WorkflowService())->legacy($this, 'requestModification', $request);
+    }
+
+    public function executeLegacyWorkflow(string $operation, Request $request): array
+    {
+        return match ($operation) {
+            'requestModification' => $this->legacyRequestModification($request),
+            'review' => $this->legacyReview($request),
+            'reviewJournal' => $this->legacyReviewJournal($request),
+            'reviewReport' => $this->legacyReviewReport($request),
+            'timeline' => $this->legacyTimeline($request),
+            default => throw new RuntimeException('未注册的兼容流程操作', 422),
+        };
+    }
+
     private const MODULES = [
         'training' => [
             'name' => '实训',
@@ -351,7 +388,7 @@ class PracticeService
         return $existingId ? $this->workflowLock('practice', $this->entityType($entity), $existingId, $save) : $save();
     }
 
-    public function review(Request $request): array
+    private function legacyReview(Request $request): array
     {
         $this->assertWritableModule();
         $entity = $this->entityInput($request);
@@ -434,7 +471,7 @@ class PracticeService
         });
     }
 
-    public function requestModification(Request $request): array
+    private function legacyRequestModification(Request $request): array
     {
         $this->assertWritableModule();
         $entity = $this->entityInput($request);
@@ -472,7 +509,7 @@ class PracticeService
         });
     }
 
-    public function timeline(Request $request): array
+    private function legacyTimeline(Request $request): array
     {
         $this->requirePermission('view');
         $entity = $this->entityInput($request);
@@ -553,7 +590,7 @@ class PracticeService
         return $this->saveReviewExecution($request, 'journal');
     }
 
-    public function reviewJournal(Request $request): array
+    private function legacyReviewJournal(Request $request): array
     {
         return $this->reviewExecution($request, 'journal');
     }
@@ -717,7 +754,7 @@ class PracticeService
         return $this->saveReviewExecution($request, 'report');
     }
 
-    public function reviewReport(Request $request): array
+    private function legacyReviewReport(Request $request): array
     {
         return $this->reviewExecution($request, 'report');
     }
