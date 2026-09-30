@@ -25,6 +25,7 @@ pub struct Gateway {
     pub port: u16,
     shutdown: Option<oneshot::Sender<()>>,
     cancel: tokio_util::sync::CancellationToken,
+    login_cancel: Option<(reqwest::Client, Url)>,
 }
 
 struct GatewayState {
@@ -40,6 +41,19 @@ struct GatewayState {
 impl Drop for Gateway {
     /// 关闭当前学校本机通道。
     fn drop(&mut self) {
+        if let Some((client, origin)) = self.login_cancel.take() {
+            tauri::async_runtime::spawn(async move {
+                if let Ok(url) = origin.join("api/auth/wechat-login/cancel") {
+                    let _ = client
+                        .post(url)
+                        .header(header::ORIGIN, origin.origin().ascii_serialization())
+                        .timeout(std::time::Duration::from_secs(5))
+                        .json(&serde_json::json!({}))
+                        .send()
+                        .await;
+                }
+            });
+        }
         self.cancel.cancel();
         if let Some(shutdown) = self.shutdown.take() {
             let _ = shutdown.send(());
@@ -66,6 +80,7 @@ pub async fn start(
         .join(&format!("_desktop/connect/{token}"))
         .map_err(|_| "无法创建学校入口")?;
     let remote = connection.origin.clone();
+    let login_cancel = Some((connection.client.clone(), remote.clone()));
     let cancel = tokio_util::sync::CancellationToken::new();
     let state = Arc::new(GatewayState {
         app,
@@ -90,6 +105,7 @@ pub async fn start(
         remote,
         entry,
         port,
+        login_cancel,
         cancel,
         shutdown: Some(shutdown),
     })
@@ -231,6 +247,8 @@ async fn handle(State(state): State<Arc<GatewayState>>, request: Request) -> Res
             | "/_desktop/update"
             | "/_desktop/favorite-credentials"
             | "/_desktop/preview-cache"
+            | "/_desktop/credential-vault"
+            | "/_desktop/window"
     ) {
         if request.method() != axum::http::Method::POST
             || headers.get(header::ORIGIN).and_then(|v| v.to_str().ok())
@@ -241,6 +259,8 @@ async fn handle(State(state): State<Arc<GatewayState>>, request: Request) -> Res
         let update = path.ends_with("/update");
         let credentials = path.ends_with("/favorite-credentials");
         let cache = path.ends_with("/preview-cache");
+        let vault = path.ends_with("/credential-vault");
+        let controls = path.ends_with("/window");
         let bytes = match axum::body::to_bytes(request.into_body(), 65536).await {
             Ok(bytes) => bytes,
             Err(_) => return error(StatusCode::BAD_REQUEST, "参数过长"),
@@ -249,8 +269,12 @@ async fn handle(State(state): State<Arc<GatewayState>>, request: Request) -> Res
             Ok(input) => input,
             Err(_) => return error(StatusCode::BAD_REQUEST, "参数无效"),
         };
-        if credentials || cache {
-            let result = if credentials {
+        if credentials || cache || vault || controls {
+            let result = if controls {
+                crate::windows::control(&state.app, input["action"].as_str().unwrap_or(""))
+            } else if vault {
+                crate::credential_vault::configure(&state.connection, &input).await
+            } else if credentials {
                 crate::favorite_auth::configure(&state.connection, &input).await
             } else {
                 crate::preview_cache::configure(&state.app, &input).await
@@ -302,6 +326,12 @@ async fn handle(State(state): State<Arc<GatewayState>>, request: Request) -> Res
             HeaderValue::from_static("application/json"),
         );
         return response;
+    }
+    if path.starts_with("/api/credential-vault/") {
+        return error(
+            StatusCode::FORBIDDEN,
+            "凭据同步只能通过原生安全凭据入口操作",
+        );
     }
     if path.starts_with("/api/") || path.starts_with("/files/") {
         return proxy(state, request).await;

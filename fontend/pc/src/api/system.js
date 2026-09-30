@@ -1,4 +1,4 @@
-import { request } from './client';
+import { apiBase, request } from './client';
 
 export function sendMobileCode(payload) {
   return request('/profile/send-mobile-code', { method: 'POST', body: JSON.stringify(payload) });
@@ -589,6 +589,20 @@ export function importArchiveExcel(type, file, params = {}) {
   });
 }
 
+export function previewProfessionImport(file) {
+  const body = new FormData();
+  body.append('file', file);
+  return request('/archive/profession-preview', { method: 'POST', body });
+}
+
+export function confirmProfessionImport(payload) {
+  return request('/archive/profession-confirm', { method: 'POST', body: JSON.stringify(payload) });
+}
+
+export function professionImportTemplateUrl() {
+  return `${apiBase}/archive/profession-template`;
+}
+
 export function fetchRolePermissions(roleId) {
   const query = new URLSearchParams({ role_id: roleId }).toString();
   return request(`/admin/role-permissions?${query}`);
@@ -716,6 +730,10 @@ export function saveTeacherSyncApplication(payload) {
 
 export function saveInternshipBase(payload) {
   return internshipPost('save-base', payload);
+}
+
+export function removeInternshipBase(payload) {
+  return internshipPost('remove-base', payload);
 }
 
 export function previewInternshipBaseImport(file) {
@@ -913,6 +931,14 @@ export function reviewInternshipDelay(payload) {
 
 export function fetchInternshipPlans(params = {}) {
   return internshipList('plans', params);
+}
+
+export function fetchInternshipPlanDeleteImpact(id) {
+  return internshipList('plan-delete-impact', { id });
+}
+
+export function removeInternshipPlan(payload) {
+  return internshipPost('remove-plan', payload);
 }
 
 export function saveInternshipPlan(payload) {

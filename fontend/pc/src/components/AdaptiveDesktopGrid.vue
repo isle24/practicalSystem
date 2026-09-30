@@ -24,6 +24,7 @@ import { useDesktopPositions } from '../composables/useDesktopPositions';
 
 const props = defineProps({
   modules: { type: Array, default: () => [] },
+  density: { type: String, default: 'normal' },
   moduleHref: { type: Function, required: true },
   isFocused: { type: Function, required: true },
   backendUrl: { type: Function, required: true },
@@ -39,10 +40,11 @@ const layoutStyle = computed(() => {
   const count = Math.max(1, props.modules.length);
   const width = Math.max(1, bounds.value.width);
   const height = Math.max(1, bounds.value.height);
-  const naturalWidth = 92;
-  const naturalHeight = 104;
-  const gapX = 12;
-  const gapY = 8;
+  const factor = props.density === 'compact' ? 0.82 : props.density === 'comfortable' ? 1.18 : 1;
+  const naturalWidth = 92 * factor;
+  const naturalHeight = 104 * factor;
+  const gapX = 12 * factor;
+  const gapY = 8 * factor;
   let best = { columns: 1, rows: count, scale: 0 };
 
   for (let columns = 1; columns <= count; columns += 1) {

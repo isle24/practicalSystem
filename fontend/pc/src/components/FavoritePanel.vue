@@ -1,23 +1,26 @@
 <template>
   <section class="favorites">
+    <EmbeddedExternalPage v-if="embeddedItem" :item="embeddedItem" @close="embeddedItem = null" />
+    <template v-else>
     <header class="favorites-toolbar"><el-input v-model="keyword" clearable placeholder="搜索标题或网址" @keyup.enter="load(1)" /><el-select v-model="scope" placeholder="请选择收藏范围" @change="load(1)"><el-option label="全部收藏" value="" /><el-option label="我的收藏" value="personal" /><el-option label="学校共享" value="school" /></el-select><el-button :icon="Search" :loading="loading" @click="load(1)">查询</el-button><el-button :icon="Plus" type="primary" @click="edit()">新增收藏</el-button></header>
     <el-alert v-if="error" :title="error" type="error" :closable="false" />
     <div class="favorites-grid" v-loading="loading">
       <article v-for="row in items" :key="row.id" class="favorite-tile">
         <button class="favorite-open" @click="open(row)"><AppIcon :icon="Globe2" :icon-url="row.icon_url" :label="row.title" :size="28" :backend-url="backendUrl" /><span><strong>{{ row.title }}</strong><small>{{ host(row.url) }}</small></span></button>
-        <div class="favorite-tile-footer"><span :class="{ shared: row.scope === 'school' }">{{ row.scope === 'school' ? '学校共享' : '个人收藏' }}</span><el-dropdown trigger="click" @command="command => action(row, command)"><el-button :icon="MoreHorizontal" text circle title="更多操作" /><template #dropdown><el-dropdown-menu><el-dropdown-item command="client">{{ desktop ? '客户端窗口打开' : '新标签页打开' }}</el-dropdown-item><el-dropdown-item v-if="desktop" command="browser">外部浏览器打开</el-dropdown-item><el-dropdown-item v-if="desktop" command="credentials">本机认证配置</el-dropdown-item><el-dropdown-item command="desktop">{{ isDesktop(row.id) ? '从桌面移除' : '添加到桌面' }}</el-dropdown-item><el-dropdown-item v-if="row.can_edit" command="edit" divided>编辑</el-dropdown-item><el-dropdown-item v-if="row.can_edit" command="delete">删除</el-dropdown-item></el-dropdown-menu></template></el-dropdown></div>
+        <div class="favorite-tile-footer"><span :class="{ shared: row.scope === 'school' }">{{ row.scope === 'school' ? '学校共享' : '个人收藏' }}</span><el-dropdown trigger="click" @command="command => action(row, command)"><el-button :icon="MoreHorizontal" text circle title="更多操作" /><template #dropdown><el-dropdown-menu><el-dropdown-item command="current">当前页打开</el-dropdown-item><el-dropdown-item command="client">{{ desktop ? '客户端窗口打开' : '新标签页打开' }}</el-dropdown-item><el-dropdown-item v-if="desktop" command="browser">外部浏览器打开</el-dropdown-item><el-dropdown-item v-if="desktop" command="credentials">本机认证配置</el-dropdown-item><el-dropdown-item command="desktop">{{ isDesktop(row.id) ? '从桌面移除' : '添加到桌面' }}</el-dropdown-item><el-dropdown-item v-if="row.can_edit" command="edit" divided>编辑</el-dropdown-item><el-dropdown-item v-if="row.can_edit" command="delete">删除</el-dropdown-item></el-dropdown-menu></template></el-dropdown></div>
       </article>
       <el-empty v-if="!loading && !items.length" description="暂无收藏" />
     </div>
     <footer class="favorites-pagination"><span>共 {{ pagination.total }} 个收藏</span><el-pagination layout="prev, pager, next" :current-page="pagination.page" :page-size="pagination.page_size" :total="pagination.total" @current-change="load" /></footer>
     <OperationDialog :visible="dialog" :title="form.id ? '编辑收藏' : '新增收藏'" :busy="saving || uploading" @close="dialog = false">
       <div class="favorites-dialog-body">
-      <div class="favorites-form" :inert="saving"><label>标题<el-input v-model="form.title" maxlength="180" placeholder="请输入收藏标题" /></label><label>网址<el-input v-model="form.url" maxlength="500" placeholder="https://example.com" /></label><label>默认打开方式<el-radio-group v-model="form.open_mode"><el-radio-button value="client">客户端窗口</el-radio-button><el-radio-button value="browser">外部浏览器</el-radio-button></el-radio-group></label><label v-if="canShare" class="favorites-switch">同步到全校<el-switch v-model="form.scope" active-value="school" inactive-value="personal" /></label><label class="favorites-switch">添加到我的桌面<el-switch v-model="form.on_desktop" /></label><label>排序<el-input-number v-model="form.sort" :min="0" :max="99999" /></label><label>图标<IconUpload :icon="Globe2" :icon-url="form.icon_url" label="收藏图标" :uploading="uploading" :backend-url="backendUrl" @select="upload" /></label></div>
+      <div class="favorites-form" :inert="saving"><label>标题<el-input v-model="form.title" maxlength="180" placeholder="请输入收藏标题" /></label><label>网址<el-input v-model="form.url" maxlength="500" placeholder="https://example.com" /></label><label>默认打开方式<el-radio-group v-model="form.open_mode"><el-radio-button value="current">当前页打开</el-radio-button><el-radio-button value="client">客户端窗口</el-radio-button><el-radio-button value="browser">外部浏览器</el-radio-button></el-radio-group></label><label v-if="canShare" class="favorites-switch">同步到全校<el-switch v-model="form.scope" active-value="school" inactive-value="personal" /></label><label class="favorites-switch">添加到我的桌面<el-switch v-model="form.on_desktop" /></label><label>排序<el-input-number v-model="form.sort" :min="0" :max="99999" /></label><label>图标<IconUpload :icon="Globe2" :icon-url="form.icon_url" label="收藏图标" :uploading="uploading" :backend-url="backendUrl" @select="upload" /></label></div>
       <div class="favorites-parameters" :inert="saving"><label>请求方式<el-radio-group v-model="form.request_config.method"><el-radio-button value="GET">GET</el-radio-button><el-radio-button value="POST">POST</el-radio-button></el-radio-group></label><LinkParameterEditor v-model="form.request_config.query" title="Query 参数" /><LinkParameterEditor v-if="form.request_config.method === 'POST'" v-model="form.request_config.form" title="POST 参数" /><small>这里只保存非敏感参数。密码、令牌、Cookie 请在收藏的“本机认证配置”中设置。</small></div>
       </div>
       <template #footer><el-button :disabled="saving || uploading" @click="dialog = false">取消</el-button><el-button type="primary" :loading="saving" :disabled="uploading" @click="save">保存</el-button></template>
     </OperationDialog>
     <FavoriteCredentials :item="credentialItem" @close="credentialItem = null" />
+    </template>
   </section>
 </template>
 
@@ -32,6 +35,8 @@ import IconUpload from './IconUpload.vue';
 import OperationDialog from './OperationDialog.vue';
 import LinkParameterEditor from './LinkParameterEditor.vue';
 import FavoriteCredentials from './FavoriteCredentials.vue';
+import EmbeddedExternalPage from './EmbeddedExternalPage.vue';
+const embeddedItem = ref(null);
 const credentialItem = ref(null);
 const props = defineProps({ isDesktop: { type: Function, required: true }, setDesktop: { type: Function, required: true } });
 const emit = defineEmits(['changed']);
@@ -47,7 +52,7 @@ async function load(page = 1) {
   catch (e) { error.value = e.message; } finally { if (ticket === sequence) loading.value = false; }
 }
 function edit(row = {}) { form.value = { id: row.id || null, title: row.title || '', url: row.url || '', scope: row.scope || 'personal', open_mode: row.open_mode || 'client', sort: Number(row.sort || 0), icon_file_id: row.icon_file_id || null, icon_url: row.icon_url || '', revision: row.revision || 0, on_desktop: row.id ? props.isDesktop(row.id) : true, request_config: JSON.parse(JSON.stringify({ method:'GET', query:[], form:[], ...row.request_config })) }; originalScope = form.value.scope; dialog.value = true; }
-async function open(row, mode) { try { await openExternalLink(row, mode); } catch (e) { ElMessage.error(e.message); } }
+async function open(row, mode) { try { await openExternalLink(row, mode, item => { embeddedItem.value = item; }); } catch (e) { ElMessage.error(e.message); } }
 async function save() {
   if (saving.value || uploading.value) return;
   saving.value = true;
@@ -67,7 +72,7 @@ async function upload(file) { uploading.value = true; try { const body = new For
 async function action(row, command) {
   if (command === 'credentials') { credentialItem.value = row; return; }
   if (command === 'edit') return edit(row);
-  if (command === 'client' || command === 'browser') return open(row, command);
+  if (command === 'client' || command === 'browser' || command === 'current') return open(row, command);
   if (command === 'desktop') { try { await props.setDesktop(row, !props.isDesktop(row.id)); emit('changed'); } catch (e) { ElMessage.error(e.message); } return; }
   if (command === 'delete') {
     try { await ElMessageBox.confirm(`确认删除“${row.title}”？${row.scope === 'school' ? '全校用户的该快捷方式将同步失效。' : ''}`, '删除收藏'); } catch { return; }

@@ -1,4 +1,4 @@
-use crate::{connection::Connection, external, school_api};
+use crate::{connection::Connection, credential_vault, external, school_api};
 use reqwest::{
     header::{HeaderMap, HeaderName, HeaderValue},
     redirect::Policy,
@@ -8,13 +8,13 @@ use serde_json::{json, Value};
 use tauri::{webview::Cookie, AppHandle};
 use url::Url;
 
-#[derive(Clone, Default, Deserialize, Serialize)]
+#[derive(Clone, Default, Deserialize, Serialize, PartialEq, Eq)]
 pub struct Pair {
     pub key: String,
     pub value: String,
 }
 
-#[derive(Default, Deserialize, Serialize)]
+#[derive(Clone, Default, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct Profile {
     #[serde(default)]
@@ -26,7 +26,14 @@ pub struct Profile {
 }
 
 /// 限定个人认证参数大小与可修改请求头。
-fn validate(profile: &Profile) -> Result<(), String> {
+pub(crate) fn validate(profile: &Profile) -> Result<(), String> {
+    if serde_json::to_vec(profile)
+        .map_err(|_| "认证配置格式无效")?
+        .len()
+        > 60 * 1024
+    {
+        return Err("认证配置最多 60 KB".into());
+    }
     for rows in [&profile.headers, &profile.cookies, &profile.form] {
         if rows.len() > 20 {
             return Err("每组最多 20 个参数".into());
@@ -77,47 +84,37 @@ fn validate(profile: &Profile) -> Result<(), String> {
     Ok(())
 }
 
-/// 以学校、账号、收藏和完整目标地址定位系统凭据。
-async fn context(connection: &Connection, id: u64) -> Result<(Value, keyring::Entry), String> {
-    let account = school_api::account(connection).await?;
+/// 从服务器读取当前账号可使用的收藏。
+async fn favorite(connection: &Connection, id: u64) -> Result<Value, String> {
+    if id == 0 {
+        return Err("收藏编号无效".into());
+    }
     let favorite = school_api::read(connection, &format!("api/favorite/detail?id={id}")).await?;
     let address = favorite["url"].as_str().ok_or("收藏地址不存在")?;
     let url = Url::parse(address).map_err(|_| "收藏地址无效")?;
-    if url.scheme() != "https" || !external::allowed(&url) {
+    if url.scheme() != "https"
+        || !external::allowed(&url)
+        || url.origin() == connection.origin.origin()
+    {
         return Err("本机认证只支持 HTTPS 外部站点".into());
     }
-    let key = school_api::digest(&format!("{}:{account}:{id}:{address}", connection.origin));
-    let entry = keyring::Entry::new("com.2iwm.practical.desktop.favorite", &key)
-        .map_err(|_| "系统凭据库不可用")?;
-    Ok((favorite, entry))
+    Ok(favorite)
 }
 
 /// 仅返回是否保存，不把原凭据返回网页。
 pub async fn configure(connection: &Connection, input: &Value) -> Result<Value, String> {
-    let (_, entry) = context(connection, input["id"].as_u64().unwrap_or(0)).await?;
+    let favorite = favorite(connection, input["id"].as_u64().unwrap_or(0)).await?;
     match input["action"].as_str().unwrap_or("") {
-        "status" => match entry.get_password() {
-            Ok(_) => Ok(json!({"stored":true})),
-            Err(keyring::Error::NoEntry) => Ok(json!({"stored":false})),
-            Err(_) => Err("无法读取系统凭据库".into()),
-        },
+        "status" => {
+            Ok(json!({"stored":credential_vault::profile(connection,&favorite).await?.is_some()}))
+        }
         "save" => {
             let profile: Profile =
                 serde_json::from_value(input["profile"].clone()).map_err(|_| "认证配置格式无效")?;
             validate(&profile)?;
-            let value = serde_json::to_string(&profile).map_err(|_| "认证配置格式无效")?;
-            entry
-                .set_password(&value)
-                .map_err(|_| "无法保存到系统凭据库")?;
-            Ok(json!({"stored":true}))
+            credential_vault::save_profile(connection, &favorite, &profile).await
         }
-        "clear" => {
-            match entry.delete_credential() {
-                Ok(()) | Err(keyring::Error::NoEntry) => (),
-                Err(_) => return Err("无法清除系统凭据".into()),
-            };
-            Ok(json!({"stored":false}))
-        }
+        "clear" => credential_vault::clear_favorite(connection, &favorite).await,
         _ => Err("操作无效".into()),
     }
 }
@@ -132,14 +129,9 @@ pub async fn open(
     let favorite = school_api::read(connection, &format!("api/favorite/detail?id={id}")).await?;
     let mut url = Url::parse(favorite["url"].as_str().unwrap_or("")).map_err(|_| "收藏地址无效")?;
     let profile = if url.scheme() == "https" {
-        let (_, entry) = context(connection, id).await?;
-        match entry.get_password() {
-            Ok(value) => {
-                serde_json::from_str::<Profile>(&value).map_err(|_| "本机认证配置已损坏")?
-            }
-            Err(keyring::Error::NoEntry) => Profile::default(),
-            Err(_) => return Err("无法读取系统凭据库".into()),
-        }
+        credential_vault::profile(connection, &favorite)
+            .await?
+            .unwrap_or_default()
     } else {
         Profile::default()
     };

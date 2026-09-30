@@ -1,5 +1,5 @@
 <template>
-  <el-dialog
+  <ManagedElementDialog
     :model-value="modelValue"
     append-to-body
     destroy-on-close
@@ -125,10 +125,11 @@
         <el-button v-if="editable" type="primary" :loading="saving" @click="save('wait')">提交审核</el-button>
       </div>
     </template>
-  </el-dialog>
+  </ManagedElementDialog>
 </template>
 
 <script setup>
+import ManagedElementDialog from './ManagedElementDialog.vue';
 import { previewFile } from '../../../shared/filePreview';
 import { computed, reactive, ref, watch } from 'vue';
 import { FileText, Upload } from '@lucide/vue';

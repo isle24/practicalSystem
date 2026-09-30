@@ -116,7 +116,8 @@ function isAuthExpired(response, payload) {
 }
 
 function isAuthPath(path) {
-  return String(path || '').startsWith('/auth/login')
+  return String(path || '').startsWith('/auth/wechat-login/')
+    || String(path || '').startsWith('/auth/login')
     || String(path || '').startsWith('/auth/register')
     || String(path || '').startsWith('/auth/register-options')
     || String(path || '').startsWith('/auth/logout')

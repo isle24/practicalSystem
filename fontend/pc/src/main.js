@@ -27,6 +27,7 @@ import {
   ElRadioGroup,
   ElSegmented,
   ElSelect,
+  ElSlider,
   ElSwitch,
   ElTabPane,
   ElTable,
@@ -39,9 +40,11 @@ import {
   ElTreeSelect,
 } from 'element-plus';
 import 'element-plus/dist/index.css';
+import 'element-plus/theme-chalk/dark/css-vars.css';
 import App from './App.vue';
 import './styles.css';
 import './desktop-appearance.css';
+import './theme.css';
 import { configureFilePreview } from '../../shared/filePreview';
 import { request, backendUrl } from './api/client';
 configureFilePreview({ request, backendUrl });
@@ -75,6 +78,7 @@ const app = createApp(App);
   ElRadioGroup,
   ElSegmented,
   ElSelect,
+  ElSlider,
   ElSwitch,
   ElTabPane,
   ElTable,

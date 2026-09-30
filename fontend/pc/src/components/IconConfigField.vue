@@ -14,11 +14,13 @@
         :button-class="uploadButtonClass"
         :icon="resolvedIcon"
         :icon-url="iconUrl"
+        image-fit="cover"
         :label="uploadLabel"
         :uploading="uploading"
         :backend-url="backendUrl"
         @select="file => emit('select', file)"
       />
+      <small class="icon-upload-hint">推荐尺寸：128×128 像素，按比例填充，超出部分居中裁切</small>
     </label>
   </section>
 </template>

@@ -2,7 +2,7 @@
   <button
     type="button"
     class="icon-upload-button"
-    :class="buttonClass"
+    :class="[buttonClass, { 'icon-upload-button--cover': imageFit === 'cover' }]"
     :disabled="uploading"
     :title="uploading ? '正在上传' : `上传${label || '图标'}`"
     :aria-label="`上传${label || '图标'}`"
@@ -30,6 +30,7 @@ const props = defineProps({
   size: { type: Number, default: 24 },
   accept: { type: String, default: 'image/jpeg,image/png,image/webp,image/gif,image/x-icon' },
   uploading: { type: Boolean, default: false },
+  imageFit: { type: String, default: 'contain' },
   buttonClass: { type: [String, Array, Object], default: '' },
   backendUrl: { type: Function, required: true },
 });
@@ -52,5 +53,5 @@ function handleFileChange(event) {
 </script>
 
 <style scoped>
-.icon-upload-button{width:56px;height:56px;flex-shrink:0;display:grid;place-items:center;border:1px dashed #cdd6e2;border-radius:8px;background:#f5f8fc;color:#526b8a;cursor:pointer;overflow:hidden;padding:8px}.icon-upload-button:hover{border-color:#648ddd;background:#edf3fc}.icon-upload-button:disabled{opacity:.5;cursor:wait}.icon-upload-button img{width:100%;height:100%;object-fit:contain}.hidden-file{display:none}
+.icon-upload-button{width:56px;height:56px;flex-shrink:0;display:grid;place-items:center;border:1px dashed #cdd6e2;border-radius:8px;background:#f5f8fc;color:#526b8a;cursor:pointer;overflow:hidden;padding:8px}.icon-upload-button:hover{border-color:#648ddd;background:#edf3fc}.icon-upload-button:disabled{opacity:.5;cursor:wait}.icon-upload-button img{width:100%;height:100%;object-fit:contain}.icon-upload-button--cover{padding:0}.icon-upload-button--cover img{object-fit:cover;border-radius:inherit}.hidden-file{display:none}
 </style>

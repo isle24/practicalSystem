@@ -1,6 +1,6 @@
 <template>
   <Teleport to="body">
-    <div v-if="visible" class="operation-mask" @click.self="requestClose">
+    <div v-if="visible" :class="{ 'operation-mask-maximized': maximized }" class="operation-mask" @click.self="requestClose">
       <section
         ref="dialogRef"
         class="operation-dialog operation-dialog-managed"
@@ -53,6 +53,7 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
 import { Maximize2, Minimize2, X, ZoomIn } from '@lucide/vue';
+import { useMaximizedWindow } from '../composables/useMaximizedWindows';
 
 const props = defineProps({
   visible: { type: Boolean, default: false },
@@ -66,6 +67,11 @@ const props = defineProps({
 const emit = defineEmits(['close']);
 const dialogRef = ref(null);
 const maximized = ref(false);
+const registration = useMaximizedWindow();
+watch(() => [props.visible, maximized.value], ([visible, full]) => {
+  if (visible && full) registration.register();
+  else registration.unregister();
+}, { flush: 'sync' });
 const resizing = ref(false);
 const customSize = ref(null);
 let resizeState = null;

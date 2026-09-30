@@ -29,6 +29,8 @@ pub fn build(
     let context = serde_json::json!({
         "serverOrigin": remote.origin().ascii_serialization(),
         "localOrigin": local.origin().ascii_serialization(),
+        "windowLabel": label,
+        "platform": std::env::consts::OS,
     });
     let mut builder = WebviewWindowBuilder::new(app, label, WebviewUrl::External(url))
         .title("实践管理系统")
@@ -41,7 +43,7 @@ pub fn build(
             r#"(() => {{
             const bridge = async (action, payload) => {{
                 const controller = new AbortController();
-                const timer = setTimeout(() => controller.abort(), action === 'external' ? 90000 : 60000);
+                const timer = setTimeout(() => controller.abort(), action === 'credential-vault' ? 180000 : action === 'external' ? 90000 : 60000);
                 try {{
                     const response = await fetch('/_desktop/' + action, {{
                         method:'POST', credentials:'same-origin', signal:controller.signal,
@@ -60,6 +62,8 @@ pub fn build(
                     bootstrapLogin:()=>bridge('bootstrap-login',{{}}),
                     openExternal:(url,mode='client',favorite_id=0)=>bridge('external',{{url,mode,favorite_id}}),
                     favoriteCredentials:(id,action,profile)=>bridge('favorite-credentials',{{id,action,profile}}),
+                    credentialVault:(action,payload={{}})=>bridge('credential-vault',{{action,...payload}}),
+                    windowControls:(action)=>bridge('window',{{action}}),
                     previewCache:(action='status',max_gb)=>bridge('preview-cache',{{action,max_gb}}),
                     previewFileUrl:(id)=>'/_desktop/preview-file?id='+encodeURIComponent(id),
                     checkUpdate:(interactive=true)=>bridge('update',{{interactive}})
@@ -130,6 +134,18 @@ pub fn build(
             }
         })
         .on_download(move |webview, event| downloads.handle(webview, event));
+    if label == "school" {
+        #[cfg(target_os = "macos")]
+        {
+            builder = builder
+                .title_bar_style(tauri::TitleBarStyle::Overlay)
+                .hidden_title(true);
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            builder = builder.decorations(false);
+        }
+    }
     if let Some(features) = features {
         builder = builder.window_features(features);
     }
@@ -164,4 +180,25 @@ pub fn close_school(app: &AppHandle) {
             let _ = window.destroy();
         }
     }
+}
+
+/// 控制当前学校主窗口。
+pub fn control(app: &AppHandle, action: &str) -> Result<serde_json::Value, String> {
+    let window = app.get_webview_window("school").ok_or("学校窗口已关闭")?;
+    let result = match action {
+        "status" => Ok(()),
+        "drag" => window.start_dragging(),
+        "minimize" => window.minimize(),
+        "maximize" => {
+            if window.is_maximized().map_err(|_| "无法读取窗口状态")? {
+                window.unmaximize()
+            } else {
+                window.maximize()
+            }
+        }
+        "close" => window.close(),
+        _ => return Err("窗口操作无效".into()),
+    };
+    result.map_err(|_| "窗口操作失败")?;
+    Ok(serde_json::json!({"maximized": window.is_maximized().unwrap_or(false)}))
 }

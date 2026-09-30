@@ -1,5 +1,7 @@
 <template>
   <section class="plugin-panel">
+    <EmbeddedExternalPage v-if="embeddedItem" :item="embeddedItem" @close="embeddedItem = null" />
+    <template v-else>
     <header class="plugin-toolbar">
       <div class="plugin-search">
         <el-input v-model="keyword" clearable placeholder="搜索插件" @keyup.enter="search" @clear="search" />
@@ -32,7 +34,7 @@
         <label><span>插件编码</span><el-input v-model="dialog.form.code" :disabled="Boolean(dialog.form.id)" placeholder="如 cloud-storage" /></label>
         <label><span>名称</span><el-input v-model="dialog.form.name" placeholder="请输入插件名称" /></label>
         <label><span>版本</span><el-input v-model="dialog.form.version" placeholder="1.0.0" /></label>
-        <label><span>打开方式</span><el-select v-model="dialog.form.open_mode" placeholder="请选择打开方式"><el-option label="客户端窗口" value="client" /><el-option label="外部浏览器" value="browser" /></el-select></label>
+        <label><span>打开方式</span><el-select v-model="dialog.form.open_mode" placeholder="请选择打开方式"><el-option label="当前页打开" value="current" /><el-option label="客户端窗口" value="client" /><el-option label="外部浏览器" value="browser" /></el-select></label>
         <label class="wide"><span>HTTPS 入口</span><el-input v-model="dialog.form.entry_url" placeholder="https://example.com/oauth/start" /></label>
         <label class="wide"><span>允许域名</span><el-input v-model="dialog.form.allowed_domains_text" placeholder="多个域名用逗号分隔" /></label>
         <label class="wide"><span>图标地址</span><el-input v-model="dialog.form.icon_url" placeholder="可选 HTTPS 图片地址" /></label>
@@ -43,6 +45,7 @@
       </div>
       <template #footer><el-button @click="dialog.visible = false">取消</el-button><el-button type="primary" :loading="saving" @click="save">保存</el-button></template>
     </OperationDialog>
+    </template>
   </section>
 </template>
 
@@ -53,6 +56,8 @@ import { ExternalLink, Globe2, Plus, Search } from '@lucide/vue';
 import { backendUrl, request } from '../api/client';
 import { openExternalLink } from '../utils/externalLinks';
 import OperationDialog from './OperationDialog.vue';
+import EmbeddedExternalPage from './EmbeddedExternalPage.vue';
+const embeddedItem = ref(null);
 
 const props = defineProps({ canManage: { type: Boolean, default: false } });
 const canManage = ref(props.canManage);
@@ -118,7 +123,7 @@ async function open(item) {
   try {
     const url = new URL(item.entry_url);
     if (item.status === 'disabled' || url.protocol !== 'https:' || !(item.allowed_domains || []).includes(url.hostname.toLowerCase().replace(/\.$/, ''))) throw new Error('插件入口不在允许域名中或已停用');
-    await openExternalLink({ url: item.entry_url, open_mode: item.open_mode || 'browser' });
+    await openExternalLink({ url: item.entry_url, title: item.name, open_mode: item.open_mode || 'browser' }, undefined, current => { embeddedItem.value = current; });
   }
   catch (reason) { ElMessage.error(reason.message || '插件打开失败'); }
 }

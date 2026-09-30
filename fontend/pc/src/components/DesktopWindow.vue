@@ -44,8 +44,9 @@
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { Minus, Square, X } from '@lucide/vue';
+import { useMaximizedWindow } from '../composables/useMaximizedWindows';
 
 const props = defineProps({
   title: { type: String, required: true },
@@ -71,6 +72,8 @@ const frame = reactive({
 const interaction = ref(null);
 const baseMinFrame = { width: 680, height: 500 };
 const maximized = ref(false);
+const registration = useMaximizedWindow();
+watch(maximized, value => value ? registration.register() : registration.unregister(), { flush: 'sync' });
 const restoreFrame = ref(null);
 let workspaceObserver = null;
 

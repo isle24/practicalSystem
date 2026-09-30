@@ -47,3 +47,10 @@ footer { display: flex; gap: 6px; align-items: center; color: #8a939e; font-size
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 @media (max-width: 380px) { .connection-page { padding: 28px 20px 20px; } }
+
+@media (prefers-color-scheme: dark) {
+  :root { color-scheme: dark; color: #e7edf5; background: #0e1622; }
+  .connection-page { color: #e7edf5; }
+  .connection-form input, .connection-form button, .history-card, .history-item { color: #e7edf5; background: #18212f; border-color: #354359; }
+  .connection-form label, .school-identity, .product-name, .status-message { color: #a2b0c2; }
+}

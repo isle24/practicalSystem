@@ -8,17 +8,48 @@ pub async fn read(connection: &Connection, path: &str) -> Result<Value, String> 
         .origin
         .join(path)
         .map_err(|_| "学校接口地址无效")?;
-    let mut response = connection
+    let response = connection
         .client
         .get(target)
         .timeout(std::time::Duration::from_secs(15))
         .send()
         .await
         .map_err(|_| "学校接口连接失败，请检查网络")?;
+    decode(response, 1024 * 1024).await
+}
+
+/// 通过学校 HTTPS 会话发送凭据库操作。
+pub async fn post(connection: &Connection, path: &str, input: &Value) -> Result<Value, String> {
+    if connection.origin.scheme() != "https" {
+        return Err("云同步密码需要学校 HTTPS 连接".into());
+    }
+    let target = connection
+        .origin
+        .join(path)
+        .map_err(|_| "学校接口地址无效")?;
+    if target.origin() != connection.origin.origin() {
+        return Err("学校接口来源无效".into());
+    }
+    let response = connection
+        .client
+        .post(target)
+        .header(
+            reqwest::header::ORIGIN,
+            connection.origin.origin().ascii_serialization(),
+        )
+        .timeout(std::time::Duration::from_secs(45))
+        .json(input)
+        .send()
+        .await
+        .map_err(|_| "学校接口连接失败，请检查网络")?;
+    decode(response, 16 * 1024 * 1024).await
+}
+
+async fn decode(mut response: reqwest::Response, limit: usize) -> Result<Value, String> {
     let status = response.status();
     let mut bytes = Vec::new();
     while let Some(chunk) = response.chunk().await.map_err(|_| "读取学校信息失败")? {
-        if bytes.len() + chunk.len() > 1024 * 1024 {
+        if bytes.len() + chunk.len() > limit {
             return Err("学校响应过大".into());
         }
         bytes.extend_from_slice(&chunk);

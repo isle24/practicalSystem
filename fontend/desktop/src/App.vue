@@ -29,20 +29,21 @@
       </div>
       <button v-if="profiles.length" class="switch-school history-entry" type="button" @click="switching = true">选择已连接的学校<ChevronRight :size="14" /></button>
       </template>
-      <label for="school-username">账号</label>
+      <p class="connection-guidance">账号与密码可同时留空，进入学校后选择企业微信扫码登录。</p>
+      <label for="school-username">账号 <small>可选</small></label>
       <input id="school-username" v-model="username" type="text" autocomplete="username" placeholder="请输入账号" :disabled="busy || loading">
-      <label for="school-password">密码</label>
+      <label for="school-password">密码 <small>可选</small></label>
       <input id="school-password" v-model="password" type="password" autocomplete="current-password" placeholder="请输入密码" :disabled="busy || loading">
       <label for="school-remark">备注 <small>可选</small></label>
       <input id="school-remark" v-model="remark" maxlength="60" placeholder="例如：工作账号" :disabled="busy || loading">
       <div class="connection-options">
-        <label class="check-option"><input v-model="rememberPassword" type="checkbox" :disabled="busy || loading"><span>记住密码</span></label>
+        <label class="check-option"><input v-model="rememberPassword" type="checkbox" :disabled="busy || loading || !username.trim() || !password"><span>记住密码</span></label>
         <label class="check-option"><input v-model="autoLogin" type="checkbox" :disabled="busy || loading || !rememberPassword"><span>自动登录</span></label>
       </div>
       <p v-if="error" id="connection-error" class="error" role="alert"><CircleAlert :size="17" />{{ error }}</p>
       <button class="connect-button" type="submit" :disabled="busy || loading || !domain.trim()">
         <LoaderCircle v-if="busy" :size="19" class="spin" />
-        <span>{{ busy ? '正在连接' : username.trim() ? '登录' : '进入学校' }}</span>
+        <span>{{ busy ? '正在连接' : username.trim() ? '登录' : '连接学校并扫码' }}</span>
         <ArrowRight v-if="!busy" :size="19" />
       </button>
     </form>
@@ -125,8 +126,8 @@ async function connect() {
       domain: domain.value,
       username: username.value,
       password: password.value,
-      rememberPassword: rememberPassword.value,
-      autoLogin: autoLogin.value,
+      rememberPassword: Boolean(username.value.trim() && password.value && rememberPassword.value),
+      autoLogin: Boolean(username.value.trim() && password.value && autoLogin.value),
       remark: remark.value,
     });
     profiles.value = settings.schools;
@@ -175,3 +176,7 @@ function newSchool() {
   schoolName.value = ''; editingSchool.value = true; switching.value = false; error.value = '';
 }
 </script>
+
+<style scoped>
+.connection-guidance { margin: 0 0 14px; color: #5f6b78; font-size: 13px; line-height: 1.6; }
+</style>

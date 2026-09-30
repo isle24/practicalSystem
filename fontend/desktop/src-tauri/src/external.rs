@@ -1,3 +1,4 @@
+use std::net::{Ipv4Addr, Ipv6Addr};
 use tauri::webview::{NewWindowFeatures, NewWindowResponse};
 use tauri::{AppHandle, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 use tauri_plugin_clipboard_manager::ClipboardExt;
@@ -11,20 +12,14 @@ pub fn allowed(url: &Url) -> bool {
         .unwrap_or("")
         .trim_end_matches('.')
         .to_ascii_lowercase();
-    let loopback = match url.host() {
-        Some(url::Host::Ipv4(ip)) => ip.is_loopback() || ip.is_unspecified(),
-        Some(url::Host::Ipv6(ip)) => {
-            ip.is_loopback()
-                || ip.is_unspecified()
-                || ip
-                    .to_ipv4_mapped()
-                    .is_some_and(|ip| ip.is_loopback() || ip.is_unspecified())
-        }
+    let restricted_ip = match url.host() {
+        Some(url::Host::Ipv4(ip)) => restricted_ipv4(ip),
+        Some(url::Host::Ipv6(ip)) => restricted_ipv6(ip),
         _ => false,
     };
     matches!(url.scheme(), "http" | "https")
         && !host.is_empty()
-        && !loopback
+        && !restricted_ip
         && url.username().is_empty()
         && url.password().is_none()
         && host != "localhost"
@@ -32,6 +27,44 @@ pub fn allowed(url: &Url) -> bool {
         && !host.starts_with("127.")
         && host != "[::1]"
         && host != "0.0.0.0"
+        && (host.contains('.') || host.contains(':'))
+        && !host.ends_with(".local")
+        && !host.ends_with(".internal")
+        && !host.ends_with(".lan")
+        && !host.ends_with(".home.arpa")
+}
+
+fn restricted_ipv4(ip: Ipv4Addr) -> bool {
+    let [first, second, third, ..] = ip.octets();
+    first == 0
+        || first == 10
+        || first == 127
+        || first >= 224
+        || (first == 100 && (64..=127).contains(&second))
+        || (first == 169 && second == 254)
+        || (first == 172 && (16..=31).contains(&second))
+        || (first == 192 && second == 0 && (third == 0 || third == 2))
+        || (first == 192 && second == 88 && third == 99)
+        || (first == 192 && second == 168)
+        || (first == 198 && ((second == 18 || second == 19) || (second == 51 && third == 100)))
+        || (first == 203 && second == 0 && third == 113)
+}
+
+fn restricted_ipv6(ip: Ipv6Addr) -> bool {
+    if let Some(mapped) = ip.to_ipv4_mapped() {
+        return restricted_ipv4(mapped);
+    }
+    let [first, second, third, fourth, ..] = ip.octets();
+    let word0 = u16::from_be_bytes([first, second]);
+    let word1 = u16::from_be_bytes([third, fourth]);
+    let global_unicast = (first & 0xe0) == 0x20;
+    !global_unicast
+        || ip.is_loopback()
+        || ip.is_unspecified()
+        || (word0 == 0x2001 && (word1 <= 0x01ff || word1 == 0x0db8))
+        || word0 == 0x2002
+        || (word0 == 0x3fff && word1 <= 0x000f)
+        || (word0 == 0x0064 && word1 == 0xff9b)
 }
 
 /// 认证窗口使用非持久独立上下文，禁止携带凭据跳转其他来源。

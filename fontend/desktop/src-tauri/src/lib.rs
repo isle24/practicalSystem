@@ -1,4 +1,5 @@
 mod connection;
+mod credential_vault;
 mod downloads;
 mod external;
 mod favorite_auth;
@@ -84,6 +85,9 @@ async fn connect_school(
     remark: Option<String>,
 ) -> Result<Settings, String> {
     require_connection(&window)?;
+    if username.trim().is_empty() != password.is_empty() {
+        return Err("请完整填写账号和密码，或同时留空后选择企业微信扫码登录".into());
+    }
     if state.connecting.swap(true, Ordering::AcqRel) {
         return Err("正在连接，请稍候".into());
     }
@@ -323,6 +327,11 @@ pub fn run() {
     }
 
     builder
+        .setup(|app| {
+            crate::credential_vault::initialize(app.path().app_config_dir()?)
+                .map_err(std::io::Error::other)?;
+            Ok(())
+        })
         .on_window_event(|window, event| {
             if window.label() == "connection" {
                 if let tauri::WindowEvent::CloseRequested { api, .. } = event {
