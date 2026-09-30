@@ -11,22 +11,16 @@
           :key="filter.key"
           class="data-list-filter-field"
         >
-          <el-select
+          <el-select-v2
             v-if="filter.type === 'select'"
             class="filter-select"
             :model-value="filterValue(filter.key)"
+            :options="filter.options || []"
             clearable
             filterable
             :placeholder="filterPlaceholder(filter)"
             @update:model-value="value => updateFilter(filter.key, value)"
-          >
-            <el-option
-              v-for="option in filter.options || []"
-              :key="option.value"
-              :label="option.label"
-              :value="option.value"
-            />
-          </el-select>
+          />
           <input
             v-else
             :value="filterValue(filter.key)"
@@ -171,6 +165,7 @@
 
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
+import { ElSelectV2 } from 'element-plus';
 import { ChevronDown, ChevronRight, ChevronUp, Columns3, Ellipsis, RefreshCw, X } from '@lucide/vue';
 import { tableSequence } from '../utils/table';
 
@@ -275,7 +270,6 @@ watch(
     await nextTick();
     updateFilterOverflow();
   },
-  { deep: true },
 );
 
 watch(

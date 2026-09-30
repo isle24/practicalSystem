@@ -14,6 +14,8 @@ const props = defineProps({
 });
 const emit = defineEmits(['close', 'completed']);
 const fileInput = ref(null);
+const previewPage = ref(1);
+const previewPageSize = 20;
 const state = reactive({
   loading: false,
   previewLoading: false,
@@ -25,8 +27,10 @@ const state = reactive({
 });
 
 const canConfirm = computed(() => Boolean(state.fileId && Number(state.summary?.valid_rows) > 0 && !state.loading && !state.previewLoading));
+const visibleItems = computed(() => state.items.slice((previewPage.value - 1) * previewPageSize, previewPage.value * previewPageSize));
 
 function reset() {
+  previewPage.value = 1;
   state.loading = false;
   state.previewLoading = false;
   state.fileName = '';
@@ -46,6 +50,7 @@ async function handleFileChange(event) {
   event.target.value = '';
   if (!file || state.previewLoading) return;
   state.previewLoading = true;
+  previewPage.value = 1;
   state.message = '';
   state.fileName = file.name;
   try {
@@ -102,7 +107,7 @@ watch(() => props.visible, (visible) => {
           <span>重复行 {{ state.summary.duplicate_rows || 0 }}</span>
         </div>
         <el-alert v-if="state.summary.error_rows" title="存在错误行。确认时可选择跳过错误行，只导入可导入的数据。" type="warning" :closable="false" />
-        <el-table :data="state.items" height="360" stripe size="small">
+        <el-table :data="visibleItems" height="360" stripe size="small">
           <el-table-column prop="row_number" label="行号" width="68" />
           <el-table-column prop="dep_name" label="所属学院" min-width="150" />
           <el-table-column prop="profession_code" label="专业代码" width="110" />
@@ -115,6 +120,7 @@ watch(() => props.visible, (visible) => {
             </template>
           </el-table-column>
         </el-table>
+        <el-pagination v-if="state.items.length > previewPageSize" v-model:current-page="previewPage" layout="total, prev, pager, next" :page-size="previewPageSize" :total="state.items.length" />
       </template>
     </div>
     <template #footer>

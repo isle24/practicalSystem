@@ -74,9 +74,7 @@
       <el-form v-else-if="dialog.mode === 'edit'" label-position="top" class="student-change-form">
         <div class="student-change-form-grid">
           <el-form-item label="实习任务" class="span-two">
-            <el-select v-model="form.arrangement_id" filterable placeholder="请选择实习任务" :disabled="Boolean(form.id)" @change="selectProfile">
-              <el-option v-for="item in taskProfiles" :key="item.arrangement_id" :label="profileTaskLabel(item)" :value="item.arrangement_id" />
-            </el-select>
+            <el-select-v2 v-model="form.arrangement_id" :options="taskSelectOptions" filterable placeholder="请选择实习任务" :disabled="Boolean(form.id)" @change="selectProfile" />
           </el-form-item>
           <el-form-item label="变更类型">
             <el-select v-model="form.change_type" placeholder="请选择变更类型">
@@ -88,14 +86,10 @@
           </el-form-item>
           <template v-if="showCompanyFields">
             <el-form-item label="实习单位">
-              <el-select v-model="form.after_payload.company_id" clearable filterable placeholder="请选择实习单位" @change="normalizeCompanyRelations">
-                <el-option v-for="item in options.companies || []" :key="item.company_id" :label="item.company_name" :value="item.company_id" />
-              </el-select>
+              <el-select-v2 v-model="form.after_payload.company_id" :options="options.companies || []" :props="{ label: 'company_name', value: 'company_id' }" clearable filterable placeholder="请选择实习单位" @change="normalizeCompanyRelations" />
             </el-form-item>
             <el-form-item label="实习基地">
-              <el-select v-model="form.after_payload.base_id" clearable filterable placeholder="请选择实习基地">
-                <el-option v-for="item in availableBases" :key="item.id" :label="item.name" :value="item.id" />
-              </el-select>
+              <el-select-v2 v-model="form.after_payload.base_id" :options="availableBases" :props="{ label: 'name', value: 'id' }" clearable filterable placeholder="请选择实习基地" />
             </el-form-item>
           </template>
           <el-form-item v-if="showMentorField" label="企业导师" class="span-two">
@@ -169,7 +163,7 @@
 <script setup>
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { Plus } from '@lucide/vue';
-import { ElMessage, ElMessageBox } from 'element-plus';
+import { ElMessage, ElMessageBox, ElSelectV2 } from 'element-plus';
 import {
   fetchInternshipMentors,
   fetchInternshipStudentChangeDetail,
@@ -248,6 +242,7 @@ const taskProfiles = computed(() => {
   });
   return Array.from(items.values());
 });
+const taskSelectOptions = computed(() => taskProfiles.value.map(item => ({ label: profileTaskLabel(item), value: item.arrangement_id })));
 const listFilters = computed(() => {
   if (isStudent.value) return [];
   const scopeFilter = selectedCategory.value?.scope_type === 'cohort'

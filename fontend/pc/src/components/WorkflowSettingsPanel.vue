@@ -1,7 +1,7 @@
 <script setup>
 import { onMounted, reactive, ref } from 'vue';
 import { request } from '../api/client';
-import WorkflowAccountSelect from './WorkflowAccountSelect.vue';
+import WorkflowAccountSelect from './RemoteAccountSelect.vue';
 
 const loading = ref(false);
 const message = ref('');

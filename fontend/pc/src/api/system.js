@@ -616,7 +616,7 @@ export function saveRoleMenus(payload) {
 }
 
 export function fetchAdminOptions() {
-  return request('/admin/options');
+  return request('/admin/options?include_accounts=0');
 }
 
 export function fetchOrganizationScopes(params) {

@@ -149,8 +149,8 @@
             <div v-for="(scope, index) in state.form.scopes" :key="index" class="social-inline-row scope-row">
               <el-select v-model="scope.scope_type" placeholder="请选择范围类型"><el-option label="全校" value="school" /><el-option label="学院" value="college" /><el-option label="专业" value="profession" /><el-option label="班级" value="class" /></el-select>
               <el-select v-if="scope.scope_type !== 'school'" v-model="scope.dep_id" clearable filterable placeholder="请选择学院"><el-option v-for="item in state.options.departments" :key="item.dep_id" :label="item.dep_name" :value="item.dep_id" /></el-select>
-              <el-select v-if="['profession', 'class'].includes(scope.scope_type)" v-model="scope.profession_id" clearable filterable placeholder="请选择专业"><el-option v-for="item in professionsFor(scope.dep_id)" :key="item.profession_id" :label="item.profession_name" :value="item.profession_id" /></el-select>
-              <el-select v-if="scope.scope_type === 'class'" v-model="scope.class_id" clearable filterable placeholder="请选择班级"><el-option v-for="item in classesFor(scope.profession_id)" :key="item.class_id" :label="item.class_name" :value="item.class_id" /></el-select>
+              <el-select-v2 v-if="['profession', 'class'].includes(scope.scope_type)" v-model="scope.profession_id" clearable filterable placeholder="请选择专业" :options="professionsFor(scope.dep_id)" :props="{ label: 'profession_name', value: 'profession_id' }" />
+              <el-select-v2 v-if="scope.scope_type === 'class'" v-model="scope.class_id" clearable filterable placeholder="请选择班级" :options="classesFor(scope.profession_id)" :props="{ label: 'class_name', value: 'class_id' }" />
               <el-button link type="danger" :disabled="state.form.scopes.length === 1" @click="removeArrayItem('scopes', index)">移除</el-button>
             </div>
           </section>
@@ -177,7 +177,7 @@
         </template>
 
         <template v-else-if="state.form.resource === 'project'">
-          <label><span>所属计划</span><el-select v-model="state.form.plan_id" filterable placeholder="请选择计划" @change="loadPlanStudents"><el-option v-for="item in state.options.plans" :key="item.id" :label="item.title" :value="item.id" /></el-select></label>
+          <label><span>所属计划</span><el-select-v2 v-model="state.form.plan_id" filterable placeholder="请选择计划" @change="loadPlanStudents" :options="state.options.plans" :props="{ label: 'title', value: 'id' }" /></label>
           <label><span>项目编号</span><input v-model="state.form.project_code" maxlength="120" placeholder="不填则自动生成"></label>
           <label class="span-2"><span>项目名称</span><input v-model="state.form.title" maxlength="180" placeholder="请输入集中实践项目名称"></label>
           <label><span>开始时间</span><input v-model="state.form.start_at" type="datetime-local"></label>
@@ -189,7 +189,7 @@
         </template>
 
         <template v-else-if="state.form.resource === 'implementation'">
-          <label class="span-2"><span>集中实践项目</span><el-select v-model="state.form.project_id" filterable placeholder="请选择项目"><el-option v-for="item in centralizedProjects" :key="item.id" :label="item.title" :value="item.id" /></el-select></label>
+          <label class="span-2"><span>集中实践项目</span><el-select-v2 v-model="state.form.project_id" filterable placeholder="请选择项目" :options="centralizedProjects" :props="{ label: 'title', value: 'id' }" /></label>
           <label class="span-2"><span>实施申请名称</span><input v-model="state.form.title" maxlength="180" placeholder="请输入实施申请名称"></label>
           <label><span>预算金额</span><el-input-number v-model="state.form.budget_amount" :min="0" :max="99999999" :precision="2" /></label>
           <label><span>场地要求</span><input v-model="state.form.venue_requirement" maxlength="10000"></label>
@@ -198,11 +198,11 @@
         </template>
 
         <template v-else-if="state.form.resource === 'declaration'">
-          <label><span>所属计划</span><el-select v-model="state.form.plan_id" filterable placeholder="请选择计划"><el-option v-for="item in state.options.plans" :key="item.id" :label="item.title" :value="item.id" /></el-select></label>
+          <label><span>所属计划</span><el-select-v2 v-model="state.form.plan_id" filterable placeholder="请选择计划" :options="state.options.plans" :props="{ label: 'title', value: 'id' }" /></label>
           <label><span>申报类型</span><el-select v-model="state.form.declaration_type" placeholder="请选择申报类型"><el-option label="个人申报" value="individual" /><el-option label="团队申报" value="team" /></el-select></label>
           <label v-if="state.form.declaration_type === 'team'"><span>团队提交</span><el-select v-model="state.form.team_submit_mode" placeholder="请选择团队提交方式"><el-option label="分别提交" value="individual" /><el-option label="共同提交" value="shared" /></el-select></label>
-          <label><span>指导教师</span><el-select v-model="state.form.selected_teacher_id" filterable placeholder="请选择指导教师"><el-option v-for="item in state.options.teachers" :key="item.teacher_id" :label="`${item.teacher_name} / ${item.teacher_num || '-'}`" :value="item.teacher_id" /></el-select></label>
-          <label v-if="state.form.declaration_type === 'team'" class="span-2"><span>团队成员</span><el-select v-model="state.form.member_student_ids" multiple filterable collapse-tags placeholder="请选择团队成员"><el-option v-for="item in state.planStudents" :key="item.student_id" :label="`${item.name} / ${item.student_num}`" :value="item.student_id" /></el-select></label>
+          <label><span>指导教师</span><el-select-v2 v-model="state.form.selected_teacher_id" filterable placeholder="请选择指导教师" :options="teacherSelectOptions" /></label>
+          <label v-if="state.form.declaration_type === 'team'" class="span-2"><span>团队成员</span><el-select-v2 v-model="state.form.member_student_ids" multiple filterable collapse-tags placeholder="请选择团队成员" :options="planStudentSelectOptions" /></label>
           <label class="span-2"><span>申报名称</span><input v-model="state.form.title" maxlength="180"></label>
           <label><span>预计时长</span><input v-model="state.form.expected_duration" maxlength="120" placeholder="例如：5天"></label>
           <label><span>实践地点</span><input v-model="state.form.location" maxlength="255"></label>
@@ -212,9 +212,9 @@
         </template>
 
         <template v-else-if="state.form.resource === 'material'">
-          <label><span>所属计划</span><el-select v-model="state.form.plan_id" filterable placeholder="请选择所属计划" @change="state.form.project_id = null"><el-option v-for="item in state.options.plans" :key="item.id" :label="item.title" :value="item.id" /></el-select></label>
-          <label><span>实践项目</span><el-select v-model="state.form.project_id" filterable placeholder="请选择实践项目"><el-option v-for="item in projectsForPlan(state.form.plan_id)" :key="item.id" :label="item.title" :value="item.id" /></el-select></label>
-          <label v-if="!isStudent"><span>学生</span><el-select v-model="state.form.student_id" filterable placeholder="请选择学生"><el-option v-for="item in state.options.students" :key="item.student_id" :label="`${item.name} / ${item.student_num}`" :value="item.student_id" /></el-select></label>
+          <label><span>所属计划</span><el-select-v2 v-model="state.form.plan_id" filterable placeholder="请选择所属计划" @change="state.form.project_id = null" :options="state.options.plans" :props="{ label: 'title', value: 'id' }" /></label>
+          <label><span>实践项目</span><el-select-v2 v-model="state.form.project_id" filterable placeholder="请选择实践项目" :options="projectsForPlan(state.form.plan_id)" :props="{ label: 'title', value: 'id' }" /></label>
+          <label v-if="!isStudent"><span>学生</span><el-select-v2 v-model="state.form.student_id" filterable placeholder="请选择学生" :options="studentSelectOptions" /></label>
           <label><span>材料类型</span><el-select v-model="state.form.material_type" filterable allow-create placeholder="请选择材料类型"><el-option v-for="option in materialTypeOptions" :key="option.value" :label="option.label" :value="option.value" /></el-select></label>
           <label><span>提交范围</span><el-select v-model="state.form.submit_scope" placeholder="请选择提交范围"><el-option label="学生" value="student" /><el-option label="团队" value="team" /><el-option label="项目" value="project" /></el-select></label>
           <label class="span-2"><span>材料标题</span><input v-model="state.form.title" maxlength="180"></label>
@@ -234,15 +234,15 @@
         </template>
 
         <template v-else-if="state.form.resource === 'patch_sign'">
-          <label class="span-2"><span>集中实践项目</span><el-select v-model="state.form.project_id" filterable placeholder="请选择集中实践项目"><el-option v-for="item in centralizedProjects" :key="item.id" :label="item.title" :value="item.id" /></el-select></label>
+          <label class="span-2"><span>集中实践项目</span><el-select-v2 v-model="state.form.project_id" filterable placeholder="请选择集中实践项目" :options="centralizedProjects" :props="{ label: 'title', value: 'id' }" /></label>
           <label><span>补签日期</span><input v-model="state.form.sign_date" type="date"></label>
           <label class="span-2"><span>补签原因</span><textarea v-model="state.form.reason" rows="4" maxlength="10000" /></label>
           <label class="span-2"><span>证明说明</span><textarea v-model="state.form.proof" rows="4" maxlength="100000" /></label>
         </template>
 
         <template v-else-if="state.form.resource === 'score'">
-          <label><span>实践项目</span><el-select v-model="state.form.project_id" filterable placeholder="请选择实践项目" @change="prepareScoreRules"><el-option v-for="item in state.options.projects" :key="item.id" :label="item.title" :value="item.id" /></el-select></label>
-          <label><span>学生</span><el-select v-model="state.form.student_id" filterable placeholder="请选择学生"><el-option v-for="item in scoreStudentOptions" :key="item.student_id" :label="`${item.name} / ${item.student_num}`" :value="item.student_id" /></el-select></label>
+          <label><span>实践项目</span><el-select-v2 v-model="state.form.project_id" filterable placeholder="请选择实践项目" @change="prepareScoreRules" :options="state.options.projects" :props="{ label: 'title', value: 'id' }" /></label>
+          <label><span>学生</span><el-select-v2 v-model="state.form.student_id" filterable placeholder="请选择学生" :options="scoreStudentSelectOptions" /></label>
           <section class="span-2 social-inline-editor">
             <header><strong>评分项</strong><small>按计划规则自动计算总评</small></header>
             <div v-for="item in state.form.items" :key="item.item_code" class="social-score-input">
@@ -283,11 +283,13 @@
         </section>
         <section v-if="state.detail.participants?.length" class="social-detail-block">
           <strong>参与学生</strong>
-          <el-table :data="state.detail.participants" size="small"><el-table-column type="index" label="序号" width="66" /><el-table-column prop="student_name" label="学生" /><el-table-column prop="student_num" label="学号" /><el-table-column prop="teacher_name" label="指导教师" /></el-table>
+          <el-table :data="visibleDetailParticipants" size="small"><el-table-column type="index" label="序号" width="66" :index="index => (detailParticipantPage - 1) * detailPageSize + index + 1" /><el-table-column prop="student_name" label="学生" /><el-table-column prop="student_num" label="学号" /><el-table-column prop="teacher_name" label="指导教师" /></el-table>
+          <el-pagination v-if="state.detail.participants.length > detailPageSize" v-model:current-page="detailParticipantPage" layout="total, prev, pager, next" :page-size="detailPageSize" :total="state.detail.participants.length" />
         </section>
         <section v-if="state.detail.members?.length" class="social-detail-block">
           <strong>团队成员</strong>
-          <el-table :data="state.detail.members" size="small"><el-table-column type="index" label="序号" width="66" /><el-table-column prop="student_name" label="学生" /><el-table-column prop="student_num" label="学号" /><el-table-column prop="confirm_status" label="确认状态"><template #default="{ row }">{{ confirmStatusText(row.confirm_status) }}</template></el-table-column></el-table>
+          <el-table :data="visibleDetailMembers" size="small"><el-table-column type="index" label="序号" width="66" :index="index => (detailMemberPage - 1) * detailPageSize + index + 1" /><el-table-column prop="student_name" label="学生" /><el-table-column prop="student_num" label="学号" /><el-table-column prop="confirm_status" label="确认状态"><template #default="{ row }">{{ confirmStatusText(row.confirm_status) }}</template></el-table-column></el-table>
+          <el-pagination v-if="state.detail.members.length > detailPageSize" v-model:current-page="detailMemberPage" layout="total, prev, pager, next" :page-size="detailPageSize" :total="state.detail.members.length" />
         </section>
       </div>
     </OperationDialog>
@@ -336,7 +338,7 @@
     <OperationDialog :visible="state.dialog.type === 'assignTeachers'" title="分配指导教师" :busy="state.saving" @close="closeDialog">
       <div class="social-assignment-form">
         <div v-for="(item, index) in state.assignment.teachers" :key="index" class="social-inline-row teacher-row">
-          <el-select v-model="item.teacher_id" filterable placeholder="请选择教师"><el-option v-for="teacher in state.options.teachers" :key="teacher.teacher_id" :label="`${teacher.teacher_name} / ${teacher.teacher_num || '-'}`" :value="teacher.teacher_id" /></el-select>
+          <el-select-v2 v-model="item.teacher_id" filterable placeholder="请选择教师" :options="teacherSelectOptions" />
           <el-select v-model="item.teacher_role" placeholder="请选择教师角色"><el-option label="负责人" value="leader" /><el-option label="指导教师" value="guide" /></el-select>
           <el-input-number v-model="item.capacity" :min="0" :max="10000" />
           <el-button link type="danger" @click="state.assignment.teachers.splice(index, 1)">移除</el-button>
@@ -349,19 +351,20 @@
     <OperationDialog :visible="state.dialog.type === 'assignStudents'" title="分配学生与指导教师" :busy="state.saving" dialog-class="social-practice-assignment-dialog" @close="closeDialog">
       <div class="social-student-assignment">
         <header><el-button :icon="Plus" @click="addParticipant">添加学生</el-button><small>每名学生必须绑定当前项目中的一名指导教师。</small></header>
-        <el-table :data="state.assignment.participants" size="small" height="420">
-          <el-table-column type="index" label="序号" width="66" />
-          <el-table-column label="学生" min-width="220"><template #default="{ row }"><el-select v-model="row.student_id" filterable placeholder="请选择学生"><el-option v-for="student in state.options.students" :key="student.student_id" :label="`${student.name} / ${student.student_num}`" :value="student.student_id" /></el-select></template></el-table-column>
-          <el-table-column label="指导教师" min-width="200"><template #default="{ row }"><el-select v-model="row.teacher_id" filterable placeholder="请选择指导教师"><el-option v-for="teacher in state.assignment.teachers" :key="teacher.teacher_id" :label="teacherName(teacher.teacher_id)" :value="teacher.teacher_id" /></el-select></template></el-table-column>
-          <el-table-column label="操作" width="80"><template #default="{ $index }"><el-button link type="danger" @click="state.assignment.participants.splice($index, 1)">移除</el-button></template></el-table-column>
+        <el-table :data="visibleAssignmentParticipants" size="small" height="420">
+          <el-table-column type="index" label="序号" width="66" :index="index => (assignmentPage - 1) * detailPageSize + index + 1" />
+          <el-table-column label="学生" min-width="220"><template #default="{ row }"><el-select-v2 v-model="row.student_id" filterable placeholder="请选择学生" :options="studentSelectOptions" /></template></el-table-column>
+          <el-table-column label="指导教师" min-width="200"><template #default="{ row }"><el-select-v2 v-model="row.teacher_id" filterable placeholder="请选择指导教师" :options="assignmentTeacherSelectOptions" /></template></el-table-column>
+          <el-table-column label="操作" width="80"><template #default="{ $index }"><el-button link type="danger" @click="removeParticipant($index)">移除</el-button></template></el-table-column>
         </el-table>
+        <el-pagination v-if="state.assignment.participants.length > detailPageSize" v-model:current-page="assignmentPage" layout="total, prev, pager, next" :page-size="detailPageSize" :total="state.assignment.participants.length" />
       </div>
       <template #footer><el-button @click="closeDialog">取消</el-button><el-button type="primary" :loading="state.saving" @click="submitStudentAssignment">保存分配</el-button></template>
     </OperationDialog>
 
     <OperationDialog :visible="state.dialog.type === 'assignDeclarationTeacher'" title="分配分散实践指导教师" :busy="state.saving" @close="closeDialog">
       <div class="social-assignment-form">
-        <label class="social-assignment-field"><span>指导教师</span><el-select v-model="state.assignment.declarationTeacherId" filterable placeholder="请选择指导教师"><el-option v-for="teacher in state.options.teachers" :key="teacher.teacher_id" :label="`${teacher.teacher_name} / ${teacher.teacher_num || '-'}`" :value="teacher.teacher_id" /></el-select></label>
+        <label class="social-assignment-field"><span>指导教师</span><el-select-v2 v-model="state.assignment.declarationTeacherId" filterable placeholder="请选择指导教师" :options="teacherSelectOptions" /></label>
         <small class="social-assignment-hint">分配后教师需要在确认期限内确认，申报审核会使用最新的确认结果。</small>
       </div>
       <template #footer><el-button @click="closeDialog">取消</el-button><el-button type="primary" :loading="state.saving" @click="submitDeclarationTeacherAssignment">保存分配</el-button></template>
@@ -378,7 +381,7 @@
 
     <OperationDialog :visible="state.dialog.type === 'teacherReselect'" title="重新选择指导教师" :busy="state.saving" @close="closeDialog">
       <div class="social-assignment-form">
-        <label class="social-assignment-field"><span>指导教师</span><el-select v-model="state.assignment.declarationTeacherId" filterable placeholder="请选择其他指导教师"><el-option v-for="teacher in state.options.teachers" :key="teacher.teacher_id" :label="`${teacher.teacher_name} / ${teacher.teacher_num || '-'}`" :value="teacher.teacher_id" /></el-select></label>
+        <label class="social-assignment-field"><span>指导教师</span><el-select-v2 v-model="state.assignment.declarationTeacherId" filterable placeholder="请选择其他指导教师" :options="teacherSelectOptions" /></label>
         <small class="social-assignment-hint">仅在教师拒绝或确认超时后可重新选择，次数受计划配置限制。</small>
       </div>
       <template #footer><el-button @click="closeDialog">取消</el-button><el-button type="primary" :loading="state.saving" @click="submitTeacherReselect">提交选择</el-button></template>
@@ -396,14 +399,15 @@
           <span>错误 {{ state.planImport.summary.error_rows || 0 }} 条</span>
           <span>重复 {{ state.planImport.summary.duplicate_rows || 0 }} 条</span>
         </div>
-        <el-table v-if="state.planImport.items.length" :data="state.planImport.items" size="small" height="390">
-          <el-table-column type="index" label="序号" width="66" />
+        <el-table v-if="state.planImport.items.length" :data="visiblePlanImportItems" size="small" height="390">
+          <el-table-column type="index" label="序号" width="66" :index="index => (planImportPage - 1) * detailPageSize + index + 1" />
           <el-table-column prop="title" label="计划名称" min-width="180" />
           <el-table-column prop="grade_name" label="年级" width="110" />
           <el-table-column prop="department_name" label="学院" min-width="150" />
           <el-table-column prop="profession_name" label="专业" min-width="150" />
           <el-table-column label="校验结果" min-width="220"><template #default="{ row }"><el-tag :type="row.errors?.length ? 'danger' : (row.duplicate ? 'warning' : 'success')">{{ row.errors?.join('；') || (row.duplicate ? '将更新可编辑草稿' : '可导入') }}</el-tag></template></el-table-column>
         </el-table>
+        <el-pagination v-if="state.planImport.items.length > detailPageSize" v-model:current-page="planImportPage" layout="total, prev, pager, next" :page-size="detailPageSize" :total="state.planImport.items.length" />
       </div>
       <template #footer>
         <el-button :disabled="state.saving" @click="closeDialog">取消</el-button>
@@ -416,7 +420,7 @@
 <script setup>
 import FilePreviewButton from '../../../shared/components/FilePreviewButton.vue';
 import { computed, reactive, ref, watch } from 'vue';
-import { ElMessage, ElMessageBox } from 'element-plus';
+import { ElMessage, ElMessageBox, ElSelectV2 } from 'element-plus';
 import {
   Archive,
   CheckCircle2,
@@ -515,6 +519,19 @@ const state = reactive({
   planImport: { fileId: null, items: [], summary: null },
 });
 const materialFileInput = ref(null);
+const detailPageSize = 20;
+const assignmentPage = ref(1);
+const detailParticipantPage = ref(1);
+const detailMemberPage = ref(1);
+const planImportPage = ref(1);
+const visibleAssignmentParticipants = computed(() => state.assignment.participants.slice((assignmentPage.value - 1) * detailPageSize, assignmentPage.value * detailPageSize));
+const visibleDetailParticipants = computed(() => (state.detail.participants || []).slice((detailParticipantPage.value - 1) * detailPageSize, detailParticipantPage.value * detailPageSize));
+const visibleDetailMembers = computed(() => (state.detail.members || []).slice((detailMemberPage.value - 1) * detailPageSize, detailMemberPage.value * detailPageSize));
+const visiblePlanImportItems = computed(() => state.planImport.items.slice((planImportPage.value - 1) * detailPageSize, planImportPage.value * detailPageSize));
+const teacherSelectOptions = computed(() => state.options.teachers.map(item => ({ label: `${item.teacher_name} / ${item.teacher_num || '-'}`, value: item.teacher_id })));
+const studentSelectOptions = computed(() => state.options.students.map(item => ({ label: `${item.name} / ${item.student_num}`, value: item.student_id })));
+const planStudentSelectOptions = computed(() => state.planStudents.map(item => ({ label: `${item.name} / ${item.student_num}`, value: item.student_id })));
+const assignmentTeacherSelectOptions = computed(() => state.assignment.teachers.map(item => ({ label: teacherName(item.teacher_id), value: item.teacher_id })));
 
 const panelConfig = computed(() => panelDefinitions[props.panel] || panelDefinitions.plans);
 const isStudent = computed(() => props.roleType === 'student');
@@ -526,6 +543,7 @@ const scoreStudentOptions = computed(() => {
   const assignedIds = state.rows.filter(row => Number(row.project_id) === projectId).map(row => Number(row.student_id));
   return assignedIds.length ? state.options.students.filter(item => assignedIds.includes(Number(item.student_id))) : state.options.students;
 });
+const scoreStudentSelectOptions = computed(() => scoreStudentOptions.value.map(item => ({ label: `${item.name} / ${item.student_num}`, value: item.student_id })));
 const panelResource = computed(() => panelConfig.value.resource);
 const createLabel = computed(() => ({
   plan: '新增计划', project: '新增集中项目', implementation: '新增实施申请', declaration: '发起分散申报',
@@ -563,6 +581,8 @@ const tableActions = computed(() => uniqueActions(state.rows.flatMap(rowActions)
 const detailFacts = computed(() => detailFields(state.dialog.row?.resource || panelResource.value).map(item => ({ label: item.label, value: item.format ? item.format(state.detail) : state.detail[item.key] })));
 const reviewLimit = computed(() => state.review.status === 'modify' || state.dialog.type === 'modify' ? { min: 8, max: 800 } : { min: 0, max: 300 });
 const reviewPlaceholder = computed(() => reviewLimit.value.min ? `请填写不少于 ${reviewLimit.value.min} 字的具体原因` : '可填写审核意见');
+
+watch(() => state.detail, () => { detailParticipantPage.value = 1; detailMemberPage.value = 1; });
 
 watch(() => props.panel, async () => {
   state.filters = defaultFilters();
@@ -647,6 +667,7 @@ async function downloadPlanImportTemplate() {
 
 /** 打开社会实践计划导入窗口。 */
 function openPlanImport() {
+  planImportPage.value = 1;
   state.planImport = { fileId: null, items: [], summary: null };
   state.dialog = { type: 'planImport', title: '导入社会实践计划', row: null };
 }
@@ -657,6 +678,7 @@ async function previewPlanImport(event) {
   event.target.value = '';
   if (!file || state.uploading) return;
   state.uploading = true;
+  planImportPage.value = 1;
   try {
     const data = await previewSocialPracticePlanImport(file);
     state.planImport = {
@@ -909,12 +931,19 @@ async function openStudentAssignment(row) {
     teachers: detail.teachers || [],
     participants: (detail.participants || []).map(item => ({ student_id: item.student_id, teacher_id: item.teacher_id })),
   };
+  assignmentPage.value = 1;
   state.dialog = { type: 'assignStudents', title: '分配学生与指导教师', row: { ...row, resource: 'project' } };
 }
 
 /** 添加学生分配行。 */
 function addParticipant() {
   state.assignment.participants.push({ student_id: null, teacher_id: state.assignment.teachers[0]?.teacher_id || null });
+  assignmentPage.value = Math.ceil(state.assignment.participants.length / detailPageSize);
+}
+
+function removeParticipant(index) {
+  state.assignment.participants.splice((assignmentPage.value - 1) * detailPageSize + index, 1);
+  assignmentPage.value = Math.min(assignmentPage.value, Math.max(1, Math.ceil(state.assignment.participants.length / detailPageSize)));
 }
 
 /** 保存项目学生分配。 */

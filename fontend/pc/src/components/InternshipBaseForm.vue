@@ -62,9 +62,7 @@
           </label>
           <label>
             <span>服务专业</span>
-            <el-select v-model="local.profession_ids" multiple collapse-tags collapse-tags-tooltip filterable placeholder="请选择服务专业">
-              <el-option v-for="item in professionOptions" :key="item.profession_id" :label="item.profession_name" :value="item.profession_id" />
-            </el-select>
+            <el-select-v2 v-model="local.profession_ids" :options="professionOptions" :props="{ label: 'profession_name', value: 'profession_id' }" multiple collapse-tags collapse-tags-tooltip filterable placeholder="请选择服务专业" />
           </label>
           <label class="span-2"><span>基地所在位置</span><input v-model="local.address"></label>
           <label class="span-2"><span>服务课程</span><textarea v-model="local.service_courses" rows="3" /></label>
@@ -73,9 +71,7 @@
           <template v-if="local.base_type === 'long_term'">
             <label>
               <span>合作单位</span>
-              <el-select v-model="local.company_id" clearable filterable placeholder="请选择合作单位">
-                <el-option v-for="item in options.companies || []" :key="item.company_id" :label="item.company_name" :value="item.company_id" />
-              </el-select>
+              <el-select-v2 v-model="local.company_id" :options="options.companies || []" :props="{ label: 'company_name', value: 'company_id' }" clearable filterable placeholder="请选择合作单位" />
             </label>
             <label><span>基地类别</span><input v-model="local.category"></label>
             <label><span>基地面积（平方米）</span><input v-model="local.area" type="number" min="0"></label>
@@ -249,6 +245,7 @@
 
 <script setup>
 import { computed, reactive, ref, watch } from 'vue';
+import { ElSelectV2 } from 'element-plus';
 import { Building2, CalendarRange, ClipboardList, Handshake, Plus, Save, Trash2, UsersRound } from '@lucide/vue';
 import BasePersonRows from './InternshipBasePersonRows.vue';
 import TextTabs from './TextTabs.vue';

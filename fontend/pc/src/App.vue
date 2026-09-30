@@ -542,19 +542,12 @@
                       <div v-else-if="internshipState.dialog.type === 'syllabusGuide'" class="operation-form single syllabus-guide-form">
                         <label>
                           <span>实习任务</span>
-                          <el-select
+                          <el-select-v2
                             v-model="internshipState.syllabusGuideForm.arrangement_id"
                             filterable
                             placeholder="请选择实习任务"
                             @change="handleSyllabusGuideArrangementChange"
-                          >
-                            <el-option
-                              v-for="arrangement in internshipState.options.arrangements"
-                              :key="arrangement.id"
-                              :label="internshipArrangementLabel(arrangement)"
-                              :value="arrangement.id"
-                            />
-                          </el-select>
+                           :options="(internshipState.options.arrangements).map(arrangement => ({ label: internshipArrangementLabel(arrangement), value: arrangement.id }))" />
                         </label>
                         <label>
                           <span>材料名称</span>
@@ -607,9 +600,7 @@
                       <div v-else-if="internshipState.dialog.type === 'arrangement'" class="operation-form">
                         <label>
                           <span>实习计划</span>
-                          <el-select v-model="internshipState.arrangementForm.plan_id" clearable filterable placeholder="请选择实习计划" @change="handleArrangementPlanChange">
-                            <el-option v-for="plan in arrangementPlanOptions()" :key="plan.id" :label="internshipPlanLabel(plan)" :value="plan.id" />
-                          </el-select>
+                          <el-select-v2 v-model="internshipState.arrangementForm.plan_id" clearable filterable placeholder="请选择实习计划" @change="handleArrangementPlanChange" :options="(arrangementPlanOptions()).map(plan => ({ label: internshipPlanLabel(plan), value: plan.id }))" />
                         </label>
                         <label><span>任务标题</span><input v-model="internshipState.arrangementForm.title"></label>
                         <label><span>任务编号</span><input v-model="internshipState.arrangementForm.task_no" placeholder="同一计划下唯一"></label>
@@ -624,34 +615,24 @@
                         </label>
                         <label>
                           <span>学院</span>
-                          <el-select v-model="internshipState.arrangementForm.dep_id" filterable disabled placeholder="选择计划后自动带出学院">
-                            <el-option v-for="dep in arrangementDepartmentOptions()" :key="dep.dep_id" :label="dep.dep_name" :value="dep.dep_id" />
-                          </el-select>
+                          <el-select-v2 v-model="internshipState.arrangementForm.dep_id" filterable disabled placeholder="选择计划后自动带出学院" :options="arrangementDepartmentOptions()" :props="{ label: 'dep_name', value: 'dep_id' }" />
                         </label>
                         <label>
                           <span>专业</span>
-                          <el-select v-model="internshipState.arrangementForm.profession_id" filterable disabled placeholder="选择计划后自动带出专业">
-                            <el-option v-for="profession in arrangementProfessionOptions()" :key="profession.profession_id" :label="profession.profession_name" :value="profession.profession_id" />
-                          </el-select>
+                          <el-select-v2 v-model="internshipState.arrangementForm.profession_id" filterable disabled placeholder="选择计划后自动带出专业" :options="arrangementProfessionOptions()" :props="{ label: 'profession_name', value: 'profession_id' }" />
                         </label>
                         <label>
                           <span>负责老师</span>
-                          <el-select v-model="internshipState.arrangementForm.teacher_id" clearable filterable placeholder="请选择负责老师">
-                            <el-option v-for="teacher in arrangementTeacherOptions()" :key="teacher.teacher_id" :label="teacher.teacher_name" :value="teacher.teacher_id" />
-                          </el-select>
+                          <el-select-v2 v-model="internshipState.arrangementForm.teacher_id" clearable filterable placeholder="请选择负责老师" :options="arrangementTeacherOptions()" :props="{ label: 'teacher_name', value: 'teacher_id' }" />
                         </label>
                         <label>
                           <span>任务班级</span>
-                          <el-select v-model="internshipState.arrangementForm.class_ids" multiple collapse-tags collapse-tags-tooltip filterable placeholder="请选择任务班级">
-                            <el-option v-for="classItem in arrangementClassOptions()" :key="classItem.class_id" :label="classItem.class_name" :value="classItem.class_id" />
-                          </el-select>
+                          <el-select-v2 v-model="internshipState.arrangementForm.class_ids" multiple collapse-tags collapse-tags-tooltip filterable placeholder="请选择任务班级" :options="arrangementClassOptions()" :props="{ label: 'class_name', value: 'class_id' }" />
                         </label>
                         <label><span>学分</span><input v-model="internshipState.arrangementForm.credit" type="number" min="0" step="0.5"></label>
                         <label>
                           <span>基地</span>
-                          <el-select v-model="internshipState.arrangementForm.base_id" clearable filterable placeholder="请选择实习基地">
-                            <el-option v-for="base in internshipState.options.bases" :key="base.id" :label="base.name" :value="base.id" />
-                          </el-select>
+                          <el-select-v2 v-model="internshipState.arrangementForm.base_id" clearable filterable placeholder="请选择实习基地" :options="internshipState.options.bases" :props="{ label: 'name', value: 'id' }" />
                         </label>
                         <label>
                           <span>类型</span>
@@ -714,15 +695,11 @@
                         </label>
                         <label>
                           <span>学院</span>
-                          <el-select v-model="internshipState.planForm.dep_id" filterable placeholder="请选择学院" @change="handlePlanDepartmentChange">
-                            <el-option v-for="dep in internshipState.options.departments" :key="dep.dep_id" :label="dep.dep_name" :value="dep.dep_id" />
-                          </el-select>
+                          <el-select-v2 v-model="internshipState.planForm.dep_id" filterable placeholder="请选择学院" @change="handlePlanDepartmentChange" :options="internshipState.options.departments" :props="{ label: 'dep_name', value: 'dep_id' }" />
                         </label>
                         <label>
                           <span>专业</span>
-                          <el-select v-model="internshipState.planForm.profession_id" filterable placeholder="请选择专业">
-                            <el-option v-for="profession in planProfessionOptions()" :key="profession.profession_id" :label="profession.profession_name" :value="profession.profession_id" />
-                          </el-select>
+                          <el-select-v2 v-model="internshipState.planForm.profession_id" filterable placeholder="请选择专业" :options="planProfessionOptions()" :props="{ label: 'profession_name', value: 'profession_id' }" />
                         </label>
                         <label><span>学分</span><input v-model="internshipState.planForm.credit" type="number" min="0" step="0.5"></label>
                         <label>
@@ -786,15 +763,11 @@
                         </label>
                         <label>
                           <span>实习基地</span>
-                          <el-select v-model="internshipState.baseFlowForm.base_id" clearable filterable placeholder="请选择实习基地">
-                            <el-option v-for="base in internshipState.options.bases" :key="base.id" :label="base.name" :value="base.id" />
-                          </el-select>
+                          <el-select-v2 v-model="internshipState.baseFlowForm.base_id" clearable filterable placeholder="请选择实习基地" :options="internshipState.options.bases" :props="{ label: 'name', value: 'id' }" />
                         </label>
                         <label>
                           <span>学院</span>
-                          <el-select v-model="internshipState.baseFlowForm.dep_id" clearable filterable placeholder="请选择学院">
-                            <el-option v-for="dep in internshipState.options.departments" :key="dep.dep_id" :label="dep.dep_name" :value="dep.dep_id" />
-                          </el-select>
+                          <el-select-v2 v-model="internshipState.baseFlowForm.dep_id" clearable filterable placeholder="请选择学院" :options="internshipState.options.departments" :props="{ label: 'dep_name', value: 'dep_id' }" />
                         </label>
                         <label>
                           <span>标题</span>
@@ -1780,9 +1753,7 @@
                         </label>
                         <label>
                           <span>项目</span>
-                          <el-select v-model="practiceModuleState(win.module.id).form.project_id" clearable filterable placeholder="请选择项目" @change="changePracticeExecutionProject(win.module.id)">
-                            <el-option v-for="project in practiceProjectOptions(win.module.id)" :key="project.id" :label="project.title || project.course_name" :value="project.id" />
-                          </el-select>
+                          <el-select-v2 v-model="practiceModuleState(win.module.id).form.project_id" clearable filterable placeholder="请选择项目" @change="changePracticeExecutionProject(win.module.id)" :options="(practiceProjectOptions(win.module.id)).map(project => ({ label: project.title || project.course_name, value: project.id }))" />
                         </label>
                         <label v-if="win.panel === 'signIns'"><span>日期</span><input v-model="practiceModuleState(win.module.id).form.date" type="date"></label>
                         <label v-if="win.panel === 'signIns'"><span>位置</span><input v-model="practiceModuleState(win.module.id).form.location"></label>
@@ -1811,15 +1782,11 @@
                         </label>
                         <label>
                           <span>项目</span>
-                          <el-select v-model="practiceModuleState(win.module.id).form.project_id" clearable filterable placeholder="请选择项目" @change="changePracticeScoreProject(win.module.id)">
-                            <el-option v-for="project in practiceScoreProjectOptions(win.module.id)" :key="project.id" :label="project.title || project.course_name" :value="project.id" />
-                          </el-select>
+                          <el-select-v2 v-model="practiceModuleState(win.module.id).form.project_id" clearable filterable placeholder="请选择项目" @change="changePracticeScoreProject(win.module.id)" :options="(practiceScoreProjectOptions(win.module.id)).map(project => ({ label: project.title || project.course_name, value: project.id }))" />
                         </label>
                         <label>
                           <span>学生</span>
-                          <el-select v-model="practiceModuleState(win.module.id).form.student_id" clearable filterable placeholder="请选择学生" @change="applyPracticeScoreStudent(win.module.id)">
-                            <el-option v-for="student in practiceModuleState(win.module.id).scoreStudents" :key="student.student_id" :label="`${student.student_name} / ${student.student_num}`" :value="student.student_id" />
-                          </el-select>
+                          <el-select-v2 v-model="practiceModuleState(win.module.id).form.student_id" clearable filterable placeholder="请选择学生" @change="applyPracticeScoreStudent(win.module.id)" :options="(practiceModuleState(win.module.id).scoreStudents).map(student => ({ label: `${student.student_name} / ${student.student_num}`, value: student.student_id }))" />
                         </label>
                         <label><span>考勤与课堂表现</span><input v-model="practiceModuleState(win.module.id).form.attendance_score" min="0" max="100" type="number"></label>
                         <label><span>项目实操</span><input v-model="practiceModuleState(win.module.id).form.material_score" min="0" max="100" type="number"></label>
@@ -1832,21 +1799,11 @@
                         <p>{{ practiceModuleState(win.module.id).dialog.description }}</p>
                         <label>
                           <span>课程负责人</span>
-                          <el-select v-model="practiceModuleState(win.module.id).dialog.course_leader_id" filterable placeholder="请选择课程负责人">
-                            <el-option v-for="teacher in practiceModuleState(win.module.id).options.teachers" :key="teacher.teacher_id" :label="teacher.teacher_name" :value="teacher.teacher_id" />
-                          </el-select>
+                          <el-select-v2 v-model="practiceModuleState(win.module.id).dialog.course_leader_id" filterable placeholder="请选择课程负责人" :options="practiceModuleState(win.module.id).options.teachers" :props="{ label: 'teacher_name', value: 'teacher_id' }" />
                         </label>
                         <label>
                           <span>任课教师</span>
-                          <el-select v-model="practiceModuleState(win.module.id).dialog.teacher_ids" multiple collapse-tags collapse-tags-tooltip filterable placeholder="请选择任课教师">
-                            <el-option
-                              v-for="teacher in practiceModuleState(win.module.id).options.teachers"
-                              :key="teacher.teacher_id"
-                              :label="teacher.teacher_name"
-                              :value="teacher.teacher_id"
-                              :disabled="Number(teacher.teacher_id) === Number(practiceModuleState(win.module.id).dialog.course_leader_id)"
-                            />
-                          </el-select>
+                          <el-select-v2 v-model="practiceModuleState(win.module.id).dialog.teacher_ids" multiple collapse-tags collapse-tags-tooltip filterable placeholder="请选择任课教师" :options="(practiceModuleState(win.module.id).options.teachers).map(teacher => ({ label: teacher.teacher_name, value: teacher.teacher_id, disabled: Number(teacher.teacher_id) === Number(practiceModuleState(win.module.id).dialog.course_leader_id) }))" />
                         </label>
                         <small>课程负责人自动属于本课程教师，无需在任课教师中重复选择。</small>
                       </div>
@@ -1855,9 +1812,7 @@
                         <p>请选择需要检查归档条件的开课任务。</p>
                         <label>
                           <span>开课任务</span>
-                          <el-select v-model="practiceModuleState(win.module.id).dialog.plan_id" filterable placeholder="请选择开课任务">
-                            <el-option v-for="plan in practiceArchivePlanOptions(win.module.id)" :key="plan.id" :label="plan.title || plan.course_name" :value="plan.id" />
-                          </el-select>
+                          <el-select-v2 v-model="practiceModuleState(win.module.id).dialog.plan_id" filterable placeholder="请选择开课任务" :options="(practiceArchivePlanOptions(win.module.id)).map(plan => ({ label: plan.title || plan.course_name, value: plan.id }))" />
                         </label>
                       </div>
 
@@ -1894,39 +1849,29 @@
                         </label>
                         <label>
                           <span>学院</span>
-                          <el-select v-model="practiceModuleState(win.module.id).form.dep_id" clearable filterable placeholder="请选择学院" @change="normalizePracticeCascade(win.module.id)">
-                            <el-option v-for="dep in practiceModuleState(win.module.id).options.departments" :key="dep.dep_id" :label="dep.dep_name" :value="dep.dep_id" />
-                          </el-select>
+                          <el-select-v2 v-model="practiceModuleState(win.module.id).form.dep_id" clearable filterable placeholder="请选择学院" @change="normalizePracticeCascade(win.module.id)" :options="practiceModuleState(win.module.id).options.departments" :props="{ label: 'dep_name', value: 'dep_id' }" />
                         </label>
                         <label>
                           <span>专业</span>
-                          <el-select v-model="practiceModuleState(win.module.id).form.profession_id" clearable filterable placeholder="请选择专业" @change="handlePracticeProfessionChange(win.module.id)">
-                            <el-option v-for="profession in practiceProfessionOptions(win.module.id)" :key="profession.profession_id" :label="profession.profession_name" :value="profession.profession_id" />
-                          </el-select>
+                          <el-select-v2 v-model="practiceModuleState(win.module.id).form.profession_id" clearable filterable placeholder="请选择专业" @change="handlePracticeProfessionChange(win.module.id)" :options="practiceProfessionOptions(win.module.id)" :props="{ label: 'profession_name', value: 'profession_id' }" />
                         </label>
                         <label>
                           <span>任课教师</span>
-                          <el-select
+                          <el-select-v2
                             v-model="practiceModuleState(win.module.id).form.teacher_id"
                             clearable
                             filterable
                             :disabled="win.panel === 'projects'"
                             :placeholder="win.panel === 'projects' ? '选择课表后自动带出' : '请选择任课教师'"
-                          >
-                            <el-option v-for="teacher in practiceModuleState(win.module.id).options.teachers" :key="teacher.teacher_id" :label="teacher.teacher_name" :value="teacher.teacher_id" />
-                          </el-select>
+                           :options="practiceModuleState(win.module.id).options.teachers" :props="{ label: 'teacher_name', value: 'teacher_id' }" />
                         </label>
                         <label v-if="practiceNeedsPlan(win.panel)">
                           <span>关联计划</span>
-                          <el-select v-model="practiceModuleState(win.module.id).form.plan_id" clearable filterable placeholder="请选择关联计划" @change="handlePracticePlanChange(win.module.id)">
-                            <el-option v-for="plan in practicePlanOptions(win.module.id, win.panel)" :key="plan.id" :label="plan.title || plan.course_name" :value="plan.id" />
-                          </el-select>
+                          <el-select-v2 v-model="practiceModuleState(win.module.id).form.plan_id" clearable filterable placeholder="请选择关联计划" @change="handlePracticePlanChange(win.module.id)" :options="(practicePlanOptions(win.module.id, win.panel)).map(plan => ({ label: plan.title || plan.course_name, value: plan.id }))" />
                         </label>
                         <label v-if="win.panel === 'projects'">
                           <span>关联课表</span>
-                          <el-select v-model="practiceModuleState(win.module.id).form.schedule_id" clearable filterable placeholder="请选择关联课表" @change="handlePracticeScheduleChange(win.module.id)">
-                            <el-option v-for="schedule in practiceScheduleOptions(win.module.id)" :key="schedule.id" :label="practiceScheduleLabel(schedule)" :value="schedule.id" />
-                          </el-select>
+                          <el-select-v2 v-model="practiceModuleState(win.module.id).form.schedule_id" clearable filterable placeholder="请选择关联课表" @change="handlePracticeScheduleChange(win.module.id)" :options="(practiceScheduleOptions(win.module.id)).map(schedule => ({ label: practiceScheduleLabel(schedule), value: schedule.id }))" />
                         </label>
                         <label v-if="win.panel === 'plans'">
                           <span>来源</span>
@@ -1944,15 +1889,11 @@
                         </label>
                         <label v-if="win.panel === 'schedules' && practiceModuleState(win.module.id).form.place_type === 'inside'">
                           <span>场地</span>
-                          <el-select v-model="practiceModuleState(win.module.id).form.room_id" clearable filterable placeholder="请选择场地">
-                            <el-option v-for="room in practiceRoomOptions(win.module.id)" :key="room.id" :label="room.name" :value="room.id" />
-                          </el-select>
+                          <el-select-v2 v-model="practiceModuleState(win.module.id).form.room_id" clearable filterable placeholder="请选择场地" :options="practiceRoomOptions(win.module.id)" :props="{ label: 'name', value: 'id' }" />
                         </label>
                         <label v-if="win.panel === 'schedules' && practiceModuleState(win.module.id).form.place_type === 'outside'">
                           <span>校外基地</span>
-                          <el-select v-model="practiceModuleState(win.module.id).form.base_id" clearable filterable placeholder="请选择校外基地">
-                            <el-option v-for="base in practiceBaseOptions(win.module.id)" :key="base.id" :label="base.name" :value="base.id" />
-                          </el-select>
+                          <el-select-v2 v-model="practiceModuleState(win.module.id).form.base_id" clearable filterable placeholder="请选择校外基地" :options="practiceBaseOptions(win.module.id)" :props="{ label: 'name', value: 'id' }" />
                         </label>
                         <label v-if="win.panel === 'schedules'"><span>日期</span><input v-model="practiceModuleState(win.module.id).form.schedule_date" type="date"></label>
                         <label v-if="win.panel === 'schedules'">
@@ -2143,7 +2084,7 @@
                     >
                       <template #toolbar>
                         <el-button v-if="showPracticeAddButton(win.module.id, win.panel)" :icon="Plus" @click="openPracticeDialog(win.module.id, win.panel)">新增{{ win.panel === 'scores' ? '成绩' : '成绩方案' }}</el-button>
-                        <el-button :icon="RefreshCw" :loading="practiceModuleState(win.module.id).loading" @click="loadPracticePanel(win.module.id, win.panel)">刷新</el-button>
+                        <el-button :icon="RefreshCw" :loading="practiceModuleState(win.module.id).loading" @click="loadPracticePanel(win.module.id, win.panel, 1, true)">刷新</el-button>
                       </template>
                       <template #actions="{ row }">
                         <el-button v-if="showPracticeRowEdit(win.module.id, win.panel, row)" link type="primary" @click="openPracticeDialog(win.module.id, win.panel, row)">编辑</el-button>
@@ -2175,21 +2116,17 @@
                           </el-select>
                         </label>
                         <label class="data-list-filter-field">
-                          <el-select v-model="practiceModuleState(win.module.id).filters.schedules.dep_id" class="filter-select" clearable filterable placeholder="请选择学院" @change="refreshPracticeScheduleBoard(win.module.id)">
-                            <el-option v-for="dep in practiceModuleState(win.module.id).options.departments" :key="dep.dep_id" :label="dep.dep_name" :value="dep.dep_id" />
-                          </el-select>
+                          <el-select-v2 v-model="practiceModuleState(win.module.id).filters.schedules.dep_id" class="filter-select" clearable filterable placeholder="请选择学院" @change="refreshPracticeScheduleBoard(win.module.id)" :options="practiceModuleState(win.module.id).options.departments" :props="{ label: 'dep_name', value: 'dep_id' }" />
                         </label>
                         <label class="data-list-filter-field">
-                          <el-select v-model="practiceModuleState(win.module.id).filters.schedules.profession_id" class="filter-select" clearable filterable placeholder="请选择专业" @change="refreshPracticeScheduleBoard(win.module.id)">
-                            <el-option v-for="profession in practiceScheduleProfessionOptions(win.module.id)" :key="profession.profession_id" :label="profession.profession_name" :value="profession.profession_id" />
-                          </el-select>
+                          <el-select-v2 v-model="practiceModuleState(win.module.id).filters.schedules.profession_id" class="filter-select" clearable filterable placeholder="请选择专业" @change="refreshPracticeScheduleBoard(win.module.id)" :options="practiceScheduleProfessionOptions(win.module.id)" :props="{ label: 'profession_name', value: 'profession_id' }" />
                         </label>
                       </div>
                       <div class="data-list-actions">
                         <el-button v-if="showPracticeAddButton(win.module.id, win.panel)" :icon="Plus" @click="openPracticeDialog(win.module.id, win.panel)">
                           新增{{ practicePanelLabel(win.panel) }}
                         </el-button>
-                        <el-button :icon="RefreshCw" :loading="practiceModuleState(win.module.id).loading" @click="loadPracticePanel(win.module.id, win.panel)">
+                        <el-button :icon="RefreshCw" :loading="practiceModuleState(win.module.id).loading" @click="loadPracticePanel(win.module.id, win.panel, 1, true)">
                           刷新
                         </el-button>
                         <el-segmented
@@ -2256,7 +2193,7 @@
                       <el-button v-if="win.panel === 'archives'" :icon="FolderOpen" @click="openPracticeArchiveCheck(win.module.id)">
                         归档检查
                       </el-button>
-                      <el-button :icon="RefreshCw" :loading="practiceModuleState(win.module.id).loading" @click="loadPracticePanel(win.module.id, win.panel)">
+                      <el-button :icon="RefreshCw" :loading="practiceModuleState(win.module.id).loading" @click="loadPracticePanel(win.module.id, win.panel, 1, true)">
                         刷新
                       </el-button>
                       <el-segmented
@@ -2418,36 +2355,15 @@
                         </label>
                         <label v-if="['student', 'teacher', 'college_admin', 'profession_admin'].includes(userEditingRoleType)">
                           <span>所属学院</span>
-                          <el-select v-model="userAdminState.editing.dep_id" clearable filterable placeholder="请选择所属学院" @change="handleUserAcademicChange('dep_id')">
-                            <el-option
-                              v-for="department in userEditDepartmentOptions()"
-                              :key="department.dep_id"
-                              :label="department.dep_name"
-                              :value="department.dep_id"
-                            />
-                          </el-select>
+                          <el-select-v2 v-model="userAdminState.editing.dep_id" clearable filterable placeholder="请选择所属学院" @change="handleUserAcademicChange('dep_id')" :options="userEditDepartmentOptions()" :props="{ label: 'dep_name', value: 'dep_id' }" />
                         </label>
                         <label v-if="['student', 'teacher', 'college_admin', 'profession_admin'].includes(userEditingRoleType)">
                           <span>所属专业</span>
-                          <el-select v-model="userAdminState.editing.profession_id" clearable filterable placeholder="请选择所属专业" @change="handleUserAcademicChange('profession_id')">
-                            <el-option
-                              v-for="profession in userEditProfessionOptions()"
-                              :key="profession.profession_id"
-                              :label="profession.profession_name"
-                              :value="profession.profession_id"
-                            />
-                          </el-select>
+                          <el-select-v2 v-model="userAdminState.editing.profession_id" clearable filterable placeholder="请选择所属专业" @change="handleUserAcademicChange('profession_id')" :options="userEditProfessionOptions()" :props="{ label: 'profession_name', value: 'profession_id' }" />
                         </label>
                         <label v-if="userEditingRoleType === 'student'">
                           <span>所在班级</span>
-                          <el-select v-model="userAdminState.editing.class_id" clearable filterable placeholder="请选择所在班级" @change="handleUserAcademicChange('class_id')">
-                            <el-option
-                              v-for="classItem in userEditClassOptions()"
-                              :key="classItem.class_id"
-                              :label="classItem.class_name"
-                              :value="classItem.class_id"
-                            />
-                          </el-select>
+                          <el-select-v2 v-model="userAdminState.editing.class_id" clearable filterable placeholder="请选择所在班级" @change="handleUserAcademicChange('class_id')" :options="userEditClassOptions()" :props="{ label: 'class_name', value: 'class_id' }" />
                         </label>
                         <label v-if="userEditingRoleType === 'student'"><span>班号</span><input v-model="userAdminState.editing.class_num"></label>
                         <label>
@@ -2700,21 +2616,14 @@
                           :active-text="archiveSwitchActiveText(field)"
                           :inactive-text="archiveSwitchInactiveText(field)"
                         />
-                        <el-select
+                        <el-select-v2
                           v-else-if="field.options"
                           v-model="archiveStateForWindow(win).editing[field.key]"
                           clearable
                           filterable
                           :placeholder="`请选择${field.label}`"
                           @change="handleArchiveFieldChange(archiveTypeForWindow(win), field.key)"
-                        >
-                          <el-option
-                            v-for="option in archiveEditFieldOptions(field, archiveTypeForWindow(win))"
-                            :key="option.value"
-                            :label="option.label"
-                            :value="option.value"
-                          />
-                        </el-select>
+                         :options="archiveEditFieldOptions(field, archiveTypeForWindow(win))" :props="{ label: 'label', value: 'value' }" />
                         <input
                           v-else
                           v-model="archiveStateForWindow(win).editing[field.key]"
@@ -3049,14 +2958,7 @@
                           </label>
                           <label v-if="messageState.sendDialog.form.send_mode === 'template'" class="message-send-field">
                             <span>消息模板</span>
-                            <el-select v-model="messageState.sendDialog.form.template_code" filterable placeholder="请选择模板" @change="handleMessageTemplateChange">
-                              <el-option
-                                v-for="item in enabledMessageTemplates"
-                                :key="item.code"
-                                :label="`${item.name} / ${item.code}`"
-                                :value="item.code"
-                              />
-                            </el-select>
+                            <el-select-v2 v-model="messageState.sendDialog.form.template_code" filterable placeholder="请选择模板" @change="handleMessageTemplateChange" :options="(enabledMessageTemplates).map(item => ({ label: `${item.name} / ${item.code}`, value: item.code }))" />
                           </label>
                           <label v-else class="message-send-field">
                             <span>消息级别</span>
@@ -3118,21 +3020,14 @@
                           </div>
                           <label class="message-send-field wide">
                             <span>收件人</span>
-                            <el-select
+                            <el-select-v2
                               v-model="messageState.sendDialog.form.account_ids"
                               multiple
                               filterable
                               collapse-tags
                               collapse-tags-tooltip
                               placeholder="请选择收件人"
-                            >
-                              <el-option
-                                v-for="item in messageState.targetOptions"
-                                :key="item.id"
-                                :label="messageTargetLabel(item)"
-                                :value="item.id"
-                              />
-                            </el-select>
+                             :options="(messageState.targetOptions).map(item => ({ label: messageTargetLabel(item), value: item.id }))" />
                           </label>
                         </div>
                         <div v-if="messageState.sendDialog.form.send_mode === 'manual'" class="message-send-grid message-send-grid-compact">
@@ -3453,7 +3348,7 @@
                     >
                       删除菜单
                     </el-button>
-                    <el-button :icon="RefreshCw" :loading="adminState.loading" @click="loadAdminFoundation">
+                    <el-button :icon="RefreshCw" :loading="adminState.loading" @click="loadAdminFoundation(true)">
                       刷新
                     </el-button>
                     <el-input
@@ -3536,7 +3431,7 @@
                         :value="role.id"
                       />
                     </el-select>
-                    <el-button :icon="RefreshCw" :loading="adminState.roleMenus.loading" @click="loadAdminFoundation">
+                    <el-button :icon="RefreshCw" :loading="adminState.roleMenus.loading" @click="loadAdminFoundation(true).then(loadRolePermissions)">
                       读取
                     </el-button>
                     <el-button
@@ -3576,21 +3471,17 @@
 
                 <div v-else-if="win.module.id === 'config' && win.panel === 'organizationScope'" class="admin-panel">
                   <div class="admin-toolbar scope-toolbar">
-                    <el-select
+                    <RemoteAccountSelect
+                      :key="accountImportSessionKey"
                       v-model="adminState.scope.account_id"
-                      filterable
-                      placeholder="选择账号"
+                      :multiple="false"
+                      endpoint="/admin/account-options"
+                      :disabled="adminState.scope.loading"
                       @change="handleScopeAccountChange"
-                    >
-                      <el-option
-                        v-for="account in adminState.options.accounts"
-                        :key="account.id"
-                        :label="`${account.name} / ${account.login_name}`"
-                        :value="account.id"
-                      />
-                    </el-select>
+                    />
                     <el-select
                       v-model="adminState.scope.role_id"
+                      :disabled="adminState.scope.loading"
                       filterable
                       placeholder="选择角色"
                       @change="loadOrganizationScopeConfig"
@@ -3619,50 +3510,22 @@
                     <el-table-column type="index" label="序号" width="66" align="center" />
                     <el-table-column label="学院" min-width="150">
                       <template #default="{ row }">
-                        <el-select v-model="row.dep_id" clearable filterable placeholder="不限" @change="row.profession_id = null; row.class_id = null">
-                          <el-option
-                            v-for="dep in adminState.options.departments"
-                            :key="dep.dep_id"
-                            :label="dep.dep_name"
-                            :value="String(dep.dep_id)"
-                          />
-                        </el-select>
+                        <el-select-v2 v-model="row.dep_id" clearable filterable placeholder="不限" @change="row.profession_id = null; row.class_id = null" :options="(adminState.options.departments).map(dep => ({ label: dep.dep_name, value: String(dep.dep_id) }))" />
                       </template>
                     </el-table-column>
                     <el-table-column label="专业" min-width="160">
                       <template #default="{ row }">
-                        <el-select v-model="row.profession_id" clearable filterable placeholder="不限">
-                          <el-option
-                            v-for="profession in adminState.options.professions.filter(item => !row.dep_id || String(item.dep_id) === String(row.dep_id))"
-                            :key="profession.profession_id"
-                            :label="profession.profession_name"
-                            :value="String(profession.profession_id)"
-                          />
-                        </el-select>
+                        <el-select-v2 v-model="row.profession_id" clearable filterable placeholder="不限" :options="(adminState.options.professions.filter(item => !row.dep_id || String(item.dep_id) === String(row.dep_id))).map(profession => ({ label: profession.profession_name, value: String(profession.profession_id) }))" />
                       </template>
                     </el-table-column>
                     <el-table-column label="班级" min-width="160">
                       <template #default="{ row }">
-                        <el-select v-model="row.class_id" clearable filterable placeholder="不限">
-                          <el-option
-                            v-for="clazz in adminState.options.classes"
-                            :key="clazz.class_id"
-                            :label="clazz.class_name"
-                            :value="String(clazz.class_id)"
-                          />
-                        </el-select>
+                        <el-select-v2 v-model="row.class_id" clearable filterable placeholder="不限" :options="(adminState.options.classes).map(clazz => ({ label: clazz.class_name, value: String(clazz.class_id) }))" />
                       </template>
                     </el-table-column>
                     <el-table-column label="基地" min-width="180">
                       <template #default="{ row }">
-                        <el-select v-model="row.company_id" clearable filterable placeholder="不限">
-                          <el-option
-                            v-for="company in adminState.options.companies"
-                            :key="company.company_id"
-                            :label="company.company_name"
-                            :value="String(company.company_id)"
-                          />
-                        </el-select>
+                        <el-select-v2 v-model="row.company_id" clearable filterable placeholder="不限" :options="(adminState.options.companies).map(company => ({ label: company.company_name, value: String(company.company_id) }))" />
                       </template>
                     </el-table-column>
                     <el-table-column label="操作" width="90" fixed="right">
@@ -3887,21 +3750,15 @@
                       </label>
                       <label :class="{ 'filter-active': hasFilterValue(statState.filters.dep_id) }">
                         <span>学院</span>
-                        <el-select v-model="statState.filters.dep_id" class="filter-select" :class="{ 'is-filter-active': hasFilterValue(statState.filters.dep_id) }" clearable filterable placeholder="全部" @change="handleStatFilterChange('dep_id')">
-                          <el-option v-for="item in statDepartmentOptions()" :key="item.value" :label="item.label" :value="item.value" />
-                        </el-select>
+                        <el-select-v2 v-model="statState.filters.dep_id" class="filter-select" :class="{ 'is-filter-active': hasFilterValue(statState.filters.dep_id) }" clearable filterable placeholder="全部" @change="handleStatFilterChange('dep_id')" :options="statDepartmentOptions()" :props="{ label: 'label', value: 'value' }" />
                       </label>
                       <label :class="{ 'filter-active': hasFilterValue(statState.filters.profession_id) }">
                         <span>专业</span>
-                        <el-select v-model="statState.filters.profession_id" class="filter-select" :class="{ 'is-filter-active': hasFilterValue(statState.filters.profession_id) }" clearable filterable placeholder="全部" @change="handleStatFilterChange('profession_id')">
-                          <el-option v-for="item in statProfessionOptions()" :key="item.value" :label="item.label" :value="item.value" />
-                        </el-select>
+                        <el-select-v2 v-model="statState.filters.profession_id" class="filter-select" :class="{ 'is-filter-active': hasFilterValue(statState.filters.profession_id) }" clearable filterable placeholder="全部" @change="handleStatFilterChange('profession_id')" :options="statProfessionOptions()" :props="{ label: 'label', value: 'value' }" />
                       </label>
                       <label :class="{ 'filter-active': hasFilterValue(statState.filters.class_id) }">
                         <span>班级</span>
-                        <el-select v-model="statState.filters.class_id" class="filter-select" :class="{ 'is-filter-active': hasFilterValue(statState.filters.class_id) }" clearable filterable placeholder="全部" @change="handleStatFilterChange('class_id')">
-                          <el-option v-for="item in statClassOptions()" :key="item.value" :label="item.label" :value="item.value" />
-                        </el-select>
+                        <el-select-v2 v-model="statState.filters.class_id" class="filter-select" :class="{ 'is-filter-active': hasFilterValue(statState.filters.class_id) }" clearable filterable placeholder="全部" @change="handleStatFilterChange('class_id')" :options="statClassOptions()" :props="{ label: 'label', value: 'value' }" />
                       </label>
                       <label v-if="isPracticeScoreSheetReport()" :class="{ 'filter-active': hasFilterValue(statState.filters.module_type) }">
                         <span>模块</span>
@@ -3912,9 +3769,7 @@
                       </label>
                       <label v-if="isPracticeScoreSheetReport()" :class="{ 'filter-active': hasFilterValue(statState.filters.plan_id) }">
                         <span>教学计划</span>
-                        <el-select v-model="statState.filters.plan_id" class="filter-select" :class="{ 'is-filter-active': hasFilterValue(statState.filters.plan_id) }" clearable filterable placeholder="全部计划" @change="handleStatFilterChange('plan_id')">
-                          <el-option v-for="item in practiceScoreSheetPlanOptions()" :key="item.value" :label="item.label" :value="item.value" />
-                        </el-select>
+                        <el-select-v2 v-model="statState.filters.plan_id" class="filter-select" :class="{ 'is-filter-active': hasFilterValue(statState.filters.plan_id) }" clearable filterable placeholder="全部计划" @change="handleStatFilterChange('plan_id')" :options="practiceScoreSheetPlanOptions()" :props="{ label: 'label', value: 'value' }" />
                       </label>
                       <label :class="{ 'filter-active': hasFilterValue(statState.filters.keyword) }">
                         <span>关键词</span>
@@ -4448,6 +4303,7 @@ import PreviewCacheSettings from './components/PreviewCacheSettings.vue';
 import ClientDownloadButton from './components/ClientDownloadButton.vue';
 import SchoolSettingsPanel from './components/SchoolSettingsPanel.vue';
 import WorkflowSettingsPanel from './components/WorkflowSettingsPanel.vue';
+import RemoteAccountSelect from './components/RemoteAccountSelect.vue';
 import MessageChannelSettings from './components/MessageChannelSettings.vue';
 import WallpaperLibrary from './components/WallpaperLibrary.vue';
 import SignatureSettings from './components/profile/SignatureSettings.vue';
@@ -5042,6 +4898,13 @@ const adminState = reactive({
     message: '',
   },
 });
+const adminFoundationCache = { key: '', promise: null, loadedAt: 0 };
+const practiceFoundationCache = { key: '', promise: null, value: null, loadedAt: 0 };
+let organizationScopeRequest = 0;
+let statRequest = 0;
+let practiceLoadRequest = 0;
+const practicePanelRequests = new Map();
+
 const userAdminState = reactive({
   items: [],
   filters: {
@@ -8434,26 +8297,8 @@ function openModuleWindow(module, options = {}) {
   if (existing) {
     existing.minimized = false;
     focusWindow(existing.id);
-    if (module.id === 'stat') {
-      statState.report = statReports.some(item => item.key === existing.panel) ? existing.panel : 'overview';
-      loadStats(statState.pagination.page || 1);
-    }
-    if (module.id === 'config' || module.id === 'userManage' || archiveManageModules[module.id] || module.id === 'dataManage') {
-      activateWindowPanel(existing, module.id === 'config' ? normalizeConfigPanel(existing.panel) : existing.panel);
-    }
-    if (module.id === 'message') {
-      loadMessages(messageState.pagination.page || 1);
-    }
-    if (module.id === 'companyManage') {
-      existing.panel = normalizeBaseManagementPanel(existing.panel);
-      loadInternshipPanel(existing.panel, internshipState.lists[existing.panel]?.pagination.page || 1);
-    }
-    if (module.id === 'favorite') {
-      loadFavorites(favoriteState.pagination.page || 1);
-    }
-    if (isPracticeModule(module.id)) {
-      loadPracticePanel(module.id, existing.panel);
-    }
+    if (module.id === 'config') existing.panel = normalizeConfigPanel(existing.panel);
+    if (module.id === 'companyManage') existing.panel = normalizeBaseManagementPanel(existing.panel);
     return;
   }
 
@@ -8472,29 +8317,7 @@ function openModuleWindow(module, options = {}) {
   };
   openWindows.push(win);
   focusedWindowId.value = win.id;
-  if (module.id === 'internship') {
-    loadInternshipPanel(win.panel);
-  }
-  if (module.id === 'companyManage') {
-    win.panel = normalizeBaseManagementPanel(win.panel);
-    loadInternshipPanel(win.panel);
-  }
-  if (isPracticeModule(module.id)) {
-    loadPracticePanel(module.id, win.panel);
-  }
-  if (module.id === 'stat') {
-    statState.report = win.panel;
-    loadStats(1);
-  }
-  if (module.id === 'config' || module.id === 'userManage' || archiveManageModules[module.id] || module.id === 'dataManage') {
-    activateWindowPanel(win, win.panel);
-  }
-  if (module.id === 'message') {
-    loadMessages(1);
-  }
-  if (module.id === 'favorite') {
-    loadFavorites(1);
-  }
+  if (module.id === 'companyManage') win.panel = normalizeBaseManagementPanel(win.panel);
 }
 
 function defaultWindowFrame(index = 0) {
@@ -8764,42 +8587,6 @@ function activateWindowPanel(win, panel) {
   win.panel = panel;
   focusWindow(win.id);
 
-  if (isUserManageWindow(win)) {
-    loadAdminFoundation();
-    loadUserAccounts();
-  }
-  if (isArchiveManageWindow(win)) {
-    loadAdminFoundation();
-    loadArchiveItems(archiveTypeForWindow(win));
-  }
-  if (win.module.id === 'dataManage') {
-    loadAdminFoundation();
-  }
-  if (win.module.id === 'dataManage' || (win.module.id === 'config' && panel === 'dataManage')) {
-    loadDataEnvironment();
-  }
-  if (win.module.id === 'file' && panel === 'fileManage') {
-    loadFiles();
-  }
-  if (win.module.id === 'favorite') {
-    loadFavorites();
-  }
-  if (win.module.id === 'config' && panel === 'operationGuides') {
-    loadGuideAdminItems();
-  }
-  if (win.module.id === 'stat') {
-    statState.report = statReports.some(item => item.key === panel) ? panel : 'overview';
-    loadStats(1);
-  }
-  if (win.module.id === 'internship') {
-    loadInternshipPanel(panel);
-  }
-  if (win.module.id === 'companyManage') {
-    loadInternshipPanel(panel);
-  }
-  if (isPracticeModule(win.module.id)) {
-    loadPracticePanel(win.module.id, panel);
-  }
 }
 
 function focusLogin() {
@@ -8921,7 +8708,6 @@ async function refreshAuthenticatedSession(resetWorkspace = false) {
   ensureDefaultWindow();
   handleHashNavigation();
   scheduleDefaultWindow();
-  loadAdminFoundation();
 }
 
 
@@ -9421,7 +9207,7 @@ async function saveUserConfig() {
     userAdminState.loading = false;
     await Promise.all([
       loadUserAccounts(userAdminState.pagination.page || 1),
-      loadAdminFoundation(),
+      loadAdminFoundation(true),
     ]);
   } catch (error) {
     userAdminState.message = error.message;
@@ -9451,7 +9237,7 @@ async function toggleUserStatus(row) {
     userAdminState.loading = false;
     await Promise.all([
       loadUserAccounts(userAdminState.pagination.page || 1),
-      loadAdminFoundation(),
+      loadAdminFoundation(true),
     ]);
   } catch (error) {
     userAdminState.message = error.message;
@@ -9553,7 +9339,7 @@ function pollDataCleanupTask() {
           ? `清理完成，影响 ${dataManageState.task.affected_rows || 0} 行`
           : (dataManageState.task.error_message || '清理任务执行失败');
         dataManageState.clearLoading = false;
-        await loadAdminFoundation();
+        await loadAdminFoundation(true);
         await loadDesktopShortcuts();
         await loadFavorites(1);
         return;
@@ -9912,50 +9698,47 @@ async function deleteMenuConfig(row) {
   }
 }
 
-async function loadAdminFoundation() {
-  if (!canManageConfig.value || adminState.loading) {
-    return;
+async function loadAdminFoundation(force = false) {
+  if (!canManageConfig.value || wechatBlocked.value) return;
+  const key = internshipFoundationSessionKey();
+  if (!force && adminFoundationCache.key === key) {
+    if (adminFoundationCache.promise) return adminFoundationCache.promise;
+    if (Date.now() - adminFoundationCache.loadedAt < 60000) return;
   }
-
   adminState.loading = true;
-  adminState.roleMenus.message = '';
-  adminState.scope.message = '';
-  try {
-    const [rolesData, menusData, optionsData] = await Promise.all([
-      fetchAdminRoles(),
-      fetchAdminMenus(),
-      fetchAdminOptions(),
-    ]);
-
-    adminState.roles = rolesData.roles || [];
-    applyMenusData(menusData);
-    adminState.options.accounts = optionsData.accounts || [];
-    adminState.options.departments = optionsData.departments || [];
-    adminState.options.grades = optionsData.grades || [];
-    adminState.options.graduationCohorts = optionsData.graduation_cohorts || [];
-    adminState.options.internshipCategories = optionsData.internship_categories || [];
-    adminState.options.professions = optionsData.professions || [];
-    adminState.options.classes = optionsData.classes || [];
-    adminState.options.companies = optionsData.companies || [];
-
-    if (!adminState.roleMenus.role_id && adminState.roles.length) {
-      adminState.roleMenus.role_id = adminState.roles[0].id;
+  const pending = (async () => {
+    try {
+      const [rolesData, menusData, optionsData] = await Promise.all([
+        fetchAdminRoles(), fetchAdminMenus(), fetchAdminOptions(),
+      ]);
+      if (adminFoundationCache.promise !== pending || key !== internshipFoundationSessionKey()) return;
+      adminState.roles = rolesData.roles || [];
+      applyMenusData(menusData);
+      adminState.options.accounts = [];
+      adminState.options.departments = optionsData.departments || [];
+      adminState.options.grades = optionsData.grades || [];
+      adminState.options.graduationCohorts = optionsData.graduation_cohorts || [];
+      adminState.options.internshipCategories = optionsData.internship_categories || [];
+      adminState.options.professions = optionsData.professions || [];
+      adminState.options.classes = optionsData.classes || [];
+      adminState.options.companies = optionsData.companies || [];
+      if (!adminState.roleMenus.role_id) adminState.roleMenus.role_id = adminState.roles[0]?.id || null;
+      adminFoundationCache.loadedAt = Date.now();
+    } catch (error) {
+      if (adminFoundationCache.promise === pending && key === internshipFoundationSessionKey()) {
+        adminState.roleMenus.message = error.message;
+        adminState.scope.message = error.message;
+      }
+    } finally {
+      if (adminFoundationCache.promise === pending) {
+        adminFoundationCache.promise = null;
+        adminState.loading = false;
+      }
     }
-    if (!adminState.scope.account_id && adminState.options.accounts.length) {
-      adminState.scope.account_id = adminState.options.accounts[0].id;
-      adminState.scope.role_id = adminState.options.accounts[0].role_id || adminState.roles[0]?.id || null;
-    }
-
-    await Promise.all([
-      loadRolePermissions(),
-      loadOrganizationScopeConfig(),
-    ]);
-  } catch (error) {
-    adminState.roleMenus.message = error.message;
-    adminState.scope.message = error.message;
-  } finally {
-    adminState.loading = false;
-  }
+  })();
+  adminFoundationCache.key = key;
+  adminFoundationCache.promise = pending;
+  return pending;
 }
 
 async function loadRolePermissions() {
@@ -10009,13 +9792,14 @@ function activeRoleTree() {
   return Array.isArray(tree) ? tree.at(-1) : tree;
 }
 
-function handleScopeAccountChange() {
-  const account = adminState.options.accounts.find(item => item.id === adminState.scope.account_id);
+function handleScopeAccountChange(account) {
+  adminState.scope.scopes = [];
   adminState.scope.role_id = account?.role_id || adminState.roles[0]?.id || null;
   loadOrganizationScopeConfig();
 }
 
 async function loadOrganizationScopeConfig() {
+  const revision = ++organizationScopeRequest;
   if (!adminState.scope.account_id || !adminState.scope.role_id || !canManageConfig.value) {
     return;
   }
@@ -10027,11 +9811,12 @@ async function loadOrganizationScopeConfig() {
       account_id: adminState.scope.account_id,
       role_id: adminState.scope.role_id,
     });
+    if (revision !== organizationScopeRequest) return;
     adminState.scope.scopes = (data.organization_scopes || []).map(scopeRow);
   } catch (error) {
-    adminState.scope.message = error.message;
+    if (revision === organizationScopeRequest) adminState.scope.message = error.message;
   } finally {
-    adminState.scope.loading = false;
+    if (revision === organizationScopeRequest) adminState.scope.loading = false;
   }
 }
 
@@ -10302,7 +10087,7 @@ async function saveArchiveConfig(type) {
     state.message = '已保存';
     state.dialogVisible = false;
     state.selected = null;
-    await loadAdminFoundation();
+    await loadAdminFoundation(true);
   } catch (error) {
     state.message = error.message;
   } finally {
@@ -10331,7 +10116,7 @@ async function deleteArchiveConfig(type) {
       applyArchivePage(type, await fetchArchiveList(type, archiveRequestParams(type, (state.pagination.page || 1) - 1)));
     }
     state.message = '已删除';
-    await loadAdminFoundation();
+    await loadAdminFoundation(true);
   } catch (error) {
     state.message = error.message;
   } finally {
@@ -10363,7 +10148,7 @@ function chooseArchiveExcel(type) {
 async function handleProfessionImportCompleted() {
   await Promise.all([
     loadArchiveItems('profession', 1),
-    loadAdminFoundation(),
+    loadAdminFoundation(true),
   ]);
 }
 
@@ -10384,7 +10169,7 @@ async function handleArchiveImportFile(event) {
     const failedText = data.failed ? `，失败 ${data.failed} 条` : '';
     const firstError = data.errors?.[0]?.message ? `；首条错误：${data.errors[0].message}` : '';
     state.message = `导入完成：新增 ${data.created || 0} 条，跳过 ${data.skipped || 0} 条${failedText}${firstError}`;
-    await loadAdminFoundation();
+    await loadAdminFoundation(true);
   } catch (error) {
     state.message = error.message;
   } finally {
@@ -10625,23 +10410,30 @@ function logDetailText(row) {
 }
 
 async function loadStats(page = 1) {
-  if (!hasPermission('stat:view') || statState.loading) {
+  if (!hasPermission('stat:view') || wechatBlocked.value) {
     return;
   }
 
+  const revision = ++statRequest;
+  const session = internshipFoundationSessionKey();
+  const report = statState.report;
+  const current = () => revision === statRequest && session === internshipFoundationSessionKey() && report === statState.report;
   statState.loading = true;
   statState.message = '';
   try {
     await loadInternshipFoundation();
+    if (!current()) return;
     applyAcademicDefaults(statState.filters, organizationScopeDefaults(statAcademicOptions()));
     normalizeStatCascade();
     if (isPracticeScoreSheetReport()) {
       practiceModuleState('practice').module_type = statState.filters.module_type || 'all';
       await loadPracticeFoundation('practice');
+      if (!current()) return;
       applyAcademicDefaults(statState.filters, organizationScopeDefaults(statAcademicOptions()));
       normalizeStatCascade();
     }
     const data = await fetchInternshipStats(statQueryParams(page));
+    if (!current()) return;
     statState.cards = data.cards || [];
     statState.columns = data.columns || [];
     statState.rows = data.rows || [];
@@ -10654,9 +10446,9 @@ async function loadStats(page = 1) {
     };
     statState.generated_at = data.generated_at || '';
   } catch (error) {
-    statState.message = error.message;
+    if (current()) statState.message = error.message;
   } finally {
-    statState.loading = false;
+    if (revision === statRequest) statState.loading = false;
   }
 }
 
@@ -11428,7 +11220,7 @@ function openPracticeScheduleSlot(module, slot) {
   Object.assign(practiceModuleState(module).form, slot);
 }
 
-async function loadPracticeScheduleWeek(module) {
+async function loadPracticeScheduleWeek(module, current = () => true) {
   const state = practiceModuleState(module);
   const filters = state.filters.schedules;
   if (!filters.grade_id || !filters.dep_id || !filters.profession_id) {
@@ -11443,6 +11235,7 @@ async function loadPracticeScheduleWeek(module) {
     dep_id: filters.dep_id,
     profession_id: filters.profession_id,
   });
+  if (!current()) return;
   state.schedule.week_start = data.week_start || state.schedule.week_start;
   state.schedule.periods = data.periods || state.options.periods || [];
   state.schedule.rows = data.items || [];
@@ -11653,10 +11446,6 @@ function showPracticeAddButton(module, panel) {
   if (isTeacherRole.value && ['plans', 'schedules', 'rooms'].includes(panel)) {
     return false;
   }
-  if (isTeacherRole.value && panel === 'lessonPlans') {
-    return Number(row?.submitter_id || 0) === Number(permissionState.context.account_id || 0)
-      && ['draft', 'modify'].includes(row?.status || '');
-  }
   if (isTeacherRole.value && ['projects', 'reflections'].includes(panel)) {
     return canManagePracticeGradeRules(module) && canManagePractice(module);
   }
@@ -11675,6 +11464,10 @@ function showPracticeRowEdit(module, panel, row) {
   }
   if (['journals', 'reports'].includes(panel)) {
     return isStudentRole.value && ['draft', 'modify'].includes(row?.status || '');
+  }
+  if (isTeacherRole.value && panel === 'lessonPlans') {
+    return canManagePractice(module) && Number(row?.submitter_id || 0) === Number(permissionState.context.account_id || 0)
+      && ['draft', 'modify'].includes(row?.status || '');
   }
   if (isTeacherRole.value && panel === 'scores') {
     return Number(row?.teacher_id || 0) === currentPracticeTeacherId(module)
@@ -12358,43 +12151,51 @@ function resetPracticeFilters(module, panel) {
   loadPracticePanel(module, panel, 1);
 }
 
-async function loadPracticeFoundation(module) {
-  if (!hasPermission('practice:view')) {
-    return;
-  }
+async function loadPracticeFoundation(module, force = false) {
+  if (!hasPermission('practice:view') || wechatBlocked.value) return;
   const state = practiceModuleState(module);
   const moduleType = state.module_type;
-  const [overview, options] = await Promise.all([
-    fetchPracticeOverview(moduleType),
-    fetchPracticeOptions(moduleType),
-  ]);
-  state.overview = {
-    ...emptyPracticeOverview(),
-    ...(overview || {}),
-  };
-  state.options = {
-    ...emptyPracticeOptions(),
-    ...(options || {}),
-  };
-  const defaults = organizationScopeDefaults(state.options);
-  Object.keys(state.filters).forEach((panel) => {
-    state.filters[panel].module_type = moduleType;
-    applyAcademicDefaults(state.filters[panel], defaults);
-    normalizeFilterCascade(state.filters[panel], state.options);
+  const key = `${internshipFoundationSessionKey()}:${moduleType}`;
+  if (!force && practiceFoundationCache.key === key) {
+    if (practiceFoundationCache.promise) return practiceFoundationCache.promise;
+    if (practiceFoundationCache.value && Date.now() - practiceFoundationCache.loadedAt < 60000) return practiceFoundationCache.value;
+  }
+  const pending = Promise.all([fetchPracticeOverview(moduleType), fetchPracticeOptions(moduleType)]).then(([overview, options]) => {
+    if (practiceFoundationCache.promise !== pending || key !== `${internshipFoundationSessionKey()}:${state.module_type}`) return;
+    state.overview = { ...emptyPracticeOverview(), ...(overview || {}) };
+    state.options = { ...emptyPracticeOptions(), ...(options || {}) };
+    const defaults = organizationScopeDefaults(state.options);
+    Object.keys(state.filters).forEach(panel => {
+      state.filters[panel].module_type = moduleType;
+      applyAcademicDefaults(state.filters[panel], defaults);
+      normalizeFilterCascade(state.filters[panel], state.options);
+    });
+    practiceFoundationCache.value = { overview, options };
+    practiceFoundationCache.loadedAt = Date.now();
+    return practiceFoundationCache.value;
+  }).finally(() => {
+    if (practiceFoundationCache.promise === pending) practiceFoundationCache.promise = null;
   });
+  Object.assign(practiceFoundationCache, { key, promise: pending, value: null });
+  return pending;
 }
 
-async function loadPracticePanel(module, panel = 'overview', page = 1) {
-  if (!hasPermission('practice:view')) {
+async function loadPracticePanel(module, panel = 'overview', page = 1, forceFoundation = false) {
+  if (!hasPermission('practice:view') || wechatBlocked.value) {
     return;
   }
   const state = practiceModuleState(module);
+  const revision = ++practiceLoadRequest;
+  const key = `${internshipFoundationSessionKey()}:${state.module_type}`;
+  practicePanelRequests.set(panel, revision);
+  const current = () => practicePanelRequests.get(panel) === revision && key === `${internshipFoundationSessionKey()}:${state.module_type}`;
   state.loading = true;
   state.message = '';
   try {
-    await loadPracticeFoundation(module);
+    const foundation = await loadPracticeFoundation(module, forceFoundation);
+    if (!foundation || !current()) return;
     if (panel === 'schedules' && state.schedule.view === 'board') {
-      await loadPracticeScheduleWeek(module);
+      await loadPracticeScheduleWeek(module, current);
     } else if (panel === 'courseScores') {
       const plan = selectedPracticeCourseScorePlan(module);
       if (!plan) {
@@ -12404,6 +12205,7 @@ async function loadPracticePanel(module, panel = 'overview', page = 1) {
         return;
       }
       const data = await fetchPracticeCourseScores(plan.module_type, practiceQueryParams(module, panel, page));
+      if (!current()) return;
       state.courseScore = {
         plan: data.plan || plan,
         rule: data.rule || null,
@@ -12420,6 +12222,7 @@ async function loadPracticePanel(module, panel = 'overview', page = 1) {
         : isPracticeExecutionPanel(panel)
         ? await fetchPracticeExecutionList(practiceRequestModuleType(module, state.filters[panel].module_type), practiceExecutionType(panel), practiceExecutionQueryParams(module, panel, page))
         : await fetchPracticeList(practiceRequestModuleType(module, state.filters[panel].module_type), practiceQueryParams(module, panel, page));
+      if (!current()) return;
       state.lists[panel].items = data.items || [];
       state.lists[panel].pagination = {
         ...state.lists[panel].pagination,
@@ -12427,9 +12230,9 @@ async function loadPracticePanel(module, panel = 'overview', page = 1) {
       };
     }
   } catch (error) {
-    state.message = error.message;
+    if (current()) state.message = error.message;
   } finally {
-    state.loading = false;
+    if (revision === practiceLoadRequest) state.loading = false;
   }
 }
 
@@ -12626,7 +12429,7 @@ async function savePracticeExecutionDialog(module, workflowStatus = 'wait') {
       status: execution === 'sign_in' ? 'signed' : workflowStatus,
     });
     closePracticeDialog(module);
-    await loadPracticePanel(module, panel, state.lists[panel]?.pagination.page || 1);
+    await loadPracticePanel(module, panel, state.lists[panel]?.pagination.page || 1, true);
   } catch (error) {
     state.message = error.message;
   } finally {
@@ -12656,7 +12459,7 @@ async function savePracticeProjectScoreDialog(module, workflowStatus = 'wait') {
       status: workflowStatus,
     });
     closePracticeDialog(module);
-    await loadPracticePanel(module, 'scores', state.lists.scores?.pagination.page || 1);
+    await loadPracticePanel(module, 'scores', state.lists.scores?.pagination.page || 1, true);
   } catch (error) {
     state.message = error.message;
   } finally {
@@ -12722,7 +12525,7 @@ async function savePracticePlanTeacherDialog(module) {
       teacher_ids: teacherIds,
     });
     closePracticeDialog(module);
-    await loadPracticePanel(module, 'plans', state.lists.plans.pagination.page || 1);
+    await loadPracticePanel(module, 'plans', state.lists.plans.pagination.page || 1, true);
     ElMessage.success('课程教师已更新');
   } catch (error) {
     state.message = error.message;
@@ -12813,7 +12616,7 @@ async function confirmCreatePracticeArchive(module) {
   try {
     await createPracticeArchive(practiceWriteModuleType(check.plan.module_type), planId);
     state.archiveCheck = null;
-    await loadPracticePanel(module, 'archives', 1);
+    await loadPracticePanel(module, 'archives', 1, true);
     ElMessage.success('归档版本已生成');
   } catch (error) {
     state.message = error.message;
@@ -12897,7 +12700,7 @@ async function savePractice(module, workflowStatus = null) {
   try {
     await savePracticeItem(state.form.module_type, payload);
     closePracticeDialog(module);
-    await loadPracticePanel(module, panel, state.lists[panel]?.pagination.page || 1);
+    await loadPracticePanel(module, panel, state.lists[panel]?.pagination.page || 1, true);
   } catch (error) {
     state.message = error.message;
   } finally {
@@ -13132,7 +12935,7 @@ async function reviewPractice(module) {
       });
     }
     closePracticeDialog(module);
-    await loadPracticePanel(module, panel, state.lists[panel]?.pagination.page || 1);
+    await loadPracticePanel(module, panel, state.lists[panel]?.pagination.page || 1, true);
   } catch (error) {
     state.message = error.message;
   } finally {
@@ -13160,7 +12963,7 @@ async function requestPracticeReopen(module) {
       });
     }
     closePracticeDialog(module);
-    await loadPracticePanel(module, panel, state.lists[panel]?.pagination.page || 1);
+    await loadPracticePanel(module, panel, state.lists[panel]?.pagination.page || 1, true);
   } catch (error) {
     state.message = error.message;
   } finally {
@@ -15610,6 +15413,8 @@ function internshipFoundationSessionKey() {
     permissionState.context.school_database_id || '',
     permissionState.context.account_id || '',
     permissionState.context.role_type || '',
+    permissionState.context.role_id || '',
+    JSON.stringify(permissionState.dataScope || null),
   ].join(':');
 }
 
@@ -16411,6 +16216,10 @@ function statusTagType(value) {
 }
 
 function resetAdminState() {
+  Object.assign(adminFoundationCache, { key: '', promise: null, loadedAt: 0 });
+  organizationScopeRequest++;
+  adminState.loading = false;
+  adminState.scope.loading = false;
   adminState.roles = [];
   adminState.menus = [];
   adminState.menu.items = [];
@@ -16499,6 +16308,12 @@ function resetFavoriteState() {
 }
 
 function resetInternshipState() {
+  statRequest++;
+  statState.loading = false;
+  practiceLoadRequest++;
+  practicePanelRequests.clear();
+  practiceModuleState('practice').loading = false;
+  Object.assign(practiceFoundationCache, { key: '', promise: null, value: null, loadedAt: 0 });
   invalidateInternshipFoundation();
   internshipState.message = '';
   internshipState.savedMessage = '';
@@ -16967,41 +16782,54 @@ async function checkProxyConfig() {
   }
 }
 
-watch(openWindows, (windows) => {
+async function loadWindowPanel(win) {
+  const { panel, module } = win;
+  const current = () => openWindows.includes(win) && !win.minimized && win.panel === panel && isLoggedIn.value && !wechatBlocked.value;
+  if (isUserManageWindow(win)) {
+    await loadAdminFoundation();
+    if (!current()) return;
+    return loadUserAccounts();
+  }
+  if (isArchiveManageWindow(win)) {
+    await loadAdminFoundation();
+    if (!current()) return;
+    return loadArchiveItems(archiveTypeForWindow(win));
+  }
+  if (module.id === 'config' && ['menuManage', 'roleMenus', 'organizationScope'].includes(panel)) {
+    await loadAdminFoundation();
+    if (!current()) return;
+    if (panel === 'roleMenus') return loadRolePermissions();
+    if (panel === 'organizationScope') return loadOrganizationScopeConfig();
+    return;
+  }
+  if (module.id === 'dataManage' || (module.id === 'config' && panel === 'dataManage')) return loadDataEnvironment();
+  if (module.id === 'config' && panel === 'operationGuides') return loadGuideAdminItems();
+  if (module.id === 'file' && panel === 'fileManage') return loadFiles(fileState.pagination.page);
+  if (module.id === 'favorite') return loadFavorites();
+  if (module.id === 'message') return loadMessages();
+  if (module.id === 'log') return loadLogs(logState.pagination.page);
+  if (module.id === 'stat') {
+    const report = statReports.some(item => item.key === panel) ? panel : 'overview';
+    const page = report === statState.report ? statState.pagination.page : 1;
+    statState.report = report;
+    return loadStats(page);
+  }
+  if (['internship', 'companyManage'].includes(module.id)) return loadInternshipPanel(panel);
+  if (isPracticeModule(module.id)) return loadPracticePanel(module.id, panel);
+}
+
+watch(() => openWindows.filter(win => !win.minimized).map(win => JSON.stringify([win.id, win.module.id, win.panel])), (keys, previous = []) => {
   if (!isLoggedIn.value || wechatBlocked.value) return;
-  if (windows.some(win => ['menuManage', 'roleMenus', 'organizationScope'].includes(win.panel))) {
-    loadAdminFoundation();
-  }
-  if (windows.some(win => win.panel === 'operationGuides')) {
-    loadGuideAdminItems();
-  }
-  const archiveWindows = windows.filter(win => isArchiveManageWindow(win));
-  if (archiveWindows.length) {
-    loadAdminFoundation();
-    Array.from(new Set(archiveWindows.map(archiveTypeForWindow))).forEach(type => loadArchiveItems(type));
-  }
-  if (windows.some(win => win.panel === 'fileManage')) {
-    loadFiles(fileState.pagination.page);
-  }
-  if (windows.some(win => win.module.id === 'favorite')) {
-    loadFavorites(favoriteState.pagination.page);
-  }
-  if (windows.some(win => win.module.id === 'log')) {
-    loadLogs(logState.pagination.page);
-  }
-  if (windows.some(win => win.module.id === 'stat')) {
-    loadStats(statState.pagination.page || 1);
-  }
-  const internshipWindow = windows.find(win => win.module.id === 'internship' && !win.minimized);
-  if (internshipWindow) {
-    loadInternshipPanel(internshipWindow.panel);
-  }
-}, { deep: true });
+  const loaded = new Set(previous);
+  keys.filter(key => !loaded.has(key)).forEach(key => {
+    const [id] = JSON.parse(key);
+    const win = openWindows.find(item => item.id === id);
+    if (win) loadWindowPanel(win);
+  });
+});
 
 watch(() => [permissionState.context.account_id, wechatBlocked.value], ([accountId, blocked]) => {
   if (accountId && !blocked) {
-    loadAdminFoundation();
-    loadInternshipFoundation();
     loadMessageSummary();
     loadSwitchableAccounts();
     loadDesktopShortcuts();
@@ -17023,6 +16851,7 @@ watch(allLaunchableModules, () => {
 });
 
 function handleAuthExpired(event) {
+  resetAdminState();
   const message = event?.detail?.message || '登录已过期，请重新登录';
   permissionState.context = {};
   permissionState.permissions = [];
@@ -17086,7 +16915,7 @@ async function initializeSession() {
     await loadMessageSummary();
     await loadSwitchableAccounts();
     await nextTick();
-    ensureDefaultWindow(); handleHashNavigation(); scheduleDefaultWindow(); loadAdminFoundation();
+    ensureDefaultWindow(); handleHashNavigation(); scheduleDefaultWindow();
   } catch (error) { startupState.error = error.message || '学校连接失败，请重试'; }
   finally { startupState.loading = false; }
 }

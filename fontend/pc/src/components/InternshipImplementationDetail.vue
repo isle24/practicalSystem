@@ -32,13 +32,11 @@
 
       <template v-else-if="activeTab === 'students'">
         <section v-if="canManage" class="implementation-add-student">
-          <el-select v-model="newStudentId" filterable clearable placeholder="选择任务班级内学生">
-            <el-option v-for="item in availableStudents" :key="item.student_id" :label="studentLabel(item)" :value="item.student_id" />
-          </el-select>
+          <el-select-v2 v-model="newStudentId" :options="studentSelectOptions" filterable clearable placeholder="选择任务班级内学生" />
           <el-button type="primary" :icon="UserPlus" :disabled="!newStudentId || loading" :loading="loading" @click="addStudent">绑定学生</el-button>
         </section>
-        <el-table :data="students" height="100%" stripe size="small">
-          <el-table-column type="index" label="序号" width="66" align="center" />
+        <el-table :data="visibleStudents" height="100%" stripe size="small">
+          <el-table-column type="index" label="序号" width="66" align="center" :index="index => (studentPage - 1) * detailPageSize + index + 1" />
           <el-table-column prop="student_name" label="学生" width="110" />
           <el-table-column prop="student_num" label="学号" width="130" />
           <el-table-column prop="class_name" label="班级" min-width="140" />
@@ -53,6 +51,7 @@
             </template>
           </el-table-column>
         </el-table>
+        <el-pagination v-if="students.length > detailPageSize" v-model:current-page="studentPage" class="implementation-detail-pagination" layout="total, prev, pager, next" :page-size="detailPageSize" :total="students.length" />
       </template>
 
       <template v-else-if="activeTab === 'changes'">
@@ -100,9 +99,7 @@
           <div v-if="schedules.length" class="dynamic-row-list">
             <div v-for="(item, index) in schedules" :key="`schedule-${index}`" class="dynamic-form-row schedule-row">
               <label><span>专业</span>
-            <el-select v-model="item.profession_id" filterable clearable :disabled="!canManage" placeholder="请选择专业" @change="syncProfession(item)">
-                  <el-option v-for="option in options.professions || []" :key="option.profession_id" :label="option.profession_name" :value="option.profession_id" />
-                </el-select>
+                <el-select-v2 v-model="item.profession_id" :options="options.professions || []" :props="{ label: 'profession_name', value: 'profession_id' }" filterable clearable :disabled="!canManage" placeholder="请选择专业" @change="syncProfession(item)" />
               </label>
               <label><span>届次</span>
             <el-select v-model="item.grade_id" filterable clearable :disabled="!canManage" placeholder="请选择年级" @change="syncGrade(item)">
@@ -115,9 +112,7 @@
               <label><span>地点</span><input v-model="item.location" :disabled="!canManage"></label>
               <label><span>时间</span><input v-model="item.time_text" :disabled="!canManage"></label>
               <label><span>带队教师</span>
-            <el-select v-model="item.teacher_id" filterable clearable :disabled="!canManage" placeholder="请选择指导教师" @change="syncTeacher(item)">
-                  <el-option v-for="option in options.teachers || []" :key="option.teacher_id" :label="option.teacher_name" :value="option.teacher_id" />
-                </el-select>
+                <el-select-v2 v-model="item.teacher_id" :options="options.teachers || []" :props="{ label: 'teacher_name', value: 'teacher_id' }" filterable clearable :disabled="!canManage" placeholder="请选择指导教师" @change="syncTeacher(item)" />
               </label>
               <el-button v-if="canManage" text type="danger" :icon="Trash2" @click="schedules.splice(index, 1)">删除</el-button>
             </div>
@@ -162,6 +157,7 @@
 
 <script setup>
 import { computed, reactive, ref, watch } from 'vue';
+import { ElSelectV2 } from 'element-plus';
 import { ClipboardList, Download, Edit3, History, Plus, Trash2, UserPlus, UsersRound } from '@lucide/vue';
 
 const props = defineProps({
@@ -175,6 +171,8 @@ const props = defineProps({
 
 const emit = defineEmits(['add-student', 'close', 'edit-task', 'export', 'remove-student', 'save']);
 const activeTab = ref('overview');
+const detailPageSize = 20;
+const studentPage = ref(1);
 const newStudentId = ref(null);
 const sheet = reactive(emptySheet());
 const schedules = reactive([]);
@@ -182,6 +180,7 @@ const expenses = reactive([]);
 const task = computed(() => props.detail.task || props.detail.item || {});
 const classes = computed(() => props.detail.classes || []);
 const students = computed(() => props.detail.students || []);
+const visibleStudents = computed(() => students.value.slice((studentPage.value - 1) * detailPageSize, studentPage.value * detailPageSize));
 const changes = computed(() => props.detail.changes || []);
 const implementationSheet = computed(() => props.detail.implementation_sheet || {});
 const tabs = computed(() => [
@@ -199,6 +198,10 @@ const availableStudents = computed(() => {
   });
 });
 const totalAmount = computed(() => expenses.reduce((sum, item) => sum + (Number(item.amount) || 0), 0));
+const studentSelectOptions = computed(() => availableStudents.value.map(item => ({ label: studentLabel(item), value: item.student_id })));
+
+watch(() => task.value.id, () => { studentPage.value = 1; });
+watch(() => students.value.length, count => { studentPage.value = Math.min(studentPage.value, Math.max(1, Math.ceil(count / detailPageSize))); });
 
 watch(
   () => props.detail,
@@ -320,3 +323,7 @@ function dateRange(start, end) {
   return start || end ? `${start || '-'} 至 ${end || '-'}` : '-';
 }
 </script>
+
+<style scoped>
+.implementation-detail-pagination { flex-shrink: 0; padding-top: 10px; }
+</style>
