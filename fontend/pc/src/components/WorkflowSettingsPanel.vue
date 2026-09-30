@@ -1,6 +1,7 @@
 <script setup>
 import { onMounted, reactive, ref } from 'vue';
 import { request } from '../api/client';
+import WorkflowAccountSelect from './WorkflowAccountSelect.vue';
 
 const loading = ref(false);
 const message = ref('');
@@ -61,7 +62,7 @@ function move(index, step) {
   dirty.value = true;
 }
 onMounted(() => run(async () => {
-  Object.assign(options, await request('/workflow/options'));
+  Object.assign(options, await request('/workflow/options?include_accounts=0'));
   await reloadDefinitions();
   newDefinition();
 }));
@@ -94,7 +95,7 @@ onMounted(() => run(async () => {
             <el-form-item label="节点类型"><el-select v-model="item.kind" @change="dirty = true"><el-option value="review" label="审批" /><el-option value="cc" label="抄送" /></el-select></el-form-item>
             <el-form-item v-if="item.kind === 'review'" label="通过规则"><el-select v-model="item.mode" @change="dirty = true"><el-option value="any" label="或签" /><el-option value="all" label="会签" /></el-select></el-form-item>
             <el-form-item label="人员选择"><el-select v-model="item.selector.type" @change="dirty = true"><el-option value="accounts" label="指定账号" /><el-option value="role" label="按角色" /></el-select></el-form-item>
-            <el-form-item v-if="item.selector.type === 'accounts'" label="审批人 / 抄送人" class="workflow-wide"><el-select v-model="item.selector.account_ids" multiple filterable @change="dirty = true"><el-option v-for="account in options.accounts" :key="account.id" :value="Number(account.id)" :label="`${account.name}（${account.login_name}）`" /></el-select></el-form-item>
+            <el-form-item v-if="item.selector.type === 'accounts'" label="审批人 / 抄送人" class="workflow-wide"><WorkflowAccountSelect v-model="item.selector.account_ids" @update:model-value="dirty = true" /></el-form-item>
             <template v-else>
               <el-form-item label="角色"><el-select v-model="item.selector.role_id" filterable @change="dirty = true"><el-option v-for="role in options.roles" :key="role.id" :value="Number(role.id)" :label="role.name" /></el-select></el-form-item>
               <el-form-item label="学院范围"><el-select v-model="item.selector.department" @change="dirty = true"><el-option value="entity" label="申请所属学院" /><el-option value="fixed" label="指定学院" /><el-option value="school" label="全校" /></el-select></el-form-item>

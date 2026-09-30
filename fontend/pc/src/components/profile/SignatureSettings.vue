@@ -76,14 +76,14 @@ onBeforeUnmount(() => {
 });
 </script>
 <style scoped>
-.signature-settings { padding: 20px; border: 1px solid #e2e8f0; border-radius: 12px; background: #fff; color: #334155; }
+.signature-settings { padding: 20px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--text); }
 h3 { margin: 0 0 12px; }
 p { line-height: 1.6; font-size: 14px; }
 .signature-preview { display: flex; align-items: center; gap: 20px; margin: 18px 0; }
-.signature-preview img { object-fit: contain; max-width: 240px; max-height: 100px; }
-.signature-preview span { font-size: 13px; color: #64748b; }
+.signature-preview img { object-fit: contain; max-width: 240px; max-height: 100px; padding: 12px; border-radius: 6px; background: #fff; }
+.signature-preview span { font-size: 13px; color: var(--muted); }
 .signature-session { margin-top: 20px; text-align: center; }
-button { border: 1px solid #cbd5e1; padding: 9px 14px; border-radius: 6px; background: #fff; color: #0f172a; cursor: pointer; }
+button { border: 1px solid var(--line); padding: 9px 14px; border-radius: 6px; background: var(--surface); color: var(--text); cursor: pointer; }
 button:disabled { opacity: .5; cursor: default; }
 .error { color: #b91c1c; }
 </style>

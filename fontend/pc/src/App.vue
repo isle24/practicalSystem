@@ -37,7 +37,8 @@
   </DesktopTitlebar>
   <main v-if="startupState.loading || startupState.error" class="startup-shell" :class="{ native: isDesktopShell }"><section><strong>{{ startupState.error ? '连接未完成' : '正在连接并加载登录会话...' }}</strong><span v-if="startupState.error">{{ startupState.error }}</span><el-button v-if="startupState.error" type="primary" @click="initializeSession">重试</el-button></section></main>
   <main v-else-if="!isLoggedIn" class="login-shell" :class="{ 'login-shell-native': isDesktopShell }" :style="loginPageStyle">
-    <section class="login-panel">
+    <section class="login-panel" :class="{ 'login-panel-scan': loginMethod === 'wechat' }">
+      <button type="button" class="login-mode-corner" :aria-label="loginMethod === 'password' ? '切换企业微信扫码登录' : '切换账号密码登录'" :title="loginMethod === 'password' ? '企业微信扫码登录' : '账号密码登录'" @click="loginMethod = loginMethod === 'password' ? 'wechat' : 'password'"><QrCode v-if="loginMethod === 'password'" :size="28" /><Monitor v-else :size="28" /></button>
       <header>
         <img v-if="loginPageState.school_logo_url" class="login-school-logo" :src="backendUrl(loginPageState.school_logo_url)" :alt="loginSchoolName">
         <Building2 v-else :size="32" />
@@ -46,7 +47,7 @@
           <span>{{ loginSchoolName }}</span>
         </div>
       </header>
-      <div class="login-methods"><button type="button" :class="{ active: loginMethod === 'password' }" @click="loginMethod = 'password'">账号密码</button><button type="button" :class="{ active: loginMethod === 'wechat' }" @click="loginMethod = 'wechat'">企业微信扫码</button></div>
+      <h1 v-if="loginMethod === 'password'" class="login-view-title">账号密码登录</h1>
       <WechatLogin v-if="loginMethod === 'wechat'" :request="request" :public-origin="publicSchoolOrigin" @logged-in="refreshAuthenticatedSession(true)" />
       <template v-else>
       <label>
@@ -135,31 +136,15 @@
         </template>
 
         <div v-if="win.module.id === 'profile'" class="profile-app">
-          <section class="profile-content">
-            <div class="content-head">
-              <div>
-                <h1>个人设置</h1>
-                <p>头像资料、桌面壁纸和消息接收偏好。</p>
-              </div>
-              <div class="head-actions">
-                <el-button :icon="RefreshCw" :loading="profileState.loading" @click="loadProfile">
-                  读取
-                </el-button>
-                <el-button type="primary" :icon="Save" :loading="profileState.loading" @click="saveProfile">
-                  保存设置
-                </el-button>
-              </div>
-            </div>
-
-            <el-alert
-              v-if="profileState.message"
-              :type="profileAlertType"
-              :closable="false"
-              show-icon
-              :title="profileState.message"
-            />
-
-            <div class="profile-settings">
+          <ProfileSettingsLayout v-model="profileSection" :desktop="isDesktopClient">
+            <template #actions>
+              <el-button :icon="RefreshCw" :loading="profileState.loading" @click="loadProfile">重新读取</el-button>
+              <el-button type="primary" :icon="Save" :loading="profileState.loading" @click="saveProfile">保存修改</el-button>
+            </template>
+            <template #message>
+              <el-alert v-if="profileState.message" :type="profileAlertType" :closable="false" show-icon :title="profileState.message" />
+            </template>
+            <template #general>
               <section class="profile-panel-card profile-card-main">
                 <div class="avatar-edit">
                   <label
@@ -202,28 +187,9 @@
                 </div>
               </section>
 
-              <section
-                ref="wallpaperSectionRef"
-                class="profile-panel-card"
-                :class="{ focused: profileState.focus === 'wallpaper' }"
-              >
-                <header>
-                  <strong>桌面壁纸</strong>
-                  <small>选择后立即应用到 PC 工作台。</small>
-                </header>
-                <WallpaperLibrary
-                  :key="`${permissionState.context.school_database_id}:${permissionState.context.account_id}`"
-                  :selection="profileState.form"
-                  :school-default-url="loginPageState.default_wallpaper_url"
-                  @applied="applyWallpaperSelection"
-                />
-              </section>
-
+            </template>
+            <template #appearance>
               <ThemeSettings :theme="localTheme" />
-              <AccountLinks :session-key="accountImportSessionKey" :current-account-id="Number(permissionState.context.account_id || 0)" @changed="loadSwitchableAccounts" @switch="switchLoginAccount" />
-              <CredentialVaultSettings v-if="isDesktopClient" :key="accountImportSessionKey" :session-key="accountImportSessionKey" />
-              <SignatureSettings :key="`${permissionState.context.school_database_id}:${permissionState.context.account_id}`" />
-
               <section class="profile-panel-card">
                 <header>
                   <strong>客户端外观</strong>
@@ -253,8 +219,29 @@
                 </div>
                 <small class="client-version">客户端版本 v{{ clientVersion }}</small>
               </section>
+              <section
+                ref="wallpaperSectionRef"
+                class="profile-panel-card"
+                :class="{ focused: profileState.focus === 'wallpaper' }"
+              >
+                <header>
+                  <strong>桌面壁纸</strong>
+                  <small>选择后立即应用到 PC 工作台。</small>
+                </header>
+                <WallpaperLibrary
+                  :key="`${permissionState.context.school_database_id}:${permissionState.context.account_id}`"
+                  :selection="profileState.form"
+                  :school-default-url="loginPageState.default_wallpaper_url"
+                  @applied="applyWallpaperSelection"
+                />
+              </section>
 
-              <PreviewCacheSettings />
+            </template>
+            <template #accounts>
+              <AccountLinks :session-key="accountImportSessionKey" :current-account-id="Number(permissionState.context.account_id || 0)" @changed="loadSwitchableAccounts" @switch="switchLoginAccount" />
+              <CredentialVaultSettings v-if="isDesktopClient" :key="accountImportSessionKey" :session-key="accountImportSessionKey" />
+            </template>
+            <template #notifications>
               <section class="profile-panel-card">
                 <header>
                   <strong>消息接收</strong>
@@ -310,8 +297,12 @@
                   </label>
                 </div>
               </section>
-            </div>
-          </section>
+            </template>
+            <template #signature>
+              <SignatureSettings :key="`${permissionState.context.school_database_id}:${permissionState.context.account_id}`" />
+            </template>
+            <template #storage><PreviewCacheSettings /></template>
+          </ProfileSettingsLayout>
         </div>
 
         <ModuleCollection
@@ -4466,6 +4457,7 @@ import ExpensePanel from './components/ExpensePanel.vue';
 import { hasMaximizedWindow } from './composables/useMaximizedWindows';
 import { useLocalTheme } from './composables/useLocalTheme';
 import ThemeSettings from './components/profile/ThemeSettings.vue';
+import ProfileSettingsLayout from './components/profile/ProfileSettingsLayout.vue';
 import AccountLinks from './components/profile/AccountLinks.vue';
 import CredentialVaultSettings from './components/profile/CredentialVaultSettings.vue';
 import DesktopTitlebar from './components/DesktopTitlebar.vue';
@@ -4506,6 +4498,7 @@ import {
   Network,
   Plus,
   Printer,
+  QrCode,
   RefreshCw,
   RotateCcw,
   Save,
@@ -4727,6 +4720,7 @@ const keyword = ref('');
 const clock = ref('');
 const loginNameInput = ref(null);
 const wallpaperSectionRef = ref(null);
+const profileSection = ref('general');
 const menuTreeRef = ref(null);
 const archiveImportInputRef = ref(null);
 const archiveImportType = ref('');
@@ -8523,10 +8517,12 @@ function openProfile(section = '') {
   }
   loginPageState.message = '';
   if (section === 'wallpaper') {
+    profileSection.value = 'appearance';
     profileState.focus = 'wallpaper';
     nextTick(() => {
       window.setTimeout(() => {
-        wallpaperSectionRef.value?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        const element = Array.isArray(wallpaperSectionRef.value) ? wallpaperSectionRef.value[0] : wallpaperSectionRef.value;
+        element?.scrollIntoView({ block: 'center', behavior: 'smooth' });
       }, 80);
       window.setTimeout(() => {
         if (profileState.focus === 'wallpaper') {

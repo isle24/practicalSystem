@@ -1019,7 +1019,8 @@ a {
 .profile-app {
   min-height: 0;
   height: 100%;
-  background: #fff;
+  background: var(--surface);
+  container-type: inline-size;
 }
 
 .profile-content {
@@ -1049,7 +1050,7 @@ a {
   border-radius: 8px;
   color: var(--muted);
   text-align: left;
-  background: #fff;
+  background: var(--surface);
 }
 
 .desktop-style-options button.active {
@@ -5275,7 +5276,7 @@ a {
   justify-content: space-between;
   gap: 12px;
   padding: 9px 10px;
-  background: #fbfcfe;
+  background: var(--surface-2);
 }
 
 .notify-list label > span {
@@ -5289,19 +5290,30 @@ a {
   place-items: center;
   padding: 24px;
   background: #dfe8f0 center / cover no-repeat;
+  height: 100dvh;
+  overflow: auto;
 }
 
 .login-panel {
-  width: min(390px, 100%);
+  position: relative;
+  width: min(460px, 100%);
   border: 1px solid rgba(255, 255, 255, .72);
-  border-radius: 8px;
+  border-radius: 18px;
   display: grid;
   gap: 14px;
-  padding: 22px;
-  background: rgba(255, 255, 255, .86);
+  padding: 36px;
+  background: linear-gradient(145deg, rgba(237,247,255,.97), rgba(255,255,255,.97) 65%);
   box-shadow: 0 24px 70px rgba(24, 33, 43, .24);
   backdrop-filter: blur(24px) saturate(125%);
 }
+
+.login-mode-corner { position: absolute; top: 12px; right: 12px; width: 58px; height: 58px; display: flex; justify-content: flex-end; align-items: flex-start; padding: 7px; clip-path: polygon(0 0,100% 0,100% 100%); border-radius: 0 8px 0 0; background: #4169ff; color: #fff; }
+.login-mode-corner:hover { background: #2852df; }
+.login-mode-corner:focus-visible { clip-path: none; }
+.login-panel header { padding-right: 34px; }
+.login-view-title { margin: 22px 0 16px; font-size: 23px; text-align: center; }
+.login-panel-scan { gap: 20px; }
+@media (max-width: 520px) { .login-panel { padding: 28px 20px; } }
 
 .login-panel header {
   display: grid;

@@ -1,7 +1,10 @@
 <template>
   <section class="wechat-login" aria-label="企业微信扫码登录">
-    <p>使用已绑定系统账号的企业微信扫码登录。</p>
-    <QRCode v-if="scan && ['pending', 'scanned'].includes(scan.state)" :value="scan.scan_url" label="企业微信扫码登录二维码" />
+    <h2>请使用 <span>企业微信</span> 扫码登录</h2>
+    <div v-if="scan?.state !== 'ready'" class="scan-code-card" :aria-busy="busy">
+      <QRCode v-if="scan && ['pending', 'scanned'].includes(scan.state)" :value="scan.scan_url" :size="280" label="企业微信扫码登录二维码" />
+      <div v-else class="scan-placeholder"><span>{{ busy ? '正在生成二维码…' : '二维码暂不可用' }}</span><button v-if="!busy" type="button" @click="create">重新获取</button></div>
+    </div>
     <p v-if="scan && ['pending', 'scanned', 'ready'].includes(scan.state)" class="countdown">二维码剩余 {{ seconds }} 秒</p>
     <p v-if="scan?.state === 'scanned'">已扫码，请在企业微信中完成身份授权。</p>
     <fieldset v-if="scan?.state === 'ready' && accounts.length">
@@ -13,6 +16,8 @@
       <button type="button" :disabled="busy || !selectedAccount" @click="login">{{ busy ? '正在登录' : '确认登录' }}</button>
     </fieldset>
     <p v-if="message" class="message" role="status">{{ message }}</p>
+    <p class="scan-binding-hint">仅支持已绑定账号。未绑定请先用账号密码登录，
+      再在个人设置中绑定企业微信。</p>
     <div class="actions">
       <button type="button" :disabled="busy" @click="create">{{ busy && !scan ? '正在生成二维码' : scan ? '刷新二维码' : '生成登录二维码' }}</button>
       <button v-if="scan && ['pending', 'scanned', 'ready'].includes(scan.state)" type="button" :disabled="busy" @click="cancel">取消扫码</button>
@@ -185,12 +190,18 @@ defineExpose({ cancel });
 </script>
 
 <style scoped>
-.wechat-login { color: var(--theme-text, inherit); text-align: center; }
+.wechat-login { color: var(--theme-text, inherit); text-align: center; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+h2 { margin: 10px 0 22px; font-size: 20px; font-weight: 600; line-height: 1.6; }
+h2 span { color: var(--theme-accent, #2563eb); }
+.scan-code-card { width: min(304px, 100%); aspect-ratio: 1; display: grid; place-items: center; border: 1px solid #d8dee8; border-radius: 16px; background: #fff; padding: 10px; box-shadow: 0 4px 20px rgba(30, 50, 80, .04); }
+.scan-placeholder { display: grid; gap: 18px; justify-items: center; color: #64748b; font-size: 14px; }
+.scan-binding-hint { color: var(--muted, #64748b); font-size: 12px; max-width: 320px; }
 .wechat-login p { margin: 12px 0; line-height: 1.6; }
-.countdown { font-size: 13px; opacity: .8; }
+.countdown { font-size: 12px; color: var(--muted, #64748b); }
 .message { overflow-wrap: anywhere; }
-fieldset { margin: 12px 0; padding: 12px; border: 1px solid var(--theme-border, #cbd5e1); border-radius: 8px; text-align: left; }
-.account-option { display: flex; align-items: center; gap: 10px; padding: 10px 0; cursor: pointer; }
+fieldset { width: 100%; box-sizing: border-box; margin: 12px 0; padding: 12px; border: 1px solid var(--theme-border, #cbd5e1); border-radius: 8px; text-align: left; }
+.wechat-login .account-option { display: flex; align-items: center; gap: 10px; padding: 10px 0; cursor: pointer; }
+.wechat-login .account-option input { width: 16px; height: 16px; padding: 0; flex-shrink: 0; }
 .account-option small { display: block; margin-top: 4px; opacity: .8; }
 .actions { display: flex; gap: 10px; justify-content: center; }
 button { padding: 10px 16px; border: 1px solid var(--theme-border, #cbd5e1); border-radius: 8px; background: var(--theme-panel, #f8fafc); color: inherit; cursor: pointer; }
