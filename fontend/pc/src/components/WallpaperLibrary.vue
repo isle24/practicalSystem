@@ -126,13 +126,13 @@ onMounted(load);
       </article>
     </div>
     <p v-if="!state.loading && !state.items.length" class="wallpaper-library-empty">{{ state.scope === 'mine' ? '暂无上传壁纸' : '壁纸库暂无共享图片' }}</p>
-    <el-pagination v-if="state.total > state.size" v-model:current-page="state.page" :page-size="state.size" :total="state.total" layout="prev, pager, next" background />
+    <ListPagination v-model:current-page="state.page" :page-size="state.size" :total="state.total" layout="prev, pager, next" background />
     <el-dialog v-model="state.importing" title="选择历史图片" width="min(720px, 92vw)">
       <div class="wallpaper-library-grid">
         <button v-for="image in state.importItems" :key="image.file_id" type="button" class="wallpaper-library-import-item" :disabled="state.busy" @click="importImage(image.file_id)"><img :src="backendUrl(image.url)" :alt="image.name"><span>{{ image.name }}</span></button>
       </div>
       <p v-if="!state.importItems.length" class="wallpaper-library-empty">暂无可选图片</p>
-      <el-pagination v-if="state.importTotal > 12" v-model:current-page="state.importPage" :page-size="12" :total="state.importTotal" layout="prev, pager, next" background @current-change="loadImportable" />
+      <ListPagination v-model:current-page="state.importPage" :page-size="12" :total="state.importTotal" layout="prev, pager, next" background @current-change="loadImportable" />
     </el-dialog>
   </section>
 </template>

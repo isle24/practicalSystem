@@ -88,7 +88,7 @@
 
       <div class="education-sync-pagination">
         <span>共 {{ state.pagination.total || 0 }} 条</span>
-        <el-pagination
+        <ListPagination
           size="small"
           layout="prev, pager, next"
           :current-page="state.pagination.page || 1"
@@ -406,6 +406,21 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.education-sync-inbox > .education-sync-section-title {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.education-sync-filter {
+  flex-wrap: wrap;
+}
+
+.education-sync-filter input {
+  max-width: 280px;
 }
 
 .education-sync-section-title > .el-button {

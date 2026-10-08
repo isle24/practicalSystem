@@ -15,24 +15,28 @@
       </span>
     </div>
 
-    <div v-if="activeTab === 'file'" class="support-toolbar">
-      <el-select v-model="filters.category_id" clearable filterable placeholder="全部分类" @change="loadTemplates(1)">
-        <el-option v-for="item in categories" :key="item.id" :label="item.name" :value="item.id" />
-      </el-select>
-      <el-select v-model="filters.business_code" clearable placeholder="全部业务" @change="loadTemplates(1)">
-        <el-option v-for="item in businessOptions" :key="item.value" :label="item.label" :value="item.value" />
-      </el-select>
-      <el-select v-model="filters.material_type" clearable filterable placeholder="全部材料" @change="loadTemplates(1)">
-        <el-option v-for="item in materialOptions" :key="item.value" :label="item.label" :value="item.value" />
-      </el-select>
-      <el-select v-model="filters.scope_type" clearable placeholder="全部层级" @change="loadTemplates(1)">
-        <el-option v-for="item in scopeOptions" :key="item.value" :label="item.label" :value="item.value" />
-      </el-select>
-      <el-input v-model="filters.keyword" clearable placeholder="搜索模板、说明、分类" @keyup.enter="loadTemplates(1)" />
-      <el-button :icon="Search" :loading="loading" @click="loadTemplates(1)">查询</el-button>
-      <el-button :icon="RefreshCw" :loading="loading" @click="reload">刷新</el-button>
-      <el-button v-if="canManage" :icon="Plus" @click="openCategoryDialog">分类</el-button>
-      <el-button v-if="canManage" type="primary" :icon="Upload" @click="openTemplateDialog()">上传模板</el-button>
+    <div v-if="activeTab === 'file'" class="support-toolbar list-toolbar">
+      <div class="list-filter-controls">
+        <el-select v-model="filters.category_id" clearable filterable placeholder="全部分类" @change="loadTemplates(1)">
+          <el-option v-for="item in categories" :key="item.id" :label="item.name" :value="item.id" />
+        </el-select>
+        <el-select v-model="filters.business_code" clearable placeholder="全部业务" @change="loadTemplates(1)">
+          <el-option v-for="item in businessOptions" :key="item.value" :label="item.label" :value="item.value" />
+        </el-select>
+        <el-select v-model="filters.material_type" clearable filterable placeholder="全部材料" @change="loadTemplates(1)">
+          <el-option v-for="item in materialOptions" :key="item.value" :label="item.label" :value="item.value" />
+        </el-select>
+        <el-select v-model="filters.scope_type" clearable placeholder="全部层级" @change="loadTemplates(1)">
+          <el-option v-for="item in scopeOptions" :key="item.value" :label="item.label" :value="item.value" />
+        </el-select>
+        <el-input v-model="filters.keyword" clearable placeholder="搜索模板、说明、分类" @keyup.enter="loadTemplates(1)" />
+        <el-button :icon="Search" :loading="loading" @click="loadTemplates(1)">查询</el-button>
+        <el-button :icon="RefreshCw" :loading="loading" @click="reload">刷新</el-button>
+      </div>
+      <div v-if="canManage" class="list-toolbar-actions">
+        <el-button v-if="canManage" :icon="Plus" @click="openCategoryDialog">分类</el-button>
+        <el-button v-if="canManage" type="primary" :icon="Upload" @click="openTemplateDialog()">上传模板</el-button>
+      </div>
     </div>
 
     <div v-if="activeTab === 'file'" class="template-category-strip">
@@ -110,7 +114,7 @@
       </el-table>
       <div class="file-pagination">
         <span>共 {{ pagination.total }} 个模板</span>
-        <el-pagination
+        <ListPagination
           size="small"
           layout="prev, pager, next"
           :current-page="pagination.page"
@@ -122,30 +126,34 @@
     </section>
 
     <section v-else class="support-table message-template-support">
-      <div class="message-template-library-toolbar">
-        <el-select v-model="messageFilters.type" placeholder="请选择消息类型" @change="loadMessageTemplates(1)">
-          <el-option
-            v-for="item in messageTemplateTypeOptions"
-            :key="item.value"
-            :label="item.label"
-            :value="item.value"
-          />
-        </el-select>
-        <el-select v-model="messageFilters.status" placeholder="请选择状态" @change="loadMessageTemplates(1)">
-          <el-option label="全部状态" value="all" />
-          <el-option label="启用" value="enabled" />
-          <el-option label="停用" value="disabled" />
-        </el-select>
-        <el-input v-model="messageFilters.keyword" clearable placeholder="搜索名称、编码、内容" @keyup.enter="loadMessageTemplates(1)" />
-        <el-button :icon="Search" :loading="messageLoading" @click="loadMessageTemplates(1)">查询</el-button>
-        <el-button
-          v-if="canManageMessageTemplates"
-          :icon="RefreshCw"
-          :loading="messageSyncing"
-          @click="syncDefaultMessageTemplates"
-        >
-          同步默认流程模板
-        </el-button>
+      <div class="message-template-library-toolbar list-toolbar">
+        <div class="list-filter-controls">
+          <el-select v-model="messageFilters.type" placeholder="请选择消息类型" @change="loadMessageTemplates(1)">
+            <el-option
+              v-for="item in messageTemplateTypeOptions"
+              :key="item.value"
+              :label="item.label"
+              :value="item.value"
+            />
+          </el-select>
+          <el-select v-model="messageFilters.status" placeholder="请选择状态" @change="loadMessageTemplates(1)">
+            <el-option label="全部状态" value="all" />
+            <el-option label="启用" value="enabled" />
+            <el-option label="停用" value="disabled" />
+          </el-select>
+          <el-input v-model="messageFilters.keyword" clearable placeholder="搜索名称、编码、内容" @keyup.enter="loadMessageTemplates(1)" />
+          <el-button :icon="Search" :loading="messageLoading" @click="loadMessageTemplates(1)">查询</el-button>
+        </div>
+        <div v-if="canManageMessageTemplates" class="list-toolbar-actions">
+          <el-button
+            v-if="canManageMessageTemplates"
+            :icon="RefreshCw"
+            :loading="messageSyncing"
+            @click="syncDefaultMessageTemplates"
+          >
+            同步默认流程模板
+          </el-button>
+        </div>
       </div>
 
       <el-table :data="messageTemplates" height="100%" stripe v-loading="messageLoading">
@@ -193,7 +201,7 @@
 
       <div class="file-pagination">
         <span>共 {{ messagePagination.total }} 个流程审核待办/消息模板</span>
-        <el-pagination
+        <ListPagination
           size="small"
           layout="prev, pager, next"
           :current-page="messagePagination.page"
@@ -1010,3 +1018,38 @@ function formatFileSize(size) {
   return `${(value / 1024 / 1024).toFixed(1)} MB`;
 }
 </script>
+
+<style scoped>
+.support-toolbar.list-toolbar,
+.message-template-library-toolbar.list-toolbar {
+  display: flex;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.list-filter-controls {
+  flex: 1 1 420px;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.list-filter-controls > .el-select { width: 150px; }
+.list-filter-controls > .el-input { width: 250px; max-width: 100%; }
+
+.list-toolbar-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.list-toolbar :deep(.el-button) {
+  height: var(--control-height);
+  margin: 0;
+}
+</style>

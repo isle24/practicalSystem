@@ -1,20 +1,24 @@
 <template>
   <section class="support-panel doc-center-panel">
-    <div class="support-toolbar">
-      <el-select v-model="filters.category_id" clearable filterable placeholder="全部分类" @change="loadArticles(1)">
-        <el-option v-for="item in flatCategories" :key="item.id" :label="item.name" :value="item.id" />
-      </el-select>
-      <el-select v-if="canManage" v-model="filters.status" placeholder="请选择文档状态" @change="loadArticles(1)">
-        <el-option label="全部状态" value="all" />
-        <el-option label="草稿" value="draft" />
-        <el-option label="已发布" value="published" />
-        <el-option label="已归档" value="archived" />
-      </el-select>
-      <el-input v-model="filters.keyword" clearable placeholder="搜索标题、内容、分类" @keyup.enter="loadArticles(1)" />
-      <el-button :icon="Search" :loading="loading" @click="loadArticles(1)">查询</el-button>
-      <el-button :icon="RefreshCw" :loading="loading" @click="reload">刷新</el-button>
-      <el-button v-if="canManage" :icon="Plus" @click="openCategoryDialog()">分类</el-button>
-      <el-button v-if="canManage" type="primary" :icon="Plus" @click="openArticleDialog()">新增文档</el-button>
+    <div class="support-toolbar list-toolbar">
+      <div class="list-filter-controls">
+        <el-select v-model="filters.category_id" clearable filterable placeholder="全部分类" @change="loadArticles(1)">
+          <el-option v-for="item in flatCategories" :key="item.id" :label="item.name" :value="item.id" />
+        </el-select>
+        <el-select v-if="canManage" v-model="filters.status" placeholder="请选择文档状态" @change="loadArticles(1)">
+          <el-option label="全部状态" value="all" />
+          <el-option label="草稿" value="draft" />
+          <el-option label="已发布" value="published" />
+          <el-option label="已归档" value="archived" />
+        </el-select>
+        <el-input v-model="filters.keyword" clearable placeholder="搜索标题、内容、分类" @keyup.enter="loadArticles(1)" />
+        <el-button :icon="Search" :loading="loading" @click="loadArticles(1)">查询</el-button>
+        <el-button :icon="RefreshCw" :loading="loading" @click="reload">刷新</el-button>
+      </div>
+      <div v-if="canManage" class="list-toolbar-actions">
+        <el-button v-if="canManage" :icon="Plus" @click="openCategoryDialog()">分类</el-button>
+        <el-button v-if="canManage" type="primary" :icon="Plus" @click="openArticleDialog()">新增文档</el-button>
+      </div>
     </div>
 
     <div class="support-layout doc-layout">
@@ -57,7 +61,7 @@
         </el-table>
         <div class="file-pagination">
           <span>共 {{ pagination.total }} 篇文档</span>
-          <el-pagination
+          <ListPagination
             size="small"
             layout="prev, pager, next"
             :current-page="pagination.page"
@@ -561,3 +565,38 @@ function statusTagType(status) {
   return 'warning';
 }
 </script>
+
+<style scoped>
+.support-toolbar.list-toolbar,
+.message-template-library-toolbar.list-toolbar {
+  display: flex;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.list-filter-controls {
+  flex: 1 1 420px;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.list-filter-controls > .el-select { width: 150px; }
+.list-filter-controls > .el-input { width: 250px; max-width: 100%; }
+
+.list-toolbar-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.list-toolbar :deep(.el-button) {
+  height: var(--control-height);
+  margin: 0;
+}
+</style>

@@ -89,7 +89,7 @@
         <el-empty v-if="!state.rows.length && !state.loading" description="暂无相关记录" />
         <div class="social-student-pagination">
           <span>共 {{ state.pagination.total }} 条</span>
-          <el-pagination
+          <ListPagination
             size="small"
             layout="prev, pager, next"
             :current-page="state.pagination.page"
@@ -284,12 +284,12 @@
         <section v-if="state.detail.participants?.length" class="social-detail-block">
           <strong>参与学生</strong>
           <el-table :data="visibleDetailParticipants" size="small"><el-table-column type="index" label="序号" width="66" :index="index => (detailParticipantPage - 1) * detailPageSize + index + 1" /><el-table-column prop="student_name" label="学生" /><el-table-column prop="student_num" label="学号" /><el-table-column prop="teacher_name" label="指导教师" /></el-table>
-          <el-pagination v-if="state.detail.participants.length > detailPageSize" v-model:current-page="detailParticipantPage" layout="total, prev, pager, next" :page-size="detailPageSize" :total="state.detail.participants.length" />
+          <ListPagination v-model:current-page="detailParticipantPage" layout="total, prev, pager, next" :page-size="detailPageSize" :total="state.detail.participants.length" />
         </section>
         <section v-if="state.detail.members?.length" class="social-detail-block">
           <strong>团队成员</strong>
           <el-table :data="visibleDetailMembers" size="small"><el-table-column type="index" label="序号" width="66" :index="index => (detailMemberPage - 1) * detailPageSize + index + 1" /><el-table-column prop="student_name" label="学生" /><el-table-column prop="student_num" label="学号" /><el-table-column prop="confirm_status" label="确认状态"><template #default="{ row }">{{ confirmStatusText(row.confirm_status) }}</template></el-table-column></el-table>
-          <el-pagination v-if="state.detail.members.length > detailPageSize" v-model:current-page="detailMemberPage" layout="total, prev, pager, next" :page-size="detailPageSize" :total="state.detail.members.length" />
+          <ListPagination v-model:current-page="detailMemberPage" layout="total, prev, pager, next" :page-size="detailPageSize" :total="state.detail.members.length" />
         </section>
       </div>
     </OperationDialog>
@@ -357,7 +357,7 @@
           <el-table-column label="指导教师" min-width="200"><template #default="{ row }"><el-select-v2 v-model="row.teacher_id" filterable placeholder="请选择指导教师" :options="assignmentTeacherSelectOptions" /></template></el-table-column>
           <el-table-column label="操作" width="80"><template #default="{ $index }"><el-button link type="danger" @click="removeParticipant($index)">移除</el-button></template></el-table-column>
         </el-table>
-        <el-pagination v-if="state.assignment.participants.length > detailPageSize" v-model:current-page="assignmentPage" layout="total, prev, pager, next" :page-size="detailPageSize" :total="state.assignment.participants.length" />
+        <ListPagination v-model:current-page="assignmentPage" layout="total, prev, pager, next" :page-size="detailPageSize" :total="state.assignment.participants.length" />
       </div>
       <template #footer><el-button @click="closeDialog">取消</el-button><el-button type="primary" :loading="state.saving" @click="submitStudentAssignment">保存分配</el-button></template>
     </OperationDialog>
@@ -407,7 +407,7 @@
           <el-table-column prop="profession_name" label="专业" min-width="150" />
           <el-table-column label="校验结果" min-width="220"><template #default="{ row }"><el-tag :type="row.errors?.length ? 'danger' : (row.duplicate ? 'warning' : 'success')">{{ row.errors?.join('；') || (row.duplicate ? '将更新可编辑草稿' : '可导入') }}</el-tag></template></el-table-column>
         </el-table>
-        <el-pagination v-if="state.planImport.items.length > detailPageSize" v-model:current-page="planImportPage" layout="total, prev, pager, next" :page-size="detailPageSize" :total="state.planImport.items.length" />
+        <ListPagination v-model:current-page="planImportPage" layout="total, prev, pager, next" :page-size="detailPageSize" :total="state.planImport.items.length" />
       </div>
       <template #footer>
         <el-button :disabled="state.saving" @click="closeDialog">取消</el-button>

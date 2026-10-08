@@ -24,3 +24,4 @@ export const assignBaseVisit = payload => save('assign', payload);
 export const scheduleBaseVisit = payload => save('schedule', payload);
 export const saveBaseVisitRecord = payload => save('record', payload);
 export const cancelBaseVisit = payload => save('cancel', payload);
+export const deleteBaseVisit = payload => save('delete', payload);

@@ -38,12 +38,9 @@
       <span>{{ emptyText }}</span>
     </div>
 
-    <footer
-      v-if="pagination.total > pagination.page_size"
-      class="student-own-pagination"
-    >
+    <footer class="student-own-pagination">
       <span>共 {{ pagination.total }} 条</span>
-      <el-pagination
+      <ListPagination
         size="small"
         layout="prev, pager, next"
         :current-page="pagination.page || 1"

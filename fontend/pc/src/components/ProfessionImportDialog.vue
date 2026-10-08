@@ -120,7 +120,7 @@ watch(() => props.visible, (visible) => {
             </template>
           </el-table-column>
         </el-table>
-        <el-pagination v-if="state.items.length > previewPageSize" v-model:current-page="previewPage" layout="total, prev, pager, next" :page-size="previewPageSize" :total="state.items.length" />
+        <ListPagination v-model:current-page="previewPage" layout="total, prev, pager, next" :page-size="previewPageSize" :total="state.items.length" />
       </template>
     </div>
     <template #footer>

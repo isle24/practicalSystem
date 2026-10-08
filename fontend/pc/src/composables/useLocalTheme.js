@@ -10,6 +10,42 @@ export const themePresets = [
 
 const defaults = () => ({ ...themePresets[0], wallpaper_id: '', name: '' });
 const color = value => /^#[0-9a-f]{6}$/i.test(value || '') ? value : '';
+const rgb = value => [1, 3, 5].map(index => Number.parseInt(value.slice(index, index + 2), 16));
+const mixColor = (source, target, ratio) => `#${rgb(source).map((channel, index) => Math.round(channel + (rgb(target)[index] - channel) * ratio).toString(16).padStart(2, '0')).join('')}`;
+
+function luminance(value) {
+  const channels = rgb(value).map(channel => channel / 255).map(channel => channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4);
+  return channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722;
+}
+
+function contrast(first, second) {
+  const values = [luminance(first), luminance(second)];
+  return (Math.max(...values) + 0.05) / (Math.min(...values) + 0.05);
+}
+
+function foreground(background) {
+  return contrast(background, '#18212b') > contrast(background, '#ffffff') ? '#18212b' : '#ffffff';
+}
+
+function accentVariables(accent, surface) {
+  const variants = Object.fromEntries([3, 5, 7, 8, 9].map(level => [`--el-color-primary-light-${level}`, mixColor(accent, surface, level / 10)]));
+  const active = mixColor(accent, '#000000', 0.2);
+  const target = foreground(surface);
+  let ink = accent;
+  for (let step = 1; contrast(ink, surface) < 4.5 && step <= 20; step++) {
+    ink = mixColor(accent, target, step / 20);
+  }
+  return {
+    ...variants,
+    '--el-color-primary-dark-2': active,
+    '--primary-ink': ink,
+    '--primary-contrast': foreground(accent),
+    '--primary-hover-contrast': foreground(variants['--el-color-primary-light-3']),
+    '--primary-active-contrast': foreground(active),
+    '--primary-disabled-contrast': foreground(variants['--el-color-primary-light-5']),
+  };
+}
+
 function normalize(value = {}) {
   return { id: String(value.id || 'system'), name: String(value.name || '').slice(0, 40), mode: ['light', 'dark', 'system'].includes(value.mode) ? value.mode : 'system', accent: color(value.accent) || '#2563eb', window: color(value.window), text: color(value.text) || '#ffffff', opacity: Math.max(0.65, Math.min(1, Number(value.opacity) || 1)), density: ['compact', 'normal', 'comfortable'].includes(value.density) ? value.density : 'normal', wallpaper_id: String(value.wallpaper_id || '') };
 }
@@ -56,8 +92,8 @@ export function useLocalTheme(scope) {
       else html.style.removeProperty(key);
     }
     const value = current.value.window || (dark.value ? '#18212f' : '#ffffff');
-    const rgb = [1, 3, 5].map(index => Number.parseInt(value.slice(index, index + 2), 16));
-    html.style.setProperty('--theme-window-background', `rgba(${rgb.join(',')},${current.value.opacity})`);
+    Object.entries(accentVariables(current.value.accent, value)).forEach(([key, value]) => html.style.setProperty(key, value));
+    html.style.setProperty('--theme-window-background', `rgba(${rgb(value).join(',')},${current.value.opacity})`);
   }, { immediate: true, deep: true });
 
   function revokeWallpaper() {

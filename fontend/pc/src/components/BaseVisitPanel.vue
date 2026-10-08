@@ -1,7 +1,7 @@
 <template>
   <section class="base-visit-panel">
     <header class="base-visit-heading">
-      <strong>基地走访</strong>
+      <strong>基地巡查</strong>
       <span>{{ state.options.is_teacher ? '填写本人走访时间和走访记录' : '安排走访人员，查看走访进度与记录' }}</span>
     </header>
     <el-alert v-if="state.message" :title="state.message" :type="state.error ? 'error' : 'success'" :closable="false" show-icon />
@@ -18,8 +18,10 @@
       @reset="resetFilters"
       @page-change="loadList"
     >
-      <template #toolbar>
+      <template #filters>
         <label class="base-visit-date-filter"><span>走访日期</span><input v-model="state.filters.visit_date" type="date" aria-label="走访日期" @change="loadList(1)"></label>
+      </template>
+      <template #toolbar>
         <el-button :loading="state.loading || state.optionsLoading" :disabled="busy" @click="refresh">刷新</el-button>
         <el-button v-if="state.options.can_assign" type="primary" :icon="Plus" :disabled="busy || state.optionsLoading" @click="openCreate">新增安排</el-button>
       </template>
@@ -33,6 +35,7 @@
         <el-button v-if="canAct('schedule', row)" :disabled="busy" type="primary" @click="openDialog('schedule', row)">填写时间</el-button>
         <el-button v-if="canAct('record', row)" :disabled="busy" type="primary" @click="openDialog('record', row)">{{ row.status === 'completed' ? '修改走访记录' : '填写走访记录' }}</el-button>
         <el-button v-if="canAct('cancel', row)" :disabled="busy" type="danger" plain @click="openDialog('cancel', row)">取消安排</el-button>
+        <el-button v-if="canAct('delete', row)" :disabled="busy" type="danger" @click="openDialog('delete', row)">删除</el-button>
       </template>
     </DataListPanel>
 
@@ -40,7 +43,7 @@
       <div class="base-visit-dialog-body" v-loading="state.detailLoading" :inert="busy">
         <el-alert v-if="state.dialogError" :title="state.dialogError" type="error" :closable="false" show-icon />
         <div v-if="state.detail?.item" class="base-visit-context">
-          <strong>{{ state.detail.item.base_name || '基地走访' }}</strong>
+          <strong>{{ state.detail.item.base_name || '基地巡查' }}</strong>
           <span>{{ state.detail.item.base_department || '—' }} · {{ state.detail.item.teacher_name || '—' }}</span>
           <el-tag :type="statusType(state.detail.item.status)">{{ statusText(state.detail.item.status) }}</el-tag>
         </div>
@@ -151,6 +154,7 @@
         <form v-else-if="!state.detailLoading && state.dialogMode === 'cancel'" class="base-visit-form" @submit.prevent="saveDialog">
           <label class="base-visit-wide"><span>取消原因</span><el-input v-model="state.form.reason" type="textarea" :rows="4" maxlength="1000" placeholder="请输入取消原因" /></label>
         </form>
+        <el-alert v-else-if="!state.detailLoading && state.dialogMode === 'delete'" title="确认删除该巡查？" description="删除后不再显示该巡查，也不再占用走访时间。不再安排后续提醒；已发送或正在处理的提醒无法撤回。历史走访记录和附件将保留。" type="warning" :closable="false" show-icon />
       </div>
       <template #footer>
         <el-button :disabled="busy" @click="closeDialog">关闭</el-button>
@@ -159,8 +163,9 @@
           <el-button v-if="canAct('schedule', state.detail.item, state.detail.permissions)" :disabled="busy" type="primary" @click="openDialog('schedule', state.detail.item)">填写时间</el-button>
           <el-button v-if="canAct('record', state.detail.item, state.detail.permissions)" :disabled="busy" type="primary" @click="openDialog('record', state.detail.item)">{{ state.detail.record ? '修改走访记录' : '填写走访记录' }}</el-button>
           <el-button v-if="canAct('cancel', state.detail.item, state.detail.permissions)" :disabled="busy" type="danger" plain @click="openDialog('cancel', state.detail.item)">取消安排</el-button>
+          <el-button v-if="canAct('delete', state.detail.item, state.detail.permissions)" :disabled="busy" type="danger" @click="openDialog('delete', state.detail.item)">删除</el-button>
         </template>
-        <el-button v-else-if="state.dialogMode !== 'detail'" :type="state.dialogMode === 'cancel' ? 'danger' : 'primary'" :loading="state.saving" :disabled="state.detailLoading || state.uploading" @click="saveDialog">{{ saveButtonText }}</el-button>
+        <el-button v-else-if="state.dialogMode !== 'detail'" :type="['cancel', 'delete'].includes(state.dialogMode) ? 'danger' : 'primary'" :loading="state.saving" :disabled="state.detailLoading || state.uploading" @click="saveDialog">{{ saveButtonText }}</el-button>
       </template>
     </OperationDialog>
   </section>
@@ -174,7 +179,7 @@ import OperationDialog from './OperationDialog.vue';
 import FilePreviewButton from '../../../shared/components/FilePreviewButton.vue';
 import { backendUrl } from '../api/client';
 import { uploadFile } from '../api/system';
-import { assignBaseVisit, cancelBaseVisit, fetchBaseVisitDetail, fetchBaseVisitOptions, fetchBaseVisits, saveBaseVisitRecord, scheduleBaseVisit } from '../api/baseVisits';
+import { assignBaseVisit, cancelBaseVisit, deleteBaseVisit, fetchBaseVisitDetail, fetchBaseVisitOptions, fetchBaseVisits, saveBaseVisitRecord, scheduleBaseVisit } from '../api/baseVisits';
 
 const props = defineProps({ sessionKey: { type: String, required: true } });
 const emptyFilters = () => ({ keyword: '', status: '', dep_id: '', visit_date: '' });
@@ -189,8 +194,8 @@ const state = reactive(initialState());
 const selectedBase = ref(null);
 const attachmentInput = ref(null);
 const busy = computed(() => state.saving || state.uploading);
-const dialogTitle = computed(() => ({ detail: '走访详情', assign: state.detail ? '修改走访安排' : '新增走访安排', schedule: '填写走访时间', record: state.detail?.record ? '修改走访记录' : '填写走访记录', cancel: '取消走访安排' }[state.dialogMode] || '基地巡查'));
-const saveButtonText = computed(() => ({ assign: '保存安排', schedule: '保存时间', record: '保存记录', cancel: '确认取消' }[state.dialogMode] || '保存'));
+const dialogTitle = computed(() => ({ detail: '走访详情', assign: state.detail ? '修改走访安排' : '新增走访安排', schedule: '填写走访时间', record: state.detail?.record ? '修改走访记录' : '填写走访记录', cancel: '取消走访安排', delete: '删除基地巡查' }[state.dialogMode] || '基地巡查'));
+const saveButtonText = computed(() => ({ assign: '保存安排', schedule: '保存时间', record: '保存记录', cancel: '确认取消', delete: '确认删除' }[state.dialogMode] || '保存'));
 const statusOptions = [{ value: 'pending_time', label: '待填时间' }, { value: 'scheduled', label: '已安排' }, { value: 'completed', label: '已完成' }, { value: 'cancelled', label: '已取消' }];
 const recordTextFields = [{ key: 'content', label: '走访内容', maxlength: 20000 }, { key: 'problems', label: '发现问题', maxlength: 10000 }, { key: 'follow_up', label: '后续措施', maxlength: 10000 }];
 const columns = [
@@ -281,6 +286,7 @@ function safeExternalUrl(value) {
 
 function canAct(action, item, permissions = item) {
   if (!item || permissions?.[`can_${action}`] !== true) return false;
+  if (action === 'delete') return true;
   if (action === 'record') return ['scheduled', 'completed'].includes(item.status);
   return ['pending_time', 'scheduled'].includes(item.status);
 }
@@ -354,7 +360,9 @@ async function loadList(page = 1) {
     const data = await fetchBaseVisits({ ...state.filters, page, page_size: state.pagination.page_size }, { signal: ticket.controller.signal });
     if (!isCurrent('list', ticket)) return;
     state.rows = data.items || [];
-    state.pagination = { page, page_size: 20, total: 0, ...data.pagination };
+    state.pagination = { page, page_size: state.pagination.page_size, total: 0, ...data.pagination };
+    const lastPage = Math.max(1, Math.ceil(state.pagination.total / state.pagination.page_size));
+    if (state.pagination.page > lastPage) await loadList(lastPage);
   } catch (error) {
     if (isCurrent('list', ticket)) { state.message = error.message; state.error = true; }
   } finally {
@@ -482,7 +490,7 @@ function formError(mode, form) {
 }
 
 async function saveDialog() {
-  if (busy.value || state.detailLoading || !['assign', 'schedule', 'record', 'cancel'].includes(state.dialogMode)) return;
+  if (busy.value || state.detailLoading || !['assign', 'schedule', 'record', 'cancel', 'delete'].includes(state.dialogMode)) return;
   const mode = state.dialogMode;
   const item = state.detail?.item;
   if (item ? !canAct(mode, item, state.detail.permissions) : mode !== 'assign' || !state.options.can_assign) return;
@@ -501,9 +509,19 @@ async function saveDialog() {
   }
   state.saving = true;
   try {
-    const save = { assign: assignBaseVisit, schedule: scheduleBaseVisit, record: saveBaseVisitRecord, cancel: cancelBaseVisit }[mode];
+    const save = { assign: assignBaseVisit, schedule: scheduleBaseVisit, record: saveBaseVisitRecord, cancel: cancelBaseVisit, delete: deleteBaseVisit }[mode];
     const data = await save(payload);
     if (version !== sessionVersion || currentDialog !== dialogVersion) return;
+    if (mode === 'delete') {
+      state.message = '基地巡查已删除';
+      state.error = false;
+      await loadList(state.pagination.page);
+      if (version === sessionVersion && currentDialog === dialogVersion) {
+        state.saving = false;
+        closeDialog();
+      }
+      return;
+    }
     state.detail = data;
     state.dialogMode = 'detail';
     state.form = {};
@@ -511,7 +529,7 @@ async function saveDialog() {
     state.error = false;
     await loadList(state.pagination.page);
   } catch (error) {
-    if (version === sessionVersion && currentDialog === dialogVersion) state.dialogError = error.status === 409 ? `${error.message} 请调整走访人员或时间后重试。` : error.message;
+    if (version === sessionVersion && currentDialog === dialogVersion) state.dialogError = error.status === 409 && mode !== 'delete' ? `${error.message} 请调整走访人员或时间后重试。` : error.message;
   } finally {
     if (version === sessionVersion && currentDialog === dialogVersion) state.saving = false;
   }
@@ -579,8 +597,9 @@ onBeforeUnmount(invalidateSession);
 .base-visit-heading > strong { font-size: 16px; }
 .base-visit-heading > span, .base-visit-date-filter, .base-visit-form small, .base-visit-files small { color: var(--muted); font-size: 12px; }
 .base-visit-panel > .data-list-panel { flex: 1; min-height: 0; }
-.base-visit-date-filter { display: flex; align-items: center; gap: 8px; }
-.base-visit-date-filter input { height: var(--toolbar-control-height, 38px); border: 1px solid var(--line); border-radius: var(--control-radius); padding: 0 8px; color: var(--text); background: #fff; }
+.base-visit-date-filter { display: flex; flex: 0 0 220px; width: 220px; max-width: 100%; align-items: center; gap: 8px; }
+.base-visit-date-filter > span { flex-shrink: 0; white-space: nowrap; }
+.base-visit-date-filter input { flex: 1; min-width: 0; height: var(--toolbar-control-height, 38px); border: 1px solid var(--line); border-radius: var(--control-radius); padding: 0 8px; color: var(--text); background: var(--surface); }
 :global(.operation-dialog.base-visit-dialog) { width: min(860px, calc(100vw - 48px)); }
 .base-visit-dialog-body { min-height: 160px; display: flex; flex-direction: column; gap: 16px; padding: 18px; overflow: auto; }
 .base-visit-context { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; }

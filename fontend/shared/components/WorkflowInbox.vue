@@ -9,6 +9,7 @@ const selected = ref(null);
 const busy = ref(false);
 const message = ref('');
 const page = ref(1);
+const pageSize = ref(20);
 const total = ref(0);
 const application = computed(() => selected.value?.snapshot_json?.application || selected.value?.snapshot_json?.expense || selected.value?.snapshot_json || {});
 const base = computed(() => selected.value?.snapshot_json?.base || {});
@@ -18,8 +19,9 @@ async function load() {
   busy.value = true;
   message.value = '';
   try {
-    const data = await props.request(`/workflow/inbox?kind=${kind.value}&page=${page.value}&page_size=20`);
+    const data = await props.request(`/workflow/inbox?kind=${kind.value}&page=${page.value}&page_size=${pageSize.value}`);
     items.value = data.items || [];
+    pageSize.value = Number(data.pagination?.page_size || pageSize.value);
     total.value = Number(data.pagination?.total || 0);
   } catch (error) { message.value = error.message; } finally { busy.value = false; }
 }
@@ -46,7 +48,7 @@ watch(() => props.accountId, () => { page.value = 1; selected.value = null; load
     <template v-else>
       <p v-if="!busy && !items.length" class="workflow-inbox-empty">{{ kind === 'review' ? '暂无待处理审批' : '暂无抄送记录' }}</p>
       <button v-for="item in items" :key="item.task_id" class="workflow-inbox-item" @click="open(item)"><strong>{{ title(item) }}</strong><span>{{ labels[item.entity_type] || '审批申请' }} · {{ item.nodes_json?.[Number(item.position) - 1]?.name }} · 第 {{ item.round }} 轮</span></button>
-      <footer v-if="total"><button :disabled="busy || page <= 1" @click="page--; load()">上一页</button><span>{{ page }} / {{ Math.max(1, Math.ceil(total / 20)) }}</span><button :disabled="busy || page * 20 >= total" @click="page++; load()">下一页</button></footer>
+      <footer><span>{{ pageSize }} 条/页</span><button :disabled="busy || page <= 1" @click="page--; load()">上一页</button><span>{{ page }} / {{ Math.max(1, Math.ceil(total / pageSize)) }}</span><button :disabled="busy || page * pageSize >= total" @click="page++; load()">下一页</button></footer>
     </template>
   </section>
 </template>

@@ -1,4 +1,25 @@
 :root { --desktop-label-color: #fff; --theme-window-background: #fff; --theme-panel: var(--surface-2); --theme-text: var(--text); --theme-border: var(--line); --theme-accent: var(--primary); }
+:root[data-theme] {
+  --primary-soft: color-mix(in srgb, var(--primary) 9%, var(--surface));
+  --el-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --el-font-size-base: 13px;
+  --el-text-color-primary: var(--text);
+  --el-text-color-regular: var(--text);
+  --el-text-color-secondary: var(--muted);
+  --el-text-color-placeholder: var(--muted);
+  --el-text-color-disabled: var(--muted);
+  --el-disabled-text-color: var(--muted);
+  --el-border-color: var(--line);
+  --el-border-color-light: var(--line);
+  --el-border-color-lighter: var(--line);
+  --el-bg-color: var(--surface);
+  --el-bg-color-overlay: var(--surface);
+  --el-fill-color-blank: var(--surface);
+  --el-fill-color-light: var(--surface-2);
+  --el-fill-color-lighter: color-mix(in srgb, var(--surface-2) 60%, var(--surface));
+  --el-fill-color: var(--surface-2);
+  --el-fill-color-dark: var(--line);
+}
 :root[data-theme="dark"] {
   color-scheme: dark;
   --bg: #0e1622;
@@ -8,9 +29,59 @@
   --line-strong: #50627a;
   --text: #e7edf5;
   --muted: #a2b0c2;
-  --primary-soft: #1c3556;
+  --danger: #ee8b9a;
+  --amber: #e4b35d;
+  --green: #5dcea4;
+  --teal: #63c6b9;
   --shadow: 0 22px 60px rgba(0, 0, 0, .4);
   --shadow-active: 0 28px 72px rgba(0, 0, 0, .5);
+}
+.el-button--primary:not(.is-plain):not(.is-text):not(.is-link):not(.is-dashed) {
+  --el-button-text-color: var(--primary-contrast, #fff);
+  --el-button-hover-text-color: var(--primary-hover-contrast, #fff);
+  --el-button-active-text-color: var(--primary-active-contrast, #fff);
+  --el-button-disabled-text-color: var(--primary-disabled-contrast, #fff);
+}
+.el-button--primary:is(.is-plain, .is-text, .is-link, .is-dashed) {
+  --el-button-text-color: var(--primary-ink, var(--primary));
+  --el-button-hover-link-text-color: var(--primary-ink, var(--primary));
+  --el-button-active-color: var(--primary-ink, var(--primary));
+}
+.el-button--primary.is-plain {
+  --el-button-hover-text-color: var(--primary-contrast, #fff);
+  --el-button-active-text-color: var(--primary-active-contrast, #fff);
+}
+.el-button--primary:is(.is-plain, .is-text, .is-link, .is-dashed).is-disabled,
+.el-button--primary:is(.is-plain, .is-text, .is-link, .is-dashed).is-disabled:is(:hover, :active, :focus) {
+  color: var(--muted);
+}
+.el-button.is-disabled {
+  opacity: .68;
+}
+.el-tag--primary:is(.el-tag--light, .el-tag--plain) {
+  --el-tag-text-color: var(--primary-ink, var(--primary));
+}
+.el-tag--primary.el-tag--dark {
+  --el-tag-text-color: var(--primary-contrast, #fff);
+}
+.el-pagination {
+  --el-pagination-text-color: var(--text);
+  --el-pagination-button-color: var(--text);
+  --el-pagination-button-bg-color: var(--surface);
+  --el-pagination-bg-color: var(--surface);
+  --el-pagination-button-disabled-bg-color: var(--surface-2);
+  --el-pagination-button-disabled-color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.el-pagination .el-pager li.is-active,
+.el-pagination.is-background .el-pager li.is-active {
+  color: var(--primary-ink, var(--primary));
+  background: var(--primary-soft);
+  font-weight: 600;
+}
+.el-pagination .el-pager li:not(.is-disabled):hover {
+  color: var(--primary-ink, var(--primary));
+  background: var(--primary-soft);
 }
 .shortcut-tile-desktop { color: var(--desktop-label-color); text-shadow: 0 1px 3px rgba(0, 0, 0, .85), 0 2px 8px rgba(0, 0, 0, .65); }
 .desktop-shell-native { height: calc(100dvh - 42px); min-height: 0; }
@@ -49,9 +120,20 @@
 :root[data-theme="dark"] .operation-dialog strong,
 :root[data-theme="dark"] .taskbar-clock,
 :root[data-theme="dark"] .taskbar-operator-button { color: var(--text); }
-:root[data-theme="dark"] input:not([type="color"]),
+:root[data-theme="dark"] input:not([type="color"]):not(.el-input__inner):not(.el-select__input):not(.el-select-v2__combobox-input),
 :root[data-theme="dark"] textarea,
 :root[data-theme="dark"] select { background-color: var(--surface-2); color: var(--text); border-color: var(--line); }
 :root[data-theme="dark"] .window-content,
 :root[data-theme="dark"] .operation-dialog-body { background: transparent; color: var(--text); }
 :root[data-theme="dark"] .wechat-binding-gate { background: rgba(5, 10, 18, .8) !important; }
+
+@media (prefers-reduced-motion: reduce) {
+  .data-list-drawer-enter-active,
+  .data-list-drawer-leave-active,
+  .data-list-drawer-enter-active .data-list-action-drawer,
+  .data-list-drawer-leave-active .data-list-action-drawer,
+  .data-list-drawer-action,
+  .table-operation-trigger {
+    transition: none;
+  }
+}

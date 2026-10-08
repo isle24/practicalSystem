@@ -22,6 +22,7 @@
             <article><span>所属学院</span><strong>{{ departmentText }}</strong></article>
             <article><span>服务专业</span><strong :title="professionText">{{ professionText }}</strong></article>
             <article><span>是否立项</span><strong>{{ local.is_project_approved ? '是' : '否' }}</strong></article>
+            <article><span>启用状态</span><strong>{{ local.status === 'enabled' ? '启用' : '关闭' }}</strong></article>
             <article><span>基地负责人</span><strong>{{ valueText(local.manager.name) }}</strong></article>
             <article><span>负责人电话</span><strong>{{ valueText(local.manager.phone) }}</strong></article>
             <template v-if="local.base_type === 'long_term'">
@@ -54,6 +55,7 @@
           </label>
           <label v-if="local.base_type === 'long_term'"><span>基地编号</span><input v-model="local.code"></label>
           <label><span>是否立项</span><el-radio-group v-model="local.is_project_approved"><el-radio :value="true">是</el-radio><el-radio :value="false">否</el-radio></el-radio-group></label>
+          <label><span>启用状态</span><el-switch v-model="local.status" active-value="enabled" inactive-value="disabled" active-text="启用" inactive-text="关闭" aria-label="基地启用状态" /></label>
           <label>
             <span>所属学院</span>
             <el-select v-model="local.dep_id" clearable filterable placeholder="请选择所属学院">
@@ -334,6 +336,7 @@ function emptyForm(detail = {}) {
     id: item.id || null,
     uuid: item.uuid || '',
     base_type: item.base_type || 'long_term',
+    status: item.status || 'enabled',
     is_project_approved: item.is_project_approved === true || item.is_project_approved === 1,
     name: item.name || '',
     code: item.code || '',

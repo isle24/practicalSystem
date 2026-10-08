@@ -754,6 +754,10 @@ export function fetchInternshipBaseDetail(params = {}) {
   return internshipList('base-detail', params);
 }
 
+export function setInternshipBaseStatus(payload) {
+  return internshipPost('set-base-status', payload);
+}
+
 export function exportInternshipBaseWord(payload) {
   return internshipPost('export-base-word', payload);
 }

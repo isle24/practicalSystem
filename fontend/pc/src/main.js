@@ -43,6 +43,7 @@ import {
 import 'element-plus/dist/index.css';
 import 'element-plus/theme-chalk/dark/css-vars.css';
 import App from './App.vue';
+import ListPagination from './components/ListPagination.vue';
 import './styles.css';
 import './desktop-appearance.css';
 import './theme.css';
@@ -51,6 +52,7 @@ import { request, backendUrl } from './api/client';
 configureFilePreview({ request, backendUrl });
 
 const app = createApp(App);
+app.component('ListPagination', ListPagination);
 
 [
   ElAlert,

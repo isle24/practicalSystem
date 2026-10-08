@@ -111,7 +111,7 @@ onMounted(load);
         <button v-for="item in state.sharedWallpapers" :key="item.id" type="button" :disabled="Boolean(state.uploading)" @click="setWallpaper(item.id)"><img :src="backendUrl(item.url)" :alt="item.name"><span>{{ item.name }}</span></button>
       </div>
       <p v-if="!state.sharedWallpapers.length">暂无共享壁纸</p>
-      <el-pagination v-if="state.wallpaperTotal > 8" v-model:current-page="state.wallpaperPage" :page-size="8" :total="state.wallpaperTotal" layout="prev, pager, next" background @current-change="loadShared" />
+      <ListPagination v-model:current-page="state.wallpaperPage" :page-size="8" :total="state.wallpaperTotal" layout="prev, pager, next" background @current-change="loadShared" />
     </section>
     <slot />
   </section>

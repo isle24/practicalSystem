@@ -536,22 +536,22 @@ watch(() => props.sessionKey, () => { state.accountImportVisible = false; });
 
     <div v-if="state.tab === 'batches'" class="file-pagination">
       <span>共 {{ state.batchPagination.total || 0 }} 条</span>
-      <el-pagination size="small" layout="prev, pager, next" :current-page="state.batchPagination.page" :page-size="state.batchPagination.page_size" :total="state.batchPagination.total" @current-change="loadBatches" />
+      <ListPagination size="small" layout="prev, pager, next" :current-page="state.batchPagination.page" :page-size="state.batchPagination.page_size" :total="state.batchPagination.total" @current-change="loadBatches" />
     </div>
 
     <div v-else-if="['student', 'teaching_plan', 'course_offering'].includes(state.tab)" class="file-pagination">
       <span>共 {{ state.sourcePagination.total || 0 }} 条</span>
-      <el-pagination size="small" layout="prev, pager, next" :current-page="state.sourcePagination.page" :page-size="state.sourcePagination.page_size" :total="state.sourcePagination.total" @current-change="loadSource" />
+      <ListPagination size="small" layout="prev, pager, next" :current-page="state.sourcePagination.page" :page-size="state.sourcePagination.page_size" :total="state.sourcePagination.total" @current-change="loadSource" />
     </div>
 
     <div v-else-if="state.tab === 'candidates'" class="file-pagination">
       <span>共 {{ state.candidatePagination.total || 0 }} 条</span>
-      <el-pagination size="small" layout="prev, pager, next" :current-page="state.candidatePagination.page" :page-size="state.candidatePagination.page_size" :total="state.candidatePagination.total" @current-change="loadCandidates" />
+      <ListPagination size="small" layout="prev, pager, next" :current-page="state.candidatePagination.page" :page-size="state.candidatePagination.page_size" :total="state.candidatePagination.total" @current-change="loadCandidates" />
     </div>
 
     <div v-else-if="state.tab === 'issues'" class="file-pagination">
       <span>共 {{ state.issuePagination.total || 0 }} 条</span>
-      <el-pagination size="small" layout="prev, pager, next" :current-page="state.issuePagination.page" :page-size="state.issuePagination.page_size" :total="state.issuePagination.total" @current-change="loadIssues" />
+      <ListPagination size="small" layout="prev, pager, next" :current-page="state.issuePagination.page" :page-size="state.issuePagination.page_size" :total="state.issuePagination.total" @current-change="loadIssues" />
     </div>
 
     <AccountImportDialog :visible="state.accountImportVisible" mode="student" :session-key="props.sessionKey" @close="state.accountImportVisible = false" @completed="state.tab === 'student' && loadSource(state.sourcePagination.page || 1)" />
@@ -575,11 +575,11 @@ watch(() => props.sessionKey, () => { state.accountImportVisible = false; });
               <el-table-column label="数据记录" min-width="190" show-overflow-tooltip><template #default="{ row }">{{ row.after_json?.course_name || row.after_json?.student_name || row.before_json?.course_name || row.source_key }}</template></el-table-column>
               <el-table-column label="字段差异" min-width="380"><template #default="{ row }"><details class="edu-change-detail"><summary>查看字段变更</summary><EduFieldChanges :value="row.diff_json" /></details></template></el-table-column>
             </el-table>
-            <el-pagination layout="total, prev, pager, next" :current-page="state.detail.changes?.pagination?.page || 1" :page-size="20" :total="state.detail.changes?.pagination?.total || 0" @current-change="loadDetailPage('changes', $event)" />
+            <ListPagination layout="total, prev, pager, next" :current-page="state.detail.changes?.pagination?.page || 1" :page-size="20" :total="state.detail.changes?.pagination?.total || 0" @current-change="loadDetailPage('changes', $event)" />
           </el-tab-pane>
           <el-tab-pane label="问题">
             <el-table :data="state.detail.issues?.items || []" size="small"><el-table-column prop="row_number" label="行号" width="80" /><el-table-column prop="field_name" label="字段" width="130" /><el-table-column prop="message" label="问题" min-width="320" /></el-table>
-            <el-pagination layout="total, prev, pager, next" :current-page="state.detail.issues?.pagination?.page || 1" :page-size="20" :total="state.detail.issues?.pagination?.total || 0" @current-change="loadDetailPage('issues', $event)" />
+            <ListPagination layout="total, prev, pager, next" :current-page="state.detail.issues?.pagination?.page || 1" :page-size="20" :total="state.detail.issues?.pagination?.total || 0" @current-change="loadDetailPage('issues', $event)" />
           </el-tab-pane>
         </el-tabs>
       </template>
@@ -609,9 +609,10 @@ watch(() => props.sessionKey, () => { state.accountImportVisible = false; });
 }
 
 .edu-data-toolbar-title {
+  flex-basis: 100%;
   display: grid;
   gap: 3px;
-  margin-right: auto;
+  margin: 0 0 4px;
 }
 
 .edu-data-toolbar-title small,

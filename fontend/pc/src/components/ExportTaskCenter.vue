@@ -1,18 +1,22 @@
 <template>
   <section class="support-panel export-task-panel">
-    <div class="support-toolbar">
-      <el-select v-model="filters.status" placeholder="请选择任务状态" @change="loadTasks(1)">
-        <el-option label="全部状态" value="all" />
-        <el-option label="待处理" value="pending" />
-        <el-option label="处理中" value="processing" />
-        <el-option label="已完成" value="completed" />
-        <el-option label="失败" value="failed" />
-        <el-option label="超时" value="timeout" />
-      </el-select>
-      <el-input v-model="filters.keyword" clearable placeholder="搜索文件名、类型、创建人" @keyup.enter="loadTasks(1)" />
-      <el-button :icon="Search" :loading="loading" @click="loadTasks(1)">查询</el-button>
-      <el-button :icon="RefreshCw" :loading="loading" @click="loadTasks(pagination.page)">刷新</el-button>
-      <el-button type="primary" :icon="Plus" @click="openCreateDialog">创建任务</el-button>
+    <div class="support-toolbar list-toolbar">
+      <div class="list-filter-controls">
+        <el-select v-model="filters.status" placeholder="请选择任务状态" @change="loadTasks(1)">
+          <el-option label="全部状态" value="all" />
+          <el-option label="待处理" value="pending" />
+          <el-option label="处理中" value="processing" />
+          <el-option label="已完成" value="completed" />
+          <el-option label="失败" value="failed" />
+          <el-option label="超时" value="timeout" />
+        </el-select>
+        <el-input v-model="filters.keyword" clearable placeholder="搜索文件名、类型、创建人" @keyup.enter="loadTasks(1)" />
+        <el-button :icon="Search" :loading="loading" @click="loadTasks(1)">查询</el-button>
+        <el-button :icon="RefreshCw" :loading="loading" @click="loadTasks(pagination.page)">刷新</el-button>
+      </div>
+      <div class="list-toolbar-actions">
+        <el-button type="primary" :icon="Plus" @click="openCreateDialog">创建任务</el-button>
+      </div>
     </div>
 
     <section class="support-table">
@@ -48,7 +52,7 @@
       </el-table>
       <div class="file-pagination">
         <span>共 {{ pagination.total }} 个任务</span>
-        <el-pagination
+        <ListPagination
           size="small"
           layout="prev, pager, next"
           :current-page="pagination.page"
@@ -215,3 +219,38 @@ function statusTagType(status) {
   return 'info';
 }
 </script>
+
+<style scoped>
+.support-toolbar.list-toolbar,
+.message-template-library-toolbar.list-toolbar {
+  display: flex;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.list-filter-controls {
+  flex: 1 1 420px;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.list-filter-controls > .el-select { width: 150px; }
+.list-filter-controls > .el-input { width: 250px; max-width: 100%; }
+
+.list-toolbar-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.list-toolbar :deep(.el-button) {
+  height: var(--control-height);
+  margin: 0;
+}
+</style>

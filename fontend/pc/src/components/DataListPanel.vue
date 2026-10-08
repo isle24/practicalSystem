@@ -1,44 +1,64 @@
 <template>
   <section class="data-list-panel">
     <div class="data-list-toolbar">
-      <div
-        ref="filtersRef"
-        class="data-list-filters"
-        :class="{ 'is-collapsed': filterCollapsible && !filtersExpanded }"
-      >
-        <label
-          v-for="filter in filters"
-          :key="filter.key"
-          class="data-list-filter-field"
+      <div class="data-list-query">
+        <div
+          ref="filtersRef"
+          class="data-list-filters"
+          :class="{ 'is-collapsed': filterCollapsible && !filtersExpanded }"
         >
-          <el-select-v2
-            v-if="filter.type === 'select'"
-            class="filter-select"
-            :model-value="filterValue(filter.key)"
-            :options="filter.options || []"
-            clearable
-            filterable
-            :placeholder="filterPlaceholder(filter)"
-            @update:model-value="value => updateFilter(filter.key, value)"
-          />
-          <input
-            v-else
-            :value="filterValue(filter.key)"
-            :placeholder="filterPlaceholder(filter)"
-            @input="event => updateFilter(filter.key, event.target.value)"
-            @keyup.enter="emit('search')"
+          <label
+            v-for="filter in filters"
+            :key="filter.key"
+            class="data-list-filter-field"
           >
-        </label>
+            <el-select-v2
+              v-if="filter.type === 'select'"
+              class="filter-select"
+              :model-value="filterValue(filter.key)"
+              :options="filter.options || []"
+              clearable
+              filterable
+              :aria-label="filter.label"
+              :placeholder="filterPlaceholder(filter)"
+              @update:model-value="value => updateFilter(filter.key, value)"
+            />
+            <input
+              v-else
+              :value="filterValue(filter.key)"
+              :aria-label="filter.label"
+              :placeholder="filterPlaceholder(filter)"
+              @input="event => updateFilter(filter.key, event.target.value)"
+              @keyup.enter="emit('search')"
+            >
+          </label>
+          <slot name="filters" />
+        </div>
+        <div class="data-list-query-actions">
+          <el-button type="primary" :icon="Search" :loading="loading" @click="emit('search')">
+            查询
+          </el-button>
+          <el-button @click="emit('reset')">重置</el-button>
+          <el-button
+            v-if="filterCollapsible"
+            text
+            :icon="filtersExpanded ? ChevronUp : ChevronDown"
+            :aria-expanded="filtersExpanded"
+            @click="filtersExpanded = !filtersExpanded"
+          >
+            {{ filtersExpanded ? '收起条件' : '显示更多' }}
+          </el-button>
+        </div>
       </div>
       <div class="data-list-actions">
         <div v-if="$slots.toolbar" class="data-list-toolbar-actions">
           <slot name="toolbar" />
         </div>
         <div ref="columnMenuRef" class="data-list-column-selector">
-          <button type="button" class="el-button" @click="toggleColumnMenu">
+          <el-button :aria-expanded="columnMenuOpen" @click="toggleColumnMenu">
             <Columns3 :size="15" />
             <span>显示字段</span>
-          </button>
+          </el-button>
         </div>
         <Teleport to="body">
           <div
@@ -65,20 +85,6 @@
             </label>
           </div>
         </Teleport>
-        <el-button
-          v-if="filterCollapsible"
-          text
-          :icon="filtersExpanded ? ChevronUp : ChevronDown"
-          @click="filtersExpanded = !filtersExpanded"
-        >
-          {{ filtersExpanded ? '收起条件' : '显示更多' }}
-        </el-button>
-        <el-button :icon="RefreshCw" :loading="loading" @click="emit('search')">
-          查询
-        </el-button>
-        <el-button @click="emit('reset')">
-          重置
-        </el-button>
       </div>
     </div>
 
@@ -104,7 +110,7 @@
           </slot>
         </template>
       </el-table-column>
-      <el-table-column v-if="actions.length || $slots.actions" label="操作" width="82" fixed="right" align="center">
+      <el-table-column v-if="actions.length || $slots.actions" label="操作" width="96" fixed="right" align="center">
         <template #default="{ row }">
           <button type="button" class="table-operation-trigger" @click.stop="openActionDrawer(row)">
             <Ellipsis :size="16" />
@@ -116,7 +122,7 @@
 
     <div class="data-list-pagination">
       <span>共 {{ pagination.total || 0 }} 条</span>
-      <el-pagination
+      <ListPagination
         size="small"
         layout="prev, pager, next"
         :current-page="pagination.page || 1"
@@ -166,7 +172,7 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { ElSelectV2 } from 'element-plus';
-import { ChevronDown, ChevronRight, ChevronUp, Columns3, Ellipsis, RefreshCw, X } from '@lucide/vue';
+import { ChevronDown, ChevronRight, ChevronUp, Columns3, Ellipsis, Search, X } from '@lucide/vue';
 import { tableSequence } from '../utils/table';
 
 const props = defineProps({
@@ -299,13 +305,14 @@ onBeforeUnmount(() => {
 
 function updateFilterOverflow() {
   const element = filtersRef.value;
-  if (!element || props.filters.length < 2) {
+  if (!element || element.children.length < 2) {
     filterCollapsible.value = false;
     return;
   }
   const wasExpanded = filtersExpanded.value;
   element.classList.add('is-measuring');
-  filterCollapsible.value = element.scrollHeight > 40;
+  const first = element.firstElementChild;
+  filterCollapsible.value = [...element.children].some(child => child.offsetTop > first.offsetTop + 1);
   element.classList.remove('is-measuring');
   if (!filterCollapsible.value && wasExpanded) {
     filtersExpanded.value = false;

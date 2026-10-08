@@ -5,6 +5,7 @@ import MarkdownIt from 'markdown-it';
 import DOMPurify from 'dompurify';
 
 const props = defineProps({ request: { type: Function, required: true } });
+const threadPageSize = 20;
 const state = reactive({ enabled: false, personalEnabled: false, name: '问答助手', can_manage: false, mode: 'school', threads: [], total: 0, page: 1, turns: [], threadId: 0, loading: false, sending: false, error: '', question: '', older: false });
 const emptySettings = () => ({ name: '问答助手', enabled: false, endpoint: '', model: '', api_key: '', has_key: false, clear_key: false });
 const settings = reactive(emptySettings());
@@ -146,7 +147,7 @@ onBeforeUnmount(() => { disposed = true; generation++; clearInterval(poll); });
       <aside v-if="historyVisible" class="assistant-history">
         <button v-for="thread in state.threads" :key="thread.id" type="button" :class="{ selected: thread.id === state.threadId }" :disabled="state.sending" @click="selectThread(thread.id)"><span>{{ thread.title }}</span><small>{{ modeName(thread.provider_mode) }}</small></button>
         <span v-if="!state.threads.length">暂无会话</span>
-        <footer><button aria-label="上一页" :disabled="state.page <= 1" @click="loadThreads(state.page - 1).catch(e => state.error = e.message)"><ChevronLeft :size="16" /></button><span>{{ state.page }}</span><button aria-label="下一页" :disabled="state.page * 20 >= state.total" @click="loadThreads(state.page + 1).catch(e => state.error = e.message)"><ChevronRight :size="16" /></button></footer>
+        <footer><button aria-label="上一页" :disabled="state.page <= 1" @click="loadThreads(state.page - 1).catch(e => state.error = e.message)"><ChevronLeft :size="16" /></button><span class="assistant-page-summary"><span>{{ state.page }} / {{ Math.max(1, Math.ceil(state.total / threadPageSize)) }}</span><span>{{ threadPageSize }} 条/页</span></span><button aria-label="下一页" :disabled="state.page * threadPageSize >= state.total" @click="loadThreads(state.page + 1).catch(e => state.error = e.message)"><ChevronRight :size="16" /></button></footer>
       </aside>
       <div class="assistant-main">
         <div ref="scroll" class="assistant-turns" aria-live="polite" :aria-busy="state.loading">
@@ -189,6 +190,7 @@ onBeforeUnmount(() => { disposed = true; generation++; clearInterval(poll); });
 .assistant-history > button span { display: block; overflow: hidden; text-overflow: ellipsis; }
 .assistant-history > button small { display: block; margin-top: 4px; font-size: 11px; color: #768397; }
 .assistant-history footer { display: flex; align-items: center; justify-content: space-between; padding-top: 12px; }
+.assistant-page-summary { display: grid; gap: 3px; text-align: center; font-size: 12px; }
 .assistant-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .assistant-turns { flex: 1; overflow: auto; padding: 16px 20px; }
 .assistant-empty { text-align: center; padding: 40px 0; color: #7a8595; }

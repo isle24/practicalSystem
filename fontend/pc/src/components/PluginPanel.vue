@@ -28,7 +28,7 @@
       </article>
       <el-empty v-if="!loading && !items.length" description="暂无可用插件" />
     </div>
-    <el-pagination v-if="total > pageSize" v-model:current-page="page" :page-size="pageSize" :total="total" layout="prev, pager, next" @current-change="load" />
+    <ListPagination v-model:current-page="page" :page-size="pageSize" :total="total" layout="prev, pager, next" @current-change="load" />
     <OperationDialog :visible="dialog.visible" :title="dialog.form.id ? '编辑插件' : '新增插件'" :busy="saving" @close="dialog.visible = false">
       <div class="plugin-form">
         <label><span>插件编码</span><el-input v-model="dialog.form.code" :disabled="Boolean(dialog.form.id)" placeholder="如 cloud-storage" /></label>

@@ -51,7 +51,7 @@
             </template>
           </el-table-column>
         </el-table>
-        <el-pagination v-if="students.length > detailPageSize" v-model:current-page="studentPage" class="implementation-detail-pagination" layout="total, prev, pager, next" :page-size="detailPageSize" :total="students.length" />
+        <ListPagination v-model:current-page="studentPage" class="implementation-detail-pagination" layout="total, prev, pager, next" :page-size="detailPageSize" :total="students.length" />
       </template>
 
       <template v-else-if="activeTab === 'changes'">
