@@ -108,13 +108,19 @@ pub fn initialize(directory: PathBuf) -> Result<(), String> {
 
 async fn scope(connection: &Connection) -> Result<Scope, String> {
     let context = school_api::read(connection, "api/auth/context").await?;
-    let owner = Owner {
-        school_database_id: context["school_database_id"].as_u64().unwrap_or(0),
-        user_id: context["user_id"].as_u64().unwrap_or(0),
-        account_id: context["account_id"].as_u64().unwrap_or(0),
-    };
+    let user_id = context["user_id"].as_u64().unwrap_or(0);
+    let account_id = context["account_id"].as_u64().unwrap_or(0);
+    if user_id == 0 || account_id == 0 {
+        return Err("请先登录有效学校账号".into());
+    }
+    let status = school_api::read(connection, "api/credential-vault/status").await?;
+    let owner: Owner =
+        serde_json::from_value(status["owner"].clone()).map_err(|_| "凭据库身份格式无效")?;
     if owner.school_database_id == 0 || owner.user_id == 0 || owner.account_id == 0 {
         return Err("请先登录有效学校账号".into());
+    }
+    if owner.user_id != user_id || owner.account_id != account_id {
+        return Err("学校账号已切换，请重新读取凭据库".into());
     }
     let key = school_api::digest(&format!(
         "{}:{}:{}:{}",

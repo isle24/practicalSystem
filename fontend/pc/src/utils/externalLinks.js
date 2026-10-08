@@ -1,3 +1,4 @@
+import { reactive } from 'vue';
 import { request } from '../api/client';
 
 export function restrictedHost(value) {
@@ -50,8 +51,23 @@ function ipv6Segments(host) {
   return values.length === 8 && values.every(Number.isFinite) ? values : null;
 }
 
+const openingLinks = reactive(new Set());
+const linkKey = item => String(item?.favoriteId || item?.id || item?.url || '');
+export const isExternalLinkOpening = item => openingLinks.has(linkKey(item));
+
 /** 收藏、桌面与菜单共用的外链入口。 */
 export async function openExternalLink(item, mode, onCurrent = null) {
+  const key = linkKey(item);
+  if (openingLinks.has(key)) return;
+  openingLinks.add(key);
+  try {
+    return await openResolvedExternalLink(item, mode, onCurrent);
+  } finally {
+    openingLinks.delete(key);
+  }
+}
+
+async function openResolvedExternalLink(item, mode, onCurrent) {
   const id = Number(item?.favoriteId || item?.id) || 0;
   if (id) item = await request(`/favorite/detail?id=${id}`);
   mode ||= item?.open_mode || 'client';

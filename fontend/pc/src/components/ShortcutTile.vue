@@ -13,7 +13,9 @@
       :type="tagName === 'button' ? 'button' : undefined"
       class="shortcut-tile-main"
       :aria-label="item.name"
-      @click.prevent="emit('open', item)"
+      :aria-busy="opening"
+      :aria-disabled="opening || undefined"
+      @click.prevent="!opening && emit('open', item)"
     >
       <AppIcon
         class="app-glyph"
@@ -25,7 +27,7 @@
         :backend-url="backendUrl"
       />
       <span class="shortcut-tile-label">
-        <strong>{{ item.name }}</strong>
+        <strong>{{ opening ? '正在打开…' : item.name }}</strong>
         <small v-if="subtitle">{{ subtitle }}</small>
       </span>
     </component>
@@ -49,6 +51,7 @@
 import { computed } from 'vue';
 import { Check, LockKeyhole, Plus } from '@lucide/vue';
 import AppIcon from './AppIcon.vue';
+import { isExternalLinkOpening } from '../utils/externalLinks';
 
 const props = defineProps({
   item: { type: Object, required: true },
@@ -74,6 +77,7 @@ function handleDragStart(event) {
   if (event.dataTransfer) event.dataTransfer.effectAllowed = 'copy';
   emit('drag-module', props.item.id);
 }
+const opening = computed(() => props.item.type === 'favoriteLink' && isExternalLinkOpening(props.item));
 const tagName = computed(() => (props.href ? 'a' : 'button'));
 const iconSize = computed(() => (props.mode === 'launcher' ? 28 : 25));
 const actionIconSize = computed(() => (props.mode === 'launcher' ? 14 : 16));
@@ -87,6 +91,7 @@ const tileClasses = computed(() => [
 </script>
 
 <style scoped>
+.shortcut-tile-main[aria-busy="true"] { cursor: progress; opacity: .75; }
 .is-dragging { opacity: .45; }
 .is-drop-target { outline: 2px solid #2975c8; outline-offset: 2px; }
 </style>

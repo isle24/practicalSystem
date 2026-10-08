@@ -6,7 +6,7 @@
     <el-alert v-if="error" :title="error" type="error" :closable="false" />
     <div class="favorites-grid" v-loading="loading">
       <article v-for="row in items" :key="row.id" class="favorite-tile">
-        <button class="favorite-open" @click="open(row)"><AppIcon :icon="Globe2" :icon-url="row.icon_url" :label="row.title" :size="28" :backend-url="backendUrl" /><span><strong>{{ row.title }}</strong><small>{{ host(row.url) }}</small></span></button>
+        <button class="favorite-open" :disabled="isExternalLinkOpening(row)" :aria-busy="isExternalLinkOpening(row)" @click="open(row)"><AppIcon :icon="Globe2" :icon-url="row.icon_url" :label="row.title" :size="28" :backend-url="backendUrl" /><span><strong>{{ row.title }}</strong><small>{{ isExternalLinkOpening(row) ? '正在打开…' : host(row.url) }}</small></span></button>
         <div class="favorite-tile-footer"><span :class="{ shared: row.scope === 'school' }">{{ row.scope === 'school' ? '学校共享' : '个人收藏' }}</span><el-dropdown trigger="click" @command="command => action(row, command)"><el-button :icon="MoreHorizontal" text circle title="更多操作" /><template #dropdown><el-dropdown-menu><el-dropdown-item command="current">当前页打开</el-dropdown-item><el-dropdown-item command="client">{{ desktop ? '客户端窗口打开' : '新标签页打开' }}</el-dropdown-item><el-dropdown-item v-if="desktop" command="browser">外部浏览器打开</el-dropdown-item><el-dropdown-item v-if="desktop" command="credentials">本机认证配置</el-dropdown-item><el-dropdown-item command="desktop">{{ isDesktop(row.id) ? '从桌面移除' : '添加到桌面' }}</el-dropdown-item><el-dropdown-item v-if="row.can_edit" command="edit" divided>编辑</el-dropdown-item><el-dropdown-item v-if="row.can_edit" command="delete">删除</el-dropdown-item></el-dropdown-menu></template></el-dropdown></div>
       </article>
       <el-empty v-if="!loading && !items.length" description="暂无收藏" />
@@ -29,7 +29,7 @@ import { ref, onMounted } from 'vue';
 import { Plus, Search, Globe2, MoreHorizontal } from '@lucide/vue';
 import { ElMessageBox, ElMessage } from 'element-plus';
 import { request, backendUrl } from '../api/client';
-import { openExternalLink } from '../utils/externalLinks';
+import { isExternalLinkOpening, openExternalLink } from '../utils/externalLinks';
 import AppIcon from './AppIcon.vue';
 import IconUpload from './IconUpload.vue';
 import OperationDialog from './OperationDialog.vue';
@@ -83,6 +83,7 @@ onMounted(() => load(1));
 </script>
 
 <style scoped>
+.favorite-open:disabled { cursor: progress; opacity: .65; }
 .favorites-dialog-body{flex:1;min-height:0;overflow:auto}.favorites-dialog-body .favorites-form{overflow:visible;flex:initial}.favorites-dialog-body .favorites-parameters{overflow:visible;max-height:none}
 .favorites-parameters{padding:8px 24px 20px;display:flex;flex-direction:column;gap:16px;overflow:auto;flex-shrink:0;max-height:280px}.favorites-parameters>label{display:flex;align-items:center;gap:16px;font-size:13px}.favorites-parameters small{color:#778291;line-height:1.6}
 .favorites{display:flex;flex-direction:column;gap:18px;padding:20px;min-height:0;height:100%;box-sizing:border-box}.favorites-toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center}.favorites-toolbar>.el-input{flex:1;min-width:180px}.favorites-toolbar>.el-select{width:150px}.favorites-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:16px;overflow:auto;align-content:start;flex:1;min-height:140px}.favorite-tile{background:#f8fafc;border:1px solid #e5e9ef;border-radius:8px;min-width:0;padding:16px}.favorite-open{border:0;background:transparent;display:flex;gap:14px;align-items:center;text-align:left;width:100%;cursor:pointer;color:#263141;padding:8px 0}.favorite-open span{min-width:0;display:flex;flex-direction:column;gap:8px}.favorite-open strong{font-size:15px;overflow-wrap:anywhere}.favorite-open small{font-size:12px;color:#8390a0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.favorite-tile-footer{display:flex;justify-content:space-between;align-items:center;margin-top:12px;font-size:11px;color:#8791a0}.favorite-tile-footer .shared{color:#25816b}.favorites-pagination{display:flex;align-items:center;justify-content:space-between;color:#808895;font-size:12px}.favorites-form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px 24px;padding:20px 24px;min-width:0;min-height:0;overflow:auto;flex:1}.favorites-form>label:nth-child(-n+3){grid-column:1/-1}.favorites-form label{display:flex;flex-direction:column;gap:9px;font-size:13px;color:#566272}.favorites-form .favorites-switch{flex-direction:row;justify-content:space-between;align-items:center}.favorites-actions{display:flex;justify-content:flex-end;gap:10px;padding:16px 24px 24px;border-top:1px solid #edf0f4}
