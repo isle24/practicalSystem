@@ -25,3 +25,13 @@ export const scheduleBaseVisit = payload => save('schedule', payload);
 export const saveBaseVisitRecord = payload => save('record', payload);
 export const cancelBaseVisit = payload => save('cancel', payload);
 export const deleteBaseVisit = payload => save('delete', payload);
+
+export function fetchBaseVisitRecords(params = {}, options = {}) {
+  return request(`/base-visit/records?${query(params)}`, options);
+}
+
+export function fetchBaseVisitRecordDetail(id, options = {}) {
+  return request(`/base-visit/record-detail?${query({ id })}`, options);
+}
+
+export const saveIndependentBaseVisitRecord = payload => save('record-save', payload);

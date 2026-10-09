@@ -1,7 +1,7 @@
 <template>
   <section class="support-panel export-task-panel">
     <div class="support-toolbar list-toolbar">
-      <div class="list-filter-controls">
+      <FilterToolbar class="list-filter-controls" :values="filters">
         <el-select v-model="filters.status" placeholder="请选择任务状态" @change="loadTasks(1)">
           <el-option label="全部状态" value="all" />
           <el-option label="待处理" value="pending" />
@@ -11,9 +11,9 @@
           <el-option label="超时" value="timeout" />
         </el-select>
         <el-input v-model="filters.keyword" clearable placeholder="搜索文件名、类型、创建人" @keyup.enter="loadTasks(1)" />
-        <el-button :icon="Search" :loading="loading" @click="loadTasks(1)">查询</el-button>
+        <template #actions><el-button type="primary" :icon="Search" :loading="loading" @click="loadTasks(1)">查询</el-button>
         <el-button :icon="RefreshCw" :loading="loading" @click="loadTasks(pagination.page)">刷新</el-button>
-      </div>
+      </template></FilterToolbar>
       <div class="list-toolbar-actions">
         <el-button type="primary" :icon="Plus" @click="openCreateDialog">创建任务</el-button>
       </div>
@@ -95,6 +95,7 @@
 </template>
 
 <script setup>
+import FilterToolbar from './FilterToolbar.vue';
 import { onMounted, reactive, ref } from 'vue';
 import { Plus, RefreshCw, Save, Search } from '@lucide/vue';
 import { createExportTask, fetchExportTasks, retryExportTask } from '../api/system';

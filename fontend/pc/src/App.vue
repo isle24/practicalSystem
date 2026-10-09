@@ -3,35 +3,7 @@
   <DesktopTitlebar v-if="isDesktopShell" :active="isLoggedIn && !wechatBlocked && !startupState.loading" @window-action="closeDesktopTransient" @error="message => ElMessage.error(message)">
       <div class="taskbar-status" aria-label="系统状态">
         <ClientDownloadButton compact />
-        <span class="taskbar-online"><i />在线</span>
-        <span class="taskbar-version">v{{ clientVersion }}</span>
-        <el-button text class="taskbar-operator-button" :title="'个人设置'" @click="handleOperatorClick">
-          <span class="top-avatar" :style="topAvatarStyle">
-            <UserRound v-if="!profileState.form.avatar" :size="14" />
-          </span>
-          <span class="taskbar-operator-name">{{ operatorName }}</span>
-        </el-button>
-        <div v-if="switchableLoginAccounts.length > 0" class="switch-account-wrap taskbar-switch-account">
-          <el-button class="switch-account-button" :loading="switchAccountState.loading" title="切换身份" @click="toggleSwitchAccountMenu">
-            <UsersRound :size="15" />
-          </el-button>
-          <div v-if="switchAccountState.open" class="switch-account-menu">
-            <button
-              v-for="account in switchableLoginAccounts"
-              :key="account.id"
-              type="button"
-              class="switch-account-item"
-              @click="switchLoginAccount(account.id)"
-            >
-              <strong>{{ switchAccountName(account) }}</strong>
-              <small>{{ switchAccountMeta(account) }}</small>
-            </button>
-          </div>
-        </div>
-        <div v-if="switchAccountState.open && switchableLoginAccounts.length > 0" class="switch-account-backdrop" @click="switchAccountState.open = false" />
-        <el-button text class="taskbar-logout-button" :icon="LogOut" :loading="loginState.loading" title="退出登录" @click="submitLogout">
-          <span>退出</span>
-        </el-button>
+        <ProfileMenu ref="nativeProfileMenu" :name="operatorName" :role="roleText" :avatar="profileState.form.avatar" :avatar-style="topAvatarStyle" :version="clientVersion" :accounts="switchableLoginAccounts" :account-name="switchAccountName" :account-meta="switchAccountMeta" :switching="switchAccountState.loading" :busy="loginState.loading" :error="switchAccountState.message" :context-key="permissionState.context.account_id" placement="bottom" @settings="handleOperatorClick" @switch="switchLoginAccount" @logout="submitLogout" />
         <span class="taskbar-clock">{{ clock }}</span>
       </div>
   </DesktopTitlebar>
@@ -341,8 +313,12 @@
 
             <div class="module-workspace">
               <section class="module-content-panel">
+                <BaseVisitRecordPanel
+                  v-if="canViewBaseVisits && (win.module.id === 'baseVisitRecords' || (win.module.id === 'companyManage' && win.panel === 'baseVisitRecords'))"
+                  :session-key="[permissionState.context.school_id, permissionState.context.account_id, permissionState.context.role_type].join(':')"
+                />
                 <BaseVisitPanel
-                  v-if="canViewBaseVisits && (win.module.id === 'baseVisits' || (win.module.id === 'companyManage' && win.panel === 'baseVisits'))"
+                  v-else-if="canViewBaseVisits && (win.module.id === 'baseVisits' || (win.module.id === 'companyManage' && win.panel === 'baseVisits'))"
                   :session-key="[permissionState.context.school_id, permissionState.context.account_id, permissionState.context.role_type].join(':')"
                 />
                 <div v-else-if="['internship', 'companyManage'].includes(win.module.id)" class="internship-panel">
@@ -2112,7 +2088,7 @@
                   </div>
                   <div v-else-if="win.panel === 'schedules' && practiceModuleState(win.module.id).schedule.view === 'board'" class="practice-schedule-workspace">
                     <div class="practice-schedule-toolbar">
-                      <div class="practice-schedule-filters data-list-filters">
+                      <FilterToolbar class="practice-schedule-filters data-list-filters" :values="practiceModuleState(win.module.id).filters.schedules">
                         <label class="data-list-filter-field">
                           <el-select
                             :model-value="practiceModuleState(win.module.id).module_type"
@@ -2136,7 +2112,7 @@
                         <label class="data-list-filter-field">
                           <el-select-v2 v-model="practiceModuleState(win.module.id).filters.schedules.profession_id" class="filter-select" clearable filterable placeholder="请选择专业" @change="refreshPracticeScheduleBoard(win.module.id)" :options="practiceScheduleProfessionOptions(win.module.id)" :props="{ label: 'profession_name', value: 'profession_id' }" />
                         </label>
-                      </div>
+                      </FilterToolbar>
                       <div class="data-list-actions">
                         <el-button v-if="showPracticeAddButton(win.module.id, win.panel)" :icon="Plus" @click="openPracticeDialog(win.module.id, win.panel)">
                           新增{{ practicePanelLabel(win.panel) }}
@@ -2553,7 +2529,7 @@
                   </div>
                   <div class="archive-filter-bar data-list-toolbar">
                     <div class="data-list-query">
-                    <div class="data-list-filters">
+                    <FilterToolbar class="data-list-filters" :values="archiveStateForWindow(win).filters">
                       <label :class="{ 'filter-active': hasFilterValue(archiveStateForWindow(win).filters.keyword) }">
                         <span>关键词</span>
                         <input
@@ -2575,9 +2551,9 @@
                           <el-option v-for="option in archiveStatusFilterOptions" :key="option.value" :label="option.label" :value="option.value" />
                         </el-select>
                       </label>
-                    </div>
+                    </FilterToolbar>
                     <div class="data-list-query-actions">
-                      <el-button :icon="Search" :loading="archiveStateForWindow(win).loading" @click="loadArchiveItems(archiveTypeForWindow(win), 1)">
+                      <el-button type="primary" :icon="Search" :loading="archiveStateForWindow(win).loading" @click="loadArchiveItems(archiveTypeForWindow(win), 1)">
                         查询
                       </el-button>
                       <el-button @click="resetArchiveFilters(archiveTypeForWindow(win))">
@@ -2842,7 +2818,7 @@
                       placeholder="搜索标题、内容、发送人"
                       @keyup.enter="loadMessages(1)"
                     />
-                    <el-button :icon="Search" :loading="messageState.loading" @click="loadMessages(1)">
+                    <el-button type="primary" :icon="Search" :loading="messageState.loading" @click="loadMessages(1)">
                       查询
                     </el-button>
                     <el-button :icon="RefreshCw" :loading="messageState.loading" @click="resetMessageFilters">
@@ -3031,7 +3007,7 @@
                               placeholder="搜索姓名、账号、手机、角色"
                               @keyup.enter="loadMessageTargets"
                             />
-                            <el-button :icon="Search" :loading="messageState.targetLoading" @click="loadMessageTargets">
+                            <el-button type="primary" :icon="Search" :loading="messageState.targetLoading" @click="loadMessageTargets">
                               查找
                             </el-button>
                           </div>
@@ -3133,7 +3109,7 @@
                   >
                       <div class="data-list-toolbar message-template-filter-bar">
                         <div class="data-list-query">
-                        <div class="data-list-filters">
+                        <FilterToolbar class="data-list-filters" :values="messageState.templateFilters">
                         <el-select v-model="messageState.templateFilters.type" placeholder="请选择消息类型" @change="loadMessageTemplates(1)">
                           <el-option
                             v-for="item in messageTemplateTypeOptions"
@@ -3148,9 +3124,9 @@
                           <el-option label="停用" value="disabled" />
                         </el-select>
                         <el-input v-model="messageState.templateFilters.keyword" clearable placeholder="搜索名称、编码、内容" @keyup.enter="loadMessageTemplates(1)" />
-                        </div>
+                        </FilterToolbar>
                         <div class="data-list-query-actions">
-                        <el-button :icon="Search" :loading="messageState.templateLoading" @click="loadMessageTemplates(1)">查询</el-button>
+                        <el-button type="primary" :icon="Search" :loading="messageState.templateLoading" @click="loadMessageTemplates(1)">查询</el-button>
                         </div>
                         </div>
                         <div class="data-list-actions">
@@ -3256,7 +3232,7 @@
                 </div>
 
                 <div v-else-if="win.module.id === 'file' && win.panel === 'fileManage'" class="admin-panel file-admin">
-                  <div class="admin-toolbar file-toolbar">
+                  <FilterToolbar class="admin-toolbar file-toolbar" :values="fileState.filters">
                     <el-input
                       v-model="fileState.filters.keyword"
                       clearable
@@ -3273,10 +3249,10 @@
                       <el-option label="个人资源" value="profile" />
                       <el-option label="通用文件" value="general" />
                     </el-select>
-                    <el-button :icon="RefreshCw" :loading="fileState.loading" @click="loadFiles(fileState.pagination.page)">
+                    <template #actions><el-button :icon="RefreshCw" :loading="fileState.loading" @click="loadFiles(fileState.pagination.page)">
                       读取
                     </el-button>
-                  </div>
+                  </template></FilterToolbar>
                   <el-table :data="fileState.items" height="100%" stripe>
                     <el-table-column type="index" label="序号" width="66" align="center" :index="index => tableSequence(index, fileState.pagination)" />
                     <el-table-column label="文件" min-width="220">
@@ -3628,7 +3604,7 @@
                 </div>
 
                 <div v-else-if="win.module.id === 'log'" class="admin-panel log-panel">
-                  <div class="admin-toolbar log-toolbar">
+                  <FilterToolbar class="admin-toolbar log-toolbar" :values="logState.filters">
                     <el-input v-model="logState.filters.keyword" clearable placeholder="关键词、账号、姓名、IP" @keyup.enter="loadLogs(1)" />
                     <el-input v-model="logState.filters.action" clearable placeholder="动作" @keyup.enter="loadLogs(1)" />
                     <el-input v-model="logState.filters.ip" clearable placeholder="IP" @keyup.enter="loadLogs(1)" />
@@ -3643,13 +3619,13 @@
                         <input v-model="logState.filters.date_to" type="date">
                       </label>
                     </div>
-                    <el-button :icon="Search" :loading="logState.loading" @click="loadLogs(1)">
+                    <template #actions><el-button type="primary" :icon="Search" :loading="logState.loading" @click="loadLogs(1)">
                       查询
                     </el-button>
                     <el-button :icon="RefreshCw" :loading="logState.loading" @click="resetLogFilters">
                       重置
                     </el-button>
-                  </div>
+                  </template></FilterToolbar>
                   <el-table :data="logState.items" height="100%" stripe>
                     <el-table-column type="index" label="序号" width="66" align="center" :index="index => tableSequence(index, logState.pagination)" />
                     <el-table-column prop="created_at" label="时间" width="168" />
@@ -3745,7 +3721,7 @@
                       </div>
                       <small>{{ statState.generated_at ? `生成时间 ${statState.generated_at}` : '等待生成' }}</small>
                     </header>
-                    <div class="stat-filter-bar">
+                    <FilterToolbar class="stat-filter-bar" :values="statState.filters">
                       <!-- 暂时隐藏学期筛选，后续需要时恢复。 -->
                       <!--
                       <label>
@@ -3800,15 +3776,14 @@
                         <span>关键词</span>
                         <input v-model="statState.filters.keyword" placeholder="学生、学号、基地、教师">
                       </label>
-                      <div class="stat-filter-actions">
-                        <el-button :icon="Search" :loading="statState.loading" @click="loadStats(1)">
+                      <template #actions><el-button type="primary" :icon="Search" :loading="statState.loading" @click="loadStats(1)">
                           查询
                         </el-button>
                         <el-button :icon="RefreshCw" :loading="statState.loading" @click="resetStatFilters">
                           重置
                         </el-button>
-                      </div>
-                    </div>
+                      </template>
+                    </FilterToolbar>
                     <el-alert
                       v-if="statState.message"
                       type="warning"
@@ -4243,35 +4218,7 @@
       </div>
       <div v-if="!isDesktopShell" class="taskbar-status" aria-label="系统状态">
         <ClientDownloadButton compact />
-        <span class="taskbar-online"><i />在线</span>
-        <span class="taskbar-version">v{{ clientVersion }}</span>
-        <el-button text class="taskbar-operator-button" :title="'个人设置'" @click="handleOperatorClick">
-          <span class="top-avatar" :style="topAvatarStyle">
-            <UserRound v-if="!profileState.form.avatar" :size="14" />
-          </span>
-          <span class="taskbar-operator-name">{{ operatorName }}</span>
-        </el-button>
-        <div v-if="switchableLoginAccounts.length > 0" class="switch-account-wrap taskbar-switch-account">
-          <el-button class="switch-account-button" :loading="switchAccountState.loading" title="切换身份" @click="toggleSwitchAccountMenu">
-            <UsersRound :size="15" />
-          </el-button>
-          <div v-if="switchAccountState.open" class="switch-account-menu">
-            <button
-              v-for="account in switchableLoginAccounts"
-              :key="account.id"
-              type="button"
-              class="switch-account-item"
-              @click="switchLoginAccount(account.id)"
-            >
-              <strong>{{ switchAccountName(account) }}</strong>
-              <small>{{ switchAccountMeta(account) }}</small>
-            </button>
-          </div>
-        </div>
-        <div v-if="switchAccountState.open && switchableLoginAccounts.length > 0" class="switch-account-backdrop" @click="switchAccountState.open = false" />
-        <el-button text class="taskbar-logout-button" :icon="LogOut" :loading="loginState.loading" title="退出登录" @click="submitLogout">
-          <span>退出</span>
-        </el-button>
+        <ProfileMenu ref="webProfileMenu" :name="operatorName" :role="roleText" :avatar="profileState.form.avatar" :avatar-style="topAvatarStyle" :version="clientVersion" :accounts="switchableLoginAccounts" :account-name="switchAccountName" :account-meta="switchAccountMeta" :switching="switchAccountState.loading" :busy="loginState.loading" :error="switchAccountState.message" :context-key="permissionState.context.account_id" placement="top" @settings="handleOperatorClick" @switch="switchLoginAccount" @logout="submitLogout" />
         <span class="taskbar-clock">{{ clock }}</span>
       </div>
     </footer>
@@ -4341,6 +4288,8 @@ import ThemeSettings from './components/profile/ThemeSettings.vue';
 import ProfileSettingsLayout from './components/profile/ProfileSettingsLayout.vue';
 import AccountLinks from './components/profile/AccountLinks.vue';
 import CredentialVaultSettings from './components/profile/CredentialVaultSettings.vue';
+import ProfileMenu from './components/ProfileMenu.vue';
+import FilterToolbar from './components/FilterToolbar.vue';
 import DesktopTitlebar from './components/DesktopTitlebar.vue';
 import WechatLogin from '../../shared/components/WechatLogin.vue';
 import EmbeddedExternalPage from './components/EmbeddedExternalPage.vue';
@@ -4401,6 +4350,7 @@ import FavoritePanel from './components/FavoritePanel.vue';
 import ReleaseManager from './components/ReleaseManager.vue';
 import DatabaseSchemaPanel from './components/DatabaseSchemaPanel.vue';
 import BaseVisitPanel from './components/BaseVisitPanel.vue';
+import BaseVisitRecordPanel from './components/BaseVisitRecordPanel.vue';
 import DesktopUpdateStatus from './components/DesktopUpdateStatus.vue';
 import ReleaseNotesPanel from '../../shared/components/ReleaseNotesPanel.vue';
 import AssistantPanel from '../../shared/components/AssistantPanel.vue';
@@ -5218,7 +5168,7 @@ const modules = [
     name: '基地管理',
     icon: Building2,
     color: 'amber',
-    scope: '基地申报 / 基地审批 / 基地巡查 / 基地统计',
+    scope: '基地申报 / 基地审批 / 基地巡查 / 走访记录 / 基地统计',
     viewPermission: 'internship:view',
     managePermission: 'internship:manage',
     defaultPanel: 'baseApplications',
@@ -5234,6 +5184,16 @@ const modules = [
     viewPermission: 'internship:view',
     managePermission: 'internship:manage',
     defaultPanel: 'baseVisits',
+  },
+  {
+    id: 'baseVisitRecords',
+    name: '走访记录',
+    icon: FileText,
+    color: 'amber',
+    scope: '查看走访记录 / 填写与修正',
+    viewPermission: 'internship:view',
+    managePermission: 'internship:manage',
+    defaultPanel: 'baseVisitRecords',
   },
   {
     id: 'eduData',
@@ -5704,6 +5664,7 @@ const baseManagementSidebarItems = [
   { key: 'baseApplications', name: '基地申报', icon: FileText },
   { key: 'baseUsage', name: '基地审批', icon: ClipboardList },
   { key: 'baseVisits', name: '基地巡查', icon: CalendarCheck },
+  { key: 'baseVisitRecords', name: '走访记录', icon: FileText },
   { key: 'baseFlows', name: '基地统计', icon: Building2 },
 ];
 
@@ -6066,7 +6027,9 @@ const parentMenuTreeOptions = computed(() => [
     children: selectableParentMenus(adminState.menus),
   },
 ]);
-const operatorName = computed(() => permissionState.context.user_name || (permissionState.context.user_id ? `用户 ${permissionState.context.user_id}` : '未登录'));
+const nativeProfileMenu = ref(null);
+const webProfileMenu = ref(null);
+const operatorName = computed(() => profileState.form.name?.trim() || permissionState.context.user_name || (permissionState.context.user_id ? `用户 ${permissionState.context.user_id}` : '未登录'));
 const switchableLoginAccounts = computed(() => {
   const currentAccountId = Number(permissionState.context.account_id || 0);
   return (switchAccountState.items || []).filter((account) => {
@@ -6177,7 +6140,7 @@ function canShowModule(module) {
   if (module.id === 'expenseManage') {
     return hasPermission('expense:view');
   }
-  if (module.id === 'baseVisits') {
+  if (['baseVisits', 'baseVisitRecords'].includes(module.id)) {
     return canViewBaseVisits.value;
   }
   if (schoolConfigModuleIds.has(module.id)) {
@@ -7026,7 +6989,7 @@ function sidebarItems(win) {
   if (win.module.source === 'menu') {
     return [];
   }
-  if (['message', 'doc', 'templateLib', 'exportTask', 'favorite', 'baseVisits'].includes(win.module.id)) {
+  if (['message', 'doc', 'templateLib', 'exportTask', 'favorite', 'baseVisits', 'baseVisitRecords'].includes(win.module.id)) {
     return [];
   }
   if (win.module.id === 'companyManage') {
@@ -7750,7 +7713,7 @@ function decorateModule(module) {
 }
 
 function moduleDisplayName(module) {
-  if (['dataManage', 'baseVisits'].includes(module.id)) {
+  if (['dataManage', 'baseVisits', 'baseVisitRecords'].includes(module.id)) {
     return module.name;
   }
   const item = permissionState.menus.find(menu => moduleMatchesMenu(module, menu));
@@ -14557,7 +14520,7 @@ async function submitInternshipBase(form) {
     const missing = [];
     if (!String(form.address || '').trim()) missing.push('基地所在位置');
     if (!(form.profession_ids || []).length) missing.push('服务专业');
-    if (!String(form.service_courses || '').trim()) missing.push('服务课程');
+    if (!(form.course_ids || []).length && !String(form.service_courses || '').trim()) missing.push('服务课程');
     if (!String(form.manager?.name || '').trim()) missing.push('基地负责人');
     if (missing.length) {
       internshipState.message = `请填写${missing.join('、')}`;
@@ -15605,7 +15568,7 @@ async function refreshInternshipPanel(panel = 'overview', page = 1) {
 }
 
 async function loadInternshipPanel(panel = 'overview', page = 1, forceFoundation = false) {
-  if (wechatBlocked.value || panel === 'baseVisits' || !hasPermission('internship:view')) {
+  if (wechatBlocked.value || ['baseVisits', 'baseVisitRecords'].includes(panel) || !hasPermission('internship:view')) {
     return;
   }
 
@@ -17002,6 +16965,8 @@ function handleAuthExpired(event) {
 }
 
 function closeDesktopTransient() {
+  nativeProfileMenu.value?.close();
+  webProfileMenu.value?.close();
   switchAccountState.open = false;
   closeDesktopContextMenu();
   desktopLauncherState.visible = false;

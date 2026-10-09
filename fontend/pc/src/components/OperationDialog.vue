@@ -1,6 +1,6 @@
 <template>
   <Teleport to="body">
-    <div v-if="visible" :class="{ 'operation-mask-maximized': maximized }" class="operation-mask" @click.self="requestClose">
+    <div ref="maskRef" v-if="visible" :class="{ 'operation-mask-maximized': maximized }" class="operation-mask" @click.self="requestClose">
       <section
         ref="dialogRef"
         class="operation-dialog operation-dialog-managed"
@@ -8,7 +8,9 @@
         :style="dialogStyle"
         role="dialog"
         aria-modal="true"
+        tabindex="-1"
         :aria-label="title"
+        @keydown="handleKeydown"
       >
         <header>
           <strong>{{ title }}</strong>
@@ -66,6 +68,9 @@ const props = defineProps({
 
 const emit = defineEmits(['close']);
 const dialogRef = ref(null);
+const maskRef = ref(null);
+let previousFocus = null;
+let maskObserver;
 const maximized = ref(false);
 const registration = useMaximizedWindow();
 watch(() => [props.visible, maximized.value], ([visible, full]) => {
@@ -83,18 +88,38 @@ const dialogStyle = computed(() => customSize.value && !maximized.value
 watch(
   () => props.visible,
   async visible => {
+    maskObserver?.disconnect();
     window.removeEventListener('resize', clampSize);
     if (!visible) {
       stopResize();
       maximized.value = false;
       customSize.value = null;
+      await nextTick();
+      const active = document.activeElement;
+      if ((!active || active === document.body || !active.isConnected) && previousFocus?.isConnected) previousFocus.focus();
+      previousFocus = null;
       return;
     }
+    previousFocus = document.activeElement;
     await nextTick();
+    dialogRef.value?.focus();
     clampSize();
     window.addEventListener('resize', clampSize);
+    maskObserver = new ResizeObserver(clampSize);
+    if (maskRef.value) maskObserver.observe(maskRef.value);
   },
+  { immediate: true },
 );
+
+function handleKeydown(event) {
+  if (event.key === 'Escape') { event.stopPropagation(); requestClose(); }
+  if (event.key !== 'Tab') return;
+  const nodes = [...dialogRef.value.querySelectorAll('button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), a[href], [tabindex="0"]')].filter(node => node.getClientRects().length);
+  const first = nodes[0], last = nodes.at(-1);
+  if (!first) { event.preventDefault(); return; }
+  if (event.shiftKey && (document.activeElement === first || document.activeElement === dialogRef.value)) { event.preventDefault(); last.focus(); }
+  else if (!event.shiftKey && (document.activeElement === last || document.activeElement === dialogRef.value)) { event.preventDefault(); first.focus(); }
+}
 
 /** 请求关闭弹窗 */
 function requestClose() {
@@ -176,12 +201,13 @@ function clampSize() {
 
 /** 返回当前视口允许的弹窗尺寸 */
 function sizeLimits() {
-  return {
-    minWidth: Math.min(420, Math.max(280, window.innerWidth - 36)),
-    minHeight: Math.min(320, Math.max(220, window.innerHeight - 104)),
-    maxWidth: Math.max(280, window.innerWidth - 36),
-    maxHeight: Math.max(220, window.innerHeight - 104),
-  };
+  const mask = maskRef.value;
+  const style = mask ? getComputedStyle(mask) : null;
+  const horizontal = style ? parseFloat(style.paddingLeft) + parseFloat(style.paddingRight) : 48;
+  const vertical = style ? parseFloat(style.paddingTop) + parseFloat(style.paddingBottom) : 122;
+  const maxWidth = Math.max(0, (mask?.clientWidth || window.innerWidth) - horizontal);
+  const maxHeight = Math.max(0, (mask?.clientHeight || window.innerHeight) - vertical);
+  return { minWidth: Math.min(420, maxWidth), minHeight: Math.min(320, maxHeight), maxWidth, maxHeight };
 }
 
 /** 限制数值范围 */
@@ -190,6 +216,7 @@ function clamp(value, min, max) {
 }
 
 onBeforeUnmount(() => {
+  maskObserver?.disconnect();
   stopResize();
   window.removeEventListener('resize', clampSize);
 });

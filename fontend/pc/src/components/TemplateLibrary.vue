@@ -16,7 +16,7 @@
     </div>
 
     <div v-if="activeTab === 'file'" class="support-toolbar list-toolbar">
-      <div class="list-filter-controls">
+      <FilterToolbar class="list-filter-controls" :values="filters">
         <el-select v-model="filters.category_id" clearable filterable placeholder="全部分类" @change="loadTemplates(1)">
           <el-option v-for="item in categories" :key="item.id" :label="item.name" :value="item.id" />
         </el-select>
@@ -30,9 +30,9 @@
           <el-option v-for="item in scopeOptions" :key="item.value" :label="item.label" :value="item.value" />
         </el-select>
         <el-input v-model="filters.keyword" clearable placeholder="搜索模板、说明、分类" @keyup.enter="loadTemplates(1)" />
-        <el-button :icon="Search" :loading="loading" @click="loadTemplates(1)">查询</el-button>
+        <template #actions><el-button type="primary" :icon="Search" :loading="loading" @click="loadTemplates(1)">查询</el-button>
         <el-button :icon="RefreshCw" :loading="loading" @click="reload">刷新</el-button>
-      </div>
+      </template></FilterToolbar>
       <div v-if="canManage" class="list-toolbar-actions">
         <el-button v-if="canManage" :icon="Plus" @click="openCategoryDialog">分类</el-button>
         <el-button v-if="canManage" type="primary" :icon="Upload" @click="openTemplateDialog()">上传模板</el-button>
@@ -127,7 +127,7 @@
 
     <section v-else class="support-table message-template-support">
       <div class="message-template-library-toolbar list-toolbar">
-        <div class="list-filter-controls">
+        <FilterToolbar class="list-filter-controls" :values="messageFilters">
           <el-select v-model="messageFilters.type" placeholder="请选择消息类型" @change="loadMessageTemplates(1)">
             <el-option
               v-for="item in messageTemplateTypeOptions"
@@ -142,8 +142,8 @@
             <el-option label="停用" value="disabled" />
           </el-select>
           <el-input v-model="messageFilters.keyword" clearable placeholder="搜索名称、编码、内容" @keyup.enter="loadMessageTemplates(1)" />
-          <el-button :icon="Search" :loading="messageLoading" @click="loadMessageTemplates(1)">查询</el-button>
-        </div>
+          <template #actions><el-button type="primary" :icon="Search" :loading="messageLoading" @click="loadMessageTemplates(1)">查询</el-button>
+        </template></FilterToolbar>
         <div v-if="canManageMessageTemplates" class="list-toolbar-actions">
           <el-button
             v-if="canManageMessageTemplates"
@@ -417,6 +417,7 @@
 </template>
 
 <script setup>
+import FilterToolbar from './FilterToolbar.vue';
 import { previewFile } from '../../../shared/filePreview';
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { FileText, Plus, RefreshCw, Save, Search, Upload } from '@lucide/vue';

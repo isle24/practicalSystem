@@ -4,6 +4,7 @@
       <div class="data-list-query">
         <div
           ref="filtersRef"
+          v-show="filtersVisible"
           class="data-list-filters"
           :class="{ 'is-collapsed': filterCollapsible && !filtersExpanded }"
         >
@@ -35,18 +36,19 @@
           <slot name="filters" />
         </div>
         <div class="data-list-query-actions">
+          <el-button v-if="filters.length || $slots.filters" :aria-expanded="filtersVisible" @click="toggleFilters">{{ filtersVisible ? '隐藏筛选' : '展开筛选' }}<span v-if="enabledFilterCount">（{{ enabledFilterCount }}）</span></el-button>
           <el-button type="primary" :icon="Search" :loading="loading" @click="emit('search')">
             查询
           </el-button>
           <el-button @click="emit('reset')">重置</el-button>
           <el-button
-            v-if="filterCollapsible"
+            v-if="filtersVisible && filterCollapsible"
             text
             :icon="filtersExpanded ? ChevronUp : ChevronDown"
             :aria-expanded="filtersExpanded"
             @click="filtersExpanded = !filtersExpanded"
           >
-            {{ filtersExpanded ? '收起条件' : '显示更多' }}
+            {{ filtersExpanded ? '收起条件' : '更多条件' }}
           </el-button>
         </div>
       </div>
@@ -112,7 +114,7 @@
       </el-table-column>
       <el-table-column v-if="actions.length || $slots.actions" label="操作" width="96" fixed="right" align="center">
         <template #default="{ row }">
-          <button type="button" class="table-operation-trigger" @click.stop="openActionDrawer(row)">
+          <button type="button" class="table-operation-trigger" @click.stop="openActionDrawer(row, $event)">
             <Ellipsis :size="16" />
             <span>操作</span>
           </button>
@@ -135,7 +137,7 @@
     <Teleport to="body">
       <Transition name="data-list-drawer">
         <div v-if="actionDrawerOpen" class="data-list-action-layer" @pointerdown.self="closeActionDrawer">
-          <aside class="data-list-action-drawer" role="dialog" aria-modal="true" aria-label="记录操作">
+          <aside ref="actionDrawerRef" tabindex="-1" class="data-list-action-drawer" role="dialog" aria-modal="true" aria-label="记录操作">
             <header>
               <div>
                 <span>当前记录</span>
@@ -170,6 +172,7 @@
 </template>
 
 <script setup>
+import { activeFilterCount, desktopTopInset } from '../composables/viewportArea';
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { ElSelectV2 } from 'element-plus';
 import { ChevronDown, ChevronRight, ChevronUp, Columns3, Ellipsis, Search, X } from '@lucide/vue';
@@ -196,6 +199,7 @@ const props = defineProps({
     type: Object,
     default: () => ({}),
   },
+  extraFilterKeys: { type: Array, default: () => [] },
   loading: {
     type: Boolean,
     default: false,
@@ -227,22 +231,30 @@ const localFilterValues = reactive({});
 const filtersRef = ref(null);
 const columnMenuRef = ref(null);
 const columnMenuPanelRef = ref(null);
+const filtersVisible = ref(true);
+const enabledFilterCount = computed(() => {
+  const keys = new Set([...props.filters.map(filter => filter.key), ...props.extraFilterKeys]);
+  return activeFilterCount(Object.fromEntries(Object.entries(props.filterValues).filter(([key]) => keys.has(key))));
+});
+async function toggleFilters() { filtersVisible.value = !filtersVisible.value; if (filtersVisible.value) { await nextTick(); updateFilterOverflow(); } }
 const filtersExpanded = ref(false);
 const filterCollapsible = ref(false);
 const columnMenuOpen = ref(false);
 const actionDrawerOpen = ref(false);
 const actionRow = ref(null);
+const actionDrawerRef = ref(null);
 const columnMenuPosition = reactive({ top: 0, left: 0 });
 const visibleColumnKeys = ref([]);
 let filterResizeObserver = null;
 let lastActionAt = 0;
+let actionTrigger = null;
 const selectableColumns = computed(() => props.columns.filter(column => column.label));
 const visibleColumns = computed(() => props.columns.filter(column => isColumnVisible(column)));
 const actionRowTitle = computed(() => {
   if (!actionRow.value) {
     return '-';
   }
-  const titleKeys = ['title', 'name', 'plan_title', 'course_name', 'student_name', 'teacher_name', 'login_name'];
+  const titleKeys = ['title', 'name', 'base_name', 'plan_title', 'course_name', 'student_name', 'teacher_name', 'login_name'];
   const column = visibleColumns.value.find(item => titleKeys.includes(String(item.prop || item.key)))
     || visibleColumns.value[1]
     || visibleColumns.value[0]
@@ -291,6 +303,8 @@ onMounted(() => {
   updateFilterOverflow();
   document.addEventListener('pointerdown', closeColumnMenuOutside);
   document.addEventListener('keydown', handleDocumentKeydown);
+  window.addEventListener('resize', positionColumnMenu);
+  window.addEventListener('scroll', positionColumnMenu, true);
   if (typeof ResizeObserver !== 'undefined' && filtersRef.value) {
     filterResizeObserver = new ResizeObserver(updateFilterOverflow);
     filterResizeObserver.observe(filtersRef.value);
@@ -301,9 +315,12 @@ onBeforeUnmount(() => {
   filterResizeObserver?.disconnect();
   document.removeEventListener('pointerdown', closeColumnMenuOutside);
   document.removeEventListener('keydown', handleDocumentKeydown);
+  window.removeEventListener('resize', positionColumnMenu);
+  window.removeEventListener('scroll', positionColumnMenu, true);
 });
 
 function updateFilterOverflow() {
+  if (!filtersVisible.value) return;
   const element = filtersRef.value;
   if (!element || element.children.length < 2) {
     filterCollapsible.value = false;
@@ -335,6 +352,11 @@ async function toggleColumnMenu() {
     return;
   }
   await nextTick();
+  positionColumnMenu();
+}
+
+function positionColumnMenu() {
+  if (!columnMenuOpen.value) return;
   const rect = columnMenuRef.value?.getBoundingClientRect();
   if (!rect) {
     return;
@@ -343,8 +365,8 @@ async function toggleColumnMenu() {
   const panelHeight = columnMenuPanelRef.value?.offsetHeight || 360;
   columnMenuPosition.left = Math.max(12, Math.min(window.innerWidth - width - 12, rect.right - width));
   columnMenuPosition.top = rect.bottom + 6 + panelHeight > window.innerHeight - 12
-    ? Math.max(12, rect.top - panelHeight - 6)
-    : rect.bottom + 6;
+    ? Math.max(desktopTopInset() + 12, rect.top - panelHeight - 6)
+    : Math.max(desktopTopInset() + 12, rect.bottom + 6);
 }
 
 /** 返回稳定的列表字段标识 */
@@ -465,15 +487,20 @@ function handleAction(event, action, row) {
 }
 
 /** 打开当前记录的操作面板 */
-function openActionDrawer(row) {
+function openActionDrawer(row, event) {
+  actionTrigger = event?.currentTarget || document.activeElement;
   actionRow.value = row;
   actionDrawerOpen.value = true;
   columnMenuOpen.value = false;
+  nextTick(() => actionDrawerRef.value?.focus());
 }
 
 /** 关闭记录操作面板 */
 function closeActionDrawer() {
+  const wasOpen = actionDrawerOpen.value;
+  if (wasOpen && actionDrawerRef.value?.contains(document.activeElement) && actionTrigger?.isConnected) actionTrigger.focus();
   actionDrawerOpen.value = false;
+  if (wasOpen) nextTick(() => { const active = document.activeElement; if ((!active || active === document.body || !active.isConnected) && actionTrigger?.isConnected) actionTrigger.focus(); });
 }
 
 /** 执行插槽按钮后关闭操作面板 */
@@ -486,7 +513,15 @@ function handleDrawerContentClick(event) {
 
 /** 响应操作面板键盘关闭 */
 function handleDocumentKeydown(event) {
+  if (event.key === 'Tab' && actionDrawerOpen.value && actionDrawerRef.value?.contains(event.target)) {
+    const nodes = [...actionDrawerRef.value.querySelectorAll('button:not(:disabled), a[href], [tabindex="0"]')].filter(node => node.getClientRects().length);
+    const first = nodes[0], last = nodes.at(-1);
+    if (!first) event.preventDefault();
+    else if (event.shiftKey && (document.activeElement === first || document.activeElement === actionDrawerRef.value)) { event.preventDefault(); last.focus(); }
+    else if (!event.shiftKey && (document.activeElement === last || document.activeElement === actionDrawerRef.value)) { event.preventDefault(); first.focus(); }
+  }
   if (event.key === 'Escape' && actionDrawerOpen.value) {
+    event.stopPropagation();
     closeActionDrawer();
   }
 }

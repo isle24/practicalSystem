@@ -2,13 +2,14 @@
   <section class="base-visit-panel">
     <header class="base-visit-heading">
       <strong>基地巡查</strong>
-      <span>{{ state.options.is_teacher ? '填写本人走访时间和走访记录' : '安排走访人员，查看走访进度与记录' }}</span>
+      <span>{{ state.options.is_teacher ? '填写本人走访时间，查看参与记录' : '安排走访人员，查看走访进度与记录' }}</span>
     </header>
     <el-alert v-if="state.message" :title="state.message" :type="state.error ? 'error' : 'success'" :closable="false" show-icon />
     <DataListPanel
       :columns="columns"
       :filters="listFilters"
       :filter-values="state.filters"
+      :extra-filter-keys="['visit_date']"
       :rows="state.rows"
       :pagination="state.pagination"
       :loading="state.loading"
@@ -44,14 +45,13 @@
         <el-alert v-if="state.dialogError" :title="state.dialogError" type="error" :closable="false" show-icon />
         <div v-if="state.detail?.item" class="base-visit-context">
           <strong>{{ state.detail.item.base_name || '基地巡查' }}</strong>
-          <span>{{ state.detail.item.base_department || '—' }} · {{ state.detail.item.teacher_name || '—' }}</span>
+          <span>{{ state.detail.item.teacher_name || '—' }}</span>
           <el-tag :type="statusType(state.detail.item.status)">{{ statusText(state.detail.item.status) }}</el-tag>
         </div>
 
         <template v-if="!state.detailLoading && state.dialogMode === 'detail' && state.detail">
           <el-alert v-if="Number(state.detail.item.conflict_count) > 0" :title="conflictText(state.detail.item)" type="warning" :closable="false" show-icon />
           <dl class="base-visit-facts">
-            <dt>基地学院</dt><dd>{{ state.detail.item.base_department || '—' }}</dd>
             <dt>基地名称</dt><dd>{{ state.detail.item.base_name || '—' }}</dd>
             <dt>基地地址</dt><dd>{{ state.detail.item.base_address || '—' }}</dd>
             <dt>基地类型</dt><dd>{{ state.detail.item.base_category || '—' }}</dd>
@@ -60,9 +60,9 @@
             <dt>负责人电话</dt><dd>{{ state.detail.item.base_manager_phone || '—' }}</dd>
             <dt>负责教师</dt><dd>{{ state.detail.item.teacher_name || '—' }}</dd>
             <dt>所在部门</dt><dd>{{ state.detail.item.teacher_department || '—' }}</dd>
-            <dt>主管院长</dt><dd>{{ state.detail.item.supervisor_name || displayAccountNames(state.detail.item.supervisor_id, state.detail.item.supervisor_name) }}</dd>
+            <dt>主管院长</dt><dd>{{ state.detail.item.supervisor_name ? accountLabel({ name: state.detail.item.supervisor_name, dep_name: state.detail.item.supervisor_department }) : displayAccountNames(state.detail.item.supervisor_id) }}</dd>
             <dt>走访人员</dt><dd>{{ state.detail.item.participant_names || displayAccountNames(state.detail.item.participant_ids) }}</dd>
-            <dt>联系人</dt><dd>{{ state.detail.item.contact_person || state.detail.item.contact_account_name || '—' }}</dd>
+            <dt>联系人</dt><dd>{{ state.detail.item.contact_person || state.detail.item.contact_account_name ? accountLabel({ name: state.detail.item.contact_person || state.detail.item.contact_account_name, dep_name: state.detail.item.contact_department }) : '—' }}</dd>
             <dt>联系电话</dt><dd>{{ state.detail.item.contact_phone || '—' }}</dd>
             <dt>新闻链接</dt><dd><a v-if="safeExternalUrl(state.detail.item.news_url)" :href="safeExternalUrl(state.detail.item.news_url)" target="_blank" rel="noopener noreferrer">{{ state.detail.item.news_url }}</a><span v-else>—</span></dd>
             <dt>走访时间</dt><dd>{{ scheduleText(state.detail.item) }}</dd>
@@ -94,13 +94,12 @@
         <form v-else-if="!state.detailLoading && state.dialogMode === 'assign'" class="base-visit-form" @submit.prevent="saveDialog">
           <label><span>实习基地</span>
             <el-select v-model="state.form.base_id" filterable remote :remote-method="searchBases" :loading="state.baseLoading" placeholder="输入基地名称搜索" @change="selectBase">
-              <el-option v-for="base in baseOptions" :key="base.id" :label="`${base.name}${base.dep_name ? ` / ${base.dep_name}` : ''}`" :value="Number(base.id)" />
+              <el-option v-for="base in baseOptions" :key="base.id" :label="base.name" :value="Number(base.id)" />
             </el-select>
           </label>
           <label class="base-visit-wide"><span>基地资料</span>
             <dl v-if="selectedBase" class="base-visit-facts base-visit-readonly">
               <dt>基地名称</dt><dd>{{ selectedBase.name || '—' }}</dd>
-              <dt>所属学院</dt><dd>{{ selectedBase.dep_name || '—' }}</dd>
               <dt>基地地址</dt><dd>{{ selectedBase.address || '—' }}</dd>
               <dt>基地类型</dt><dd>{{ selectedBase.base_category || selectedBase.category || '—' }}</dd>
               <dt>基地负责人</dt><dd>{{ selectedBase.manager_name || '—' }}</dd>
@@ -108,17 +107,17 @@
             </dl>
           </label>
           <label><span>走访人员</span>
-            <el-select v-model="state.form.participant_ids" multiple filterable remote :remote-method="searchParticipants" :loading="state.optionsLoading" collapse-tags collapse-tags-tooltip placeholder="输入姓名、工号或角色搜索走访人员">
+            <el-select v-model="state.form.participant_ids" multiple filterable remote :remote-method="searchParticipants" :loading="state.optionsLoading" collapse-tags collapse-tags-tooltip placeholder="输入姓名或单位搜索走访人员">
               <el-option v-for="person in participantOptions" :key="personId(person)" :label="accountLabel(person)" :value="personId(person)" />
             </el-select>
           </label>
           <label><span>主管院长</span>
-            <el-select v-model="state.form.supervisor_id" filterable remote clearable :remote-method="searchSupervisors" :loading="state.optionsLoading" placeholder="输入姓名或账号搜索主管院长">
+            <el-select v-model="state.form.supervisor_id" filterable remote clearable :remote-method="searchSupervisors" :loading="state.optionsLoading" placeholder="输入姓名或单位搜索主管院长">
               <el-option v-for="person in supervisorOptions" :key="personId(person)" :label="accountLabel(person)" :value="personId(person)" />
             </el-select>
           </label>
           <label><span>本次联系人</span>
-            <el-select v-model="state.form.contact_account_id" filterable remote clearable :remote-method="searchContacts" :loading="state.optionsLoading" placeholder="输入姓名或账号搜索系统联系人" @change="selectContact">
+            <el-select v-model="state.form.contact_account_id" filterable remote clearable :remote-method="searchContacts" :loading="state.optionsLoading" placeholder="输入姓名或单位搜索系统联系人" @change="selectContact">
               <el-option v-for="person in contactOptions" :key="personId(person)" :label="accountLabel(person)" :value="personId(person)" />
             </el-select>
           </label>
@@ -137,7 +136,8 @@
 
         <form v-else-if="!state.detailLoading && state.dialogMode === 'record'" class="base-visit-form" @submit.prevent="saveDialog">
           <label class="base-visit-wide"><span>实际走访时间</span><input v-model="state.form.actual_at" type="datetime-local" step="1" required></label>
-          <label><span>参加人员</span><el-input v-model="state.form.participants" maxlength="500" /></label>
+          <label><span>参加人员账号（必选）</span><el-select v-model="state.form.participant_ids" multiple filterable remote :remote-method="searchParticipants" :loading="state.optionsLoading" placeholder="输入姓名或单位搜索"><el-option v-for="person in participantOptions" :key="personId(person)" :label="accountLabel(person)" :value="personId(person)" /></el-select></label>
+          <label><span>参加人员补充</span><el-input v-model="state.form.participants" maxlength="500" /></label>
           <label><span>接待人员</span><el-input v-model="state.form.contact_person" maxlength="180" /></label>
           <label v-for="field in recordTextFields" :key="field.key" class="base-visit-wide"><span>{{ field.label }}{{ field.key === 'content' ? '（必填）' : '' }}</span><el-input v-model="state.form[field.key]" type="textarea" :rows="field.key === 'content' ? 6 : 3" :maxlength="field.maxlength" /></label>
           <section class="base-visit-wide base-visit-files">
@@ -200,7 +200,6 @@ const statusOptions = [{ value: 'pending_time', label: '待填时间' }, { value
 const recordTextFields = [{ key: 'content', label: '走访内容', maxlength: 20000 }, { key: 'problems', label: '发现问题', maxlength: 10000 }, { key: 'follow_up', label: '后续措施', maxlength: 10000 }];
 const columns = [
   { prop: 'base_name', label: '基地名称', minWidth: 180, required: true },
-  { prop: 'base_department', label: '基地学院', minWidth: 130 },
   { prop: 'teacher_name', label: '负责教师', minWidth: 110 },
   { prop: 'teacher_department', label: '所在部门', minWidth: 130 },
   { key: 'visit_time', label: '走访时间', minWidth: 230, formatter: scheduleText },
@@ -252,7 +251,7 @@ function personId(item) {
 }
 
 function accountLabel(item) {
-  return [item.name || item.account_name || item.real_name || item.nickname || '账号', item.username || item.login_name || item.teacher_num || item.mobile || item.role_name].filter(Boolean).join(' / ');
+  return [item.name || item.account_name || item.real_name || item.nickname || '账号', item.dep_name || item.organization_name].filter(Boolean).join(' · ');
 }
 
 function displayAccountNames(ids, names = '') {
@@ -321,9 +320,9 @@ async function loadOptions(kind = '', keyword = '') {
     if (!kind || kind === 'base') state.options.bases = data.bases || [];
     if (!kind || kind === 'teacher') state.options.teachers = data.teachers || [];
     if (!kind) {
-      state.options.participants = data.participants || data.accounts || data.users || data.teachers || [];
-      state.options.supervisors = data.supervisors || data.admins || state.options.participants;
-      state.options.contacts = data.contacts || state.options.participants;
+      state.options.participants = mergeOptions(data.participants || data.accounts || data.users || data.teachers || [], state.options.participants.filter(item => (state.form.participant_ids || []).map(Number).includes(personId(item))));
+      state.options.supervisors = mergeOptions(data.supervisors || data.admins || state.options.participants, state.options.supervisors.filter(item => Number(state.form.supervisor_id) === personId(item)));
+      state.options.contacts = mergeOptions(data.contacts || state.options.participants, state.options.contacts.filter(item => Number(state.form.contact_account_id) === personId(item)));
     } else if (kind === 'participant') {
       state.options.participants = mergeOptions(data.participants || [], state.options.participants.filter(item => (state.form.participant_ids || []).map(Number).includes(personId(item))));
     } else if (kind === 'supervisor') {
@@ -458,16 +457,19 @@ function formFor(mode, detail) {
   const item = detail.item;
   if (mode === 'assign') {
     selectedBase.value = { id: item.base_id, name: item.base_name, dep_name: item.base_department, address: item.base_address, base_category: item.base_category, location: item.base_location, manager_name: item.base_manager_name, manager_phone: item.base_manager_phone };
-    state.options.participants = mergeOptions(state.options.participants, detail.participant_rows);
-    state.options.supervisors = mergeOptions(state.options.supervisors, item.supervisor_id ? [{ account_id: item.supervisor_id, name: item.supervisor_name }] : []);
-    state.options.contacts = mergeOptions(state.options.contacts, item.contact_account_id ? [{ account_id: item.contact_account_id, name: item.contact_account_name }] : []);
+    state.options.participants = mergeOptions(state.options.participants, item.participant_rows);
+    state.options.supervisors = mergeOptions(state.options.supervisors, item.supervisor_id ? [{ account_id: item.supervisor_id, name: item.supervisor_name, dep_name: item.supervisor_department }] : []);
+    state.options.contacts = mergeOptions(state.options.contacts, item.contact_account_id ? [{ account_id: item.contact_account_id, name: item.contact_account_name, dep_name: item.contact_department }] : []);
     const participantIds = Array.isArray(item.participant_ids) ? item.participant_ids.map(Number) : (item.participant_ids ? String(item.participant_ids).split(',').map(Number).filter(Boolean) : []);
     return { base_id: Number(item.base_id), participant_ids: participantIds, supervisor_id: Number(item.supervisor_id || 0) || null, contact_account_id: Number(item.contact_account_id || 0) || null, contact_person: item.contact_person || '', contact_phone: item.contact_phone || '', news_url: item.news_url || '', remark: item.remark || '' };
   }
   if (mode === 'schedule') return { visit_date: item.visit_date || '', start_time: item.start_time?.slice(0, 5) || '', end_time: item.end_time?.slice(0, 5) || '' };
   if (mode === 'record') {
     const record = detail.record || {};
-    return { actual_at: (record.actual_at || localDateTime()).replace(' ', 'T'), participants: record.participants || '', contact_person: record.contact_person || '', content: record.content || '', problems: record.problems || '', follow_up: record.follow_up || '', attachments: [...(record.attachments || [])] };
+    const ids = record.participant_ids || item.participant_ids || [];
+    state.options.participants = mergeOptions(state.options.participants, record.participant_rows || item.participant_rows);
+    state.options.participants = mergeOptions(state.options.participants, ids.filter(id => !state.options.participants.some(person => personId(person) === Number(id))).map(account_id => ({ account_id, name: '历史参加人员' })));
+    return { record_revision: record.revision, participant_ids: record.participant_ids || item.participant_ids || [], actual_at: (record.actual_at || localDateTime()).replace(' ', 'T'), participants: record.participants_auto_generated ? '' : record.participants || '', contact_person: record.contact_person || '', content: record.content || '', problems: record.problems || '', follow_up: record.follow_up || '', attachments: [...(record.attachments || [])] };
   }
   return mode === 'cancel' ? { reason: '' } : {};
 }
@@ -484,7 +486,7 @@ function formError(mode, form) {
     if (!form.visit_date || !form.start_time || !form.end_time) return '请填写走访日期、开始时间和结束时间。';
     if (form.end_time <= form.start_time) return '结束时间应晚于开始时间。';
   }
-  if (mode === 'record' && (!form.actual_at || !form.content?.trim())) return '请填写实际走访时间和走访内容。';
+  if (mode === 'record' && (!form.actual_at || !form.content?.trim() || !form.participant_ids?.length)) return '请选择参加人员，并填写实际走访时间和走访内容。';
   if (mode === 'cancel' && !form.reason?.trim()) return '请填写取消原因。';
   return '';
 }
@@ -502,6 +504,7 @@ async function saveDialog() {
   delete payload.title;
   delete payload.visit_period;
   if (mode === 'record') {
+    payload.participants_text_mode = payload.participants?.trim() ? 'custom' : 'auto';
     payload.actual_at = payload.actual_at.replace('T', ' ');
     if (payload.actual_at.length === 16) payload.actual_at += ':00';
     payload.attachment_ids = [...new Set(payload.attachments.map(file => Number(file.file_id || file.id)).filter(Boolean))];
@@ -607,11 +610,11 @@ onBeforeUnmount(invalidateSession);
 .base-visit-facts { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 10px 16px; margin: 0; font-size: 13px; line-height: 1.6; }
 .base-visit-facts dt { color: var(--muted); }
 .base-visit-facts dd { min-width: 0; margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
-.base-visit-readonly { padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--control-radius); background: var(--surface-muted, #f7f8fa); }
+.base-visit-readonly { padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--control-radius); background: var(--surface-muted, var(--surface)); }
 .base-visit-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
 .base-visit-form > label { display: flex; flex-direction: column; gap: 8px; min-width: 0; font-size: 13px; }
 .base-visit-wide { grid-column: 1 / -1; }
-.base-visit-form input[type='date'], .base-visit-form input[type='time'], .base-visit-form input[type='datetime-local'] { width: 100%; min-width: 0; height: var(--control-height, 34px); padding: 0 10px; border: 1px solid var(--line); border-radius: var(--control-radius); color: var(--text); font: inherit; background: #fff; box-sizing: border-box; }
+.base-visit-form input[type='date'], .base-visit-form input[type='time'], .base-visit-form input[type='datetime-local'] { width: 100%; min-width: 0; height: var(--control-height, 34px); padding: 0 10px; border: 1px solid var(--line); border-radius: var(--control-radius); color: var(--text); font: inherit; background: var(--surface); box-sizing: border-box; }
 .base-visit-form .el-select { width: 100%; }
 .base-visit-record-detail, .base-visit-record-text, .base-visit-files { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 .base-visit-record-detail h3 { margin: 0; font-size: 15px; }

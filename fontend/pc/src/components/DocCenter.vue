@@ -1,7 +1,7 @@
 <template>
   <section class="support-panel doc-center-panel">
     <div class="support-toolbar list-toolbar">
-      <div class="list-filter-controls">
+      <FilterToolbar class="list-filter-controls" :values="filters">
         <el-select v-model="filters.category_id" clearable filterable placeholder="全部分类" @change="loadArticles(1)">
           <el-option v-for="item in flatCategories" :key="item.id" :label="item.name" :value="item.id" />
         </el-select>
@@ -12,9 +12,9 @@
           <el-option label="已归档" value="archived" />
         </el-select>
         <el-input v-model="filters.keyword" clearable placeholder="搜索标题、内容、分类" @keyup.enter="loadArticles(1)" />
-        <el-button :icon="Search" :loading="loading" @click="loadArticles(1)">查询</el-button>
+        <template #actions><el-button type="primary" :icon="Search" :loading="loading" @click="loadArticles(1)">查询</el-button>
         <el-button :icon="RefreshCw" :loading="loading" @click="reload">刷新</el-button>
-      </div>
+      </template></FilterToolbar>
       <div v-if="canManage" class="list-toolbar-actions">
         <el-button v-if="canManage" :icon="Plus" @click="openCategoryDialog()">分类</el-button>
         <el-button v-if="canManage" type="primary" :icon="Plus" @click="openArticleDialog()">新增文档</el-button>
@@ -206,6 +206,7 @@
 </template>
 
 <script setup>
+import FilterToolbar from './FilterToolbar.vue';
 import { computed, nextTick, onMounted, reactive, ref } from 'vue';
 import { BookOpen, FileClock, Plus, RefreshCw, Save, Search } from '@lucide/vue';
 import {

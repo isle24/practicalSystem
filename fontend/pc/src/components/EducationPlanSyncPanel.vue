@@ -46,10 +46,10 @@
           <strong>计划接收箱</strong>
           <small>先查看映射与差异，再确认生成本地计划</small>
         </div>
-        <div class="education-sync-filter">
+        <FilterToolbar class="education-sync-filter" :values="{ keyword: state.keyword }">
           <input v-model.trim="state.keyword" placeholder="搜索课程、学院、专业" @keyup.enter="loadInbox(1)">
-          <el-button :icon="Search" :loading="state.loading" @click="loadInbox(1)">查询</el-button>
-        </div>
+          <template #actions><el-button type="primary" :icon="Search" :loading="state.loading" @click="loadInbox(1)">查询</el-button>
+        </template></FilterToolbar>
       </div>
 
       <el-tabs v-model="state.tab" @tab-change="loadInbox(1)">
@@ -158,6 +158,7 @@
 </template>
 
 <script setup>
+import FilterToolbar from './FilterToolbar.vue';
 import { computed, onMounted, reactive } from 'vue';
 import { ElMessageBox } from 'element-plus';
 import { Download, RefreshCw, Save, Search } from '@lucide/vue';

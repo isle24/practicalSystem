@@ -54,7 +54,7 @@
             <input v-model="local.name" :placeholder="local.base_type === 'temporary' ? '留空后按位置和负责人自动生成' : ''">
           </label>
           <label v-if="local.base_type === 'long_term'"><span>基地编号</span><input v-model="local.code"></label>
-          <label><span>是否立项</span><el-radio-group v-model="local.is_project_approved"><el-radio :value="true">是</el-radio><el-radio :value="false">否</el-radio></el-radio-group></label>
+          <label><span>是否立项</span><el-switch v-model="local.is_project_approved" active-text="已立项" inactive-text="未立项" aria-label="是否立项" /></label>
           <label><span>启用状态</span><el-switch v-model="local.status" active-value="enabled" inactive-value="disabled" active-text="启用" inactive-text="关闭" aria-label="基地启用状态" /></label>
           <label>
             <span>所属学院</span>
@@ -66,9 +66,9 @@
             <span>服务专业</span>
             <el-select-v2 v-model="local.profession_ids" :options="professionOptions" :props="{ label: 'profession_name', value: 'profession_id' }" multiple collapse-tags collapse-tags-tooltip filterable placeholder="请选择服务专业" />
           </label>
-          <label class="span-2"><span>基地所在位置</span><input v-model="local.address"></label>
-          <label class="span-2"><span>服务课程</span><textarea v-model="local.service_courses" rows="3" /></label>
-          <label><span>基地负责人</span><input v-model="local.manager.name"></label>
+          <div class="base-address-label span-2"><span>基地所在地址</span><BaseAddressField :model-value="local" /></div>
+          <div class="base-address-label span-2"><span>服务课程</span><BaseCourseField v-model="local.course_ids" :selected="detail.courses || []" :departments="options.departments || []" :dep-id="local.dep_id" :legacy-text="detail.courses?.length ? '' : local.service_courses" /></div>
+          <label><span>基地负责人</span><BaseManagerSelect v-model="local.manager_account_id" :selected="local.manager" @change="selectManager" /></label>
           <label><span>负责人电话</span><input v-model="local.manager.phone"></label>
           <template v-if="local.base_type === 'long_term'">
             <label>
@@ -251,6 +251,9 @@ import { ElSelectV2 } from 'element-plus';
 import { Building2, CalendarRange, ClipboardList, Handshake, Plus, Save, Trash2, UsersRound } from '@lucide/vue';
 import BasePersonRows from './InternshipBasePersonRows.vue';
 import TextTabs from './TextTabs.vue';
+import BaseAddressField from './BaseAddressField.vue';
+import BaseCourseField from './BaseCourseField.vue';
+import BaseManagerSelect from './BaseManagerSelect.vue';
 
 const props = defineProps({
   detail: { type: Object, default: () => ({}) },
@@ -344,6 +347,12 @@ function emptyForm(detail = {}) {
     dep_id: item.dep_id || null,
     profession_ids: [...(detail.profession_ids || [])],
     address: item.address || '',
+    province_code: item.province_code || '', province_name: item.province_name || '',
+    city_code: item.city_code || '', city_name: item.city_name || '',
+    district_code: item.district_code || '', district_name: item.district_name || '',
+    address_detail: item.address_detail || '',
+    manager_account_id: item.manager_account_id ? Number(item.manager_account_id) : null,
+    course_ids: (detail.courses || []).map(course => Number(course.id)),
     area: item.area ?? '',
     annual_student_count: item.annual_student_count ?? 0,
     current_student_count: item.current_student_count ?? 0,
@@ -401,6 +410,11 @@ function person(value = {}) {
   };
 }
 
+function selectManager(value) {
+  if (!value) { local.manager = person(); return; }
+  local.manager = { ...person(value), duties: local.manager.duties };
+}
+
 function addExistingSite() {
   local.existing_sites.push({ site_name: '', cooperation: '' });
 }
@@ -429,6 +443,12 @@ function declarationBudgetTotal(declaration) {
 }
 
 function submit() {
-  emit('submit', JSON.parse(JSON.stringify(local)));
+  const value = JSON.parse(JSON.stringify(local));
+  if (!value.course_ids.length && (props.detail.courses || []).length) value.service_courses = '';
+  emit('submit', value);
 }
 </script>
+
+<style scoped>
+.base-address-label { display: grid; gap: 8px; min-width: 0; font-size: 13px; }
+</style>
