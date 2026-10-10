@@ -460,7 +460,7 @@ watch(() => props.sessionKey, () => { state.accountImportVisible = false; });
       <el-button v-if="props.canManageAccounts" type="primary" @click="state.accountImportVisible = true">一键导入用户</el-button>
     </div>
 
-    <el-table v-if="state.tab === 'batches'" :data="state.batches" stripe size="small" v-loading="state.loading" class="edu-data-table">
+    <el-table width-storage-key="edu-data-panel:state-batches" v-if="state.tab === 'batches'" :data="state.batches" stripe size="small" v-loading="state.loading" class="edu-data-table">
       <el-table-column type="index" label="序号" width="60" />
       <el-table-column prop="import_type" label="类型" width="120">
         <template #default="{ row }">{{ typeLabel(row.import_type) }}</template>
@@ -482,7 +482,7 @@ watch(() => props.sessionKey, () => { state.accountImportVisible = false; });
       </el-table-column>
     </el-table>
 
-    <el-table v-else-if="['student', 'teaching_plan', 'course_offering'].includes(state.tab)" :data="state.sourceItems" stripe size="small" v-loading="state.sourceLoading" class="edu-data-table">
+    <el-table :width-storage-key="`edu-data-panel:state-sourceItems:${state.tab}`" v-else-if="['student', 'teaching_plan', 'course_offering'].includes(state.tab)" :data="state.sourceItems" stripe size="small" v-loading="state.sourceLoading" class="edu-data-table">
       <el-table-column type="index" label="序号" width="60" />
       <el-table-column v-if="state.tab === 'student'" prop="student_num" label="学号" width="120" />
       <el-table-column v-if="state.tab === 'student'" prop="student_name" label="学生" width="110" />
@@ -503,7 +503,7 @@ watch(() => props.sessionKey, () => { state.accountImportVisible = false; });
         <span>待确认业务候选</span>
         <el-button type="primary" :icon="Check" :loading="state.candidateSubmitting" :disabled="!props.canConfirm || !candidateSelectionReady" @click="confirmSelectedCandidates">生成业务草稿</el-button>
       </div>
-      <el-table :data="state.candidates" stripe size="small" v-loading="state.candidateLoading" class="edu-data-table">
+      <el-table width-storage-key="edu-data-panel:state-candidates" :data="state.candidates" stripe size="small" v-loading="state.candidateLoading" class="edu-data-table">
         <el-table-column label="选择" width="60">
           <template #default="{ row }"><el-checkbox :aria-label="`选择${row.name || '课程'}`" :disabled="!props.canConfirm || state.candidateSubmitting" :model-value="state.selectedCandidateIds.includes(Number(row.id))" @change="value => toggleCandidate(row, value)" /></template>
         </el-table-column>
@@ -520,7 +520,7 @@ watch(() => props.sessionKey, () => { state.accountImportVisible = false; });
       </el-table>
     </section>
 
-    <el-table v-else :data="state.issues" stripe size="small" class="edu-data-table">
+    <el-table width-storage-key="edu-data-panel:state-issues" v-else :data="state.issues" stripe size="small" class="edu-data-table">
       <el-table-column prop="batch_id" label="批次" width="80" />
       <el-table-column prop="row_number" label="行号" width="80" />
       <el-table-column prop="field_name" label="字段" width="140" />
@@ -570,7 +570,7 @@ watch(() => props.sessionKey, () => { state.accountImportVisible = false; });
         <p class="edu-detail-title">{{ state.selectedBatch?.name || '-' }} · {{ statusLabel(state.selectedBatch?.status) }}</p>
         <el-tabs>
           <el-tab-pane label="差异">
-            <el-table :data="state.detail.changes?.items || []" size="small" max-height="54vh">
+            <el-table width-storage-key="edu-data-panel:state-detail-changes-items" :data="state.detail.changes?.items || []" size="small" max-height="54vh">
               <el-table-column label="类型" width="80"><template #default="{ row }">{{ ({ created: '新增', updated: '更新', unchanged: '未变化', missing: '缺失', deleted: '删除' })[row.change_type] || row.change_type }}</template></el-table-column>
               <el-table-column label="数据记录" min-width="190" show-overflow-tooltip><template #default="{ row }">{{ row.after_json?.course_name || row.after_json?.student_name || row.before_json?.course_name || row.source_key }}</template></el-table-column>
               <el-table-column label="字段差异" min-width="380"><template #default="{ row }"><details class="edu-change-detail"><summary>查看字段变更</summary><EduFieldChanges :value="row.diff_json" /></details></template></el-table-column>
@@ -578,7 +578,7 @@ watch(() => props.sessionKey, () => { state.accountImportVisible = false; });
             <ListPagination layout="total, prev, pager, next" :current-page="state.detail.changes?.pagination?.page || 1" :page-size="20" :total="state.detail.changes?.pagination?.total || 0" @current-change="loadDetailPage('changes', $event)" />
           </el-tab-pane>
           <el-tab-pane label="问题">
-            <el-table :data="state.detail.issues?.items || []" size="small"><el-table-column prop="row_number" label="行号" width="80" /><el-table-column prop="field_name" label="字段" width="130" /><el-table-column prop="message" label="问题" min-width="320" /></el-table>
+            <el-table width-storage-key="edu-data-panel:state-detail-issues-items" :data="state.detail.issues?.items || []" size="small"><el-table-column prop="row_number" label="行号" width="80" /><el-table-column prop="field_name" label="字段" width="130" /><el-table-column prop="message" label="问题" min-width="320" /></el-table>
             <ListPagination layout="total, prev, pager, next" :current-page="state.detail.issues?.pagination?.page || 1" :page-size="20" :total="state.detail.issues?.pagination?.total || 0" @current-change="loadDetailPage('issues', $event)" />
           </el-tab-pane>
         </el-tabs>

@@ -400,7 +400,7 @@
                             <el-button size="small" @click="confirmAllPlanImportTypes">确认全部建议分类</el-button>
                           </div>
                         </div>
-                        <el-table :data="internshipState.planImport.items" height="100%" stripe size="small">
+                        <el-table :width-storage-key="`app:internshipState-planImport-items:${win.module.id}:${win.panel}`" :data="internshipState.planImport.items" height="100%" stripe size="small">
                           <el-table-column prop="row_number" label="行" width="62" fixed="left" />
                           <el-table-column prop="course_name" label="课程名称" min-width="170" fixed="left" />
                           <el-table-column prop="category_name" label="实习类别" width="110" />
@@ -467,7 +467,7 @@
                             title="存在错误行，确认时可选择跳过错误行，只导入有效基地资料"
                           />
                         </div>
-                        <el-table :data="internshipState.baseImport.items" height="100%" stripe size="small" row-key="row_number" v-loading="internshipState.loading">
+                        <el-table :width-storage-key="`app:internshipState-baseImport-items:${win.module.id}:${win.panel}`" :data="internshipState.baseImport.items" height="100%" stripe size="small" row-key="row_number" v-loading="internshipState.loading">
                           <el-table-column prop="row_number" label="行" width="62" fixed="left" />
                           <el-table-column prop="base_name" label="基地名称" min-width="210" fixed="left" />
                           <el-table-column prop="declaration_year" label="申报年份" width="92" />
@@ -820,7 +820,7 @@
                               <strong>绑定班级</strong>
                               <small>{{ internshipState.arrangementDetail.classes.length }} 个</small>
                             </header>
-                            <el-table :data="internshipState.arrangementDetail.classes" max-height="220" stripe>
+                            <el-table :width-storage-key="`app:internshipState-arrangementDetail-classes:${win.module.id}:${win.panel}`" :data="internshipState.arrangementDetail.classes" max-height="220" stripe>
                               <el-table-column type="index" label="序号" width="66" align="center" />
                               <el-table-column prop="class_name" label="班级" min-width="150" />
                               <el-table-column prop="class_num" label="班号" width="120" />
@@ -832,7 +832,7 @@
                               <strong>绑定学生</strong>
                               <small>{{ internshipState.arrangementDetail.students.length }} 人</small>
                             </header>
-                            <el-table :data="internshipState.arrangementDetail.students" max-height="280" stripe>
+                            <el-table :width-storage-key="`app:internshipState-arrangementDetail-students:${win.module.id}:${win.panel}`" :data="internshipState.arrangementDetail.students" max-height="280" stripe>
                               <el-table-column type="index" label="序号" width="66" align="center" />
                               <el-table-column prop="student_name" label="学生" width="120" />
                               <el-table-column prop="student_num" label="学号" width="130" />
@@ -1017,7 +1017,7 @@
                           <strong>近期任务</strong>
                           <small>{{ internshipState.lists.arrangements.pagination.total || 0 }} 条</small>
                         </header>
-                        <el-table :data="internshipState.lists.arrangements.items" height="100%" stripe>
+                        <el-table :width-storage-key="`app:internshipState-lists-arrangements-items:${win.module.id}:${win.panel}`" :data="internshipState.lists.arrangements.items" height="100%" stripe>
                           <el-table-column type="index" label="序号" width="66" align="center" />
                           <el-table-column prop="title" label="任务" min-width="170" />
                           <!-- 暂时隐藏学期列，后续需要时恢复。 -->
@@ -1041,7 +1041,7 @@
                           <strong>实习方式申请</strong>
                           <small>{{ internshipState.overview.applications_waiting || 0 }} 条</small>
                         </header>
-                        <el-table :data="internshipState.lists.applications.items" height="100%" stripe>
+                        <el-table :width-storage-key="`app:internshipState-lists-applications-items:${win.module.id}:${win.panel}`" :data="internshipState.lists.applications.items" height="100%" stripe>
                           <el-table-column type="index" label="序号" width="66" align="center" />
                           <el-table-column prop="student_name" label="学生" width="110" />
                           <el-table-column prop="arrangement_title" label="实习任务" min-width="170" />
@@ -2411,7 +2411,7 @@
                         </section>
                         <el-alert v-if="userAdminState.message" :title="userAdminState.message" type="warning" :closable="false" />
                         <template v-if="userAdminState.detailMode === 'logs'">
-                          <el-table
+                          <el-table :width-storage-key="`app:userAdminState-detail-logs:${win.module.id}:${win.panel}`"
                             :data="userAdminState.detail.logs"
                             height="340"
                             stripe
@@ -2450,7 +2450,7 @@
                               <strong>其他登录账号</strong>
                               <small>{{ userAdminState.detail.boundAccounts.length }} 个</small>
                             </header>
-                            <el-table :data="userAdminState.detail.boundAccounts" height="190" stripe v-loading="userAdminState.detailLoading">
+                            <el-table :width-storage-key="`app:userAdminState-detail-boundAccounts:${win.module.id}:${win.panel}`" :data="userAdminState.detail.boundAccounts" height="190" stripe v-loading="userAdminState.detailLoading">
                               <el-table-column type="index" label="序号" width="66" align="center" />
                               <el-table-column prop="id" label="ID" width="76" />
                               <el-table-column prop="login_name" label="登录账号" min-width="140" />
@@ -2470,7 +2470,7 @@
                               <strong>企业微信绑定</strong>
                               <small>{{ userAdminState.detail.wechatAccounts.filter(item => item.valid).length }} 个有效绑定</small>
                             </header>
-                            <el-table :data="userAdminState.detail.wechatAccounts" height="190" stripe empty-text="尚未绑定企业微信" v-loading="userAdminState.detailLoading">
+                            <el-table :width-storage-key="`app:userAdminState-detail-wechatAccounts:${win.module.id}:${win.panel}`" :data="userAdminState.detail.wechatAccounts" height="190" stripe empty-text="尚未绑定企业微信" v-loading="userAdminState.detailLoading">
                               <el-table-column type="index" label="序号" width="66" align="center" />
                               <el-table-column prop="wechat_userid" label="企业微信账号" min-width="150" />
                               <el-table-column prop="wechat_name" label="姓名" min-width="120" />
@@ -2562,7 +2562,7 @@
                     </div>
                     </div>
                   </div>
-                  <el-table :data="archiveStateForWindow(win).items" height="100%" stripe highlight-current-row @row-click="row => selectArchiveItem(archiveTypeForWindow(win), row)">
+                  <el-table :width-storage-key="`app:archiveStateForWindow-win-items:${win.module.id}:${win.panel}`" :data="archiveStateForWindow(win).items" height="100%" stripe highlight-current-row @row-click="row => selectArchiveItem(archiveTypeForWindow(win), row)">
                     <el-table-column type="index" label="序号" width="66" align="center" :index="index => tableSequence(index, archiveStateForWindow(win).pagination)" />
                     <el-table-column :prop="archiveIdFieldForWindow(win)" label="ID" width="76" />
                     <el-table-column
@@ -2644,7 +2644,7 @@
                     </el-button>
                   </div>
                   <section class="guide-admin-list">
-                    <el-table :data="guideAdminState.items" height="100%" stripe>
+                    <el-table :width-storage-key="`app:guideAdminState-items:${win.module.id}:${win.panel}`" :data="guideAdminState.items" height="100%" stripe>
                       <el-table-column type="index" label="序号" width="66" align="center" />
                       <el-table-column label="模块" width="150">
                         <template #default="{ row }">
@@ -3142,7 +3142,7 @@
                         </div>
                       </div>
                       <div class="message-template-table">
-                        <el-table :data="messageState.templates" height="100%" stripe v-loading="messageState.templateLoading">
+                        <el-table :width-storage-key="`app:messageState-templates:${win.module.id}:${win.panel}`" :data="messageState.templates" height="100%" stripe v-loading="messageState.templateLoading">
                           <el-table-column type="index" label="序号" width="66" align="center" :index="index => tableSequence(index, messageState.templatePagination)" />
                           <template #empty>
                             <div class="template-empty-state">
@@ -3253,7 +3253,7 @@
                       读取
                     </el-button>
                   </template></FilterToolbar>
-                  <el-table :data="fileState.items" height="100%" stripe>
+                  <el-table :width-storage-key="`app:fileState-items:${win.module.id}:${win.panel}`" :data="fileState.items" height="100%" stripe>
                     <el-table-column type="index" label="序号" width="66" align="center" :index="index => tableSequence(index, fileState.pagination)" />
                     <el-table-column label="文件" min-width="220">
                       <template #default="{ row }">
@@ -3507,7 +3507,7 @@
                       保存
                     </el-button>
                   </div>
-                  <el-table :data="adminState.scope.scopes" height="100%" stripe>
+                  <el-table :width-storage-key="`app:adminState-scope-scopes:${win.module.id}:${win.panel}`" :data="adminState.scope.scopes" height="100%" stripe>
                     <el-table-column type="index" label="序号" width="66" align="center" />
                     <el-table-column label="学院" min-width="150">
                       <template #default="{ row }">
@@ -3626,7 +3626,7 @@
                       重置
                     </el-button>
                   </template></FilterToolbar>
-                  <el-table :data="logState.items" height="100%" stripe>
+                  <el-table :width-storage-key="`app:logState-items:${win.module.id}:${win.panel}`" :data="logState.items" height="100%" stripe>
                     <el-table-column type="index" label="序号" width="66" align="center" :index="index => tableSequence(index, logState.pagination)" />
                     <el-table-column prop="created_at" label="时间" width="168" />
                     <el-table-column label="账号" min-width="150">
@@ -3844,66 +3844,24 @@
                           </span>
                         </div>
                         <div class="course-score-scroll">
-                          <table class="course-score-table">
-                            <thead>
-                              <tr>
-                                <th rowspan="2" class="score-select-column">
-                                  <input
-                                    type="checkbox"
-                                    :checked="allVisibleScoreRowsSelected"
-                                    :disabled="!statState.rows.length"
-                                    aria-label="选择当前页全部学生"
-                                    @change="toggleAllVisibleScoreRows"
-                                  >
-                                </th>
-                                <th rowspan="2">序号</th>
-                                <th rowspan="2">学号</th>
-                                <th rowspan="2">姓名</th>
-                                <th rowspan="2">行政班级</th>
-                                <th :colspan="scoreSheetAttendanceIndexes.length + 1">考勤与课堂表现（占20%）</th>
-                                <th :colspan="scoreSheetProjectIndexes.length">项目（实操）成绩（占70%）</th>
-                                <th rowspan="2">课程报告<br>10%</th>
-                                <th rowspan="2">总分</th>
-                              </tr>
-                              <tr>
-                                <th v-for="index in scoreSheetAttendanceIndexes" :key="`att-${index}`">{{ index }}</th>
-                                <th>小计</th>
-                                <th v-for="index in scoreSheetProjectIndexes" :key="`project-${index}`">{{ index }}</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              <tr v-for="row in statState.rows" :key="row.student_id || row.sequence">
-                                <td class="score-select-column">
-                                  <input
-                                    v-model="statState.selectedStudentIds"
-                                    type="checkbox"
-                                    :value="Number(row.student_id)"
-                                    :disabled="!row.student_id"
-                                    :aria-label="`选择${row.student_name || row.student_num || '学生'}`"
-                                  >
-                                </td>
-                                <td>{{ statCellText(row.sequence) }}</td>
-                                <td>{{ statCellText(row.student_num) }}</td>
-                                <td>{{ statCellText(row.student_name) }}</td>
-                                <td>{{ statCellText(row.class_name) }}</td>
-                                <td v-for="index in scoreSheetAttendanceIndexes" :key="`row-att-${row.sequence}-${index}`">{{ scoreSheetCell(row, `attendance_${index}`) }}</td>
-                                <td>{{ scoreSheetCell(row, 'attendance_total') }}</td>
-                                <td v-for="index in scoreSheetProjectIndexes" :key="`row-project-${row.sequence}-${index}`">{{ scoreSheetCell(row, `project_${index}`) }}</td>
-                                <td>{{ scoreSheetCell(row, 'report_score') }}</td>
-                                <td>{{ scoreSheetCell(row, 'total_score') }}</td>
-                              </tr>
-                              <tr v-if="!statState.rows.length">
-                                <td :colspan="scoreSheetColumnCount">暂无成绩记载数据</td>
-                              </tr>
-                            </tbody>
-                          </table>
+                          <CourseScoreTable
+                            :rows="statState.rows"
+                            v-model:selected-student-ids="statState.selectedStudentIds"
+                            :attendance-indexes="scoreSheetAttendanceIndexes"
+                            :project-indexes="scoreSheetProjectIndexes"
+                            :all-visible-selected="allVisibleScoreRowsSelected"
+                            :format-cell="statCellText"
+                            :score-cell="scoreSheetCell"
+                            :storage-key="`course-score:${currentStatReport.key}`"
+                            @select-all="toggleAllVisibleScoreRows"
+                          />
                         </div>
                         <footer>
                           <span>注：考勤与课堂表现、项目实操、课程报告按成绩规则记录，空白表示未录入。</span>
                           <span>生成时间：{{ statState.generated_at || '-' }}</span>
                         </footer>
                       </section>
-                      <el-table v-else :data="statState.rows" height="100%" stripe v-loading="statState.loading">
+                      <el-table :width-storage-key="`app:statState-rows:${win.module.id}:${win.panel}:${currentStatReport.key}`" v-else :data="statState.rows" height="100%" stripe v-loading="statState.loading">
                         <el-table-column type="index" label="序号" width="66" align="center" :index="index => tableSequence(index, statState.pagination)" />
                         <el-table-column
                           v-for="column in currentStatColumns"
@@ -4293,7 +4251,9 @@ import FilterToolbar from './components/FilterToolbar.vue';
 import DesktopTitlebar from './components/DesktopTitlebar.vue';
 import WechatLogin from '../../shared/components/WechatLogin.vue';
 import EmbeddedExternalPage from './components/EmbeddedExternalPage.vue';
-import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, provide, reactive, ref, watch } from 'vue';
+import { TABLE_WIDTH_SCOPE } from './utils/tableWidths';
+import CourseScoreTable from './components/CourseScoreTable.vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import zhCn from 'element-plus/es/locale/lang/zh-cn';
 import {
@@ -5821,6 +5781,10 @@ const publicSchoolOrigin = window.__PRACTICAL_DESKTOP__?.serverOrigin || window.
 const startupState = reactive({ loading: true, error: '' });
 const loginMethod = ref('password');
 const themeScope = computed(() => permissionState.context.user_id ? `${publicSchoolOrigin}:${permissionState.context.school_database_id}:${permissionState.context.user_id}` : '');
+const tableWidthScope = computed(() => permissionState.context.account_id
+  ? JSON.stringify([publicSchoolOrigin, permissionState.context.school_database_id || permissionState.context.school_id,
+    permissionState.context.account_id, permissionState.context.role_id, permissionState.context.role_type]) : '');
+provide(TABLE_WIDTH_SCOPE, tableWidthScope);
 const localTheme = useLocalTheme(themeScope);
 const messagePreview = reactive({ loading: false, count: null, items: [], error: '' });
 const currentExternalItem = ref(null);
@@ -5948,7 +5912,6 @@ const currentStatReport = computed(() => statReports.find(item => item.key === s
 const statCardIcons = [UserRound, ClipboardList, CheckCircle2, UsersRound, GraduationCap, MapPin];
 const scoreSheetAttendanceIndexes = Array.from({ length: 16 }, (_, index) => index + 1);
 const scoreSheetProjectIndexes = Array.from({ length: 12 }, (_, index) => index + 1);
-const scoreSheetColumnCount = 36;
 const allVisibleScoreRowsSelected = computed(() => {
   const ids = statState.rows.map(row => Number(row.student_id)).filter(Boolean);
   return ids.length > 0 && ids.every(id => statState.selectedStudentIds.includes(id));

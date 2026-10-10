@@ -31,7 +31,6 @@ import {
   ElSlider,
   ElSwitch,
   ElTabPane,
-  ElTable,
   ElTableColumn,
   ElTabs,
   ElTag,
@@ -44,6 +43,7 @@ import 'element-plus/dist/index.css';
 import 'element-plus/theme-chalk/dark/css-vars.css';
 import App from './App.vue';
 import ListPagination from './components/ListPagination.vue';
+import LocalWidthTable from './components/LocalWidthTable';
 import './styles.css';
 import './desktop-appearance.css';
 import './theme.css';
@@ -53,6 +53,7 @@ configureFilePreview({ request, backendUrl });
 
 const app = createApp(App);
 app.component('ListPagination', ListPagination);
+app.component('ElTable', LocalWidthTable);
 
 [
   ElAlert,
@@ -85,7 +86,6 @@ app.component('ListPagination', ListPagination);
   ElSlider,
   ElSwitch,
   ElTabPane,
-  ElTable,
   ElTableColumn,
   ElTabs,
   ElTag,

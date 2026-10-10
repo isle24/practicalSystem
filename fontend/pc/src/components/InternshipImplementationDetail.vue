@@ -35,7 +35,7 @@
           <el-select-v2 v-model="newStudentId" :options="studentSelectOptions" filterable clearable placeholder="选择任务班级内学生" />
           <el-button type="primary" :icon="UserPlus" :disabled="!newStudentId || loading" :loading="loading" @click="addStudent">绑定学生</el-button>
         </section>
-        <el-table :data="visibleStudents" height="100%" stripe size="small">
+        <el-table width-storage-key="internship-implementation-detail:visibleStudents" :data="visibleStudents" height="100%" stripe size="small">
           <el-table-column type="index" label="序号" width="66" align="center" :index="index => (studentPage - 1) * detailPageSize + index + 1" />
           <el-table-column prop="student_name" label="学生" width="110" />
           <el-table-column prop="student_num" label="学号" width="130" />
@@ -55,7 +55,7 @@
       </template>
 
       <template v-else-if="activeTab === 'changes'">
-        <el-table :data="changes" height="100%" stripe size="small">
+        <el-table width-storage-key="internship-implementation-detail:changes" :data="changes" height="100%" stripe size="small">
           <el-table-column type="index" label="序号" width="66" align="center" />
           <el-table-column prop="reason" label="变更原因" min-width="220" />
           <el-table-column prop="submitter_name" label="提交人" width="110" />

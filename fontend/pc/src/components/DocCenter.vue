@@ -40,7 +40,7 @@
       </aside>
 
       <section class="support-table">
-        <el-table :data="articles" height="100%" stripe v-loading="loading" @row-click="openDetail">
+        <el-table width-storage-key="doc-center:articles" :data="articles" height="100%" stripe v-loading="loading" @row-click="openDetail">
           <el-table-column type="index" label="序号" width="66" align="center" :index="index => tableSequence(index, pagination)" />
           <el-table-column prop="title" label="标题" min-width="220" />
           <el-table-column prop="category_name" label="分类" width="130" />
@@ -193,7 +193,7 @@
     </OperationDialog>
 
     <OperationDialog :visible="historyDialog.visible" title="版本记录" dialog-class="history-dialog" @close="historyDialog.visible = false">
-        <el-table :data="historyDialog.items" height="100%" stripe>
+        <el-table width-storage-key="doc-center:historyDialog-items" :data="historyDialog.items" height="100%" stripe>
           <el-table-column type="index" label="序号" width="66" align="center" />
           <el-table-column prop="version" label="版本" width="90" />
           <el-table-column prop="title" label="标题" min-width="180" />

@@ -36,7 +36,7 @@
           </div>
           <el-button v-if="canManage" type="primary" plain :icon="Plus" @click="emit('add-task', plan)">新增任务</el-button>
         </header>
-        <el-table v-if="tasks.length" :data="tasks" max-height="360" stripe size="small">
+        <el-table width-storage-key="internship-plan-detail:tasks" v-if="tasks.length" :data="tasks" max-height="360" stripe size="small">
           <el-table-column type="index" label="序号" width="66" align="center" />
           <el-table-column prop="task_no" label="任务编号" width="130" />
           <el-table-column prop="title" label="任务名称" min-width="180" />

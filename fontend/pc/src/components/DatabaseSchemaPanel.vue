@@ -41,7 +41,7 @@
         <el-tag type="info">保留现状 {{ state.result.summary.keep }}</el-tag>
       </div>
       <div class="database-schema-table">
-        <el-table :data="state.result.differences" height="100%" size="small" stripe empty-text="未发现结构差异">
+        <el-table width-storage-key="database-schema-panel:state-result-differences" :data="state.result.differences" height="100%" size="small" stripe empty-text="未发现结构差异">
           <el-table-column prop="table" label="表名" min-width="170" show-overflow-tooltip />
           <el-table-column prop="object" label="对象" min-width="150" show-overflow-tooltip />
           <el-table-column prop="type" label="差异类型" min-width="150" show-overflow-tooltip />

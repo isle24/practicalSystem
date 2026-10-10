@@ -58,7 +58,7 @@
         <el-tab-pane label="已忽略" name="ignored" />
       </el-tabs>
 
-      <el-table :data="state.items" stripe size="small" v-loading="state.loading" class="education-sync-table">
+      <el-table width-storage-key="education-plan-sync-panel:state-items" :data="state.items" stripe size="small" v-loading="state.loading" class="education-sync-table">
         <el-table-column type="index" label="序号" width="66" align="center" />
         <el-table-column prop="course_name" label="课程名称" min-width="190" show-overflow-tooltip />
         <el-table-column prop="course_code" label="课程代码" width="130" />
@@ -125,7 +125,7 @@
           :closable="false"
           title="确认后生成本地计划草稿；实习类别仍需在计划表补充后再提交审核"
         />
-        <el-table :data="state.detail.diff || []" size="small" stripe>
+        <el-table width-storage-key="education-plan-sync-panel:state-detail-diff" :data="state.detail.diff || []" size="small" stripe>
           <el-table-column prop="label" label="字段" width="130" />
           <el-table-column prop="source" label="教务系统" min-width="220" show-overflow-tooltip />
           <el-table-column prop="local" label="本地数据" min-width="220" show-overflow-tooltip />

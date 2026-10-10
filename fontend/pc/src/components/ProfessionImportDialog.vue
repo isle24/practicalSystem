@@ -107,7 +107,7 @@ watch(() => props.visible, (visible) => {
           <span>重复行 {{ state.summary.duplicate_rows || 0 }}</span>
         </div>
         <el-alert v-if="state.summary.error_rows" title="存在错误行。确认时可选择跳过错误行，只导入可导入的数据。" type="warning" :closable="false" />
-        <el-table :data="visibleItems" height="360" stripe size="small">
+        <el-table width-storage-key="profession-import-dialog:visibleItems" :data="visibleItems" height="360" stripe size="small">
           <el-table-column prop="row_number" label="行号" width="68" />
           <el-table-column prop="dep_name" label="所属学院" min-width="150" />
           <el-table-column prop="profession_code" label="专业代码" width="110" />

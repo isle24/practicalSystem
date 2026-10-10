@@ -2003,72 +2003,33 @@ a {
 
 .course-score-scroll {
   min-height: 0;
-  border: 1px solid #d8e1ec;
   border-radius: 8px;
-  overflow: auto;
-  background: #fff;
+  overflow: hidden;
+  background: var(--surface);
 }
 
 .course-score-table {
-  width: max-content;
-  min-width: 100%;
-  border-collapse: separate;
-  border-spacing: 0;
-  color: var(--text);
+  width: 100%;
   font-size: 12px;
 }
 
-.course-score-table th,
-.course-score-table td {
-  min-width: 44px;
-  height: 34px;
-  border-right: 1px solid #d8e1ec;
-  border-bottom: 1px solid #d8e1ec;
-  padding: 5px 7px;
-  text-align: center;
-  white-space: nowrap;
-}
-
-.course-score-table th {
-  position: sticky;
-  top: 0;
-  z-index: 2;
-  color: #243447;
-  font-weight: 700;
-  background: #eef5fb;
-}
-
-.course-score-table tr:first-child th {
-  border-top: 0;
-}
-
-.course-score-table th:first-child,
-.course-score-table td:first-child {
-  border-left: 0;
-}
-
-.course-score-table .score-select-column {
-  width: 42px;
-  min-width: 42px;
-  padding: 5px 4px;
-}
-
-.course-score-table .score-select-column input {
+.course-score-table input[type="checkbox"] {
   width: 15px;
   height: 15px;
   margin: 0;
   accent-color: var(--primary);
 }
 
-.course-score-table tbody tr:hover td {
-  background: #f7fbff;
+.resizable-data-table {
+  --el-table-border-color: var(--line);
 }
 
-.course-score-table td:nth-child(2),
-.course-score-table td:nth-child(3),
-.course-score-table td:nth-child(4),
-.course-score-table td:nth-child(5) {
-  min-width: 76px;
+.resizable-data-table .el-table__header th.el-table__cell {
+  border-right-color: var(--line);
+}
+
+.resizable-data-table .el-table__column-resize-proxy {
+  border-left-color: var(--primary);
 }
 
 .course-score-sheet > footer {

@@ -90,12 +90,13 @@
       </div>
     </div>
 
-    <el-table :data="rows" row-key="id" height="100%" size="small" stripe v-loading="loading" @selection-change="selection => emit('selection-change', selection)">
+    <el-table :width-storage-key="storageKey" :data="rows" row-key="id" height="100%" size="small" stripe v-loading="loading" @selection-change="selection => emit('selection-change', selection)">
       <el-table-column v-if="selectable" type="selection" width="46" fixed="left" :reserve-selection="reserveSelection" />
       <el-table-column type="index" label="序号" width="66" fixed="left" align="center" :index="index => tableSequence(index, pagination)" />
       <el-table-column
         v-for="column in visibleColumns"
         :key="column.key || column.prop"
+        :column-key="column.key || column.prop"
         :prop="column.prop"
         :label="column.label"
         :width="column.width"

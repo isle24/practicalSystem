@@ -170,7 +170,7 @@
     <input ref="uploadInput" type="file" accept=".pdf,.doc,.docx,.xls,.xlsx" hidden @change="uploadFinalFile">
 
     <ManagedElementDialog v-model="historyVisible" append-to-body title="材料历史版本" width="760px">
-      <el-table :data="historyItems" border empty-text="暂无历史版本">
+      <el-table width-storage-key="internship-archive-detail:historyItems" :data="historyItems" border empty-text="暂无历史版本">
         <el-table-column type="index" label="序号" width="66" align="center" />
         <el-table-column prop="archive_version" label="版本" width="80" />
         <el-table-column prop="status" label="状态" width="100" />

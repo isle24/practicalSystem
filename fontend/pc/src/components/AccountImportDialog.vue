@@ -307,7 +307,7 @@ onBeforeUnmount(() => {
           <template v-if="state.preview">
             <p>共 {{ state.preview.total_rows }} 行，可导入 {{ state.preview.valid_rows }} 行，问题 {{ state.preview.invalid_rows }} 行，提示 {{ state.preview.warning_rows || 0 }} 行。预览最多显示 50 行。</p>
             <el-alert v-if="Number(state.preview.invalid_rows) > 0" title="存在错误行，确认导入时将跳过错误行，只处理可导入数据；邮箱格式提示不影响导入。" type="warning" :closable="false" />
-            <el-table :data="state.preview.items || []" max-height="220" stripe size="small">
+            <el-table width-storage-key="account-import-dialog:state-preview-items" :data="state.preview.items || []" max-height="220" stripe size="small">
               <el-table-column prop="row_number" label="行号" width="65" />
               <el-table-column prop="values.teacher_num" label="工号" min-width="110" />
               <el-table-column prop="values.teacher_name" label="姓名" min-width="100" />
@@ -334,7 +334,7 @@ onBeforeUnmount(() => {
 
       <section class="account-import-section">
         <div class="account-import-actions"><strong>最近导入任务</strong><el-button link :icon="RefreshCw" :loading="state.loading" :disabled="state.submitting" @click="loadTasks()">刷新</el-button><small>关闭弹窗不会取消任务。</small></div>
-        <el-table :data="state.tasks" max-height="200" stripe size="small" v-loading="state.loading" empty-text="暂无导入任务">
+        <el-table width-storage-key="account-import-dialog:state-tasks" :data="state.tasks" max-height="200" stripe size="small" v-loading="state.loading" empty-text="暂无导入任务">
           <el-table-column prop="id" label="任务" width="75" />
           <el-table-column prop="created_at" label="创建时间" min-width="160" />
           <el-table-column label="状态" width="105"><template #default="{ row }"><el-tag :type="statusType(row.status)">{{ statusText(row.status) }}</el-tag></template></el-table-column>

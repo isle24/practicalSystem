@@ -49,9 +49,9 @@
       </div>
       <div class="social-overview-grid social-stat-summary"><article v-for="item in statisticCards" :key="item.key"><span class="social-overview-icon" :class="item.tone"><component :is="item.icon" :size="20" /></span><div><small>{{ item.label }}</small><strong>{{ state.statistics.summary?.[item.key] || 0 }}</strong></div></article></div>
       <div class="social-stat-grid">
-        <section class="social-stat-card"><header><strong>按年级</strong><small>计划数量</small></header><el-table :data="state.statistics.by_grade || []" size="small" height="250"><el-table-column type="index" label="序号" width="66" /><el-table-column prop="grade_name" label="年级" /><el-table-column prop="plan_count" label="计划数" width="100" /></el-table></section>
-        <section class="social-stat-card"><header><strong>实践模式</strong><small>项目数量</small></header><el-table :data="state.statistics.by_mode || []" size="small" height="250"><el-table-column type="index" label="序号" width="66" /><el-table-column prop="practice_mode" label="模式"><template #default="{ row }">{{ modeText(row.practice_mode) }}</template></el-table-column><el-table-column prop="project_count" label="项目数" width="100" /><el-table-column prop="plan_count" label="计划数" width="100" /></el-table></section>
-        <section class="social-stat-card social-stat-card-wide"><header><strong>学院参与情况</strong><small>学生参与与项目分配</small></header><el-table :data="state.statistics.by_college || []" size="small" height="280"><el-table-column type="index" label="序号" width="66" /><el-table-column prop="dep_name" label="学院" min-width="180" /><el-table-column prop="student_count" label="学生数" width="100" /><el-table-column prop="assigned_count" label="已分配/已参与" width="130" /></el-table></section>
+        <section class="social-stat-card"><header><strong>按年级</strong><small>计划数量</small></header><el-table width-storage-key="social-practice-panel:state-statistics-by-grade" :data="state.statistics.by_grade || []" size="small" height="250"><el-table-column type="index" label="序号" width="66" /><el-table-column prop="grade_name" label="年级" /><el-table-column prop="plan_count" label="计划数" width="100" /></el-table></section>
+        <section class="social-stat-card"><header><strong>实践模式</strong><small>项目数量</small></header><el-table width-storage-key="social-practice-panel:state-statistics-by-mode" :data="state.statistics.by_mode || []" size="small" height="250"><el-table-column type="index" label="序号" width="66" /><el-table-column prop="practice_mode" label="模式"><template #default="{ row }">{{ modeText(row.practice_mode) }}</template></el-table-column><el-table-column prop="project_count" label="项目数" width="100" /><el-table-column prop="plan_count" label="计划数" width="100" /></el-table></section>
+        <section class="social-stat-card social-stat-card-wide"><header><strong>学院参与情况</strong><small>学生参与与项目分配</small></header><el-table width-storage-key="social-practice-panel:state-statistics-by-college" :data="state.statistics.by_college || []" size="small" height="280"><el-table-column type="index" label="序号" width="66" /><el-table-column prop="dep_name" label="学院" min-width="180" /><el-table-column prop="student_count" label="学生数" width="100" /><el-table-column prop="assigned_count" label="已分配/已参与" width="130" /></el-table></section>
       </div>
     </template>
 
@@ -279,16 +279,16 @@
         </section>
         <section v-if="state.detail.teachers?.length" class="social-detail-block">
           <strong>指导教师</strong>
-          <el-table :data="state.detail.teachers" size="small"><el-table-column type="index" label="序号" width="66" /><el-table-column prop="teacher_name" label="教师" /><el-table-column prop="teacher_role" label="角色"><template #default="{ row }">{{ row.teacher_role === 'leader' ? '负责人' : '指导教师' }}</template></el-table-column><el-table-column prop="capacity" label="容量" /></el-table>
+          <el-table width-storage-key="social-practice-panel:state-detail-teachers" :data="state.detail.teachers" size="small"><el-table-column type="index" label="序号" width="66" /><el-table-column prop="teacher_name" label="教师" /><el-table-column prop="teacher_role" label="角色"><template #default="{ row }">{{ row.teacher_role === 'leader' ? '负责人' : '指导教师' }}</template></el-table-column><el-table-column prop="capacity" label="容量" /></el-table>
         </section>
         <section v-if="state.detail.participants?.length" class="social-detail-block">
           <strong>参与学生</strong>
-          <el-table :data="visibleDetailParticipants" size="small"><el-table-column type="index" label="序号" width="66" :index="index => (detailParticipantPage - 1) * detailPageSize + index + 1" /><el-table-column prop="student_name" label="学生" /><el-table-column prop="student_num" label="学号" /><el-table-column prop="teacher_name" label="指导教师" /></el-table>
+          <el-table width-storage-key="social-practice-panel:visibleDetailParticipants" :data="visibleDetailParticipants" size="small"><el-table-column type="index" label="序号" width="66" :index="index => (detailParticipantPage - 1) * detailPageSize + index + 1" /><el-table-column prop="student_name" label="学生" /><el-table-column prop="student_num" label="学号" /><el-table-column prop="teacher_name" label="指导教师" /></el-table>
           <ListPagination v-model:current-page="detailParticipantPage" layout="total, prev, pager, next" :page-size="detailPageSize" :total="state.detail.participants.length" />
         </section>
         <section v-if="state.detail.members?.length" class="social-detail-block">
           <strong>团队成员</strong>
-          <el-table :data="visibleDetailMembers" size="small"><el-table-column type="index" label="序号" width="66" :index="index => (detailMemberPage - 1) * detailPageSize + index + 1" /><el-table-column prop="student_name" label="学生" /><el-table-column prop="student_num" label="学号" /><el-table-column prop="confirm_status" label="确认状态"><template #default="{ row }">{{ confirmStatusText(row.confirm_status) }}</template></el-table-column></el-table>
+          <el-table width-storage-key="social-practice-panel:visibleDetailMembers" :data="visibleDetailMembers" size="small"><el-table-column type="index" label="序号" width="66" :index="index => (detailMemberPage - 1) * detailPageSize + index + 1" /><el-table-column prop="student_name" label="学生" /><el-table-column prop="student_num" label="学号" /><el-table-column prop="confirm_status" label="确认状态"><template #default="{ row }">{{ confirmStatusText(row.confirm_status) }}</template></el-table-column></el-table>
           <ListPagination v-model:current-page="detailMemberPage" layout="total, prev, pager, next" :page-size="detailPageSize" :total="state.detail.members.length" />
         </section>
       </div>
@@ -351,7 +351,7 @@
     <OperationDialog :visible="state.dialog.type === 'assignStudents'" title="分配学生与指导教师" :busy="state.saving" dialog-class="social-practice-assignment-dialog" @close="closeDialog">
       <div class="social-student-assignment">
         <header><el-button :icon="Plus" @click="addParticipant">添加学生</el-button><small>每名学生必须绑定当前项目中的一名指导教师。</small></header>
-        <el-table :data="visibleAssignmentParticipants" size="small" height="420">
+        <el-table width-storage-key="social-practice-panel:visibleAssignmentParticipants" :data="visibleAssignmentParticipants" size="small" height="420">
           <el-table-column type="index" label="序号" width="66" :index="index => (assignmentPage - 1) * detailPageSize + index + 1" />
           <el-table-column label="学生" min-width="220"><template #default="{ row }"><el-select-v2 v-model="row.student_id" filterable placeholder="请选择学生" :options="studentSelectOptions" /></template></el-table-column>
           <el-table-column label="指导教师" min-width="200"><template #default="{ row }"><el-select-v2 v-model="row.teacher_id" filterable placeholder="请选择指导教师" :options="assignmentTeacherSelectOptions" /></template></el-table-column>
@@ -399,7 +399,7 @@
           <span>错误 {{ state.planImport.summary.error_rows || 0 }} 条</span>
           <span>重复 {{ state.planImport.summary.duplicate_rows || 0 }} 条</span>
         </div>
-        <el-table v-if="state.planImport.items.length" :data="visiblePlanImportItems" size="small" height="390">
+        <el-table width-storage-key="social-practice-panel:visiblePlanImportItems" v-if="state.planImport.items.length" :data="visiblePlanImportItems" size="small" height="390">
           <el-table-column type="index" label="序号" width="66" :index="index => (planImportPage - 1) * detailPageSize + index + 1" />
           <el-table-column prop="title" label="计划名称" min-width="180" />
           <el-table-column prop="grade_name" label="年级" width="110" />

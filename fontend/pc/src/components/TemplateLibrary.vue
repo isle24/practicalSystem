@@ -53,7 +53,7 @@
     </div>
 
     <section v-if="activeTab === 'file'" class="support-table">
-      <el-table :data="templates" height="100%" stripe v-loading="loading">
+      <el-table width-storage-key="template-library:templates" :data="templates" height="100%" stripe v-loading="loading">
         <el-table-column type="index" label="序号" width="66" align="center" :index="index => tableSequence(index, pagination)" />
         <template #empty>
           <div class="template-empty-state">
@@ -156,7 +156,7 @@
         </div>
       </div>
 
-      <el-table :data="messageTemplates" height="100%" stripe v-loading="messageLoading">
+      <el-table width-storage-key="template-library:messageTemplates" :data="messageTemplates" height="100%" stripe v-loading="messageLoading">
         <el-table-column type="index" label="序号" width="66" align="center" :index="index => tableSequence(index, messagePagination)" />
         <template #empty>
           <div class="template-empty-state">

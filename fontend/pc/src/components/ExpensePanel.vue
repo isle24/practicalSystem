@@ -90,7 +90,14 @@ watch(() => props.openExpenseId, openExpense, { immediate: true });
   <section class="expense-panel" :aria-busy="busy">
     <header class="expense-panel-toolbar"><div><h2>经费管理</h2><p>基地建设费用申请</p></div><div><button :disabled="busy" @click="load">刷新</button><button v-if="canCreate" class="primary" :disabled="busy" @click="openCreate">新建申请</button></div></header>
     <p v-if="message" class="expense-message" role="status">{{ message }}</p>
-    <table v-if="rows.length" class="expense-table"><thead><tr><th>审批编号</th><th>基地</th><th>单位</th><th>总金额</th><th>状态</th><th>操作</th></tr></thead><tbody><tr v-for="row in rows" :key="row.id"><td>{{ row.code || row.id }}</td><td>{{ row.title || row.name || '—' }}</td><td>{{ row.name || '—' }}</td><td>{{ row.total_amount || row.amount || '0.00' }}</td><td>{{ statusText(row.workflow_status) }}</td><td><button v-if="canEdit(row)" @click="openEdit(row)">编辑</button><button v-if="canEdit(row)" class="primary" @click="editAndSubmit(row)">提交</button><button @click="openExpense(row.id)">查看详情</button><button v-if="canExport" @click="exportItem(row, 'docx')">Word</button><button v-if="canExport" @click="exportItem(row, 'pdf')">PDF</button></td></tr></tbody></table>
+    <el-table v-if="rows.length" :data="rows" row-key="id" class="expense-table" width-storage-key="expense-list">
+      <el-table-column prop="code" column-key="code" label="审批编号" min-width="140"><template #default="{ row }">{{ row.code || row.id }}</template></el-table-column>
+      <el-table-column prop="title" column-key="title" label="基地" min-width="180"><template #default="{ row }">{{ row.title || row.name || '—' }}</template></el-table-column>
+      <el-table-column prop="name" column-key="name" label="单位" min-width="180"><template #default="{ row }">{{ row.name || '—' }}</template></el-table-column>
+      <el-table-column prop="total_amount" column-key="total_amount" label="总金额" min-width="120"><template #default="{ row }">{{ row.total_amount || row.amount || '0.00' }}</template></el-table-column>
+      <el-table-column prop="workflow_status" column-key="workflow_status" label="状态" min-width="100"><template #default="{ row }">{{ statusText(row.workflow_status) }}</template></el-table-column>
+      <el-table-column column-key="actions" label="操作" min-width="340"><template #default="{ row }"><button v-if="canEdit(row)" @click="openEdit(row)">编辑</button><button v-if="canEdit(row)" class="primary" @click="editAndSubmit(row)">提交</button><button @click="openExpense(row.id)">查看详情</button><button v-if="canExport" @click="exportItem(row, 'docx')">Word</button><button v-if="canExport" @click="exportItem(row, 'pdf')">PDF</button></template></el-table-column>
+    </el-table>
     <p v-else-if="!busy" class="expense-empty">暂无费用申请。</p>
     <div v-if="editorVisible" class="expense-editor"><div class="expense-editor-card"><header><h3>{{ form.id ? '编辑费用申请' : '新建费用申请' }}</h3><button @click="editorVisible = false">关闭</button></header>
       <label>申请单位<select v-model.number="form.dep_id"><option :value="0">请选择单位</option><option v-for="unit in options.units" :key="unit.dep_id" :value="Number(unit.dep_id)">{{ unit.dep_name }}</option></select></label><label>基地<select v-model.number="form.base_id" @change="selectBase"><option :value="0">请选择基地</option><option v-for="base in options.bases" :key="base.id" :value="Number(base.id)">{{ base.name }}</option></select></label><label>学年学期<select v-model="form.semester"><option value="">未选择</option><option v-for="term in options.semesters" :key="term" :value="term">{{ term }}</option></select></label><p>基地类型：{{ form.base_type || '—' }}；基地类别：{{ form.base_category || '—' }}</p><label>备注<textarea v-model.trim="form.remark" rows="3"></textarea></label>
@@ -101,7 +108,10 @@ watch(() => props.openExpenseId, openExpense, { immediate: true });
       <article class="expense-detail">
         <header><h3>费用申请详情</h3><button @click="selected = null">关闭</button></header>
         <dl class="expense-detail-fields"><dt>审批编号</dt><dd>{{ selected.code || selected.id }}</dd><dt>申请人</dt><dd>{{ selected.submitter_name || `账号 ${selected.submitter_id || '—'}` }}</dd><dt>申请单位</dt><dd>{{ selected.name || '—' }}</dd><dt>基地名称</dt><dd>{{ selected.title || '—' }}</dd><dt>学年学期</dt><dd>{{ selected.semester || '—' }}</dd><dt>基地类型 / 类别</dt><dd>{{ selected.base_type || '—' }} / {{ selected.base_category || '—' }}</dd><dt>提交时间</dt><dd>{{ selected.submitted_at || selected.created_at || '—' }}</dd><dt>状态</dt><dd>{{ statusText(selected.workflow_status) }}</dd></dl>
-        <table v-if="selected.items?.length" class="expense-table"><thead><tr><th>建设项目</th><th>项目金额</th></tr></thead><tbody><tr v-for="(item, index) in selected.items" :key="item.id || index"><td>{{ item.project }}</td><td>{{ item.amount }}</td></tr></tbody></table>
+        <el-table v-if="selected.items?.length" :data="selected.items" class="expense-table" width-storage-key="expense-item-detail">
+          <el-table-column prop="project" column-key="project" label="建设项目" min-width="300" />
+          <el-table-column prop="amount" column-key="amount" label="项目金额" min-width="160" />
+        </el-table>
         <p class="expense-detail-total">合计：{{ selected.total_amount || selected.amount || '0.00' }}（{{ selected.amount_upper || '—' }}）</p>
         <ul v-if="selected.attachments?.length" class="expense-attachments"><li v-for="file in selected.attachments" :key="file.file_id"><a :href="backendUrl(file.url)" target="_blank" rel="noopener noreferrer">{{ file.name }}</a></li></ul><p v-else class="expense-muted">无附件</p>
         <p class="expense-detail-remark">备注：{{ selected.remark || '无' }}</p>
@@ -128,9 +138,8 @@ h2,h3,p { margin: 0; }
 button { border: 1px solid #d6deea; border-radius: 5px; padding: 7px 12px; background: #fff; color: #253248; cursor: pointer; }
 button.primary { color: #fff; border-color: #2e68b3; background: #2e68b3; }
 button:disabled { opacity: .5; cursor: default; }
-.expense-table { width: 100%; border-collapse: collapse; margin-top: 18px; }
-th,td { border-bottom: 1px solid #e8edf3; padding: 10px; text-align: left; font-size: 13px; }
-td button { margin-right: 6px; }
+.expense-table { width: 100%; margin-top: 18px; }
+.expense-table :deep(.cell button) { margin-right: 6px; }
 .expense-editor { position: fixed; inset: 0; z-index: 20; background: rgba(20,31,48,.35); display: grid; place-items: center; padding: 20px; }
 .expense-editor-card,.expense-detail { background: #fff; border-radius: 9px; width: min(760px,calc(100vw - 40px)); max-height: 90vh; overflow: auto; padding: 20px; box-sizing: border-box; }
 .expense-detail-backdrop { position: fixed; inset: 0; z-index: 21; background: rgba(20,31,48,.35); display: grid; place-items: center; padding: 20px; box-sizing: border-box; }
