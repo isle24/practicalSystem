@@ -1,7 +1,7 @@
 <template>
   <main class="connection-page">
     <header class="connection-heading">
-      <span class="product-name">实践管理系统</span>
+      <span class="product-name">实践系统</span>
       <h1>{{ editingSchool ? '连接学校' : schoolName }}</h1>
       <div v-if="!editingSchool" class="school-identity">
         <span>{{ remark || '学校账号登录' }}</span>

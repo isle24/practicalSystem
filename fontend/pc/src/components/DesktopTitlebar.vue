@@ -1,6 +1,6 @@
 <template>
   <header ref="titlebar" class="desktop-native-titlebar" :class="{ mac: platform === 'macos' }">
-    <div class="native-title-drag" @pointerdown="drag" @dblclick="act('maximize')"><span>实践管理系统</span></div>
+    <div class="native-title-drag" @mousedown="drag" @dblclick="act('maximize')"><span>实践系统</span></div>
     <div v-if="active" class="native-title-user"><slot /></div>
     <div v-if="platform !== 'macos'" class="native-title-controls">
       <button type="button" aria-label="最小化" title="最小化" @click="act('minimize')"><Minus :size="14" /></button>

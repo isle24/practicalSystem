@@ -170,7 +170,7 @@ async fn connect_school(
         None,
     )
     .map_err(|_| "无法打开学校窗口，请重新连接")?;
-    let _ = school.set_title(&format!("{} - 实践管理系统", profile.name));
+    let _ = school.set_title(&format!("{} - 实践系统", profile.name));
     *state.gateway.lock().map_err(|_| "连接状态不可用")? = Some(gateway);
     *state.zoom.lock().map_err(|_| "窗口状态不可用")? = 1.0;
     window.hide().map_err(|_| "无法隐藏连接设置")?;
@@ -182,16 +182,16 @@ fn application_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
     let settings = MenuItem::with_id(app, "connection", "连接设置…", true, Some("CmdOrCtrl+,"))?;
     let about = PredefinedMenuItem::about(
         app,
-        Some("关于实践管理系统"),
+        Some("关于实践系统"),
         Some(AboutMetadata {
-            name: Some("实践管理系统".into()),
+            name: Some("实践系统".into()),
             version: Some(env!("CARGO_PKG_VERSION").into()),
             ..Default::default()
         }),
     )?;
     let application = Submenu::with_items(
         app,
-        "实践管理系统",
+        "实践系统",
         true,
         &[
             &about,

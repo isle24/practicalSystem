@@ -1,0 +1,10 @@
+{
+  "productName": "Practical System",
+  "bundle": {
+    "linux": {
+      "deb": {
+        "desktopTemplate": "linux/main.desktop"
+      }
+    }
+  }
+}

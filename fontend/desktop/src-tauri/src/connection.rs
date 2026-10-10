@@ -189,7 +189,7 @@ pub async fn connect(origin: Url, port: u16) -> Result<Connection, String> {
         bytes.extend_from_slice(&chunk);
     }
     let payload: serde_json::Value =
-        serde_json::from_slice(&bytes).map_err(|_| "该地址未返回实践管理系统的接口数据")?;
+        serde_json::from_slice(&bytes).map_err(|_| "该地址未返回实践系统的接口数据")?;
     let name = payload
         .get("data")
         .and_then(|data| data.get("school_name"))

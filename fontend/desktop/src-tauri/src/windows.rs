@@ -33,7 +33,7 @@ pub fn build(
         "platform": std::env::consts::OS,
     });
     let mut builder = WebviewWindowBuilder::new(app, label, WebviewUrl::External(url))
-        .title("实践管理系统")
+        .title("实践系统")
         .inner_size(1360.0, 900.0)
         .min_inner_size(880.0, 580.0)
         .resizable(true)
@@ -116,7 +116,7 @@ pub fn build(
                     popup_app
                         .dialog()
                         .message("无法打开预览窗口，请稍后重试")
-                        .title("实践管理系统")
+                        .title("实践系统")
                         .show(|_| {});
                     NewWindowResponse::Deny
                 }
@@ -124,6 +124,7 @@ pub fn build(
         })
         .on_document_title_changed(|window, title| {
             let title: String = title.chars().take(100).collect();
+            let title = if title == "实践管理系统 PC" { "实践系统".to_owned() } else { title };
             if !title.is_empty() {
                 let _ = window.set_title(&title);
             }

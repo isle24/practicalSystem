@@ -1,7 +1,7 @@
 <template>
   <div ref="root" class="profile-menu">
-    <button ref="trigger" type="button" class="profile-menu-trigger" :aria-expanded="open" aria-haspopup="dialog" @click="toggle" @keydown.down.prevent="show">
-      <span class="top-avatar" :style="avatarStyle"><UserRound v-if="!avatar" :size="16" /></span><span class="profile-menu-name">{{ name }}</span><ChevronDown :size="14" />
+    <button ref="trigger" type="button" class="profile-menu-trigger" :class="{ 'profile-menu-avatar-only': avatarOnly }" :aria-label="`${name || '用户'}的个人菜单`" :title="name" :aria-expanded="open" aria-haspopup="dialog" @click="toggle" @keydown.down.prevent="show">
+      <span class="top-avatar" :style="avatarStyle"><UserRound v-if="!avatar" :size="16" /></span><template v-if="!avatarOnly"><span class="profile-menu-name">{{ name }}</span><ChevronDown :size="14" /></template>
     </button>
     <Teleport to="body">
       <section v-if="open" ref="panel" class="profile-menu-panel" :style="position" role="dialog" aria-label="个人菜单" @keydown.esc.stop.prevent="close(true)">
@@ -22,7 +22,7 @@
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { ChevronDown, LogOut, Settings, UserRound, UsersRound } from '@lucide/vue';
 import { desktopTopInset } from '../composables/viewportArea';
-const props = defineProps({ name: String, role: String, avatar: String, avatarStyle: Object, version: String, accounts: { type: Array, default: () => [] }, accountName: Function, accountMeta: Function, placement: { type: String, default: 'top' }, switching: Boolean, busy: Boolean, error: String, contextKey: [String, Number] });
+const props = defineProps({ name: String, role: String, avatar: String, avatarStyle: Object, version: String, avatarOnly: Boolean, accounts: { type: Array, default: () => [] }, accountName: Function, accountMeta: Function, placement: { type: String, default: 'top' }, switching: Boolean, busy: Boolean, error: String, contextKey: [String, Number] });
 const emit = defineEmits(['settings', 'switch', 'logout']);
 const root = ref(null), trigger = ref(null), panel = ref(null), open = ref(false), identities = ref(false), position = ref({});
 let observer;

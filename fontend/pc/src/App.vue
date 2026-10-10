@@ -4176,7 +4176,7 @@
       </div>
       <div v-if="!isDesktopShell" class="taskbar-status" aria-label="系统状态">
         <ClientDownloadButton compact />
-        <ProfileMenu ref="webProfileMenu" :name="operatorName" :role="roleText" :avatar="profileState.form.avatar" :avatar-style="topAvatarStyle" :version="clientVersion" :accounts="switchableLoginAccounts" :account-name="switchAccountName" :account-meta="switchAccountMeta" :switching="switchAccountState.loading" :busy="loginState.loading" :error="switchAccountState.message" :context-key="permissionState.context.account_id" placement="top" @settings="handleOperatorClick" @switch="switchLoginAccount" @logout="submitLogout" />
+        <ProfileMenu ref="webProfileMenu" avatar-only :name="operatorName" :role="roleText" :avatar="profileState.form.avatar" :avatar-style="topAvatarStyle" :version="clientVersion" :accounts="switchableLoginAccounts" :account-name="switchAccountName" :account-meta="switchAccountMeta" :switching="switchAccountState.loading" :busy="loginState.loading" :error="switchAccountState.message" :context-key="permissionState.context.account_id" placement="top" @settings="handleOperatorClick" @switch="switchLoginAccount" @logout="submitLogout" />
         <span class="taskbar-clock">{{ clock }}</span>
       </div>
     </footer>

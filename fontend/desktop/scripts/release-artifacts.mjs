@@ -18,7 +18,7 @@ function collect(platform) {
   if (!files.length) throw Error('No installation artifacts found');
   const names = new Set();
   for (const file of files) {
-    const name = basename(file).replace(/[^A-Za-z0-9._-]+/g, '-');
+    const name = basename(file).replace(/^实践系统(?=[_. -]|$)/, 'Practical System').replace(/[^A-Za-z0-9._-]+/g, '-');
     if (names.has(name)) throw Error('Duplicate installation artifact: ' + name);
     names.add(name);
     copyFileSync(file, join(directory, name));
@@ -61,7 +61,7 @@ async function publish() {
   const releases = await call(`${api}/releases?per_page=100`);
   let release = releases.find(r => r.tag_name === `v${version}`);
   if (release && !release.draft) throw Error('This version is already published; bump the version to publish changed packages');
-  if (!release) release = await call(`${api}/releases`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tag_name: `v${version}`, target_commitish: process.env.GITHUB_SHA, name: `实践管理系统客户端 v${version}`, body: data.notes, draft: true, prerelease: false }) });
+  if (!release) release = await call(`${api}/releases`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tag_name: `v${version}`, target_commitish: process.env.GITHUB_SHA, name: `实践系统客户端 v${version}`, body: data.notes, draft: true, prerelease: false }) });
   const oldAssets = await call(`${api}/releases/${release.id}/assets?per_page=100`);
   const files = scan(directory);
   for (const file of files) {
