@@ -36,8 +36,8 @@ export function logout() {
   });
 }
 
-export function fetchSwitchableAccounts() {
-  return request('/auth/switchable-accounts');
+export function fetchSwitchableAccounts(options = {}) {
+  return request('/auth/switchable-accounts', options);
 }
 
 export function switchAccount(payload) {

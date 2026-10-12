@@ -31,6 +31,7 @@
         <small v-if="subtitle">{{ subtitle }}</small>
       </span>
     </component>
+    <button v-if="showEdit" type="button" class="shortcut-tile-action shortcut-tile-edit" :title="`编辑${item.name}`" :aria-label="`编辑${item.name}`" @pointerdown.stop @click.stop="emit('edit', item)"><Pencil :size="14" /></button>
     <button
       v-if="showAction"
       type="button"
@@ -49,7 +50,7 @@
 
 <script setup>
 import { computed } from 'vue';
-import { Check, LockKeyhole, Plus } from '@lucide/vue';
+import { Check, LockKeyhole, Pencil, Plus } from '@lucide/vue';
 import AppIcon from './AppIcon.vue';
 import { isExternalLinkOpening } from '../utils/externalLinks';
 
@@ -61,6 +62,7 @@ const props = defineProps({
   subtitle: { type: String, default: '' },
   active: { type: Boolean, default: false },
   showAction: { type: Boolean, default: false },
+  showEdit: { type: Boolean, default: false },
   added: { type: Boolean, default: false },
   locked: { type: Boolean, default: false },
   disabled: { type: Boolean, default: false },
@@ -69,7 +71,7 @@ const props = defineProps({
   draggable: { type: Boolean, default: false },
 });
 
-const emit = defineEmits(['open', 'action', 'drag-module']);
+const emit = defineEmits(['open', 'action', 'edit', 'drag-module']);
 function handleDragStart(event) {
   if (!props.draggable) return;
   event.dataTransfer?.setData('application/x-practical-module', String(props.item.id));
@@ -92,6 +94,8 @@ const tileClasses = computed(() => [
 
 <style scoped>
 .shortcut-tile-main[aria-busy="true"] { cursor: progress; opacity: .75; }
+.shortcut-tile-edit { top: 2px; right: 2px; bottom: auto; opacity: 0; }
+.shortcut-tile:hover .shortcut-tile-edit, .shortcut-tile:focus-within .shortcut-tile-edit { opacity: 1; }
 .is-dragging { opacity: .45; }
 .is-drop-target { outline: 2px solid #2975c8; outline-offset: 2px; }
 </style>

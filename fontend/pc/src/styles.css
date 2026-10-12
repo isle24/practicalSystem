@@ -6267,6 +6267,8 @@ a {
   position: fixed;
   z-index: 2600;
   min-width: 164px;
+  max-height: calc(100dvh - 16px);
+  overflow-y: auto;
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 6px;
@@ -6292,6 +6294,9 @@ a {
   color: var(--primary-ink, var(--primary));
   background: var(--primary-soft);
 }
+.desktop-context-title { display: block; padding: 7px 9px; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+.desktop-context-caption { display: block; padding: 7px 9px 3px; color: var(--muted); }
+.desktop-mode-unselected { visibility: hidden; }
 
 .student-own-panel {
   min-height: 0;
@@ -7164,8 +7169,7 @@ a {
 .login-school-logo { width: 42px; height: 42px; flex: 0 0 42px; object-fit: contain; }
 .login-panel .login-secondary-button { min-height: 40px; border-radius: 8px; }
 
-.desktop-shell.desktop-shell-maximized { grid-template-rows: minmax(0, 1fr); }
-.desktop-shell-maximized .taskbar, .desktop-shell-maximized .notebook-floating-button { display: none; }
+.desktop-shell-maximized .notebook-floating-button { display: none; }
 .operation-mask.operation-mask-maximized { padding: 0; }
 
 :root { --desktop-top-inset: 0px; }

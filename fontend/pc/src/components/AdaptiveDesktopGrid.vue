@@ -9,10 +9,12 @@
       mode="desktop"
       :href="moduleHref(module)"
       :active="isFocused(module.id)"
+      :show-edit="canEdit(module)"
       :backend-url="backendUrl"
       :style="tileStyle(module.id)"
       :class="{ 'desktop-position-dragging': drag?.id === String(module.id) && drag.moved }"
       @open="emit('open', module)"
+      @edit="emit('edit', module)"
     />
   </nav>
 </template>
@@ -27,11 +29,12 @@ const props = defineProps({
   density: { type: String, default: 'normal' },
   moduleHref: { type: Function, required: true },
   isFocused: { type: Function, required: true },
+  canEdit: { type: Function, default: () => false },
   backendUrl: { type: Function, required: true },
   storageKey: { type: String, required: true },
 });
 
-const emit = defineEmits(['open', 'warning', 'drop-module']);
+const emit = defineEmits(['open', 'edit', 'warning', 'drop-module']);
 const gridRef = ref(null);
 const bounds = ref({ width: 0, height: 0 });
 let observer = null;

@@ -159,6 +159,7 @@ export function useDesktopLauncher(options) {
       open_mode: item.favorite.open_mode,
       auth_mode: item.favorite.auth_mode,
       sso_client_id: item.favorite.sso_client_id,
+      can_edit: item.favorite.can_edit,
       auto_desktop: item.auto_shared || item.favorite.auto_desktop,
     });
   }
@@ -167,6 +168,7 @@ export function useDesktopLauncher(options) {
     return {
       id: `favorite-link-${item.id}`,
       favoriteId: Number(item.id),
+      canEdit: item.can_edit === true,
       name: item.title || '收藏网址',
       icon: Globe2,
       iconUrl: item.icon_url || '',

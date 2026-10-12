@@ -1,9 +1,9 @@
 <template>
   <el-config-provider :locale="zhCn" :z-index="10000">
-  <DesktopTitlebar v-if="isDesktopShell" :active="isLoggedIn && !pendingSsoResume && !wechatBlocked && !startupState.loading" :menu-open="nativeProfileMenuOpen" :maximized="nativeWindowState.maximized" :controls="controlNativeWindow" @window-action="closeDesktopTransient" @error="message => ElMessage.error(message)">
+  <DesktopTitlebar v-if="isDesktopShell" :auto-hide="desktopBarPreferences.state.autoHideStatusBar" :active="isLoggedIn && !pendingSsoResume && !wechatBlocked && !startupState.loading" :menu-open="nativeProfileMenuOpen" :maximized="nativeWindowState.maximized" :controls="controlNativeWindow" @window-action="closeDesktopTransient" @error="message => ElMessage.error(message)">
       <div v-if="!pendingSsoResume" class="taskbar-status" aria-label="系统状态">
         <ClientDownloadButton compact />
-        <ProfileMenu ref="nativeProfileMenu" :name="operatorName" :role="roleText" :avatar="profileState.form.avatar" :avatar-style="topAvatarStyle" :version="clientVersion" :accounts="switchableLoginAccounts" :account-name="switchAccountName" :account-meta="switchAccountMeta" :switching="switchAccountState.loading" :busy="loginState.loading" :error="switchAccountState.message" :context-key="permissionState.context.account_id" placement="bottom" @open-change="nativeProfileMenuOpen = $event" @settings="handleOperatorClick" @switch="switchLoginAccount" @logout="submitLogout" />
+        <ProfileMenu ref="nativeProfileMenu" :name="operatorName" :role="roleText" :avatar="profileState.form.avatar" :avatar-style="topAvatarStyle" :version="clientVersion" :accounts="switchableLoginAccounts" :account-name="switchAccountName" :account-meta="switchAccountMeta" :switching="switchAccountState.loading || switchAccountsLoading" :busy="loginState.loading" :error="switchAccountState.message" :context-key="permissionState.context.account_id" placement="bottom" @open-change="handleNativeProfileMenuOpen" @settings="handleOperatorClick" @switch="switchLoginAccount" @logout="submitLogout" />
         <span class="taskbar-clock">{{ clock }}</span>
       </div>
   </DesktopTitlebar>
@@ -70,7 +70,7 @@
     </section>
   </main>
 
-  <main v-else-if="!wechatBlocked" class="desktop-shell" :class="{ 'desktop-shell-mac': desktopStyleMode === 'mac', 'desktop-shell-maximized': !isDesktopShell && hasMaximizedWindow, 'desktop-shell-native': isDesktopShell, 'desktop-shell-fullscreen': isDesktopShell && nativeWindowState.fullscreen }" :style="desktopStyle" @click.left="closeDesktopContextMenu" @contextmenu.prevent="openDesktopContextMenu">
+  <main v-else-if="!wechatBlocked" class="desktop-shell" :class="{ 'desktop-shell-mac': desktopStyleMode === 'mac', 'desktop-shell-maximized': !isDesktopShell && hasMaximizedWindow, 'desktop-shell-native': isDesktopShell, 'desktop-shell-dock-auto-hide': dockShouldAutoHide }" :style="desktopStyle" @click.left="closeDesktopContextMenu" @contextmenu.prevent="openDesktopContextMenu">
     <section class="workspace">
       <AdaptiveDesktopGrid
         ref="desktopGridRef"
@@ -79,8 +79,10 @@
         :density="localTheme.current.value.density"
         :module-href="moduleHref"
         :is-focused="isModuleFocused"
+        :can-edit="canEditDesktopModule"
         :backend-url="backendUrl"
         @open="openModule"
+        @edit="editDesktopModule"
         @drop-module="addDesktopShortcutFromDrop"
         @warning="ElMessage.warning"
       />
@@ -163,6 +165,7 @@
             </template>
             <template #appearance>
               <ThemeSettings :theme="localTheme" />
+              <DesktopBarSettings :preferences="desktopBarPreferences.state" :native="isDesktopShell" @change="desktopBarPreferences.setPreference" />
               <section class="profile-panel-card">
                 <header>
                   <strong>客户端外观</strong>
@@ -2750,7 +2753,7 @@
                 </div>
 
                 <PluginPanel v-else-if="win.module.id === 'pluginCenter'" :can-manage="isSchoolConfigRole()" />
-                <FavoritePanel v-else-if="win.module.id === 'favorite'" :key="workspaceContextKey" :session-key="workspaceContextKey" :is-desktop="isFavoriteDesktop" :set-desktop="setFavoriteDesktopShortcut" @changed="refreshFavoriteShortcuts" />
+                <FavoritePanel v-else-if="win.module.id === 'favorite'" :ref="panel => setFavoritePanelRef(win.id, panel)" :key="workspaceContextKey" :session-key="workspaceContextKey" :is-desktop="isFavoriteDesktop" :set-desktop="setFavoriteDesktopShortcut" @changed="refreshFavoriteShortcuts" />
                 <NotebookPanel v-else-if="win.module.id === 'notebook'" :key="noteSessionKey" :ref="el => setNotebookRef(win.id, el)" :request="request" :session-key="noteSessionKey" />
                 <ReleaseNotesPanel v-else-if="win.module.id === 'releaseNotes'" :request="request" />
                 <SchoolSettingsPanel v-else-if="win.module.id === 'config' && win.panel === 'schoolAppearance' && canManageConfig" @updated="applyLoginPageData" />
@@ -4011,10 +4014,20 @@
     <div
       v-if="desktopContextMenu.visible"
       class="desktop-context-menu"
+      role="menu"
+      aria-label="桌面操作"
       :style="{ left: `${desktopContextMenu.x}px`, top: `${desktopContextMenu.y}px` }"
       @click.stop
       @contextmenu.prevent
     >
+      <template v-if="desktopContextMenu.module">
+        <strong class="desktop-context-title">{{ desktopContextMenu.module.name }}</strong>
+        <button type="button" @click="openDesktopContextModule"><LogIn :size="16" /><span>打开</span></button>
+        <small class="desktop-context-caption">打开方式 · 仅当前设备</small>
+        <button v-for="option in desktopOpenModeOptions(desktopContextMenu.module)" :key="option.value" type="button" role="menuitemradio" :aria-checked="desktopOpenPreferences.getMode(desktopContextMenu.module.id) === option.value" @click="setDesktopOpenMode(option.value)"><CheckCircle2 :size="16" :class="{ 'desktop-mode-unselected': desktopOpenPreferences.getMode(desktopContextMenu.module.id) !== option.value }" /><span>{{ option.label }}</span></button>
+        <button v-if="canEditDesktopModule(desktopContextMenu.module)" type="button" @click="editDesktopContextModule"><Edit3 :size="16" /><span>编辑</span></button>
+      </template>
+      <template v-else>
       <button type="button" @click="openWallpaperSettings">
         <ImagePlus :size="16" />
         <span>更换壁纸</span>
@@ -4027,6 +4040,7 @@
         <RotateCcw :size="16" />
         <span>恢复默认布局</span>
       </button>
+      </template>
     </div>
 
     <OperationDialog
@@ -4110,8 +4124,8 @@
       @saved="loadInternshipPanel('documents')"
     />
 
-    <button v-if="isDesktopShell && nativeWindowState.fullscreen" type="button" class="native-taskbar-edge" aria-label="显示任务栏" aria-controls="desktop-taskbar" @pointerenter="nativeDockHovered = true" @pointerleave="nativeDockHovered = false" @focus="nativeDockHovered = true" @blur="nativeDockHovered = false" />
-    <footer id="desktop-taskbar" v-show="isDesktopShell || !hasMaximizedWindow" class="taskbar" :class="{ 'taskbar-revealed': nativeDockHovered || desktopLauncherState.visible || showGlobalSearchResults }" @pointerenter="nativeDockHovered = true" @pointerleave="nativeDockHovered = false">
+    <button v-if="dockShouldAutoHide" type="button" class="native-taskbar-edge" aria-label="显示任务栏" aria-controls="desktop-taskbar" @pointerenter="nativeDockHovered = true" @pointerleave="nativeDockHovered = false" @focus="nativeDockHovered = true" @blur="nativeDockHovered = false" />
+    <footer id="desktop-taskbar" class="taskbar" :class="{ 'taskbar-revealed': nativeDockHovered || webProfileMenuOpen || desktopLauncherState.visible || showGlobalSearchResults }" @pointerenter="nativeDockHovered = true" @pointerleave="nativeDockHovered = false">
       <div class="taskbar-brand">
         <span class="brand-mark">实</span>
         <strong>实践管理系统</strong>
@@ -4179,7 +4193,7 @@
       </div>
       <div v-if="!isDesktopShell" class="taskbar-status" aria-label="系统状态">
         <ClientDownloadButton compact />
-        <ProfileMenu ref="webProfileMenu" avatar-only :name="operatorName" :role="roleText" :avatar="profileState.form.avatar" :avatar-style="topAvatarStyle" :version="clientVersion" :accounts="switchableLoginAccounts" :account-name="switchAccountName" :account-meta="switchAccountMeta" :switching="switchAccountState.loading" :busy="loginState.loading" :error="switchAccountState.message" :context-key="permissionState.context.account_id" placement="top" @settings="handleOperatorClick" @switch="switchLoginAccount" @logout="submitLogout" />
+        <ProfileMenu ref="webProfileMenu" avatar-only :name="operatorName" :role="roleText" :avatar="profileState.form.avatar" :avatar-style="topAvatarStyle" :version="clientVersion" :accounts="switchableLoginAccounts" :account-name="switchAccountName" :account-meta="switchAccountMeta" :switching="switchAccountState.loading || switchAccountsLoading" :busy="loginState.loading" :error="switchAccountState.message" :context-key="permissionState.context.account_id" placement="top" @open-change="handleWebProfileMenuOpen" @settings="handleOperatorClick" @switch="switchLoginAccount" @logout="submitLogout" />
         <span class="taskbar-clock">{{ clock }}</span>
       </div>
     </footer>
@@ -4247,6 +4261,9 @@ import ExpensePanel from './components/ExpensePanel.vue';
 import { hasMaximizedWindow } from './composables/useMaximizedWindows';
 import { useNativeWindowState } from './composables/useNativeWindowState';
 import { useLocalTheme } from './composables/useLocalTheme';
+import { useDesktopBarPreferences } from './composables/useDesktopBarPreferences';
+import { useDesktopOpenPreferences } from './composables/useDesktopOpenPreferences';
+import DesktopBarSettings from './components/DesktopBarSettings.vue';
 import ThemeSettings from './components/profile/ThemeSettings.vue';
 import ProfileSettingsLayout from './components/profile/ProfileSettingsLayout.vue';
 import AccountLinks from './components/profile/AccountLinks.vue';
@@ -4772,6 +4789,7 @@ const desktopContextMenu = reactive({
   visible: false,
   x: 0,
   y: 0,
+  module: null,
 });
 const guideState = reactive({
   visible: false,
@@ -5787,6 +5805,7 @@ const isDesktopClient = Boolean(window.__PRACTICAL_DESKTOP__);
 const isDesktopShell = Boolean(window.__PRACTICAL_DESKTOP__?.windowControls && (window.__PRACTICAL_DESKTOP__.windowLabel || 'school') === 'school');
 const { state: nativeWindowState, control: controlNativeWindow } = useNativeWindowState(isDesktopShell);
 const nativeProfileMenuOpen = ref(false);
+const webProfileMenuOpen = ref(false);
 const nativeDockHovered = ref(false);
 const publicSchoolOrigin = window.__PRACTICAL_DESKTOP__?.serverOrigin || window.location.origin;
 const workspaceSourceEpoch = ref(0);
@@ -5803,6 +5822,11 @@ const tableWidthScope = computed(() => permissionState.context.account_id
     permissionState.context.account_id, permissionState.context.role_id, permissionState.context.role_type]) : '');
 provide(TABLE_WIDTH_SCOPE, tableWidthScope);
 const localTheme = useLocalTheme(themeScope);
+const desktopBarPreferences = useDesktopBarPreferences(themeScope);
+const desktopOpenScope = computed(() => permissionState.context.account_id ? `${publicSchoolOrigin}:${permissionState.context.school_database_id}:${permissionState.context.account_id}` : '');
+const desktopOpenPreferences = useDesktopOpenPreferences(desktopOpenScope);
+const favoritePanelRefs = new Map();
+const dockShouldAutoHide = computed(() => desktopBarPreferences.state.autoHideDock && hasMaximizedWindow.value);
 const messagePreview = reactive({ loading: false, count: null, items: [], error: '' });
 const currentExternalItem = ref(null);
 let messagePreviewVersion = 0;
@@ -7746,28 +7770,118 @@ function openGlobalSearchModule(module) {
   openModule(module);
 }
 
-function openModule(module) {
-  if (wechatBlocked.value) return;
+function openModule(module, options = {}) {
+  if (wechatBlocked.value || workspaceFrozen.value || !module || !canShowModule(module)) return;
+  const mode = options.skipOpenPreference === true ? '' : desktopOpenPreferences.getMode(String(module.id));
   if (module?.type === 'favoriteLink' && module.url) {
-    openExternalLink(module).catch(error => ElMessage.error(error.message));
+    openExternalLink(module, mode || undefined).catch(error => ElMessage.error(error.message));
     return;
   }
-  if (module?.source === 'menu' && module.menu?.url) {
-    window.open(backendUrl(module.menu.url), '_blank', 'noopener,noreferrer');
+  const external = desktopModuleExternalUrl(module);
+  if (external) {
+    const targetMode = mode || 'browser';
+    if (targetMode === 'client' && external.origin === new URL(publicSchoolOrigin).origin) {
+      const local = new URL(external.href);
+      const base = new URL(window.location.origin);
+      local.host = base.host; local.protocol = base.protocol;
+      window.open(local.href, '_blank', 'noopener,noreferrer');
+    } else {
+      openExternalLink({ url: external.href }, targetMode).catch(error => ElMessage.error(error.message));
+    }
     return;
   }
-  if (module?.source === 'menu' && /^https?:\/\//i.test(String(module.menu?.path || ''))) {
-    window.open(module.menu.path, '_blank', 'noopener,noreferrer');
+  if (mode === 'client') {
+    const url = new URL('/pc/index.html', window.location.origin);
+    url.hash = `module=${encodeURIComponent(module.id)}`;
+    window.open(url.href, '_blank', 'noopener,noreferrer');
+    return;
+  }
+  if (mode === 'browser') {
+    const url = new URL('/pc/index.html', publicSchoolOrigin);
+    url.hash = `module=${encodeURIComponent(module.id)}`;
+    if (window.__PRACTICAL_DESKTOP__?.openExternal) window.__PRACTICAL_DESKTOP__.openExternal(url.href, 'browser').catch(error => ElMessage.error(error.message));
+    else window.open(url.href, '_blank', 'noopener,noreferrer');
     return;
   }
   openModuleWindow(module, { reuse: module.id !== 'notebook' });
+}
+
+function desktopModuleExternalUrl(module) {
+  const value = module?.source === 'menu' ? module.menu?.url || (/^https?:\/\//i.test(String(module.menu?.path || '')) ? module.menu.path : '') : '';
+  if (!value) return null;
+  try {
+    const url = new URL(value, publicSchoolOrigin);
+    return ['http:', 'https:'].includes(url.protocol) && !url.username && !url.password ? url : null;
+  } catch { return null; }
+}
+
+function desktopOpenModeOptions(module) {
+  const external = module?.type === 'favoriteLink' || Boolean(desktopModuleExternalUrl(module));
+  const options = [{ value: '', label: '使用默认方式' }];
+  if (module?.auth_mode !== 'oidc' && (!desktopModuleExternalUrl(module) || desktopModuleExternalUrl(module).origin !== new URL(publicSchoolOrigin).origin)) options.push({ value: 'current', label: external ? '当前页打开' : '桌面窗口打开' });
+  options.push({ value: 'client', label: isDesktopClient ? '独立窗口打开' : '新标签页打开' });
+  if (isDesktopClient) options.push({ value: 'browser', label: '系统浏览器打开' });
+  return options;
+}
+
+function canEditDesktopModule(module) {
+  if (!isLoggedIn.value || workspaceFrozen.value) return false;
+  if (module?.type === 'favoriteLink') return module.canEdit === true;
+  return Number(module?.menuId || 0) > 0 && canManageConfig.value;
+}
+
+function setFavoritePanelRef(id, panel) {
+  if (panel) favoritePanelRefs.set(id, panel);
+  else favoritePanelRefs.delete(id);
+}
+
+async function editDesktopModule(module) {
+  if (!canEditDesktopModule(module)) return;
+  closeDesktopContextMenu();
+  const source = workspaceContextKey.value;
+  if (module.type === 'favoriteLink') {
+    const favorite = modules.find(item => item.id === 'favorite');
+    openModuleWindow(favorite, { reuse: true });
+    const win = openWindows.find(item => item.module.id === 'favorite');
+    await nextTick();
+    if (source !== workspaceContextKey.value || workspaceFrozen.value) return;
+    await favoritePanelRefs.get(win?.id)?.editById(module.favoriteId);
+    return;
+  }
+  const config = modules.find(item => item.id === 'config');
+  openModuleWindow(config, { reuse: true });
+  const win = openWindows.find(item => item.module.id === 'config');
+  if (win) win.panel = 'menuManage';
+  await loadAdminFoundation();
+  if (source !== workspaceContextKey.value || workspaceFrozen.value || !canManageConfig.value) return;
+  const row = adminState.menus.find(item => Number(item.id) === Number(module.menuId));
+  if (row) openMenuDialog(row);
+  else ElMessage.error('模块配置不存在或没有编辑权限');
+}
+
+function setDesktopOpenMode(mode) {
+  const module = desktopContextMenu.module;
+  if (!module || !desktopOpenModeOptions(module).some(option => option.value === mode)) return;
+  if (!desktopOpenPreferences.setMode(String(module.id), mode)) ElMessage.error(desktopOpenPreferences.state.error || '本机打开方式保存失败');
+  closeDesktopContextMenu();
+}
+
+function openDesktopContextModule() {
+  const module = desktopContextMenu.module;
+  closeDesktopContextMenu();
+  if (module) openModule(module);
+}
+
+function editDesktopContextModule() {
+  const module = desktopContextMenu.module;
+  if (module) editDesktopModule(module);
 }
 
 function openExpenseFromWorkflowInbox(expenseId) {
   const module = modules.find(item => item.id === 'expenseManage');
   if (!module) return;
   expenseInboxSelection.value = 0;
-  openModule(module);
+  openModule(module, { skipOpenPreference: true });
   nextTick(() => { expenseInboxSelection.value = Number(expenseId || 0); });
 }
 
@@ -8369,15 +8483,19 @@ function openDesktopContextMenu(event) {
   if (!isLoggedIn.value || target?.closest('.desktop-window, .topbar, .taskbar, .login-layer, .desktop-context-menu')) {
     return;
   }
-  const width = 172;
-  const height = 136;
-  desktopContextMenu.x = Math.min(event.clientX, window.innerWidth - width - 8);
-  desktopContextMenu.y = Math.min(event.clientY, window.innerHeight - height - 8);
+  const shortcut = target?.closest('[data-shortcut-id]');
+  const module = shortcut?.closest('.desktop-canvas') ? visibleDesktopModules.value.find(item => String(item.id) === shortcut.dataset.shortcutId) : null;
+  const width = module ? 216 : 172;
+  const height = module ? 100 + desktopOpenModeOptions(module).length * 34 + (canEditDesktopModule(module) ? 34 : 0) : 136;
+  desktopContextMenu.module = module || null;
+  desktopContextMenu.x = Math.max(8, Math.min(event.clientX, window.innerWidth - width - 8));
+  desktopContextMenu.y = Math.max(8, Math.min(event.clientY, window.innerHeight - height - 8));
   desktopContextMenu.visible = true;
 }
 
 function closeDesktopContextMenu() {
   desktopContextMenu.visible = false;
+  desktopContextMenu.module = null;
 }
 
 async function resetDesktopPositions() {
@@ -8459,7 +8577,7 @@ async function handleHashNavigation() {
     const moduleId = decodeURIComponent(hash.slice(7));
     const module = allLaunchableModules.value.find(item => item.id === moduleId);
     if (module) {
-      openModule(module);
+      openModule(module, { skipOpenPreference: true });
       clearNavigationHash();
     }
     return;
@@ -8731,33 +8849,77 @@ async function refreshAuthenticatedSession(resetWorkspace = false) {
 
 
 
+const switchAccountsLoading = ref(false);
+let switchAccountsRequestVersion = 0;
+let switchAccountsController = null;
+let switchAccountsLoadedAt = 0;
+
+watch(workspaceContextKey, () => {
+  switchAccountsRequestVersion++;
+  switchAccountsController?.abort();
+  switchAccountsController = null;
+  switchAccountsLoadedAt = 0;
+  switchAccountsLoading.value = false;
+  switchAccountState.open = false;
+  switchAccountState.items = [];
+  switchAccountState.message = '';
+}, { flush: 'sync' });
+
+onBeforeUnmount(() => { switchAccountsRequestVersion++; switchAccountsController?.abort(); });
+
+function handleNativeProfileMenuOpen(open) {
+  nativeProfileMenuOpen.value = open;
+  refreshProfileMenuAccounts(open);
+}
+
+function handleWebProfileMenuOpen(open) {
+  webProfileMenuOpen.value = open;
+  refreshProfileMenuAccounts(open);
+}
+
+function refreshProfileMenuAccounts(open) {
+  if (open && isLoggedIn.value && !switchAccountsLoading.value && !switchAccountState.loading && Date.now() - switchAccountsLoadedAt >= 60000) loadSwitchableAccounts();
+}
+
 async function loadSwitchableAccounts() {
+  const version = ++switchAccountsRequestVersion;
+  switchAccountsController?.abort();
+  switchAccountsController = null;
   if (!isLoggedIn.value) {
     switchAccountState.open = false;
     switchAccountState.items = [];
     switchAccountState.message = '';
+    switchAccountsLoading.value = false;
     return;
   }
 
-  switchAccountState.loading = true;
+  const source = workspaceContextKey.value;
+  const controller = new AbortController();
+  switchAccountsController = controller;
+  const current = () => version === switchAccountsRequestVersion && isLoggedIn.value && !workspaceFrozen.value && source === workspaceContextKey.value;
+  switchAccountsLoading.value = true;
   switchAccountState.message = '';
   try {
-    const data = await fetchSwitchableAccounts();
+    const data = await fetchSwitchableAccounts({ signal: controller.signal, isCurrent: current, refreshOnUnauthorized: false });
+    if (!current()) return;
     switchAccountState.items = data.accounts || [];
+    switchAccountsLoadedAt = Date.now();
     if (!switchableLoginAccounts.value.length) {
       switchAccountState.open = false;
     }
   } catch (error) {
+    if (!current()) return;
     switchAccountState.open = false;
     switchAccountState.items = [];
     switchAccountState.message = error.message;
   } finally {
-    switchAccountState.loading = false;
+    if (version === switchAccountsRequestVersion) switchAccountsLoading.value = false;
+    if (switchAccountsController === controller) switchAccountsController = null;
   }
 }
 
 function toggleSwitchAccountMenu() {
-  if (switchAccountState.loading || !switchableLoginAccounts.value.length) {
+  if (switchAccountState.loading || switchAccountsLoading.value || !switchableLoginAccounts.value.length) {
     switchAccountState.open = false;
     return;
   }
@@ -8766,7 +8928,7 @@ function toggleSwitchAccountMenu() {
 
 async function switchLoginAccount(accountId) {
   const targetId = Number(accountId || 0);
-  if (!targetId || targetId === Number(permissionState.context.account_id || 0) || switchAccountState.loading) {
+  if (!targetId || targetId === Number(permissionState.context.account_id || 0) || switchAccountState.loading || switchAccountsLoading.value) {
     switchAccountState.open = false;
     return;
   }
@@ -17021,6 +17183,14 @@ async function loadFinalMessageTargets() {
 }
 watch(() => [messageState.sendDialog.visible, messageState.sendDialog.form.send_scope, messageState.sendDialog.form.role_type, messageState.sendDialog.form.include_sender, JSON.stringify(messageState.sendDialog.form.account_ids)], () => { messagePreviewVersion++; messagePreview.count = null; messagePreview.items = []; messagePreview.error = ''; messagePreview.loading = false; });
 watch(hasMaximizedWindow, closeDesktopTransient);
+watch(dockShouldAutoHide, hidden => {
+  nativeDockHovered.value = false;
+  closeDesktopTransient();
+  if (hidden) {
+    keyword.value = '';
+    if (document.activeElement?.closest('#desktop-taskbar')) document.activeElement.blur();
+  }
+});
 watch(() => nativeWindowState.fullscreen, () => { nativeDockHovered.value = false; closeDesktopTransient(); });
 watch(() => permissionState.context.account_id, closeDesktopTransient);
 

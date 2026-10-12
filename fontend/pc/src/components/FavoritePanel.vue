@@ -12,12 +12,12 @@
       <el-empty v-if="!loading && !items.length" description="暂无收藏" />
     </div>
     <footer class="favorites-pagination"><span>共 {{ pagination.total }} 个收藏</span><ListPagination layout="prev, pager, next" :current-page="pagination.page" :page-size="pagination.page_size" :total="pagination.total" @current-change="load" /></footer>
-    <OperationDialog :visible="dialog" :title="form.id ? '编辑收藏' : '新增收藏'" :busy="saving || uploading" @close="dialog = false">
+    <OperationDialog :visible="dialog" :title="form.id ? '编辑收藏' : '新增收藏'" :busy="saving || uploading" @close="closeEdit">
       <div class="favorites-dialog-body">
       <div class="favorites-form" :inert="saving"><label>标题<el-input v-model="form.title" maxlength="180" placeholder="请输入收藏标题" /></label><label>认证方式<el-radio-group v-model="form.auth_mode"><el-radio-button value="none">普通链接</el-radio-button><el-radio-button value="oidc">应用授权</el-radio-button></el-radio-group></label><label v-if="form.auth_mode === 'oidc'">授权应用<el-select v-model="form.sso_client_id" filterable remote :remote-method="searchClients" :loading="clientLoading" placeholder="搜索本校应用" @visible-change="visible => visible && searchClients('')"><el-option v-for="client in clientOptions" :key="client.id" :label="client.client_name" :value="client.id" /></el-select><small>网址使用已注册应用的固定入口。</small></label><label v-else>网址<el-input v-model="form.url" maxlength="500" placeholder="https://example.com" /></label><label>默认打开方式<el-radio-group v-model="form.open_mode"><el-radio-button v-if="form.auth_mode !== 'oidc'" value="current">当前页打开</el-radio-button><el-radio-button value="client">客户端窗口</el-radio-button><el-radio-button value="browser">外部浏览器</el-radio-button></el-radio-group></label><label>共享范围<el-select v-model="form.scope"><el-option v-for="value in formScopes" :key="value" :label="scopeLabels[value]" :value="value" :disabled="!shareScopes.includes(value)" /></el-select><small v-if="form.scope === 'college' || form.scope === 'accounts'">符合共享范围的有效账号将自动显示桌面快捷方式。</small></label><label v-if="form.scope === 'college'" class="favorites-targets">共享学院<FavoriteTargetSelect v-model="form.college_ids" type="college" :disabled="saving" /></label><label v-if="form.scope === 'accounts'" class="favorites-targets">共享人员<FavoriteTargetSelect v-model="form.account_ids" type="accounts" :disabled="saving" /></label><label class="favorites-switch">{{ formAutoDesktop ? '管理员共享到我的桌面' : '添加到我的桌面' }}<el-switch v-model="form.on_desktop" :disabled="formAutoDesktop" /></label><label>排序<el-input-number v-model="form.sort" :min="0" :max="99999" /></label><label>图标<IconUpload :icon="Globe2" :icon-url="form.icon_url" label="收藏图标" :uploading="uploading" :backend-url="backendUrl" @select="upload" /></label></div>
       <div v-if="form.auth_mode !== 'oidc'" class="favorites-parameters" :inert="saving"><label>请求方式<el-radio-group v-model="form.request_config.method"><el-radio-button value="GET">GET</el-radio-button><el-radio-button value="POST">POST</el-radio-button></el-radio-group></label><LinkParameterEditor v-model="form.request_config.query" title="Query 参数" /><LinkParameterEditor v-if="form.request_config.method === 'POST'" v-model="form.request_config.form" title="POST 参数" /><small>这里只保存非敏感参数。密码、令牌、Cookie 请在收藏的“本机认证配置”中设置。</small></div>
       </div>
-      <template #footer><el-button :disabled="saving || uploading" @click="dialog = false">取消</el-button><el-button type="primary" :loading="saving" :disabled="uploading" @click="save">保存</el-button></template>
+      <template #footer><el-button :disabled="saving || uploading" @click="closeEdit">取消</el-button><el-button type="primary" :loading="saving" :disabled="uploading" @click="save">保存</el-button></template>
     </OperationDialog>
     <FavoriteCredentials :item="credentialItem" @close="credentialItem = null" />
     </template>
@@ -50,14 +50,14 @@ const loading = ref(false), saving = ref(false), uploading = ref(false), dialog 
 const pagination = ref({ page: 1, page_size: 20, total: 0 });
 const desktop = Boolean(window.__PRACTICAL_DESKTOP__);
 const clientOptions = ref([]), clientLoading = ref(false);
-let clientSequence = 0, sequence = 0, generation = 0, disposed = false;
+let clientSequence = 0, sequence = 0, editSequence = 0, generation = 0, disposed = false;
 let originalScope = 'personal', originalTargets = '';
 const controllers = new Set();
 const sourceContext = () => ({ key: props.sessionKey, generation });
 const currentContext = context => !disposed && context.key === props.sessionKey && context.generation === generation;
 const host = url => { try { return new URL(url).host; } catch { return url; } };
 function invalidateContext() {
-  generation += 1; sequence += 1; clientSequence += 1;
+  generation += 1; sequence += 1; clientSequence += 1; editSequence += 1;
   controllers.forEach(controller => controller.abort());
   controllers.clear();
 }
@@ -104,12 +104,44 @@ async function load(page = 1, context = sourceContext()) {
   } catch (reason) { if (currentContext(context) && ticket === sequence) error.value = reason.message; }
   finally { if (currentContext(context) && ticket === sequence) loading.value = false; }
 }
+function closeEdit() {
+  editSequence += 1;
+  dialog.value = false;
+}
+async function editById(id) {
+  const context = sourceContext(), ticket = ++editSequence;
+  if (!currentContext(context) || saving.value || uploading.value) return false;
+  const value = typeof id === 'number' || typeof id === 'string' ? String(id) : '';
+  if (!/^[1-9]\d*$/.test(value) || !Number.isSafeInteger(Number(value))) {
+    ElMessage.error('收藏编号无效');
+    return false;
+  }
+  try {
+    const row = await contextRequest(context, `/favorite/detail?${new URLSearchParams({ id: value })}`);
+    if (!currentContext(context) || ticket !== editSequence || saving.value || uploading.value) return false;
+    if (!row || row.can_edit !== true) {
+      ElMessage.error('没有编辑此收藏的权限');
+      return false;
+    }
+    embeddedItem.value = null;
+    return edit(row);
+  } catch (reason) {
+    if (currentContext(context) && ticket === editSequence) ElMessage.error(reason.message);
+    return false;
+  }
+}
 function edit(row = {}) {
-  if (disposed) return;
+  if (disposed || saving.value || uploading.value) return false;
+  if (row.id && row.can_edit !== true) {
+    ElMessage.error('没有编辑此收藏的权限');
+    return false;
+  }
+  editSequence += 1;
   form.value = { id: row.id || null, title: row.title || '', url: row.url || '', scope: row.scope || 'personal', open_mode: row.open_mode || 'client', sort: Number(row.sort || 0), icon_file_id: row.icon_file_id || null, icon_url: row.icon_url || '', revision: row.revision || 0, on_desktop: row.auto_desktop || (row.id ? props.isDesktop(row.id) : true), auto_desktop: Boolean(row.auto_desktop), college_ids: [...(row.college_ids || [])], account_ids: [...(row.account_ids || [])], auth_mode: row.auth_mode || 'none', sso_client_id: row.sso_client_id || null, request_config: JSON.parse(JSON.stringify({ method:'GET', query:[], form:[], ...row.request_config })) };
   originalScope = form.value.scope; originalTargets = targetSignature(form.value);
   if (row.sso_client_id) clientOptions.value = [{ id: row.sso_client_id, client_name: row.sso_client_name || '已选择应用' }];
   dialog.value = true;
+  return true;
 }
 function targetSignature(row) { return JSON.stringify([row.college_ids || [], row.account_ids || []]); }
 async function open(row, mode) {
@@ -206,6 +238,7 @@ watch(() => props.sessionKey, () => {
 }, { flush: 'sync' });
 onBeforeUnmount(() => { disposed = true; invalidateContext(); });
 onMounted(() => load(1));
+defineExpose({ editById });
 </script>
 
 <style scoped>

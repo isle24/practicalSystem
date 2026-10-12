@@ -44,17 +44,20 @@
   border-top-color: rgba(255, 255, 255, .72);
 }
 .taskbar-center { overflow: visible; }
-.desktop-shell-native.desktop-shell-fullscreen { grid-template-rows: minmax(0, 1fr); }
-.native-taskbar-edge { position: absolute; inset: auto 0 0; height: 5px; border: 0; padding: 0; background: transparent; z-index: 3201; }
-.desktop-shell-native.desktop-shell-fullscreen .taskbar { position: absolute; inset: auto 0 0; min-height: 50px; transform: translateY(100%); transition: transform .16s ease; }
-.desktop-shell-native.desktop-shell-fullscreen .taskbar-revealed,
-.desktop-shell-native.desktop-shell-fullscreen .taskbar:focus-within { transform: translateY(0); }
-.desktop-shell-native.desktop-shell-mac.desktop-shell-fullscreen .taskbar { left: 50%; right: auto; transform: translate(-50%, calc(100% + 10px)); }
-.desktop-shell-native.desktop-shell-mac.desktop-shell-fullscreen .taskbar-revealed,
-.desktop-shell-native.desktop-shell-mac.desktop-shell-fullscreen .taskbar:focus-within { transform: translate(-50%, 0); }
-.desktop-shell-native.desktop-shell-mac.desktop-shell-fullscreen .taskbar::before { content: ''; position: absolute; inset: auto 0 -10px; height: 10px; }
+.desktop-shell-native { padding-top: var(--desktop-top-inset, 0px); }
+.login-shell-native { padding-top: calc(32px + var(--desktop-top-inset, 0px)); }
+.startup-shell.native { min-height: 100dvh; padding-top: var(--desktop-top-inset, 0px); }
+.desktop-shell.desktop-shell-dock-auto-hide { grid-template-rows: minmax(0, 1fr); }
+.native-taskbar-edge { position: absolute; inset: auto 0 0; height: 10px; border: 0; padding: 0; background: transparent; z-index: 3201; }
+.desktop-shell.desktop-shell-dock-auto-hide .taskbar { position: absolute; inset: auto 0 0; min-height: 50px; transform: translateY(100%); transition: transform .16s ease; }
+.desktop-shell.desktop-shell-dock-auto-hide .taskbar-revealed,
+.desktop-shell.desktop-shell-dock-auto-hide .taskbar:focus-within { transform: translateY(0); }
+.desktop-shell.desktop-shell-mac.desktop-shell-dock-auto-hide .taskbar { left: 50%; right: auto; transform: translate(-50%, calc(100% + 10px)); }
+.desktop-shell.desktop-shell-mac.desktop-shell-dock-auto-hide .taskbar-revealed,
+.desktop-shell.desktop-shell-mac.desktop-shell-dock-auto-hide .taskbar:focus-within { transform: translate(-50%, 0); }
+.desktop-shell.desktop-shell-mac.desktop-shell-dock-auto-hide .taskbar::before { content: ''; position: absolute; inset: auto 0 -10px; height: 10px; }
 .native-taskbar-edge:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
-@media (prefers-reduced-motion: reduce) { .desktop-shell-native.desktop-shell-fullscreen .taskbar { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .desktop-shell.desktop-shell-dock-auto-hide .taskbar { transition: none; } }
 .taskbar .global-search svg { flex-shrink: 0; }
 .taskbar .taskbar-glyph,
 .taskbar .search-result-glyph { color: #fff; }
