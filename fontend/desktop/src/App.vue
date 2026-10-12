@@ -1,5 +1,6 @@
 <template>
   <main class="connection-page">
+    <LoginModeToggle v-if="!switching" :mode="loginMethod" :disabled="busy || loading" @update:mode="switchLoginMode" />
     <header class="connection-heading">
       <span class="product-name">实践系统</span>
       <h1>{{ editingSchool ? (domain.trim() === defaultSchoolOrigin ? defaultSchoolName : '连接学校') : schoolName }}</h1>
@@ -29,10 +30,6 @@
       </div>
       <button v-if="profiles.length" class="switch-school history-entry" type="button" @click="switching = true">选择已连接的学校<ChevronRight :size="14" /></button>
       </template>
-      <div class="login-methods" aria-label="登录方式">
-        <button type="button" :aria-pressed="loginMethod === 'password'" :disabled="busy || loading" @click="selectLoginMethod('password')"><LockKeyhole :size="16" />密码登录</button>
-        <button type="button" :aria-pressed="loginMethod === 'wechat'" :disabled="busy || loading" @click="selectLoginMethod('wechat')"><QrCode :size="16" />企业微信扫码登录</button>
-      </div>
       <template v-if="loginMethod === 'password'">
       <label for="school-username">账号</label>
       <input id="school-username" v-model="username" type="text" autocomplete="username" placeholder="请输入账号" :disabled="busy || loading">
@@ -62,7 +59,8 @@
 import { ref, onBeforeUnmount, onMounted, watch } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
 import { getVersion } from '@tauri-apps/api/app';
-import { ArrowRight, ChevronRight, CircleAlert, Globe2, LoaderCircle, LockKeyhole, Plus, QrCode, RefreshCw, X } from '@lucide/vue';
+import { ArrowRight, ChevronRight, CircleAlert, Globe2, LoaderCircle, LockKeyhole, Plus, RefreshCw, X } from '@lucide/vue';
+import LoginModeToggle from '../../shared/components/LoginModeToggle.vue';
 
 const defaultSchoolOrigin = 'https://sxxt.cdjcc.edu.cn';
 const defaultSchoolName = '成都锦城学院';
@@ -157,6 +155,12 @@ async function selectLoginMethod(method) {
   } finally {
     loading.value = false;
   }
+}
+
+async function switchLoginMode(method) {
+  if (busy.value || loading.value) return;
+  await selectLoginMethod(method);
+  if (method === 'wechat' && domain.value.trim()) await connect();
 }
 
 // 使用所填域名建立独立学校会话。

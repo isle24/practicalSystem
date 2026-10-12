@@ -10,7 +10,7 @@
   <main v-if="startupState.loading || startupState.error" class="startup-shell" :class="{ native: isDesktopShell }"><section><strong>{{ startupState.error ? '连接未完成' : '正在连接并加载登录会话...' }}</strong><span v-if="startupState.error">{{ startupState.error }}</span><el-button v-if="startupState.error" type="primary" @click="initializeSession">重试</el-button></section></main>
   <main v-else-if="!isLoggedIn || pendingSsoResume" class="login-shell" :class="{ 'login-shell-native': isDesktopShell }" :style="loginPageStyle">
     <section class="login-panel" :class="{ 'login-panel-scan': loginMethod === 'wechat' }">
-      <button type="button" class="login-mode-corner" :aria-label="loginMethod === 'password' ? '切换企业微信扫码登录' : '切换账号密码登录'" :title="loginMethod === 'password' ? '企业微信扫码登录' : '账号密码登录'" @click="loginMethod = loginMethod === 'password' ? 'wechat' : 'password'"><QrCode v-if="loginMethod === 'password'" :size="28" /><Monitor v-else :size="28" /></button>
+      <LoginModeToggle v-model:mode="loginMethod" />
       <header>
         <img v-if="loginPageState.school_logo_url" class="login-school-logo" :src="backendUrl(loginPageState.school_logo_url)" :alt="loginSchoolName">
         <Building2 v-else :size="32" />
@@ -4255,6 +4255,7 @@ import ProfileMenu from './components/ProfileMenu.vue';
 import FilterToolbar from './components/FilterToolbar.vue';
 import DesktopTitlebar from './components/DesktopTitlebar.vue';
 import WechatLogin from '../../shared/components/WechatLogin.vue';
+import LoginModeToggle from '../../shared/components/LoginModeToggle.vue';
 import EmbeddedExternalPage from './components/EmbeddedExternalPage.vue';
 import { computed, nextTick, onBeforeUnmount, onMounted, provide, reactive, ref, watch } from 'vue';
 import { TABLE_WIDTH_SCOPE } from './utils/tableWidths';
@@ -4293,7 +4294,6 @@ import {
   Network,
   Plus,
   Printer,
-  QrCode,
   RefreshCw,
   RotateCcw,
   Save,

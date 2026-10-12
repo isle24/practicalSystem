@@ -5362,9 +5362,6 @@ a {
   backdrop-filter: blur(24px) saturate(125%);
 }
 
-.login-mode-corner { position: absolute; top: 12px; right: 12px; width: 58px; height: 58px; display: flex; justify-content: flex-end; align-items: flex-start; padding: 7px; clip-path: polygon(0 0,100% 0,100% 100%); border-radius: 0 8px 0 0; background: #4169ff; color: #fff; }
-.login-mode-corner:hover { background: #2852df; }
-.login-mode-corner:focus-visible { clip-path: none; }
 .login-panel header { padding-right: 34px; }
 .login-view-title { margin: 22px 0 16px; font-size: 23px; text-align: center; }
 .login-panel-scan { gap: 20px; }
