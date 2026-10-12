@@ -2,7 +2,7 @@
   <main class="connection-page">
     <header class="connection-heading">
       <span class="product-name">实践系统</span>
-      <h1>{{ editingSchool ? '连接学校' : schoolName }}</h1>
+      <h1>{{ editingSchool ? (domain.trim() === defaultSchoolOrigin ? defaultSchoolName : '连接学校') : schoolName }}</h1>
       <div v-if="!editingSchool" class="school-identity">
         <span>{{ remark || '学校账号登录' }}</span>
         <button type="button" class="switch-school" :disabled="busy || loading" @click="switching = !switching"><RefreshCw :size="14" />切换</button>
@@ -64,8 +64,10 @@ import { invoke } from '@tauri-apps/api/core';
 import { getVersion } from '@tauri-apps/api/app';
 import { ArrowRight, ChevronRight, CircleAlert, Globe2, LoaderCircle, LockKeyhole, Plus, QrCode, RefreshCw, X } from '@lucide/vue';
 
-const domain = ref('');
-const schoolName = ref('');
+const defaultSchoolOrigin = 'https://sxxt.cdjcc.edu.cn';
+const defaultSchoolName = '成都锦城学院';
+const domain = ref(defaultSchoolOrigin);
+const schoolName = ref(defaultSchoolName);
 const remark = ref('');
 const editingSchool = ref(true);
 const switching = ref(false);
