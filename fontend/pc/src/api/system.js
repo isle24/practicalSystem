@@ -497,20 +497,21 @@ export function uploadProfileAsset(type, file) {
   });
 }
 
-export function fetchDesktopShortcuts() {
-  return request('/desktop/shortcuts');
+export function fetchDesktopShortcuts(options = {}) {
+  return request('/desktop/shortcuts', options);
 }
 
-export function saveDesktopShortcuts(payload) {
+export function saveDesktopShortcuts(payload, options = {}) {
   return request('/desktop/save-shortcuts', {
+    ...options,
     method: 'POST',
     body: JSON.stringify(payload),
   });
 }
 
-export function fetchFavorites(params = {}) {
+export function fetchFavorites(params = {}, options = {}) {
   const query = new URLSearchParams(params).toString();
-  return request(`/favorite/list${query ? `?${query}` : ''}`);
+  return request(`/favorite/list${query ? `?${query}` : ''}`, options);
 }
 
 export function saveFavorite(payload) {

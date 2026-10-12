@@ -1,6 +1,20 @@
 :root { --desktop-label-color: #fff; --theme-window-background: #fff; --theme-panel: var(--surface-2); --theme-text: var(--text); --theme-border: var(--line); --theme-accent: var(--primary); }
 :root[data-theme] {
   --primary-soft: color-mix(in srgb, var(--primary) 9%, var(--surface));
+  --primary-border: color-mix(in srgb, var(--primary) 30%, var(--line));
+  --teal-soft: color-mix(in srgb, var(--teal) 10%, var(--surface));
+  --teal-border: color-mix(in srgb, var(--teal) 30%, var(--line));
+  --amber-soft: color-mix(in srgb, var(--amber) 10%, var(--surface));
+  --amber-border: color-mix(in srgb, var(--amber) 30%, var(--line));
+  --danger-soft: color-mix(in srgb, var(--danger) 10%, var(--surface));
+  --danger-border: color-mix(in srgb, var(--danger) 30%, var(--line));
+  --green-soft: color-mix(in srgb, var(--green) 10%, var(--surface));
+  --green-border: color-mix(in srgb, var(--green) 30%, var(--line));
+  --purple: #7652b8;
+  --purple-soft: color-mix(in srgb, var(--purple) 10%, var(--surface));
+  --text-secondary: var(--muted);
+  --panel-background: var(--surface);
+  --border-color: var(--line);
   --el-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
   --el-font-size-base: 13px;
   --el-text-color-primary: var(--text);
@@ -10,15 +24,69 @@
   --el-text-color-disabled: var(--muted);
   --el-disabled-text-color: var(--muted);
   --el-border-color: var(--line);
+  --el-border-color-dark: var(--line-strong);
+  --el-border-color-darker: color-mix(in srgb, var(--line-strong) 75%, var(--text));
   --el-border-color-light: var(--line);
   --el-border-color-lighter: var(--line);
+  --el-border-color-extra-light: color-mix(in srgb, var(--line) 60%, var(--surface));
   --el-bg-color: var(--surface);
+  --el-bg-color-page: var(--bg);
   --el-bg-color-overlay: var(--surface);
   --el-fill-color-blank: var(--surface);
   --el-fill-color-light: var(--surface-2);
   --el-fill-color-lighter: color-mix(in srgb, var(--surface-2) 60%, var(--surface));
   --el-fill-color: var(--surface-2);
   --el-fill-color-dark: var(--line);
+  --el-fill-color-darker: var(--line-strong);
+  --el-fill-color-extra-light: color-mix(in srgb, var(--surface-2) 35%, var(--surface));
+  --el-disabled-bg-color: var(--surface-2);
+  --el-disabled-border-color: var(--line);
+  --el-color-success: var(--green);
+  --el-color-success-light-3: color-mix(in srgb, var(--green) 70%, var(--surface));
+  --el-color-success-light-5: color-mix(in srgb, var(--green) 50%, var(--surface));
+  --el-color-success-light-7: color-mix(in srgb, var(--green) 30%, var(--surface));
+  --el-color-success-light-8: color-mix(in srgb, var(--green) 20%, var(--surface));
+  --el-color-success-light-9: color-mix(in srgb, var(--green) 10%, var(--surface));
+  --el-color-success-dark-2: color-mix(in srgb, var(--green) 80%, var(--text));
+  --el-color-warning: var(--amber);
+  --el-color-warning-light-3: color-mix(in srgb, var(--amber) 70%, var(--surface));
+  --el-color-warning-light-5: color-mix(in srgb, var(--amber) 50%, var(--surface));
+  --el-color-warning-light-7: color-mix(in srgb, var(--amber) 30%, var(--surface));
+  --el-color-warning-light-8: color-mix(in srgb, var(--amber) 20%, var(--surface));
+  --el-color-warning-light-9: color-mix(in srgb, var(--amber) 10%, var(--surface));
+  --el-color-warning-dark-2: color-mix(in srgb, var(--amber) 80%, var(--text));
+  --el-color-danger: var(--danger);
+  --el-color-danger-light-3: color-mix(in srgb, var(--danger) 70%, var(--surface));
+  --el-color-danger-light-5: color-mix(in srgb, var(--danger) 50%, var(--surface));
+  --el-color-danger-light-7: color-mix(in srgb, var(--danger) 30%, var(--surface));
+  --el-color-danger-light-8: color-mix(in srgb, var(--danger) 20%, var(--surface));
+  --el-color-danger-light-9: color-mix(in srgb, var(--danger) 10%, var(--surface));
+  --el-color-danger-dark-2: color-mix(in srgb, var(--danger) 80%, var(--text));
+  --el-color-error: var(--danger);
+  --el-color-error-light-3: color-mix(in srgb, var(--danger) 70%, var(--surface));
+  --el-color-error-light-5: color-mix(in srgb, var(--danger) 50%, var(--surface));
+  --el-color-error-light-7: color-mix(in srgb, var(--danger) 30%, var(--surface));
+  --el-color-error-light-8: color-mix(in srgb, var(--danger) 20%, var(--surface));
+  --el-color-error-light-9: color-mix(in srgb, var(--danger) 10%, var(--surface));
+  --el-color-error-dark-2: color-mix(in srgb, var(--danger) 80%, var(--text));
+  --el-color-info: var(--muted);
+  --el-color-info-light-3: color-mix(in srgb, var(--muted) 70%, var(--surface));
+  --el-color-info-light-5: color-mix(in srgb, var(--muted) 50%, var(--surface));
+  --el-color-info-light-7: color-mix(in srgb, var(--muted) 30%, var(--surface));
+  --el-color-info-light-8: color-mix(in srgb, var(--muted) 20%, var(--surface));
+  --el-color-info-light-9: color-mix(in srgb, var(--muted) 10%, var(--surface));
+  --el-box-shadow: var(--shadow);
+  --el-box-shadow-light: 0 6px 24px rgba(0, 0, 0, .18);
+  --el-box-shadow-lighter: 0 2px 12px rgba(0, 0, 0, .12);
+  --el-mask-color: color-mix(in srgb, #000 55%, transparent);
+  --el-mask-color-extra-light: color-mix(in srgb, #000 30%, transparent);
+  --el-menu-active-color: var(--primary-ink, var(--primary));
+  --el-menu-hover-text-color: var(--primary-ink, var(--primary));
+  --el-menu-hover-bg-color: var(--primary-soft);
+  --el-menu-border-color: var(--line);
+}
+:root[data-theme="light"] {
+  color-scheme: light;
 }
 :root[data-theme="dark"] {
   color-scheme: dark;
@@ -33,6 +101,8 @@
   --amber: #e4b35d;
   --green: #5dcea4;
   --teal: #63c6b9;
+  --purple: #b99be7;
+  --glass: color-mix(in srgb, var(--surface) 88%, transparent);
   --shadow: 0 22px 60px rgba(0, 0, 0, .4);
   --shadow-active: 0 28px 72px rgba(0, 0, 0, .5);
 }
@@ -57,6 +127,22 @@
 }
 .el-button.is-disabled {
   opacity: .68;
+}
+.el-dropdown, .el-dropdown__popper {
+  --el-dropdown-menuItem-hover-color: var(--primary-ink, var(--primary));
+  --el-dropdown-menuItem-hover-fill: var(--primary-soft);
+}
+.el-select-dropdown__item.is-selected:not(.is-disabled) {
+  color: var(--primary-ink, var(--primary));
+}
+.el-select-dropdown.is-multiple .el-select-dropdown__item.is-selected::after {
+  background-color: var(--primary-ink, var(--primary));
+}
+:root[data-theme="dark"] .el-button:is(.el-button--success, .el-button--warning, .el-button--danger, .el-button--info):not(.is-plain):not(.is-text):not(.is-link) {
+  --el-button-text-color: #18212b;
+  --el-button-hover-text-color: #18212b;
+  --el-button-active-text-color: #18212b;
+  --el-button-disabled-text-color: #18212b;
 }
 .el-tag--primary:is(.el-tag--light, .el-tag--plain) {
   --el-tag-text-color: var(--primary-ink, var(--primary));
@@ -100,7 +186,6 @@
 :root[data-theme="dark"] .profile-panel-card,
 :root[data-theme="dark"] .module-content-panel,
 :root[data-theme="dark"] .menu-dialog,
-:root[data-theme="dark"] .operation-dialog,
 :root[data-theme="dark"] .plugin-card,
 :root[data-theme="dark"] .favorite-tile,
 :root[data-theme="dark"] .wechat-binding-gate,
@@ -122,7 +207,7 @@
 :root[data-theme="dark"] .taskbar-operator-button { color: var(--text); }
 :root[data-theme="dark"] input:not([type="color"]):not(.el-input__inner):not(.el-select__input):not(.el-select-v2__combobox-input),
 :root[data-theme="dark"] textarea,
-:root[data-theme="dark"] select { background-color: var(--surface-2); color: var(--text); border-color: var(--line); }
+:root[data-theme="dark"] select { background-color: var(--surface); color: var(--text); border-color: var(--line); }
 :root[data-theme="dark"] .window-content,
 :root[data-theme="dark"] .operation-dialog-body { background: transparent; color: var(--text); }
 :root[data-theme="dark"] .wechat-binding-gate { background: rgba(5, 10, 18, .8) !important; }

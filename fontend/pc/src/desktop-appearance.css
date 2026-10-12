@@ -28,22 +28,33 @@
 }
 .desktop-canvas .desktop-position-dragging * { cursor: grabbing; }
 
-.window-title { gap: 0; background: #f6f7fa; border-bottom-color: rgba(0, 0, 0, .07); }
+.window-title { gap: 0; background: var(--surface-2); border-bottom-color: rgba(0, 0, 0, .07); }
 .window-name { flex: 1; padding-right: 16px; }
 .window-name span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .window-title-side { margin-left: auto; }
 .window-controls { flex-shrink: 0; }
 .window-guide-button { border-color: transparent; background: transparent; }
-.window-guide-button:hover { background: rgba(0, 0, 0, .05); }
+.window-guide-button:hover { background: var(--surface); }
 
 .desktop-shell:not(.desktop-shell-mac) {
   font-family: "Segoe UI Variable", "Segoe UI", "Microsoft YaHei", sans-serif;
 }
 .desktop-shell:not(.desktop-shell-mac) .taskbar {
-  background: rgba(245, 247, 250, .88);
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
   border-top-color: rgba(255, 255, 255, .72);
 }
 .taskbar-center { overflow: visible; }
+.desktop-shell-native.desktop-shell-fullscreen { grid-template-rows: minmax(0, 1fr); }
+.native-taskbar-edge { position: absolute; inset: auto 0 0; height: 5px; border: 0; padding: 0; background: transparent; z-index: 3201; }
+.desktop-shell-native.desktop-shell-fullscreen .taskbar { position: absolute; inset: auto 0 0; min-height: 50px; transform: translateY(100%); transition: transform .16s ease; }
+.desktop-shell-native.desktop-shell-fullscreen .taskbar-revealed,
+.desktop-shell-native.desktop-shell-fullscreen .taskbar:focus-within { transform: translateY(0); }
+.desktop-shell-native.desktop-shell-mac.desktop-shell-fullscreen .taskbar { left: 50%; right: auto; transform: translate(-50%, calc(100% + 10px)); }
+.desktop-shell-native.desktop-shell-mac.desktop-shell-fullscreen .taskbar-revealed,
+.desktop-shell-native.desktop-shell-mac.desktop-shell-fullscreen .taskbar:focus-within { transform: translate(-50%, 0); }
+.desktop-shell-native.desktop-shell-mac.desktop-shell-fullscreen .taskbar::before { content: ''; position: absolute; inset: auto 0 -10px; height: 10px; }
+.native-taskbar-edge:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+@media (prefers-reduced-motion: reduce) { .desktop-shell-native.desktop-shell-fullscreen .taskbar { transition: none; } }
 .taskbar .global-search svg { flex-shrink: 0; }
 .taskbar .taskbar-glyph,
 .taskbar .search-result-glyph { color: #fff; }
@@ -80,7 +91,7 @@
   gap: 8px;
   border: 1px solid rgba(255, 255, 255, .55);
   border-radius: 20px;
-  background: rgba(244, 245, 248, .68);
+  background: color-mix(in srgb, var(--surface) 68%, transparent);
   box-shadow: 0 8px 30px rgba(0, 0, 0, .17), inset 0 0 0 1px rgba(255, 255, 255, .18);
   backdrop-filter: blur(32px) saturate(155%);
 }
@@ -96,7 +107,7 @@
 .desktop-shell-mac .taskbar a:hover,
 .desktop-shell-mac .taskbar .dock-pinned-app:hover { transform: translateY(-4px); }
 .desktop-shell-mac .taskbar a.active,
-.desktop-shell-mac .taskbar .dock-pinned-app.active { background: rgba(255,255,255,.3); border-color: transparent; box-shadow: none; }
+.desktop-shell-mac .taskbar .dock-pinned-app.active { background: color-mix(in srgb, var(--text) 12%, transparent); border-color: transparent; box-shadow: none; }
 .desktop-shell-mac .taskbar .dock-pinned-app::after,
 .desktop-shell-mac .taskbar a::after,
 .desktop-shell-mac .taskbar .message-taskbar-button::after {
@@ -111,15 +122,15 @@
   background: transparent;
 }
 .desktop-shell-mac .taskbar .running::after,
-.desktop-shell-mac .taskbar .active::after { background: #48515b; }
-.desktop-shell-mac .taskbar-status { flex: 0 0 auto; gap: 3px; padding-left: 8px; border-left: 1px solid rgba(70, 80, 90, .2); }
-.desktop-shell-mac .taskbar-version { font-size: 10px; color: #59626d; }
+.desktop-shell-mac .taskbar .active::after { background: var(--text); }
+.desktop-shell-mac .taskbar-status { flex: 0 0 auto; gap: 3px; padding-left: 8px; border-left: 1px solid var(--line); }
+.desktop-shell-mac .taskbar-version { font-size: 10px; color: var(--muted); }
 .desktop-shell-mac .taskbar-clock { font-size: 11px; }
 .desktop-shell-mac .taskbar .taskbar-operator-button,
 .desktop-shell-mac .taskbar .taskbar-logout-button,
 .desktop-shell-mac .taskbar .switch-account-button { width: 34px; height: 38px; flex-basis: 34px; padding: 0; }
 .desktop-shell-mac .taskbar .global-search-wrap { flex: 0 0 40px; width: 40px; }
-.desktop-shell-mac .taskbar .global-search { height: 40px; padding: 0 11px; border: 0; border-radius: 11px; background: rgba(255,255,255,.45); }
+.desktop-shell-mac .taskbar .global-search { height: 40px; padding: 0 11px; border: 0; border-radius: 11px; background: color-mix(in srgb, var(--surface) 45%, transparent); }
 .desktop-shell-mac .taskbar .global-search input { width: 0; min-width: 0; opacity: 0; }
 .desktop-shell-mac .taskbar .global-search-wrap:focus-within { width: 210px; flex-basis: 210px; }
 .desktop-shell-mac .taskbar .global-search-wrap:focus-within input { width: 100%; opacity: 1; }
@@ -128,7 +139,7 @@
 .desktop-shell-mac .notebook-floating-button { bottom: 100px; }
 
 .desktop-window-mac { border-color: rgba(0,0,0,.18); box-shadow: 0 20px 55px rgba(0,0,0,.2); }
-.desktop-window-mac .window-title { position: relative; padding: 0 12px; gap: 12px; background: #f1f1f3; }
+.desktop-window-mac .window-title { position: relative; padding: 0 12px; gap: 12px; background: var(--surface-2); }
 .desktop-window-mac .window-controls { order: -1; gap: 8px; align-items: center; }
 .desktop-window-mac .window-controls button { width: 13px; height: 13px; min-width: 13px; flex: 0 0 13px; padding: 0; line-height: 1; border-radius: 50%; border: 1px solid rgba(0,0,0,.12); color: rgba(0,0,0,.62); }
 .desktop-window-mac .window-controls .window-control-close { order: -1; background: #ff5f57; }

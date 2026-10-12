@@ -46,6 +46,20 @@ function accentVariables(accent, surface) {
   };
 }
 
+function surfaceVariables(windowColor, dark) {
+  const surface = windowColor || (dark ? '#18212f' : '#ffffff');
+  const variables = { '--surface': surface };
+  if (surface !== (dark ? '#18212f' : '#ffffff')) {
+    const target = foreground(surface) === '#ffffff' ? '#ffffff' : '#000000';
+    variables['--surface-2'] = mixColor(surface, target, 0.06);
+    variables['--line'] = mixColor(surface, target, 0.18);
+    variables['--line-strong'] = mixColor(surface, target, 0.32);
+    variables['--text'] = target === '#ffffff' ? '#e7edf5' : '#202b3a';
+    variables['--muted'] = mixColor(surface, variables['--text'], 0.7);
+  }
+  return variables;
+}
+
 function normalize(value = {}) {
   return { id: String(value.id || 'system'), name: String(value.name || '').slice(0, 40), mode: ['light', 'dark', 'system'].includes(value.mode) ? value.mode : 'system', accent: color(value.accent) || '#2563eb', window: color(value.window), text: color(value.text) || '#ffffff', opacity: Math.max(0.65, Math.min(1, Number(value.opacity) || 1)), density: ['compact', 'normal', 'comfortable'].includes(value.density) ? value.density : 'normal', wallpaper_id: String(value.wallpaper_id || '') };
 }
@@ -77,7 +91,7 @@ export function useLocalTheme(scope) {
   let objectUrl = '';
   const current = computed(() => state.preview || state.saved);
   const dark = computed(() => current.value.mode === 'dark' || (current.value.mode === 'system' && state.systemDark));
-  const styles = computed(() => ({ '--desktop-label-color': current.value.text, '--primary': current.value.accent, '--el-color-primary': current.value.accent, '--theme-window-opacity': current.value.opacity, '--desktop-tile-padding-top': current.value.density === 'compact' ? '5px' : current.value.density === 'comfortable' ? '18px' : '10px', ...(current.value.window ? { '--surface': current.value.window, '--el-bg-color': current.value.window, '--el-bg-color-overlay': current.value.window } : {}), ...(state.wallpaperUrl ? { backgroundImage: `url("${state.wallpaperUrl}")`, backgroundSize: 'cover', backgroundPosition: 'center' } : {}) }));
+  const styles = computed(() => ({ '--desktop-label-color': current.value.text, '--primary': current.value.accent, '--el-color-primary': current.value.accent, '--theme-window-opacity': current.value.opacity, '--desktop-tile-padding-top': current.value.density === 'compact' ? '5px' : current.value.density === 'comfortable' ? '18px' : '10px', ...surfaceVariables(current.value.window, dark.value), ...(state.wallpaperUrl ? { backgroundImage: `url("${state.wallpaperUrl}")`, backgroundSize: 'cover', backgroundPosition: 'center' } : {}) }));
   const updateSystem = event => { state.systemDark = event.matches; };
   media.addEventListener('change', updateSystem);
   watch([dark, current], () => {
@@ -87,11 +101,10 @@ export function useLocalTheme(scope) {
     html.style.setProperty('--primary', current.value.accent);
     html.style.setProperty('--el-color-primary', current.value.accent);
     html.style.setProperty('--desktop-label-color', current.value.text);
-    for (const key of ['--surface', '--el-bg-color', '--el-bg-color-overlay']) {
-      if (current.value.window) html.style.setProperty(key, current.value.window);
-      else html.style.removeProperty(key);
-    }
-    const value = current.value.window || (dark.value ? '#18212f' : '#ffffff');
+    for (const key of ['--surface', '--surface-2', '--line', '--line-strong', '--text', '--muted', '--el-bg-color', '--el-bg-color-overlay']) html.style.removeProperty(key);
+    const surface = surfaceVariables(current.value.window, dark.value);
+    Object.entries(surface).forEach(([key, value]) => html.style.setProperty(key, value));
+    const value = surface['--surface'];
     Object.entries(accentVariables(current.value.accent, value)).forEach(([key, value]) => html.style.setProperty(key, value));
     html.style.setProperty('--theme-window-background', `rgba(${rgb(value).join(',')},${current.value.opacity})`);
   }, { immediate: true, deep: true });

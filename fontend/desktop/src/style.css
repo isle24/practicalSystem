@@ -19,6 +19,9 @@ h1 { font-size: 23px; line-height: 1.4; margin: 14px 0 12px; font-weight: 600; o
 .icon-button { display: grid; place-items: center; border: 0; border-radius: 6px; background: #e9edf2; width: 28px; height: 28px; color: #6c7787; }
 .add-school { margin-top: 18px; display: flex; gap: 8px; align-items: center; padding: 12px 0; border: 0; background: transparent; color: #276fc2; }
 .connection-form label { display: block; margin: 0 0 10px; font-size: 13px; font-weight: 600; }
+.login-methods { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 4px; padding: 4px; margin-bottom: 20px; border: 1px solid #d9dfe5; border-radius: 10px; background: #e9edf2; }
+.login-methods button { display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 42px; padding: 7px; border: 0; border-radius: 7px; background: transparent; color: #5f6b78; font-size: 13px; }
+.login-methods button[aria-pressed="true"] { background: #fff; color: #1875dc; box-shadow: 0 1px 4px #17212d12; }
 .domain-field { display: flex; align-items: center; gap: 10px; padding: 0 14px; height: 48px; border: 1px solid #d9dfe5; border-radius: 8px; background: white; color: #7a8592; transition: border-color .15s; }
 .domain-field:focus-within { border-color: #1875dc; box-shadow: 0 0 0 3px #1875dc14; }
 .domain-field input { width: 100%; min-width: 0; border: 0; padding: 0; outline: 0; color: #20252b; background: transparent; font-size: 15px; height: 100%; }
@@ -49,8 +52,15 @@ footer { display: flex; gap: 6px; align-items: center; color: #8a939e; font-size
 @media (max-width: 380px) { .connection-page { padding: 28px 20px 20px; } }
 
 @media (prefers-color-scheme: dark) {
-  :root { color-scheme: dark; color: #e7edf5; background: #0e1622; }
+  :root { color-scheme: dark; color: #e7edf5; background: #0e1622; --connection-muted: #a2b0c2; }
   .connection-page { color: #e7edf5; }
-  .connection-form input, .connection-form button, .history-card, .history-item { color: #e7edf5; background: #18212f; border-color: #354359; }
-  .connection-form label, .school-identity, .product-name, .status-message { color: #a2b0c2; }
+  .domain-field, .connection-form > input, .icon-button, .login-methods { color: #e7edf5; background: #18212f; border-color: #354359; }
+  .domain-field input { color: #e7edf5; }
+  .connection-form label, .school-identity, .product-name, .login-methods button, .school-row, .recent-schools h2, footer { color: #a2b0c2; }
+  .login-methods button[aria-pressed="true"] { background: #263c61; color: #acd0ff; }
+  .school-label strong { color: #e7edf5; }
+  .school-row { border-color: #354359; }
+  .connection-form label small { color: #a2b0c2; }
+  .switch-school, .add-school { color: #91bff1; }
+  .error { color: #ff9e9e; }
 }

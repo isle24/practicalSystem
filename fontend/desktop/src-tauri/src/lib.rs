@@ -11,7 +11,7 @@ mod windows;
 
 use connection::Settings;
 use std::sync::{
-    atomic::{AtomicBool, Ordering},
+    atomic::{AtomicBool, AtomicU8, Ordering},
     Mutex,
 };
 use tauri::{
@@ -24,8 +24,47 @@ use tauri_plugin_opener::OpenerExt;
 #[derive(Default)]
 struct AppState {
     connecting: AtomicBool,
+    exit_gate: ExitGate,
     gateway: Mutex<Option<gateway::Gateway>>,
     zoom: Mutex<f64>,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum ExitDecision {
+    Allow,
+    Prevent,
+    StartRevocation,
+}
+
+#[derive(Default)]
+struct ExitGate(AtomicU8);
+
+impl ExitGate {
+    fn request(&self, active: bool) -> ExitDecision {
+        loop {
+            match self.0.load(Ordering::Acquire) {
+                2 => return ExitDecision::Allow,
+                1 => return ExitDecision::Prevent,
+                _ if !active => return ExitDecision::Allow,
+                _ => {
+                    if self
+                        .0
+                        .compare_exchange(0, 1, Ordering::AcqRel, Ordering::Acquire)
+                        .is_ok()
+                    {
+                        return ExitDecision::StartRevocation;
+                    }
+                }
+            }
+        }
+    }
+
+    fn complete(&self) {
+        self.0.store(2, Ordering::Release);
+    }
+    fn cancel(&self) {
+        self.0.store(0, Ordering::Release);
+    }
 }
 
 struct ConnectingGuard<'a>(&'a AtomicBool);
@@ -34,6 +73,27 @@ impl Drop for ConnectingGuard<'_> {
     /// 释放重复连接保护。
     fn drop(&mut self) {
         self.0.store(false, Ordering::Release);
+    }
+}
+
+async fn revoke_current_school(app: &AppHandle) -> Result<Option<String>, String> {
+    let previous = {
+        let state = app.state::<AppState>();
+        let active = state.gateway.lock().map_err(|_| "连接状态不可用")?;
+        active
+            .as_ref()
+            .map(|gateway| {
+                gateway
+                    .source_session()
+                    .map(|session| (gateway.owner.clone(), session))
+            })
+            .transpose()?
+    };
+    if let Some((owner, (client, source))) = previous {
+        gateway::logout_source(&client, &source).await?;
+        Ok(Some(owner))
+    } else {
+        Ok(None)
     }
 }
 
@@ -80,13 +140,29 @@ async fn connect_school(
     domain: String,
     username: String,
     password: String,
+    login_method: Option<String>,
     remember_password: bool,
     auto_login: bool,
     remark: Option<String>,
 ) -> Result<Settings, String> {
     require_connection(&window)?;
-    if username.trim().is_empty() != password.is_empty() {
-        return Err("请完整填写账号和密码，或同时留空后选择企业微信扫码登录".into());
+    let login_method = login_method.unwrap_or_else(|| {
+        if username.trim().is_empty() && password.is_empty() {
+            "wechat".into()
+        } else {
+            "password".into()
+        }
+    });
+    if !matches!(login_method.as_str(), "password" | "wechat") {
+        return Err("请选择有效的登录方式".into());
+    }
+    if login_method == "password" && (username.trim().is_empty() || password.is_empty()) {
+        return Err("请输入账号和密码，或选择企业微信扫码登录".into());
+    }
+    if login_method == "wechat"
+        && (!username.trim().is_empty() || !password.is_empty() || remember_password || auto_login)
+    {
+        return Err("企业微信扫码登录无需填写账号密码".into());
     }
     if state.connecting.swap(true, Ordering::AcqRel) {
         return Err("正在连接，请稍候".into());
@@ -125,11 +201,13 @@ async fn connect_school(
         .iter()
         .find(|school| school.origin == origin.origin().ascii_serialization())
         .map_or(0, |school| school.port);
-    let connection = connection::connect(origin, preferred_port).await?;
+    let mut connection = connection::connect(origin, preferred_port).await?;
     let mut profile = connection.school.clone();
     profile.username = username.trim().to_owned();
+    profile.login_method = login_method;
     profile.auto_login = auto_login && remember_password && !password.is_empty();
     profile.remark = remark.unwrap_or_default().trim().chars().take(60).collect();
+    connection.school = profile.clone();
     let reserved_ports: Vec<u16> = settings
         .schools
         .iter()
@@ -147,6 +225,13 @@ async fn connect_school(
         },
     )
     .await?;
+    if let Some(owner) = revoke_current_school(&app)
+        .await
+        .map_err(|reason| format!("原学校退出未完成，当前学校连接已保留：{reason}"))?
+    {
+        windows::close_school(&app, &owner);
+        state.gateway.lock().map_err(|_| "连接状态不可用")?.take();
+    }
     profile.port = gateway.port;
     settings.last_origin = profile.origin.clone();
     settings.last_username = profile.username.clone();
@@ -160,13 +245,14 @@ async fn connect_school(
     } else {
         connection::delete_password(&profile.origin, &profile.username)?;
     }
-    windows::close_school(&app);
     let school = windows::build(
         &app,
         "school",
         gateway.entry.clone(),
         gateway.origin.clone(),
         gateway.remote.clone(),
+        &gateway.owner,
+        &profile.login_method,
         None,
     )
     .map_err(|_| "无法打开学校窗口，请重新连接")?;
@@ -285,6 +371,9 @@ fn handle_menu(app: &AppHandle, id: &str) {
         }
         "fullscreen" => {
             let _ = window.set_fullscreen(!window.is_fullscreen().unwrap_or(false));
+            if window.label() == "school" {
+                windows::notify_state(app);
+            }
         }
         "zoom-in" | "zoom-out" | "zoom-reset" => {
             let state = app.state::<AppState>();
@@ -341,16 +430,40 @@ pub fn run() {
                     }
                 }
             } else if window.label() == "school" {
-                if matches!(event, tauri::WindowEvent::CloseRequested { .. }) {
-                    if let Ok(mut gateway) = window.app_handle().state::<AppState>().gateway.lock()
-                    {
-                        gateway.take();
+                if matches!(
+                    event,
+                    tauri::WindowEvent::Resized(_)
+                        | tauri::WindowEvent::Focused(_)
+                        | tauri::WindowEvent::ScaleFactorChanged { .. }
+                ) {
+                    windows::notify_state(window.app_handle());
+                }
+                if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                    api.prevent_close();
+                    let app = window.app_handle().clone();
+                    let state = app.state::<AppState>();
+                    if state.connecting.swap(true, Ordering::AcqRel) {
+                        return;
                     }
-                    for (label, preview) in window.app_handle().webview_windows() {
-                        if label.starts_with("preview-") {
-                            let _ = preview.destroy();
-                        }
-                    }
+                    tauri::async_runtime::spawn(async move {
+                        let state = app.state::<AppState>();
+                        let _guard = ConnectingGuard(&state.connecting);
+                        let owner = match revoke_current_school(&app).await {
+                            Ok(Some(owner)) => owner,
+                            Ok(None) => String::new(),
+                            Err(reason) => {
+                                app.dialog()
+                                    .message(format!("原学校退出未完成，已保留当前连接：{reason}"))
+                                    .title("无法关闭学校连接")
+                                    .show(|_| {});
+                                return;
+                            }
+                        };
+                        windows::close_school(&app, &owner);
+                        if let Ok(mut active) = state.gateway.lock() {
+                            active.take();
+                        };
+                    });
                 }
                 if matches!(event, tauri::WindowEvent::Destroyed) {
                     windows::show_connection(window.app_handle());
@@ -360,6 +473,51 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("无法启动实践管理客户端")
         .run(|app, event| {
+            if let tauri::RunEvent::ExitRequested { api, .. } = &event {
+                let state = app.state::<AppState>();
+                let active = state
+                    .gateway
+                    .lock()
+                    .map(|gateway| gateway.is_some())
+                    .unwrap_or(true)
+                    || state.connecting.load(Ordering::Acquire);
+                match state.exit_gate.request(active) {
+                    ExitDecision::Allow => {}
+                    ExitDecision::Prevent => api.prevent_exit(),
+                    ExitDecision::StartRevocation => {
+                        api.prevent_exit();
+                        if state.connecting.swap(true, Ordering::AcqRel) {
+                            state.exit_gate.cancel();
+                            return;
+                        }
+                        let app = app.clone();
+                        tauri::async_runtime::spawn(async move {
+                            let state = app.state::<AppState>();
+                            let _guard = ConnectingGuard(&state.connecting);
+                            match revoke_current_school(&app).await {
+                                Ok(owner) => {
+                                    if let Some(owner) = owner {
+                                        windows::close_school(&app, &owner);
+                                    }
+                                    if let Ok(mut gateway) = state.gateway.lock() {
+                                        gateway.take();
+                                    }
+                                    state.exit_gate.complete();
+                                    app.exit(0);
+                                }
+                                Err(reason) => {
+                                    state.exit_gate.cancel();
+                                    app.dialog()
+                                        .message(format!("原学校退出未完成，已取消退出：{reason}"))
+                                        .title("无法退出客户端")
+                                        .show(|_| {});
+                                }
+                            }
+                        });
+                        return;
+                    }
+                }
+            }
             #[cfg(target_os = "macos")]
             if let tauri::RunEvent::Reopen { .. } = event {
                 if let Some(window) = app.get_webview_window("school") {
@@ -372,4 +530,27 @@ pub fn run() {
             #[cfg(not(target_os = "macos"))]
             let _ = (app, event);
         });
+}
+
+#[cfg(test)]
+mod exit_gate_tests {
+    use super::{ExitDecision, ExitGate};
+
+    #[test]
+    fn repeated_exit_waits_until_source_logout_is_confirmed() {
+        let gate = ExitGate::default();
+        assert_eq!(gate.request(true), ExitDecision::StartRevocation);
+        assert_eq!(gate.request(true), ExitDecision::Prevent);
+        assert_eq!(gate.request(false), ExitDecision::Prevent);
+        gate.complete();
+        assert_eq!(gate.request(false), ExitDecision::Allow);
+    }
+
+    #[test]
+    fn failed_logout_returns_to_guarded_idle_state() {
+        let gate = ExitGate::default();
+        assert_eq!(gate.request(true), ExitDecision::StartRevocation);
+        gate.cancel();
+        assert_eq!(gate.request(true), ExitDecision::StartRevocation);
+    }
 }

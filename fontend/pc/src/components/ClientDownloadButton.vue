@@ -32,10 +32,10 @@ async function open() {
 </template>
 
 <style scoped>
-.client-download-entry { display: inline-flex; align-items: center; justify-content: center; gap: 8px; border: 0; background: transparent; color: #316aa9; padding: 10px; cursor: pointer; font: inherit; border-radius: 6px; }
+.client-download-entry { display: inline-flex; align-items: center; justify-content: center; gap: 8px; border: 0; background: transparent; color: var(--primary-ink); padding: 10px; cursor: pointer; font: inherit; border-radius: 6px; }
 .client-download-entry.compact { width: 34px; height: 34px; padding: 8px; color: inherit; }
-.client-download-entry:hover { background: #3d7bcc10; }
+.client-download-entry:hover { background: var(--primary-soft); }
 .client-download-list { padding: 24px; display: flex; flex-direction: column; gap: 12px; overflow: auto; }
-.client-download-list a { display: flex; align-items: center; gap: 14px; color: #3066b1; text-decoration: none; padding: 16px 0; border-bottom: 1px solid #e3e8ef; }
-.client-download-list a > span { flex: 1; min-width: 0; display: grid; gap: 6px; overflow-wrap: anywhere; }.client-download-list a > svg { flex-shrink: 0; }.client-download-list small { font-size: 12px; color: #788496; font-weight: normal; }
+.client-download-list a { display: flex; align-items: center; gap: 14px; color: var(--primary-ink); text-decoration: none; padding: 16px 0; border-bottom: 1px solid var(--line); }
+.client-download-list a > span { flex: 1; min-width: 0; display: grid; gap: 6px; overflow-wrap: anywhere; }.client-download-list a > svg { flex-shrink: 0; }.client-download-list small { font-size: 12px; color: var(--muted); font-weight: normal; }
 </style>

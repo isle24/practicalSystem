@@ -55,6 +55,7 @@
             <dt>基地名称</dt><dd>{{ state.detail.item.base_name || '—' }}</dd>
             <dt>基地地址</dt><dd>{{ state.detail.item.base_address || '—' }}</dd>
             <dt>基地类型</dt><dd>{{ state.detail.item.base_category || '—' }}</dd>
+            <dt>立项年份</dt><dd>{{ state.detail.item.project_year ?? '—' }}</dd>
             <dt>基地位置</dt><dd>{{ state.detail.item.base_location || '—' }}</dd>
             <dt>基地负责人</dt><dd>{{ state.detail.item.base_manager_name || '—' }}</dd>
             <dt>负责人电话</dt><dd>{{ state.detail.item.base_manager_phone || '—' }}</dd>
@@ -123,6 +124,7 @@
           </label>
           <label><span>联系人姓名</span><el-input v-model="state.form.contact_person" maxlength="180" placeholder="请输入本次走访联系人" /></label>
           <label><span>联系电话</span><el-input v-model="state.form.contact_phone" maxlength="40" placeholder="请输入本次走访联系电话" /></label>
+          <label><span>立项年份</span><el-input v-model="state.form.project_year" maxlength="4" inputmode="numeric" placeholder="例如 2026，可留空" /></label>
           <label class="base-visit-wide"><span>新闻链接</span><el-input v-model="state.form.news_url" maxlength="500" placeholder="可选，仅支持 http 或 https" /></label>
           <label class="base-visit-wide"><span>备注</span><el-input v-model="state.form.remark" type="textarea" :rows="3" maxlength="10000" /></label>
         </form>
@@ -209,6 +211,7 @@ const columns = [
   { prop: 'conflict_count', label: '时段提醒', minWidth: 200 },
   { prop: 'base_address', label: '基地地址', minWidth: 220, defaultVisible: false },
   { prop: 'base_category', label: '基地类型', minWidth: 120, defaultVisible: false },
+  { prop: 'project_year', label: '立项年份', minWidth: 110, formatter: row => row.project_year ?? '—' },
   { prop: 'base_location', label: '基地位置', minWidth: 150, defaultVisible: false },
   { prop: 'scheduled_at', label: '填写时间', minWidth: 170, defaultVisible: false },
   { prop: 'remark', label: '备注', minWidth: 180, defaultVisible: false },
@@ -426,7 +429,7 @@ function closeDialog() {
 function openCreate() {
   if (busy.value || !state.options.can_assign) return;
   closeDialog();
-  state.form = { base_id: null, participant_ids: [], supervisor_id: null, contact_account_id: null, contact_person: '', contact_phone: '', news_url: '', remark: '' };
+  state.form = { base_id: null, participant_ids: [], supervisor_id: null, contact_account_id: null, contact_person: '', contact_phone: '', project_year: '', news_url: '', remark: '' };
   state.dialogMode = 'assign';
 }
 
@@ -461,7 +464,7 @@ function formFor(mode, detail) {
     state.options.supervisors = mergeOptions(state.options.supervisors, item.supervisor_id ? [{ account_id: item.supervisor_id, name: item.supervisor_name, dep_name: item.supervisor_department }] : []);
     state.options.contacts = mergeOptions(state.options.contacts, item.contact_account_id ? [{ account_id: item.contact_account_id, name: item.contact_account_name, dep_name: item.contact_department }] : []);
     const participantIds = Array.isArray(item.participant_ids) ? item.participant_ids.map(Number) : (item.participant_ids ? String(item.participant_ids).split(',').map(Number).filter(Boolean) : []);
-    return { base_id: Number(item.base_id), participant_ids: participantIds, supervisor_id: Number(item.supervisor_id || 0) || null, contact_account_id: Number(item.contact_account_id || 0) || null, contact_person: item.contact_person || '', contact_phone: item.contact_phone || '', news_url: item.news_url || '', remark: item.remark || '' };
+    return { base_id: Number(item.base_id), participant_ids: participantIds, supervisor_id: Number(item.supervisor_id || 0) || null, contact_account_id: Number(item.contact_account_id || 0) || null, contact_person: item.contact_person || '', contact_phone: item.contact_phone || '', project_year: item.project_year ?? '', news_url: item.news_url || '', remark: item.remark || '' };
   }
   if (mode === 'schedule') return { visit_date: item.visit_date || '', start_time: item.start_time?.slice(0, 5) || '', end_time: item.end_time?.slice(0, 5) || '' };
   if (mode === 'record') {
@@ -482,6 +485,7 @@ function localDateTime() {
 
 function formError(mode, form) {
   if (mode === 'assign' && (!form.base_id || !(form.participant_ids || []).length)) return '请选择实习基地和至少一名走访人员。';
+  if (mode === 'assign' && form.project_year !== '' && !/^[1-9][0-9]{3}$/.test(String(form.project_year))) return '立项年份应为四位年份。';
   if (mode === 'schedule') {
     if (!form.visit_date || !form.start_time || !form.end_time) return '请填写走访日期、开始时间和结束时间。';
     if (form.end_time <= form.start_time) return '结束时间应晚于开始时间。';

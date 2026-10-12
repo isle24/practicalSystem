@@ -122,21 +122,21 @@ onMounted(load);
 .school-settings-heading { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
 .school-settings h2, .school-settings h3 { margin: 0; font-size: 18px; }
 .school-settings h3 { font-size: 15px; }
-.school-settings p { color: #6b7280; font-size: 13px; line-height: 1.6; margin: 8px 0 0; }
-.school-asset-card { border: 1px solid #e3e8ef; border-radius: 10px; padding: 20px; background: #fff; }
+.school-settings p { color: var(--muted); font-size: 13px; line-height: 1.6; margin: 8px 0 0; }
+.school-asset-card { border: 1px solid var(--line); border-radius: 10px; padding: 20px; background: var(--surface); }
 .school-asset-controls { display: flex; align-items: center; gap: 20px; margin-top: 18px; flex-wrap: wrap; }
-.school-asset-preview { background: #f3f5f8; color: #8290a3; display: grid; place-items: center; border: 1px solid #e3e8ef; border-radius: 8px; overflow: hidden; }
+.school-asset-preview { background: var(--surface-2); color: var(--muted); display: grid; place-items: center; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
 .school-asset-preview.logo { width: 96px; height: 96px; padding: 6px; }
 .school-asset-preview.background { width: min(320px, 100%); aspect-ratio: 16/9; }
 .school-asset-preview img { width: 100%; height: 100%; object-fit: cover; }
 .school-asset-preview.logo img { object-fit: contain; }
-.school-asset-upload { display: inline-flex; align-items: center; gap: 8px; padding: 10px 14px; border: 1px solid #ccd6e3; border-radius: 6px; color: #316aa9; cursor: pointer; position: relative; }
+.school-asset-upload { display: inline-flex; align-items: center; gap: 8px; padding: 10px 14px; border: 1px solid var(--line); border-radius: 6px; color: var(--primary-ink); cursor: pointer; position: relative; }
 .school-asset-upload input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
 .school-asset-upload:focus-within { outline: 2px solid #2563eb; outline-offset: 2px; }
 .school-asset-upload.disabled { opacity: .55; cursor: wait; }
 .school-asset-card h4 { font-size: 13px; margin: 20px 0 10px; }
 .school-wallpaper-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
-.school-wallpaper-list button { min-width: 0; border: 1px solid #d5dfe8; border-radius: 6px; overflow: hidden; background: #fff; padding: 0; text-align: left; cursor: pointer; }
+.school-wallpaper-list button { min-width: 0; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; background: var(--surface); padding: 0; text-align: left; cursor: pointer; }
 .school-wallpaper-list img { display: block; width: 100%; aspect-ratio: 16/9; object-fit: cover; }
 .school-wallpaper-list span { display: block; padding: 7px; font-size: 12px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 </style>

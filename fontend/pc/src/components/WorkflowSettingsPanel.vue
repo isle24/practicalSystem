@@ -120,12 +120,12 @@ onMounted(() => run(async () => {
 .workflow-settings-toolbar,.workflow-node-editor header { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
 .workflow-settings-toolbar strong,.workflow-node-editor header strong { margin-right: auto; }
 .workflow-settings-layout { display: grid; grid-template-columns: 210px minmax(0,1fr); gap: 20px; margin-top: 16px; }
-.workflow-definition-list article { display: flex; flex-direction: column; padding: 12px 0; border-bottom: 1px solid #e4e8ee; }
-.workflow-definition-list small,.workflow-help { color: #697587; font-size: 12px; line-height: 1.7; }
+.workflow-definition-list article { display: flex; flex-direction: column; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.workflow-definition-list small,.workflow-help { color: var(--muted); font-size: 12px; line-height: 1.7; }
 .workflow-definition-list .el-button { margin: 0; justify-content: start; }
 .workflow-settings-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 0 14px; }
 .workflow-wide { grid-column: 1 / -1; }
-.workflow-node-editor { border: 1px solid #e3e8f0; border-radius: 8px; padding: 14px; margin: 14px 0; }
+.workflow-node-editor { border: 1px solid var(--line); border-radius: 8px; padding: 14px; margin: 14px 0; }
 .workflow-definition-editor :deep(.el-select) { width: 100%; }
 @media(max-width:800px) { .workflow-settings-layout { grid-template-columns: 1fr; } .workflow-settings-grid { grid-template-columns: 1fr; } }
 </style>

@@ -35,3 +35,4 @@ export function fetchBaseVisitRecordDetail(id, options = {}) {
 }
 
 export const saveIndependentBaseVisitRecord = payload => save('record-save', payload);
+export const deleteBaseVisitRecord = payload => save('record-delete', payload);

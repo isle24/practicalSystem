@@ -1,14 +1,14 @@
 <template>
   <el-config-provider :locale="zhCn" :z-index="10000">
-  <DesktopTitlebar v-if="isDesktopShell" :active="isLoggedIn && !wechatBlocked && !startupState.loading" @window-action="closeDesktopTransient" @error="message => ElMessage.error(message)">
-      <div class="taskbar-status" aria-label="系统状态">
+  <DesktopTitlebar v-if="isDesktopShell" :active="isLoggedIn && !pendingSsoResume && !wechatBlocked && !startupState.loading" :menu-open="nativeProfileMenuOpen" :maximized="nativeWindowState.maximized" :controls="controlNativeWindow" @window-action="closeDesktopTransient" @error="message => ElMessage.error(message)">
+      <div v-if="!pendingSsoResume" class="taskbar-status" aria-label="系统状态">
         <ClientDownloadButton compact />
-        <ProfileMenu ref="nativeProfileMenu" :name="operatorName" :role="roleText" :avatar="profileState.form.avatar" :avatar-style="topAvatarStyle" :version="clientVersion" :accounts="switchableLoginAccounts" :account-name="switchAccountName" :account-meta="switchAccountMeta" :switching="switchAccountState.loading" :busy="loginState.loading" :error="switchAccountState.message" :context-key="permissionState.context.account_id" placement="bottom" @settings="handleOperatorClick" @switch="switchLoginAccount" @logout="submitLogout" />
+        <ProfileMenu ref="nativeProfileMenu" :name="operatorName" :role="roleText" :avatar="profileState.form.avatar" :avatar-style="topAvatarStyle" :version="clientVersion" :accounts="switchableLoginAccounts" :account-name="switchAccountName" :account-meta="switchAccountMeta" :switching="switchAccountState.loading" :busy="loginState.loading" :error="switchAccountState.message" :context-key="permissionState.context.account_id" placement="bottom" @open-change="nativeProfileMenuOpen = $event" @settings="handleOperatorClick" @switch="switchLoginAccount" @logout="submitLogout" />
         <span class="taskbar-clock">{{ clock }}</span>
       </div>
   </DesktopTitlebar>
   <main v-if="startupState.loading || startupState.error" class="startup-shell" :class="{ native: isDesktopShell }"><section><strong>{{ startupState.error ? '连接未完成' : '正在连接并加载登录会话...' }}</strong><span v-if="startupState.error">{{ startupState.error }}</span><el-button v-if="startupState.error" type="primary" @click="initializeSession">重试</el-button></section></main>
-  <main v-else-if="!isLoggedIn" class="login-shell" :class="{ 'login-shell-native': isDesktopShell }" :style="loginPageStyle">
+  <main v-else-if="!isLoggedIn || pendingSsoResume" class="login-shell" :class="{ 'login-shell-native': isDesktopShell }" :style="loginPageStyle">
     <section class="login-panel" :class="{ 'login-panel-scan': loginMethod === 'wechat' }">
       <button type="button" class="login-mode-corner" :aria-label="loginMethod === 'password' ? '切换企业微信扫码登录' : '切换账号密码登录'" :title="loginMethod === 'password' ? '企业微信扫码登录' : '账号密码登录'" @click="loginMethod = loginMethod === 'password' ? 'wechat' : 'password'"><QrCode v-if="loginMethod === 'password'" :size="28" /><Monitor v-else :size="28" /></button>
       <header>
@@ -20,7 +20,8 @@
         </div>
       </header>
       <h1 v-if="loginMethod === 'password'" class="login-view-title">账号密码登录</h1>
-      <WechatLogin v-if="loginMethod === 'wechat'" :request="request" :public-origin="publicSchoolOrigin" @logged-in="refreshAuthenticatedSession(true)" />
+      <p v-if="pendingSsoResume">请重新使用密码或企业微信扫码登录，完成应用授权。</p>
+      <WechatLogin v-if="loginMethod === 'wechat'" :request="request" :public-origin="publicSchoolOrigin" @logged-in="onFreshAuthentication" />
       <template v-else>
       <label>
         <span>账号</span>
@@ -69,7 +70,7 @@
     </section>
   </main>
 
-  <main v-else-if="!wechatBlocked" class="desktop-shell" :class="{ 'desktop-shell-mac': desktopStyleMode === 'mac', 'desktop-shell-maximized': hasMaximizedWindow, 'desktop-shell-native': isDesktopShell }" :style="desktopStyle" @click.left="closeDesktopContextMenu" @contextmenu.prevent="openDesktopContextMenu">
+  <main v-else-if="!wechatBlocked" class="desktop-shell" :class="{ 'desktop-shell-mac': desktopStyleMode === 'mac', 'desktop-shell-maximized': !isDesktopShell && hasMaximizedWindow, 'desktop-shell-native': isDesktopShell, 'desktop-shell-fullscreen': isDesktopShell && nativeWindowState.fullscreen }" :style="desktopStyle" @click.left="closeDesktopContextMenu" @contextmenu.prevent="openDesktopContextMenu">
     <section class="workspace">
       <AdaptiveDesktopGrid
         ref="desktopGridRef"
@@ -2749,10 +2750,11 @@
                 </div>
 
                 <PluginPanel v-else-if="win.module.id === 'pluginCenter'" :can-manage="isSchoolConfigRole()" />
-                <FavoritePanel v-else-if="win.module.id === 'favorite'" :is-desktop="isFavoriteDesktop" :set-desktop="setFavoriteDesktopShortcut" @changed="refreshFavoriteShortcuts" />
+                <FavoritePanel v-else-if="win.module.id === 'favorite'" :key="workspaceContextKey" :session-key="workspaceContextKey" :is-desktop="isFavoriteDesktop" :set-desktop="setFavoriteDesktopShortcut" @changed="refreshFavoriteShortcuts" />
                 <NotebookPanel v-else-if="win.module.id === 'notebook'" :key="noteSessionKey" :ref="el => setNotebookRef(win.id, el)" :request="request" :session-key="noteSessionKey" />
                 <ReleaseNotesPanel v-else-if="win.module.id === 'releaseNotes'" :request="request" />
                 <SchoolSettingsPanel v-else-if="win.module.id === 'config' && win.panel === 'schoolAppearance' && canManageConfig" @updated="applyLoginPageData" />
+                <SsoClientPanel v-else-if="win.module.id === 'config' && win.panel === 'ssoClients' && canManageConfig" />
                 <WorkflowSettingsPanel v-else-if="win.module.id === 'config' && win.panel === 'workflowSettings' && canManageConfig" />
                 <MessageChannelSettings v-else-if="win.module.id === 'config' && win.panel === 'messageChannels' && canManageConfig" />
                 <ReleaseManager v-else-if="win.module.id === 'config' && win.panel === 'releases'" />
@@ -4108,7 +4110,8 @@
       @saved="loadInternshipPanel('documents')"
     />
 
-    <footer v-show="!hasMaximizedWindow" class="taskbar">
+    <button v-if="isDesktopShell && nativeWindowState.fullscreen" type="button" class="native-taskbar-edge" aria-label="显示任务栏" aria-controls="desktop-taskbar" @pointerenter="nativeDockHovered = true" @pointerleave="nativeDockHovered = false" @focus="nativeDockHovered = true" @blur="nativeDockHovered = false" />
+    <footer id="desktop-taskbar" v-show="isDesktopShell || !hasMaximizedWindow" class="taskbar" :class="{ 'taskbar-revealed': nativeDockHovered || desktopLauncherState.visible || showGlobalSearchResults }" @pointerenter="nativeDockHovered = true" @pointerleave="nativeDockHovered = false">
       <div class="taskbar-brand">
         <span class="brand-mark">实</span>
         <strong>实践管理系统</strong>
@@ -4232,6 +4235,7 @@ import { previewFile } from '../../shared/filePreview';
 import PreviewCacheSettings from './components/PreviewCacheSettings.vue';
 import ClientDownloadButton from './components/ClientDownloadButton.vue';
 import SchoolSettingsPanel from './components/SchoolSettingsPanel.vue';
+import SsoClientPanel from './components/SsoClientPanel.vue';
 import WorkflowSettingsPanel from './components/WorkflowSettingsPanel.vue';
 import RemoteAccountSelect from './components/RemoteAccountSelect.vue';
 import MessageChannelSettings from './components/MessageChannelSettings.vue';
@@ -4241,6 +4245,7 @@ import WorkflowHistory from '../../shared/components/WorkflowHistory.vue';
 import WorkflowInbox from '../../shared/components/WorkflowInbox.vue';
 import ExpensePanel from './components/ExpensePanel.vue';
 import { hasMaximizedWindow } from './composables/useMaximizedWindows';
+import { useNativeWindowState } from './composables/useNativeWindowState';
 import { useLocalTheme } from './composables/useLocalTheme';
 import ThemeSettings from './components/profile/ThemeSettings.vue';
 import ProfileSettingsLayout from './components/profile/ProfileSettingsLayout.vue';
@@ -4318,6 +4323,7 @@ import { useRealtimeMessages } from '../../shared/useRealtimeMessages';
 import ReleaseNotice from '../../shared/components/ReleaseNotice.vue';
 import NotebookPanel from '../../shared/components/NotebookPanel.vue';
 import { openExternalLink } from './utils/externalLinks';
+import { ssoResume, finishSsoResume } from './utils/ssoClient';
 import MobileBinding from './components/MobileBinding.vue';
 import DesktopLauncher from './components/DesktopLauncher.vue';
 import AdaptiveDesktopGrid from './components/AdaptiveDesktopGrid.vue';
@@ -4352,7 +4358,7 @@ import { DEFAULT_DESKTOP_MODULE_IDS, useDesktopLauncher } from './composables/us
 import { usePermissions } from './composables/usePermissions';
 import { buildLaunchableMenuModules, mergeLaunchableModules as mergeMenuModules } from './utils/menuModules';
 import { tableSequence } from './utils/table';
-import { backendUrl, frontendPublicUrl, request } from './api/client';
+import { backendUrl, frontendPublicUrl, request, waitForPendingRefresh } from './api/client';
 import {
   changeOwnPassword,
   changeAdminAccountStatus,
@@ -4612,6 +4618,7 @@ const desktopLauncher = useDesktopLauncher({
   orderStorageKey: () => `practical:pc:desktop-order:${window.__PRACTICAL_DESKTOP__?.serverOrigin || window.location.origin}:${permissionState.context.account_id || 'guest'}`,
 });
 const desktopLauncherState = desktopLauncher.state;
+let desktopShortcutsVersion = 0;
 const loginPageState = reactive({
   loading: false,
   message: '',
@@ -5553,6 +5560,7 @@ const fileState = reactive({
 });
 
 const favoriteState = reactive({ items: [], loading: false, message: '', pagination: { page: 1 } });
+let favoritesVersion = 0;
 const notebookRefs = new Map();
 const noteSessionKey = computed(() => [window.location.origin, permissionState.context.school_database_id, permissionState.context.account_id].join(':'));
 const assistantVisible = ref(false);
@@ -5751,11 +5759,11 @@ const moduleSearchKeywords = {
   profile: '个人设置 头像 壁纸 背景 消息接收 密码 资料',
   message: '消息 通知 待办 审核结果 站内信',
 };
-const defaultDesktopModuleIds = DEFAULT_DESKTOP_MODULE_IDS;
 const launcherModuleIds = modules.filter(module => !module.collectionParent && !module.launcherHidden).map(module => module.id);
 const launcherModuleIdSet = new Set(launcherModuleIds);
 const configSidebarDefinitions = [
   { key: 'schoolAppearance', name: '学校设置', permission: 'config:manage', schoolConfig: true, icon: Building2 },
+  { key: 'ssoClients', name: '授权应用', permission: 'config:manage', schoolConfig: true, icon: Globe2 },
   { key: 'workflowSettings', name: '审批流程', permission: 'config:manage', schoolConfig: true, icon: ClipboardList },
   { key: 'messageChannels', name: '消息渠道', permission: 'config:manage', schoolConfig: true, icon: MessageCircle },
   { key: 'releases', name: '版本与更新', permission: 'config:manage', schoolConfig: true, icon: Download },
@@ -5777,9 +5785,18 @@ const configSidebarDefinitions = [
 
 const isDesktopClient = Boolean(window.__PRACTICAL_DESKTOP__);
 const isDesktopShell = Boolean(window.__PRACTICAL_DESKTOP__?.windowControls && (window.__PRACTICAL_DESKTOP__.windowLabel || 'school') === 'school');
+const { state: nativeWindowState, control: controlNativeWindow } = useNativeWindowState(isDesktopShell);
+const nativeProfileMenuOpen = ref(false);
+const nativeDockHovered = ref(false);
 const publicSchoolOrigin = window.__PRACTICAL_DESKTOP__?.serverOrigin || window.location.origin;
+const workspaceSourceEpoch = ref(0);
+const workspaceFrozen = ref(false);
+let activeWorkspaceTransition = null;
+const workspaceIdentityKey = computed(() => JSON.stringify([publicSchoolOrigin, permissionState.context.school_database_id, permissionState.context.school_id, permissionState.context.user_id, permissionState.context.account_id, permissionState.context.role_id, permissionState.context.role_type]));
+const workspaceContextKey = computed(() => JSON.stringify([workspaceSourceEpoch.value, workspaceIdentityKey.value]));
 const startupState = reactive({ loading: true, error: '' });
-const loginMethod = ref('password');
+const loginMethod = ref(window.__PRACTICAL_DESKTOP__?.loginMethod === 'wechat' ? 'wechat' : 'password');
+const pendingSsoResume = ref(Boolean(ssoResume()));
 const themeScope = computed(() => permissionState.context.user_id ? `${publicSchoolOrigin}:${permissionState.context.school_database_id}:${permissionState.context.user_id}` : '');
 const tableWidthScope = computed(() => permissionState.context.account_id
   ? JSON.stringify([publicSchoolOrigin, permissionState.context.school_database_id || permissionState.context.school_id,
@@ -7819,84 +7836,59 @@ async function toggleDesktopShortcut(moduleId, forceAdd = false) {
 }
 
 async function loadDesktopShortcuts() {
+  if (workspaceFrozen.value) return;
+  const version = ++desktopShortcutsVersion;
+  const context = workspaceContextKey.value;
+  const current = () => !workspaceFrozen.value && version === desktopShortcutsVersion && context === workspaceContextKey.value && isLoggedIn.value && !wechatBlocked.value;
   if (!isLoggedIn.value || wechatBlocked.value) {
     desktopLauncher.reset();
+    desktopLauncherState.loading = false;
     return;
   }
 
   desktopLauncherState.loading = true;
   desktopLauncherState.message = '';
   try {
-    const data = await fetchDesktopShortcuts();
+    const data = await fetchDesktopShortcuts({ isCurrent: current });
+    if (!current()) return;
     desktopLauncher.setItems(data.items || []);
   } catch (error) {
+    if (!current()) return;
     desktopLauncher.setItems([]);
     desktopLauncherState.message = error.message;
   } finally {
-    desktopLauncherState.loading = false;
+    if (current()) desktopLauncherState.loading = false;
   }
 }
 
 async function persistDesktopShortcuts(items) {
+  if (workspaceFrozen.value || !isLoggedIn.value || wechatBlocked.value) return;
+  const version = ++desktopShortcutsVersion;
+  const context = workspaceContextKey.value;
+  const current = () => !workspaceFrozen.value && version === desktopShortcutsVersion && context === workspaceContextKey.value && isLoggedIn.value && !wechatBlocked.value;
   desktopLauncherState.loading = true;
   desktopLauncherState.message = '';
   const previous = desktopLauncherState.items.slice();
-  desktopLauncher.setItems(items);
+  desktopLauncher.setItems([...items, ...previous.filter(item => item.auto_shared)]);
   try {
-    const data = await saveDesktopShortcuts({ items });
+    const data = await saveDesktopShortcuts({ items }, { isCurrent: current });
+    if (!current()) return;
     desktopLauncher.setItems(data.items || []);
     await nextTick();
+    if (!current()) return;
     syncShortcutWorkspace();
   } catch (error) {
+    if (!current()) return;
     desktopLauncherState.items = previous;
     desktopLauncherState.message = error.message;
     ElMessage.error(error.message || '保存桌面快捷方式失败');
   } finally {
-    desktopLauncherState.loading = false;
+    if (current()) desktopLauncherState.loading = false;
   }
 }
 
 function syncShortcutWorkspace() {
   syncOpenWindowModules();
-  ensureDefaultWindow();
-}
-
-function defaultWindowModule() {
-  return defaultDesktopModuleIds
-    .map(id => allLaunchableModules.value.find(module => module.id === id))
-    .find(Boolean)
-    || mainEntryModules.value.find(module => isPrimaryWorkWindow({ module }))
-    || null;
-}
-
-function isPrimaryWorkWindow(win) {
-  return win?.module?.id && !['profile', 'favorite', 'message'].includes(win.module.id);
-}
-
-function ensureDefaultWindow() {
-  if (!isLoggedIn.value || wechatBlocked.value) return;
-  const defaultModule = defaultWindowModule();
-  if (!defaultModule) {
-    return;
-  }
-  if (!openWindows.length && defaultModule) {
-    openModule(defaultModule);
-    return;
-  }
-  if (!openWindows.some(isPrimaryWorkWindow) && isPrimaryWorkWindow({ module: defaultModule })) {
-    openModule(defaultModule);
-  }
-}
-
-function scheduleDefaultWindow() {
-  [200, 1000].forEach((delay) => {
-    window.setTimeout(() => {
-      if (isLoggedIn.value && !wechatBlocked.value) {
-        ensureDefaultWindow();
-        handleHashNavigation();
-      }
-    }, delay);
-  });
 }
 
 function moduleHref(module) {
@@ -7934,19 +7926,23 @@ function closeGuide() {
 
 /** 启动台收藏独立于列表分页和筛选。 */
 async function loadFavorites() {
-  if (!isLoggedIn.value || wechatBlocked.value || favoriteState.loading) return;
-  const account = permissionState.context.account_id;
+  if (workspaceFrozen.value || !isLoggedIn.value || wechatBlocked.value || favoriteState.loading) return;
+  const version = ++favoritesVersion;
+  const context = workspaceContextKey.value;
+  const current = () => !workspaceFrozen.value && version === favoritesVersion && context === workspaceContextKey.value && isLoggedIn.value && !wechatBlocked.value;
   favoriteState.loading = true;
+  favoriteState.message = '';
   try {
     let page = 1, total = 0; const items = [];
     do {
-      const data = await fetchFavorites({ page, page_size: 200 });
+      const data = await fetchFavorites({ page, page_size: 200 }, { isCurrent: current });
+      if (!current()) return;
       items.push(...data.items); total = data.pagination.total; page += 1;
       if (!data.items.length) break;
     } while (items.length < total);
-    if (permissionState.context.account_id === account) favoriteState.items = items;
-  } catch (error) { favoriteState.message = error.message; }
-  finally { favoriteState.loading = false; }
+    if (current()) favoriteState.items = items;
+  } catch (error) { if (current()) favoriteState.message = error.message; }
+  finally { if (current()) favoriteState.loading = false; }
 }
 async function refreshFavoriteShortcuts() { await loadFavorites(); await loadDesktopShortcuts(); }
 
@@ -7964,6 +7960,10 @@ async function toggleFavoriteDesktop(row) {
 
 async function setFavoriteDesktopShortcut(row, enabled) {
   if (!row?.id) {
+    return;
+  }
+  if (row.auto_desktop || row.auto_shared || customDesktopShortcutItems.value.some(item => item.type === 'favorite' && Number(item.ref_id) === Number(row.id) && item.auto_shared)) {
+    ElMessage.info('此收藏由管理员共享到桌面');
     return;
   }
   const items = desktopShortcutPayloadItems.value.slice();
@@ -8442,7 +8442,7 @@ function toggleTaskWindow(id) {
 }
 
 async function handleHashNavigation() {
-  if (!isLoggedIn.value || wechatBlocked.value) return;
+  if (workspaceFrozen.value || !isLoggedIn.value || wechatBlocked.value) return;
   const hash = window.location.hash.slice(1);
   if (!hash) {
     return;
@@ -8577,6 +8577,61 @@ function toggleRegisterForm() {
   registerState.message = '';
 }
 
+function resetAuthenticatedWorkspace() {
+  resetAdminState();
+  resetProfileState();
+  resetMessageState();
+  resetInternshipState();
+  resetFavoriteState();
+  openWindows.splice(0);
+  focusedWindowId.value = null;
+}
+
+async function withWorkspaceTransition(action) {
+  if (activeWorkspaceTransition) throw new Error('正在切换登录会话，请稍候');
+  const transition = { loading: startupState.loading, identity: workspaceIdentityKey.value };
+  activeWorkspaceTransition = transition;
+  workspaceFrozen.value = true;
+  startupState.loading = true;
+  startupState.error = '';
+  workspaceSourceEpoch.value++;
+  closeDesktopTransient();
+  try {
+    await nextTick();
+    await waitForPendingRefresh();
+    return await action();
+  } catch (error) {
+    workspaceFrozen.value = true;
+    workspaceSourceEpoch.value++;
+    try {
+      await load();
+      if (permissionState.error) throw new Error(permissionState.error);
+      if (workspaceIdentityKey.value !== transition.identity) resetAuthenticatedWorkspace();
+      await wechatBinding.refresh();
+      workspaceFrozen.value = false;
+      if (isLoggedIn.value && !wechatBlocked.value) {
+        await loadProfile();
+        await loadDesktopShortcuts();
+        await loadFavorites();
+        await loadSwitchableAccounts();
+      }
+    } catch (sessionError) {
+      permissionState.context = {};
+      permissionState.menus = [];
+      permissionState.permissions = [];
+      permissionState.dataScope = null;
+      startupState.error = sessionError.message || '读取登录会话失败，请重试';
+    }
+    throw error;
+  } finally {
+    if (activeWorkspaceTransition === transition) {
+      workspaceFrozen.value = false;
+      startupState.loading = transition.loading;
+      activeWorkspaceTransition = null;
+    }
+  }
+}
+
 async function submitRegister() {
   if (!registerState.enabled || registerState.loading) {
     return;
@@ -8589,12 +8644,14 @@ async function submitRegister() {
   registerState.loading = true;
   registerState.message = '';
   try {
-    await registerAccount({
-      ...registerForm,
-      client: 'WEB',
+    await withWorkspaceTransition(async () => {
+      await registerAccount({
+        ...registerForm,
+        client: 'WEB',
+      });
+      registerState.open = false;
+      await onFreshAuthentication();
     });
-    registerState.open = false;
-    await refreshAuthenticatedSession(true);
   } catch (error) {
     registerState.message = error.message;
   } finally {
@@ -8609,17 +8666,25 @@ async function submitLogin() {
   loginState.loading = true;
   loginState.message = '';
   try {
-    await loginApi({
-      login_name: loginForm.login_name,
-      password: loginForm.password,
-      client: 'WEB',
+    await withWorkspaceTransition(async () => {
+      await loginApi({
+        login_name: loginForm.login_name,
+        password: loginForm.password,
+        client: 'WEB',
+      });
+      await onFreshAuthentication();
     });
-    await refreshAuthenticatedSession(true);
   } catch (error) {
     loginState.message = error.message;
   } finally {
     loginState.loading = false;
   }
+}
+
+async function onFreshAuthentication() {
+  if (pendingSsoResume.value && finishSsoResume()) return;
+  if (activeWorkspaceTransition) await refreshAuthenticatedSession(true);
+  else await withWorkspaceTransition(() => refreshAuthenticatedSession(true));
 }
 
 async function submitDesktopBootstrapLogin() {
@@ -8629,11 +8694,13 @@ async function submitDesktopBootstrapLogin() {
   loginState.loading = true;
   loginState.message = '';
   try {
-    const result = await window.__PRACTICAL_DESKTOP__.bootstrapLogin();
-    if (result?.attempted === false) return;
-    if (result?.code !== 0) throw new Error(result?.message || '客户端登录失败，请手动登录');
-    await refreshAuthenticatedSession(true);
-    return true;
+    return await withWorkspaceTransition(async () => {
+      const result = await window.__PRACTICAL_DESKTOP__.bootstrapLogin();
+      if (result?.attempted === false) return;
+      if (result?.code !== 0) throw new Error(result?.message || '客户端登录失败，请手动登录');
+      await refreshAuthenticatedSession(true);
+      return true;
+    });
   } catch (error) {
     loginState.message = error.message || '客户端自动登录失败，请手动登录';
     return false;
@@ -8644,17 +8711,14 @@ async function submitDesktopBootstrapLogin() {
 
 async function refreshAuthenticatedSession(resetWorkspace = false) {
   if (resetWorkspace) {
-    resetAdminState();
-    resetProfileState();
-    resetMessageState();
-    resetInternshipState();
-    resetFavoriteState();
-    openWindows.splice(0);
-    focusedWindowId.value = null;
+    resetAuthenticatedWorkspace();
+    permissionState.context = {};
   }
 
   await load();
+  if (permissionState.error) throw new Error(permissionState.error);
   await wechatBinding.refresh();
+  workspaceFrozen.value = false;
   if (wechatBlocked.value) return;
   await loadProfile();
   await loadDesktopShortcuts();
@@ -8662,9 +8726,7 @@ async function refreshAuthenticatedSession(resetWorkspace = false) {
   await loadProxy();
   await loadMessageSummary();
   await loadSwitchableAccounts();
-  ensureDefaultWindow();
   handleHashNavigation();
-  scheduleDefaultWindow();
 }
 
 
@@ -8713,12 +8775,14 @@ async function switchLoginAccount(accountId) {
   switchAccountState.open = false;
   switchAccountState.message = '';
   try {
-    await wechatBinding.cancelScan();
-    await switchAccount({
-      account_id: targetId,
-      client: 'WEB',
+    await withWorkspaceTransition(async () => {
+      await wechatBinding.cancelScan();
+      await switchAccount({
+        account_id: targetId,
+        client: 'WEB',
+      });
+      await refreshAuthenticatedSession(true);
     });
-    await refreshAuthenticatedSession(true);
     switchAccountState.message = `已切换为 ${operatorName.value}`;
   } catch (error) {
     switchAccountState.message = error.message;
@@ -8747,10 +8811,10 @@ async function consumeUrlPasskey() {
   loginState.loading = true;
   loginState.message = '';
   try {
-    await passkeyLogin({
+    await withWorkspaceTransition(() => passkeyLogin({
       passkey,
       client: 'WEB',
-    });
+    }));
     params.delete('passkey');
     params.delete('login_key');
     const query = params.toString();
@@ -8771,21 +8835,21 @@ async function submitLogout() {
   loginState.loading = true;
   loginState.message = '';
   try {
-    await wechatBinding.cancelScan();
-    await logoutApi();
-    resetAdminState();
-    resetProfileState();
-    resetMessageState();
-    switchAccountState.items = [];
-    switchAccountState.message = '';
-    desktopLauncherState.items = [];
-    desktopLauncherState.message = '';
-    resetFavoriteState();
-    openWindows.splice(0);
-    focusedWindowId.value = null;
-    await load();
-    await loadLoginPageSettings();
-    await loadRegisterOptions();
+    await withWorkspaceTransition(async () => {
+      await wechatBinding.cancelScan();
+      await logoutApi();
+      resetAuthenticatedWorkspace();
+      switchAccountState.items = [];
+      switchAccountState.message = '';
+      desktopLauncherState.items = [];
+      desktopLauncherState.message = '';
+      permissionState.context = {};
+      await load();
+      if (permissionState.error) throw new Error(permissionState.error);
+      workspaceFrozen.value = false;
+      await loadLoginPageSettings();
+      await loadRegisterOptions();
+    });
   } catch (error) {
     loginState.message = error.message;
   } finally {
@@ -16349,6 +16413,7 @@ function resetAdminState() {
 }
 
 function resetFavoriteState() {
+  favoritesVersion++;
   favoriteState.items = [];
   favoriteState.pagination.page = 1;
   favoriteState.loading = false;
@@ -16884,7 +16949,13 @@ watch(() => openWindows.filter(win => !win.minimized).map(win => JSON.stringify(
   });
 });
 
-watch(() => [permissionState.context.account_id, wechatBlocked.value], ([accountId, blocked]) => {
+watch(() => [workspaceContextKey.value, wechatBlocked.value], ([, blocked]) => {
+  desktopShortcutsVersion++;
+  desktopLauncher.reset();
+  desktopLauncherState.loading = false;
+  resetFavoriteState();
+  const accountId = permissionState.context.account_id;
+  if (workspaceFrozen.value) return;
   if (accountId && !blocked) {
     loadMessageSummary();
     loadSwitchableAccounts();
@@ -16896,17 +16967,17 @@ watch(() => [permissionState.context.account_id, wechatBlocked.value], ([account
     desktopLauncherState.items = [];
     resetFavoriteState();
   }
-});
+}, { flush: 'sync' });
 
 watch(allLaunchableModules, () => {
-  if (isLoggedIn.value && !wechatBlocked.value) {
+  if (!workspaceFrozen.value && isLoggedIn.value && !wechatBlocked.value) {
     syncOpenWindowModules();
-    ensureDefaultWindow();
     handleHashNavigation();
   }
 });
 
 function handleAuthExpired(event) {
+  workspaceSourceEpoch.value++;
   resetAdminState();
   const message = event?.detail?.message || '登录已过期，请重新登录';
   permissionState.context = {};
@@ -16950,19 +17021,28 @@ async function loadFinalMessageTargets() {
 }
 watch(() => [messageState.sendDialog.visible, messageState.sendDialog.form.send_scope, messageState.sendDialog.form.role_type, messageState.sendDialog.form.include_sender, JSON.stringify(messageState.sendDialog.form.account_ids)], () => { messagePreviewVersion++; messagePreview.count = null; messagePreview.items = []; messagePreview.error = ''; messagePreview.loading = false; });
 watch(hasMaximizedWindow, closeDesktopTransient);
+watch(() => nativeWindowState.fullscreen, () => { nativeDockHovered.value = false; closeDesktopTransient(); });
 watch(() => permissionState.context.account_id, closeDesktopTransient);
+
+let desktopRefreshTimer;
+function refreshVisibleDesktop() {
+  if (workspaceFrozen.value || document.hidden || startupState.loading || !isLoggedIn.value || wechatBlocked.value) return;
+  if (!desktopLauncherState.loading) loadDesktopShortcuts();
+  if (!favoriteState.loading) loadFavorites();
+}
 
 async function initializeSession() {
   if (startupState.loading && startupState.started) return;
   startupState.started = true; startupState.loading = true; startupState.error = '';
   try {
     await Promise.all([loadLoginPageSettings(), loadRegisterOptions()]);
-    await consumeUrlPasskey();
+    if (!pendingSsoResume.value) await consumeUrlPasskey();
     await load();
     if (permissionState.error) throw new Error(permissionState.error);
     const desktopBridge = window.__PRACTICAL_DESKTOP__;
-    const bootstrapped = !isLoggedIn.value && desktopBridge?.bootstrapLogin ? await submitDesktopBootstrapLogin() : false;
+    const bootstrapped = !pendingSsoResume.value && !isLoggedIn.value && desktopBridge?.bootstrapLogin ? await submitDesktopBootstrapLogin() : false;
     if (bootstrapped) return;
+    if (pendingSsoResume.value) return;
     if (!isLoggedIn.value) return;
     await wechatBinding.refresh();
     if (wechatBlocked.value) return;
@@ -16973,7 +17053,7 @@ async function initializeSession() {
     await loadMessageSummary();
     await loadSwitchableAccounts();
     await nextTick();
-    ensureDefaultWindow(); handleHashNavigation(); scheduleDefaultWindow();
+    handleHashNavigation();
   } catch (error) { startupState.error = error.message || '学校连接失败，请重试'; }
   finally { startupState.loading = false; }
 }
@@ -16982,14 +17062,22 @@ onMounted(() => {
   window.addEventListener('hashchange', handleHashNavigation);
   window.addEventListener('practical-auth-expired', handleAuthExpired);
   window.addEventListener('practical-open-current-link', handleCurrentExternal);
+  document.addEventListener('visibilitychange', refreshVisibleDesktop);
+  desktopRefreshTimer = setInterval(refreshVisibleDesktop, 60000);
   renderClock(); clockTimer = setInterval(renderClock, 30000);
   initializeSession();
 });
 
 onBeforeUnmount(() => {
+  workspaceFrozen.value = true;
+  workspaceSourceEpoch.value++;
   window.removeEventListener('hashchange', handleHashNavigation);
   window.removeEventListener('practical-auth-expired', handleAuthExpired);
   window.removeEventListener('practical-open-current-link', handleCurrentExternal);
+  document.removeEventListener('visibilitychange', refreshVisibleDesktop);
+  clearInterval(desktopRefreshTimer);
+  desktopShortcutsVersion++;
+  favoritesVersion++;
   clearInterval(clockTimer);
 });
 </script>

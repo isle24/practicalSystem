@@ -98,7 +98,7 @@ export function useDesktopLauncher(options) {
   const payloadItems = computed(() => [
     ...customModuleKeys.value.map(key => ({ type: 'module', key })),
     ...customShortcutItems.value
-      .filter(item => item.type === 'favorite' && Number(item.ref_id || 0) > 0)
+      .filter(item => item.type === 'favorite' && !item.auto_shared && Number(item.ref_id || 0) > 0)
       .map(item => ({ type: 'favorite', ref_id: Number(item.ref_id) })),
   ]);
 
@@ -124,6 +124,8 @@ export function useDesktopLauncher(options) {
         key: item.key || item.item_key || '',
         ref_id: item.ref_id === null || item.ref_id === undefined ? null : Number(item.ref_id),
         favorite: item.favorite || null,
+        auto_shared: Boolean(item.auto_shared),
+        locked: Boolean(item.locked),
       }))
       .filter(item => (item.type === 'module' && item.key) || (item.type === 'favorite' && item.ref_id));
   }
@@ -155,6 +157,9 @@ export function useDesktopLauncher(options) {
       url: item.favorite.url,
       icon_url: item.favorite.icon_url,
       open_mode: item.favorite.open_mode,
+      auth_mode: item.favorite.auth_mode,
+      sso_client_id: item.favorite.sso_client_id,
+      auto_desktop: item.auto_shared || item.favorite.auto_desktop,
     });
   }
 
@@ -169,7 +174,10 @@ export function useDesktopLauncher(options) {
       scope: item.url,
       url: item.url,
       open_mode: item.open_mode || 'client',
+      auth_mode: item.auth_mode || 'none',
+      sso_client_id: item.sso_client_id || null,
       type: 'favoriteLink',
+      autoShared: Boolean(item.auto_desktop),
     };
   }
 

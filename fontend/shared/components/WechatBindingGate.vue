@@ -8,6 +8,7 @@
         <template v-if="!inWechat && !status?.bound">
           <QRCode v-if="state.scan && ['pending', 'scanned'].includes(state.scan.state)" :value="state.scan.scan_url" label="企业微信扫码绑定二维码" />
           <p v-if="state.scan && ['pending', 'scanned'].includes(state.scan.state)">二维码有效期 5 分钟，请使用企业微信扫码。</p>
+          <p v-if="state.scan && ['pending', 'scanned'].includes(state.scan.state)" class="scan-switch-hint">使用同一部手机时，可截图后切换企业微信，从相册扫码。请保留本页，完成后返回本页查看绑定结果。</p>
           <button type="button" :disabled="state.loading || state.scanLoading || status?.configured === false || status?.binding_outdated" @click="$emit('start')">{{ state.scanLoading ? '正在生成二维码' : state.scan ? '刷新二维码' : '生成绑定二维码' }}</button>
         </template>
         <button v-if="inWechat && status?.identity_ready && !status?.bound && !status?.binding_outdated" type="button" :disabled="state.loading" @click="$emit('bind')">确认绑定当前账号</button>
@@ -32,13 +33,14 @@ const guidance = computed(() => {
 });
 </script>
 <style scoped>
-.wechat-binding-gate { position: fixed; inset: 0; z-index: 100000; display: grid; place-items: center; background: rgba(15,23,42,.65); padding: 20px; }
-.wechat-binding-gate section { box-sizing: border-box; width: min(440px, 100%); padding: 24px; border-radius: 16px; background: white; color: #172033; }
+.wechat-binding-gate { position: fixed; inset: 0; z-index: 100000; display: grid; place-items: center; overflow-y: auto; background: rgba(15,23,42,.65); padding: 20px; box-sizing: border-box; }
+.wechat-binding-gate section { box-sizing: border-box; width: min(440px, 100%); max-height: calc(100dvh - 40px); overflow-y: auto; padding: 24px; border: 1px solid var(--line, #e4e9ef); border-radius: 16px; background: var(--surface, #fff); color: var(--text, #1f2d3d); }
 h2 { margin: 0 0 16px; font-size: 21px; }
 p { margin: 12px 0; line-height: 1.7; overflow-wrap: anywhere; }
 label { display: block; margin-top: 12px; font-size: 14px; }
-input { box-sizing: border-box; width: 100%; margin-top: 6px; padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; background: #f8fafc; color: #172033; }
-button { width: 100%; margin-top: 12px; padding: 12px; border: 1px solid #cbd5e1; border-radius: 8px; cursor: pointer; background: #f8fafc; color: #172033; }
-button:first-of-type { background: #2563eb; color: white; border-color: #2563eb; }
+input { box-sizing: border-box; width: 100%; margin-top: 6px; padding: 10px; border: 1px solid var(--line, #cbd5e1); border-radius: 6px; background: var(--surface-2, #f8fafc); color: var(--text, #1f2d3d); }
+button { width: 100%; min-height: 44px; margin-top: 12px; padding: 12px; border: 1px solid var(--line, #cbd5e1); border-radius: 8px; cursor: pointer; background: var(--surface-2, #f8fafc); color: var(--text, #1f2d3d); }
+button:first-of-type { background: var(--primary, #265f91); color: var(--primary-contrast, white); border-color: transparent; }
 button:disabled { opacity: .6; cursor: wait; }
+.scan-switch-hint { color: var(--muted, #637487); font-size: 12px; }
 </style>

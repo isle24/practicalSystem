@@ -148,7 +148,7 @@ function canArchive(row) {
 }
 
 .archive-source-state span {
-  color: #667085;
+  color: var(--muted);
   font-size: 12px;
 }
 
@@ -165,7 +165,7 @@ function canArchive(row) {
   max-width: 100%;
   padding: 0;
   border: 0;
-  color: #2563eb;
+  color: var(--primary-ink);
   background: transparent;
   cursor: pointer;
 }
@@ -177,7 +177,7 @@ function canArchive(row) {
 }
 
 .archive-empty-file {
-  color: #98a2b3;
+  color: var(--muted);
   font-size: 12px;
 }
 

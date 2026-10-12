@@ -90,6 +90,9 @@ async fn favorite(connection: &Connection, id: u64) -> Result<Value, String> {
         return Err("收藏编号无效".into());
     }
     let favorite = school_api::read(connection, &format!("api/favorite/detail?id={id}")).await?;
+    if favorite["auth_mode"].as_str() == Some("oidc") {
+        return Err("授权收藏不能使用本机凭据配置".into());
+    }
     let address = favorite["url"].as_str().ok_or("收藏地址不存在")?;
     let url = Url::parse(address).map_err(|_| "收藏地址无效")?;
     if url.scheme() != "https"
@@ -127,6 +130,9 @@ pub async fn open(
     mode: &str,
 ) -> Result<(), String> {
     let favorite = school_api::read(connection, &format!("api/favorite/detail?id={id}")).await?;
+    if favorite["auth_mode"].as_str() == Some("oidc") {
+        return Err("请使用授权入口打开此收藏".into());
+    }
     let mut url = Url::parse(favorite["url"].as_str().unwrap_or("")).map_err(|_| "收藏地址无效")?;
     let profile = if url.scheme() == "https" {
         credential_vault::profile(connection, &favorite)
@@ -246,4 +252,59 @@ pub async fn open(
         url = next;
     }
     external::open_authenticated(app, url, cookies)
+}
+
+/// 在受保护学校会话内申请转接，不读取本机收藏凭据。
+pub async fn open_sso(
+    app: &AppHandle,
+    connection: &Connection,
+    id: u64,
+    mode: &str,
+    owner: &str,
+) -> Result<(), String> {
+    if id == 0 || !matches!(mode, "client" | "browser") {
+        return Err("授权收藏或打开方式无效".into());
+    }
+    let favorite = school_api::read(connection, &format!("api/favorite/detail?id={id}")).await?;
+    if favorite["auth_mode"].as_str() != Some("oidc")
+        || favorite["sso_available"].as_bool() != Some(true)
+    {
+        return Err("授权应用不可用".into());
+    }
+    let registered = Url::parse(favorite["url"].as_str().ok_or("授权入口不存在")?)
+        .map_err(|_| "授权入口无效")?;
+    if registered.scheme() != "https" || !external::allowed(&registered) {
+        return Err("授权入口必须是有效的外部 HTTPS 地址".into());
+    }
+    let launch = school_api::sso_post(
+        connection,
+        "api/sso/launch",
+        &json!({"favorite_id": id, "open_mode": mode}),
+    )
+    .await?;
+    let target = Url::parse(launch["open_url"].as_str().ok_or("授权地址不存在")?)
+        .map_err(|_| "授权地址无效")?;
+    let fragment = target.fragment().ok_or("授权凭据不存在")?;
+    let claim = fragment
+        .strip_prefix("claim_token=")
+        .ok_or("授权凭据格式无效")?;
+    if claim.len() < 16
+        || !claim
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_' || byte == b'-')
+        || target.scheme() != "https"
+        || !external::allowed(&target)
+        || target.origin() != registered.origin()
+        || target.query().is_some()
+        || launch["target_origin"].as_str()
+            != Some(registered.origin().ascii_serialization().as_str())
+        || launch["issuer"].as_str()
+            != Some(connection.origin.origin().ascii_serialization().as_str())
+    {
+        return Err("授权转接地址校验失败".into());
+    }
+    if mode == "browser" {
+        return external::open(app, target.as_str(), "browser");
+    }
+    external::open_sso(app, target, connection.origin.origin(), owner)
 }

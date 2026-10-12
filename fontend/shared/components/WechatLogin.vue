@@ -1,14 +1,17 @@
 <template>
   <section class="wechat-login" aria-label="企业微信扫码登录">
-    <h2>请使用 <span>企业微信</span> 扫码登录</h2>
+    <h2 v-if="scan?.state === 'ready'">企业微信身份已确认</h2>
+    <h2 v-else>请使用 <span>企业微信</span> 扫码登录</h2>
     <div v-if="scan?.state !== 'ready'" class="scan-code-card" :aria-busy="busy">
       <QRCode v-if="scan && ['pending', 'scanned'].includes(scan.state)" :value="scan.scan_url" :size="280" label="企业微信扫码登录二维码" />
       <div v-else class="scan-placeholder"><span>{{ busy ? '正在生成二维码…' : '二维码暂不可用' }}</span><button v-if="!busy" type="button" @click="create">重新获取</button></div>
     </div>
-    <p v-if="scan && ['pending', 'scanned', 'ready'].includes(scan.state)" class="countdown">二维码剩余 {{ seconds }} 秒</p>
-    <p v-if="scan?.state === 'scanned'">已扫码，请在企业微信中完成身份授权。</p>
-    <fieldset v-if="scan?.state === 'ready' && accounts.length">
-      <legend>{{ accounts.length > 1 ? '请选择登录账号' : '确认登录账号' }}</legend>
+    <p v-if="scan && ['pending', 'scanned', 'ready'].includes(scan.state)" class="countdown">{{ scan.state === 'ready' ? '确认登录' : '二维码' }}剩余 {{ seconds }} 秒</p>
+    <p v-if="scan?.state === 'pending'" class="scan-guidance">请在企业微信中完成授权，绑定多个账号时需选择登录账号。</p>
+    <p v-if="scan?.state === 'scanned'" class="scan-guidance">已扫码，请在企业微信中完成授权。</p>
+    <p v-if="scan?.state === 'ready' && accounts.length === 1" class="scan-guidance" role="status">正在登录…</p>
+    <fieldset v-if="scan?.state === 'ready' && accounts.length > 1">
+      <legend>请选择登录账号</legend>
       <label v-for="account in accounts" :key="account.id" class="account-option">
         <input v-model="selectedAccount" type="radio" :value="account.id" name="wechat-login-account" :disabled="busy">
         <span>{{ account.name }} · {{ account.login_name }}<small>{{ account.role_name }}{{ organizationLabel(account) }}</small></span>
@@ -43,6 +46,7 @@ let pollTimer = null;
 let countdownTimer = null;
 let disposed = false;
 let pendingController = null;
+let consumeController = null;
 
 function schoolOrigin() {
   const value = typeof props.publicOrigin === 'function' ? props.publicOrigin() : props.publicOrigin;
@@ -69,13 +73,15 @@ async function cancelSession(id, requester = props.request) {
 async function cancel() {
   generation++;
   stop();
+  consumeController?.abort();
+  consumeController = null;
   const current = scan.value;
   scan.value = null;
   accounts.value = [];
   selectedAccount.value = null;
   busy.value = false;
   message.value = '已取消扫码登录。';
-  if (current && ['pending', 'scanned', 'ready'].includes(current.state)) await cancelSession(current.session_id);
+  if (current && ['pending', 'scanned', 'ready'].includes(current.state)) await cancelSession(current.session_id, current.requester);
 }
 
 async function create() {
@@ -91,7 +97,7 @@ async function create() {
   message.value = '';
   let createdId = '';
   try {
-    if (previous && ['pending', 'scanned', 'ready'].includes(previous.state)) await cancelSession(previous.session_id, requester);
+    if (previous && ['pending', 'scanned', 'ready'].includes(previous.state)) await cancelSession(previous.session_id, previous.requester);
     if (disposed || version !== generation) return;
     const origin = schoolOrigin();
     if (new URL(origin).protocol !== 'https:') throw new Error('扫码登录需要学校 HTTPS 地址，请检查学校连接。');
@@ -101,7 +107,7 @@ async function create() {
     const url = new URL(result.scan_url);
     if (url.origin !== origin || url.protocol !== 'https:' || url.pathname !== '/api/auth/wechat-login/start') throw new Error('扫码地址与当前学校不一致，请联系管理员。');
     if (!/^[a-f0-9]{64}$/.test(result.session_id) || !Number.isFinite(Number(result.expires_in)) || result.expires_in <= 0) throw new Error('扫码登录响应无效，请重新获取二维码。');
-    scan.value = { ...result, expiresAt: Date.now() + result.expires_in * 1000 };
+    scan.value = { ...result, requester, expiresAt: Date.now() + result.expires_in * 1000 };
     now.value = Date.now();
     schedulePoll(version);
   } catch (error) {
@@ -120,15 +126,20 @@ async function poll(version) {
   if (disposed || version !== generation || !scan.value || !['pending', 'scanned', 'ready'].includes(scan.value.state)) return;
   if (Date.now() >= scan.value.expiresAt) { expire(); return; }
   const current = scan.value;
-  pendingController = new AbortController();
+  const controller = new AbortController();
+  pendingController = controller;
   try {
-    const result = await props.request(`/auth/wechat-login/status?session_id=${encodeURIComponent(current.session_id)}`, { refreshOnUnauthorized: false, signal: pendingController.signal });
+    const result = await current.requester(`/auth/wechat-login/status?session_id=${encodeURIComponent(current.session_id)}`, { refreshOnUnauthorized: false, signal: controller.signal });
     if (disposed || version !== generation || scan.value !== current) return;
+    const remaining = Number(result.expires_in);
+    if (Number.isFinite(remaining)) current.expiresAt = Math.min(current.expiresAt, Date.now() + Math.max(0, remaining) * 1000);
+    if (Date.now() >= current.expiresAt) { expire(); return; }
     current.state = result.state;
     message.value = result.message || '';
     if (result.state === 'ready') {
-      accounts.value = result.accounts || [];
+      accounts.value = Array.isArray(result.accounts) ? result.accounts : [];
       selectedAccount.value = accounts.value.length === 1 ? accounts.value[0].id : null;
+      if (accounts.value.length === 1) await login();
       return;
     }
     if (['expired', 'cancelled', 'unbound', 'failed', 'consumed'].includes(result.state)) {
@@ -139,7 +150,7 @@ async function poll(version) {
     if (disposed || version !== generation || scan.value !== current) return;
     message.value = error.message || '读取扫码状态失败，请重试。';
   } finally {
-    if (version === generation) pendingController = null;
+    if (pendingController === controller) pendingController = null;
   }
   if (!disposed && version === generation) schedulePoll(version);
 }
@@ -147,30 +158,46 @@ async function poll(version) {
 function expire() {
   if (busy.value || !scan.value || !['pending', 'scanned', 'ready'].includes(scan.value.state)) return;
   const id = scan.value.session_id;
+  const requester = scan.value.requester;
   scan.value.state = 'expired';
   accounts.value = [];
   selectedAccount.value = null;
   message.value = '二维码已过期，请重新获取。';
   generation++;
   stop();
-  cancelSession(id);
+  cancelSession(id, requester);
 }
 
 async function login() {
-  if (busy.value || !selectedAccount.value || scan.value?.state !== 'ready') return;
+  if (disposed || busy.value || !selectedAccount.value || scan.value?.state !== 'ready') return;
+  if (Date.now() >= scan.value.expiresAt) { expire(); return; }
   const version = generation;
+  const current = scan.value;
+  const accountId = selectedAccount.value;
+  if (!accounts.value.some(account => account.id === accountId)) return;
+  const requester = current.requester;
+  const controller = new AbortController();
+  consumeController = controller;
+  stop();
   busy.value = true;
   message.value = '';
   try {
-    const result = await props.request('/auth/wechat-login/consume', { method: 'POST', body: JSON.stringify({ session_id: scan.value.session_id, account_id: selectedAccount.value }), refreshOnUnauthorized: false });
-    if (disposed || version !== generation) return;
-    scan.value.state = 'consumed';
+    const result = await requester('/auth/wechat-login/consume', { method: 'POST', body: JSON.stringify({ session_id: current.session_id, account_id: accountId }), refreshOnUnauthorized: false, signal: controller.signal });
+    if (disposed || version !== generation || scan.value !== current) return;
+    current.state = 'consumed';
     stop();
     emit('logged-in', result);
   } catch (error) {
-    if (!disposed && version === generation) message.value = error.message || '登录失败，请重新扫码。';
+    if (!disposed && version === generation && scan.value === current) {
+      current.state = 'failed';
+      accounts.value = [];
+      selectedAccount.value = null;
+      message.value = error.message || '登录失败，请重新扫码。';
+      cancelSession(current.session_id, requester);
+    }
   } finally {
-    if (!disposed && version === generation) busy.value = false;
+    if (consumeController === controller) consumeController = null;
+    if (!disposed && version === generation && scan.value === current) busy.value = false;
   }
 }
 
@@ -198,6 +225,7 @@ h2 span { color: var(--theme-accent, #2563eb); }
 .scan-binding-hint { color: var(--muted, #64748b); font-size: 12px; max-width: 320px; }
 .wechat-login p { margin: 12px 0; line-height: 1.6; }
 .countdown { font-size: 12px; color: var(--muted, #64748b); }
+.scan-guidance { max-width: 320px; font-size: 13px; color: var(--muted, #64748b); }
 .message { overflow-wrap: anywhere; }
 fieldset { width: 100%; box-sizing: border-box; margin: 12px 0; padding: 12px; border: 1px solid var(--theme-border, #cbd5e1); border-radius: 8px; text-align: left; }
 .wechat-login .account-option { display: flex; align-items: center; gap: 10px; padding: 10px 0; cursor: pointer; }

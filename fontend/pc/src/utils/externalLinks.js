@@ -1,5 +1,7 @@
 import { reactive } from 'vue';
+import { ElMessage } from 'element-plus';
 import { request } from '../api/client';
+import { ssoMutation, validateLaunch } from './ssoClient';
 
 export function restrictedHost(value) {
   const host = String(value || '').toLowerCase().replace(/^\[|\]$/g, '');
@@ -59,18 +61,46 @@ export const isExternalLinkOpening = item => openingLinks.has(linkKey(item));
 export async function openExternalLink(item, mode, onCurrent = null) {
   const key = linkKey(item);
   if (openingLinks.has(key)) return;
+  const desktop = window.__PRACTICAL_DESKTOP__;
+  const placeholder = item?.auth_mode === 'oidc' && !desktop
+    ? window.open('', '_blank') : null;
+  if (placeholder) {
+    placeholder.opener = null;
+    placeholder.document.title = '正在打开授权应用';
+    placeholder.document.body.textContent = '正在申请授权，请稍候…';
+  }
   openingLinks.add(key);
   try {
-    return await openResolvedExternalLink(item, mode, onCurrent);
+    return await openResolvedExternalLink(item, mode, onCurrent, placeholder);
+  } catch (error) {
+    placeholder?.close();
+    throw error;
   } finally {
     openingLinks.delete(key);
   }
 }
 
-async function openResolvedExternalLink(item, mode, onCurrent) {
+async function openResolvedExternalLink(item, mode, onCurrent, placeholder) {
   const id = Number(item?.favoriteId || item?.id) || 0;
   if (id) item = await request(`/favorite/detail?id=${id}`);
   mode ||= item?.open_mode || 'client';
+  if (item?.auth_mode === 'oidc') {
+    if (!id || item.sso_available === false) throw new Error('授权应用不可用');
+    if (mode === 'current') {
+      ElMessage.info('授权应用将在专用窗口中打开');
+      mode = 'client';
+      if (placeholder) placeholder.document.body.textContent = '授权应用将在专用窗口中打开…';
+    }
+    if (window.__PRACTICAL_DESKTOP__?.openSso) {
+      return window.__PRACTICAL_DESKTOP__.openSso(id, mode);
+    }
+    if (!placeholder) throw new Error('浏览器阻止了授权窗口，请允许弹出窗口后重试');
+    const data = await ssoMutation('/sso/launch', { favorite_id: id, open_mode: mode === 'browser' ? 'browser' : 'client' });
+    const url = validateLaunch(data, item, window.location.origin);
+    placeholder.location.replace(url);
+    return;
+  }
+  placeholder?.close();
   const url = new URL(String(item?.url || ''));
   if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) throw new Error('链接地址无效');
   if (restrictedHost(url.hostname)) throw new Error('链接地址不允许访问本机或内部网络');

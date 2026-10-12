@@ -1038,8 +1038,8 @@ function formatFileSize(size) {
   gap: 8px;
 }
 
-.list-filter-controls > .el-select { width: 150px; }
-.list-filter-controls > .el-input { width: 250px; max-width: 100%; }
+.list-filter-controls :deep(.shared-filter-fields > .el-select) { width: 150px; max-width: 100%; }
+.list-filter-controls :deep(.shared-filter-fields > .el-input) { width: 250px; max-width: 100%; }
 
 .list-toolbar-actions {
   display: flex;

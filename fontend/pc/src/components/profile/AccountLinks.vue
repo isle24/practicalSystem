@@ -128,7 +128,7 @@ label { display: grid; gap: 6px; font-size: 14px; }
 input { box-sizing: border-box; min-width: 0; padding: 10px; border: 1px solid var(--theme-border, #cbd5e1); border-radius: 6px; background: var(--surface, #fff); color: inherit; font: inherit; }
 button { padding: 9px 14px; border: 1px solid var(--theme-border, #cbd5e1); border-radius: 6px; background: var(--surface, #fff); color: inherit; cursor: pointer; }
 button:disabled { opacity: .5; cursor: default; }
-.error { color: #b91c1c; }
+.error { color: var(--danger); }
 .message { color: var(--theme-accent, #2563eb); }
 .notice { color: var(--muted, #64748b); }
 @media (max-width: 650px) { .account-row { align-items: stretch; flex-direction: column; } .account-actions { justify-content: flex-start; } }

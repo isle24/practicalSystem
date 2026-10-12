@@ -419,7 +419,7 @@ function dateRange(start, end) {
 }
 
 .archive-dialog-title small {
-  color: #667085;
+  color: var(--muted);
 }
 
 .archive-plan-summary {
@@ -428,9 +428,9 @@ function dateRange(start, end) {
   gap: 1px;
   margin: 4px 0 16px;
   overflow: hidden;
-  border: 1px solid #e4e7ec;
+  border: 1px solid var(--line);
   border-radius: 6px;
-  background: #e4e7ec;
+  background: var(--line);
 }
 
 .archive-plan-summary div {
@@ -439,14 +439,14 @@ function dateRange(start, end) {
   flex-direction: column;
   gap: 6px;
   padding: 12px 14px;
-  background: #fff;
+  background: var(--surface);
 }
 
 .archive-plan-summary span,
 .archive-level-section header span,
 .archive-task-title span,
 .archive-student-title span {
-  color: #667085;
+  color: var(--muted);
   font-size: 12px;
 }
 
@@ -487,9 +487,9 @@ function dateRange(start, end) {
 .archive-compliance-section {
   margin: 4px 0 18px;
   padding: 12px 14px;
-  border: 1px solid #d9e2f2;
+  border: 1px solid var(--primary-border);
   border-radius: 8px;
-  background: #f7faff;
+  background: var(--primary-soft);
 }
 
 .archive-compliance-section > header {
@@ -503,7 +503,7 @@ function dateRange(start, end) {
 .archive-student-compliance,
 .archive-student-compliance small,
 .archive-compliance-item small {
-  color: #667085;
+  color: var(--muted);
   font-size: 12px;
 }
 
@@ -519,13 +519,13 @@ function dateRange(start, end) {
   gap: 10px;
   min-width: 0;
   padding: 10px 12px;
-  border: 1px solid #e4e7ec;
+  border: 1px solid var(--line);
   border-radius: 6px;
-  background: #fff;
+  background: var(--surface);
 }
 
 .archive-compliance-item span {
-  color: #667085;
+  color: var(--muted);
   white-space: nowrap;
 }
 
@@ -536,11 +536,11 @@ function dateRange(start, end) {
 }
 
 .archive-compliance-item strong.is-ready {
-  color: #087443;
+  color: var(--green);
 }
 
 .archive-compliance-item strong.is-pending {
-  color: #b54708;
+  color: var(--amber);
 }
 
 .archive-student-compliance {
@@ -550,7 +550,7 @@ function dateRange(start, end) {
   gap: 8px;
   margin-top: 10px;
   padding: 8px 10px;
-  border-top: 1px solid #eef2f6;
+  border-top: 1px solid var(--line);
 }
 
 .archive-level-section > header {

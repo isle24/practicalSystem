@@ -35,10 +35,19 @@ async function sendRequest(path, options = {}, canRefresh = true) {
   const {
     timeoutMs: rawTimeoutMs,
     refreshOnUnauthorized = true,
+    isCurrent = () => true,
     signal: externalSignal,
     headers = {},
     ...fetchOptions
   } = options;
+  const requireCurrent = () => {
+    if (externalSignal?.aborted || !isCurrent()) {
+      const error = new Error('操作已取消或账号上下文已变化');
+      error.name = 'AbortError';
+      throw error;
+    }
+  };
+  requireCurrent();
   const isFormData = fetchOptions.body instanceof FormData;
   const timeoutMs = Number(rawTimeoutMs ?? (isFormData ? 120000 : 30000));
   let didTimeout = false;
@@ -55,10 +64,12 @@ async function sendRequest(path, options = {}, canRefresh = true) {
     if (externalSignal) {
       abortExternal = () => abortController.abort();
       externalSignal.addEventListener('abort', abortExternal, { once: true });
+      if (externalSignal.aborted) abortExternal();
     }
   }
 
   let response;
+  let payload;
   try {
     response = await fetch(`${apiBase}${path}`, {
       credentials: 'include',
@@ -70,9 +81,15 @@ async function sendRequest(path, options = {}, canRefresh = true) {
       ...fetchOptions,
       signal: abortController?.signal || externalSignal,
     });
+    payload = await response.json().catch(error => {
+      if (error?.name === 'AbortError') throw error;
+      return { code: response.status, message: '接口响应格式错误', data: null };
+    });
   } catch (error) {
     if (error?.name === 'AbortError') {
-      throw new Error(didTimeout ? '请求超时，请稍后重试' : '请求已取消');
+      const cancelled = new Error(didTimeout ? '请求超时，请稍后重试' : '请求已取消');
+      cancelled.name = 'AbortError';
+      throw cancelled;
     }
     throw error;
   } finally {
@@ -84,11 +101,7 @@ async function sendRequest(path, options = {}, canRefresh = true) {
     }
   }
 
-  const payload = await response.json().catch(() => ({
-    code: response.status,
-    message: '接口响应格式错误',
-    data: null,
-  }));
+  requireCurrent();
 
   if (payload.code === 40310) window.dispatchEvent(new CustomEvent('practical-wechat-required'));
 
@@ -100,6 +113,7 @@ async function sendRequest(path, options = {}, canRefresh = true) {
     error.payload = payload;
     if (canRefresh && isAuthExpired(response, payload) && !isAuthPath(path)) {
       const refreshed = refreshOnUnauthorized ? await refreshSession() : false;
+      requireCurrent();
       if (refreshed) {
         return sendRequest(path, options, false);
       }
@@ -109,6 +123,11 @@ async function sendRequest(path, options = {}, canRefresh = true) {
   }
 
   return payload.data;
+}
+
+export async function waitForPendingRefresh() {
+  const pending = refreshPromise;
+  if (pending) await pending;
 }
 
 function isAuthExpired(response, payload) {

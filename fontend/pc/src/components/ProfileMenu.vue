@@ -23,7 +23,7 @@ import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { ChevronDown, LogOut, Settings, UserRound, UsersRound } from '@lucide/vue';
 import { desktopTopInset } from '../composables/viewportArea';
 const props = defineProps({ name: String, role: String, avatar: String, avatarStyle: Object, version: String, avatarOnly: Boolean, accounts: { type: Array, default: () => [] }, accountName: Function, accountMeta: Function, placement: { type: String, default: 'top' }, switching: Boolean, busy: Boolean, error: String, contextKey: [String, Number] });
-const emit = defineEmits(['settings', 'switch', 'logout']);
+const emit = defineEmits(['settings', 'switch', 'logout', 'open-change']);
 const root = ref(null), trigger = ref(null), panel = ref(null), open = ref(false), identities = ref(false), position = ref({});
 let observer;
 function place() {
@@ -42,6 +42,7 @@ function act(action, value) { close(true); emit(action, value); }
 function outside(event) { if (open.value && !root.value?.contains(event.target) && !panel.value?.contains(event.target)) close(); }
 function escape(event) { if (event.key === 'Escape' && open.value) close(true); }
 watch(() => props.contextKey, () => close());
+watch(open, value => emit('open-change', value), { flush: 'sync' });
 watch(identities, async () => { await nextTick(); place(); });
 onMounted(() => { document.addEventListener('pointerdown', outside); document.addEventListener('keydown', escape); window.addEventListener('resize', place); window.addEventListener('scroll', place, true); if (typeof ResizeObserver !== 'undefined') { observer = new ResizeObserver(place); observer.observe(document.documentElement); } });
 onBeforeUnmount(() => { observer?.disconnect(); document.removeEventListener('pointerdown', outside); document.removeEventListener('keydown', escape); window.removeEventListener('resize', place); window.removeEventListener('scroll', place, true); });

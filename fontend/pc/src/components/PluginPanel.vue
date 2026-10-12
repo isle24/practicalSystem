@@ -135,20 +135,20 @@ onMounted(load);
 .plugin-panel{display:flex;flex-direction:column;gap:18px;padding:22px;min-height:0;height:100%;overflow:auto}
 .plugin-toolbar{display:flex;align-items:center;justify-content:space-between;gap:18px}
 .plugin-toolbar h2{margin:0;font-size:20px}
-.plugin-toolbar p{margin:5px 0 0;color:#788596;font-size:13px}
+.plugin-toolbar p{margin:5px 0 0;color:var(--muted);font-size:13px}
 .plugin-search{display:flex;gap:8px;min-width:300px}
 .plugin-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px;align-content:start}
-.plugin-card{display:flex;gap:14px;padding:17px;border:1px solid #e4e9ef;border-radius:8px;background:#fff;min-width:0}
-.plugin-card-icon{width:52px;height:52px;display:grid;place-items:center;flex:none;border-radius:13px;background:#edf5ff;color:#2875c5}
+.plugin-card{display:flex;gap:14px;padding:17px;border:1px solid var(--line);border-radius:8px;background:var(--surface);min-width:0}
+.plugin-card-icon{width:52px;height:52px;display:grid;place-items:center;flex:none;border-radius:13px;background:var(--primary-soft);color:var(--primary-ink)}
 .plugin-card-icon img{width:100%;height:100%;object-fit:cover;border-radius:13px}
 .plugin-card-body{display:grid;gap:8px;min-width:0;flex:1}
 .plugin-card-body header{display:flex;align-items:center;justify-content:space-between;gap:10px}
-.plugin-card-body header small,.plugin-permission{color:#8793a2;font-size:11px}
-.plugin-card-body p{margin:0;color:#536173;font-size:13px;line-height:1.55}
+.plugin-card-body header small,.plugin-permission{color:var(--muted);font-size:11px}
+.plugin-card-body p{margin:0;color:var(--muted);font-size:13px;line-height:1.55}
 .plugin-card-body .el-button{justify-self:start}
 .plugin-permission{line-height:1.45}
 .plugin-form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px 20px;padding:20px;min-width:0}
-.plugin-form label{display:grid;gap:6px;color:#5e6b7a;font-size:13px;min-width:0}
+.plugin-form label{display:grid;gap:6px;color:var(--muted);font-size:13px;min-width:0}
 .plugin-form .wide{grid-column:1/-1}
 @media(max-width:620px){.plugin-toolbar{display:grid}.plugin-search{min-width:0}}
 @media(max-width:560px){.plugin-form{grid-template-columns:1fr}.plugin-form .wide{grid-column:auto}}

@@ -53,5 +53,5 @@ function handleFileChange(event) {
 </script>
 
 <style scoped>
-.icon-upload-button{width:56px;height:56px;flex-shrink:0;display:grid;place-items:center;border:1px dashed #cdd6e2;border-radius:8px;background:#f5f8fc;color:#526b8a;cursor:pointer;overflow:hidden;padding:8px}.icon-upload-button:hover{border-color:#648ddd;background:#edf3fc}.icon-upload-button:disabled{opacity:.5;cursor:wait}.icon-upload-button img{width:100%;height:100%;object-fit:contain}.icon-upload-button--cover{padding:0}.icon-upload-button--cover img{object-fit:cover;border-radius:inherit}.hidden-file{display:none}
+.icon-upload-button{width:56px;height:56px;flex-shrink:0;display:grid;place-items:center;border:1px dashed var(--line);border-radius:8px;background:var(--surface-2);color:var(--muted);cursor:pointer;overflow:hidden;padding:8px}.icon-upload-button:hover{border-color:var(--primary);background:var(--primary-soft)}.icon-upload-button:disabled{opacity:.5;cursor:wait}.icon-upload-button img{width:100%;height:100%;object-fit:contain}.icon-upload-button--cover{padding:0}.icon-upload-button--cover img{object-fit:cover;border-radius:inherit}.hidden-file{display:none}
 </style>

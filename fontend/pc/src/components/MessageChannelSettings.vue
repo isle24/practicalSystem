@@ -46,12 +46,12 @@ onMounted(() => execute(async () => Object.assign(form, await request('/workflow
 
 <style scoped>
 .channel-settings { padding: 20px; }
-.channel-settings p { color: #64748b; font-size: 13px; line-height: 1.7; }
-fieldset { display: flex; gap: 24px; border: 1px solid #dbe2ec; padding: 16px; margin: 16px 0; }
+.channel-settings p { color: var(--muted); font-size: 13px; line-height: 1.7; }
+fieldset { display: flex; gap: 24px; border: 1px solid var(--line); padding: 16px; margin: 16px 0; }
 .channel-fields { display: grid; gap: 14px; max-width: 620px; }
 .channel-fields label { display: grid; gap: 6px; font-size: 14px; }
 .channel-fields label:has(input[type=checkbox]) { display: flex; align-items: center; }
-input:not([type=checkbox]) { padding: 9px 12px; border: 1px solid #cbd5e1; border-radius: 6px; }
-[role=alert] { color: #b91c1c !important; }
-[role=status] { color: #15803d !important; }
+input:not([type=checkbox]) { padding: 9px 12px; border: 1px solid var(--line); border-radius: 6px; }
+[role=alert] { color: var(--danger) !important; }
+[role=status] { color: var(--green) !important; }
 </style>

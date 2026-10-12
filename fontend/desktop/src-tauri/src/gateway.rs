@@ -1,4 +1,4 @@
-use crate::connection::Connection;
+use crate::connection::{self, Connection, School};
 use axum::{
     body::Body,
     extract::{Request, State},
@@ -8,6 +8,7 @@ use axum::{
 };
 use rust_embed::RustEmbed;
 use std::sync::Arc;
+use tauri_plugin_dialog::DialogExt;
 use tokio::{
     net::TcpListener,
     sync::{oneshot, Mutex},
@@ -23,6 +24,7 @@ pub struct Gateway {
     pub remote: Url,
     pub entry: Url,
     pub port: u16,
+    pub owner: String,
     shutdown: Option<oneshot::Sender<()>>,
     cancel: tokio_util::sync::CancellationToken,
     login_cancel: Option<(reqwest::Client, Url)>,
@@ -35,7 +37,9 @@ struct GatewayState {
     local: Url,
     cookie: String,
     token: String,
+    owner: String,
     credentials: Mutex<Option<(String, String)>>,
+    profile: Mutex<School>,
 }
 
 impl Drop for Gateway {
@@ -61,10 +65,51 @@ impl Drop for Gateway {
     }
 }
 
+impl Gateway {
+    pub fn source_session(&self) -> Result<(reqwest::Client, Url), String> {
+        self.login_cancel.clone().ok_or("学校会话不可用".into())
+    }
+}
+
+/// 等待学校确认注销，失败时保留原客户端连接。
+pub async fn logout_source(client: &reqwest::Client, origin: &Url) -> Result<(), String> {
+    let target = origin
+        .join("api/auth/logout")
+        .map_err(|_| "学校退出地址无效")?;
+    if target.origin() != origin.origin() {
+        return Err("学校退出来源无效".into());
+    }
+    let response = client
+        .post(target)
+        .header(header::ORIGIN, origin.origin().ascii_serialization())
+        .timeout(std::time::Duration::from_secs(15))
+        .json(&serde_json::json!({}))
+        .send()
+        .await
+        .map_err(|_| "无法连接原学校退出接口")?;
+    let status = response.status();
+    let body = response
+        .bytes()
+        .await
+        .map_err(|_| "无法读取原学校退出响应")?;
+    if body.len() > 32 * 1024 {
+        return Err("原学校退出响应无效".into());
+    }
+    let value: serde_json::Value =
+        serde_json::from_slice(&body).map_err(|_| "原学校退出响应无效")?;
+    if !status.is_success() || value["code"].as_i64() != Some(0) {
+        return Err(value["message"]
+            .as_str()
+            .unwrap_or("原学校退出未完成")
+            .to_owned());
+    }
+    Ok(())
+}
+
 /// 启动只监听回环地址的会话通道，PC 页面来自安装包。
 pub async fn start(
     app: tauri::AppHandle,
-    connection: Connection,
+    mut connection: Connection,
     reserved_ports: &[u16],
     credentials: Option<(String, String)>,
 ) -> Result<Gateway, String> {
@@ -73,9 +118,11 @@ pub async fn start(
         .local_addr()
         .map_err(|_| "无法读取本机连接端口")?
         .port();
+    connection.school.port = port;
     let local =
         Url::parse(&format!("http://127.0.0.1:{port}/")).map_err(|_| "无法创建本机连接地址")?;
     let token = uuid::Uuid::new_v4().simple().to_string();
+    let owner = uuid::Uuid::new_v4().simple().to_string();
     let entry = local
         .join(&format!("_desktop/connect/{token}"))
         .map_err(|_| "无法创建学校入口")?;
@@ -85,10 +132,12 @@ pub async fn start(
     let state = Arc::new(GatewayState {
         app,
         cancel: cancel.clone(),
+        profile: Mutex::new(connection.school.clone()),
         connection,
         local: local.clone(),
         cookie: format!("practical_desktop_{port}"),
         token,
+        owner: owner.clone(),
         credentials: Mutex::new(credentials),
     });
     let router = Router::new().fallback(any(handle)).with_state(state);
@@ -105,6 +154,7 @@ pub async fn start(
         remote,
         entry,
         port,
+        owner,
         login_cancel,
         cancel,
         shutdown: Some(shutdown),
@@ -210,16 +260,21 @@ async fn handle(State(state): State<Arc<GatewayState>>, request: Request) -> Res
         let response = match state.connection.client.post(target)
             .timeout(std::time::Duration::from_secs(30))
             .header(header::ORIGIN, state.connection.origin.origin().ascii_serialization())
+            .header(header::ACCEPT_ENCODING, "identity")
             .json(&serde_json::json!({"login_name": login_name, "password": password, "client": "WEB"}))
             .send().await {
             Ok(response) => response,
             Err(_) => return error(StatusCode::BAD_GATEWAY, "学校登录接口连接失败"),
         };
         let status = response.status();
-        let body = match response.bytes().await {
+        let body = match login_response_body(response).await {
             Ok(body) => body,
             Err(_) => return error(StatusCode::BAD_GATEWAY, "读取学校登录响应失败"),
         };
+        if status.is_success() {
+            remember_authenticated_account(&state, &body, Some("password"), Some(&login_name))
+                .await;
+        }
         let mut result = Response::new(Body::from(body));
         *result.status_mut() = status;
         result.headers_mut().insert(
@@ -244,6 +299,7 @@ async fn handle(State(state): State<Arc<GatewayState>>, request: Request) -> Res
     if matches!(
         path,
         "/_desktop/external"
+            | "/_desktop/sso"
             | "/_desktop/update"
             | "/_desktop/favorite-credentials"
             | "/_desktop/preview-cache"
@@ -257,6 +313,7 @@ async fn handle(State(state): State<Arc<GatewayState>>, request: Request) -> Res
             return error(StatusCode::FORBIDDEN, "仅学校页面可以调用客户端功能");
         }
         let update = path.ends_with("/update");
+        let sso = path.ends_with("/sso");
         let credentials = path.ends_with("/favorite-credentials");
         let cache = path.ends_with("/preview-cache");
         let vault = path.ends_with("/credential-vault");
@@ -269,6 +326,30 @@ async fn handle(State(state): State<Arc<GatewayState>>, request: Request) -> Res
             Ok(input) => input,
             Err(_) => return error(StatusCode::BAD_REQUEST, "参数无效"),
         };
+        if sso {
+            return match crate::favorite_auth::open_sso(
+                &state.app,
+                &state.connection,
+                input["favorite_id"].as_u64().unwrap_or(0),
+                input["mode"].as_str().unwrap_or("client"),
+                &state.owner,
+            )
+            .await
+            {
+                Ok(()) => {
+                    let mut response = Response::new(Body::from("{}"));
+                    response.headers_mut().insert(
+                        header::CONTENT_TYPE,
+                        HeaderValue::from_static("application/json"),
+                    );
+                    response
+                        .headers_mut()
+                        .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+                    response
+                }
+                Err(message) => error(StatusCode::BAD_REQUEST, &message),
+            };
+        }
         if credentials || cache || vault || controls {
             let result = if controls {
                 crate::windows::control(&state.app, input["action"].as_str().unwrap_or(""))
@@ -371,16 +452,28 @@ async fn handle(State(state): State<Arc<GatewayState>>, request: Request) -> Res
 /// 转发学校接口和文件流，令牌只保存在 Rust 会话容器中。
 async fn proxy(state: Arc<GatewayState>, request: Request) -> Response<Body> {
     let (parts, body) = request.into_parts();
+    let authentication = parts.method == axum::http::Method::POST
+        && matches!(
+            parts.uri.path(),
+            "/api/auth/login" | "/api/auth/wechat-login/consume" | "/api/auth/switch-account"
+        );
+    let login_method = match parts.uri.path() {
+        "/api/auth/login" => Some("password"),
+        "/api/auth/wechat-login/consume" => Some("wechat"),
+        _ => None,
+    };
     let mut target = state.connection.origin.clone();
     target.set_path(parts.uri.path());
     target.set_query(parts.uri.query());
     let mut upstream = state.connection.client.request(parts.method, target);
     for (name, value) in &parts.headers {
         if !blocked_header(name.as_str(), &parts.headers)
+            && !(authentication && name.as_str() == "accept-encoding")
             && !matches!(
                 name.as_str(),
                 "host"
                     | "cookie"
+                    | "user-agent"
                     | "origin"
                     | "referer"
                     | "forwarded"
@@ -402,6 +495,9 @@ async fn proxy(state: Arc<GatewayState>, request: Request) -> Response<Body> {
             format!("{}pc/index.html", state.connection.origin),
         )
         .body(reqwest::Body::wrap_stream(body.into_data_stream()));
+    if authentication {
+        upstream = upstream.header(header::ACCEPT_ENCODING, "identity");
+    }
     let response = match upstream.send().await {
         Ok(response) => response,
         Err(error_value) => {
@@ -446,10 +542,90 @@ async fn proxy(state: Arc<GatewayState>, request: Request) -> Response<Body> {
         outgoing.insert(header::LOCATION, location);
     }
     outgoing.insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
-    let mut result = Response::new(Body::from_stream(response.bytes_stream()));
+    let body = if authentication && status.is_success() {
+        let bytes = match login_response_body(response).await {
+            Ok(bytes) => bytes,
+            Err(message) => return error(StatusCode::BAD_GATEWAY, &message),
+        };
+        remember_authenticated_account(&state, &bytes, login_method, None).await;
+        Body::from(bytes)
+    } else {
+        Body::from_stream(response.bytes_stream())
+    };
+    let mut result = Response::new(body);
     *result.status_mut() = status;
     *result.headers_mut() = outgoing;
     result
+}
+
+async fn login_response_body(mut response: reqwest::Response) -> Result<Vec<u8>, String> {
+    let mut bytes = Vec::new();
+    while let Some(chunk) = response.chunk().await.map_err(|_| "读取学校登录响应失败")? {
+        if bytes.len() + chunk.len() > 1024 * 1024 {
+            return Err("学校登录响应过大，请联系管理员".into());
+        }
+        bytes.extend_from_slice(&chunk);
+    }
+    Ok(bytes)
+}
+
+/// 仅按学校成功认证的账号更新本机连接记录。
+async fn remember_authenticated_account(
+    state: &GatewayState,
+    body: &[u8],
+    login_method: Option<&str>,
+    bootstrap_username: Option<&str>,
+) {
+    let Ok(value) = serde_json::from_slice::<serde_json::Value>(body) else {
+        return;
+    };
+    if value["code"].as_i64() != Some(0)
+        || value["data"]["context"]["account_id"].as_u64().unwrap_or(0) == 0
+    {
+        return;
+    }
+    let Some(server_username) = value["data"]["context"]["login_name"]
+        .as_str()
+        .filter(|username| !username.trim().is_empty())
+    else {
+        return;
+    };
+    let username = bootstrap_username
+        .filter(|username| login_method == Some("password") && !username.trim().is_empty())
+        .unwrap_or(server_username);
+    let mut profile = state.profile.lock().await;
+    if state.cancel.is_cancelled() {
+        return;
+    }
+    let mut updated = profile.clone();
+    updated.username = username.to_owned();
+    if let Some(method) = login_method {
+        updated.login_method = method.to_owned();
+    }
+    updated.auto_login = updated.login_method == "password"
+        && updated.username == profile.username
+        && updated.auto_login;
+    let result = (|| {
+        let mut settings = connection::load(&state.app)?;
+        settings.last_origin = updated.origin.clone();
+        settings.last_username = updated.username.clone();
+        settings.schools.retain(|school| {
+            school.origin != updated.origin
+                || (school.username != updated.username
+                    && !(profile.username.is_empty() && school.username.is_empty()))
+        });
+        settings.schools.insert(0, updated.clone());
+        connection::save(&state.app, &settings)
+    })();
+    match result {
+        Ok(()) => *profile = updated,
+        Err(message) => state
+            .app
+            .dialog()
+            .message(format!("已登录，但学校连接记录未保存：{message}"))
+            .title("保存学校连接")
+            .show(|_| {}),
+    }
 }
 
 /// 过滤逐跳传输头及 Connection 声明的头。
@@ -498,4 +674,58 @@ fn error(status: StatusCode, message: &str) -> Response<Body> {
         .headers_mut()
         .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
     response
+}
+
+#[cfg(test)]
+mod logout_tests {
+    use super::logout_source;
+    use axum::{
+        http::{header, HeaderMap, StatusCode},
+        routing::post,
+        Router,
+    };
+    use reqwest::{cookie::Jar, Client};
+    use std::sync::Arc;
+    use url::Url;
+
+    #[tokio::test]
+    async fn waits_for_authenticated_source_logout_and_rejects_failure() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let origin = Url::parse(&format!("http://{}/", listener.local_addr().unwrap())).unwrap();
+        let expected_origin = origin.origin().ascii_serialization();
+        let router = Router::new().route(
+            "/api/auth/logout",
+            post(move |headers: HeaderMap| {
+                let expected_origin = expected_origin.clone();
+                async move {
+                    let has_cookie = headers
+                        .get(header::COOKIE)
+                        .and_then(|value| value.to_str().ok())
+                        .is_some_and(|value| value.contains("refresh_jwt=school-a"));
+                    let same_origin = headers
+                        .get(header::ORIGIN)
+                        .and_then(|value| value.to_str().ok())
+                        == Some(expected_origin.as_str());
+                    if has_cookie && same_origin {
+                        (StatusCode::OK, r#"{"code":0,"message":"ok","data":null}"#)
+                    } else {
+                        (
+                            StatusCode::FORBIDDEN,
+                            r#"{"code":40300,"message":"forbidden","data":null}"#,
+                        )
+                    }
+                }
+            }),
+        );
+        let server = tokio::spawn(async move {
+            axum::serve(listener, router).await.unwrap();
+        });
+        let jar = Arc::new(Jar::default());
+        jar.add_cookie_str("refresh_jwt=school-a; Path=/", &origin);
+        let client = Client::builder().cookie_provider(jar).build().unwrap();
+        assert!(logout_source(&client, &origin).await.is_ok());
+        assert!(logout_source(&Client::new(), &origin).await.is_err());
+        server.abort();
+        assert!(logout_source(&client, &origin).await.is_err());
+    }
 }

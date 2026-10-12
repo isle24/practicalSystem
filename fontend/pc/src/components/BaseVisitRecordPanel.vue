@@ -5,9 +5,9 @@
     <DataListPanel :columns="columns" :filters="filters" :filter-values="state.filters" :extra-filter-keys="['actual_date']" :rows="state.rows" :pagination="state.pagination" :loading="state.loading" :storage-key="`practical:pc:columns:${sessionKey}:baseVisitRecords`" @filter-change="setFilter" @search="loadList(1)" @reset="resetFilters" @page-change="loadList">
       <template #filters><label class="date-filter"><span>实际走访日期</span><input v-model="state.filters.actual_date" type="date" @change="loadList(1)"></label></template>
       <template #toolbar><el-button :disabled="busy" @click="loadList(state.pagination.page)">刷新</el-button><el-button v-if="state.canWrite" type="primary" :disabled="busy" @click="createRecord">新增记录</el-button></template>
-      <template #actions="{ row }"><el-button :disabled="busy" @click="openRecord(row.id, false)">查看详情</el-button><el-button v-if="row.can_edit" :disabled="busy" @click="openRecord(row.id, true)">修改记录</el-button></template>
+      <template #actions="{ row }"><el-button :disabled="busy" @click="openRecord(row.id)">查看详情</el-button><el-button v-if="row.can_edit" :disabled="busy" @click="openRecord(row.id, 'edit')">修改记录</el-button><el-button v-if="row.can_delete" type="danger" :disabled="busy" @click="openRecord(row.id, 'delete')">删除记录</el-button></template>
     </DataListPanel>
-    <OperationDialog :visible="Boolean(state.mode)" :title="state.mode === 'detail' ? '走访记录详情' : state.form.id ? '修改走访记录' : '新增走访记录'" :busy="busy" dialog-class="visit-record-dialog" @close="closeDialog">
+    <OperationDialog :visible="Boolean(state.mode)" :title="dialogTitle" :busy="busy" dialog-class="visit-record-dialog" @close="closeDialog">
       <div class="record-body" v-loading="state.detailLoading">
         <el-alert v-if="state.dialogError" :title="state.dialogError" type="error" :closable="false" />
         <template v-if="!state.detailLoading && state.mode === 'detail'">
@@ -25,8 +25,17 @@
           <label v-for="field in textFields" :key="field.key" class="wide"><span>{{ field.label }}{{ field.key === 'content' ? '（必填）' : '' }}</span><el-input v-model="state.form[field.key]" type="textarea" :rows="field.key === 'content' ? 6 : 3" :maxlength="field.max" /></label>
           <div class="record-files wide"><header><strong>附件（{{ state.form.attachments.length }}/20）</strong><el-button :icon="Upload" :loading="state.uploading" :disabled="busy || state.form.attachments.length >= 20" @click="attachmentInput?.click()">上传附件</el-button><input ref="attachmentInput" type="file" hidden multiple :disabled="busy" @change="uploadAttachments"></header><small v-if="!state.form.attachments.length">暂无附件</small><article v-for="file in state.form.attachments" :key="file.file_id || file.id"><span>{{ fileName(file) }}</span><FilePreviewButton :file="file" /><el-button :disabled="busy" link type="danger" @click="removeAttachment(file)">移除</el-button></article></div>
         </form>
+        <el-alert v-else-if="!state.detailLoading && state.mode === 'delete'" title="确认删除此走访记录？" description="删除后不再显示此记录。关联的已完成安排会恢复到未完成状态，附件原文件保留。" type="warning" :closable="false" show-icon />
       </div>
-      <template #footer><el-button :disabled="busy" @click="closeDialog">关闭</el-button><el-button v-if="state.mode === 'edit'" type="primary" :loading="state.saving" :disabled="busy || state.detailLoading || state.linkLoading" @click="saveRecord">保存记录</el-button><el-button v-else-if="state.item.can_edit" type="primary" :disabled="busy" @click="openRecord(state.item.id, true)">修改记录</el-button></template>
+      <template #footer>
+        <el-button :disabled="busy" @click="closeDialog">关闭</el-button>
+        <el-button v-if="state.mode === 'edit'" type="primary" :loading="state.saving" :disabled="busy || state.detailLoading || state.linkLoading" @click="saveRecord">保存记录</el-button>
+        <el-button v-else-if="state.mode === 'delete'" type="danger" :loading="state.saving" :disabled="busy || state.detailLoading" @click="deleteRecord">确认删除</el-button>
+        <template v-else-if="state.mode === 'detail' && !state.detailLoading">
+          <el-button v-if="state.item.can_edit" type="primary" :disabled="busy" @click="openRecord(state.item.id, 'edit')">修改记录</el-button>
+          <el-button v-if="state.item.can_delete" type="danger" :disabled="busy" @click="openRecord(state.item.id, 'delete')">删除记录</el-button>
+        </template>
+      </template>
     </OperationDialog>
   </section>
 </template>
@@ -39,7 +48,7 @@ import OperationDialog from './OperationDialog.vue';
 import FilePreviewButton from '../../../shared/components/FilePreviewButton.vue';
 import { backendUrl } from '../api/client';
 import { uploadFile } from '../api/system';
-import { fetchBaseVisitRecords, fetchBaseVisitRecordDetail, saveIndependentBaseVisitRecord, fetchBaseVisitOptions, fetchBaseVisits, fetchBaseVisitDetail } from '../api/baseVisits';
+import { deleteBaseVisitRecord, fetchBaseVisitRecords, fetchBaseVisitRecordDetail, saveIndependentBaseVisitRecord, fetchBaseVisitOptions, fetchBaseVisits, fetchBaseVisitDetail } from '../api/baseVisits';
 
 const props = defineProps({ sessionKey: { type: String, default: '' } });
 const columns = [{ prop: 'base_name', label: '基地名称', minWidth: 170 }, { prop: 'actual_at', label: '实际走访时间', minWidth: 170 }, { prop: 'participants', label: '参加人员', minWidth: 160 }, { prop: 'contact_person', label: '接待人员', minWidth: 120 }, { prop: 'author_name', label: '填写人', minWidth: 110 }, { prop: 'updated_at', label: '更新时间', minWidth: 170 }];
@@ -49,6 +58,7 @@ const initialState = () => ({ rows: [], filters: { keyword: '', actual_date: '' 
 const state = reactive(initialState());
 const attachmentInput = ref(null);
 const busy = computed(() => state.saving || state.uploading);
+const dialogTitle = computed(() => ({ detail: '走访记录详情', delete: '删除走访记录', edit: state.form.id ? '修改走访记录' : '新增走访记录' }[state.mode] || '走访记录'));
 const requests = new Map();
 const timers = new Map();
 let session = 0;
@@ -73,6 +83,8 @@ async function loadList(page = 1) {
     const data = await fetchBaseVisitRecords({ ...state.filters, page, page_size: state.pagination.page_size }, { signal: ticket.controller.signal });
     if (!current('list', ticket)) return;
     state.rows = data.items || []; state.pagination = data.pagination; state.canWrite = data.can_write_record === true; state.message = '';
+    const lastPage = Math.max(1, Math.ceil(state.pagination.total / state.pagination.page_size));
+    if (state.pagination.page > lastPage) await loadList(lastPage);
   } catch (error) { if (current('list', ticket)) state.message = error.message; }
   finally { if (current('list', ticket)) { state.loading = false; requests.delete('list'); } }
 }
@@ -121,7 +133,7 @@ function createRecord() {
   state.form = { base_id: null, visit_id: null, actual_at: localDateTime(), participant_ids: [], participants: '', contact_person: '', content: '', problems: '', follow_up: '', attachments: [] };
   options('base'); options('participant'); options('plan');
 }
-async function openRecord(id, edit) {
+async function openRecord(id, mode = 'detail') {
   if (busy.value) return;
   closeDialog(); state.mode = 'detail'; state.detailLoading = true;
   const ticket = begin('detail');
@@ -129,8 +141,10 @@ async function openRecord(id, edit) {
     const data = await fetchBaseVisitRecordDetail(id, { signal: ticket.controller.signal });
     if (!current('detail', ticket)) return;
     state.item = data.item;
-    if (edit && !data.item.can_edit) { state.dialogError = '无修改记录权限'; return; }
-    if (edit) {
+    if (mode === 'edit' && !data.item.can_edit) { state.dialogError = '无修改记录权限'; return; }
+    if (mode === 'delete' && !data.item.can_delete) { state.dialogError = '无删除记录权限'; return; }
+    if (mode === 'delete') state.mode = 'delete';
+    if (mode === 'edit') {
       state.form = { ...data.item, participants: data.item.participants_auto_generated ? '' : data.item.participants || '', actual_at: data.item.actual_at.replace(' ', 'T'), participant_ids: [...data.item.participant_ids], attachments: [...data.item.attachments] };
       state.bases = [{ id: data.item.base_id, name: data.item.base_name }];
       state.people = merge(data.item.participant_ids.map(account_id => ({ account_id, name: '历史参加人员' })), data.item.participant_rows || [], 'account_id');
@@ -139,6 +153,20 @@ async function openRecord(id, edit) {
     }
   } catch (error) { if (current('detail', ticket)) state.dialogError = error.message; }
   finally { if (current('detail', ticket)) { state.detailLoading = false; requests.delete('detail'); } }
+}
+async function deleteRecord() {
+  if (busy.value || state.detailLoading || state.mode !== 'delete' || !state.item.can_delete) return;
+  const version = session; const opened = dialog;
+  const { id, revision, visit_revision } = state.item;
+  state.saving = true; state.dialogError = '';
+  try {
+    await deleteBaseVisitRecord({ id, revision, visit_revision });
+    if (version !== session || opened !== dialog) return;
+    await loadList(state.pagination.page);
+    if (version !== session || opened !== dialog) return;
+    state.saving = false; closeDialog();
+  } catch (error) { if (version === session && opened === dialog) state.dialogError = error.message; }
+  finally { if (version === session && opened === dialog) state.saving = false; }
 }
 async function selectPlan(id) {
   requests.get('link')?.controller.abort(); requests.delete('link'); state.linkLoading = false;

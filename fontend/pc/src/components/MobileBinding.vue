@@ -55,5 +55,5 @@ async function verify() {
 .mobile-code-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .mobile-code-row > .el-input { flex: 1 1 120px; min-width: 100px; }
 .mobile-code-row > .el-button { margin: 0; }
-.mobile-binding small { color: #525866; line-height: 1.5; }
+.mobile-binding small { color: var(--muted); line-height: 1.5; }
 </style>

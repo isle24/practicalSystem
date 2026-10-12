@@ -15,6 +15,8 @@ pub fn build(
     url: Url,
     local: Url,
     remote: Url,
+    owner: &str,
+    login_method: &str,
     features: Option<NewWindowFeatures>,
 ) -> tauri::Result<WebviewWindow> {
     let navigation_app = app.clone();
@@ -24,12 +26,15 @@ pub fn build(
     let popup_app = app.clone();
     let popup_local = local.clone();
     let popup_remote = remote.clone();
+    let popup_owner = owner.to_owned();
+    let popup_login_method = login_method.to_owned();
     let downloads = Arc::new(Downloads::default());
     let document_state = downloads.clone();
     let context = serde_json::json!({
         "serverOrigin": remote.origin().ascii_serialization(),
         "localOrigin": local.origin().ascii_serialization(),
         "windowLabel": label,
+        "loginMethod": login_method,
         "platform": std::env::consts::OS,
     });
     let mut builder = WebviewWindowBuilder::new(app, label, WebviewUrl::External(url))
@@ -61,6 +66,7 @@ pub fn build(
                 value:Object.freeze({{...{context}, version:'{}',
                     bootstrapLogin:()=>bridge('bootstrap-login',{{}}),
                     openExternal:(url,mode='client',favorite_id=0)=>bridge('external',{{url,mode,favorite_id}}),
+                    openSso:(favorite_id,mode='client')=>bridge('sso',{{favorite_id,mode}}),
                     favoriteCredentials:(id,action,profile)=>bridge('favorite-credentials',{{id,action,profile}}),
                     credentialVault:(action,payload={{}})=>bridge('credential-vault',{{action,...payload}}),
                     windowControls:(action)=>bridge('window',{{action}}),
@@ -100,7 +106,7 @@ pub fn build(
                 open_external(&popup_app, &url);
                 return NewWindowResponse::Deny;
             }
-            let label = format!("preview-{}", uuid::Uuid::new_v4().simple());
+            let label = school_window_label("preview", &popup_owner, &uuid::Uuid::new_v4().simple().to_string());
             // about:blank 与 window_features 保留 document.write 打印所需的关联窗口。
             let blank = Url::parse("about:blank").expect("valid blank URL");
             match build(
@@ -109,6 +115,8 @@ pub fn build(
                 blank,
                 popup_local.clone(),
                 popup_remote.clone(),
+                &popup_owner,
+                &popup_login_method,
                 Some(features),
             ) {
                 Ok(window) => NewWindowResponse::Create { window },
@@ -136,16 +144,7 @@ pub fn build(
         })
         .on_download(move |webview, event| downloads.handle(webview, event));
     if label == "school" {
-        #[cfg(target_os = "macos")]
-        {
-            builder = builder
-                .title_bar_style(tauri::TitleBarStyle::Overlay)
-                .hidden_title(true);
-        }
-        #[cfg(not(target_os = "macos"))]
-        {
-            builder = builder.decorations(false);
-        }
+        builder = builder.decorations(false);
     }
     if let Some(features) = features {
         builder = builder.window_features(features);
@@ -174,10 +173,20 @@ pub fn show_connection(app: &AppHandle) {
     }
 }
 
-/// 关闭当前学校的业务和预览窗口。
-pub fn close_school(app: &AppHandle) {
+pub fn school_window_label(kind: &str, owner: &str, suffix: &str) -> String {
+    format!("{kind}-{owner}-{suffix}")
+}
+
+fn belongs_to_school(label: &str, owner: &str) -> bool {
+    ["preview", "sso"]
+        .iter()
+        .any(|kind| label.starts_with(&format!("{kind}-{owner}-")))
+}
+
+/// 关闭当前连接创建的业务、预览和授权窗口。
+pub fn close_school(app: &AppHandle, owner: &str) {
     for (label, window) in app.webview_windows() {
-        if label == "school" || label.starts_with("preview-") {
+        if label == "school" || belongs_to_school(&label, owner) {
             let _ = window.destroy();
         }
     }
@@ -197,9 +206,40 @@ pub fn control(app: &AppHandle, action: &str) -> Result<serde_json::Value, Strin
                 window.maximize()
             }
         }
+        "fullscreen" => {
+            window.set_fullscreen(!window.is_fullscreen().map_err(|_| "无法读取全屏状态")?)
+        }
         "close" => window.close(),
         _ => return Err("窗口操作无效".into()),
     };
     result.map_err(|_| "窗口操作失败")?;
-    Ok(serde_json::json!({"maximized": window.is_maximized().unwrap_or(false)}))
+    let maximized = window.is_maximized().map_err(|_| "无法读取窗口状态")?;
+    let fullscreen = window.is_fullscreen().map_err(|_| "无法读取全屏状态")?;
+    if action != "status" {
+        notify_state(app);
+    }
+    Ok(serde_json::json!({"maximized": maximized, "fullscreen": fullscreen}))
+}
+
+pub fn notify_state(app: &AppHandle) {
+    if let Some(window) = app.get_webview_window("school") {
+        let _ = window.eval("window.dispatchEvent(new Event('practical-native-window-state'))");
+    }
+}
+
+#[cfg(test)]
+mod school_window_tests {
+    use super::{belongs_to_school, school_window_label};
+    #[test]
+    fn closes_only_windows_owned_by_the_active_school() {
+        let school_a = "first-session";
+        let school_b = "second-session";
+        let a_sso = school_window_label("sso", school_a, "one");
+        let a_preview = school_window_label("preview", school_a, "two");
+        let b_sso = school_window_label("sso", school_b, "three");
+        assert!(belongs_to_school(&a_sso, school_a));
+        assert!(belongs_to_school(&a_preview, school_a));
+        assert!(!belongs_to_school(&b_sso, school_a));
+        assert!(!belongs_to_school("external-unrelated", school_a));
+    }
 }

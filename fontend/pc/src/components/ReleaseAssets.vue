@@ -47,5 +47,5 @@ async function upload(event) {
 </template>
 
 <style scoped>
-.release-assets { display: grid; gap: 16px; min-width: 0; }.release-assets-toolbar { display: flex; gap: 10px; flex-wrap: wrap; }.release-assets fieldset { border: 1px solid #e1e6ed; border-radius: 6px; padding: 12px 16px; display: flex; flex-direction: column; gap: 10px; }.release-assets legend { padding: 0 6px; font-size: 13px; }.release-assets small { color: #7c8794; line-height: 1.6; }.release-assets :deep(.el-checkbox) { white-space: normal; height: auto; }.release-assets :deep(.el-checkbox__label) { white-space: normal; }
+.release-assets { display: grid; gap: 16px; min-width: 0; }.release-assets-toolbar { display: flex; gap: 10px; flex-wrap: wrap; }.release-assets fieldset { border: 1px solid var(--line); border-radius: 6px; padding: 12px 16px; display: flex; flex-direction: column; gap: 10px; }.release-assets legend { padding: 0 6px; font-size: 13px; }.release-assets small { color: var(--muted); line-height: 1.6; }.release-assets :deep(.el-checkbox) { white-space: normal; height: auto; }.release-assets :deep(.el-checkbox__label) { white-space: normal; }
 </style>

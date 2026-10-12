@@ -23,6 +23,8 @@ pub struct School {
     #[serde(default)]
     pub username: String,
     #[serde(default)]
+    pub login_method: String,
+    #[serde(default)]
     pub auto_login: bool,
     #[serde(default)]
     pub remark: String,
@@ -205,6 +207,7 @@ pub async fn connect(origin: Url, port: u16) -> Result<Connection, String> {
             name: name.unwrap_or_default().to_owned(),
             port,
             username: String::new(),
+            login_method: String::new(),
             auto_login: false,
             remark: String::new(),
         },

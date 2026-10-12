@@ -85,5 +85,5 @@ p { line-height: 1.6; font-size: 14px; }
 .signature-session { margin-top: 20px; text-align: center; }
 button { border: 1px solid var(--line); padding: 9px 14px; border-radius: 6px; background: var(--surface); color: var(--text); cursor: pointer; }
 button:disabled { opacity: .5; cursor: default; }
-.error { color: #b91c1c; }
+.error { color: var(--danger); }
 </style>

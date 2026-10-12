@@ -432,7 +432,7 @@ function actionLabel(action) {
 .appraisal-dialog-title small,
 .appraisal-section header span,
 .appraisal-file-row > span {
-  color: #667085;
+  color: var(--muted);
   font-size: 12px;
 }
 
@@ -442,9 +442,9 @@ function actionLabel(action) {
   gap: 1px;
   overflow: hidden;
   margin-bottom: 16px;
-  border: 1px solid #e4e7ec;
+  border: 1px solid var(--line);
   border-radius: 6px;
-  background: #e4e7ec;
+  background: var(--line);
 }
 
 .appraisal-context div {
@@ -453,11 +453,11 @@ function actionLabel(action) {
   flex-direction: column;
   gap: 5px;
   padding: 11px 13px;
-  background: #fff;
+  background: var(--surface);
 }
 
 .appraisal-context span {
-  color: #667085;
+  color: var(--muted);
   font-size: 12px;
 }
 
@@ -469,7 +469,7 @@ function actionLabel(action) {
 
 .appraisal-section {
   padding: 16px 0;
-  border-top: 1px solid #eaecf0;
+  border-top: 1px solid var(--line);
 }
 
 .appraisal-section header {
@@ -507,7 +507,7 @@ function actionLabel(action) {
 .enterprise-evaluation-source {
   display: block;
   margin-top: 5px;
-  color: #667085;
+  color: var(--muted);
   font-size: 12px;
   line-height: 1.4;
 }
@@ -517,9 +517,9 @@ function actionLabel(action) {
   gap: 12px;
   min-height: 42px;
   padding: 8px 10px;
-  border: 1px solid #e4e7ec;
+  border: 1px solid var(--line);
   border-radius: 6px;
-  background: #f9fafb;
+  background: var(--surface-2);
 }
 
 .appraisal-file {
@@ -529,7 +529,7 @@ function actionLabel(action) {
   gap: 7px;
   padding: 0;
   border: 0;
-  color: #2563eb;
+  color: var(--primary-ink);
   background: transparent;
   cursor: pointer;
 }
@@ -543,9 +543,9 @@ function actionLabel(action) {
 .review-section {
   margin-top: 4px;
   padding: 16px;
-  border: 1px solid #dbeafe;
+  border: 1px solid var(--primary-border);
   border-radius: 6px;
-  background: #f8fbff;
+  background: var(--primary-soft);
 }
 
 .review-form-row {
@@ -568,7 +568,7 @@ function actionLabel(action) {
 
 .appraisal-timeline p {
   margin: 5px 0 0;
-  color: #667085;
+  color: var(--muted);
   line-height: 1.6;
 }
 

@@ -43,7 +43,7 @@ const current = computed(() => tabs.value.find(tab => tab.id === props.modelValu
 nav { display: grid; gap: 6px; }
 nav button { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-radius: 8px; color: var(--muted); background: transparent; text-align: left; font-size: 13px; white-space: nowrap; }
 nav button:hover { background: var(--surface-2); color: var(--text); }
-nav button.active { color: var(--primary); background: var(--primary-soft); font-weight: 600; }
+nav button.active { color: var(--primary-ink, var(--primary)); background: var(--primary-soft); font-weight: 600; }
 .profile-navigation p { padding: 0 14px; margin: auto 0 0; color: var(--muted); font-size: 11px; line-height: 1.8; }
 .profile-detail { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 .profile-detail-header { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 24px 28px 20px; border-bottom: 1px solid var(--line); background: var(--surface); }

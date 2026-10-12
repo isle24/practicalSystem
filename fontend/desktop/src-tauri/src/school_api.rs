@@ -45,6 +45,36 @@ pub async fn post(connection: &Connection, path: &str, input: &Value) -> Result<
     decode(response, 16 * 1024 * 1024).await
 }
 
+/// 授权写入必须携带学校签发的 CSRF 值和单次请求标识。
+pub async fn sso_post(connection: &Connection, path: &str, input: &Value) -> Result<Value, String> {
+    let security = read(connection, "api/sso/security").await?;
+    let csrf = security["csrf_token"]
+        .as_str()
+        .ok_or("授权操作校验不可用")?;
+    let target = connection
+        .origin
+        .join(path)
+        .map_err(|_| "学校接口地址无效")?;
+    if target.origin() != connection.origin.origin() || connection.origin.scheme() != "https" {
+        return Err("授权请求需要同源 HTTPS 学校连接".into());
+    }
+    let response = connection
+        .client
+        .post(target)
+        .header(
+            reqwest::header::ORIGIN,
+            connection.origin.origin().ascii_serialization(),
+        )
+        .header("x-csrf-token", csrf)
+        .header("x-request-token", uuid::Uuid::new_v4().to_string())
+        .timeout(std::time::Duration::from_secs(45))
+        .json(input)
+        .send()
+        .await
+        .map_err(|_| "学校授权接口连接失败")?;
+    decode(response, 1024 * 1024).await
+}
+
 async fn decode(mut response: reqwest::Response, limit: usize) -> Result<Value, String> {
     let status = response.status();
     let mut bytes = Vec::new();

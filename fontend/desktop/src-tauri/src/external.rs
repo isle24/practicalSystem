@@ -115,6 +115,98 @@ pub fn open_authenticated(
     Ok(())
 }
 
+/// 单点登录窗口使用独立会话，只允许学校发行方和注册目标来源。
+pub fn open_sso(
+    app: &AppHandle,
+    target: Url,
+    issuer: url::Origin,
+    owner: &str,
+) -> Result<(), String> {
+    let target_origin = target.origin();
+    if target.scheme() != "https"
+        || !allowed(&target)
+        || !issuer.ascii_serialization().starts_with("https://")
+    {
+        return Err("授权窗口来源无效".into());
+    }
+    let builder = WebviewWindowBuilder::new(
+        app,
+        crate::windows::school_window_label(
+            "sso",
+            owner,
+            &uuid::Uuid::new_v4().simple().to_string(),
+        ),
+        WebviewUrl::External(Url::parse("about:blank").map_err(|_| "无法创建授权窗口")?),
+    )
+    .title("应用授权")
+    .inner_size(1180.0, 820.0)
+    .incognito(true)
+    .on_navigation(move |url| sso_navigation_allowed(url, &issuer, &target_origin))
+    .on_new_window(|_, _| NewWindowResponse::Deny);
+    #[cfg(target_os = "windows")]
+    let directory = tempfile::tempdir().map_err(|_| "无法创建独立授权会话")?;
+    #[cfg(target_os = "windows")]
+    let builder = builder.data_directory(directory.path().to_path_buf());
+    let window = builder.build().map_err(|_| "无法创建授权窗口")?;
+    #[cfg(target_os = "windows")]
+    {
+        let directory = std::sync::Mutex::new(Some(directory));
+        window.on_window_event(move |event| {
+            if matches!(event, tauri::WindowEvent::Destroyed) {
+                if let Ok(mut directory) = directory.lock() {
+                    directory.take();
+                }
+            }
+        });
+    }
+    if window.navigate(target).is_err() {
+        let _ = window.destroy();
+        return Err("无法打开授权页面".into());
+    }
+    Ok(())
+}
+
+fn sso_navigation_allowed(url: &Url, issuer: &url::Origin, target: &url::Origin) -> bool {
+    url.as_str() == "about:blank"
+        || (url.scheme() == "https" && (url.origin() == *issuer || url.origin() == *target))
+}
+
+#[cfg(test)]
+mod sso_window_tests {
+    use super::sso_navigation_allowed;
+    use url::Url;
+
+    #[test]
+    fn permits_only_two_https_origins_and_blank_initial_page() {
+        let issuer = Url::parse("https://school.example.edu/").unwrap().origin();
+        let target = Url::parse("https://paper.example.edu/sso/launch")
+            .unwrap()
+            .origin();
+        for address in [
+            "about:blank",
+            "https://school.example.edu/api/oidc/authorize",
+            "https://paper.example.edu/sso/launch#claim_token=x",
+        ] {
+            assert!(
+                sso_navigation_allowed(&Url::parse(address).unwrap(), &issuer, &target),
+                "{address}"
+            );
+        }
+        for address in [
+            "https://other.example.edu/",
+            "http://school.example.edu/",
+            "file:///etc/passwd",
+            "data:text/html,hello",
+            "http://127.0.0.1:1234/",
+        ] {
+            assert!(
+                !sso_navigation_allowed(&Url::parse(address).unwrap(), &issuer, &target),
+                "{address}"
+            );
+        }
+    }
+}
+
 /// 统一打开收藏的客户端窗口或系统浏览器。
 pub fn open(app: &AppHandle, address: &str, mode: &str) -> Result<(), String> {
     let url = Url::parse(address).map_err(|_| "网址格式不正确")?;

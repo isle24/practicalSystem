@@ -663,7 +663,7 @@ function mentorLabel(item) {
 }
 
 .student-change-tabs button.active {
-  color: var(--primary);
+  color: var(--primary-ink, var(--primary));
   font-weight: 600;
 }
 
@@ -706,7 +706,7 @@ function mentorLabel(item) {
   border-radius: var(--control-radius);
   padding: 0 12px;
   color: var(--text);
-  background: #fff;
+  background: var(--surface);
 }
 
 .student-change-review {
@@ -726,7 +726,7 @@ function mentorLabel(item) {
   border: 1px solid var(--line);
   border-radius: 6px;
   padding: 14px;
-  background: #f8fafc;
+  background: var(--surface-2);
 }
 
 .student-change-snapshots dl {

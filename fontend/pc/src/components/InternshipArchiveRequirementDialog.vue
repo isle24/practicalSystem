@@ -181,7 +181,7 @@ function scopeLabel(type) {
 }
 
 .archive-requirement-tabs button.active {
-  color: var(--primary);
+  color: var(--primary-ink, var(--primary));
   font-weight: 600;
 }
 

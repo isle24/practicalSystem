@@ -291,7 +291,7 @@ onBeforeUnmount(() => {
   overflow: auto;
   border: 1px solid var(--line);
   border-radius: var(--control-radius);
-  background: #f4f6f8;
+  background: var(--surface-2);
   font: 12px/1.8 monospace;
 }
 </style>
