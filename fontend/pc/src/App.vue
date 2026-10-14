@@ -1749,6 +1749,7 @@
                     :busy="practiceModuleState(win.module.id).loading"
                     @close="closePracticeDialog(win.module.id)"
                   >
+                    <el-alert v-if="practiceModuleState(win.module.id).message" class="operation-feedback" :title="practiceModuleState(win.module.id).message" type="warning" :closable="false" show-icon />
 
                       <div v-if="practiceModuleState(win.module.id).dialog.type === 'execution'" class="operation-form">
                         <label>
@@ -1836,7 +1837,7 @@
                         </div>
                       </div>
 
-                      <div v-else-if="practiceModuleState(win.module.id).dialog.type === 'edit'" class="operation-form">
+                      <div v-else-if="practiceModuleState(win.module.id).dialog.type === 'edit'" class="operation-form" :inert="practiceModuleState(win.module.id).loading">
                         <label>
                           <span>类别</span>
                           <el-segmented v-model="practiceModuleState(win.module.id).form.module_type" :options="practiceWriteModuleTypeOptions" @change="handlePracticeWriteModuleTypeChange(win.module.id)" />
@@ -2325,7 +2326,8 @@
                     :busy="userAdminState.loading"
                     @close="closeUserDialog"
                   >
-                      <div class="operation-form menu-dialog-form">
+                      <el-alert v-if="userAdminState.message" class="operation-feedback" :title="userAdminState.message" type="warning" :closable="false" show-icon />
+                      <div class="operation-form menu-dialog-form" :inert="userAdminState.loading">
                         <label><span>姓名</span><input v-model="userAdminState.editing.name"></label>
                         <label><span>登录账号</span><input v-model="userAdminState.editing.login_name"></label>
                         <label>
@@ -2369,7 +2371,7 @@
                           <span>所属学院</span>
                           <el-select-v2 v-model="userAdminState.editing.dep_id" clearable filterable placeholder="请选择所属学院" @change="handleUserAcademicChange('dep_id')" :options="userEditDepartmentOptions()" :props="{ label: 'dep_name', value: 'dep_id' }" />
                         </label>
-                        <label v-if="['student', 'teacher', 'college_admin', 'profession_admin'].includes(userEditingRoleType)">
+                        <label v-if="['student', 'profession_admin'].includes(userEditingRoleType)">
                           <span>所属专业</span>
                           <el-select-v2 v-model="userAdminState.editing.profession_id" clearable filterable placeholder="请选择所属专业" @change="handleUserAcademicChange('profession_id')" :options="userEditProfessionOptions()" :props="{ label: 'profession_name', value: 'profession_id' }" />
                         </label>
@@ -2394,7 +2396,7 @@
                         </label>
                       </div>
                       <footer>
-                        <el-button @click="closeUserDialog">取消</el-button>
+                        <el-button :disabled="userAdminState.loading" @click="closeUserDialog">取消</el-button>
                         <el-button type="primary" :icon="Save" :loading="userAdminState.loading" @click="saveUserConfig">
                           保存
                         </el-button>
@@ -9391,7 +9393,7 @@ function handleUserRoleChange() {
     if (userAdminState.editing.dep_id || userAdminState.editing.profession_id) ElMessage.info('目标角色无需学院、专业，已清理不适用字段');
     userAdminState.editing.dep_id = null;
     userAdminState.editing.profession_id = null;
-  } else if (userAdminState.editing.role_type === 'college_admin') {
+  } else if (['college_admin', 'teacher'].includes(userAdminState.editing.role_type)) {
     userAdminState.editing.profession_id = null;
   }
 }
@@ -9468,12 +9470,12 @@ async function saveUserConfig() {
     return;
   }
 
-  if (['college_admin', 'profession_admin'].includes(userEditingRoleType.value) && !userAdminState.editing.dep_id) {
-    userAdminState.message = '请选择管理员所属学院';
+  if (['college_admin', 'profession_admin', 'teacher', 'student'].includes(userEditingRoleType.value) && !userAdminState.editing.dep_id) {
+    userAdminState.message = '请选择所属学院';
     return;
   }
-  if (userEditingRoleType.value === 'profession_admin' && !userAdminState.editing.profession_id) {
-    userAdminState.message = '请选择专业管理员所属专业';
+  if (['profession_admin', 'student'].includes(userEditingRoleType.value) && !userAdminState.editing.profession_id) {
+    userAdminState.message = '请选择所属专业';
     return;
   }
   userAdminState.loading = true;
@@ -12060,7 +12062,7 @@ function practiceProfessionOptions(module) {
   const gradeId = Number(state.form.grade_id || 0);
   const depId = Number(state.form.dep_id || 0);
   return state.options.professions.filter((item) => {
-    const matchGrade = !gradeId || Number(item.grade_id || 0) === gradeId;
+    const matchGrade = !gradeId || !Number(item.grade_id || 0) || Number(item.grade_id) === gradeId;
     const matchDepartment = !depId || Number(item.dep_id || 0) === depId;
     return matchGrade && matchDepartment;
   });
@@ -12573,6 +12575,7 @@ async function exportPracticeScheduleList(module) {
 
 async function openPracticeDialog(module, panel, row = null) {
   const state = practiceModuleState(module);
+  state.message = '';
   state.form = panel === 'scores'
     ? emptyPracticeExecutionForm(row || {})
     : isPracticeExecutionPanel(panel)
@@ -12992,6 +12995,9 @@ async function savePractice(module, workflowStatus = null) {
   if (state.loading) {
     return;
   }
+  const form = state.form, dialog = state.dialog, session = internshipFoundationSessionKey();
+  const sameSession = () => state === practiceModuleState(module) && session === internshipFoundationSessionKey();
+  const current = () => sameSession() && state.form === form && state.dialog === dialog;
   const panel = currentPracticeDialogPanel(module);
   const error = validatePracticeForm(module, panel, state.form);
   if (error) {
@@ -13012,13 +13018,20 @@ async function savePractice(module, workflowStatus = null) {
   state.loading = true;
   state.message = '';
   try {
-    await savePracticeItem(state.form.module_type, payload);
+    const result = await savePracticeItem(form.module_type, payload);
+    if (!current()) return;
+    if (!Number.isInteger(Number(result?.id)) || Number(result.id) <= 0) throw new Error('保存结果未确认，请刷新列表核对');
+    state.form.id = result.id;
+    if (workflowStatus && result.status !== workflowStatus) {
+      throw new Error('保存后的状态未确认为所选状态，请刷新列表核对后再操作');
+    }
     closePracticeDialog(module);
+    ElMessage.success(workflowStatus === 'wait' ? '已提交审核' : '已保存');
     await loadPracticePanel(module, panel, state.lists[panel]?.pagination.page || 1, true);
   } catch (error) {
-    state.message = error.message;
+    if (current()) state.message = error.message;
   } finally {
-    state.loading = false;
+    if (sameSession()) state.loading = false;
   }
 }
 

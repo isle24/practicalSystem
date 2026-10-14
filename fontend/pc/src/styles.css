@@ -7214,3 +7214,5 @@ a {
 .shared-filter-toolbar.stat-filter-bar .shared-filter-fields > label { display: grid; gap: 6px; }
 
 .el-message, .el-notification { margin-top: var(--desktop-top-inset, 0px); }
+
+.operation-dialog > .operation-feedback { flex-shrink: 0; width: calc(100% - 48px); margin: 16px 24px 0; }
