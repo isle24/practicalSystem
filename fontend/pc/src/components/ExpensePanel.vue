@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, reactive, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import WorkflowHistory from '../../../shared/components/WorkflowHistory.vue';
 import { uploadFile } from '../api/system';
 
@@ -13,6 +13,8 @@ const editorVisible = ref(false);
 const workflowPreview = ref([]);
 const workflowPreviewVisible = ref(false);
 const form = reactive(emptyForm());
+let alive = true;
+let detailRevision = 0;
 
 function emptyForm() { return { id: 0, name: '', title: '', base_id: 0, dep_id: 0, term_id: 0, semester: '', base_type: '', base_category: '', amount_upper: '', remark: '', items: [{ project: '', amount: '' }], attachment_ids: [] }; }
 const total = computed(() => (form.items.reduce((sum, item) => sum + amountCents(item.amount), 0) / 100).toFixed(2));
@@ -64,25 +66,59 @@ function chineseAmount(cents) {
   } else text += '整';
   return text;
 }
-async function load() { busy.value = true; message.value = ''; try { if (!props.canView) { rows.value = []; return; } const [list, optionData] = await Promise.all([props.request('/expense/list?page=1&page_size=100'), props.request('/expense/options')]); rows.value = list.items || []; Object.assign(options, optionData || {}); } catch (error) { message.value = error.message; } finally { busy.value = false; } }
-function openCreate() { Object.assign(form, emptyForm()); form.items = [{ project: '', amount: '' }]; editorVisible.value = true; }
-async function openEdit(row) { editorVisible.value = false; try { const data = await props.request(`/expense/detail?id=${Number(row.id)}`); const item = data.item || {}; const ids = Array.isArray(item.attachment_ids) ? item.attachment_ids : JSON.parse(item.attachment_ids || '[]'); Object.assign(form, emptyForm(), item, { items: (item.items || []).map(line => ({ project: line.project, amount: line.amount })), attachment_ids: ids, attachments: item.attachments || [] }); editorVisible.value = true; return true; } catch (error) { message.value = error.message; return false; } }
+async function refreshData() {
+  if (!alive) return;
+  if (!props.canView) { rows.value = []; return; }
+  const [list, optionData] = await Promise.all([props.request('/expense/list?page=1&page_size=100'), props.request('/expense/options')]);
+  if (!alive) return;
+  rows.value = list.items || []; Object.assign(options, optionData || {});
+}
+async function load() { if (!alive || busy.value) return; busy.value = true; message.value = ''; try { await refreshData(); } catch (error) { if (alive) message.value = error.message; } finally { if (alive) busy.value = false; } }
+function openCreate() { if (busy.value || !props.canCreate) return; Object.assign(form, emptyForm()); form.items = [{ project: '', amount: '' }]; editorVisible.value = true; }
+async function openEdit(row) {
+  if (busy.value || !canEdit(row)) return false;
+  busy.value = true; editorVisible.value = false; message.value = '';
+  try {
+    const data = await props.request(`/expense/detail?id=${Number(row.id)}`);
+    if (!alive) return false;
+    const item = data.item;
+    if (!item || !canEdit(item)) { message.value = '当前申请已不可编辑，请刷新列表'; return false; }
+    const ids = Array.isArray(item.attachment_ids) ? item.attachment_ids : JSON.parse(item.attachment_ids || '[]');
+    Object.assign(form, emptyForm(), item, { items: (item.items || []).map(line => ({ project: line.project, amount: line.amount })), attachment_ids: ids, attachments: item.attachments || [] });
+    editorVisible.value = true; return true;
+  } catch (error) { if (alive) message.value = error.message; return false; }
+  finally { if (alive) busy.value = false; }
+}
 async function editAndSubmit(row) { if (await openEdit(row)) await save(true); }
 function selectBase() { if (!form.dep_id || !options.units.some(unit => Number(unit.dep_id) === Number(form.dep_id))) form.dep_id = Number(selectedBase.value?.dep_id || 0); form.title = selectedBase.value?.name || form.title; form.base_type = selectedBase.value?.base_type || ''; form.base_category = selectedBase.value?.base_category || ''; }
 function addItem() { form.items.push({ project: '', amount: '' }); }
 function copyItem(index) { form.items.splice(index + 1, 0, { ...form.items[index] }); }
 function removeItem(index) { if (form.items.length > 1) form.items.splice(index, 1); }
 function requestId() { return typeof crypto?.randomUUID === 'function' ? crypto.randomUUID() : String(Date.now()) + '-' + Math.random().toString(16).slice(2); }
-async function save(submit = false) { if (busy.value) return; busy.value = true; message.value = ''; try { const data = await props.request('/expense/save', { method: 'POST', body: JSON.stringify({ ...form, total_amount: total.value }) }); Object.assign(form, data.item || {}); editorVisible.value = false; await load(); if (submit) { const preview = await props.request(`/workflow/preview?entity_type=base_expense&entity_id=${Number(form.id)}`); workflowPreview.value = preview.nodes || []; workflowPreviewVisible.value = true; } else message.value = '草稿已保存'; } catch (error) { message.value = error.message; } finally { busy.value = false; } }
-async function confirmSubmit() { if (busy.value || !form.id) return; busy.value = true; message.value = ''; try { await props.request('/expense/submit', { method: 'POST', body: JSON.stringify({ id: form.id, request_id: requestId() }) }); workflowPreviewVisible.value = false; await load(); message.value = '申请已提交审批'; } catch (error) { message.value = error.message; } finally { busy.value = false; } }
-async function uploadAttachments(event) { const files = [...(event.target.files || [])]; event.target.value = ''; for (const file of files) { busy.value = true; try { const uploaded = await uploadFile(file, { category: 'base_expense', is_temporary: 'false' }); form.attachment_ids.push(Number(uploaded.file_id)); form.attachments = [...(form.attachments || []), { file_id: Number(uploaded.file_id), name: uploaded.name || file.name, url: uploaded.url || '' }]; } catch (error) { message.value = error.message; break; } finally { busy.value = false; } } }
+async function save(submit = false) { if (!alive || busy.value || !editorVisible.value) return; busy.value = true; message.value = ''; try { const data = await props.request('/expense/save', { method: 'POST', body: JSON.stringify({ ...form, total_amount: total.value }) }); if (!alive) return; Object.assign(form, data.item || {}); editorVisible.value = false; await refreshData(); if (!alive) return; if (submit) { const preview = await props.request(`/workflow/preview?entity_type=base_expense&entity_id=${Number(form.id)}`); if (!alive) return; workflowPreview.value = preview.nodes || []; workflowPreviewVisible.value = true; } else message.value = '草稿已保存'; } catch (error) { message.value = error.message; } finally { busy.value = false; } }
+async function confirmSubmit() { if (!alive || busy.value || !form.id || !workflowPreviewVisible.value) return; busy.value = true; message.value = ''; try { await props.request('/expense/submit', { method: 'POST', body: JSON.stringify({ id: form.id, request_id: requestId() }) }); if (!alive) return; workflowPreviewVisible.value = false; await refreshData(); message.value = '申请已提交审批'; } catch (error) { message.value = error.message; } finally { busy.value = false; } }
+async function uploadAttachments(event) {
+  const files = [...(event.target.files || [])]; event.target.value = '';
+  if (busy.value || !editorVisible.value || !files.length) return;
+  busy.value = true; message.value = '';
+  try {
+    for (const file of files) {
+      const uploaded = await uploadFile(file, { category: 'base_expense', is_temporary: 'false' });
+      if (!alive) return;
+      form.attachment_ids.push(Number(uploaded.file_id));
+      form.attachments = [...(form.attachments || []), { file_id: Number(uploaded.file_id), name: uploaded.name || file.name, url: uploaded.url || '' }];
+    }
+  } catch (error) { if (alive) message.value = error.message; }
+  finally { if (alive) busy.value = false; }
+}
 function removeAttachment(fileId) { form.attachment_ids = form.attachment_ids.filter(id => Number(id) !== Number(fileId)); form.attachments = (form.attachments || []).filter(file => Number(file.file_id) !== Number(fileId)); }
 async function exportItem(row, format = 'docx') { try { await props.request('/expense/export', { method: 'POST', body: JSON.stringify({ id: row.id, format }) }); message.value = '导出任务已创建，请在导出中心查看'; } catch (error) { message.value = error.message; } }
 function canEdit(row) { return ['draft', 'modify'].includes(String(row.workflow_status)) && Number(row.submitter_id) === Number(props.accountId); }
 function statusText(value) { return ({ draft: '草稿', wait: '审批中', accept: '已通过', modify: '已退回', cancelled: '已取消' })[String(value)] || String(value || '—'); }
-async function openExpense(id) { if (!id) return; message.value = ''; try { const data = await props.request(`/expense/detail?id=${Number(id)}`); selected.value = data.item || null; } catch (error) { message.value = error.message; } }
+async function openExpense(id) { const ticket = ++detailRevision; if (!id) { selected.value = null; return; } message.value = ''; try { const data = await props.request(`/expense/detail?id=${Number(id)}`); if (alive && ticket === detailRevision) selected.value = data.item || null; } catch (error) { if (alive && ticket === detailRevision) message.value = error.message; } }
 defineExpose({ load });
 onMounted(load);
+onBeforeUnmount(() => { alive = false; detailRevision++; });
 watch(() => props.openExpenseId, openExpense, { immediate: true });
 </script>
 
@@ -99,11 +135,15 @@ watch(() => props.openExpenseId, openExpense, { immediate: true });
       <el-table-column column-key="actions" label="操作" min-width="340"><template #default="{ row }"><button v-if="canEdit(row)" @click="openEdit(row)">编辑</button><button v-if="canEdit(row)" class="primary" @click="editAndSubmit(row)">提交</button><button @click="openExpense(row.id)">查看详情</button><button v-if="canExport" @click="exportItem(row, 'docx')">Word</button><button v-if="canExport" @click="exportItem(row, 'pdf')">PDF</button></template></el-table-column>
     </el-table>
     <p v-else-if="!busy" class="expense-empty">暂无费用申请。</p>
-    <div v-if="editorVisible" class="expense-editor"><div class="expense-editor-card"><header><h3>{{ form.id ? '编辑费用申请' : '新建费用申请' }}</h3><button @click="editorVisible = false">关闭</button></header>
+    <Teleport to="body">
+    <div v-if="editorVisible" class="expense-editor"><div class="expense-editor-card"><header><h3>{{ form.id ? '编辑费用申请' : '新建费用申请' }}</h3><button :disabled="busy" @click="editorVisible = false">关闭</button></header>
+      <p v-if="message" class="expense-message" role="status">{{ message }}</p>
+      <fieldset :disabled="busy" class="expense-editor-fields">
       <label>申请单位<select v-model.number="form.dep_id"><option :value="0">请选择单位</option><option v-for="unit in options.units" :key="unit.dep_id" :value="Number(unit.dep_id)">{{ unit.dep_name }}</option></select></label><label>基地<select v-model.number="form.base_id" @change="selectBase"><option :value="0">请选择基地</option><option v-for="base in options.bases" :key="base.id" :value="Number(base.id)">{{ base.name }}</option></select></label><label>学年学期<select v-model="form.semester"><option value="">未选择</option><option v-for="term in options.semesters" :key="term" :value="term">{{ term }}</option></select></label><p>基地类型：{{ form.base_type || '—' }}；基地类别：{{ form.base_category || '—' }}</p><label>备注<textarea v-model.trim="form.remark" rows="3"></textarea></label>
       <div class="expense-lines"><div class="expense-line-head"><strong>费用明细</strong><button @click="addItem">新增明细</button></div><div v-for="(item, index) in form.items" :key="index" class="expense-line"><input v-model.trim="item.project" list="expense-projects" placeholder="建设项目"><input v-model.trim="item.amount" inputmode="decimal" placeholder="项目金额"><button @click="copyItem(index)">复制</button><button :disabled="form.items.length <= 1" @click="removeItem(index)">删除</button></div><datalist id="expense-projects"><option v-for="project in options.categories" :key="project" :value="project"></option></datalist><strong class="expense-total">合计：{{ total }}（{{ amountUpper }}）</strong></div>
       <label>附件<input type="file" multiple @change="uploadAttachments"><small>支持常见文档和图片格式</small></label><ul v-if="form.attachments?.length" class="expense-attachments"><li v-for="file in form.attachments" :key="file.file_id"><a :href="backendUrl(file.url)" target="_blank" rel="noopener noreferrer">{{ file.name }}</a><button type="button" @click="removeAttachment(file.file_id)">移除</button></li></ul>
-      <footer><button @click="save(false)">保存草稿</button><button class="primary" @click="save(true)">保存并提交</button></footer></div></div>
+      </fieldset>
+      <footer><button :disabled="busy" @click="save(false)">保存草稿</button><button class="primary" :disabled="busy" @click="save(true)">保存并提交</button></footer></div></div>
     <div v-if="selected" class="expense-detail-backdrop" @click.self="selected = null">
       <article class="expense-detail">
         <header><h3>费用申请详情</h3><button @click="selected = null">关闭</button></header>
@@ -119,13 +159,15 @@ watch(() => props.openExpenseId, openExpense, { immediate: true });
         <footer v-if="canExport"><button @click="exportItem(selected, 'docx')">导出 Word</button><button @click="exportItem(selected, 'pdf')">导出 PDF</button></footer>
       </article>
     </div>
-    <div v-if="workflowPreviewVisible" class="expense-preview-backdrop" @click.self="workflowPreviewVisible = false">
+    <div v-if="workflowPreviewVisible" class="expense-preview-backdrop" @click.self="!busy && (workflowPreviewVisible = false)">
       <article class="expense-preview">
         <header><h3>提交前确认审批流程</h3><button type="button" :disabled="busy" @click="workflowPreviewVisible = false">关闭</button></header>
+        <p v-if="message" class="expense-message" role="status">{{ message }}</p>
         <ol><li v-for="(node, index) in workflowPreview" :key="index"><strong>{{ index + 1 }}. {{ node.name }}</strong><span>{{ node.kind === 'cc' ? '抄送' : node.mode === 'all' ? '会签' : '或签' }}</span><p>{{ (node.candidates || []).map(person => person.name).join('、') || '无已解析人员' }}</p></li></ol>
         <footer><button type="button" :disabled="busy" @click="workflowPreviewVisible = false">返回修改</button><button type="button" class="primary" :disabled="busy || !workflowPreview.length" @click="confirmSubmit">确认提交</button></footer>
       </article>
     </div>
+    </Teleport>
   </section>
 </template>
 
@@ -140,12 +182,12 @@ button.primary { color: var(--primary-contrast); border-color: var(--primary); b
 button:disabled { opacity: .5; cursor: default; }
 .expense-table { width: 100%; margin-top: 18px; }
 .expense-table :deep(.cell button) { margin-right: 6px; }
-.expense-editor { position: fixed; inset: 0; z-index: 20; background: rgba(20,31,48,.35); display: grid; place-items: center; padding: 20px; }
-.expense-editor-card,.expense-detail { background: var(--surface); border-radius: 9px; width: min(760px,calc(100vw - 40px)); max-height: 90vh; overflow: auto; padding: 20px; box-sizing: border-box; }
-.expense-detail-backdrop { position: fixed; inset: 0; z-index: 21; background: rgba(20,31,48,.35); display: grid; place-items: center; padding: 20px; box-sizing: border-box; }
+.expense-editor { position: fixed; inset: var(--desktop-top-inset, 0px) 0 0; z-index: 9200; box-sizing: border-box; background: rgba(20,31,48,.35); display: grid; place-items: center; padding: 20px; }
+.expense-editor-card,.expense-detail { background: var(--surface); border-radius: 9px; width: min(760px,calc(100vw - 40px)); max-height: calc(100dvh - var(--desktop-top-inset, 0px) - 40px); overflow: auto; padding: 20px; box-sizing: border-box; }
+.expense-detail-backdrop { position: fixed; inset: var(--desktop-top-inset, 0px) 0 0; z-index: 9201; background: rgba(20,31,48,.35); display: grid; place-items: center; padding: 20px; box-sizing: border-box; }
 .expense-detail { box-shadow: 0 16px 48px rgba(20,31,48,.28); }
-.expense-preview-backdrop { position: fixed; inset: 0; z-index: 22; display: grid; place-items: center; padding: 20px; box-sizing: border-box; background: rgba(20,31,48,.35); }
-.expense-preview { width: min(680px,calc(100vw - 40px)); max-height: 90vh; overflow: auto; padding: 20px; box-sizing: border-box; border-radius: 9px; background: var(--surface); box-shadow: 0 16px 48px rgba(20,31,48,.28); }
+.expense-preview-backdrop { position: fixed; inset: var(--desktop-top-inset, 0px) 0 0; z-index: 9202; display: grid; place-items: center; padding: 20px; box-sizing: border-box; background: rgba(20,31,48,.35); }
+.expense-preview { width: min(680px,calc(100vw - 40px)); max-height: calc(100dvh - var(--desktop-top-inset, 0px) - 40px); overflow: auto; padding: 20px; box-sizing: border-box; border-radius: 9px; background: var(--surface); box-shadow: 0 16px 48px rgba(20,31,48,.28); }
 .expense-preview > header,.expense-preview > footer { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .expense-preview h3 { margin: 0; }
 .expense-preview ol { display: grid; gap: 10px; padding-left: 26px; }
@@ -155,9 +197,10 @@ button:disabled { opacity: .5; cursor: default; }
 .expense-preview .primary { color: var(--primary-contrast); border-color: var(--primary); background: var(--primary); }
 .expense-editor-card { display: grid; gap: 14px; }
 label { display: grid; gap: 5px; font-size: 13px; }
-input,select,textarea { border: 1px solid var(--line); border-radius: 5px; padding: 8px; font: inherit; box-sizing: border-box; }
+input,select,textarea { min-width: 0; background: var(--surface); color: var(--text); border: 1px solid var(--line); border-radius: 5px; padding: 8px; font: inherit; box-sizing: border-box; }
+.expense-editor-fields { border: 0; padding: 0; margin: 0; min-width: 0; display: grid; gap: 14px; }
 .expense-lines { display: grid; gap: 9px; }
-.expense-line { display: grid; grid-template-columns: 1fr 150px auto; gap: 8px; }
+.expense-line { display: grid; grid-template-columns: minmax(0,1fr) 150px auto auto; gap: 8px; }
 .expense-total,.expense-detail-total { text-align: right; }
 footer { display: flex; justify-content: flex-end; gap: 10px; }
 .expense-detail-fields { display: grid; grid-template-columns: 130px minmax(0,1fr); gap: 9px 12px; margin: 18px 0; font-size: 13px; }
@@ -167,4 +210,5 @@ footer { display: flex; justify-content: flex-end; gap: 10px; }
 .expense-detail-remark { margin: 14px 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 .expense-muted { color: var(--muted); font-size: 13px; }
 .expense-detail-history { border-top: 1px solid var(--line); padding-top: 14px; }
+@media (max-width: 650px) { .expense-line { grid-template-columns: minmax(0,1fr) minmax(0,1fr); } .expense-panel-toolbar { align-items: flex-start; flex-wrap: wrap; } .expense-detail-fields { grid-template-columns: 90px minmax(0,1fr); } }
 </style>

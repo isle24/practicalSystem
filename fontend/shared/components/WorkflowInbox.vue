@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import WorkflowHistory from './WorkflowHistory.vue';
 const props = defineProps({ request: { type: Function, required: true }, backendUrl: { type: Function, default: value => value }, accountId: { type: [Number, String], required: true } });
 const emit = defineEmits(['open-expense']);
@@ -11,26 +11,33 @@ const message = ref('');
 const page = ref(1);
 const pageSize = ref(20);
 const total = ref(0);
+let generation = 0;
+let disposed = false;
 const application = computed(() => selected.value?.snapshot_json?.application || selected.value?.snapshot_json?.expense || selected.value?.snapshot_json || {});
 const base = computed(() => selected.value?.snapshot_json?.base || {});
 const labels = { base_application: '基地申报', base_expense: '基地建设费用申请' };
 const title = item => item.snapshot_json?.application?.title || item.snapshot_json?.expense?.title || item.snapshot_json?.title || labels[item.entity_type] || '审批申请';
 async function load() {
+  const version = ++generation;
+  const current = () => !disposed && version === generation;
   busy.value = true;
   message.value = '';
   try {
     const data = await props.request(`/workflow/inbox?kind=${kind.value}&page=${page.value}&page_size=${pageSize.value}`);
+    if (!current()) return;
     items.value = data.items || [];
     pageSize.value = Number(data.pagination?.page_size || pageSize.value);
     total.value = Number(data.pagination?.total || 0);
-  } catch (error) { message.value = error.message; } finally { busy.value = false; }
+  } catch (error) { if (current()) message.value = error.message; }
+  finally { if (current()) busy.value = false; }
 }
 function open(item) {
   if (item.entity_type === 'base_expense') { emit('open-expense', item.entity_id); return; }
   selected.value = item;
 }
 function changeKind(value) { kind.value = value; page.value = 1; selected.value = null; load(); }
-watch(() => props.accountId, () => { page.value = 1; selected.value = null; load(); }, { immediate: true });
+watch(() => props.accountId, () => { page.value = 1; selected.value = null; items.value = []; total.value = 0; load(); }, { immediate: true });
+onBeforeUnmount(() => { disposed = true; generation++; });
 </script>
 
 <template>
@@ -54,17 +61,17 @@ watch(() => props.accountId, () => { page.value = 1; selected.value = null; load
 </template>
 
 <style scoped>
-.workflow-inbox { height: 100%; overflow: auto; box-sizing: border-box; padding: 18px; background: #fff; color: #253248; }
+.workflow-inbox { height: 100%; overflow: auto; box-sizing: border-box; padding: 18px; background: var(--surface, #fff); color: var(--text, #253248); }
 header,footer { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; }
 header strong { margin-right: auto; }
-button { padding: 8px 12px; border: 1px solid #dce2eb; border-radius: 5px; background: #fff; color: #253248; font: inherit; cursor: pointer; }
-button.active,button:hover:not(:disabled) { background: #edf4ff; color: #2359a8; }
+button { padding: 8px 12px; border: 1px solid var(--line, #dce2eb); border-radius: 5px; background: var(--surface, #fff); color: var(--text, #253248); font: inherit; cursor: pointer; }
+button.active,button:hover:not(:disabled) { background: var(--primary-soft, #edf4ff); color: var(--primary-ink, #2359a8); }
 button:disabled { opacity: .5; cursor: default; }
 .workflow-inbox-item { display: flex; flex-direction: column; gap: 8px; width: 100%; text-align: left; margin: 10px 0; padding: 16px; }
-.workflow-inbox-item span,.workflow-inbox-empty { font-size: 13px; color: #6d798b; }
+.workflow-inbox-item span,.workflow-inbox-empty { font-size: 13px; color: var(--muted, #6d798b); }
 .workflow-inbox-detail { margin-top: 16px; }
 dl { display: grid; grid-template-columns: 90px minmax(0,1fr); gap: 10px; font-size: 14px; }
-dt { color: #667388; } dd { margin: 0; overflow-wrap: anywhere; }
+dt { color: var(--muted, #667388); } dd { margin: 0; overflow-wrap: anywhere; }
 .workflow-inbox-content { white-space: pre-wrap; }
 footer { margin-top: 16px; justify-content: flex-end; font-size: 13px; }
 </style>

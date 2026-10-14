@@ -8,10 +8,11 @@ use axum::{
 };
 use rust_embed::RustEmbed;
 use std::sync::Arc;
+use tauri::Manager;
 use tauri_plugin_dialog::DialogExt;
 use tokio::{
     net::TcpListener,
-    sync::{oneshot, Mutex},
+    sync::{oneshot, Mutex, RwLock, RwLockReadGuard},
 };
 use url::Url;
 
@@ -28,6 +29,48 @@ pub struct Gateway {
     shutdown: Option<oneshot::Sender<()>>,
     cancel: tokio_util::sync::CancellationToken,
     login_cancel: Option<(reqwest::Client, Url)>,
+    session_lock: Arc<RwLock<()>>,
+    pub lock: Arc<crate::client_lock::ClientLock>,
+    authorization_cancel: Arc<Mutex<tokio_util::sync::CancellationToken>>,
+}
+
+pub struct SourceSession {
+    client: reqwest::Client,
+    origin: Url,
+    session_lock: Arc<RwLock<()>>,
+    cancel: tokio_util::sync::CancellationToken,
+    lock: Arc<crate::client_lock::ClientLock>,
+}
+
+impl SourceSession {
+    pub async fn logout_for_reconnect(self) -> Result<(), String> {
+        let _session = self.session_lock.write().await;
+        if self.cancel.is_cancelled() || self.lock.is_locked() {
+            return Err("客户端已锁定，请在锁屏退出原会话后重新连接".into());
+        }
+        match logout_source(&self.client, &self.origin).await {
+            Ok(()) => Ok(()),
+            Err(message) => {
+                if !self.cancel.is_cancelled()
+                    && !self.lock.is_locked()
+                    && source_confirmed_guest(&self.client, &self.origin).await
+                    && !self.cancel.is_cancelled()
+                    && !self.lock.is_locked()
+                {
+                    Ok(())
+                } else {
+                    Err(message)
+                }
+            }
+        }
+    }
+    pub async fn logout(self) -> Result<(), String> {
+        let _session = self.session_lock.write().await;
+        if self.cancel.is_cancelled() {
+            return Err("学校连接已关闭".into());
+        }
+        logout_source(&self.client, &self.origin).await
+    }
 }
 
 struct GatewayState {
@@ -38,8 +81,10 @@ struct GatewayState {
     cookie: String,
     token: String,
     owner: String,
-    credentials: Mutex<Option<(String, String)>>,
+    authorization_cancel: Arc<Mutex<tokio_util::sync::CancellationToken>>,
     profile: Mutex<School>,
+    lock: Arc<crate::client_lock::ClientLock>,
+    recovery: bool,
 }
 
 impl Drop for Gateway {
@@ -66,8 +111,22 @@ impl Drop for Gateway {
 }
 
 impl Gateway {
-    pub fn source_session(&self) -> Result<(reqwest::Client, Url), String> {
-        self.login_cancel.clone().ok_or("学校会话不可用".into())
+    pub fn download_cancellation(&self) -> Option<tokio_util::sync::CancellationToken> {
+        self.authorization_cancel
+            .try_lock()
+            .ok()
+            .map(|cancel| cancel.clone())
+            .filter(|cancel| !cancel.is_cancelled())
+    }
+    pub fn source_session(&self) -> Result<SourceSession, String> {
+        let (client, origin) = self.login_cancel.clone().ok_or("学校会话不可用")?;
+        Ok(SourceSession {
+            client,
+            origin,
+            session_lock: self.session_lock.clone(),
+            cancel: self.cancel.clone(),
+            lock: self.lock.clone(),
+        })
     }
 }
 
@@ -106,12 +165,62 @@ pub async fn logout_source(client: &reqwest::Client, origin: &Url) -> Result<(),
     Ok(())
 }
 
+async fn source_confirmed_guest(client: &reqwest::Client, origin: &Url) -> bool {
+    let Ok(target) = origin.join("api/auth/context") else {
+        return false;
+    };
+    if target.origin() != origin.origin() {
+        return false;
+    }
+    let Ok(mut response) = client
+        .get(target)
+        .timeout(std::time::Duration::from_secs(15))
+        .send()
+        .await
+    else {
+        return false;
+    };
+    if !response.status().is_success() {
+        return false;
+    }
+    let mut bytes = Vec::new();
+    loop {
+        let Ok(chunk) = response.chunk().await else {
+            return false;
+        };
+        let Some(chunk) = chunk else { break };
+        if bytes.len() + chunk.len() > 65536 {
+            return false;
+        }
+        bytes.extend_from_slice(&chunk);
+    }
+    let Ok(value) = serde_json::from_slice::<serde_json::Value>(&bytes) else {
+        return false;
+    };
+    if value["code"].as_i64() != Some(0) {
+        return false;
+    }
+    let Some(context) = value["data"].as_object() else {
+        return false;
+    };
+    if !context
+        .get("auth_error")
+        .is_some_and(|error| error.is_null() || error.as_str() == Some(""))
+    {
+        return false;
+    }
+    context
+        .get("account_id")
+        .is_some_and(|id| id.is_null() || id.as_i64() == Some(0))
+}
+
 /// 启动只监听回环地址的会话通道，PC 页面来自安装包。
 pub async fn start(
     app: tauri::AppHandle,
     mut connection: Connection,
     reserved_ports: &[u16],
-    credentials: Option<(String, String)>,
+    verified_context: Option<&serde_json::Value>,
+    recovery: bool,
 ) -> Result<Gateway, String> {
     let listener = bind_school_port(connection.school.port, reserved_ports).await?;
     let port = listener
@@ -128,7 +237,13 @@ pub async fn start(
         .map_err(|_| "无法创建学校入口")?;
     let remote = connection.origin.clone();
     let login_cancel = Some((connection.client.clone(), remote.clone()));
-    let cancel = tokio_util::sync::CancellationToken::new();
+    let cancel = connection.cancel.clone();
+    let session_lock = connection.session_lock.clone();
+    let lock = Arc::new(crate::client_lock::ClientLock::new(&app)?);
+    if let Some(context) = verified_context {
+        lock.remember_context(context);
+    }
+    let authorization_cancel = Arc::new(Mutex::new(cancel.child_token()));
     let state = Arc::new(GatewayState {
         app,
         cancel: cancel.clone(),
@@ -138,7 +253,35 @@ pub async fn start(
         cookie: format!("practical_desktop_{port}"),
         token,
         owner: owner.clone(),
-        credentials: Mutex::new(credentials),
+        authorization_cancel: authorization_cancel.clone(),
+        lock: lock.clone(),
+        recovery,
+    });
+    let timer_state = state.clone();
+    tauri::async_runtime::spawn(async move {
+        loop {
+            tokio::select! {
+                _ = timer_state.cancel.cancelled() => break,
+                _ = tokio::time::sleep(std::time::Duration::from_secs(1)) => {}
+            }
+            crate::input_activity::poll(&timer_state.app, &timer_state.owner, &timer_state.lock);
+            if timer_state.lock.due()
+                && !timer_state
+                    .app
+                    .state::<crate::AppState>()
+                    .connecting
+                    .load(std::sync::atomic::Ordering::Acquire)
+            {
+                if let Err(message) = lock_session(&timer_state).await {
+                    timer_state
+                        .app
+                        .dialog()
+                        .message(message)
+                        .title("客户端锁定")
+                        .show(|_| {});
+                }
+            }
+        }
     });
     let router = Router::new().fallback(any(handle)).with_state(state);
     let (shutdown, receive) = oneshot::channel();
@@ -158,6 +301,9 @@ pub async fn start(
         login_cancel,
         cancel,
         shutdown: Some(shutdown),
+        session_lock,
+        lock,
+        authorization_cancel,
     })
 }
 
@@ -209,9 +355,14 @@ async fn handle(State(state): State<Arc<GatewayState>>, request: Request) -> Res
     {
         let mut response = Response::new(Body::empty());
         *response.status_mut() = StatusCode::SEE_OTHER;
-        response
-            .headers_mut()
-            .insert(header::LOCATION, HeaderValue::from_static("/pc/index.html"));
+        response.headers_mut().insert(
+            header::LOCATION,
+            HeaderValue::from_static(if state.recovery {
+                "/pc/index.html#password-recovery"
+            } else {
+                "/pc/index.html"
+            }),
+        );
         if let Ok(cookie) = HeaderValue::from_str(&format!(
             "{}={}; Path=/; HttpOnly; SameSite=Strict",
             state.cookie, state.token
@@ -234,65 +385,117 @@ async fn handle(State(state): State<Arc<GatewayState>>, request: Request) -> Res
     if !authenticated {
         return error(StatusCode::UNAUTHORIZED, "请从客户端连接学校");
     }
-    if path == "/_desktop/bootstrap-login" {
-        if request.method() != axum::http::Method::POST
-            || headers.get(header::ORIGIN).and_then(|v| v.to_str().ok())
-                != Some(state.local.origin().ascii_serialization().as_str())
-        {
-            return error(StatusCode::FORBIDDEN, "仅学校页面可以调用客户端登录");
-        }
-        let credentials = state.credentials.lock().await.take();
-        let Some((login_name, password)) = credentials else {
-            let mut result = Response::new(Body::from("{\"attempted\":false}"));
-            result.headers_mut().insert(
-                header::CONTENT_TYPE,
-                HeaderValue::from_static("application/json"),
-            );
-            result
-                .headers_mut()
-                .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
-            return result;
-        };
-        let target = match state.connection.origin.join("api/auth/login") {
-            Ok(target) => target,
-            Err(_) => return error(StatusCode::BAD_GATEWAY, "学校登录地址无效"),
-        };
-        let response = match state.connection.client.post(target)
-            .timeout(std::time::Duration::from_secs(30))
-            .header(header::ORIGIN, state.connection.origin.origin().ascii_serialization())
-            .header(header::ACCEPT_ENCODING, "identity")
-            .json(&serde_json::json!({"login_name": login_name, "password": password, "client": "WEB"}))
-            .send().await {
-            Ok(response) => response,
-            Err(_) => return error(StatusCode::BAD_GATEWAY, "学校登录接口连接失败"),
-        };
-        let status = response.status();
-        let body = match login_response_body(response).await {
-            Ok(body) => body,
-            Err(_) => return error(StatusCode::BAD_GATEWAY, "读取学校登录响应失败"),
-        };
-        if status.is_success() {
-            remember_authenticated_account(&state, &body, Some("password"), Some(&login_name))
-                .await;
-        }
-        let mut result = Response::new(Body::from(body));
-        *result.status_mut() = status;
-        result.headers_mut().insert(
-            header::CONTENT_TYPE,
-            HeaderValue::from_static("application/json; charset=utf-8"),
-        );
-        result
-            .headers_mut()
-            .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
-        return result;
+    if state.lock.due() {
+        let _ = lock_session(&state).await;
     }
+    if path == "/_desktop/lock" {
+        return lock_request(state, request).await;
+    }
+    if state.lock.is_locked()
+        && (path.starts_with("/_desktop/")
+            || path.starts_with("/api/")
+            || path.starts_with("/files/"))
+        && !locked_request_allowed(path)
+    {
+        return error(StatusCode::LOCKED, "客户端已锁定，请先验证当前账号");
+    }
+    let authorization_cancel = state.authorization_cancel.lock().await.clone();
     if path == "/_desktop/preview-file" && request.method() == axum::http::Method::GET {
+        let (connection, _session) = match account_operation(&state, &authorization_cancel).await {
+            Ok(operation) => operation,
+            Err(message) => return error(StatusCode::UNAUTHORIZED, &message),
+        };
         let id = url::form_urlencoded::parse(request.uri().query().unwrap_or("").as_bytes())
             .find(|(key, _)| key == "id")
             .and_then(|(_, value)| value.parse::<u64>().ok())
             .unwrap_or(0);
-        return match crate::preview_cache::serve(&state.app, &state.connection, id, headers).await {
+        let result = tokio::select! {
+            _ = authorization_cancel.cancelled() => return error(StatusCode::LOCKED, "客户端已锁定或账号已变更"),
+            result = crate::preview_cache::serve(&state.app, &connection, id, headers, authorization_cancel.clone()) => result,
+        };
+        if state.lock.is_locked() || authorization_cancel.is_cancelled() {
+            return error(StatusCode::LOCKED, "客户端已锁定或账号已变更");
+        }
+        return match result {
             Ok(response) => response,
+            Err(message) => error(StatusCode::BAD_REQUEST, &message),
+        };
+    }
+    if path == "/_desktop/office-preview" {
+        if request.method() != axum::http::Method::POST
+            || headers.get(header::ORIGIN).and_then(|v| v.to_str().ok())
+                != Some(state.local.origin().ascii_serialization().as_str())
+        {
+            return error(StatusCode::FORBIDDEN, "仅学校页面可以调用本机 Office");
+        }
+        let bytes = match axum::body::to_bytes(request.into_body(), 4096).await {
+            Ok(bytes) => bytes,
+            Err(_) => return error(StatusCode::BAD_REQUEST, "参数过长"),
+        };
+        let input: serde_json::Value = match serde_json::from_slice(&bytes) {
+            Ok(input) => input,
+            Err(_) => return error(StatusCode::BAD_REQUEST, "参数无效"),
+        };
+        let action = input["action"].as_str().unwrap_or("");
+        let allowed: &[&str] = match action {
+            "status" => &["action"],
+            "save" => &["action", "mode", "engine"],
+            "open" => &["action", "file_id", "request_id"],
+            "convert" => &["action", "file_id", "request_id", "cancel"],
+            _ => return error(StatusCode::BAD_REQUEST, "本机 Office 操作无效"),
+        };
+        if input
+            .as_object()
+            .is_none_or(|object| object.keys().any(|key| !allowed.contains(&key.as_str())))
+        {
+            return error(StatusCode::BAD_REQUEST, "本机 Office 参数无效");
+        }
+        if action == "convert" && input["cancel"].as_bool() == Some(true) {
+            return match crate::office_preview::cancel(&state.owner, &input) {
+                Ok(data) => local_json(data),
+                Err(message) => error(StatusCode::BAD_REQUEST, &message),
+            };
+        }
+        let generation = match crate::office_preview::scope(&state.owner) {
+            Ok(generation) => generation,
+            Err(message) => return error(StatusCode::BAD_REQUEST, &message),
+        };
+        let operation = tokio::select! {
+            _ = generation.cancel.cancelled() => return error(StatusCode::LOCKED, "学校会话正在变更，本机预览已取消"),
+            _ = authorization_cancel.cancelled() => return error(StatusCode::LOCKED, "客户端已锁定或账号已变更"),
+            result = tokio::time::timeout(std::time::Duration::from_secs(30), account_operation(&state, &authorization_cancel)) => result,
+        };
+        let (connection, _session) = match operation {
+            Ok(Ok(operation)) => operation,
+            Ok(Err(message)) => return error(StatusCode::UNAUTHORIZED, &message),
+            Err(_) => return error(StatusCode::GATEWAY_TIMEOUT, "学校会话校验超时，请稍后重试"),
+        };
+        if let Err(message) =
+            crate::office_preview::scope_current(&state.owner, &generation.revision)
+        {
+            return error(StatusCode::LOCKED, &message);
+        }
+        let result = if matches!(action, "status" | "save") {
+            crate::office_preview::configure(&state.app, &input)
+        } else {
+            crate::office_preview::perform(
+                &state.app,
+                &connection,
+                &state.owner,
+                &generation.revision,
+                &input,
+                &authorization_cancel,
+            )
+            .await
+        };
+        if state.lock.is_locked()
+            || authorization_cancel.is_cancelled()
+            || state.cancel.is_cancelled()
+        {
+            return error(StatusCode::LOCKED, "客户端已锁定或账号已变更");
+        }
+        return match result {
+            Ok(data) => local_json(data),
             Err(message) => error(StatusCode::BAD_REQUEST, &message),
         };
     }
@@ -326,13 +529,41 @@ async fn handle(State(state): State<Arc<GatewayState>>, request: Request) -> Res
             Ok(input) => input,
             Err(_) => return error(StatusCode::BAD_REQUEST, "参数无效"),
         };
+        let account_bound = sso
+            || credentials
+            || vault
+            || !(update || controls || cache) && input["favorite_id"].as_u64().unwrap_or(0) > 0;
+        let plain_session = if account_bound || controls {
+            None
+        } else {
+            Some(state.connection.session_lock.read().await)
+        };
+        if state.cancel.is_cancelled()
+            || authorization_cancel.is_cancelled()
+            || state.lock.is_locked() && !controls
+        {
+            return error(StatusCode::LOCKED, "客户端已锁定或账号已变更，请重新操作");
+        }
+        let _plain_session = plain_session;
+        let operation = if account_bound {
+            match account_operation(&state, &authorization_cancel).await {
+                Ok(operation) => Some(operation),
+                Err(message) => return error(StatusCode::UNAUTHORIZED, &message),
+            }
+        } else {
+            None
+        };
+        let connection = operation
+            .as_ref()
+            .map_or(&state.connection, |(connection, _)| connection);
         if sso {
             return match crate::favorite_auth::open_sso(
                 &state.app,
-                &state.connection,
+                connection,
                 input["favorite_id"].as_u64().unwrap_or(0),
                 input["mode"].as_str().unwrap_or("client"),
                 &state.owner,
+                &authorization_cancel,
             )
             .await
             {
@@ -354,12 +585,15 @@ async fn handle(State(state): State<Arc<GatewayState>>, request: Request) -> Res
             let result = if controls {
                 crate::windows::control(&state.app, input["action"].as_str().unwrap_or(""))
             } else if vault {
-                crate::credential_vault::configure(&state.connection, &input).await
+                crate::credential_vault::configure(connection, &input).await
             } else if credentials {
-                crate::favorite_auth::configure(&state.connection, &input).await
+                crate::favorite_auth::configure(connection, &input).await
             } else {
                 crate::preview_cache::configure(&state.app, &input).await
             };
+            if !controls && (state.lock.is_locked() || authorization_cancel.is_cancelled()) {
+                return error(StatusCode::LOCKED, "客户端已锁定或账号已变更，请重新操作");
+            }
             return match result {
                 Ok(data) => {
                     let mut response = Response::new(Body::from(data.to_string()));
@@ -386,9 +620,11 @@ async fn handle(State(state): State<Arc<GatewayState>>, request: Request) -> Res
         } else if input["favorite_id"].as_u64().unwrap_or(0) > 0 {
             if let Err(message) = crate::favorite_auth::open(
                 &state.app,
-                &state.connection,
+                connection,
                 input["favorite_id"].as_u64().unwrap_or(0),
                 input["mode"].as_str().unwrap_or("client"),
+                &state.owner,
+                &authorization_cancel,
             )
             .await
             {
@@ -415,7 +651,7 @@ async fn handle(State(state): State<Arc<GatewayState>>, request: Request) -> Res
         );
     }
     if path.starts_with("/api/") || path.starts_with("/files/") {
-        return proxy(state, request).await;
+        return proxy(state, request, authorization_cancel).await;
     }
     if request.method() != axum::http::Method::GET && request.method() != axum::http::Method::HEAD {
         return error(StatusCode::METHOD_NOT_ALLOWED, "不支持的请求方式");
@@ -450,13 +686,43 @@ async fn handle(State(state): State<Arc<GatewayState>>, request: Request) -> Res
 }
 
 /// 转发学校接口和文件流，令牌只保存在 Rust 会话容器中。
-async fn proxy(state: Arc<GatewayState>, request: Request) -> Response<Body> {
+async fn proxy(
+    state: Arc<GatewayState>,
+    request: Request,
+    authorization_cancel: tokio_util::sync::CancellationToken,
+) -> Response<Body> {
     let (parts, body) = request.into_parts();
     let authentication = parts.method == axum::http::Method::POST
         && matches!(
             parts.uri.path(),
-            "/api/auth/login" | "/api/auth/wechat-login/consume" | "/api/auth/switch-account"
+            "/api/auth/login"
+                | "/api/auth/register"
+                | "/api/auth/passkey-login"
+                | "/api/auth/wechat-login/consume"
+                | "/api/auth/switch-account"
         );
+    let session_change = authentication
+        || parts.method == axum::http::Method::POST
+            && matches!(
+                parts.uri.path(),
+                "/api/auth/logout" | "/api/auth/password-recovery/reset"
+            );
+    let serialized =
+        session_change || matches!(parts.uri.path(), "/api/auth/refresh" | "/api/auth/context");
+    if session_change {
+        crate::office_preview::cancel_owner(&state.owner);
+    }
+    let (_reader, _writer) = if serialized {
+        (None, Some(state.connection.session_lock.write().await))
+    } else {
+        (Some(state.connection.session_lock.read().await), None)
+    };
+    if state.cancel.is_cancelled() || authorization_cancel.is_cancelled() {
+        return error(StatusCode::GONE, "学校账号已变更，请重新操作");
+    }
+    if state.lock.is_locked() && !locked_request_allowed(parts.uri.path()) {
+        return error(StatusCode::LOCKED, "客户端已锁定，请先验证当前账号");
+    }
     let login_method = match parts.uri.path() {
         "/api/auth/login" => Some("password"),
         "/api/auth/wechat-login/consume" => Some("wechat"),
@@ -468,7 +734,7 @@ async fn proxy(state: Arc<GatewayState>, request: Request) -> Response<Body> {
     let mut upstream = state.connection.client.request(parts.method, target);
     for (name, value) in &parts.headers {
         if !blocked_header(name.as_str(), &parts.headers)
-            && !(authentication && name.as_str() == "accept-encoding")
+            && !(serialized && name.as_str() == "accept-encoding")
             && !matches!(
                 name.as_str(),
                 "host"
@@ -495,10 +761,13 @@ async fn proxy(state: Arc<GatewayState>, request: Request) -> Response<Body> {
             format!("{}pc/index.html", state.connection.origin),
         )
         .body(reqwest::Body::wrap_stream(body.into_data_stream()));
-    if authentication {
+    if serialized {
         upstream = upstream.header(header::ACCEPT_ENCODING, "identity");
     }
-    let response = match upstream.send().await {
+    let response = match tokio::select! {
+        _ = authorization_cancel.cancelled() => return error(StatusCode::LOCKED, "客户端已锁定或账号已变更"),
+        response = upstream.send() => response,
+    } {
         Ok(response) => response,
         Err(error_value) => {
             return error(
@@ -512,6 +781,10 @@ async fn proxy(state: Arc<GatewayState>, request: Request) -> Response<Body> {
         }
     };
     let status = response.status();
+    let cookie_changed = session_change && authentication_cookie_changed(response.headers());
+    if cookie_changed {
+        invalidate_authorization_context(&state).await;
+    }
     let mut outgoing = HeaderMap::new();
     for (name, value) in response.headers() {
         if !blocked_header(name.as_str(), response.headers())
@@ -542,20 +815,84 @@ async fn proxy(state: Arc<GatewayState>, request: Request) -> Response<Body> {
         outgoing.insert(header::LOCATION, location);
     }
     outgoing.insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
-    let body = if authentication && status.is_success() {
-        let bytes = match login_response_body(response).await {
+    let body = if serialized {
+        let bytes = match tokio::select! {
+            _ = authorization_cancel.cancelled(), if !session_change => return error(StatusCode::LOCKED, "客户端已锁定或账号已变更"),
+            bytes = login_response_body(response) => bytes,
+        } {
             Ok(bytes) => bytes,
             Err(message) => return error(StatusCode::BAD_GATEWAY, &message),
         };
-        remember_authenticated_account(&state, &bytes, login_method, None).await;
+        if !session_change && !state.cancel.is_cancelled() && !authorization_cancel.is_cancelled() {
+            if status == StatusCode::UNAUTHORIZED {
+                state.lock.clear_context();
+            }
+        }
+        if !session_change
+            && status.is_success()
+            && !state.cancel.is_cancelled()
+            && !authorization_cancel.is_cancelled()
+        {
+            if let Ok(value) = serde_json::from_slice::<serde_json::Value>(&bytes) {
+                if value["code"].as_i64() == Some(40100) {
+                    state.lock.clear_context();
+                }
+                if value["code"].as_i64() == Some(0) {
+                    let context = if value["data"]["context"].is_object() {
+                        &value["data"]["context"]
+                    } else {
+                        &value["data"]
+                    };
+                    state.lock.remember_context(context);
+                }
+            }
+        }
+        if session_change && status.is_success() {
+            if !cookie_changed {
+                renew_authorization_context(&state, &bytes, authentication).await;
+            }
+            if authentication {
+                remember_authenticated_account(&state, &bytes, login_method).await;
+            }
+        }
         Body::from(bytes)
     } else {
-        Body::from_stream(response.bytes_stream())
+        cancellable_body(response, authorization_cancel)
     };
     let mut result = Response::new(body);
     *result.status_mut() = status;
     *result.headers_mut() = outgoing;
     result
+}
+
+/// 同一次原生操作使用锁内确认的账号上下文。
+async fn account_operation<'a>(
+    state: &'a GatewayState,
+    authorization_cancel: &tokio_util::sync::CancellationToken,
+) -> Result<(Connection, RwLockReadGuard<'a, ()>), String> {
+    let session = state.connection.session_lock.write().await;
+    if state.cancel.is_cancelled() || authorization_cancel.is_cancelled() {
+        return Err("学校账号已变更，请重新操作".into());
+    }
+    if state.lock.is_locked() {
+        return Err("客户端已锁定，请先验证当前账号".into());
+    }
+    let context = crate::school_api::read_context_guarded(&state.connection, &session).await?;
+    if state.lock.is_locked() || state.cancel.is_cancelled() || authorization_cancel.is_cancelled()
+    {
+        return Err("学校账号已变更，请重新操作".into());
+    }
+    if context["account_id"].as_u64().unwrap_or(0) == 0 {
+        state.lock.clear_context();
+        return Err("请先登录有效学校账号".into());
+    }
+    state.lock.remember_context(&context);
+    let mut connection = state.connection.clone();
+    connection.operation_context = Some(context);
+    Ok((
+        connection,
+        tokio::sync::RwLockWriteGuard::downgrade(session),
+    ))
 }
 
 async fn login_response_body(mut response: reqwest::Response) -> Result<Vec<u8>, String> {
@@ -569,12 +906,35 @@ async fn login_response_body(mut response: reqwest::Response) -> Result<Vec<u8>,
     Ok(bytes)
 }
 
+/// 认证成功后结束原账号的授权窗口和未完成请求。
+async fn renew_authorization_context(state: &GatewayState, body: &[u8], authenticated: bool) {
+    let Ok(value) = serde_json::from_slice::<serde_json::Value>(body) else {
+        return;
+    };
+    if value["code"].as_i64() != Some(0)
+        || authenticated && value["data"]["context"]["account_id"].as_u64().unwrap_or(0) == 0
+    {
+        return;
+    }
+    invalidate_authorization_context(state).await;
+}
+
+/// Cookie 身份边界已变更时立即结束旧窗口和请求代次。
+async fn invalidate_authorization_context(state: &GatewayState) {
+    {
+        let mut cancel = state.authorization_cancel.lock().await;
+        cancel.cancel();
+        *cancel = state.cancel.child_token();
+    }
+    state.lock.clear_context();
+    crate::windows::reset_account_windows(&state.app, &state.owner);
+}
+
 /// 仅按学校成功认证的账号更新本机连接记录。
 async fn remember_authenticated_account(
     state: &GatewayState,
     body: &[u8],
     login_method: Option<&str>,
-    bootstrap_username: Option<&str>,
 ) {
     let Ok(value) = serde_json::from_slice::<serde_json::Value>(body) else {
         return;
@@ -590,9 +950,19 @@ async fn remember_authenticated_account(
     else {
         return;
     };
-    let username = bootstrap_username
-        .filter(|username| login_method == Some("password") && !username.trim().is_empty())
-        .unwrap_or(server_username);
+    if let Err(message) = state.lock.authenticated(
+        &state.app,
+        &value["data"]["context"],
+        matches!(login_method, Some("password" | "wechat")),
+    ) {
+        state
+            .app
+            .dialog()
+            .message(message)
+            .title("本机锁定设置")
+            .show(|_| {});
+    }
+    let username = server_username;
     let mut profile = state.profile.lock().await;
     if state.cancel.is_cancelled() {
         return;
@@ -628,6 +998,18 @@ async fn remember_authenticated_account(
     }
 }
 
+fn authentication_cookie_changed(headers: &reqwest::header::HeaderMap) -> bool {
+    headers
+        .get_all(reqwest::header::SET_COOKIE)
+        .iter()
+        .filter_map(|value| value.to_str().ok())
+        .any(|value| {
+            value
+                .split_once('=')
+                .is_some_and(|(name, _)| matches!(name.trim(), "jwt" | "refresh_jwt"))
+        })
+}
+
 /// 过滤逐跳传输头及 Connection 声明的头。
 fn blocked_header(name: &str, headers: &HeaderMap) -> bool {
     matches!(
@@ -660,6 +1042,18 @@ pub fn local_url(local: &Url, remote: &Url) -> Result<Url, String> {
 }
 
 /// 返回与网页接口一致的错误格式。
+fn local_json(data: serde_json::Value) -> Response<Body> {
+    let mut response = Response::new(Body::from(data.to_string()));
+    response.headers_mut().insert(
+        header::CONTENT_TYPE,
+        HeaderValue::from_static("application/json"),
+    );
+    response
+        .headers_mut()
+        .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    response
+}
+
 fn error(status: StatusCode, message: &str) -> Response<Body> {
     let mut response = Response::new(Body::from(
         serde_json::json!({"code": status.as_u16() as u32 * 100, "message": message, "data": null})
@@ -674,6 +1068,306 @@ fn error(status: StatusCode, message: &str) -> Response<Body> {
         .headers_mut()
         .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
     response
+}
+
+fn locked_request_allowed(path: &str) -> bool {
+    matches!(
+        path,
+        "/_desktop/window" | "/api/auth/context" | "/api/auth/refresh" | "/api/auth/logout"
+    )
+}
+
+async fn lock_session(state: &GatewayState) -> Result<serde_json::Value, String> {
+    let app_state = state.app.state::<crate::AppState>();
+    if app_state
+        .connecting
+        .swap(true, std::sync::atomic::Ordering::AcqRel)
+    {
+        return Err("正在处理学校连接，请稍后锁定".into());
+    }
+    let _guard = crate::ConnectingGuard(&app_state.connecting);
+    if !crate::school_owner_current(&state.app, &state.owner) {
+        return Err("学校连接已变更，请重新操作".into());
+    }
+    if state.cancel.is_cancelled() {
+        return Err("学校连接已关闭".into());
+    }
+    if state.lock.is_locked() {
+        return state.lock.status();
+    }
+    let persisted = state.lock.begin(&state.app, &state.owner);
+    if !state.lock.is_locked() {
+        return persisted.and_then(|_| state.lock.status());
+    }
+    {
+        let mut cancel = state.authorization_cancel.lock().await;
+        cancel.cancel();
+        *cancel = state.cancel.child_token();
+    }
+    let session = state.connection.session_lock.write().await;
+    if state.cancel.is_cancelled() {
+        return Err("学校连接已关闭".into());
+    }
+    let context = crate::school_api::read_context_guarded(&state.connection, &session).await;
+    let context = match context {
+        Ok(context)
+            if context["account_id"].as_u64().unwrap_or(0) > 0
+                && context["device_jti"]
+                    .as_str()
+                    .is_none_or(|jti| jti.is_empty()) =>
+        {
+            crate::school_api::read_context_guarded(&state.connection, &session).await
+        }
+        result => result,
+    };
+    match context {
+        Ok(context) => state.lock.freeze(&state.app, &context)?,
+        Err(message) => {
+            state.lock.freeze(&state.app, &serde_json::json!({})).ok();
+            return Err(format!("{message}；请退出原会话后重新登录"));
+        }
+    }
+    persisted?;
+    state.lock.status()
+}
+
+async fn lock_request(state: Arc<GatewayState>, request: Request) -> Response<Body> {
+    if request.method() != axum::http::Method::POST
+        || request
+            .headers()
+            .get(header::ORIGIN)
+            .and_then(|v| v.to_str().ok())
+            != Some(state.local.origin().ascii_serialization().as_str())
+    {
+        return error(StatusCode::FORBIDDEN, "仅学校页面可以调用本机锁定");
+    }
+    let bytes = match axum::body::to_bytes(request.into_body(), 65536).await {
+        Ok(bytes) => bytes,
+        Err(_) => return error(StatusCode::BAD_REQUEST, "参数过长"),
+    };
+    let input: serde_json::Value = match serde_json::from_slice(&bytes) {
+        Ok(input) => input,
+        Err(_) => return error(StatusCode::BAD_REQUEST, "参数无效"),
+    };
+    let result = lock_action(&state, &input).await;
+    match result {
+        Ok(data) => {
+            let mut response = Response::new(Body::from(data.to_string()));
+            response.headers_mut().insert(
+                header::CONTENT_TYPE,
+                HeaderValue::from_static("application/json"),
+            );
+            response
+                .headers_mut()
+                .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+            response
+        }
+        Err(message) => {
+            let message = if state.lock.is_locked()
+                && (message.contains("过期")
+                    || message.contains("禁用")
+                    || message.contains("停用")
+                    || message.contains("请先登录")
+                    || message.contains("登录状态"))
+            {
+                format!("{message}；请退出原会话后重新登录")
+            } else {
+                message
+            };
+            error(StatusCode::BAD_REQUEST, &message)
+        }
+    }
+}
+
+async fn lock_action(
+    state: &GatewayState,
+    input: &serde_json::Value,
+) -> Result<serde_json::Value, String> {
+    let action = input["action"].as_str().unwrap_or("");
+    if state.cancel.is_cancelled() {
+        return Err("学校连接已关闭，请重新连接".into());
+    }
+    match action {
+        "status" => return state.lock.status(),
+        "manual" => return lock_session(state).await,
+        "activity" => {
+            state.lock.activity();
+            return state.lock.status();
+        }
+        _ => {}
+    }
+    if action == "exit-session" {
+        let app_state = state.app.state::<crate::AppState>();
+        if app_state
+            .connecting
+            .swap(true, std::sync::atomic::Ordering::AcqRel)
+        {
+            return Err("正在处理学校连接，请稍后重试".into());
+        }
+        let _guard = crate::ConnectingGuard(&app_state.connecting);
+        let _session = state.connection.session_lock.write().await;
+        logout_source(&state.connection.client, &state.connection.origin).await?;
+        invalidate_authorization_context(state).await;
+        let mut active = app_state.gateway.lock().map_err(|_| "连接状态不可用")?;
+        if active
+            .as_ref()
+            .is_some_and(|gateway| gateway.owner == state.owner)
+        {
+            active.take();
+        }
+        drop(active);
+        state.lock.restore_ordinary(&state.app);
+        crate::windows::close_school(&state.app, &state.owner);
+        crate::windows::show_connection(&state.app);
+        return Ok(serde_json::json!({"exited": true}));
+    }
+    let _session = state.connection.session_lock.write().await;
+    if state.cancel.is_cancelled() {
+        return Err("学校连接已关闭，请重新连接".into());
+    }
+    if action == "settings" {
+        return state.lock.settings(&state.app, input);
+    }
+    if !state.lock.is_locked() {
+        return Err("客户端当前未锁定".into());
+    }
+    let data = match action {
+        "password-unlock" => {
+            crate::school_api::auth_post(
+                &state.connection,
+                "api/auth/desktop-lock/password-unlock",
+                &serde_json::json!({"password": input["password"]}),
+            )
+            .await?
+        }
+        "wechat-create" => {
+            crate::school_api::auth_post(
+                &state.connection,
+                "api/auth/desktop-lock/wechat/create",
+                &serde_json::json!({}),
+            )
+            .await?
+        }
+        "wechat-status" => {
+            let id = input["session_id"].as_str().ok_or("扫码会话无效")?;
+            let mut endpoint = state
+                .connection
+                .origin
+                .join("api/auth/desktop-lock/wechat/status")
+                .map_err(|_| "扫码接口地址无效")?;
+            endpoint.query_pairs_mut().append_pair("session_id", id);
+            crate::school_api::read(&state.connection, endpoint.as_str()).await?
+        }
+        "wechat-consume" | "wechat-cancel" => {
+            let path = if action == "wechat-consume" {
+                "api/auth/desktop-lock/wechat/consume"
+            } else {
+                "api/auth/desktop-lock/wechat/cancel"
+            };
+            crate::school_api::auth_post(
+                &state.connection,
+                path,
+                &serde_json::json!({"session_id": input["session_id"]}),
+            )
+            .await?
+        }
+        "recovery-request" => {
+            let path = input["path"].as_str().unwrap_or("");
+            let method = input["method"].as_str().unwrap_or("GET");
+            let payload = input
+                .get("payload")
+                .cloned()
+                .unwrap_or(serde_json::json!({}));
+            match (path, method) {
+                ("/auth/password-recovery/wechat/status", "GET") => {
+                    let mut endpoint = state
+                        .connection
+                        .origin
+                        .join("api/auth/password-recovery/wechat/status")
+                        .map_err(|_| "找回接口地址无效")?;
+                    endpoint.query_pairs_mut().append_pair(
+                        "session_id",
+                        payload["session_id"].as_str().ok_or("扫码会话无效")?,
+                    );
+                    crate::school_api::read(&state.connection, endpoint.as_str()).await?
+                }
+                (
+                    "/auth/password-recovery/wechat/create"
+                    | "/auth/password-recovery/wechat/cancel"
+                    | "/auth/password-recovery/reset",
+                    "POST",
+                ) => {
+                    crate::school_api::auth_post(&state.connection, &format!("api{path}"), &payload)
+                        .await?
+                }
+                _ => return Err("不允许的密码找回操作".into()),
+            }
+        }
+        _ => return Err("本机锁定操作无效".into()),
+    };
+    if state.cancel.is_cancelled() {
+        return Err("学校连接已关闭，请重新连接".into());
+    }
+    if action == "recovery-request"
+        && input["path"].as_str() == Some("/auth/password-recovery/reset")
+    {
+        {
+            let mut cancel = state.authorization_cancel.lock().await;
+            cancel.cancel();
+            *cancel = state.cancel.child_token();
+        }
+        state.lock.clear_context();
+        crate::windows::close_account_windows(&state.app, &state.owner);
+        crate::windows::notify_lock(&state.app);
+    }
+    if matches!(action, "password-unlock" | "wechat-consume") {
+        return state.lock.unlock(&state.app, &state.owner, &data);
+    }
+    Ok(data)
+}
+
+pub(crate) fn cancellable_body(
+    mut response: reqwest::Response,
+    cancel: tokio_util::sync::CancellationToken,
+) -> Body {
+    use tokio::io::AsyncWriteExt;
+    let (mut writer, reader) = tokio::io::duplex(65536);
+    tauri::async_runtime::spawn(async move {
+        loop {
+            let chunk = tokio::select! {
+                _ = cancel.cancelled() => break,
+                chunk = response.chunk() => chunk,
+            };
+            let Ok(Some(chunk)) = chunk else {
+                break;
+            };
+            let write = tokio::select! {
+                _ = cancel.cancelled() => break,
+                result = writer.write_all(&chunk) => result,
+            };
+            if write.is_err() {
+                break;
+            }
+        }
+    });
+    Body::from_stream(tokio_util::io::ReaderStream::new(reader))
+}
+
+pub(crate) fn cancellable_reader<R>(
+    mut input: R,
+    cancel: tokio_util::sync::CancellationToken,
+) -> Body
+where
+    R: tokio::io::AsyncRead + Unpin + Send + 'static,
+{
+    let (mut writer, reader) = tokio::io::duplex(65536);
+    tauri::async_runtime::spawn(async move {
+        tokio::select! {
+            _ = cancel.cancelled() => {},
+            _ = tokio::io::copy(&mut input, &mut writer) => {},
+        }
+    });
+    Body::from_stream(tokio_util::io::ReaderStream::new(reader))
 }
 
 #[cfg(test)]

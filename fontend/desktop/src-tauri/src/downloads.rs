@@ -1,5 +1,6 @@
 use std::{
     collections::HashMap,
+    io::{Read, Write},
     path::PathBuf,
     sync::{
         atomic::{AtomicBool, Ordering},
@@ -13,6 +14,34 @@ struct PendingDownload {
     directory: tempfile::TempDir,
     path: PathBuf,
     name: String,
+    scope: DownloadScope,
+}
+
+struct DownloadScope {
+    owner: String,
+    cancel: tokio_util::sync::CancellationToken,
+}
+
+impl DownloadScope {
+    fn capture(app: &tauri::AppHandle, label: &str) -> Option<Self> {
+        let state = app.state::<crate::AppState>();
+        let active = state.gateway.lock().ok()?;
+        let gateway = active.as_ref()?;
+        if gateway.lock.is_locked()
+            || !(label == "school" || crate::windows::belongs_to_school(label, &gateway.owner))
+        {
+            return None;
+        }
+        Some(Self {
+            owner: gateway.owner.clone(),
+            cancel: gateway.download_cancellation()?,
+        })
+    }
+    fn current(&self, app: &tauri::AppHandle) -> bool {
+        !self.cancel.is_cancelled()
+            && !crate::current_school_locked(app)
+            && crate::school_owner_current(app, &self.owner)
+    }
 }
 
 #[derive(Default)]
@@ -31,6 +60,10 @@ impl Downloads {
     pub fn handle(&self, webview: Webview, event: DownloadEvent<'_>) -> bool {
         match event {
             DownloadEvent::Requested { url, destination } => {
+                let Some(scope) = DownloadScope::capture(webview.app_handle(), webview.label())
+                else {
+                    return false;
+                };
                 let Ok(mut pending) = self.pending.lock() else {
                     return false;
                 };
@@ -72,6 +105,7 @@ impl Downloads {
                         directory,
                         path: destination.clone(),
                         name,
+                        scope,
                     },
                 );
             }
@@ -85,6 +119,9 @@ impl Downloads {
                     return true;
                 };
                 let app = webview.app_handle().clone();
+                if !downloaded.scope.current(&app) {
+                    return true;
+                }
                 let empty_preview = (webview.label().starts_with("preview-")
                     && !self.document_loaded.load(Ordering::Acquire))
                 .then(|| webview.label().to_owned());
@@ -108,24 +145,46 @@ impl Downloads {
                 }
                 dialog.save_file(move |destination| {
                     tauri::async_runtime::spawn_blocking(move || {
+                        if !downloaded.scope.current(&app) {
+                            return;
+                        }
                         if let Some(label) = empty_preview {
                             if let Some(window) = app.get_webview_window(&label) {
                                 let _ = window.destroy();
                             }
                         }
                         let _cache = downloaded.directory;
+                        if !downloaded.scope.current(&app) {
+                            return;
+                        }
                         let Some(destination) = destination else {
                             return;
                         };
-                        let result =
-                            destination
-                                .into_path()
-                                .map_err(|_| ())
-                                .and_then(|destination| {
-                                    std::fs::copy(&downloaded.path, destination)
-                                        .map(|_| ())
-                                        .map_err(|_| ())
-                                });
+                        let result: Result<(), ()> = (|| {
+                            let destination = destination.into_path().map_err(|_| ())?;
+                            let parent = destination.parent().ok_or(())?;
+                            let mut output =
+                                tempfile::NamedTempFile::new_in(parent).map_err(|_| ())?;
+                            let mut input =
+                                std::fs::File::open(&downloaded.path).map_err(|_| ())?;
+                            let mut buffer = vec![0u8; 1024 * 1024];
+                            loop {
+                                if !downloaded.scope.current(&app) {
+                                    return Ok(());
+                                }
+                                let count = input.read(&mut buffer).map_err(|_| ())?;
+                                if count == 0 {
+                                    break;
+                                }
+                                output.write_all(&buffer[..count]).map_err(|_| ())?;
+                            }
+                            output.as_file().sync_all().map_err(|_| ())?;
+                            if !downloaded.scope.current(&app) {
+                                return Ok(());
+                            }
+                            output.persist(destination).map_err(|_| ())?;
+                            Ok(())
+                        })();
                         if result.is_err() {
                             app.dialog()
                                 .message("保存失败，请检查目标目录权限和磁盘可用空间，然后重新下载")

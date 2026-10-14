@@ -365,9 +365,14 @@ export function fetchAdminRoles() {
   return request('/admin/roles');
 }
 
-export function fetchAdminAccounts(params = {}) {
+export function fetchAdminAccounts(params = {}, options = {}) {
   const query = new URLSearchParams(params).toString();
-  return request(`/admin/accounts${query ? `?${query}` : ''}`);
+  return request(`/admin/accounts${query ? `?${query}` : ''}`, options);
+}
+
+export function fetchUserFilterOptions(params = {}, options = {}) {
+  const query = new URLSearchParams(params).toString();
+  return request(`/admin/user-filter-options?${query}`, options);
 }
 
 export function fetchAdminAccountDetail(params = {}) {

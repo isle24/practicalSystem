@@ -46,32 +46,36 @@ pub fn build(
         .center()
         .initialization_script(format!(
             r#"(() => {{
-            const bridge = async (action, payload) => {{
+            const bridge = async (action, payload, signal) => {{
                 const controller = new AbortController();
-                const timer = setTimeout(() => controller.abort(), action === 'credential-vault' ? 180000 : action === 'external' ? 90000 : 60000);
+                const abort = () => controller.abort();
+                if (signal?.aborted) controller.abort();
+                signal?.addEventListener('abort', abort, {{once:true}});
+                const timer = setTimeout(() => controller.abort(), action === 'office-preview' ? 300000 : action === 'credential-vault' ? 180000 : action === 'external' ? 90000 : 60000);
                 try {{
                     const response = await fetch('/_desktop/' + action, {{
                         method:'POST', credentials:'same-origin', signal:controller.signal,
                         headers:{{'Content-Type':'application/json'}}, body:JSON.stringify(payload)
                     }});
                     const data = await response.json().catch(() => ({{}}));
-                    if (!response.ok) throw new Error(data.message || '客户端操作失败，请重试');
+                    if (!response.ok) {{ const error = new Error(data.message || '客户端操作失败，请重试'); error.status = response.status; throw error; }}
                     return data;
                 }} catch (error) {{
                     if (error.name === 'AbortError') throw new Error('客户端操作超时，请重试');
                     throw error;
-                }} finally {{ clearTimeout(timer); }}
+                }} finally {{ clearTimeout(timer); signal?.removeEventListener('abort', abort); }}
             }};
             Object.defineProperty(window, '__PRACTICAL_DESKTOP__', {{
                 value:Object.freeze({{...{context}, version:'{}',
-                    bootstrapLogin:()=>bridge('bootstrap-login',{{}}),
                     openExternal:(url,mode='client',favorite_id=0)=>bridge('external',{{url,mode,favorite_id}}),
                     openSso:(favorite_id,mode='client')=>bridge('sso',{{favorite_id,mode}}),
                     favoriteCredentials:(id,action,profile)=>bridge('favorite-credentials',{{id,action,profile}}),
                     credentialVault:(action,payload={{}})=>bridge('credential-vault',{{action,...payload}}),
                     windowControls:(action)=>bridge('window',{{action}}),
+                    lock:(action,payload={{}})=>bridge('lock',{{...payload,action}}),
                     previewCache:(action='status',max_gb)=>bridge('preview-cache',{{action,max_gb}}),
                     previewFileUrl:(id)=>'/_desktop/preview-file?id='+encodeURIComponent(id),
+                    officePreview:(action='status',payload={{}},signal)=>bridge('office-preview',{{...payload,action}},signal),
                     checkUpdate:(interactive=true)=>bridge('update',{{interactive}})
                 }}), writable:false
             }});
@@ -79,6 +83,7 @@ pub fn build(
             env!("CARGO_PKG_VERSION")
         ))
         .on_navigation(move |url| {
+            if crate::current_school_locked(&navigation_app) && url.origin() != navigation_local.origin() { return false; }
             if url.origin() == navigation_local.origin()
                 || url.as_str() == "about:blank"
                 || url.scheme() == "blob"
@@ -98,6 +103,9 @@ pub fn build(
             false
         })
         .on_new_window(move |url, features| {
+            if crate::current_school_locked(&popup_app) || !crate::school_owner_current(&popup_app, &popup_owner) {
+                return NewWindowResponse::Deny;
+            }
             if url.origin() != popup_local.origin()
                 && url.origin() != popup_remote.origin()
                 && url.as_str() != "about:blank"
@@ -149,7 +157,9 @@ pub fn build(
     if let Some(features) = features {
         builder = builder.window_features(features);
     }
-    builder.build()
+    let window = builder.build()?;
+    crate::input_activity::install(&window);
+    Ok(window)
 }
 
 /// 仅把普通网页和邮件链接交给系统应用。
@@ -177,8 +187,8 @@ pub fn school_window_label(kind: &str, owner: &str, suffix: &str) -> String {
     format!("{kind}-{owner}-{suffix}")
 }
 
-fn belongs_to_school(label: &str, owner: &str) -> bool {
-    ["preview", "sso"]
+pub(crate) fn belongs_to_school(label: &str, owner: &str) -> bool {
+    ["preview", "sso", "authenticated"]
         .iter()
         .any(|kind| label.starts_with(&format!("{kind}-{owner}-")))
 }
@@ -192,8 +202,69 @@ pub fn close_school(app: &AppHandle, owner: &str) {
     }
 }
 
+pub fn hide_for_lock(app: &AppHandle, owner: &str) -> Vec<String> {
+    let mut hidden = Vec::new();
+    for (label, window) in app.webview_windows() {
+        if (belongs_to_school(&label, owner) || label.starts_with("external-"))
+            && window.is_visible().unwrap_or(false)
+        {
+            let _ = window.hide();
+            hidden.push(label);
+        }
+    }
+    hidden
+}
+
+pub fn restore_after_lock(app: &AppHandle, owner: &str, labels: &[String]) {
+    if !crate::school_owner_current(app, owner) {
+        return;
+    }
+    for label in labels {
+        if belongs_to_school(label, owner) || label.starts_with("external-") {
+            if let Some(window) = app.get_webview_window(label) {
+                let _ = window.show();
+            }
+        }
+    }
+}
+
+pub fn notify_lock(app: &AppHandle) {
+    if let Some(window) = app.get_webview_window("school") {
+        let _ = window.eval("window.dispatchEvent(new Event('practical-desktop-lock-change'))");
+    }
+}
+
+/// 关闭原账号子窗口。
+pub fn close_account_windows(app: &AppHandle, owner: &str) {
+    for (label, window) in app.webview_windows() {
+        if belongs_to_school(&label, owner) {
+            let _ = window.destroy();
+        }
+    }
+}
+
+pub fn reset_account_windows(app: &AppHandle, owner: &str) {
+    close_account_windows(app, owner);
+    if let Some(window) = app.get_webview_window("school") {
+        let _ = window.reload();
+    }
+}
+
 /// 控制当前学校主窗口。
 pub fn control(app: &AppHandle, action: &str) -> Result<serde_json::Value, String> {
+    if action == "connection" {
+        if crate::current_school_locked(app) {
+            return Err("客户端已锁定，请在锁屏退出原会话后重新连接".into());
+        }
+        let connection = app
+            .get_webview_window("connection")
+            .ok_or("连接窗口已关闭")?;
+        connection
+            .eval("window.dispatchEvent(new Event('practical-client-password-login'))")
+            .map_err(|_| "无法显示客户端登录")?;
+        show_connection(app);
+        return Ok(serde_json::json!({"connection": true}));
+    }
     let window = app.get_webview_window("school").ok_or("学校窗口已关闭")?;
     let result = match action {
         "status" => Ok(()),

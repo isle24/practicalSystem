@@ -85,7 +85,7 @@ function wallpaperStore(action, id, blob) {
 
 export function useLocalTheme(scope) {
   const media = window.matchMedia('(prefers-color-scheme: dark)');
-  const state = reactive({ saved: defaults(), preview: null, custom: [], wallpaperUrl: '', systemDark: media.matches, error: '' });
+  const state = reactive({ saved: defaults(), preview: null, custom: [], wallpaperUrl: '', systemDark: media.matches, error: '', scopeRevision: 0 });
   let generation = 0;
   let currentKey = '';
   let objectUrl = '';
@@ -129,6 +129,7 @@ export function useLocalTheme(scope) {
     localStorage.setItem(currentKey, JSON.stringify({ saved: state.saved, custom: state.custom }));
   }
   watch(scope, value => {
+    state.scopeRevision++;
     generation++;
     revokeWallpaper();
     state.saved = defaults(); state.preview = null; state.custom = []; state.error = '';
@@ -143,14 +144,16 @@ export function useLocalTheme(scope) {
 
   async function selectWallpaper(file) {
     if (!currentKey) throw new Error('请登录后选择本机壁纸');
+    const key = currentKey;
+    const revision = state.scopeRevision;
     if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 8 * 1024 * 1024) throw new Error('请选择不超过 8 MB 的 JPG、PNG 或 WebP 图片');
     const bitmap = await createImageBitmap(file).catch(() => null);
     if (!bitmap) throw new Error('图片内容无法读取');
     bitmap.close();
+    if (key !== currentKey || revision !== state.scopeRevision) throw new Error('登录账号已变化，请重新选择壁纸');
     const id = crypto.randomUUID();
-    const key = currentKey;
     await wallpaperStore('put', `${key}:${id}`, file);
-    if (key !== currentKey) throw new Error('登录账号已变化，请重新选择壁纸');
+    if (key !== currentKey || revision !== state.scopeRevision) throw new Error('登录账号已变化，请重新选择壁纸');
     return id;
   }
   function preview(value) { state.preview = normalize(value); return displayWallpaper(state.preview.wallpaper_id); }

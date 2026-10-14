@@ -79,7 +79,7 @@
             <strong>{{ selectedArticle.title }}</strong>
             <small>版本 {{ selectedArticle.version || '-' }} / 浏览 {{ selectedArticle.view_count || 0 }}</small>
           </header>
-          <article class="rich-content support-rich" v-html="selectedArticle.content" />
+          <article class="rich-content support-rich" v-html="sanitizeRichHtml(selectedArticle.content)" />
           <footer v-if="canManage">
             <el-button :icon="FileClock" @click="loadHistory(selectedArticle.id)">版本记录</el-button>
           </footer>
@@ -101,6 +101,7 @@
       @close="closeArticleDialog"
     >
         <div class="operation-form">
+          <el-alert v-if="articleError" class="span-2" :title="articleError" type="error" :closable="false" />
           <label>
             <span>标题</span>
             <input v-model="articleDialog.form.title">
@@ -146,16 +147,17 @@
             <div
               ref="articleEditorRef"
               class="rich-editor doc-rich-editor"
-              contenteditable="true"
+              :contenteditable="!saving && articleReady"
               data-placeholder="请输入文档正文"
               @input="syncArticleEditor"
-              v-html="articleDialog.form.content"
+              @paste="pasteArticle"
+              @drop.prevent
             />
           </section>
         </div>
         <template #footer>
           <el-button @click="closeArticleDialog">取消</el-button>
-          <el-button type="primary" :icon="Save" :loading="saving" @click="saveArticle">保存</el-button>
+          <el-button type="primary" :icon="Save" :loading="saving" :disabled="!articleReady" @click="saveArticle">{{ articleLoading ? '读取正文中' : '保存' }}</el-button>
         </template>
     </OperationDialog>
 
@@ -207,7 +209,8 @@
 
 <script setup>
 import FilterToolbar from './FilterToolbar.vue';
-import { computed, nextTick, onMounted, reactive, ref } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
+import { sanitizeRichHtml } from '../../../shared/richHtml';
 import { BookOpen, FileClock, Plus, RefreshCw, Save, Search } from '@lucide/vue';
 import {
   deleteDocArticle,
@@ -221,7 +224,7 @@ import {
 import OperationDialog from './OperationDialog.vue';
 import { tableSequence } from '../utils/table';
 
-defineProps({
+const props = defineProps({
   canManage: {
     type: Boolean,
     default: false,
@@ -230,6 +233,13 @@ defineProps({
 
 const loading = ref(false);
 const saving = ref(false);
+const articleLoading = ref(false);
+const articleError = ref('');
+const articleReady = ref(true);
+let editorRevision = 0;
+let listRevision = 0;
+let detailRevision = 0;
+let alive = true;
 const message = ref('');
 const categories = ref([]);
 const articles = ref([]);
@@ -268,6 +278,7 @@ const historyDialog = reactive({
 const flatCategories = computed(() => flattenCategories(categories.value));
 
 onMounted(reload);
+onBeforeUnmount(() => { alive = false; editorRevision++; listRevision++; detailRevision++; });
 
 async function reload() {
   await loadCategories();
@@ -275,8 +286,10 @@ async function reload() {
 }
 
 async function loadCategories() {
+  if (!alive) return;
   try {
     const data = await fetchDocCategories();
+    if (!alive) return;
     categories.value = data.tree || data.items || [];
   } catch (error) {
     message.value = error.message;
@@ -284,6 +297,9 @@ async function loadCategories() {
 }
 
 async function loadArticles(page = 1) {
+  if (!alive) return;
+  const ticket = ++listRevision;
+  detailRevision++;
   loading.value = true;
   message.value = '';
   try {
@@ -294,6 +310,7 @@ async function loadArticles(page = 1) {
       status: filters.status,
       keyword: filters.keyword,
     });
+    if (!alive || ticket !== listRevision) return;
     articles.value = data.items || [];
     Object.assign(pagination, data.pagination || {});
     if (selectedArticle.value && !articles.value.some(item => Number(item.id) === Number(selectedArticle.value.id))) {
@@ -303,18 +320,21 @@ async function loadArticles(page = 1) {
       await openDetail(articles.value[0]);
     }
   } catch (error) {
-    message.value = error.message;
+    if (alive && ticket === listRevision) message.value = error.message;
   } finally {
-    loading.value = false;
+    if (alive && ticket === listRevision) loading.value = false;
   }
 }
 
 async function openDetail(row) {
+  if (!alive) return;
+  const ticket = ++detailRevision;
   try {
     const data = await fetchDocDetail(row.id);
+    if (!alive || ticket !== detailRevision) return;
     selectedArticle.value = data.article;
   } catch (error) {
-    message.value = error.message;
+    if (alive && ticket === detailRevision) message.value = error.message;
   }
 }
 
@@ -325,6 +345,8 @@ function setCategory(id) {
 }
 
 function openArticleDialog(row = null) {
+  if (!props.canManage || saving.value) return;
+  const ticket = ++editorRevision;
   articleDialog.form = row ? {
     id: row.id,
     category_id: row.category_id || '',
@@ -335,23 +357,33 @@ function openArticleDialog(row = null) {
     content: selectedArticle.value?.id === row.id ? selectedArticle.value.content : '',
     change_note: '更新文档',
   } : emptyArticleForm();
+  const target = articleDialog.form;
+  articleError.value = '';
+  articleLoading.value = Boolean(row && target.content === '');
+  articleReady.value = !articleLoading.value;
   if (row && articleDialog.form.content === '') {
     fetchDocDetail(row.id).then((data) => {
-      articleDialog.form.content = data.article?.content || '';
+      if (!alive || ticket !== editorRevision || !articleDialog.visible || !props.canManage) return;
+      target.content = sanitizeRichHtml(data.article?.content);
+      articleReady.value = true;
       nextTick(syncArticleEditorDom);
     }).catch((error) => {
-      message.value = error.message;
-    });
+      if (alive && ticket === editorRevision) articleError.value = error.message;
+    }).finally(() => { if (alive && ticket === editorRevision) articleLoading.value = false; });
   }
   articleDialog.visible = true;
   nextTick(syncArticleEditorDom);
 }
 
 function closeArticleDialog() {
+  if (saving.value) return;
+  editorRevision++;
+  articleLoading.value = false;
   articleDialog.visible = false;
 }
 
 async function saveArticle() {
+  if (!props.canManage || saving.value || !articleReady.value || !articleDialog.visible) return;
   syncArticleEditor();
   saving.value = true;
   message.value = '';
@@ -377,17 +409,28 @@ function activeArticleEditor() {
 
 function syncArticleEditorDom() {
   const editor = activeArticleEditor();
-  if (editor && editor.innerHTML !== articleDialog.form.content) {
-    editor.innerHTML = articleDialog.form.content || '';
+  const content = sanitizeRichHtml(articleDialog.form.content);
+  if (editor && editor.innerHTML !== content) {
+    editor.innerHTML = content;
   }
 }
 
 function syncArticleEditor() {
   const editor = activeArticleEditor();
-  articleDialog.form.content = editor?.innerHTML || '';
+  articleDialog.form.content = sanitizeRichHtml(editor?.innerHTML);
+}
+
+function pasteArticle(event) {
+  event.preventDefault();
+  if (!props.canManage || saving.value || !articleReady.value) return;
+  const html = event.clipboardData?.getData('text/html');
+  if (html) document.execCommand('insertHTML', false, sanitizeRichHtml(html));
+  else document.execCommand('insertText', false, event.clipboardData?.getData('text/plain') || '');
+  syncArticleEditor();
 }
 
 function applyArticleFormat(command) {
+  if (!props.canManage || saving.value || !articleReady.value) return;
   const editor = activeArticleEditor();
   if (!editor) {
     return;
@@ -398,6 +441,7 @@ function applyArticleFormat(command) {
 }
 
 function applyArticleBlock(tagName) {
+  if (!props.canManage || saving.value || !articleReady.value) return;
   const editor = activeArticleEditor();
   if (!editor) {
     return;
@@ -408,6 +452,7 @@ function applyArticleBlock(tagName) {
 }
 
 function insertArticleTemplate() {
+  if (!props.canManage || saving.value || !articleReady.value) return;
   const editor = activeArticleEditor();
   const html = articleTemplateHtml();
   if (!editor) {
@@ -425,6 +470,7 @@ function insertArticleTemplate() {
 }
 
 async function deleteArticle(row) {
+  if (!props.canManage || saving.value) return;
   if (!window.confirm(`确认删除文档「${row.title}」？`)) {
     return;
   }
@@ -445,15 +491,18 @@ async function deleteArticle(row) {
 }
 
 function openCategoryDialog() {
+  if (!props.canManage || saving.value) return;
   categoryDialog.form = emptyCategoryForm();
   categoryDialog.visible = true;
 }
 
 function closeCategoryDialog() {
+  if (saving.value) return;
   categoryDialog.visible = false;
 }
 
 async function saveCategory() {
+  if (!props.canManage || saving.value || !categoryDialog.visible) return;
   saving.value = true;
   message.value = '';
   try {
@@ -469,6 +518,7 @@ async function saveCategory() {
 }
 
 async function loadHistory(articleId) {
+  if (!props.canManage) return;
   historyDialog.visible = true;
   historyDialog.items = [];
   try {
@@ -519,7 +569,7 @@ function articleTemplateHtml() {
 
 function stripHtml(content) {
   const element = document.createElement('div');
-  element.innerHTML = content || '';
+  element.innerHTML = sanitizeRichHtml(content);
   return element.textContent || element.innerText || '';
 }
 

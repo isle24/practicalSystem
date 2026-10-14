@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, ref, watch } from 'vue';
 
 const props = defineProps({ entityType: { type: String, required: true }, entityId: { type: [Number, String], required: true }, accountId: { type: [Number, String], required: true }, request: { type: Function, required: true }, backendUrl: { type: Function, default: value => value } });
 const emit = defineEmits(['updated']);
@@ -22,39 +22,48 @@ function candidateName(instance, actorId) {
   return Number(instance.applicant_id) === Number(actorId) ? '申请人' : `账号 ${actorId}`;
 }
 let generation = 0;
+let disposed = false;
 async function reload() {
   const version = ++generation;
   items.value = [];
   signature.value = null;
   useSignature.value = false;
   opinion.value = '';
+  busy.value = false;
+  message.value = '';
   if (!props.entityId) return;
   busy.value = true;
   message.value = '';
   try {
     const data = await props.request(`/workflow/history?entity_type=${encodeURIComponent(props.entityType)}&entity_id=${encodeURIComponent(props.entityId)}`);
-    if (version !== generation) return;
+    if (disposed || version !== generation) return;
     items.value = data.items || [];
     if (canReview.value) {
       const result = await props.request('/signature/current');
-      if (version === generation) signature.value = result.signature;
+      if (!disposed && version === generation) signature.value = result.signature;
     }
-  } catch (error) { if (version === generation) message.value = error.message; }
-  finally { if (version === generation) busy.value = false; }
+  } catch (error) { if (!disposed && version === generation) message.value = error.message; }
+  finally { if (!disposed && version === generation) busy.value = false; }
 }
 async function review(action) {
-  if (busy.value || !canReview.value) return;
+  if (disposed || busy.value || !canReview.value) return;
+  const version = generation;
+  const source = [props.entityType, props.entityId, props.accountId].join(':');
   if (action === 'modify' && !opinion.value.trim()) { message.value = '请填写退回意见'; return; }
   if (activeNode.value?.signature_required && (!signature.value || !useSignature.value)) { message.value = '此节点需要本人签名，请先在个人设置中保存签名，并勾选用于本次审批。'; return; }
   busy.value = true;
   message.value = '';
   try {
     await props.request('/workflow/review', { method: 'POST', body: JSON.stringify({ instance_id: current.value.id, action, opinion: opinion.value, signature_id: useSignature.value ? signature.value?.id : null, revision: current.value.revision }) });
+    if (disposed || version !== generation) return;
     await reload();
+    if (disposed || source !== [props.entityType, props.entityId, props.accountId].join(':')) return;
     emit('updated');
-  } catch (error) { message.value = error.message; } finally { busy.value = false; }
+  } catch (error) { if (!disposed && version === generation) message.value = error.message; }
+  finally { if (!disposed && version === generation) busy.value = false; }
 }
 watch(() => [props.entityType, props.entityId, props.accountId], reload, { immediate: true });
+onBeforeUnmount(() => { disposed = true; generation++; });
 defineExpose({ reload });
 </script>
 
@@ -85,29 +94,29 @@ defineExpose({ reload });
 </template>
 
 <style scoped>
-.workflow-history { color: #253248; font-size: 14px; }
+.workflow-history { color: var(--text, #253248); font-size: 14px; }
 .workflow-history header,.workflow-round-title,.workflow-events li > div { display: flex; align-items: center; gap: 12px; }
 .workflow-history header strong { margin-right: auto; }
-.workflow-history button { border: 1px solid #dbe1ea; border-radius: 5px; padding: 7px 14px; background: #fff; color: #253248; cursor: pointer; font: inherit; }
+.workflow-history button { border: 1px solid var(--line, #dbe1ea); border-radius: 5px; padding: 7px 14px; background: var(--surface, #fff); color: var(--text, #253248); cursor: pointer; font: inherit; }
 .workflow-history button:disabled { opacity: .55; cursor: default; }
-.workflow-history button:hover:not(:disabled) { background: #eef4fd; }
-.workflow-round { margin-top: 16px; padding: 14px; border: 1px solid #e2e7ef; border-radius: 8px; }
+.workflow-history button:hover:not(:disabled) { background: var(--surface-2, #eef4fd); }
+.workflow-round { margin-top: 16px; padding: 14px; border: 1px solid var(--line, #e2e7ef); border-radius: 8px; }
 .workflow-round-title { flex-wrap: wrap; }
-.workflow-history time,.workflow-muted,.workflow-events small { font-size: 12px; color: #657185; }
+.workflow-history time,.workflow-muted,.workflow-events small { font-size: 12px; color: var(--muted, #657185); }
 .workflow-nodes { padding-left: 20px; }
 .workflow-nodes li { padding: 8px; border-radius: 5px; }
-.workflow-nodes li.active { background: #eef4ff; color: #245fac; }
+.workflow-nodes li.active { background: var(--primary-soft, #eef4ff); color: var(--primary-ink, #245fac); }
 .workflow-nodes span { font-size: 12px; margin-left: 8px; }
 .workflow-nodes small { display: block; margin-top: 4px; }
 .workflow-events { list-style: none; padding: 0; margin: 0; }
-.workflow-events li { border-top: 1px solid #ecf0f5; padding: 10px 0; }
+.workflow-events li { border-top: 1px solid var(--line, #ecf0f5); padding: 10px 0; }
 .workflow-events li > div { flex-wrap: wrap; justify-content: space-between; }
 .workflow-events p { white-space: pre-wrap; overflow-wrap: anywhere; margin: 6px 0; }
 .workflow-review { margin-top: 16px; display: grid; gap: 12px; }
-.workflow-review textarea { display: block; width: 100%; box-sizing: border-box; margin-top: 6px; padding: 10px; border: 1px solid #dbe1ea; border-radius: 5px; font: inherit; resize: vertical; }
+.workflow-review textarea { display: block; width: 100%; box-sizing: border-box; margin-top: 6px; padding: 10px; border: 1px solid var(--line, #dbe1ea); border-radius: 5px; font: inherit; resize: vertical; color: var(--text, #253248); background: var(--surface, #fff); }
 .workflow-signature-choice { display: flex; align-items: center; flex-wrap: wrap; gap: 16px; }
-.workflow-signature-choice img { width: 150px; height: 70px; object-fit: contain; background: #fff; border: 1px solid #e2e7ef; }
+.workflow-signature-choice img { width: 150px; height: 70px; object-fit: contain; background: #fff; border: 1px solid var(--line, #e2e7ef); }
 .workflow-review-actions { display: flex; gap: 10px; }
-.workflow-review-actions .workflow-accept { background: #285fae; color: #fff; }
-.workflow-feedback { background: #fff7e8; color: #765415; padding: 10px; border-radius: 5px; }
+.workflow-review-actions .workflow-accept { background: var(--primary, #285fae); color: var(--primary-contrast, #fff); }
+.workflow-feedback { background: var(--amber-soft, #fff7e8); color: var(--amber, #765415); padding: 10px; border-radius: 5px; }
 </style>

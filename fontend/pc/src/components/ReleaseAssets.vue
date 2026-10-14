@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref } from 'vue';
+import { computed, onBeforeUnmount, ref } from 'vue';
 import { ElCheckbox, ElMessage } from 'element-plus';
 import { Upload } from '@lucide/vue';
 import { request } from '../api/client';
@@ -7,6 +7,7 @@ import { request } from '../api/client';
 const props = defineProps({ assets: { type: Array, default: () => [] }, deferred: { type: Array, default: () => [] }, disabled: Boolean });
 const emit = defineEmits(['update:deferred', 'uploaded', 'busy', 'retry', 'refresh']);
 const fileInput = ref(null), target = ref(null), uploading = ref(false), progress = ref(0);
+let alive = true, uploadController;
 const platforms = { 'darwin-universal': 'macOS', 'windows-x86_64': 'Windows', 'linux-x86_64': 'Linux' };
 const pendingPlatforms = computed(() => Object.keys(platforms).filter(key => {
   const rows = props.assets.filter(a => a.platform === key);
@@ -17,23 +18,26 @@ function defer(key, checked) { emit('update:deferred', checked ? [...new Set([..
 function choose(row) { if (props.disabled || uploading.value) return; target.value = row; fileInput.value.value = ''; fileInput.value.click(); }
 async function upload(event) {
   const file = event.target.files?.[0], asset = target.value;
-  if (!file || !asset || uploading.value) return;
+  if (!alive || props.disabled || !file || !asset || uploading.value || !props.assets.some(item => item.id === asset.id)) return;
   if (file.name !== asset.file_name || file.size !== Number(asset.size)) { ElMessage.error('请选择与清单名称和大小一致的安装包'); return; }
   uploading.value = true; progress.value = 0; emit('busy', true);
+  const controller = new AbortController(); uploadController = controller;
   try {
-    const session = await request('/release/begin-upload', { method: 'POST', body: JSON.stringify({ asset_id: asset.id }) });
+    const session = await request('/release/begin-upload', { method: 'POST', signal: controller.signal, body: JSON.stringify({ asset_id: asset.id }) });
     for (let offset = 0; offset < file.size;) {
       const end = Math.min(offset + session.chunk_size, file.size);
       const body = new FormData(); body.append('upload_id', session.upload_id); body.append('offset', String(offset)); body.append('file', file.slice(offset, end), 'chunk.bin');
-      const result = await request('/release/upload-chunk', { method: 'POST', body });
+      const result = await request('/release/upload-chunk', { method: 'POST', signal: controller.signal, body });
       if (Number(result.offset) !== end) throw new Error('分片校验位置不一致，请重新上传');
       offset = end; progress.value = Math.floor(offset / file.size * 100);
     }
-    const data = await request('/release/finish-upload', { method: 'POST', timeoutMs: 180000, body: JSON.stringify({ upload_id: session.upload_id }) });
+    const data = await request('/release/finish-upload', { method: 'POST', signal: controller.signal, timeoutMs: 180000, body: JSON.stringify({ upload_id: session.upload_id }) });
+    if (!alive) return;
     emit('uploaded', data); ElMessage.success('安装包已上传并通过校验');
-  } catch (e) { ElMessage.error(e.message); }
-  finally { uploading.value = false; emit('busy', false); }
+  } catch (e) { if (alive) ElMessage.error(e.message); }
+  finally { uploadController = null; if (alive) { uploading.value = false; emit('busy', false); } }
 }
+onBeforeUnmount(() => { alive = false; target.value = null; uploadController?.abort(); });
 </script>
 
 <template>

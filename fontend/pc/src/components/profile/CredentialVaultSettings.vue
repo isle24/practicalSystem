@@ -9,9 +9,17 @@ const state = reactive({ items: [], enabled: false, available: false, cloudEnabl
   cloudCount: null, reason: '', migrationError: '', loading: false, busy: false, error: '', message: '' });
 const locked = computed(() => state.loading || state.busy);
 let sequence = 0;
+let operation = 0;
+let sessionRevision = 0;
+let alive = true;
+function captureSession() {
+  const revision = sessionRevision;
+  const key = props.sessionKey;
+  return () => alive && revision === sessionRevision && key === props.sessionKey;
+}
 
 async function load() {
-  if (!supported) return;
+  if (!supported || !alive) return;
   const ticket = ++sequence;
   state.loading = true;
   try {
@@ -31,44 +39,58 @@ async function load() {
 
 async function operate(action, payload, message) {
   if (locked.value) return;
+  const ticket = ++operation;
+  const isCurrent = captureSession();
   state.busy = true;
   state.error = '';
   state.message = '';
   try {
     const result = await bridge.credentialVault(action, payload);
+    if (!isCurrent() || ticket !== operation) return;
     state.message = typeof message === 'function' ? message(result) : message;
-  } catch (error) { state.error = error.message; }
-  finally { await load(); state.busy = false; }
+  } catch (error) { if (isCurrent() && ticket === operation) state.error = error.message; }
+  finally { if (isCurrent() && ticket === operation) { await load(); if (isCurrent() && ticket === operation) state.busy = false; } }
 }
 
 async function changeEnabled(enabled) {
   if (locked.value) return;
+  const isCurrent = captureSession();
   if (enabled) {
     try {
       await ElMessageBox.confirm('云同步采用服务器独立密钥加密。服务器具备解密能力，此功能不是端到端加密。确认将本机已保存的外部站点认证配置同步到当前学校账号，并下载已有云副本？', '开启云同步密码', { confirmButtonText: '确认开启', cancelButtonText: '取消' });
     } catch { return; }
   }
+  if (!isCurrent()) return;
   await operate('settings', { enabled, confirm: enabled }, enabled ? '已开启并完成同步。' : '已停止本机与服务器同步，服务器副本保留。');
 }
 
 async function remove(item) {
+  if (locked.value) return;
+  const isCurrent = captureSession();
   try {
     await ElMessageBox.confirm(state.enabled ? '删除本机此条凭据，并把删除操作同步到当前账号的其他设备？' : '删除本机此条凭据？服务器副本保持不变。', '删除凭据');
   } catch { return; }
+  if (!isCurrent()) return;
   await operate('remove', { id: item.id, confirm: true }, '已删除本机凭据。');
 }
 
 async function clear() {
+  if (locked.value) return;
+  const isCurrent = captureSession();
   try {
     await ElMessageBox.confirm(state.enabled ? '清空当前学校账号已建立索引的本机凭据，并同步这些记录的删除操作？' : '清空当前学校账号已建立索引的本机凭据？服务器副本保持不变。', '清空本机凭据');
   } catch { return; }
+  if (!isCurrent()) return;
   await operate('clear', { confirm: true }, '已清空已建立索引的本机凭据。');
 }
 
 async function deleteCloud() {
+  if (locked.value) return;
+  const isCurrent = captureSession();
   try {
     await ElMessageBox.confirm('永久删除当前学校账号的全部服务器凭据副本，并停止云同步？本机和其他设备已保存的本地凭据会保留。', '删除服务器副本', { type: 'warning', confirmButtonText: '确认删除', cancelButtonText: '取消' });
   } catch { return; }
+  if (!isCurrent()) return;
   await operate('delete-cloud', { confirm: true }, '已删除服务器副本并停止同步，本机凭据保留。');
 }
 
@@ -77,9 +99,13 @@ function sync() {
 }
 
 function refresh() { state.error = ''; state.message = ''; load(); }
-watch(() => props.sessionKey, () => { sequence++; state.items = []; state.enabled = false; state.error = ''; state.message = ''; load(); });
+watch(() => props.sessionKey, () => {
+  sequence++; operation++; sessionRevision++;
+  Object.assign(state, { items: [], enabled: false, available: false, cloudEnabled: false, cloudCount: null, reason: '', migrationError: '', loading: false, busy: false, error: '', message: '' });
+  load();
+}, { flush: 'sync' });
 onMounted(() => { load(); window.addEventListener('practical-credential-vault-changed', refresh); });
-onBeforeUnmount(() => { sequence++; window.removeEventListener('practical-credential-vault-changed', refresh); });
+onBeforeUnmount(() => { alive = false; sequence++; operation++; window.removeEventListener('practical-credential-vault-changed', refresh); });
 </script>
 
 <template>

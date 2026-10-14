@@ -30,10 +30,14 @@ pub struct School {
     pub remark: String,
 }
 
+#[derive(Clone)]
 pub struct Connection {
     pub school: School,
     pub origin: Url,
     pub client: Client,
+    pub session_lock: Arc<tokio::sync::RwLock<()>>,
+    pub cancel: tokio_util::sync::CancellationToken,
+    pub(crate) operation_context: Option<serde_json::Value>,
 }
 
 /// 规范化学校域名，只允许 HTTPS 和本机开发 HTTP。
@@ -156,6 +160,14 @@ pub fn delete_password(origin: &str, username: &str) -> Result<(), String> {
 
 /// 通过学校公开配置接口确认服务器，并创建独立会话容器。
 pub async fn connect(origin: Url, port: u16) -> Result<Connection, String> {
+    connect_with_cancel(origin, port, tokio_util::sync::CancellationToken::new()).await
+}
+
+pub async fn connect_with_cancel(
+    origin: Url,
+    port: u16,
+    cancel: tokio_util::sync::CancellationToken,
+) -> Result<Connection, String> {
     let client = Client::builder()
         .cookie_provider(Arc::new(Jar::default()))
         .redirect(Policy::none())
@@ -171,12 +183,12 @@ pub async fn connect(origin: Url, port: u16) -> Result<Connection, String> {
     let endpoint = origin
         .join("api/config/login-page")
         .map_err(|_| "学校地址格式不正确")?;
-    let mut response = client
-        .get(endpoint)
-        .timeout(Duration::from_secs(15))
-        .send()
-        .await
-        .map_err(|_| "连接失败，请检查学校域名、网络和服务器 HTTPS 证书")?;
+    let request = client.get(endpoint).timeout(Duration::from_secs(15));
+    let mut response = tokio::select! {
+        _ = cancel.cancelled() => return Err("登录连接已取消，请重新连接".into()),
+        response = request.send() => response
+            .map_err(|_| "连接失败，请检查学校域名、网络和服务器 HTTPS 证书")?,
+    };
     if !response.status().is_success() {
         return Err(format!(
             "学校接口返回 {}，请检查域名或服务器状态",
@@ -184,7 +196,12 @@ pub async fn connect(origin: Url, port: u16) -> Result<Connection, String> {
         ));
     }
     let mut bytes = Vec::new();
-    while let Some(chunk) = response.chunk().await.map_err(|_| "读取学校信息失败")? {
+    loop {
+        let chunk = tokio::select! {
+            _ = cancel.cancelled() => return Err("登录连接已取消，请重新连接".into()),
+            chunk = response.chunk() => chunk.map_err(|_| "读取学校信息失败")?,
+        };
+        let Some(chunk) = chunk else { break };
         if bytes.len() + chunk.len() > 65536 {
             return Err("学校配置响应过大，请检查所填域名".into());
         }
@@ -213,5 +230,8 @@ pub async fn connect(origin: Url, port: u16) -> Result<Connection, String> {
         },
         origin,
         client,
+        session_lock: Arc::new(tokio::sync::RwLock::new(())),
+        cancel,
+        operation_context: None,
     })
 }

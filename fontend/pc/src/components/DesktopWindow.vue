@@ -226,6 +226,7 @@ function toggleMaximize() {
     height: props.initialHeight,
   });
   maximized.value = false;
+  fitToWorkspace();
 }
 
 function fitToWorkspace() {

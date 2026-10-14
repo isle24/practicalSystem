@@ -234,5 +234,5 @@ fieldset { width: 100%; box-sizing: border-box; margin: 12px 0; padding: 12px; b
 .actions { display: flex; gap: 10px; justify-content: center; }
 button { padding: 10px 16px; border: 1px solid var(--theme-border, #cbd5e1); border-radius: 8px; background: var(--theme-panel, #f8fafc); color: inherit; cursor: pointer; }
 button:disabled { opacity: .6; cursor: wait; }
-fieldset button { width: 100%; margin-top: 10px; background: var(--theme-accent, #2563eb); color: #fff; border-color: transparent; }
+fieldset button { width: 100%; margin-top: 10px; background: var(--theme-accent, #2563eb); color: var(--primary-contrast, #fff); border-color: transparent; }
 </style>

@@ -3226,14 +3226,18 @@ checksum = "439ee305def115ba05938db6eb1644ff94165c5ab5e9420d1c1bcedbba909391"
 
 [[package]]
 name = "practical-system-desktop"
-version = "0.3.19"
+version = "0.3.20"
 dependencies = [
  "aes-gcm",
  "axum",
  "base64 0.22.1",
+ "gtk",
  "keyring",
+ "libc",
  "md-5",
  "mime_guess",
+ "objc2-core-graphics",
+ "quick-xml 0.42.0",
  "reqwest 0.12.28",
  "rust-embed",
  "serde",
@@ -3251,7 +3255,9 @@ dependencies = [
  "tokio-util",
  "url",
  "uuid",
+ "windows-sys 0.61.2",
  "zeroize",
+ "zip",
 ]
 
 [[package]]
@@ -4982,6 +4988,7 @@ dependencies = [
  "libc",
  "mio",
  "pin-project-lite",
+ "signal-hook-registry",
  "socket2",
  "tokio-macros",
  "windows-sys 0.61.2",
@@ -6549,6 +6556,7 @@ checksum = "caa8cd6af31c3b31c6631b8f483848b91589021b28fffe50adada48d4f4d2ed1"
 dependencies = [
  "arbitrary",
  "crc32fast",
+ "flate2",
  "indexmap 2.14.2",
  "memchr",
 ]

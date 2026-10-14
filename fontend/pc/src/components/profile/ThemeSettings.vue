@@ -1,7 +1,7 @@
 <template>
   <section class="profile-panel-card theme-settings">
     <header><strong>本机主题</strong><small>按学校和当前用户保存在本机，壁纸不会上传服务器。</small></header>
-    <div class="theme-presets" aria-label="预置与自定义主题"><button v-for="preset in [...theme.presets, ...theme.state.custom]" :key="preset.id" type="button" :class="{ active: draft.id === preset.id }" :aria-pressed="draft.id === preset.id" @click="select(preset)"><span class="theme-swatch" :style="{ '--swatch-accent': preset.accent, '--swatch-window': preset.window || '#ffffff' }" aria-hidden="true"><i /><b /></span><span>{{ preset.name || preset.id }}</span></button></div>
+    <div class="theme-presets" aria-label="预置与自定义主题"><button v-for="preset in [...theme.presets, ...theme.state.custom]" :key="preset.id" type="button" :disabled="busy" :class="{ active: draft.id === preset.id }" :aria-pressed="draft.id === preset.id" @click="select(preset)"><span class="theme-swatch" :style="{ '--swatch-accent': preset.accent, '--swatch-window': preset.window || (theme.state.systemDark && preset.mode === 'system' ? '#18212f' : '#ffffff') }" aria-hidden="true"><i /><b /></span><span>{{ preset.name || preset.id }}</span></button></div>
     <div class="theme-fields">
       <label><span>明暗模式</span><el-select v-model="draft.mode"><el-option label="跟随系统" value="system" /><el-option label="亮色" value="light" /><el-option label="暗色" value="dark" /></el-select></label>
       <label><span>桌面文字</span><input v-model="draft.text" type="color"></label>
@@ -21,17 +21,19 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { ElMessageBox } from 'element-plus';
 const props = defineProps({ theme: { type: Object, required: true } });
 const draft = ref({ ...props.theme.state.saved }), name = ref(''), error = ref(''), busy = ref(false);
-const windowColor = computed({ get: () => draft.value.window || (draft.value.mode === 'dark' ? '#18212f' : '#ffffff'), set: value => { draft.value.window = value; } });
-watch(() => props.theme.state.saved, value => { draft.value = { ...value }; name.value = ''; });
+let revision = 0, alive = true;
+const windowColor = computed({ get: () => draft.value.window || (draft.value.mode === 'dark' || (draft.value.mode === 'system' && props.theme.state.systemDark) ? '#18212f' : '#ffffff'), set: value => { draft.value.window = value; } });
+watch(() => props.theme.state.saved, value => { draft.value = { ...value }; name.value = ''; error.value = ''; }, { flush: 'sync' });
+watch(() => props.theme.state.scopeRevision, () => { revision++; error.value = ''; busy.value = false; }, { flush: 'sync' });
 function select(preset) { draft.value = { ...preset, wallpaper_id: preset.wallpaper_id || '', name: preset.name || '' }; name.value = ''; }
-async function run(action) { busy.value = true; error.value = ''; try { await action(); } catch (reason) { error.value = reason.message; } finally { busy.value = false; } }
-async function chooseWallpaper(event) { const file = event.target.files?.[0]; event.target.value = ''; if (file) await run(async () => { draft.value.wallpaper_id = await props.theme.selectWallpaper(file); }); }
+async function run(action) { if (busy.value) return; const ticket = ++revision; busy.value = true; error.value = ''; try { await action(); } catch (reason) { if (alive && ticket === revision) error.value = reason.message; } finally { if (alive && ticket === revision) busy.value = false; } }
+async function chooseWallpaper(event) { const file = event.target.files?.[0]; event.target.value = ''; const target = draft.value; if (file) await run(async () => { const id = await props.theme.selectWallpaper(file); if (alive && target === draft.value) draft.value.wallpaper_id = id; }); }
 function preview() { return run(() => props.theme.preview(draft.value)); }
 function cancel() { return run(() => props.theme.cancelPreview()); }
 function apply() { return run(() => props.theme.apply(draft.value, name.value)); }
 function reset() { return run(() => props.theme.reset()); }
-async function remove() { try { await ElMessageBox.confirm('删除这个本机自定义主题？', '删除主题'); } catch { return; } await run(() => props.theme.remove(draft.value.id)); }
-onBeforeUnmount(() => { props.theme.cancelPreview(); });
+async function remove() { const target = draft.value, saved = props.theme.state.saved; try { await ElMessageBox.confirm('删除这个本机自定义主题？', '删除主题'); } catch { return; } if (!alive || target !== draft.value || saved !== props.theme.state.saved) return; await run(() => props.theme.remove(target.id)); }
+onBeforeUnmount(() => { alive = false; revision++; props.theme.cancelPreview(); });
 </script>
 <style scoped>
 .theme-actions{display:flex;gap:10px;flex-wrap:wrap}.theme-presets{display:grid;grid-template-columns:repeat(auto-fill,minmax(105px,1fr));gap:12px}.theme-swatch{display:block;position:relative;height:66px;border-radius:6px;background:linear-gradient(135deg,var(--swatch-accent),#10243c);overflow:hidden;margin-bottom:10px}.theme-swatch i{position:absolute;left:20%;right:12%;top:15%;bottom:15%;border-radius:4px;background:var(--swatch-window);box-shadow:0 4px 8px #0003}.theme-swatch b{position:absolute;left:24%;right:17%;top:24%;height:4px;border-radius:4px;background:var(--swatch-accent)}.theme-presets button{border:1px solid var(--line);border-radius:8px;padding:8px;background:var(--surface-2);color:var(--text);cursor:pointer}.theme-presets .active{border-color:var(--primary);color: var(--primary-ink, var(--primary))}.theme-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}.theme-fields label{display:flex;flex-direction:column;gap:8px;font-size:13px;color:var(--muted)}.theme-fields input[type=color]{height:34px;width:70px;border:1px solid var(--line);background:var(--surface);cursor:pointer}.theme-fields input[type=file]{width:100%;color:var(--text)}@media(max-width:650px){.theme-fields{grid-template-columns:1fr}}

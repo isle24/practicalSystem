@@ -4,10 +4,43 @@ use sha2::{Digest, Sha256};
 
 /// 从当前学校会话读取小型鉴权响应。
 pub async fn read(connection: &Connection, path: &str) -> Result<Value, String> {
+    if connection.cancel.is_cancelled() {
+        return Err("学校连接已关闭，请重新连接".into());
+    }
     let target = connection
         .origin
         .join(path)
         .map_err(|_| "学校接口地址无效")?;
+    let context = target.path() == "/api/auth/context";
+    if context {
+        if let Some(value) = &connection.operation_context {
+            return Ok(value.clone());
+        }
+    }
+    let _session = if context {
+        Some(connection.session_lock.write().await)
+    } else {
+        None
+    };
+    read_target(connection, target).await
+}
+
+/// 调用方已持有学校会话写锁。
+pub async fn read_context_guarded(
+    connection: &Connection,
+    _session: &tokio::sync::RwLockWriteGuard<'_, ()>,
+) -> Result<Value, String> {
+    let target = connection
+        .origin
+        .join("api/auth/context")
+        .map_err(|_| "学校接口地址无效")?;
+    read_target(connection, target).await
+}
+
+async fn read_target(connection: &Connection, target: url::Url) -> Result<Value, String> {
+    if connection.cancel.is_cancelled() {
+        return Err("学校连接已关闭，请重新连接".into());
+    }
     let response = connection
         .client
         .get(target)
@@ -22,6 +55,17 @@ pub async fn read(connection: &Connection, path: &str) -> Result<Value, String> 
 pub async fn post(connection: &Connection, path: &str, input: &Value) -> Result<Value, String> {
     if connection.origin.scheme() != "https" {
         return Err("云同步密码需要学校 HTTPS 连接".into());
+    }
+    auth_post(connection, path, input).await
+}
+
+pub async fn auth_post(
+    connection: &Connection,
+    path: &str,
+    input: &Value,
+) -> Result<Value, String> {
+    if connection.cancel.is_cancelled() {
+        return Err("学校连接已关闭，请重新连接".into());
     }
     let target = connection
         .origin
@@ -106,5 +150,9 @@ pub async fn account(connection: &Connection) -> Result<u64, String> {
 
 /// 生成本机资源命名键，不在文件名暴露学校和账号。
 pub fn digest(value: &str) -> String {
-    format!("{:x}", Sha256::digest(value.as_bytes()))
+    digest_bytes(value.as_bytes())
+}
+
+pub fn digest_bytes(value: &[u8]) -> String {
+    format!("{:x}", Sha256::digest(value))
 }

@@ -72,11 +72,20 @@ pub fn open_authenticated(
     app: &AppHandle,
     url: Url,
     cookies: Vec<tauri::webview::Cookie<'static>>,
+    owner: &str,
+    cancel: &tokio_util::sync::CancellationToken,
 ) -> Result<(), String> {
+    if cancel.is_cancelled() || crate::current_school_locked(app) {
+        return Err("学校连接已关闭，请重新连接".into());
+    }
     let origin = url.origin();
     let builder = WebviewWindowBuilder::new(
         app,
-        format!("external-{}", uuid::Uuid::new_v4().simple()),
+        crate::windows::school_window_label(
+            "authenticated",
+            owner,
+            &uuid::Uuid::new_v4().simple().to_string(),
+        ),
         WebviewUrl::External(Url::parse("about:blank").map_err(|_| "无法创建认证窗口")?),
     )
     .title(format!("{} - 外部网页", url.host_str().unwrap_or("网页")))
@@ -91,6 +100,7 @@ pub fn open_authenticated(
     #[cfg(target_os = "windows")]
     let builder = builder.data_directory(directory.path().to_path_buf());
     let window = builder.build().map_err(|_| "无法创建认证窗口")?;
+    crate::input_activity::install(&window);
     #[cfg(target_os = "windows")]
     {
         let directory = std::sync::Mutex::new(Some(directory));
@@ -112,6 +122,10 @@ pub fn open_authenticated(
         let _ = window.destroy();
         return Err("无法打开认证页面".into());
     }
+    if cancel.is_cancelled() || crate::current_school_locked(app) {
+        let _ = window.destroy();
+        return Err("学校账号已变更，请重新打开".into());
+    }
     Ok(())
 }
 
@@ -121,7 +135,11 @@ pub fn open_sso(
     target: Url,
     issuer: url::Origin,
     owner: &str,
+    cancel: &tokio_util::sync::CancellationToken,
 ) -> Result<(), String> {
+    if cancel.is_cancelled() || crate::current_school_locked(app) {
+        return Err("学校连接已关闭，请重新连接".into());
+    }
     let target_origin = target.origin();
     if target.scheme() != "https"
         || !allowed(&target)
@@ -148,6 +166,7 @@ pub fn open_sso(
     #[cfg(target_os = "windows")]
     let builder = builder.data_directory(directory.path().to_path_buf());
     let window = builder.build().map_err(|_| "无法创建授权窗口")?;
+    crate::input_activity::install(&window);
     #[cfg(target_os = "windows")]
     {
         let directory = std::sync::Mutex::new(Some(directory));
@@ -162,6 +181,10 @@ pub fn open_sso(
     if window.navigate(target).is_err() {
         let _ = window.destroy();
         return Err("无法打开授权页面".into());
+    }
+    if cancel.is_cancelled() || crate::current_school_locked(app) {
+        let _ = window.destroy();
+        return Err("学校账号已变更，请重新打开".into());
     }
     Ok(())
 }
@@ -209,6 +232,9 @@ mod sso_window_tests {
 
 /// 统一打开收藏的客户端窗口或系统浏览器。
 pub fn open(app: &AppHandle, address: &str, mode: &str) -> Result<(), String> {
+    if crate::current_school_locked(app) {
+        return Err("客户端已锁定，请先验证当前账号".into());
+    }
     let url = Url::parse(address).map_err(|_| "网址格式不正确")?;
     if !allowed(&url) {
         return Err("仅允许普通 HTTP/HTTPS 外部网页".into());
@@ -253,7 +279,7 @@ fn build(
         ));
     })
     .on_new_window(move |url, features| {
-        if !allowed(&url) {
+        if crate::current_school_locked(&popup_app) || !allowed(&url) {
             return NewWindowResponse::Deny;
         }
         match build(&popup_app, url, Some(features)) {
@@ -264,12 +290,14 @@ fn build(
     if let Some(features) = features {
         builder = builder.window_features(features);
     }
-    builder.build()
+    let window = builder.build()?;
+    crate::input_activity::install(&window);
+    Ok(window)
 }
 
 /// 原生菜单仅读取外部网页的当前地址。
 pub fn menu(app: &AppHandle, window: &WebviewWindow, command: &str) {
-    if !window.label().starts_with("external-") {
+    if !window.label().starts_with("external-") && !window.label().starts_with("authenticated-") {
         return;
     }
     let Ok(url) = window.url() else {

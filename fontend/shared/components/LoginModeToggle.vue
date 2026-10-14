@@ -12,8 +12,8 @@ defineEmits(['update:mode']);
 </script>
 
 <style scoped>
-.login-mode-corner { position: absolute; top: 12px; right: 12px; width: 58px; height: 58px; display: flex; justify-content: flex-end; align-items: flex-start; padding: 7px; clip-path: polygon(0 0,100% 0,100% 100%); border: 0; border-radius: 0 8px 0 0; background: #4169ff; color: #fff; cursor: pointer; }
-.login-mode-corner:hover:not(:disabled) { background: #2852df; }
+.login-mode-corner { position: absolute; top: 12px; right: 12px; width: 58px; height: 58px; display: flex; justify-content: flex-end; align-items: flex-start; padding: 7px; clip-path: polygon(0 0,100% 0,100% 100%); border: 0; border-radius: 0 8px 0 0; background: var(--primary, #4169ff); color: var(--primary-contrast, #fff); cursor: pointer; }
+.login-mode-corner:hover:not(:disabled) { background: var(--primary-hover, var(--el-color-primary-light-3, color-mix(in srgb, var(--primary, #4169ff) 88%, #000))); color: var(--primary-hover-contrast, var(--primary-contrast, #fff)); }
 .login-mode-corner:focus-visible { clip-path: none; }
 .login-mode-corner:disabled { cursor: default; opacity: .55; }
 </style>

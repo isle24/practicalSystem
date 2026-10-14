@@ -1,5 +1,25 @@
+import { createSessionCoordination, isCookieSessionRequest, isSessionMutation } from '../../../shared/sessionCoordination';
+
 export const apiBase = import.meta.env.VITE_API_BASE || '/api';
 let refreshPromise = null;
+let sessionGeneration = 0;
+let sessionChanging = false;
+const sessionCoordination = createSessionCoordination(error => {
+  invalidateSessionRequests();
+  sessionChanging = true;
+  emitAuthExpired(new Error(error ? '登录响应未完整收到，请重新加载页面' : '其他窗口已变更登录账号，请重新加载页面', { cause: error }));
+  window.location.reload();
+});
+
+export function invalidateSessionRequests() {
+  sessionGeneration++;
+}
+
+function cancelledRequest() {
+  const error = new Error('操作已取消或账号上下文已变化');
+  error.name = 'AbortError';
+  return error;
+}
 
 export function backendUrl(path = '') {
   const value = String(path || '').trim();
@@ -28,10 +48,26 @@ export function frontendPublicUrl() {
 }
 
 export async function request(path, options = {}) {
+  if (sessionChanging) throw cancelledRequest();
+  if (isSessionMutation(path)) {
+    const pendingRefresh = refreshPromise;
+    sessionChanging = true;
+    invalidateSessionRequests();
+    const generation = sessionGeneration;
+    try {
+      if (pendingRefresh) await pendingRefresh;
+      if (generation !== sessionGeneration) throw cancelledRequest();
+      return await sendRequest(path, options, false);
+    } finally {
+      invalidateSessionRequests();
+      sessionChanging = false;
+    }
+  }
   return sendRequest(path, options, true);
 }
 
 async function sendRequest(path, options = {}, canRefresh = true) {
+  const generation = sessionGeneration;
   const {
     timeoutMs: rawTimeoutMs,
     refreshOnUnauthorized = true,
@@ -41,11 +77,8 @@ async function sendRequest(path, options = {}, canRefresh = true) {
     ...fetchOptions
   } = options;
   const requireCurrent = () => {
-    if (externalSignal?.aborted || !isCurrent()) {
-      const error = new Error('操作已取消或账号上下文已变化');
-      error.name = 'AbortError';
-      throw error;
-    }
+    if (!sessionCoordination.check()) throw cancelledRequest();
+    if (generation !== sessionGeneration || externalSignal?.aborted || !isCurrent()) throw cancelledRequest();
   };
   requireCurrent();
   const isFormData = fetchOptions.body instanceof FormData;
@@ -70,22 +103,55 @@ async function sendRequest(path, options = {}, canRefresh = true) {
 
   let response;
   let payload;
+  let uncertainMutation = false;
   try {
-    response = await fetch(`${apiBase}${path}`, {
-      credentials: 'include',
-      headers: {
-        Accept: 'application/json',
-        ...(!isFormData ? { 'Content-Type': 'application/json' } : {}),
-        ...headers,
-      },
-      ...fetchOptions,
-      signal: abortController?.signal || externalSignal,
-    });
-    payload = await response.json().catch(error => {
-      if (error?.name === 'AbortError') throw error;
-      return { code: response.status, message: '接口响应格式错误', data: null };
-    });
+    const send = async () => {
+      const mutation = isSessionMutation(path);
+      let sent = false;
+      try {
+        if ((abortController?.signal || externalSignal)?.aborted) {
+          const error = new Error('请求已取消');
+          error.name = 'AbortError';
+          throw error;
+        }
+        sent = true;
+        response = await fetch(`${apiBase}${path}`, {
+          credentials: 'include',
+          headers: {
+            Accept: 'application/json',
+            ...(!isFormData ? { 'Content-Type': 'application/json' } : {}),
+            ...headers,
+          },
+          ...fetchOptions,
+          signal: abortController?.signal || externalSignal,
+        });
+        payload = await response.json().catch(error => {
+          if (error?.name === 'AbortError') throw error;
+          if (mutation) throw new Error('接口响应格式错误', { cause: error });
+          return { code: response.status, message: '接口响应格式错误', data: null };
+        });
+        if (mutation) {
+          if (!payload || typeof payload !== 'object' || Array.isArray(payload) || !Number.isFinite(payload.code)) {
+            throw new Error('接口响应格式错误');
+          }
+          if (payload.code === 0) {
+            if (!response.ok) throw new Error('接口响应状态异常');
+            sessionCoordination.notify();
+          }
+        }
+      } catch (error) {
+        if (mutation && sent) {
+          uncertainMutation = true;
+          sessionCoordination.notify();
+          try { sessionCoordination.invalidateSelf(error); } catch {}
+        }
+        throw error;
+      }
+    };
+    await sessionCoordination.run(send, requireCurrent, abortController?.signal || externalSignal, isCookieSessionRequest(path) ? 'exclusive' : 'shared');
   } catch (error) {
+    if (uncertainMutation) throw error;
+    requireCurrent();
     if (error?.name === 'AbortError') {
       const cancelled = new Error(didTimeout ? '请求超时，请稍后重试' : '请求已取消');
       cancelled.name = 'AbortError';
@@ -111,8 +177,8 @@ async function sendRequest(path, options = {}, canRefresh = true) {
     error.code = Number(payload.code || response.status || 0);
     error.apiPath = `${apiBase}${path}`;
     error.payload = payload;
-    if (canRefresh && isAuthExpired(response, payload) && !isAuthPath(path)) {
-      const refreshed = refreshOnUnauthorized ? await refreshSession() : false;
+    if (isAuthExpired(response, payload) && !isAuthPath(path)) {
+      const refreshed = canRefresh && refreshOnUnauthorized ? await refreshSession() : false;
       requireCurrent();
       if (refreshed) {
         return sendRequest(path, options, false);
@@ -135,7 +201,9 @@ function isAuthExpired(response, payload) {
 }
 
 function isAuthPath(path) {
-  return String(path || '').startsWith('/auth/wechat-login/')
+  return String(path || '').startsWith('/auth/password-recovery/')
+    || String(path || '').startsWith('/auth/desktop-lock/')
+    || String(path || '').startsWith('/auth/wechat-login/')
     || String(path || '').startsWith('/auth/login')
     || String(path || '').startsWith('/auth/register')
     || String(path || '').startsWith('/auth/register-options')
@@ -146,12 +214,13 @@ function isAuthPath(path) {
 
 async function refreshSession() {
   if (!refreshPromise) {
-    refreshPromise = sendRequest('/auth/refresh', { method: 'POST' }, false)
+    const pending = sendRequest('/auth/refresh', { method: 'POST' }, false)
       .then(() => true)
       .catch(() => false)
       .finally(() => {
-        refreshPromise = null;
+        if (refreshPromise === pending) refreshPromise = null;
       });
+    refreshPromise = pending;
   }
 
   return refreshPromise;

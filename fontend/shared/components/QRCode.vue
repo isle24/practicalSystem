@@ -27,5 +27,5 @@ watch(() => [props.value, props.size], async () => {
 <style scoped>
 .shared-qr-code { text-align: center; }
 img { display: inline-block; max-width: 100%; height: auto; }
-p { color: #b91c1c; }
+p { color: var(--danger, #b91c1c); background: var(--danger-soft, #fff0ed); padding: 8px; border-radius: 6px; }
 </style>

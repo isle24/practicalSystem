@@ -2,6 +2,7 @@
   <div class="file-preview-mask" @click.self="emit('close')">
     <section ref="dialog" class="file-preview" role="dialog" aria-modal="true" :aria-label="name" tabindex="-1" @keydown="keyboard">
       <header><strong>{{ name || '文件预览' }}</strong><div class="preview-actions">
+        <button v-if="officeFileId && !loading" type="button" title="使用本机 Office 打开；外部 Office 窗口不受客户端锁屏控制，修改不会上传服务器" @click="openOffice">本机 Office</button>
         <a v-if="originalUrl" :href="originalUrl" target="_blank" rel="noopener noreferrer" :download="name" title="下载原文件" aria-label="下载原文件"><Download :size="19" /></a>
         <button type="button" title="关闭" aria-label="关闭预览" @click="emit('close')"><X :size="20" /></button>
       </div></header>
@@ -13,7 +14,7 @@
       </nav>
       <nav v-if="kind === 'xlsx' && sheets.length" class="preview-sheets" aria-label="工作表"><button v-for="(sheet, index) in sheets" :key="index" :class="{ active: sheetIndex === index }" @click="sheetIndex = index">{{ sheet.name }}</button></nav>
       <div ref="body" class="preview-body" :class="{ 'is-spreadsheet': kind === 'xlsx' }" :aria-busy="loading || rendering">
-        <p v-if="loading" class="preview-state" role="status">正在读取文件…</p>
+        <p v-if="loading" class="preview-state" role="status">{{ loadingMessage }}</p>
         <p v-else-if="error" class="preview-state" role="alert">{{ error }}</p>
         <template v-else>
           <div v-if="kind === 'image'" class="preview-image"><img :src="url" :alt="name" :style="{ transform: `scale(${scale}) rotate(${rotation}deg)` }" @error="error = '图片读取失败，请下载查看'"></div>
@@ -52,14 +53,41 @@ const emit = defineEmits(['close']);
 const dialog = ref(), body = ref(), canvas = ref();
 const name = ref(''), url = ref(''), kind = ref(''), loading = ref(true), error = ref('');
 const originalUrl = ref('');
+const officeFileId = ref(0), loadingMessage = ref('正在读取文件…');
+const office = window.__PRACTICAL_DESKTOP__?.officePreview;
 const textBytes = shallowRef(null), extension = ref('');
 const scale = ref(1), rotation = ref(0), page = ref(1), pages = ref(0), rendering = ref(false);
 const query = ref(''), searchStatus = ref(''), searching = ref(false), documentHtml = ref('');
 const sheets = ref([]), sheetIndex = ref(0);
 const controller = new AbortController();
 const limit = 30 * 1024 * 1024;
-let pdfTask, pdf, renderTask, disposed = false, renderSequence = 0, resizeObserver, spreadsheetWorker;
-const timeout = setTimeout(() => { if (loading.value) { controller.abort(); spreadsheetWorker?.terminate(); error.value = '读取超时，请重新打开或下载原文件'; loading.value = false; } }, 60000);
+let pdfTask, pdf, renderTask, disposed = false, renderSequence = 0, resizeObserver, spreadsheetWorker, officeRequest;
+let timeout;
+function cancelOffice() {
+  if (officeRequest) office?.('convert', { ...officeRequest, cancel: true }).catch(() => {});
+}
+function loadingTimeout(milliseconds = 60000) {
+  clearTimeout(timeout);
+  timeout = setTimeout(() => {
+    if (loading.value) { cancelOffice(); controller.abort(); spreadsheetWorker?.terminate(); error.value = '读取超时，请重新打开或下载原文件'; loading.value = false; }
+  }, milliseconds);
+}
+loadingTimeout();
+
+async function officeOperation(action) {
+  officeRequest = { file_id: officeFileId.value, request_id: crypto.randomUUID() };
+  try { return await office(action, officeRequest, controller.signal); }
+  catch (failure) { cancelOffice(); throw failure; }
+  finally { if (!disposed) officeRequest = null; }
+}
+async function openOffice() {
+  if (loading.value || !officeFileId.value || disposed) return;
+  if (controller.signal.aborted) { error.value = '预览已取消或超时，请关闭后重新打开'; return; }
+  loading.value = true; error.value = ''; loadingMessage.value = '正在准备本机 Office 文档副本…'; loadingTimeout(90000);
+  try { await officeOperation('open'); if (!disposed) emit('close'); }
+  catch (failure) { if (!disposed) error.value = failure.message || '本机 Office 打开失败，请下载查看'; }
+  finally { clearTimeout(timeout); if (!disposed) loading.value = false; }
+}
 
 /** 读取受限大小的文件内容。 */
 async function readBytes(maxBytes = limit) {
@@ -92,6 +120,28 @@ async function load() {
     const suffix = new URL(address).pathname.split('.').pop().toLowerCase();
     extension.value = types[ext] ? ext : suffix;
     kind.value = types[ext] || types[suffix] || '';
+    let convertedBytes;
+    if (office && id && ['docx', 'xlsx'].includes(ext) && new URL(address).origin === new URL(props.adapter.backendUrl('/')).origin) {
+      officeFileId.value = id;
+      const settings = await office('status', {}, controller.signal);
+      if (disposed) return;
+      if (settings.mode === 'native') {
+        loadingMessage.value = '正在准备本机 Office 文档副本…'; loadingTimeout(90000);
+        await officeOperation('open');
+        if (!disposed) emit('close');
+        return;
+      }
+      if (settings.mode === 'pdf' && ext === 'docx') {
+        loadingMessage.value = '正在本机转换 PDF，请稍候…'; loadingTimeout(300000);
+        const result = await officeOperation('convert');
+        if (disposed) return;
+        if (typeof result.pdf_base64 !== 'string' || result.pdf_base64.length > Math.ceil(limit / 3) * 4) throw new Error('本机 PDF 转换结果无效或超过 30 MB');
+        const binary = atob(result.pdf_base64);
+        convertedBytes = Uint8Array.from(binary, character => character.charCodeAt(0));
+        if (!convertedBytes.length || convertedBytes.length > limit) throw new Error('本机 PDF 转换结果无效或超过 30 MB');
+        kind.value = 'pdf';
+      }
+    }
     if (['text', 'markdown', 'csv'].includes(kind.value)) {
       if (Number(file.blob?.size || file.size) > 5 * 1024 * 1024) throw new Error('文本超过 5 MB，请下载查看');
       const bytes = await readBytes(5 * 1024 * 1024);
@@ -99,7 +149,7 @@ async function load() {
     }
     if (['pdf', 'docx', 'xlsx'].includes(kind.value)) {
       if (Number(file.blob?.size || file.size) > limit) throw new Error('文档超过 30 MB，请下载查看');
-      const bytes = await readBytes();
+      const bytes = convertedBytes || await readBytes();
       if (disposed) return;
       if (kind.value === 'pdf') {
         const engine = await import('pdfjs-dist');
@@ -173,9 +223,9 @@ function keyboard(event) {
 }
 watch([page, scale], renderPage);
 onMounted(() => { dialog.value.focus(); load(); resizeObserver = new ResizeObserver(() => { if (pdf) renderPage(); }); resizeObserver.observe(body.value); });
-onBeforeUnmount(() => { disposed = true; controller.abort(); spreadsheetWorker?.terminate(); clearTimeout(timeout); resizeObserver?.disconnect(); renderTask?.cancel(); pdfTask?.destroy()?.catch(() => {}); });
+onBeforeUnmount(() => { disposed = true; cancelOffice(); controller.abort(); spreadsheetWorker?.terminate(); clearTimeout(timeout); resizeObserver?.disconnect(); renderTask?.cancel(); pdfTask?.destroy()?.catch(() => {}); });
 </script>
 
 <style scoped>
-.file-preview-mask{position:fixed;inset:var(--desktop-top-inset, 0px) 0 0;z-index:21000;background:rgba(18,24,34,.5);display:grid;place-items:center;padding:20px;box-sizing:border-box}.file-preview{width:min(1180px,100%);height:min(900px,100%);max-height:100%;display:flex;flex-direction:column;overflow:hidden;background:var(--surface, #fff);color:var(--text, #273243);border-radius:8px;box-shadow:0 16px 60px #0003;outline:none}.file-preview header{display:flex;align-items:center;justify-content:space-between;padding:12px 18px;border-bottom:1px solid var(--line, #e3e7ed);gap:16px}.file-preview header strong{font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.preview-actions,.preview-tools{display:flex;align-items:center;gap:8px}.file-preview button,.preview-actions a{display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;min-width:34px;height:34px;padding:0 8px;border:0;border-radius:5px;background:transparent;color:inherit;cursor:pointer;font:inherit}.file-preview button:hover,.preview-actions a:hover{background:var(--surface-2, #e9eff8)}.file-preview button:disabled{opacity:.35;cursor:default}.preview-tools{padding:8px 14px;border-bottom:1px solid var(--line, #e3e7ed);flex-wrap:wrap;font-size:12px}.preview-search{display:flex;align-items:center;margin-left:auto;gap:4px}.preview-search input{border:1px solid var(--line, #d8dee7);color:var(--text, #273243);background:var(--surface, #fff);border-radius:5px;min-width:0;width:130px;padding:7px;font:inherit}.preview-body{flex:1;min-height:0;overflow:auto;background:var(--surface-2, #edf0f4);position:relative}.preview-body.is-spreadsheet{background:#fff}.preview-state{padding:48px 24px;text-align:center;font-size:14px}.preview-image{height:100%;display:grid;place-items:center;padding:16px;box-sizing:border-box;overflow:auto}.preview-image img{max-width:100%;max-height:100%;object-fit:contain;transform-origin:center}.preview-body video{display:block;width:100%;height:100%;background:#14171c}.preview-body audio{display:block;width:min(600px,90%);margin:80px auto}.preview-body canvas{display:block;margin:16px auto;background:white;box-shadow:0 1px 6px #0002}.preview-body iframe{width:100%;height:100%;border:0;display:block;background:white}.preview-sheets{display:flex;overflow-x:auto;padding:8px;gap:8px;border-bottom:1px solid #dce2ea}.preview-sheets button{white-space:nowrap;font-size:13px}.preview-sheets .active{color:var(--primary-ink, var(--primary, #136c52));background:var(--primary-soft, #e1f3eb)}.preview-spreadsheet{color:#273243;width:max-content;min-width:100%;min-height:100%;background:white;font-size:13px}.preview-spreadsheet-scroll{width:max-content;min-width:100%;padding-bottom:20px}.preview-spreadsheet-table{width:max-content;min-width:100%;border-collapse:collapse;table-layout:fixed;white-space:pre-wrap}.preview-spreadsheet-table th,.preview-spreadsheet-table td{border:1px solid #d8dee7;padding:5px 8px;min-width:48px;max-width:420px;overflow-wrap:anywhere;line-height:1.35}.preview-spreadsheet-table thead th{height:28px;padding:4px 8px;background:#f3f5f7;color:#5b6675;font-weight:500;text-align:center;position:sticky;top:0;z-index:2;white-space:nowrap}.preview-spreadsheet-table .preview-corner{left:0;z-index:4;background:#e8edf2}.preview-spreadsheet-table .preview-row-number-column{width:48px!important}.preview-spreadsheet-table .preview-row-number{width:48px;min-width:48px;padding:4px;background:#f3f5f7;color:#748094;font-weight:400;text-align:center;position:sticky;left:0;z-index:1;white-space:nowrap}.preview-spreadsheet-table td{background:#fff;vertical-align:middle}.spreadsheet-notice{margin:0;padding:10px 12px;color:#6a7380;border-bottom:1px solid #e0e4ea;position:sticky;left:0}.preview-spreadsheet p{padding:12px;color:#6a7380}@media(max-width:600px){.file-preview-mask{padding:0}.file-preview{width:100%;height:100%;height:calc(100dvh - var(--desktop-top-inset, 0px));border-radius:0;padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom);box-sizing:border-box}.file-preview header{padding:12px}.preview-tools{gap:3px;padding:6px}.preview-search{width:100%;margin:0}.preview-search input{flex:1}.preview-body{overscroll-behavior:contain}.preview-spreadsheet-table th,.preview-spreadsheet-table td{padding:5px 6px}}
+.file-preview-mask{position:fixed;inset:var(--desktop-top-inset, 0px) 0 0;z-index:21000;background:rgba(18,24,34,.5);display:grid;place-items:center;padding:20px;box-sizing:border-box}.file-preview{width:min(1180px,100%);height:min(900px,100%);max-height:100%;display:flex;flex-direction:column;overflow:hidden;background:var(--surface, #fff);color:var(--text, #273243);border-radius:8px;box-shadow:0 16px 60px #0003;outline:none}.file-preview header{display:flex;align-items:center;justify-content:space-between;padding:12px 18px;border-bottom:1px solid var(--line, #e3e7ed);gap:16px}.file-preview header strong{font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.preview-actions,.preview-tools{display:flex;align-items:center;gap:8px}.file-preview button,.preview-actions a{display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;min-width:34px;height:34px;padding:0 8px;border:0;border-radius:5px;background:transparent;color:inherit;cursor:pointer;font:inherit}.file-preview button:hover,.preview-actions a:hover{background:var(--surface-2, #e9eff8)}.file-preview button:disabled{opacity:.35;cursor:default}.preview-tools{padding:8px 14px;border-bottom:1px solid var(--line, #e3e7ed);flex-wrap:wrap;font-size:12px}.preview-search{display:flex;align-items:center;margin-left:auto;gap:4px}.preview-search input{border:1px solid var(--line, #d8dee7);color:var(--text, #273243);background:var(--surface, #fff);border-radius:5px;min-width:0;width:130px;padding:7px;font:inherit}.preview-body{flex:1;min-height:0;overflow:auto;background:var(--surface-2, #edf0f4);position:relative}.preview-body.is-spreadsheet{background:var(--surface, #fff)}.preview-state{padding:48px 24px;text-align:center;font-size:14px}.preview-image{height:100%;display:grid;place-items:center;padding:16px;box-sizing:border-box;overflow:auto}.preview-image img{max-width:100%;max-height:100%;object-fit:contain;transform-origin:center}.preview-body video{display:block;width:100%;height:100%;background:#14171c}.preview-body audio{display:block;width:min(600px,90%);margin:80px auto}.preview-body canvas{display:block;margin:16px auto;background:white;box-shadow:0 1px 6px #0002}.preview-body iframe{width:100%;height:100%;border:0;display:block;background:white}.preview-sheets{display:flex;overflow-x:auto;padding:8px;gap:8px;border-bottom:1px solid var(--line, #dce2ea)}.preview-sheets button{white-space:nowrap;font-size:13px}.preview-sheets .active{color:var(--primary-ink, var(--primary, #136c52));background:var(--primary-soft, #e1f3eb)}.preview-spreadsheet{color:#273243;width:max-content;min-width:100%;min-height:100%;background:white;font-size:13px}.preview-spreadsheet-scroll{width:max-content;min-width:100%;padding-bottom:20px}.preview-spreadsheet-table{width:max-content;min-width:100%;border-collapse:collapse;table-layout:fixed;white-space:pre-wrap}.preview-spreadsheet-table th,.preview-spreadsheet-table td{border:1px solid #d8dee7;padding:5px 8px;min-width:48px;max-width:420px;overflow-wrap:anywhere;line-height:1.35}.preview-spreadsheet-table thead th{height:28px;padding:4px 8px;background:#f3f5f7;color:#5b6675;font-weight:500;text-align:center;position:sticky;top:0;z-index:2;white-space:nowrap}.preview-spreadsheet-table .preview-corner{left:0;z-index:4;background:#e8edf2}.preview-spreadsheet-table .preview-row-number-column{width:48px!important}.preview-spreadsheet-table .preview-row-number{width:48px;min-width:48px;padding:4px;background:#f3f5f7;color:#748094;font-weight:400;text-align:center;position:sticky;left:0;z-index:1;white-space:nowrap}.preview-spreadsheet-table td{background:#fff;vertical-align:middle}.spreadsheet-notice{margin:0;padding:10px 12px;color:#6a7380;border-bottom:1px solid #e0e4ea;position:sticky;left:0}.preview-spreadsheet p{padding:12px;color:#6a7380}@media(max-width:600px){.file-preview-mask{padding:0}.file-preview{width:100%;height:100%;height:calc(100dvh - var(--desktop-top-inset, 0px));border-radius:0;padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom);box-sizing:border-box}.file-preview header{padding:12px}.preview-tools{gap:3px;padding:6px}.preview-search{width:100%;margin:0}.preview-search input{flex:1}.preview-body{overscroll-behavior:contain}.preview-spreadsheet-table th,.preview-spreadsheet-table td{padding:5px 6px}}
 </style>

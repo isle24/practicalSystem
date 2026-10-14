@@ -1,16 +1,17 @@
 <template>
   <el-config-provider :locale="zhCn" :z-index="10000">
-  <DesktopTitlebar v-if="isDesktopShell" :auto-hide="desktopBarPreferences.state.autoHideStatusBar" :active="isLoggedIn && !pendingSsoResume && !wechatBlocked && !startupState.loading" :menu-open="nativeProfileMenuOpen" :maximized="nativeWindowState.maximized" :controls="controlNativeWindow" @window-action="closeDesktopTransient" @error="message => ElMessage.error(message)">
+  <DesktopTitlebar v-if="isDesktopShell" :auto-hide="desktopBarPreferences.state.autoHideStatusBar" :active="isLoggedIn && !desktopIsLocked && !pendingSsoResume && !wechatBlocked && !startupState.loading" :menu-open="nativeProfileMenuOpen" :maximized="nativeWindowState.maximized" :controls="controlNativeWindow" @window-action="closeDesktopTransient" @error="message => ElMessage.error(message)">
       <div v-if="!pendingSsoResume" class="taskbar-status" aria-label="系统状态">
         <ClientDownloadButton compact />
-        <ProfileMenu ref="nativeProfileMenu" :name="operatorName" :role="roleText" :avatar="profileState.form.avatar" :avatar-style="topAvatarStyle" :version="clientVersion" :accounts="switchableLoginAccounts" :account-name="switchAccountName" :account-meta="switchAccountMeta" :switching="switchAccountState.loading || switchAccountsLoading" :busy="loginState.loading" :error="switchAccountState.message" :context-key="permissionState.context.account_id" placement="bottom" @open-change="handleNativeProfileMenuOpen" @settings="handleOperatorClick" @switch="switchLoginAccount" @logout="submitLogout" />
+        <ProfileMenu ref="nativeProfileMenu" :can-lock="desktopLock.supported" @lock="lockClient" :name="operatorName" :role="roleText" :avatar="profileState.form.avatar" :avatar-style="topAvatarStyle" :version="clientVersion" :accounts="switchableLoginAccounts" :account-name="switchAccountName" :account-meta="switchAccountMeta" :switching="switchAccountState.loading || switchAccountsLoading" :busy="loginState.loading" :error="switchAccountState.message" :context-key="permissionState.context.account_id" placement="bottom" @open-change="handleNativeProfileMenuOpen" @settings="handleOperatorClick" @switch="switchLoginAccount" @logout="submitLogout" />
         <span class="taskbar-clock">{{ clock }}</span>
       </div>
   </DesktopTitlebar>
+  <div class="desktop-lock-content" :class="{ 'desktop-lock-content-hidden': desktopIsLocked }" :inert="desktopIsLocked ? true : undefined" :aria-hidden="desktopIsLocked ? 'true' : undefined">
   <main v-if="startupState.loading || startupState.error" class="startup-shell" :class="{ native: isDesktopShell }"><section><strong>{{ startupState.error ? '连接未完成' : '正在连接并加载登录会话...' }}</strong><span v-if="startupState.error">{{ startupState.error }}</span><el-button v-if="startupState.error" type="primary" @click="initializeSession">重试</el-button></section></main>
-  <main v-else-if="!isLoggedIn || pendingSsoResume" class="login-shell" :class="{ 'login-shell-native': isDesktopShell }" :style="loginPageStyle">
+  <main v-else-if="!isLoggedIn || pendingSsoResume" class="login-shell" :class="{ 'login-shell-native': isDesktopShell }" :style="loginPageStyle" :inert="passwordRecoveryVisible ? true : undefined" :aria-hidden="passwordRecoveryVisible ? 'true' : undefined">
     <section class="login-panel" :class="{ 'login-panel-scan': loginMethod === 'wechat' }">
-      <LoginModeToggle v-model:mode="loginMethod" />
+      <LoginModeToggle v-model:mode="loginMethod" :disabled="loginState.loading || registerState.loading || loginCaptcha.state.loading" />
       <header>
         <img v-if="loginPageState.school_logo_url" class="login-school-logo" :src="backendUrl(loginPageState.school_logo_url)" :alt="loginSchoolName">
         <Building2 v-else :size="32" />
@@ -21,17 +22,23 @@
       </header>
       <h1 v-if="loginMethod === 'password'" class="login-view-title">账号密码登录</h1>
       <p v-if="pendingSsoResume">请重新使用密码或企业微信扫码登录，完成应用授权。</p>
-      <WechatLogin v-if="loginMethod === 'wechat'" :request="request" :public-origin="publicSchoolOrigin" @logged-in="onFreshAuthentication" />
-      <template v-else>
+      <WechatLogin v-if="loginMethod === 'wechat' && !passwordRecoveryVisible" :request="request" :public-origin="publicSchoolOrigin" @logged-in="onFreshAuthentication" />
+      <div v-else-if="nativePasswordEntry" class="native-password-entry">
+        <p>请在客户端登录窗口校验账号密码。</p>
+        <button type="button" class="login-submit-button" :disabled="loginState.loading" @click="openNativePasswordLogin">打开客户端登录</button>
+      </div>
+      <template v-else-if="loginMethod === 'password'">
       <label>
         <span>账号</span>
-        <input ref="loginNameInput" v-model="loginForm.login_name" autocomplete="username" placeholder="请输入账号">
+        <input ref="loginNameInput" v-model="loginForm.login_name" :disabled="loginState.loading || loginCaptcha.state.loading" autocomplete="username" placeholder="请输入账号">
       </label>
       <label>
         <span>密码</span>
-        <input v-model="loginForm.password" autocomplete="current-password" placeholder="请输入密码" type="password">
+        <input v-model="loginForm.password" :disabled="loginState.loading || loginCaptcha.state.loading" autocomplete="current-password" placeholder="请输入密码" type="password">
       </label>
-      <button type="button" class="login-submit-button" :disabled="loginState.loading" @click="submitLogin">
+      <LoginCaptchaInput v-if="loginCaptcha.state.required" v-model="loginCaptcha.state.code" :captcha="loginCaptcha.state.captcha" :busy="loginState.loading || loginCaptcha.state.loading" @refresh="loginCaptcha.refresh" />
+      <small v-if="loginCaptcha.state.error" role="alert">{{ loginCaptcha.state.error }}</small>
+      <button type="button" class="login-submit-button" :disabled="loginState.loading || loginCaptcha.state.loading" @click="submitLogin">
         <LogIn :size="17" />
         登录
       </button>
@@ -64,6 +71,7 @@
         </div>
       </div>
       </template>
+      <button type="button" class="login-secondary-button" :disabled="loginState.loading || registerState.loading" @click="openPasswordRecovery">忘记密码</button>
       <small v-if="loginState.message">{{ loginState.message }}</small>
       <small v-if="registerState.message">{{ registerState.message }}</small>
       <ClientDownloadButton />
@@ -215,6 +223,7 @@
             </template>
             <template #accounts>
               <AccountLinks :session-key="accountImportSessionKey" :current-account-id="Number(permissionState.context.account_id || 0)" @changed="loadSwitchableAccounts" @switch="switchLoginAccount" />
+              <DesktopLockSettings v-if="desktopLock.supported" :lock="desktopLock" @close="profileSection = 'general'" />
               <CredentialVaultSettings v-if="isDesktopClient" :key="accountImportSessionKey" :session-key="accountImportSessionKey" />
             </template>
             <template #notifications>
@@ -2239,6 +2248,7 @@
                   <DataListPanel
                     :columns="userListColumns"
                     :filters="userListFilters"
+                    :extra-filter-keys="['dep_id', 'profession_id', 'class_id']"
                     :filter-values="userAdminState.filters"
                     :loading="userAdminState.loading"
                     :pagination="userAdminState.pagination"
@@ -2249,6 +2259,13 @@
                     @reset="resetUserFilters"
                     @search="loadUserAccounts(1)"
                   >
+                    <template #filters>
+                      <span v-if="userAdminState.filterOptionsError" role="alert">{{ userAdminState.filterOptionsError }}</span>
+                      <RemoteAcademicSelect v-if="['teacher', 'student'].includes(userAdminState.filters.role_type)" :model-value="userAdminState.filters.dep_id" type="department" :role-type="userAdminState.filters.role_type" :session-key="userFilterSessionKey" label="学院" @update:model-value="value => setUserFilter({ key: 'dep_id', value })" />
+                      <RemoteAcademicSelect v-if="userAdminState.filters.role_type === 'student'" :model-value="userAdminState.filters.profession_id" type="profession" role-type="student" :dep-id="userAdminState.filters.dep_id" :session-key="userFilterSessionKey" label="专业" @update:model-value="value => setUserFilter({ key: 'profession_id', value })" />
+                      <RemoteAcademicSelect v-if="userAdminState.filters.role_type === 'student'" :model-value="userAdminState.filters.class_id" type="class" role-type="student" :dep-id="userAdminState.filters.dep_id" :profession-id="userAdminState.filters.profession_id" :session-key="userFilterSessionKey" label="班级" @update:model-value="value => setUserFilter({ key: 'class_id', value })" />
+                      <span v-if="!['teacher', 'student'].includes(userAdminState.filters.role_type)" class="user-filter-hint">学院、专业、班级筛选请先选择教师或学生</span>
+                    </template>
                     <template #toolbar>
                       <el-button v-if="canManageConfig" type="primary" :icon="Plus" @click="openUserDialog()">
                         新增用户
@@ -2715,7 +2732,8 @@
                         class="rich-editor"
                         contenteditable="true"
                         @input="syncGuideEditor"
-                        v-html="guideAdminState.editing.content"
+                        @paste="pasteGuideContent"
+                        @drop.prevent
                       />
                       <footer>
                         <el-button @click="closeGuideAdminDialog">取消</el-button>
@@ -2760,7 +2778,7 @@
                 <SsoClientPanel v-else-if="win.module.id === 'config' && win.panel === 'ssoClients' && canManageConfig" />
                 <WorkflowSettingsPanel v-else-if="win.module.id === 'config' && win.panel === 'workflowSettings' && canManageConfig" />
                 <MessageChannelSettings v-else-if="win.module.id === 'config' && win.panel === 'messageChannels' && canManageConfig" />
-                <ReleaseManager v-else-if="win.module.id === 'config' && win.panel === 'releases'" />
+                <ReleaseManager v-else-if="win.module.id === 'config' && win.panel === 'releases' && canManageConfig" />
                 <DatabaseSchemaPanel v-else-if="win.module.id === 'config' && win.panel === 'databaseSchema' && canManageConfig" :session-key="[noteSessionKey, permissionState.context.school_id, permissionState.context.role_type].join(':')" />
 
                 <div v-else-if="win.module.source === 'menu'" class="module-content-panel menu-module-panel">
@@ -4053,7 +4071,7 @@
         <div class="guide-content rich-content">
           <el-alert v-if="guideState.message" type="warning" :closable="false" :title="guideState.message" />
           <div v-if="guideState.loading" class="guide-loading">正在读取操作说明...</div>
-          <article v-else v-html="guideState.content" />
+          <article v-else v-html="sanitizeRichHtml(guideState.content)" />
         </div>
         <footer>
           <el-button type="primary" @click="closeGuide">知道了</el-button>
@@ -4193,7 +4211,7 @@
       </div>
       <div v-if="!isDesktopShell" class="taskbar-status" aria-label="系统状态">
         <ClientDownloadButton compact />
-        <ProfileMenu ref="webProfileMenu" avatar-only :name="operatorName" :role="roleText" :avatar="profileState.form.avatar" :avatar-style="topAvatarStyle" :version="clientVersion" :accounts="switchableLoginAccounts" :account-name="switchAccountName" :account-meta="switchAccountMeta" :switching="switchAccountState.loading || switchAccountsLoading" :busy="loginState.loading" :error="switchAccountState.message" :context-key="permissionState.context.account_id" placement="top" @open-change="handleWebProfileMenuOpen" @settings="handleOperatorClick" @switch="switchLoginAccount" @logout="submitLogout" />
+        <ProfileMenu ref="webProfileMenu" :can-lock="desktopLock.supported" @lock="lockClient" avatar-only :name="operatorName" :role="roleText" :avatar="profileState.form.avatar" :avatar-style="topAvatarStyle" :version="clientVersion" :accounts="switchableLoginAccounts" :account-name="switchAccountName" :account-meta="switchAccountMeta" :switching="switchAccountState.loading || switchAccountsLoading" :busy="loginState.loading" :error="switchAccountState.message" :context-key="permissionState.context.account_id" placement="top" @open-change="handleWebProfileMenuOpen" @settings="handleOperatorClick" @switch="switchLoginAccount" @logout="submitLogout" />
         <span class="taskbar-clock">{{ clock }}</span>
       </div>
     </footer>
@@ -4239,13 +4257,20 @@
     <OperationDialog :visible="Boolean(currentExternalItem)" title="外部网页" @close="currentExternalItem = null"><EmbeddedExternalPage v-if="currentExternalItem" :item="currentExternalItem" @close="currentExternalItem = null" /></OperationDialog>
     <DesktopUpdateStatus />
     <ReleaseNotice v-if="isLoggedIn && !wechatBlocked" :key="noteSessionKey" :request="request" :session-key="noteSessionKey" @open="openModule(modules.find(item => item.id === 'releaseNotes'))" />
+    <Teleport to="body">
+      <div v-if="passwordRecoveryVisible && !desktopIsLocked" class="password-recovery-mask" role="dialog" aria-modal="true" aria-label="找回密码" @keydown.esc.prevent="passwordRecoveryVisible = false" @click.self="passwordRecoveryVisible = false">
+        <PasswordRecovery :request="request" :public-origin="publicSchoolOrigin" @close="passwordRecoveryVisible = false" @done="passwordRecovered" />
+      </div>
+    </Teleport>
+  </div>
+  <DesktopLockScreen v-if="desktopLock.supported && desktopIsLocked && desktopLock.initialized" :lock="desktopLockDisplay" :public-origin="publicSchoolOrigin" />
   </el-config-provider>
 </template>
 
 <script setup>
 import { useWechatBinding } from '../../shared/useWechatBinding';
 import WechatBindingGate from '../../shared/components/WechatBindingGate.vue';
-import { previewFile } from '../../shared/filePreview';
+import { closeFilePreview, previewFile } from '../../shared/filePreview';
 import PreviewCacheSettings from './components/PreviewCacheSettings.vue';
 import ClientDownloadButton from './components/ClientDownloadButton.vue';
 import SchoolSettingsPanel from './components/SchoolSettingsPanel.vue';
@@ -4263,7 +4288,12 @@ import { useNativeWindowState } from './composables/useNativeWindowState';
 import { useLocalTheme } from './composables/useLocalTheme';
 import { useDesktopBarPreferences } from './composables/useDesktopBarPreferences';
 import { useDesktopOpenPreferences } from './composables/useDesktopOpenPreferences';
+import { sanitizeRichHtml } from '../../shared/richHtml';
 import DesktopBarSettings from './components/DesktopBarSettings.vue';
+import DesktopLockScreen from './components/DesktopLockScreen.vue';
+import DesktopLockSettings from './components/DesktopLockSettings.vue';
+import { useDesktopLock } from './composables/useDesktopLock';
+import PasswordRecovery from '../../shared/components/PasswordRecovery.vue';
 import ThemeSettings from './components/profile/ThemeSettings.vue';
 import ProfileSettingsLayout from './components/profile/ProfileSettingsLayout.vue';
 import AccountLinks from './components/profile/AccountLinks.vue';
@@ -4335,6 +4365,8 @@ import BaseVisitPanel from './components/BaseVisitPanel.vue';
 import BaseVisitRecordPanel from './components/BaseVisitRecordPanel.vue';
 import DesktopUpdateStatus from './components/DesktopUpdateStatus.vue';
 import ReleaseNotesPanel from '../../shared/components/ReleaseNotesPanel.vue';
+import LoginCaptchaInput from '../../shared/components/LoginCaptchaInput.vue';
+import { useLoginCaptcha } from '../../shared/composables/useLoginCaptcha';
 import AssistantPanel from '../../shared/components/AssistantPanel.vue';
 import { useRealtimeMessages } from '../../shared/useRealtimeMessages';
 import ReleaseNotice from '../../shared/components/ReleaseNotice.vue';
@@ -4346,6 +4378,7 @@ import DesktopLauncher from './components/DesktopLauncher.vue';
 import AdaptiveDesktopGrid from './components/AdaptiveDesktopGrid.vue';
 import AppIcon from './components/AppIcon.vue';
 import DataListPanel from './components/DataListPanel.vue';
+import RemoteAcademicSelect from './components/RemoteAcademicSelect.vue';
 import PracticePeriodManager from './components/PracticePeriodManager.vue';
 import PracticeScheduleBoard from './components/PracticeScheduleBoard.vue';
 import DocCenter from './components/DocCenter.vue';
@@ -4375,7 +4408,7 @@ import { DEFAULT_DESKTOP_MODULE_IDS, useDesktopLauncher } from './composables/us
 import { usePermissions } from './composables/usePermissions';
 import { buildLaunchableMenuModules, mergeLaunchableModules as mergeMenuModules } from './utils/menuModules';
 import { tableSequence } from './utils/table';
-import { backendUrl, frontendPublicUrl, request, waitForPendingRefresh } from './api/client';
+import { backendUrl, frontendPublicUrl, request, waitForPendingRefresh, invalidateSessionRequests } from './api/client';
 import {
   changeOwnPassword,
   changeAdminAccountStatus,
@@ -4385,6 +4418,7 @@ import {
   exportInternshipImplementationPdf,
   fetchAdminAccountDetail,
   fetchAdminAccounts,
+  fetchUserFilterOptions,
   fetchAdminMenus,
   fetchAdminOptions,
   fetchAdminRoles,
@@ -4530,7 +4564,13 @@ import {
   unbindAdminWechat,
 } from './api/system';
 
-const { state: permissionState, hasPermission, load } = usePermissions();
+const { state: permissionState, hasPermission, load, invalidateLoad: invalidatePermissionLoad } = usePermissions();
+const desktopLock = useDesktopLock();
+const lockRefreshing = ref(false);
+const desktopIsLocked = computed(() => desktopLock.supported && (desktopLock.locked || lockRefreshing.value));
+const desktopLockDisplay = computed(() => ({ ...desktopLock, locked: desktopIsLocked.value, busy: desktopLock.busy || lockRefreshing.value }));
+const passwordRecoveryVisible = ref(false);
+let unlockVersion = 0;
 const keyword = ref('');
 const clock = ref('');
 const loginNameInput = ref(null);
@@ -4601,6 +4641,7 @@ const loginState = reactive({
   loading: false,
   message: '',
 });
+const loginCaptcha = useLoginCaptcha({ loginName: () => loginForm.login_name, request });
 const registerForm = reactive({
   role_type: 'student',
   name: '',
@@ -4808,6 +4849,8 @@ const guideAdminState = reactive({
   message: '',
 });
 const guideEditorRef = ref(null);
+let guideReadVersion = 0;
+let guideAdminVersion = 0;
 const roleTreeRef = ref(null);
 const treeProps = {
   label: 'name',
@@ -4868,10 +4911,16 @@ const practicePanelRequests = new Map();
 
 const userAdminState = reactive({
   items: [],
+  roleOptions: [],
+  filterOptionsError: '',
   filters: {
     keyword: '',
     role_type: '',
     status: 'all',
+    wechat_bound: 'all',
+    dep_id: '',
+    profession_id: '',
+    class_id: '',
   },
   editing: emptyUserForm(),
   dialogVisible: false,
@@ -5468,10 +5517,7 @@ const userListFilters = computed(() => [
     key: 'role_type',
     label: '角色',
     type: 'select',
-    options: uniqueRoleOptions().map(role => ({
-      label: role.name || roleTypeNames[role.role_type] || role.role_type,
-      value: role.role_type,
-    })),
+    options: userAdminState.roleOptions,
   },
   {
     key: 'status',
@@ -5483,7 +5529,21 @@ const userListFilters = computed(() => [
       { label: '停用', value: 'disabled' },
     ],
   },
+  {
+    key: 'wechat_bound',
+    label: '企业微信',
+    type: 'select',
+    options: [{ label: '全部绑定状态', value: 'all' }, { label: '已绑定', value: 'bound' }, { label: '未绑定', value: 'unbound' }],
+  },
 ]);
+const userFilterSessionKey = computed(() => JSON.stringify([
+  permissionState.context.school_database_id, permissionState.context.account_id,
+  permissionState.context.role_id, permissionState.context.role_type,
+  permissionState.context.organization_scopes, permissionState.dataScope,
+]));
+let userFilterRolesRequest = 0;
+let userAccountsRequest = 0;
+let userAccountsController = null;
 
 const defaultInternshipReviewRules = {
   arrangement: {
@@ -5583,7 +5643,7 @@ const notebookRefs = new Map();
 const noteSessionKey = computed(() => [window.location.origin, permissionState.context.school_database_id, permissionState.context.account_id].join(':'));
 const assistantVisible = ref(false);
 const { status: realtimeStatus } = useRealtimeMessages({
-  sessionKey: () => permissionState.context.account_id && !wechatBlocked.value ? noteSessionKey.value : '',
+  sessionKey: () => permissionState.context.account_id && !desktopIsLocked.value && !wechatBlocked.value ? noteSessionKey.value : '',
   request,
   backendOrigin: backendUrl('/'),
   invalidate: async (topic) => {
@@ -5832,6 +5892,7 @@ const currentExternalItem = ref(null);
 let messagePreviewVersion = 0;
 let clockTimer;
 const isLoggedIn = computed(() => Boolean(permissionState.context.account_id));
+const nativePasswordEntry = computed(() => isDesktopClient && loginMethod.value === 'password' && !pendingSsoResume.value);
 const currentRoleType = computed(() => permissionState.context.role_type || '');
 const isStudentRole = computed(() => currentRoleType.value === 'student');
 const isTeacherRole = computed(() => currentRoleType.value === 'teacher');
@@ -8014,6 +8075,10 @@ function panelHref(win, panel) {
 }
 
 async function openGuide(win) {
+  if (workspaceFrozen.value || !isLoggedIn.value) return;
+  const version = ++guideReadVersion;
+  const source = workspaceContextKey.value;
+  const current = () => version === guideReadVersion && source === workspaceContextKey.value && !workspaceFrozen.value;
   guideState.title = `${win.module.name}操作说明`;
   guideState.content = fallbackGuideContent(win);
   guideState.message = '';
@@ -8021,6 +8086,7 @@ async function openGuide(win) {
   guideState.visible = true;
   try {
     const data = await fetchOperationGuide(win.module.id);
+    if (!current()) return;
     if (data.guide?.title) {
       guideState.title = data.guide.title;
     }
@@ -8028,13 +8094,15 @@ async function openGuide(win) {
       guideState.content = data.guide.content;
     }
   } catch (error) {
-    guideState.message = error.message;
+    if (current()) guideState.message = error.message;
   } finally {
-    guideState.loading = false;
+    if (current()) guideState.loading = false;
   }
 }
 
 function closeGuide() {
+  guideReadVersion++;
+  guideState.loading = false;
   guideState.visible = false;
 }
 
@@ -8143,7 +8211,7 @@ function guideContentPreview(content) {
 
 function stripHtml(content) {
   const div = document.createElement('div');
-  div.innerHTML = content || '';
+  div.innerHTML = sanitizeRichHtml(content);
   return div.textContent || div.innerText || '';
 }
 
@@ -8156,26 +8224,31 @@ function guideTemplateHtml(title = '操作说明') {
 }
 
 async function loadGuideAdminItems(force = false) {
-  if (!canManageConfig.value || guideAdminState.loading) {
+  if (workspaceFrozen.value || !canManageConfig.value || guideAdminState.loading) {
     return;
   }
   if (!force && guideAdminState.items.length) {
     return;
   }
 
+  const version = ++guideAdminVersion;
+  const source = workspaceContextKey.value;
+  const current = () => version === guideAdminVersion && source === workspaceContextKey.value && !workspaceFrozen.value;
   guideAdminState.loading = true;
   guideAdminState.message = '';
   try {
     const data = await fetchOperationGuides();
+    if (!current()) return;
     guideAdminState.items = data.items || [];
   } catch (error) {
-    guideAdminState.message = error.message;
+    if (current()) guideAdminState.message = error.message;
   } finally {
-    guideAdminState.loading = false;
+    if (current()) guideAdminState.loading = false;
   }
 }
 
 function openGuideAdminDialog(item = null) {
+  if (workspaceFrozen.value || guideAdminState.loading || !hasPermission('guide:save')) return;
   if (!item) {
     guideAdminState.selected = null;
     guideAdminState.editing = {
@@ -8214,7 +8287,7 @@ function defaultGuideModuleKey() {
 function syncGuideEditorDom() {
   const editor = activeGuideEditor();
   if (editor && editor.innerHTML !== guideAdminState.editing.content) {
-    editor.innerHTML = guideAdminState.editing.content || '';
+    editor.innerHTML = sanitizeRichHtml(guideAdminState.editing.content);
   }
 }
 
@@ -8225,7 +8298,15 @@ function activeGuideEditor() {
 
 function syncGuideEditor() {
   const editor = activeGuideEditor();
-  guideAdminState.editing.content = editor?.innerHTML || '';
+  guideAdminState.editing.content = sanitizeRichHtml(editor?.innerHTML);
+}
+
+function pasteGuideContent(event) {
+  event.preventDefault();
+  const html = event.clipboardData?.getData('text/html');
+  if (html) document.execCommand('insertHTML', false, sanitizeRichHtml(html));
+  else document.execCommand('insertText', false, event.clipboardData?.getData('text/plain') || '');
+  syncGuideEditor();
 }
 
 function applyGuideFormat(command) {
@@ -8256,11 +8337,14 @@ function insertGuideTemplate() {
 }
 
 async function saveGuideAdminItem() {
-  if (!guideAdminState.editing.module_key || !hasPermission('guide:save')) {
+  if (workspaceFrozen.value || guideAdminState.loading || !guideAdminState.editing.module_key || !hasPermission('guide:save')) {
     return;
   }
 
   syncGuideEditor();
+  const version = ++guideAdminVersion;
+  const source = workspaceContextKey.value;
+  const current = () => version === guideAdminVersion && source === workspaceContextKey.value && !workspaceFrozen.value;
   guideAdminState.loading = true;
   guideAdminState.message = '';
   try {
@@ -8270,29 +8354,34 @@ async function saveGuideAdminItem() {
       content: guideAdminState.editing.content,
       sort: Number(guideAdminState.editing.sort || 0),
     });
+    if (!current()) return;
     guideAdminState.items = data.items || [];
     guideAdminState.selected = guideAdminState.items.find(item => item.module_key === guideAdminState.editing.module_key) || null;
     guideAdminState.message = '已保存';
     closeGuideAdminDialog();
   } catch (error) {
-    guideAdminState.message = error.message;
+    if (current()) guideAdminState.message = error.message;
   } finally {
-    guideAdminState.loading = false;
+    if (current()) guideAdminState.loading = false;
   }
 }
 
 async function deleteGuideAdminItem(row) {
-  if (!row?.id || !hasPermission('guide:delete')) {
+  if (workspaceFrozen.value || guideAdminState.loading || !row?.id || !hasPermission('guide:delete')) {
     return;
   }
   if (!window.confirm(`确认删除「${guideModuleName(row.module_key)}」的操作说明？`)) {
     return;
   }
 
+  const version = ++guideAdminVersion;
+  const source = workspaceContextKey.value;
+  const current = () => version === guideAdminVersion && source === workspaceContextKey.value && !workspaceFrozen.value;
   guideAdminState.loading = true;
   guideAdminState.message = '';
   try {
     const data = await deleteOperationGuide(row.id);
+    if (!current()) return;
     guideAdminState.items = data.items || [];
     if (guideAdminState.selected?.id === row.id) {
       guideAdminState.selected = null;
@@ -8300,9 +8389,9 @@ async function deleteGuideAdminItem(row) {
     }
     guideAdminState.message = '已删除';
   } catch (error) {
-    guideAdminState.message = error.message;
+    if (current()) guideAdminState.message = error.message;
   } finally {
-    guideAdminState.loading = false;
+    if (current()) guideAdminState.loading = false;
   }
 }
 
@@ -8499,9 +8588,11 @@ function closeDesktopContextMenu() {
 }
 
 async function resetDesktopPositions() {
+  const source = workspaceContextKey.value;
   closeDesktopContextMenu();
   try {
     await ElMessageBox.confirm('恢复当前账号的桌面图标默认位置？已添加的快捷方式不会移除。', '恢复默认布局', { type: 'warning', confirmButtonText: '恢复', cancelButtonText: '取消' });
+    if (workspaceFrozen.value || source !== workspaceContextKey.value) return;
     desktopGridRef.value?.reset();
   } catch {
     // 取消时保留当前布局。
@@ -8696,6 +8787,7 @@ function toggleRegisterForm() {
 }
 
 function resetAuthenticatedWorkspace() {
+  closeFilePreview();
   resetAdminState();
   resetProfileState();
   resetMessageState();
@@ -8712,8 +8804,17 @@ async function withWorkspaceTransition(action) {
   workspaceFrozen.value = true;
   startupState.loading = true;
   startupState.error = '';
+  invalidateSessionRequests();
+  guideReadVersion++;
+  guideAdminVersion++;
+  guideState.visible = false;
+  guideState.loading = false;
+  guideAdminState.dialogVisible = false;
+  guideAdminState.loading = false;
+  internshipState.loading = false;
   workspaceSourceEpoch.value++;
   closeDesktopTransient();
+  closeFilePreview();
   try {
     await nextTick();
     await waitForPendingRefresh();
@@ -8773,14 +8874,18 @@ async function submitRegister() {
   } catch (error) {
     registerState.message = error.message;
   } finally {
+    registerForm.password = '';
     registerState.loading = false;
   }
 }
 
 async function submitLogin() {
-  if (loginState.loading) {
+  if (loginState.loading || loginCaptcha.state.loading) {
     return;
   }
+  if (nativePasswordEntry.value) { await openNativePasswordLogin(); return; }
+  if (!loginForm.login_name.trim() || !loginForm.password) { loginState.message = '请输入账号和密码'; return; }
+  if (!(await loginCaptcha.ready())) { loginState.message = loginCaptcha.state.error; return; }
   loginState.loading = true;
   loginState.message = '';
   try {
@@ -8789,12 +8894,16 @@ async function submitLogin() {
         login_name: loginForm.login_name,
         password: loginForm.password,
         client: 'WEB',
+        ...loginCaptcha.payload(),
       });
+      loginCaptcha.clear();
       await onFreshAuthentication();
     });
   } catch (error) {
+    loginCaptcha.accept(error);
     loginState.message = error.message;
   } finally {
+    loginForm.password = '';
     loginState.loading = false;
   }
 }
@@ -8805,27 +8914,19 @@ async function onFreshAuthentication() {
   else await withWorkspaceTransition(() => refreshAuthenticatedSession(true));
 }
 
-async function submitDesktopBootstrapLogin() {
-  if (loginState.loading || !window.__PRACTICAL_DESKTOP__?.bootstrapLogin) {
-    return;
-  }
-  loginState.loading = true;
-  loginState.message = '';
+async function openNativePasswordLogin() {
+  loginForm.password = '';
+  loginCaptcha.clear();
   try {
-    return await withWorkspaceTransition(async () => {
-      const result = await window.__PRACTICAL_DESKTOP__.bootstrapLogin();
-      if (result?.attempted === false) return;
-      if (result?.code !== 0) throw new Error(result?.message || '客户端登录失败，请手动登录');
-      await refreshAuthenticatedSession(true);
-      return true;
-    });
+    await window.__PRACTICAL_DESKTOP__?.windowControls('connection');
   } catch (error) {
-    loginState.message = error.message || '客户端自动登录失败，请手动登录';
-    return false;
-  } finally {
-    loginState.loading = false;
+    loginState.message = error.message || '请通过客户端菜单打开连接设置';
   }
 }
+
+watch(() => [loginMethod.value, isLoggedIn.value, startupState.loading, desktopIsLocked.value, passwordRecoveryVisible.value], ([mode, loggedIn, starting, locked, recovering]) => {
+  if (mode === 'password' && !loggedIn && !starting && !locked && !recovering && nativePasswordEntry.value) openNativePasswordLogin();
+});
 
 async function refreshAuthenticatedSession(resetWorkspace = false) {
   if (resetWorkspace) {
@@ -8969,6 +9070,10 @@ async function consumeUrlPasskey() {
   if (!passkey) {
     return false;
   }
+  params.delete('passkey');
+  params.delete('login_key');
+  const query = params.toString();
+  history.replaceState(null, '', `${window.location.pathname}${query ? `?${query}` : ''}${window.location.hash}`);
 
   loginState.loading = true;
   loginState.message = '';
@@ -8977,10 +9082,6 @@ async function consumeUrlPasskey() {
       passkey,
       client: 'WEB',
     }));
-    params.delete('passkey');
-    params.delete('login_key');
-    const query = params.toString();
-    history.replaceState(null, '', `${window.location.pathname}${query ? `?${query}` : ''}${window.location.hash}`);
     return true;
   } catch (error) {
     loginState.message = error.message;
@@ -9015,6 +9116,7 @@ async function submitLogout() {
   } catch (error) {
     loginState.message = error.message;
   } finally {
+    loginForm.password = ''; registerForm.password = '';
     loginState.loading = false;
   }
 }
@@ -9344,7 +9446,9 @@ function canGenerateLoginPasskey(row) {
   return false;
 }
 
-function openUserDialog(row = null) {
+async function openUserDialog(row = null) {
+  await loadAdminFoundation();
+  if (!canManageConfig.value) return;
   const roles = manageableUserRoles();
   userAdminState.editing = emptyUserForm(row || {});
   if (!userAdminState.editing.role_id && roles.length) {
@@ -9707,52 +9811,77 @@ function logPayloadText(payload) {
   return [path, status, duration].filter(Boolean).join(' / ') || '-';
 }
 
-function uniqueRoleOptions() {
-  const roles = [];
-  const seen = new Set();
-  adminState.roles.forEach((role) => {
-    if (!role.role_type || seen.has(role.role_type)) {
-      return;
-    }
-    seen.add(role.role_type);
-    roles.push(role);
-  });
-  return roles;
-}
-
 function setUserFilter({ key, value }) {
   userAdminState.filters[key] = value ?? '';
+  if (key === 'role_type') {
+    if (!['teacher', 'student'].includes(value)) userAdminState.filters.dep_id = '';
+    if (value !== 'student') {
+      userAdminState.filters.profession_id = '';
+      userAdminState.filters.class_id = '';
+    }
+  } else if (key === 'dep_id') {
+    userAdminState.filters.profession_id = '';
+    userAdminState.filters.class_id = '';
+  } else if (key === 'profession_id') {
+    userAdminState.filters.class_id = '';
+  }
 }
 
 function resetUserFilters() {
   userAdminState.filters.keyword = '';
   userAdminState.filters.role_type = '';
   userAdminState.filters.status = 'all';
+  userAdminState.filters.wechat_bound = 'all';
+  userAdminState.filters.dep_id = '';
+  userAdminState.filters.profession_id = '';
+  userAdminState.filters.class_id = '';
   loadUserAccounts(1);
 }
 
+async function loadUserFilterRoles() {
+  const current = ++userFilterRolesRequest;
+  const sessionKey = userFilterSessionKey.value;
+  userAdminState.filterOptionsError = '';
+  try {
+    const data = await fetchUserFilterOptions({ type: 'role' });
+    if (current !== userFilterRolesRequest || sessionKey !== userFilterSessionKey.value) return;
+    userAdminState.roleOptions = data.items.map(item => ({ label: item.label, value: item.id }));
+  } catch (error) {
+    if (current === userFilterRolesRequest && sessionKey === userFilterSessionKey.value && error.name !== 'AbortError') userAdminState.filterOptionsError = error.message;
+  }
+}
+
 async function loadUserAccounts(page = 1) {
-  if (!canViewUserAdmin.value || userAdminState.loading) {
+  if (!canViewUserAdmin.value) {
     return;
   }
 
   userAdminState.loading = true;
   userAdminState.message = '';
+  const current = ++userAccountsRequest;
+  const sessionKey = userFilterSessionKey.value;
+  userAccountsController?.abort();
+  const controller = new AbortController();
+  userAccountsController = controller;
   try {
     const data = await fetchAdminAccounts({
       page,
       page_size: userAdminState.pagination.page_size,
       ...userAdminState.filters,
-    });
+    }, { signal: controller.signal });
+    if (current !== userAccountsRequest || sessionKey !== userFilterSessionKey.value) return;
     userAdminState.items = data.accounts || [];
     userAdminState.pagination = {
       ...userAdminState.pagination,
       ...(data.pagination || {}),
     };
   } catch (error) {
-    userAdminState.message = error.message;
+    if (current === userAccountsRequest && sessionKey === userFilterSessionKey.value && error.name !== 'AbortError') userAdminState.message = error.message;
   } finally {
-    userAdminState.loading = false;
+    if (current === userAccountsRequest) {
+      userAdminState.loading = false;
+      userAccountsController = null;
+    }
   }
 }
 
@@ -13751,22 +13880,7 @@ function detailFieldText(value) {
 }
 
 function safeRichHtml(value) {
-  const html = detailFieldText(value);
-  if (typeof DOMParser === 'undefined') {
-    return html;
-  }
-  const documentNode = new DOMParser().parseFromString(html, 'text/html');
-  documentNode.querySelectorAll('script, style, iframe, object, embed, form').forEach(node => node.remove());
-  documentNode.querySelectorAll('*').forEach((node) => {
-    Array.from(node.attributes).forEach((attribute) => {
-      const name = attribute.name.toLowerCase();
-      const attributeValue = attribute.value.trim().toLowerCase();
-      if (name.startsWith('on') || ((name === 'href' || name === 'src') && attributeValue.startsWith('javascript:'))) {
-        node.removeAttribute(attribute.name);
-      }
-    });
-  });
-  return documentNode.body.innerHTML;
+  return sanitizeRichHtml(detailFieldText(value));
 }
 
 async function exportStatReport() {
@@ -14500,11 +14614,14 @@ async function submitSyllabusGuide(status) {
 }
 
 async function deleteInternshipPlan(row) {
-  if (!canManageInternshipPlan.value || internshipState.loading) return;
+  if (workspaceFrozen.value || !canManageInternshipPlan.value || internshipState.loading) return;
+  const source = workspaceContextKey.value;
+  const current = () => source === workspaceContextKey.value && !workspaceFrozen.value && canManageInternshipPlan.value;
   internshipState.loading = true;
   internshipState.message = '';
   try {
     const impact = await fetchInternshipPlanDeleteImpact(row.id);
+    if (!current()) return;
     const count = Number(impact.arrangement_count || 0);
     const titles = (impact.arrangements || []).slice(0, 8).map(item => item.title || `任务 ${item.id}`).join('、');
     const message = count
@@ -14515,14 +14632,17 @@ async function deleteInternshipPlan(row) {
         confirmButtonText: count ? '一并删除' : '删除计划', cancelButtonText: '取消', type: 'warning',
       });
     } catch { return; }
+    if (!current()) return;
     await removeInternshipPlan({ id: row.id, include_arrangements: count > 0, revision: impact.revision });
+    if (!current()) return;
     invalidateInternshipFoundation();
     await loadInternshipPanel('plans', internshipState.lists.plans.pagination.page || 1);
+    if (!current()) return;
     internshipState.message = count ? `已删除计划及 ${count} 个关联实习任务` : '已删除实习计划';
   } catch (error) {
-    internshipState.message = error.message;
+    if (current()) internshipState.message = error.message;
   } finally {
-    internshipState.loading = false;
+    if (current()) internshipState.loading = false;
   }
 }
 
@@ -16490,6 +16610,10 @@ function statusTagType(value) {
 }
 
 function resetAdminState() {
+  guideReadVersion++;
+  guideAdminVersion++;
+  Object.assign(guideState, { visible: false, loading: false, title: '', content: '', message: '' });
+  Object.assign(guideAdminState, { items: [], selected: null, editing: emptyGuideForm(), dialogVisible: false, loading: false, message: '' });
   Object.assign(adminFoundationCache, { key: '', promise: null, loadedAt: 0 });
   organizationScopeRequest++;
   adminState.loading = false;
@@ -16518,9 +16642,20 @@ function resetAdminState() {
   adminState.scope.scopes = [];
   adminState.scope.message = '';
   userAdminState.items = [];
+  userAdminState.roleOptions = [];
+  userAdminState.filterOptionsError = '';
+  userFilterRolesRequest++;
+  userAccountsRequest++;
+  userAccountsController?.abort();
+  userAccountsController = null;
+  userAdminState.loading = false;
   userAdminState.filters.keyword = '';
   userAdminState.filters.role_type = '';
   userAdminState.filters.status = 'all';
+  userAdminState.filters.wechat_bound = 'all';
+  userAdminState.filters.dep_id = '';
+  userAdminState.filters.profession_id = '';
+  userAdminState.filters.class_id = '';
   userAdminState.editing = emptyUserForm();
   userAdminState.dialogVisible = false;
   userAdminState.passwordDialogVisible = false;
@@ -17069,7 +17204,7 @@ async function loadWindowPanel(win) {
   const { panel, module } = win;
   const current = () => openWindows.includes(win) && !win.minimized && win.panel === panel && isLoggedIn.value && !wechatBlocked.value;
   if (isUserManageWindow(win)) {
-    await loadAdminFoundation();
+    await loadUserFilterRoles();
     if (!current()) return;
     return loadUserAccounts();
   }
@@ -17139,6 +17274,10 @@ watch(allLaunchableModules, () => {
 });
 
 function handleAuthExpired(event) {
+  closeFilePreview();
+  loginCaptcha.clear();
+  loginForm.password = ''; registerForm.password = '';
+  invalidateSessionRequests();
   workspaceSourceEpoch.value++;
   resetAdminState();
   const message = event?.detail?.message || '登录已过期，请重新登录';
@@ -17170,6 +17309,73 @@ function closeDesktopTransient() {
 }
 
 function handleCurrentExternal(event) { currentExternalItem.value = event.detail; }
+
+function openPasswordRecovery() {
+  loginForm.password = '';
+  registerForm.password = '';
+  passwordRecoveryVisible.value = true;
+}
+
+function passwordRecovered(account) {
+  passwordRecoveryVisible.value = false;
+  handleAuthExpired({ detail: { message: '密码已重置，请重新登录' } });
+  loginForm.login_name = account.login_name || '';
+  loginMethod.value = 'password';
+}
+
+async function lockClient() {
+  if (!desktopLock.supported || desktopIsLocked.value || workspaceFrozen.value || !isLoggedIn.value) return;
+  closeDesktopTransient();
+  try { await desktopLock.lockNow(); }
+  catch (error) { ElMessage.error(error.message); }
+}
+
+function lockShortcut(event) {
+  if (event.isTrusted && (event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === 'l') {
+    event.preventDefault();
+    lockClient();
+  }
+}
+
+watch(() => [desktopLock.locked, desktopLock.initialized], async ([locked, initialized], previous = []) => {
+  if (!initialized) return;
+  const [wasLocked, wasInitialized] = previous;
+  if (locked) {
+    if (wasLocked && wasInitialized) return;
+    unlockVersion++;
+    lockRefreshing.value = false;
+    workspaceFrozen.value = true;
+    closeFilePreview();
+    invalidatePermissionLoad();
+    invalidateSessionRequests();
+    guideReadVersion++;
+    guideAdminVersion++;
+    guideState.loading = false;
+    guideAdminState.loading = false;
+    internshipState.loading = false;
+    closeDesktopTransient();
+    return;
+  }
+  if (!wasLocked || !wasInitialized) return;
+  const version = ++unlockVersion;
+  const identity = JSON.stringify([workspaceIdentityKey.value, permissionState.permissions, permissionState.dataScope, permissionState.context.organization_scopes]);
+  lockRefreshing.value = true;
+  try {
+    await load();
+    if (version !== unlockVersion || desktopLock.locked) return;
+    if (permissionState.error) throw new Error(permissionState.error);
+    if (JSON.stringify([workspaceIdentityKey.value, permissionState.permissions, permissionState.dataScope, permissionState.context.organization_scopes]) !== identity) resetAuthenticatedWorkspace();
+    await wechatBinding.refresh();
+  } catch (error) {
+    if (version === unlockVersion) handleAuthExpired({ detail: { message: error.message || '读取解锁会话失败，请重新登录' } });
+  } finally {
+    if (version === unlockVersion && !desktopLock.locked) {
+      workspaceFrozen.value = false;
+      lockRefreshing.value = false;
+    }
+  }
+}, { immediate: true, flush: 'sync' });
+
 
 async function loadFinalMessageTargets() {
   const version = ++messagePreviewVersion;
@@ -17209,9 +17415,6 @@ async function initializeSession() {
     if (!pendingSsoResume.value) await consumeUrlPasskey();
     await load();
     if (permissionState.error) throw new Error(permissionState.error);
-    const desktopBridge = window.__PRACTICAL_DESKTOP__;
-    const bootstrapped = !pendingSsoResume.value && !isLoggedIn.value && desktopBridge?.bootstrapLogin ? await submitDesktopBootstrapLogin() : false;
-    if (bootstrapped) return;
     if (pendingSsoResume.value) return;
     if (!isLoggedIn.value) return;
     await wechatBinding.refresh();
@@ -17230,18 +17433,29 @@ async function initializeSession() {
 
 onMounted(() => {
   window.addEventListener('hashchange', handleHashNavigation);
+  window.addEventListener('keydown', lockShortcut);
   window.addEventListener('practical-auth-expired', handleAuthExpired);
   window.addEventListener('practical-open-current-link', handleCurrentExternal);
   document.addEventListener('visibilitychange', refreshVisibleDesktop);
   desktopRefreshTimer = setInterval(refreshVisibleDesktop, 60000);
   renderClock(); clockTimer = setInterval(renderClock, 30000);
+  if (window.location.hash === '#password-recovery') {
+    openPasswordRecovery();
+    clearNavigationHash();
+  }
   initializeSession();
 });
 
 onBeforeUnmount(() => {
   workspaceFrozen.value = true;
+  userFilterRolesRequest++;
+  userAccountsRequest++;
+  userAccountsController?.abort();
+  invalidateSessionRequests();
   workspaceSourceEpoch.value++;
   window.removeEventListener('hashchange', handleHashNavigation);
+  window.removeEventListener('keydown', lockShortcut);
+  unlockVersion++;
   window.removeEventListener('practical-auth-expired', handleAuthExpired);
   window.removeEventListener('practical-open-current-link', handleCurrentExternal);
   document.removeEventListener('visibilitychange', refreshVisibleDesktop);

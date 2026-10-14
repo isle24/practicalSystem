@@ -9,6 +9,7 @@ const state = reactive({
   permissions: [],
   dataScope: null,
 });
+let loadVersion = 0;
 
 export function usePermissions() {
   const permissionSet = computed(() => new Set(state.permissions));
@@ -20,15 +21,22 @@ export function usePermissions() {
     return permissionSet.value.has(code);
   };
 
+  const invalidateLoad = () => {
+    loadVersion++;
+    state.loading = false;
+  };
+
   const load = async () => {
+    const version = ++loadVersion;
     state.loading = true;
     state.error = '';
 
     try {
       const context = await fetchContext();
-      state.context = context;
+      if (version !== loadVersion) return;
 
       if (!context.role_id) {
+        state.context = context;
         state.error = context.auth_error || '';
         state.menus = [];
         state.permissions = [];
@@ -37,19 +45,24 @@ export function usePermissions() {
       }
 
       const menuResult = await fetchMenus({ platform: 'pc' });
-      state.menus = menuResult.menus?.length ? flattenMenus(menuResult.menus) : [];
-      state.permissions = menuResult.permissions || [];
-
-      if (context.role_type) {
-        state.dataScope = await fetchDataScope();
-      }
+      if (version !== loadVersion) return;
+      const scope = context.role_type ? await fetchDataScope() : null;
+      if (version !== loadVersion) return;
+      Object.assign(state, {
+        context,
+        menus: menuResult.menus?.length ? flattenMenus(menuResult.menus) : [],
+        permissions: menuResult.permissions || [],
+        dataScope: scope,
+      });
     } catch (error) {
+      if (version !== loadVersion) return;
+      state.context = {};
       state.error = error.message;
       state.menus = [];
       state.permissions = [];
       state.dataScope = null;
     } finally {
-      state.loading = false;
+      if (version === loadVersion) state.loading = false;
     }
   };
 
@@ -57,6 +70,7 @@ export function usePermissions() {
     state,
     hasPermission,
     load,
+    invalidateLoad,
   };
 }
 

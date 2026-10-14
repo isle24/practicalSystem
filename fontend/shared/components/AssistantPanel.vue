@@ -21,10 +21,12 @@ markdown.renderer.rules.link_open = (tokens, index, options, env, renderer) => {
   return renderer.renderToken(tokens, index, options);
 };
 const render = value => DOMPurify.sanitize(markdown.render(value || ''), { FORBID_TAGS: ['img', 'iframe', 'form'], ADD_ATTR: ['target'] });
-let poll, generation = 0, disposed = false, turnLoading = false, sendId = '';
+let poll, generation = 0, threadsVersion = 0, disposed = false, turnLoading = false, sendId = '';
 
 async function loadSettings() {
+  if (disposed) return;
   const data = await props.request('/assistant/settings');
+  if (disposed) return;
   Object.assign(state, { enabled: data.enabled, personalEnabled: data.personal?.enabled || false, name: data.name, can_manage: data.can_manage });
   configurations.school = data.settings || {};
   configurations.personal = data.personal || {};
@@ -45,12 +47,14 @@ async function changeMode(mode) {
   state.mode = mode; await selectThread(0);
 }
 async function loadThreads(page = 1) {
-  const data = await props.request(`/assistant/threads?page=${page}`);
   if (disposed) return;
+  const version = ++threadsVersion;
+  const data = await props.request(`/assistant/threads?page=${page}`);
+  if (disposed || version !== threadsVersion) return;
   state.threads = data.items; state.total = data.total; state.page = page;
 }
 async function loadTurns(older = false) {
-  if (!state.threadId || turnLoading) return;
+  if (disposed || !state.threadId || turnLoading) return;
   const id = state.threadId, version = generation;
   turnLoading = true;
   try {
@@ -63,16 +67,18 @@ async function loadTurns(older = false) {
       state.turns = [...state.turns.filter(item => !incoming.has(item.id)), ...data.items].sort((a, b) => a.id - b.id);
     }
     if (older || state.turns.length <= 20) state.older = data.items.length === 20;
-  } finally { turnLoading = false; }
+  } finally { if (version === generation) turnLoading = false; }
 }
 async function selectThread(id) {
-  if (state.sending) return;
+  if (disposed || state.sending) return;
   if (id) state.mode = state.threads.find(thread => thread.id === id)?.provider_mode || 'school';
   turnLoading = false;
   generation++; state.threadId = id; state.turns = []; state.question = ''; state.error = ''; state.older = false; sendId = ''; historyVisible.value = false;
+  const version = generation;
   state.loading = true;
-  try { await loadTurns(); await toBottom(); } catch (e) { state.error = e.message; }
-  finally { state.loading = false; }
+  try { await loadTurns(); if (!disposed && version === generation) await toBottom(); }
+  catch (e) { if (!disposed && version === generation) state.error = e.message; }
+  finally { if (!disposed && version === generation) state.loading = false; }
 }
 async function toBottom() { await nextTick(); if (scroll.value) scroll.value.scrollTop = scroll.value.scrollHeight; }
 async function send() {
@@ -90,15 +96,16 @@ async function send() {
   finally { state.sending = false; }
 }
 async function saveSettings() {
-  if (saving.value) return;
+  if (disposed || saving.value) return;
   if (settings.clear_key && !window.confirm('清除密钥将停用此服务，是否继续？')) return;
   saving.value = true; state.error = '';
   try {
     await props.request('/assistant/save-settings', { method: 'POST', body: JSON.stringify({ ...settings, mode: configMode.value }) });
+    if (disposed) return;
     settings.api_key = '';
     await loadSettings(); configVisible.value = false;
-  } catch (e) { state.error = e.message; }
-  finally { saving.value = false; }
+  } catch (e) { if (!disposed) state.error = e.message; }
+  finally { if (!disposed) saving.value = false; }
 }
 onMounted(async () => {
   state.loading = true;
@@ -109,7 +116,7 @@ onMounted(async () => {
     if (pending.value && !document.hidden) loadTurns().catch(e => { state.error = e.message; });
   }, 3000);
 });
-onBeforeUnmount(() => { disposed = true; generation++; clearInterval(poll); });
+onBeforeUnmount(() => { disposed = true; generation++; threadsVersion++; settings.api_key = ''; clearInterval(poll); });
 </script>
 
 <template>
@@ -171,60 +178,60 @@ onBeforeUnmount(() => { disposed = true; generation++; clearInterval(poll); });
 </template>
 
 <style scoped>
-.assistant-panel { display: flex; flex-direction: column; min-height: 420px; height: min(700px, 72vh); color: var(--text-primary, #273449); background: var(--panel-background, #fff); }
-.assistant-panel header { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid #e6e9ef; flex-wrap: wrap; }
+.assistant-panel { display: flex; flex-direction: column; min-height: 420px; height: min(700px, 72vh); color: var(--text, #273449); background: var(--surface, #fff); }
+.assistant-panel header { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--line, #e6e9ef); flex-wrap: wrap; }
 .assistant-panel header strong { font-size: 16px; margin-right: auto; }
-.assistant-status { font-size: 12px; color: #6b7786; }
-.assistant-provider { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; padding: 10px 16px; border-bottom: 1px solid #e6e9ef; }
-.assistant-segments { display: inline-flex; padding: 3px; gap: 3px; background: #f0f3f7; border-radius: 8px; width: fit-content; }
+.assistant-status { font-size: 12px; color: var(--muted, #6b7786); }
+.assistant-provider { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; padding: 10px 16px; border-bottom: 1px solid var(--line, #e6e9ef); }
+.assistant-segments { display: inline-flex; padding: 3px; gap: 3px; background: var(--surface-2, #f0f3f7); border-radius: 8px; width: fit-content; }
 .assistant-panel .assistant-segments button { background: transparent; padding: 6px 12px; font-size: 13px; }
-.assistant-panel .assistant-segments button[aria-pressed=true] { background: #fff; color: #1c5abd; box-shadow: 0 1px 3px #16294a1a; }
-.assistant-panel .assistant-config-link { color: #1c5abd; background: transparent; font-size: 13px; }
-.assistant-panel button:focus-visible, .assistant-panel input:focus-visible, .assistant-panel textarea:focus-visible { outline: 2px solid #2563bd; outline-offset: 2px; }
-.assistant-panel button { display: inline-flex; align-items: center; justify-content: center; padding: 8px; border: 0; background: #f0f3f7; border-radius: 6px; color: inherit; cursor: pointer; gap: 6px; min-height: 34px; }
+.assistant-panel .assistant-segments button[aria-pressed=true] { background: var(--surface, #fff); color: var(--primary-ink, #1c5abd); box-shadow: 0 1px 3px #16294a1a; }
+.assistant-panel .assistant-config-link { color: var(--primary-ink, #1c5abd); background: transparent; font-size: 13px; }
+.assistant-panel button:focus-visible, .assistant-panel input:focus-visible, .assistant-panel textarea:focus-visible { outline: 2px solid var(--primary, #2563bd); outline-offset: 2px; }
+.assistant-panel button { display: inline-flex; align-items: center; justify-content: center; padding: 8px; border: 0; background: var(--surface-2, #f0f3f7); border-radius: 6px; color: inherit; cursor: pointer; gap: 6px; min-height: 34px; }
 .assistant-panel button:disabled { cursor: default; opacity: .45; }
 .assistant-workspace { display: flex; min-height: 0; flex: 1; position: relative; }
-.assistant-history { width: 220px; flex-shrink: 0; overflow: auto; padding: 12px; border-right: 1px solid #e6e9ef; background: #fafbfc; }
+.assistant-history { width: 220px; flex-shrink: 0; overflow: auto; padding: 12px; border-right: 1px solid var(--line, #e6e9ef); background: var(--surface-2, #fafbfc); }
 .assistant-history > button { width: 100%; display: block; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-bottom: 6px; background: transparent; }
-.assistant-history > button.selected { color: #1c5abd; background: #e8f0fc; }
+.assistant-history > button.selected { color: var(--primary-ink, #1c5abd); background: var(--primary-soft, #e8f0fc); }
 .assistant-history > button span { display: block; overflow: hidden; text-overflow: ellipsis; }
-.assistant-history > button small { display: block; margin-top: 4px; font-size: 11px; color: #768397; }
+.assistant-history > button small { display: block; margin-top: 4px; font-size: 11px; color: var(--muted, #768397); }
 .assistant-history footer { display: flex; align-items: center; justify-content: space-between; padding-top: 12px; }
 .assistant-page-summary { display: grid; gap: 3px; text-align: center; font-size: 12px; }
 .assistant-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .assistant-turns { flex: 1; overflow: auto; padding: 16px 20px; }
-.assistant-empty { text-align: center; padding: 40px 0; color: #7a8595; }
+.assistant-empty { text-align: center; padding: 40px 0; color: var(--muted, #7a8595); }
 .assistant-turn { display: flex; flex-direction: column; align-items: start; gap: 10px; margin-bottom: 22px; font-size: 14px; line-height: 1.7; }
-.assistant-turn time { align-self: center; font-size: 11px; color: #8591a0; }
-.assistant-question { align-self: flex-end; max-width: 90%; border-radius: 8px; padding: 10px 14px; background: #edf5ee; margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.assistant-turn time { align-self: center; font-size: 11px; color: var(--muted, #8591a0); }
+.assistant-question { align-self: flex-end; max-width: 90%; border-radius: 8px; padding: 10px 14px; background: var(--green-soft, #edf5ee); margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 .assistant-answer { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
-.assistant-answer :deep(pre) { overflow: auto; background: #f4f6f8; padding: 12px; border-radius: 6px; }
+.assistant-answer :deep(pre) { overflow: auto; background: var(--surface-2, #f4f6f8); padding: 12px; border-radius: 6px; }
 .assistant-answer :deep(table) { display: block; overflow: auto; border-collapse: collapse; }
-.assistant-answer :deep(td), .assistant-answer :deep(th) { padding: 6px 10px; border: 1px solid #e1e5eb; }
-.assistant-compose { margin: 0 16px 12px; padding: 12px; border: 1px solid #dce2e9; border-radius: 8px; }
+.assistant-answer :deep(td), .assistant-answer :deep(th) { padding: 6px 10px; border: 1px solid var(--line, #e1e5eb); }
+.assistant-compose { margin: 0 16px 12px; padding: 12px; border: 1px solid var(--line, #dce2e9); border-radius: 8px; }
 .assistant-compose textarea { width: 100%; resize: none; border: 0; outline: none; background: transparent; color: inherit; font: inherit; box-sizing: border-box; padding: 0; }
-.assistant-compose > div { display: flex; justify-content: space-between; align-items: center; color: #7a8595; }
-.assistant-panel .assistant-primary { background: #2563bd; color: white; }
-.assistant-privacy { display: block; margin-top: 9px; color: #7a8595; font-size: 11px; line-height: 1.5; }
-.assistant-error { color: #b52c40; padding: 8px 16px; margin: 0; font-size: 13px; overflow-wrap: anywhere; }
+.assistant-compose > div { display: flex; justify-content: space-between; align-items: center; color: var(--muted, #7a8595); }
+.assistant-panel .assistant-primary { background: var(--primary, #2563bd); color: var(--primary-contrast, white); }
+.assistant-privacy { display: block; margin-top: 9px; color: var(--muted, #7a8595); font-size: 11px; line-height: 1.5; }
+.assistant-error { color: var(--danger, #b52c40); padding: 8px 16px; margin: 0; font-size: 13px; overflow-wrap: anywhere; }
 .assistant-error button { margin-left: 8px; }
 .assistant-config { width: 100%; max-width: 580px; box-sizing: border-box; display: flex; flex-direction: column; min-height: 0; flex: 1; }
 .assistant-config-fields { display: grid; gap: 16px; padding: 16px 20px; overflow: auto; min-height: 0; }
-.assistant-config-actions { padding: 12px 20px; border-top: 1px solid #e6e9ef; flex-shrink: 0; }
+.assistant-config-actions { padding: 12px 20px; border-top: 1px solid var(--line, #e6e9ef); flex-shrink: 0; }
 .assistant-config-actions button { width: 100%; }
 .assistant-config label { display: grid; gap: 7px; font-size: 13px; }
-.assistant-config input:not([type=checkbox]) { width: 100%; box-sizing: border-box; min-height: 40px; border: 1px solid #dce2e9; border-radius: 6px; padding: 8px 12px; font: inherit; }
+.assistant-config input:not([type=checkbox]) { width: 100%; box-sizing: border-box; min-height: 40px; border: 1px solid var(--line, #dce2e9); border-radius: 6px; padding: 8px 12px; font: inherit; color: var(--text, #273449); background: var(--surface, #fff); }
 .assistant-config-heading, .assistant-config .assistant-enable { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .assistant-config .assistant-enable { justify-content: flex-start; }
 .assistant-config .assistant-check { display: flex; align-items: center; gap: 8px; }
-.assistant-check input { margin: 0; width: 16px; height: 16px; accent-color: #2563bd; }
+.assistant-check input { margin: 0; width: 16px; height: 16px; accent-color: var(--primary, #2563bd); }
 .assistant-config input:disabled { opacity: .55; }
-.assistant-enable input { appearance: none; width: 36px; height: 22px; border-radius: 11px; background: #a5adb9; position: relative; cursor: pointer; }
+.assistant-enable input { appearance: none; width: 36px; height: 22px; border-radius: 11px; background: var(--line-strong, #a5adb9); position: relative; cursor: pointer; }
 .assistant-enable input::after { content: ''; position: absolute; width: 16px; height: 16px; border-radius: 50%; background: white; top: 3px; left: 3px; }
-.assistant-enable input:checked { background: #2563bd; }
+.assistant-enable input:checked { background: var(--primary, #2563bd); }
 .assistant-enable input:checked::after { left: 17px; }
-.assistant-wait { color: #768397; }
-.assistant-pulse { display: inline-block; width: 6px; height: 6px; background: #6383b0; border-radius: 50%; margin-left: 8px; animation: assistant-pulse 1.4s ease-in-out infinite; }
+.assistant-wait { color: var(--muted, #768397); }
+.assistant-pulse { display: inline-block; width: 6px; height: 6px; background: var(--primary, #6383b0); border-radius: 50%; margin-left: 8px; animation: assistant-pulse 1.4s ease-in-out infinite; }
 @keyframes assistant-pulse { 50% { opacity: .25; } }
 @media (prefers-reduced-motion: reduce) { .assistant-pulse { animation: none; } }
 @media (max-width: 640px) { .assistant-history { position: absolute; inset: 0 20% 0 0; width: auto; z-index: 2; box-shadow: 4px 0 14px #1b294015; } .assistant-turns { padding: 12px; } .assistant-compose { margin: 0 8px 8px; } .assistant-panel { height: 68dvh; } }

@@ -128,6 +128,8 @@ pub async fn open(
     connection: &Connection,
     id: u64,
     mode: &str,
+    owner: &str,
+    cancel: &tokio_util::sync::CancellationToken,
 ) -> Result<(), String> {
     let favorite = school_api::read(connection, &format!("api/favorite/detail?id={id}")).await?;
     if favorite["auth_mode"].as_str() == Some("oidc") {
@@ -154,6 +156,9 @@ pub async fn open(
     }
     let post = config["method"].as_str() == Some("POST") || !form.is_empty();
     let configured = post || !profile.headers.is_empty() || !profile.cookies.is_empty();
+    if cancel.is_cancelled() {
+        return Err("学校连接已关闭，请重新连接".into());
+    }
     if !configured {
         return external::open(app, url.as_str(), mode);
     }
@@ -251,7 +256,10 @@ pub async fn open(
         }
         url = next;
     }
-    external::open_authenticated(app, url, cookies)
+    if cancel.is_cancelled() {
+        return Err("学校连接已关闭，请重新连接".into());
+    }
+    external::open_authenticated(app, url, cookies, owner, cancel)
 }
 
 /// 在受保护学校会话内申请转接，不读取本机收藏凭据。
@@ -261,6 +269,7 @@ pub async fn open_sso(
     id: u64,
     mode: &str,
     owner: &str,
+    cancel: &tokio_util::sync::CancellationToken,
 ) -> Result<(), String> {
     if id == 0 || !matches!(mode, "client" | "browser") {
         return Err("授权收藏或打开方式无效".into());
@@ -303,8 +312,11 @@ pub async fn open_sso(
     {
         return Err("授权转接地址校验失败".into());
     }
+    if cancel.is_cancelled() {
+        return Err("学校连接已关闭，请重新连接".into());
+    }
     if mode == "browser" {
         return external::open(app, target.as_str(), "browser");
     }
-    external::open_sso(app, target, connection.origin.origin(), owner)
+    external::open_sso(app, target, connection.origin.origin(), owner, cancel)
 }

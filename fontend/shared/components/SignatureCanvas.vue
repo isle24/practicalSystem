@@ -52,7 +52,7 @@ defineExpose({ blob, clear });
 </script>
 <style scoped>
 canvas { display: block; width: 100%; height: auto; aspect-ratio: 5 / 2; border: 1px solid #94a3b8; border-radius: 8px; background: #fff; touch-action: none; }
-.signature-tools { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 12px; font-size: 14px; color: #64748b; }
-button { border: 1px solid #cbd5e1; background: #fff; border-radius: 6px; padding: 8px 12px; color: #334155; cursor: pointer; }
+.signature-tools { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 12px; font-size: 14px; color: var(--muted, #64748b); }
+button { border: 1px solid var(--line, #cbd5e1); background: var(--surface, #fff); border-radius: 6px; padding: 8px 12px; color: var(--text, #334155); cursor: pointer; }
 button:disabled { opacity: .5; cursor: default; }
 </style>

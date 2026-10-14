@@ -48,7 +48,12 @@ function update(value) {
   emit('update:modelValue', value);
   emit('change', props.multiple ? ids.map(id => selected.value[id]).filter(Boolean) : selected.value[value] || null);
 }
-watch(selectedIds, async ids => {
+watch(() => props.endpoint, () => {
+  revision++; hydration++; clearTimeout(timer);
+  controllers.forEach(controller => controller.abort());
+  results.value = []; selected.value = {}; loading.value = false; error.value = ''; hasMore.value = false;
+}, { flush: 'sync' });
+watch(() => [props.endpoint, selectedIds.value], async ([, ids]) => {
   const current = ++hydration;
   const missing = ids.filter(id => !selected.value[id]);
   try {

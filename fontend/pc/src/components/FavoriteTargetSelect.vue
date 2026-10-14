@@ -39,6 +39,12 @@ function update(values) {
   for (const row of options.value) if (values.includes(row.value)) selected.value[row.value] = row;
   emit('update:modelValue', values);
 }
+watch(() => props.type, () => {
+  sequence++; hydration++; clearTimeout(timer);
+  controllers.forEach(controller => controller.abort());
+  results.value = []; selected.value = {}; keyword.value = ''; error.value = ''; loading.value = false;
+  pagination.value = { page: 0, page_size: 30, total: 0 };
+}, { flush: 'sync' });
 watch(() => [props.type, ...ids.value], async () => {
   const ticket = ++hydration;
   const missing = ids.value.filter(id => !selected.value[id]);

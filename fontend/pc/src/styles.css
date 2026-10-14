@@ -129,9 +129,9 @@ a {
 }
 
 .global-search:focus-within {
-  border-color: rgba(37, 99, 235, .58);
+  border-color: var(--primary);
   background: var(--surface);
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, .12);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 12%, transparent);
 }
 
 .global-search input {
@@ -535,7 +535,7 @@ a {
   padding: 14px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: rgba(248, 250, 252, .86);
+  background: color-mix(in srgb, var(--surface-2) 86%, transparent);
 }
 
 .cleanup-scope-item,
@@ -1056,10 +1056,10 @@ a {
 }
 
 .desktop-style-options button.active {
-  border-color: rgba(37, 99, 235, .52);
+  border-color: var(--primary);
   color: var(--primary-ink, var(--primary));
   background: var(--primary-soft);
-  box-shadow: 0 0 0 2px rgba(37, 99, 235, .08);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 8%, transparent);
 }
 
 .desktop-style-options span {
@@ -3738,9 +3738,9 @@ a {
 
 .operation-dialog.internship-complex-dialog {
   width: min(1180px, calc(100vw - 48px));
-  height: min(820px, calc(100dvh - 122px));
+  height: min(820px, calc(100dvh - var(--desktop-top-inset, 0px) - 122px));
   min-width: 760px;
-  min-height: min(520px, calc(100dvh - 122px));
+  min-height: min(520px, calc(100dvh - var(--desktop-top-inset, 0px) - 122px));
   resize: none;
 }
 
@@ -5314,7 +5314,7 @@ a {
 
 .profile-panel-card.focused {
   border-color: var(--primary);
-  box-shadow: 0 0 0 3px rgba(31, 115, 210, .12);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 12%, transparent);
 }
 
 .notify-list {
@@ -5418,9 +5418,9 @@ a {
 
 .login-panel input:focus,
 .login-panel select:focus {
-  border-color: rgba(37, 99, 235, .58);
+  border-color: var(--primary);
   background: var(--surface);
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, .12);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 12%, transparent);
 }
 
 .login-panel .login-submit-button {
@@ -5430,13 +5430,14 @@ a {
   align-items: center;
   justify-content: center;
   gap: 7px;
-  color: #fff;
-  background: #2563eb;
+  color: var(--primary-contrast, #fff);
+  background: var(--primary);
   transition: background .16s ease, transform .16s ease, opacity .16s ease;
 }
 
 .login-panel .login-submit-button:not(:disabled):hover {
-  background: #1d4ed8;
+  color: var(--primary-active-contrast, #fff);
+  background: var(--el-color-primary-dark-2);
 }
 
 .login-panel .login-submit-button:not(:disabled):active {
@@ -6170,14 +6171,15 @@ a {
   place-items: center;
   border: 1px solid rgba(255, 255, 255, .78);
   border-radius: 50%;
-  color: #fff;
-  background: rgba(37, 99, 235, .88);
+  color: var(--primary-contrast, #fff);
+  background: var(--primary);
   box-shadow: 0 8px 22px rgba(24, 33, 43, .22);
   transition: transform .16s ease, background .16s ease;
 }
 
 .notebook-floating-button:hover {
-  background: #1d56c8;
+  color: var(--primary-active-contrast, #fff);
+  background: var(--el-color-primary-dark-2);
   transform: translateY(-2px);
 }
 
@@ -7173,6 +7175,10 @@ a {
 .operation-mask.operation-mask-maximized { padding: 0; }
 
 :root { --desktop-top-inset: 0px; }
+.desktop-lock-content { display: contents; }
+.desktop-lock-content-hidden { visibility: hidden; }
+.password-recovery-mask { position: fixed; inset: var(--desktop-top-inset, 0px) 0 0; z-index: 70000; display: grid; place-items: center; background: rgb(15 23 42 / .55); padding: 24px; overflow: auto; box-sizing: border-box; }
+.password-recovery-mask > .password-recovery { box-sizing: border-box; width: min(460px, 100%); max-height: calc(100dvh - var(--desktop-top-inset, 0px) - 48px); overflow: auto; padding: 28px; border-radius: 16px; border: 1px solid var(--line); background: var(--surface); color: var(--text); }
 .shared-filter-toolbar { min-width: 0; max-width: 100%; display: flex; align-items: flex-start; flex-wrap: wrap; gap: 8px; }
 .shared-filter-fields { min-width: 0; max-width: 100%; flex: 1 1 auto; display: flex; align-items: flex-end; flex-wrap: wrap; gap: 8px; }
 .shared-filter-actions { min-width: 0; max-width: 100%; display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }

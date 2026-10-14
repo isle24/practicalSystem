@@ -31,7 +31,7 @@
         <small v-if="subtitle">{{ subtitle }}</small>
       </span>
     </component>
-    <button v-if="showEdit" type="button" class="shortcut-tile-action shortcut-tile-edit" :title="`编辑${item.name}`" :aria-label="`编辑${item.name}`" @pointerdown.stop @click.stop="emit('edit', item)"><Pencil :size="14" /></button>
+    <!-- <button v-if="showEdit" type="button" class="shortcut-tile-action shortcut-tile-edit" :title="`编辑${item.name}`" :aria-label="`编辑${item.name}`" @pointerdown.stop @click.stop="emit('edit', item)"><Pencil :size="14" /></button> -->
     <button
       v-if="showAction"
       type="button"

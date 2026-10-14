@@ -7,6 +7,7 @@
       <section v-if="open" ref="panel" class="profile-menu-panel" :style="position" role="dialog" aria-label="个人菜单" @keydown.esc.stop.prevent="close(true)">
         <header><strong>{{ name }}</strong><small>{{ role }}</small></header>
         <button type="button" @click="act('settings')"><Settings :size="16" />个人设置</button>
+        <button v-if="canLock" type="button" :disabled="accountActionsDisabled" @click="act('lock')"><LockKeyhole :size="16" />锁定客户端</button>
         <template v-if="accounts.length">
           <button type="button" :disabled="accountActionsDisabled" :aria-expanded="identities" @click="identities = !identities"><UsersRound :size="16" />切换账号<ChevronDown :size="14" /></button>
           <div v-if="identities" class="profile-menu-identities" role="group" aria-label="可切换账号"><button v-for="account in accounts" :key="account.id" type="button" :disabled="accountActionsDisabled" :aria-label="`${accountName(account)}，${accountMeta(account)}，切换账号`" @click="act('switch', account.id)"><strong>{{ accountName(account) }}</strong><small>{{ accountMeta(account) }}</small></button></div>
@@ -20,10 +21,10 @@
 </template>
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { ChevronDown, LogOut, Settings, UserRound, UsersRound } from '@lucide/vue';
+import { ChevronDown, LockKeyhole, LogOut, Settings, UserRound, UsersRound } from '@lucide/vue';
 import { desktopTopInset } from '../composables/viewportArea';
-const props = defineProps({ name: String, role: String, avatar: String, avatarStyle: Object, version: String, avatarOnly: Boolean, accounts: { type: Array, default: () => [] }, accountName: Function, accountMeta: Function, placement: { type: String, default: 'top' }, switching: Boolean, busy: Boolean, error: String, contextKey: [String, Number] });
-const emit = defineEmits(['settings', 'switch', 'logout', 'open-change']);
+const props = defineProps({ name: String, role: String, avatar: String, avatarStyle: Object, version: String, avatarOnly: Boolean, canLock: Boolean, accounts: { type: Array, default: () => [] }, accountName: Function, accountMeta: Function, placement: { type: String, default: 'top' }, switching: Boolean, busy: Boolean, error: String, contextKey: [String, Number] });
+const emit = defineEmits(['settings', 'switch', 'logout', 'lock', 'open-change']);
 const root = ref(null), trigger = ref(null), panel = ref(null), open = ref(false), identities = ref(false), position = ref({});
 const accountActionsDisabled = computed(() => props.switching || props.busy);
 let observer;
@@ -39,7 +40,7 @@ function place() {
 async function show() { open.value = true; await nextTick(); place(); panel.value?.querySelector('button')?.focus(); }
 function toggle() { if (open.value) close(true); else show(); }
 function close(restore = false) { open.value = false; identities.value = false; if (restore) trigger.value?.focus(); }
-function act(action, value) { if (action === 'switch' && accountActionsDisabled.value) return; close(true); emit(action, value); }
+function act(action, value) { if (['switch', 'lock'].includes(action) && accountActionsDisabled.value) return; close(true); emit(action, value); }
 function outside(event) { if (open.value && !root.value?.contains(event.target) && !panel.value?.contains(event.target)) close(); }
 function escape(event) { if (event.key === 'Escape' && open.value) close(true); }
 watch(() => props.contextKey, () => close());

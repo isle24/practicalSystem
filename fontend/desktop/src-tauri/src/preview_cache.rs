@@ -18,7 +18,6 @@ use tokio::{
     io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt},
     sync::Mutex,
 };
-use tokio_util::io::ReaderStream;
 
 const GIB: u64 = 1024 * 1024 * 1024;
 static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
@@ -73,6 +72,9 @@ fn directory(app: &AppHandle) -> Result<PathBuf, String> {
         .map_err(|_| "无法定位缓存目录")?
         .join("file-previews");
     fs::create_dir_all(&root).map_err(|_| "无法创建缓存目录")?;
+    if !fs::symlink_metadata(&root).is_ok_and(|metadata| metadata.file_type().is_dir()) {
+        return Err("本机缓存目录无效".into());
+    }
     for entry in fs::read_dir(&root).map_err(|_| "无法读取缓存目录")? {
         let entry = entry.map_err(|_| "无法读取缓存目录")?;
         let name = entry.file_name().to_string_lossy().into_owned();
@@ -81,6 +83,21 @@ fn directory(app: &AppHandle) -> Result<PathBuf, String> {
             && entry.file_type().is_ok_and(|kind| kind.is_file())
         {
             fs::remove_file(entry.path()).map_err(|_| "无法清理中断的缓存下载")?;
+        }
+        if name.len() == 68
+            && (name.ends_with(".bin") || name.ends_with(".pdf"))
+            && name[..64].bytes().all(|byte| byte.is_ascii_hexdigit())
+            && entry.file_type().is_ok_and(|kind| kind.is_file())
+            && entry
+                .metadata()
+                .ok()
+                .and_then(|metadata| metadata.modified().ok())
+                .and_then(|time| time.elapsed().ok())
+                .is_some_and(|age| age.as_secs() > 7 * 86400)
+        {
+            if fs::remove_file(entry.path()).is_ok() && name.ends_with(".pdf") {
+                let _ = fs::remove_file(entry.path().with_extension("sha256"));
+            }
         }
     }
     #[cfg(unix)]
@@ -112,7 +129,7 @@ fn entries(root: &Path) -> Result<Vec<(PathBuf, u64, SystemTime)>, String> {
         }
         let name = entry.file_name().to_string_lossy().into_owned();
         if name.len() != 68
-            || !name.ends_with(".bin")
+            || !(name.ends_with(".bin") || name.ends_with(".pdf"))
             || !name[..64].bytes().all(|c| c.is_ascii_hexdigit())
         {
             continue;
@@ -136,9 +153,92 @@ fn trim(root: &Path, limit: u64) -> Result<(), String> {
         if used <= limit {
             break;
         }
-        fs::remove_file(path).map_err(|_| "缓存正在使用，稍后重试清理")?;
+        fs::remove_file(&path).map_err(|_| "缓存正在使用，稍后重试清理")?;
+        if path.extension().is_some_and(|extension| extension == "pdf") {
+            let _ = fs::remove_file(path.with_extension("sha256"));
+        }
         used -= size;
     }
+    Ok(())
+}
+
+/// 读取已校验的本机 PDF 派生缓存。
+pub async fn office_read(app: &AppHandle, key: &str) -> Result<Option<Vec<u8>>, String> {
+    let _guard = LOCK.get_or_init(|| Mutex::new(())).lock().await;
+    let root = directory(app)?;
+    if settings(&root)?.max_bytes == 0 {
+        return Ok(None);
+    }
+    let path = root.join(format!("{key}.pdf"));
+    let valid = fs::symlink_metadata(&path).is_ok_and(|meta| {
+        meta.file_type().is_file()
+            && meta.len() <= 30 * 1024 * 1024
+            && meta
+                .modified()
+                .ok()
+                .and_then(|time| time.elapsed().ok())
+                .is_some_and(|age| age.as_secs() < 7 * 86400)
+    });
+    if !valid {
+        return Ok(None);
+    }
+    let bytes = fs::read(&path).map_err(|_| "无法读取本机 PDF 缓存")?;
+    let checksum_path = path.with_extension("sha256");
+    let checksum = if fs::symlink_metadata(&checksum_path)
+        .is_ok_and(|metadata| metadata.file_type().is_file() && metadata.len() == 64)
+    {
+        fs::read_to_string(checksum_path).unwrap_or_default()
+    } else {
+        String::new()
+    };
+    if !bytes.starts_with(b"%PDF-") || school_api::digest_bytes(&bytes) != checksum {
+        let _ = fs::remove_file(&path);
+        let _ = fs::remove_file(path.with_extension("sha256"));
+        return Ok(None);
+    }
+    let _ = fs::File::open(path).and_then(|file| file.set_modified(SystemTime::now()));
+    Ok(Some(bytes))
+}
+
+/// 与源文件共用容量上限，原子保存本机 PDF。
+pub async fn office_store(
+    app: &AppHandle,
+    key: &str,
+    bytes: &[u8],
+    cancel: &tokio_util::sync::CancellationToken,
+) -> Result<(), String> {
+    let _guard = LOCK.get_or_init(|| Mutex::new(())).lock().await;
+    let root = directory(app)?;
+    let limit = settings(&root)?.max_bytes;
+    if limit == 0 || bytes.len() as u64 > limit || cancel.is_cancelled() {
+        return Ok(());
+    }
+    trim(&root, limit.saturating_sub(bytes.len() as u64))?;
+    let mut output = tempfile::Builder::new()
+        .prefix("pending-preview-")
+        .suffix(".part")
+        .tempfile_in(&root)
+        .map_err(|_| "无法写入本机 PDF 缓存")?;
+    output
+        .write_all(bytes)
+        .map_err(|_| "本机 PDF 缓存写入失败")?;
+    output
+        .as_file()
+        .sync_all()
+        .map_err(|_| "本机 PDF 缓存写入失败")?;
+    if cancel.is_cancelled() {
+        return Ok(());
+    }
+    output
+        .persist(root.join(format!("{key}.pdf")))
+        .map_err(|_| "本机 PDF 缓存保存失败")?;
+    let mut checksum = tempfile::NamedTempFile::new_in(&root).map_err(|_| "无法写入 PDF 校验值")?;
+    checksum
+        .write_all(school_api::digest_bytes(bytes).as_bytes())
+        .map_err(|_| "无法写入 PDF 校验值")?;
+    checksum
+        .persist(root.join(format!("{key}.sha256")))
+        .map_err(|_| "无法保存 PDF 校验值")?;
     Ok(())
 }
 
@@ -184,6 +284,7 @@ pub async fn serve(
     connection: &Connection,
     id: u64,
     headers: &HeaderMap,
+    cancel: tokio_util::sync::CancellationToken,
 ) -> Result<Response<Body>, String> {
     if id == 0 {
         return Err("文件编号无效".into());
@@ -232,7 +333,8 @@ pub async fn serve(
         }
         let status = upstream.status();
         let upstream_headers = upstream.headers().clone();
-        let mut response = Response::new(Body::from_stream(upstream.bytes_stream()));
+        let mut response =
+            Response::new(crate::gateway::cancellable_body(upstream, cancel.clone()));
         *response.status_mut() = status;
         for key in [
             header::CONTENT_TYPE,
@@ -346,7 +448,10 @@ pub async fn serve(
         .map_err(|_| "缓存读取失败")?;
     let length = if size == 0 { 0 } else { end - start + 1 };
     drop(guard);
-    let mut response = Response::new(Body::from_stream(ReaderStream::new(input.take(length))));
+    let mut response = Response::new(crate::gateway::cancellable_reader(
+        input.take(length),
+        cancel,
+    ));
     if partial {
         *response.status_mut() = StatusCode::PARTIAL_CONTENT;
         response.headers_mut().insert(

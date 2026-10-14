@@ -36,7 +36,7 @@ watch(() => [props.modelValue, maximized.value], ([visible, full]) => {
 .managed-element-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-right: 24px; }
 .managed-element-header button { display: grid; place-items: center; width: 28px; height: 28px; background: transparent; border-radius: 4px; color: var(--muted); }
 .managed-element-header button:hover { background: var(--surface-2); }
-.el-dialog.managed-element-fullscreen { margin: 0; width: 100%; height: 100dvh; max-height: none; border-radius: 0; display: flex; flex-direction: column; }
+.el-dialog.managed-element-fullscreen { margin: 0; width: 100%; height: calc(100dvh - var(--desktop-top-inset, 0px)); max-height: none; border-radius: 0; display: flex; flex-direction: column; }
 .managed-element-fullscreen > .el-dialog__body { min-height: 0; flex: 1; overflow: auto; max-height: none !important; }
 .managed-element-fullscreen .archive-detail-body, .managed-element-fullscreen .appraisal-body { max-height: none; }
 </style>

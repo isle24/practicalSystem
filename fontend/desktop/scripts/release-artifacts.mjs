@@ -32,6 +32,16 @@ function manifest() {
   if (process.env.GITHUB_REF?.startsWith('refs/tags/') && process.env.GITHUB_REF !== `refs/tags/v${version}`) throw Error('Tag and package version differ');
   const files = scan(directory).filter(file => packageFile(file) && !file.endsWith('.sig'));
   const notes = readFileSync(`${root}/releases/${version}.md`, 'utf8').trim();
+  // 与 ReleaseNotesPrivacy 的私有标题保持一致。
+  const adminHeadings = new Set(['升级操作', '部署', '部署事项', '部署注意', '部署要求', '部署与菜单升级', '服务端升级', '数据库升级', '升级/部署事项', '管理员升级事项', '管理员部署事项']);
+  const lines = notes.split(/\r?\n/);
+  for (const [index, line] of lines.entries()) {
+    const heading = line.match(/^ {0,3}#{1,6}[\t ]+(.+?)(?:[\t ]+#+)?[\t ]*$/u);
+    const text = heading?.[1] || (index > 0 && /^ {0,3}(?:=+|-+)[\t ]*$/u.test(line) ? lines[index - 1] : '');
+    if (!text) continue;
+    const title = text.replace(/[*_`]/g, '').replace(/\s+/gu, '').replace(/／/g, '/').replace(/[（(](?:仅管理员|管理员可见)[）)]$/u, '');
+    if (adminHeadings.has(title)) throw Error('Administrator deployment sections must stay in server release records');
+  }
   const assets = files.map(file => {
     const name = basename(file);
     const platform = /\.(dmg|app\.tar\.gz)$/.test(name) ? 'darwin-universal' : name.endsWith('.exe') ? 'windows-x86_64' : 'linux-x86_64';
