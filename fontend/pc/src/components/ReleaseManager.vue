@@ -32,7 +32,7 @@
         <el-button :disabled="busy" @click="close">关闭</el-button><el-button :loading="busy" @click="mutate('save')">保存草稿</el-button><el-button type="primary" :loading="busy" @click="confirmAction('publish')">发布</el-button>
       </template>
     </OperationDialog>
-    <OperationDialog :visible="githubVisible" title="导入客户端版本" :busy="busy" @close="githubVisible = false"><div class="release-detail"><el-select v-model="githubId" placeholder="请选择 GitHub 正式版本" style="width:100%"><el-option v-for="row in githubItems" :key="row.id" :label="row.name || row.tag" :value="row.id" /></el-select></div><template #footer><el-button type="primary" :disabled="!githubId" :loading="busy" @click="importVersion">导入草稿并下载</el-button></template></OperationDialog>
+    <OperationDialog :visible="githubVisible" title="导入客户端版本" :busy="busy" @close="githubVisible = false"><div class="release-detail"><el-alert v-if="githubError" :title="githubError" type="error" :closable="false" /><el-select v-model="githubId" :disabled="busy" placeholder="请选择 GitHub 正式版本" style="width:100%"><el-option v-for="row in githubItems" :key="row.id" :label="row.name || row.tag" :value="row.id" /></el-select><small>导入时读取版本清单，安装包随后由后台队列下载。网络较慢时请等待当前操作完成。</small></div><template #footer><el-button type="primary" :disabled="!githubId" :loading="busy" @click="importVersion">导入草稿并下载</el-button></template></OperationDialog>
   </section>
 </template>
 <script setup>
@@ -47,6 +47,7 @@ import ReleaseAssets from './ReleaseAssets.vue';
 const deferredPlatforms = ref([]);
 const product = ref('system'), items = ref([]), page = ref(1), total = ref(0), loading = ref(false), busy = ref(false), error = ref(''), selected = ref(null), tab = ref('notes');
 const githubVisible = ref(false), githubItems = ref([]), githubId = ref(null);
+const githubError = ref('');
 const tabs = [{ key: 'notes', name: '用户更新说明' }, { key: 'upgrade', name: '升级/部署事项' }, { key: 'sql', name: '升级 SQL' }, { key: 'assets', name: '客户端安装包' }];
 let baseline = '';
 let alive = true, listRevision = 0;
@@ -70,8 +71,8 @@ async function confirmAction(action) {
 }
 async function copySql(sql) { try { await navigator.clipboard.writeText(sql.sql_content); ElMessage.success('SQL 已复制'); } catch { ElMessage.error('浏览器不允许复制，请选择 SQL 内容复制'); } }
 async function markSql(sql) { if (!alive || busy.value || !selected.value) return; const target = selected.value; try { const result = await ElMessageBox.prompt('请先在数据库工具中完成执行，再登记执行说明。此操作不会执行 SQL。', '登记 SQL', { inputPlaceholder: '执行备注', inputValidator: v => Boolean(v?.trim()) || '请填写执行备注' }); if (!alive || busy.value || target !== selected.value) return; await mutate('mark-sql', { sql_id: sql.id, execution_note: result.value }); } catch { /* 取消登记。 */ } }
-async function github() { if (!alive || busy.value) return; busy.value = true; try { const data = await request('/release/github'); if (!alive) return; githubItems.value = data.items; githubVisible.value = true; } catch (e) { if (alive) ElMessage.error(e.message); } finally { busy.value = false; } }
-async function importVersion() { if (!alive || busy.value) return; busy.value = true; try { const data = await request('/release/import', { method: 'POST', body: JSON.stringify({ id: githubId.value }) }); if (!alive) return; selected.value = data; baseline = JSON.stringify(payload()); githubVisible.value = false; tab.value = 'assets'; await load(1); } catch (e) { if (alive) ElMessage.error(e.message); } finally { busy.value = false; } }
+async function github() { if (!alive || busy.value) return; busy.value = true; githubError.value = ''; try { const data = await request('/release/github', { timeoutMs: 60000 }); if (!alive) return; githubItems.value = data.items; githubVisible.value = true; } catch (e) { if (alive) ElMessage.error(e.message); } finally { busy.value = false; } }
+async function importVersion() { if (!alive || busy.value) return; busy.value = true; githubError.value = ''; try { const data = await request('/release/import', { method: 'POST', timeoutMs: 90000, body: JSON.stringify({ id: githubId.value }) }); if (!alive) return; selected.value = data; baseline = JSON.stringify(payload()); deferredPlatforms.value = []; githubVisible.value = false; tab.value = 'assets'; await load(1); } catch (e) { if (alive) githubError.value = e.message; } finally { busy.value = false; } }
 load();
 onBeforeUnmount(() => { alive = false; listRevision++; });
 </script>
