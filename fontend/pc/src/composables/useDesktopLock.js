@@ -12,12 +12,16 @@ export function useDesktopLock() {
   let pollTimer = null;
   let revision = -1;
   let activeOperations = 0;
+  let appliedVersion = 0;
+  let statusError = false;
 
   function apply(result) {
     if (disposed || !result || typeof result.locked !== 'boolean') return result;
     const nextRevision = Number(result.revision ?? 0);
     if (nextRevision < revision) return result;
     revision = nextRevision;
+    appliedVersion++;
+    if (statusError) { state.error = ''; statusError = false; }
     state.locked = result.locked;
     state.settings.enabled = result.enabled === true;
     state.settings.idle_minutes = Number(result.idle_minutes || 30);
@@ -29,11 +33,11 @@ export function useDesktopLock() {
 
   async function call(action, payload = {}, tracked = true) {
     if (!supported) throw new Error('该功能仅在客户端中使用');
-    if (tracked) { activeOperations++; state.busy = true; state.error = ''; }
+    if (tracked) { activeOperations++; state.busy = true; state.error = ''; statusError = false; }
     try {
       return apply(await bridge.lock(action, payload));
     } catch (error) {
-      if (!disposed && tracked) state.error = error.message || '客户端锁定操作失败';
+      if (!disposed && tracked) { state.error = error.message || '客户端锁定操作失败'; statusError = false; }
       throw error;
     } finally {
       if (tracked) { activeOperations--; if (!disposed) state.busy = activeOperations > 0; }
@@ -41,9 +45,14 @@ export function useDesktopLock() {
   }
 
   async function refresh() {
-    try { return await call('status', {}, false); }
+    const version = appliedVersion;
+    try {
+      const result = await call('status', {}, false);
+      if (!result || typeof result.locked !== 'boolean') throw new Error('客户端锁定状态响应无效，请重新读取');
+      return result;
+    }
     catch (error) {
-      if (!disposed) { state.error = error.message || '无法读取客户端锁定状态'; state.locked = true; }
+      if (!disposed && version === appliedVersion) { state.error = error.message || '无法读取客户端锁定状态'; statusError = true; state.locked = true; }
       throw error;
     }
   }
@@ -66,7 +75,7 @@ export function useDesktopLock() {
 
   Object.assign(state, {
     refresh,
-    clearError: () => { state.error = ''; },
+    clearError: () => { state.error = ''; statusError = false; },
     lockNow: () => call('manual').finally(() => refresh().catch(() => {})),
     saveSettings: preferences => call('settings', preferences),
     unlockPassword: password => call('password-unlock', { password }),

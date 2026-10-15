@@ -1237,6 +1237,20 @@ async fn lock_action(
     if action == "settings" {
         return state.lock.settings(&state.app, input);
     }
+    if action == "wechat-cancel" {
+        let id = input["session_id"].as_str().ok_or("扫码会话无效")?;
+        state.lock.cancel_wechat(id)?;
+        let data = crate::school_api::auth_post(
+            &state.connection,
+            "api/auth/desktop-lock/wechat/cancel",
+            &serde_json::json!({"session_id": id}),
+        )
+        .await?;
+        if state.cancel.is_cancelled() {
+            return Err("学校连接已关闭，请重新连接".into());
+        }
+        return Ok(data);
+    }
     if !state.lock.is_locked() {
         return Err("客户端当前未锁定".into());
     }
@@ -1250,15 +1264,23 @@ async fn lock_action(
             .await?
         }
         "wechat-create" => {
-            crate::school_api::auth_post(
+            let revision = state.lock.begin_wechat()?;
+            let data = crate::school_api::auth_post(
                 &state.connection,
                 "api/auth/desktop-lock/wechat/create",
                 &serde_json::json!({}),
             )
-            .await?
+            .await?;
+            if state.cancel.is_cancelled() {
+                return Err("学校连接已关闭，请重新连接".into());
+            }
+            let id = data["session_id"].as_str().ok_or("扫码解锁响应无效")?;
+            state.lock.remember_wechat(id, revision)?;
+            data
         }
         "wechat-status" => {
             let id = input["session_id"].as_str().ok_or("扫码会话无效")?;
+            state.lock.validate_wechat(id)?;
             let mut endpoint = state
                 .connection
                 .origin
@@ -1267,16 +1289,13 @@ async fn lock_action(
             endpoint.query_pairs_mut().append_pair("session_id", id);
             crate::school_api::read(&state.connection, endpoint.as_str()).await?
         }
-        "wechat-consume" | "wechat-cancel" => {
-            let path = if action == "wechat-consume" {
-                "api/auth/desktop-lock/wechat/consume"
-            } else {
-                "api/auth/desktop-lock/wechat/cancel"
-            };
+        "wechat-consume" => {
+            let id = input["session_id"].as_str().ok_or("扫码会话无效")?;
+            state.lock.validate_wechat(id)?;
             crate::school_api::auth_post(
                 &state.connection,
-                path,
-                &serde_json::json!({"session_id": input["session_id"]}),
+                "api/auth/desktop-lock/wechat/consume",
+                &serde_json::json!({"session_id": id}),
             )
             .await?
         }

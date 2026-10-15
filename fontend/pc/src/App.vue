@@ -4265,7 +4265,7 @@
       </div>
     </Teleport>
   </div>
-  <DesktopLockScreen v-if="desktopLock.supported && desktopIsLocked && desktopLock.initialized" :lock="desktopLockDisplay" :public-origin="publicSchoolOrigin" />
+  <DesktopLockScreen v-if="desktopLock.supported && desktopIsLocked" :lock="desktopLockDisplay" :public-origin="publicSchoolOrigin" />
   </el-config-provider>
 </template>
 

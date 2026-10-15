@@ -44,6 +44,7 @@ struct Details {
     hidden_windows: Vec<String>,
     revision: u64,
     pending_lock: bool,
+    wechat_session: Option<(String, u64)>,
 }
 
 pub struct ClientLock {
@@ -102,6 +103,7 @@ impl ClientLock {
                 hidden_windows: Vec::new(),
                 revision: 0,
                 pending_lock: false,
+                wechat_session: None,
             }),
         })
     }
@@ -144,6 +146,52 @@ impl ClientLock {
                 "school_name": context["school_name"], "user_name": context["user_name"], "login_name": context["login_name"],
             })) }),
         )
+    }
+    pub fn begin_wechat(&self) -> Result<u64, String> {
+        let mut details = self.details.lock().map_err(|_| "本机锁定状态不可用")?;
+        if !self.is_locked() || details.snapshot.is_none() {
+            return Err("锁定会话已失效，请退出原会话后重新登录".into());
+        }
+        details.wechat_session = None;
+        Ok(details.revision)
+    }
+    pub fn remember_wechat(&self, id: &str, revision: u64) -> Result<(), String> {
+        if !valid_wechat_id(id) {
+            return Err("扫码解锁响应无效，请重新获取二维码".into());
+        }
+        let mut details = self.details.lock().map_err(|_| "本机锁定状态不可用")?;
+        if !self.is_locked() || details.snapshot.is_none() || details.revision != revision {
+            return Err("锁定会话已变更，请重新获取二维码".into());
+        }
+        details.wechat_session = Some((id.to_owned(), revision));
+        Ok(())
+    }
+    pub fn validate_wechat(&self, id: &str) -> Result<(), String> {
+        let details = self.details.lock().map_err(|_| "本机锁定状态不可用")?;
+        if !self.is_locked()
+            || details.snapshot.is_none()
+            || !details
+                .wechat_session
+                .as_ref()
+                .is_some_and(|(current, revision)| current == id && *revision == details.revision)
+        {
+            return Err("扫码会话已失效，请重新获取二维码".into());
+        }
+        Ok(())
+    }
+    pub fn cancel_wechat(&self, id: &str) -> Result<(), String> {
+        if !valid_wechat_id(id) {
+            return Err("扫码会话无效".into());
+        }
+        let mut details = self.details.lock().map_err(|_| "本机锁定状态不可用")?;
+        if details
+            .wechat_session
+            .as_ref()
+            .is_some_and(|(current, _)| current == id)
+        {
+            details.wechat_session = None;
+        }
+        Ok(())
     }
     pub fn settings(&self, app: &AppHandle, input: &Value) -> Result<Value, String> {
         if self.is_locked() {
@@ -207,6 +255,7 @@ impl ClientLock {
             }
             details.context = None;
             details.snapshot = None;
+            details.wechat_session = None;
             details.last_activity = SystemTime::now();
         }
     }
@@ -232,6 +281,7 @@ impl ClientLock {
         fresh: bool,
     ) -> Result<(), String> {
         let mut details = self.details.lock().map_err(|_| "本机锁定状态不可用")?;
+        details.wechat_session = None;
         if self.is_locked() {
             if details.pending_lock {
                 details.context = Some(context.clone());
@@ -261,6 +311,7 @@ impl ClientLock {
         details.revision += 1;
         details.snapshot = None;
         details.pending_lock = true;
+        details.wechat_session = None;
         self.locked.store(true, Ordering::Release);
         details.hidden_windows = crate::windows::hide_for_lock(app, owner);
         drop(details);
@@ -272,6 +323,7 @@ impl ClientLock {
         let mut details = self.details.lock().map_err(|_| "本机锁定状态不可用")?;
         details.pending_lock = false;
         details.revision += 1;
+        details.wechat_session = None;
         let valid = context["account_id"].as_u64().unwrap_or(0) > 0
             && !context["school_id"].is_null()
             && context["device_jti"]
@@ -333,6 +385,7 @@ impl ClientLock {
         details.context = Some(context.clone());
         details.snapshot = None;
         details.pending_lock = false;
+        details.wechat_session = None;
         details.last_activity = SystemTime::now();
         let hidden = std::mem::take(&mut details.hidden_windows);
         self.locked.store(false, Ordering::Release);
@@ -341,4 +394,11 @@ impl ClientLock {
         crate::windows::notify_lock(app);
         self.status()
     }
+}
+
+fn valid_wechat_id(id: &str) -> bool {
+    id.len() == 64
+        && id
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
 }
