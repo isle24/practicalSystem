@@ -5,7 +5,7 @@ use std::{
     io::Write,
     sync::{
         atomic::{AtomicBool, Ordering},
-        Mutex,
+        Arc, Mutex,
     },
     time::SystemTime,
 };
@@ -49,6 +49,7 @@ struct Details {
 pub struct ClientLock {
     locked: AtomicBool,
     details: Mutex<Details>,
+    pub local_password: Arc<crate::local_lock_password::LocalLockPassword>,
 }
 
 pub fn load(app: &AppHandle) -> Result<Preferences, String> {
@@ -92,6 +93,7 @@ impl ClientLock {
     pub fn new(app: &AppHandle) -> Result<Self, String> {
         Ok(Self {
             locked: AtomicBool::new(false),
+            local_password: Arc::default(),
             details: Mutex::new(Details {
                 preferences: load(app)?,
                 context: None,
@@ -105,6 +107,32 @@ impl ClientLock {
     }
     pub fn is_locked(&self) -> bool {
         self.locked.load(Ordering::Acquire)
+    }
+    pub fn password_context(&self, locked: bool) -> Result<(Value, u64), String> {
+        let details = self.details.lock().map_err(|_| "本机锁定状态不可用")?;
+        if self.is_locked() != locked {
+            return Err(if locked {
+                "客户端当前未锁定"
+            } else {
+                "客户端已锁定，请先解锁再修改本机密码"
+            }
+            .into());
+        }
+        let context = if locked {
+            details.snapshot.as_ref()
+        } else {
+            details.context.as_ref()
+        }
+        .ok_or("学校登录会话不可用，请重新登录")?;
+        if context["account_id"].as_u64().unwrap_or(0) == 0
+            || context["school_id"].as_u64().is_none()
+            || context["device_jti"]
+                .as_str()
+                .is_none_or(|jti| jti.is_empty())
+        {
+            return Err("学校登录会话无效，请重新登录".into());
+        }
+        Ok((context.clone(), details.revision))
     }
     pub fn status(&self) -> Result<Value, String> {
         let details = self.details.lock().map_err(|_| "本机锁定状态不可用")?;

@@ -1,6 +1,6 @@
 [package]
 name = "practical-system-desktop"
-version = "0.3.22"
+version = "0.3.23"
 description = "Practical System desktop client"
 edition = "2021"
 rust-version = "1.88"
@@ -38,6 +38,8 @@ keyring = { version = "3.6", default-features = false, features = ["apple-native
 aes-gcm = "0.10.3"
 base64 = "0.22.1"
 zeroize = "1.8"
+argon2 = { version = "=0.5.3", default-features = false, features = ["alloc", "zeroize"] }
+subtle = "=2.6.1"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2-core-graphics = { version = "0.3.2", default-features = false, features = ["std", "CGEventSource", "CGEventTypes"] }

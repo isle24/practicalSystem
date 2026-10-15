@@ -66,9 +66,14 @@ export function useDesktopLock() {
 
   Object.assign(state, {
     refresh,
+    clearError: () => { state.error = ''; },
     lockNow: () => call('manual').finally(() => refresh().catch(() => {})),
     saveSettings: preferences => call('settings', preferences),
     unlockPassword: password => call('password-unlock', { password }),
+    readLocalPassword: () => call('local-password-status'),
+    saveLocalPassword: (password, confirmation) => call('local-password-set', { password, confirmation }),
+    clearLocalPassword: () => call('local-password-clear'),
+    unlockLocalPassword: password => call('local-password-unlock', { password }),
     createWechat: () => call('wechat-create'),
     pollWechat: session_id => call('wechat-status', { session_id }, false),
     consumeWechat: session_id => call('wechat-consume', { session_id }),

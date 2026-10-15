@@ -1221,6 +1221,15 @@ async fn lock_action(
         crate::windows::show_connection(&state.app);
         return Ok(serde_json::json!({"exited": true}));
     }
+    if matches!(
+        action,
+        "local-password-status"
+            | "local-password-set"
+            | "local-password-clear"
+            | "local-password-unlock"
+    ) {
+        return local_password_action(state, input).await;
+    }
     let _session = state.connection.session_lock.write().await;
     if state.cancel.is_cancelled() {
         return Err("学校连接已关闭，请重新连接".into());
@@ -1324,6 +1333,115 @@ async fn lock_action(
         return state.lock.unlock(&state.app, &state.owner, &data);
     }
     Ok(data)
+}
+
+async fn local_password_action(
+    state: &GatewayState,
+    input: &serde_json::Value,
+) -> Result<serde_json::Value, String> {
+    let action = input["action"].as_str().unwrap_or("").to_owned();
+    let allowed: &[&str] = if action == "local-password-set" {
+        &["action", "password", "confirmation"]
+    } else if action == "local-password-unlock" {
+        &["action", "password"]
+    } else {
+        &["action"]
+    };
+    if input
+        .as_object()
+        .is_none_or(|object| object.keys().any(|key| !allowed.contains(&key.as_str())))
+    {
+        return Err("本机密码参数无效".into());
+    }
+    let lease = crate::local_lock_password::reserve()?;
+    let unlocking = action == "local-password-unlock";
+    let changing = matches!(
+        action.as_str(),
+        "local-password-set" | "local-password-clear"
+    );
+    let (expected, revision) = {
+        let session = state.connection.session_lock.write().await;
+        if state.cancel.is_cancelled() {
+            return Err("学校连接已关闭，请重新连接".into());
+        }
+        let (expected, revision) = state.lock.password_context(unlocking)?;
+        if !unlocking {
+            let context =
+                crate::school_api::read_context_guarded(&state.connection, &session).await?;
+            if ["account_id", "school_id", "device_jti"]
+                .iter()
+                .any(|key| expected[*key] != context[*key])
+            {
+                return Err("学校账号已变更，请重新登录后设置本机密码".into());
+            }
+            let (_, current_revision) = state.lock.password_context(false)?;
+            if revision != current_revision || state.cancel.is_cancelled() {
+                return Err("学校会话已变更，请重新操作本机密码".into());
+            }
+        }
+        (expected, revision)
+    };
+    let key = crate::local_lock_password::scope(&state.connection.origin, &expected)?;
+    let password = zeroize::Zeroizing::new(input["password"].as_str().unwrap_or("").to_owned());
+    if action == "local-password-set" && input["confirmation"].as_str() != Some(password.as_str()) {
+        return Err("两次输入的本机锁屏密码不一致".into());
+    }
+    let store = state.lock.local_password.clone();
+    let operation = tauri::async_runtime::spawn_blocking(move || {
+        let result = match action.as_str() {
+            "local-password-status" => store.exists(&key),
+            "local-password-set" => store.set(&key, &password),
+            "local-password-clear" => store.clear(&key),
+            "local-password-unlock" => store.verify(&key, &password),
+            _ => Err("本机密码操作无效".into()),
+        };
+        (result, lease)
+    });
+    let (result, _lease) = tokio::select! {
+        _ = state.cancel.cancelled() => return Err("学校连接已关闭，本机密码操作可能仍在系统处理中".into()),
+        result = tokio::time::timeout(std::time::Duration::from_secs(15), operation) => result
+            .map_err(|_| "系统凭据库响应超时，本机密码操作可能仍在处理中。请完成或取消系统授权后刷新状态；可使用账号密码或企业微信解锁")?
+            .map_err(|_| "本机密码操作未完成，请使用其他解锁方式")?,
+    };
+    let configured = result?;
+    let session = state.connection.session_lock.write().await;
+    if state.cancel.is_cancelled() || !crate::school_owner_current(&state.app, &state.owner) {
+        return Err("学校连接已变更，请重新操作".into());
+    }
+    let (current, current_revision) =
+        state.lock.password_context(unlocking).map_err(|message| {
+            if changing {
+                format!("{message}；本机密码操作可能已完成，请解锁后刷新状态确认")
+            } else {
+                message
+            }
+        })?;
+    if revision != current_revision
+        || ["account_id", "school_id", "device_jti"]
+            .iter()
+            .any(|key| expected[*key] != current[*key])
+    {
+        return Err(if changing {
+            "锁定状态或学校账号已变更；本机密码操作可能已完成，请解锁后刷新状态确认"
+        } else {
+            "锁定状态或学校账号已变更，请重新操作"
+        }
+        .into());
+    }
+    if unlocking {
+        let context = crate::school_api::read_context_guarded(&state.connection, &session).await?;
+        if state.cancel.is_cancelled() {
+            return Err("学校连接已关闭，请重新连接".into());
+        }
+        return state.lock.unlock(
+            &state.app,
+            &state.owner,
+            &serde_json::json!({"verified": configured, "context": context}),
+        );
+    }
+    let mut status = state.lock.status()?;
+    status["local_password_set"] = configured.into();
+    Ok(status)
 }
 
 pub(crate) fn cancellable_body(

@@ -1,6 +1,6 @@
 {
   "name": "practical-system-desktop",
-  "version": "0.3.22",
+  "version": "0.3.23",
   "private": true,
   "type": "module",
   "scripts": {
@@ -9,7 +9,7 @@
     "bundle": "tauri build",
     "bundle:mac": "CI=true tauri build --target aarch64-apple-darwin --bundles app,dmg",
     "bundle:mac:universal": "CI=true tauri build --target universal-apple-darwin --bundles app,dmg",
-    "icons": "tauri icon assets/app-icon.png",
+    "icons": "node scripts/build-app-icon.mjs",
     "tauri": "tauri"
   },
   "dependencies": {

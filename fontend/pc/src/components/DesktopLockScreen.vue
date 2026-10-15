@@ -11,7 +11,9 @@
         <p class="desktop-lock-help">工作状态已保留，请验证当前账号以继续。</p>
 
         <form v-if="lock.locked && mode === 'password'" class="desktop-lock-form" @submit.prevent="unlock">
-          <label for="desktop-unlock-password">当前账号密码</label><input id="desktop-unlock-password" ref="passwordInput" v-model="password" type="password" autocomplete="current-password" :disabled="lock.busy || !lock.initialized" required placeholder="请输入当前账号密码">
+          <div class="desktop-lock-password-types" role="group" aria-label="密码验证方式"><button v-for="item in passwordTypes" :key="item.value" type="button" :aria-pressed="passwordType === item.value" :disabled="lock.busy || !lock.initialized" @click="selectPasswordType(item.value)">{{ item.label }}</button></div>
+          <label for="desktop-unlock-password">{{ passwordType === 'local' ? '本机锁屏密码' : '当前账号密码' }}</label><input id="desktop-unlock-password" ref="passwordInput" v-model="password" type="password" :autocomplete="passwordType === 'local' ? 'off' : 'current-password'" :disabled="lock.busy || !lock.initialized" required :placeholder="passwordType === 'local' ? '请输入已设置的本机锁屏密码' : '请输入当前账号密码'">
+          <p v-if="passwordType === 'local'" class="desktop-lock-password-hint">仅用于此设备的当前学校和账号。未设置或忘记时，可使用账号密码或企业微信解锁。</p>
           <button type="submit" class="desktop-lock-primary" :disabled="lock.busy || !password || !lock.initialized">{{ lock.busy ? '正在验证…' : '解锁' }}</button>
         </form>
         <div v-else-if="lock.locked" class="desktop-lock-qr">
@@ -37,6 +39,8 @@ const screen = ref(null);
 const passwordInput = ref(null);
 const password = ref('');
 const mode = ref('password');
+const passwordType = ref('account');
+const passwordTypes = [{ value: 'account', label: '账号密码' }, { value: 'local', label: '本机锁屏密码' }];
 const message = ref('');
 const recovery = ref(false);
 const scan = ref(null);
@@ -65,15 +69,16 @@ async function cancelScan() {
   if (previous?.session_id && ['pending', 'scanned', 'ready'].includes(previous.state)) await props.lock.cancelWechat(previous.session_id).catch(() => {});
 }
 async function selectMode(value) {
-  await cancelScan(); password.value = ''; message.value = ''; mode.value = value;
+  await cancelScan(); password.value = ''; message.value = ''; props.lock.clearError(); mode.value = value;
   if (value === 'wechat') await createScan(); else { await nextTick(); passwordInput.value?.focus(); }
 }
 async function unlock() {
   if (props.lock.busy || !password.value) return;
   message.value = '';
   const value = password.value; password.value = '';
-  try { await props.lock.unlockPassword(value); } catch (error) { message.value = error.message; passwordInput.value?.focus(); }
+  try { await (passwordType.value === 'local' ? props.lock.unlockLocalPassword(value) : props.lock.unlockPassword(value)); } catch (error) { message.value = error.message; passwordInput.value?.focus(); }
 }
+async function selectPasswordType(value) { passwordType.value = value; password.value = ''; message.value = ''; props.lock.clearError(); await nextTick(); passwordInput.value?.focus(); }
 async function createScan() {
   if (props.lock.busy || disposed) return;
   await cancelScan(); const version = generation; message.value = '';
@@ -131,5 +136,6 @@ onBeforeUnmount(() => {
 });
 </script>
 <style scoped>
+.desktop-lock-password-types{display:flex;gap:8px}.desktop-lock-password-types button{flex:1;min-width:0;font-size:13px}.desktop-lock-password-types button[aria-pressed="true"]{border-color:var(--primary,#2563eb);color:var(--primary,#2563eb);background:var(--surface-2,#eef2f6)}.desktop-lock-password-hint{margin:0;font-size:12px;line-height:1.7;color:var(--muted,#64748b)}
 .desktop-lock-screen{position:fixed;inset:0;z-index:2147483000;display:grid;place-items:center;padding:56px 24px 24px;box-sizing:border-box;background:var(--surface-2,#eef2f6);overflow:auto;color:var(--text,#1f2937);outline:none}.desktop-lock-window-controls{position:absolute;inset:0 0 auto;display:flex;height:42px;align-items:stretch;user-select:none;border-bottom:1px solid var(--line,#dce2ea)}.desktop-lock-window-controls>div{flex:1;display:flex;align-items:center;padding:0 16px;font-size:12px}.desktop-lock-window-controls button{width:46px;display:grid;place-items:center;padding:0;border:0;border-radius:0;background:transparent}.desktop-lock-window-controls button:hover{background:var(--line,#dce2ea)}.desktop-lock-window-controls button:last-child:hover{background:#d92d36;color:#fff}.desktop-lock-card{position:relative;width:min(100%,420px);padding:32px;box-sizing:border-box;border:1px solid var(--line,#dce2ea);border-radius:18px;background:var(--surface,#fff);box-shadow:0 20px 60px #00000014;text-align:center}.desktop-lock-mark{display:grid;place-items:center;width:56px;height:56px;margin:0 auto 18px;border-radius:16px;background:var(--surface-2,#eef2f6);color:var(--primary,#2563eb)}h1{margin:0 0 14px;font-size:23px;font-weight:600}.desktop-lock-identity{font-size:15px;line-height:1.8;margin:0}.desktop-lock-identity span{display:block;font-size:13px;color:var(--muted,#64748b)}.desktop-lock-help{font-size:13px;color:var(--muted,#64748b);line-height:1.7;margin:14px 0 20px}button,input{font:inherit}button{cursor:pointer;border:1px solid var(--line,#dce2ea);border-radius:8px;background:var(--surface,#fff);color:inherit;padding:10px 14px}button:disabled{cursor:default;opacity:.55}button:focus-visible,input:focus-visible{outline:2px solid var(--primary,#2563eb);outline-offset:2px}.desktop-lock-form{display:flex;flex-direction:column;gap:12px;text-align:left}.desktop-lock-form label{font-size:13px}.desktop-lock-form input{border:1px solid var(--line,#dce2ea);border-radius:8px;padding:12px;background:var(--surface,#fff);color:inherit;min-width:0}.desktop-lock-primary{background:var(--primary,#2563eb);border-color:var(--primary,#2563eb);color:#fff}.desktop-lock-error{font-size:13px;line-height:1.7;color:var(--el-color-danger,#dc2626);text-align:left;margin:16px 0 0;overflow-wrap:anywhere}.desktop-lock-actions{display:flex;justify-content:space-between;gap:16px;margin-top:22px}.desktop-lock-actions button{padding:0;border:0;background:none;color:var(--muted,#64748b);font-size:12px;text-align:left}.desktop-lock-qr{display:flex;flex-direction:column;align-items:center;gap:10px}.desktop-lock-qr p{font-size:13px;line-height:1.8;color:var(--muted,#64748b);margin:0}.desktop-lock-recovery{width:min(100%,500px);background:var(--surface,#fff);border:1px solid var(--line,#dce2ea);border-radius:18px;padding:28px;box-sizing:border-box}@media(max-width:520px){.desktop-lock-screen{padding:44px 12px 12px}.desktop-lock-card{padding:24px}.desktop-lock-recovery{padding:20px}}
 </style>

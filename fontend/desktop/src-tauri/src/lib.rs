@@ -7,6 +7,7 @@ mod external;
 mod favorite_auth;
 mod gateway;
 mod input_activity;
+mod local_lock_password;
 mod office_engine;
 mod office_preview;
 mod preview_cache;
