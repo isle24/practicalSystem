@@ -1,4 +1,7 @@
+mod agent_models;
+mod agent_process;
 mod agent_store;
+mod agent_workspace;
 mod client_agent;
 mod client_lock;
 mod connection;
@@ -40,6 +43,8 @@ struct AppState {
     login_operation_scope: Mutex<Option<String>>,
     cancelled_login_scopes: Mutex<Vec<String>>,
     zoom: Mutex<f64>,
+    #[cfg(target_os = "macos")]
+    active_window: Mutex<Option<String>>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -943,6 +948,13 @@ pub fn run() {
                 let _ = window.hide();
                 return;
             }
+            #[cfg(target_os = "macos")]
+            if matches!(event, tauri::WindowEvent::Focused(true)) {
+                if let Ok(mut active) = window.app_handle().state::<AppState>().active_window.lock()
+                {
+                    *active = Some(window.label().to_owned());
+                }
+            }
             if window.label() == "connection" {
                 if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                     let pending = window
@@ -1113,13 +1125,12 @@ pub fn run() {
                 }
             }
             #[cfg(target_os = "macos")]
-            if let tauri::RunEvent::Reopen { .. } = event {
-                if let Some(window) = app.get_webview_window("school") {
-                    let _ = window.show();
-                    let _ = window.set_focus();
-                } else {
-                    windows::show_connection(app);
-                }
+            if let tauri::RunEvent::Reopen {
+                has_visible_windows: false,
+                ..
+            } = event
+            {
+                windows::restore_active(app);
             }
             #[cfg(not(target_os = "macos"))]
             let _ = (app, event);

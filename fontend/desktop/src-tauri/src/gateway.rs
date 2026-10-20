@@ -288,6 +288,42 @@ pub async fn start(
             }
         }
     });
+    let scheduler_state = state.clone();
+    tauri::async_runtime::spawn(async move {
+        let mut previous = std::time::Instant::now();
+        let mut paused = true;
+        loop {
+            tokio::select! {_=scheduler_state.cancel.cancelled()=>break,_=tokio::time::sleep(std::time::Duration::from_secs(5))=>{}}
+            let elapsed = previous.elapsed();
+            previous = std::time::Instant::now();
+            if scheduler_state.lock.is_locked() {
+                paused = true;
+                continue;
+            }
+            let Ok((context, _)) = scheduler_state.lock.password_context(false) else {
+                paused = true;
+                continue;
+            };
+            let cancel = scheduler_state.authorization_cancel.lock().await.clone();
+            let mut connection = scheduler_state.connection.clone();
+            connection.operation_context = Some(context);
+            let _session = connection.session_lock.read().await;
+            if scheduler_state.lock.is_locked() || cancel.is_cancelled() {
+                paused = true;
+                continue;
+            }
+            let interrupted = paused || elapsed > std::time::Duration::from_secs(20);
+            paused = false;
+            let _ = crate::client_agent::scheduler_tick(
+                &scheduler_state.app,
+                &connection,
+                &scheduler_state.owner,
+                cancel,
+                interrupted,
+            )
+            .await;
+        }
+    });
     let router = Router::new().fallback(any(handle)).with_state(state);
     let (shutdown, receive) = oneshot::channel();
     tauri::async_runtime::spawn(async move {
@@ -457,7 +493,7 @@ async fn handle(State(state): State<Arc<GatewayState>>, request: Request) -> Res
         {
             return error(StatusCode::FORBIDDEN, "仅学校页面可以调用客户端 Agent");
         }
-        let bytes = match axum::body::to_bytes(request.into_body(), 65536).await {
+        let bytes = match axum::body::to_bytes(request.into_body(), 2 * 1024 * 1024).await {
             Ok(bytes) => bytes,
             Err(_) => return error(StatusCode::BAD_REQUEST, "Agent 参数过长"),
         };
@@ -503,14 +539,10 @@ async fn handle(State(state): State<Arc<GatewayState>>, request: Request) -> Res
                 &state.owner,
             )
         } else {
-            crate::client_agent::action(
-                &state.app,
-                &connection,
-                &state.owner,
-                authorization_cancel.clone(),
-                &input,
-            )
-            .await
+            tokio::select! {biased;
+                _=authorization_cancel.cancelled()=>Err("客户端已锁定或账号已变更".into()),
+                result=crate::client_agent::action(&state.app,&connection,&state.owner,authorization_cancel.clone(),&input)=>result,
+            }
         };
         if let Some(serde_json::Value::String(key)) = input.get_mut("api_key") {
             use zeroize::Zeroize;
@@ -627,7 +659,7 @@ async fn handle(State(state): State<Arc<GatewayState>>, request: Request) -> Res
         let cache = path.ends_with("/preview-cache");
         let vault = path.ends_with("/credential-vault");
         let controls = path.ends_with("/window");
-        let bytes = match axum::body::to_bytes(request.into_body(), 65536).await {
+        let bytes = match axum::body::to_bytes(request.into_body(), 2 * 1024 * 1024).await {
             Ok(bytes) => bytes,
             Err(_) => return error(StatusCode::BAD_REQUEST, "参数过长"),
         };
@@ -1256,7 +1288,7 @@ async fn lock_request(state: Arc<GatewayState>, request: Request) -> Response<Bo
     {
         return error(StatusCode::FORBIDDEN, "仅学校页面可以调用本机锁定");
     }
-    let bytes = match axum::body::to_bytes(request.into_body(), 65536).await {
+    let bytes = match axum::body::to_bytes(request.into_body(), 2 * 1024 * 1024).await {
         Ok(bytes) => bytes,
         Err(_) => return error(StatusCode::BAD_REQUEST, "参数过长"),
     };

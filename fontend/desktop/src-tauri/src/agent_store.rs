@@ -75,15 +75,15 @@ fn secret(key: &str, create: bool) -> Result<Zeroizing<Vec<u8>>, String> {
     Ok(bytes)
 }
 
-pub fn read(app: &AppHandle, scope: &Value) -> Result<Value, String> {
-    let _guard = acquire(app, scope)?;
-    read_locked(app, scope)
-}
-
 pub fn read_locked(app: &AppHandle, scope: &Value) -> Result<Value, String> {
     let key = scope_key(scope)?;
-    let path = file(app, &key)?;
-    let data = match fs::read(path) {
+    let legacy = file(app, &key)?;
+    let path = legacy.with_extension("workspace.bin");
+    let encoded = match fs::read(&path) {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => fs::read(&legacy),
+        result => result,
+    };
+    let data = match encoded {
         Ok(data) if data.len() <= 4 * 1024 * 1024 => data,
         Ok(_) => return Err("本机记忆超过容量限制，请清除后重新开始".into()),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
@@ -116,12 +116,13 @@ pub fn read_locked(app: &AppHandle, scope: &Value) -> Result<Value, String> {
 
 pub fn write(app: &AppHandle, scope: &Value, value: &Value) -> Result<(), String> {
     let key = scope_key(scope)?;
-    let path = file(app, &key)?;
-    let exists = path.exists();
+    let legacy = file(app, &key)?;
+    let path = legacy.with_extension("workspace.bin");
+    let exists = path.exists() || legacy.exists();
     let key_bytes = secret(&key, !exists)?;
     let clear = Zeroizing::new(serde_json::to_vec(value).map_err(|_| "无法保存本机记忆")?);
     if clear.len() > 3 * 1024 * 1024 {
-        return Err("本机记忆已满，请新建会话后继续".into());
+        return Err("本机工作区已满，请删除不需要的会话或插件资源".into());
     }
     let cipher = Aes256Gcm::new_from_slice(&key_bytes).map_err(|_| "本机记忆密钥无效")?;
     let mut nonce = [0u8; 12];
@@ -146,16 +147,5 @@ pub fn write(app: &AppHandle, scope: &Value, value: &Value) -> Result<(), String
         .and_then(|_| temporary.as_file().sync_all())
         .map_err(|_| "无法保存本机记忆")?;
     temporary.persist(path).map_err(|_| "无法替换本机记忆")?;
-    Ok(())
-}
-
-pub fn clear(app: &AppHandle, scope: &Value) -> Result<(), String> {
-    let _guard = acquire(app, scope)?;
-    let key = scope_key(scope)?;
-    match fs::remove_file(file(app, &key)?) {
-        Ok(()) => (),
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => (),
-        Err(_) => return Err("无法清除本机记忆".into()),
-    }
     Ok(())
 }

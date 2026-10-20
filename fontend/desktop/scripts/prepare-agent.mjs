@@ -1,4 +1,5 @@
 import { build } from 'esbuild';
+import { builtinModules } from 'node:module';
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, readFile, writeFile, chmod, copyFile, rename, rm, mkdtemp, readdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
@@ -93,6 +94,7 @@ const result = await build({
   bundle: true,
   platform: 'node',
   format: 'esm',
+  banner: { js: "import { createRequire as __practicalCreateRequire } from 'node:module';const require=__practicalCreateRequire(import.meta.url);" },
   target: 'node22.19',
   packages: 'bundle',
   minify: true,
@@ -101,7 +103,7 @@ const result = await build({
   metafile: true,
 });
 for (const output of Object.values(result.metafile.outputs)) {
-  if (output.imports.some((entry) => entry.external && !entry.path.startsWith('node:'))) throw new Error('Agent runtime contains an unbundled dependency');
+  if (output.imports.some((entry) => entry.external && !entry.path.startsWith('node:') && !builtinModules.includes(entry.path))) throw new Error('Agent runtime contains an unbundled dependency');
 }
 
 const bundledPackages = new Set();
@@ -117,8 +119,9 @@ for (const packageName of [...bundledPackages].sort()) {
   notices.push(`\n${packageName}@${metadata.version} (${metadata.license ?? 'see notice'})`);
   if (files.length) {
     for (const file of files.sort()) notices.push(`\n${file}\n${await readFile(join(directory, file), 'utf8')}`);
-  } else if (['@earendil-works/pi-agent-core', '@earendil-works/pi-ai'].includes(packageName)) {
+  } else if (['@earendil-works/pi-agent-core', '@earendil-works/pi-ai', '@earendil-works/pi-mcp'].includes(packageName)) {
     notices.push(`\nhttps://github.com/earendil-works/pi/blob/v1.3.0/LICENSE\n${await readFile(join(root, 'agent/licenses/pi-LICENSE.txt'), 'utf8')}`);
+    if (packageName === '@earendil-works/pi-mcp') notices.push(await readFile(join(directory, 'LICENSES/modelcontextprotocol-typescript-sdk.txt'), 'utf8'));
   } else throw new Error(`Bundled dependency has no license notice: ${packageName}`);
 }
 await writeFile(join(runtimeDirectory, 'THIRD-PARTY-NOTICES.txt'), `${notices.join('\n')}\n`);

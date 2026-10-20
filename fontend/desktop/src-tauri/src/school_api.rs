@@ -91,7 +91,25 @@ pub async fn auth_post(
 
 /// 授权写入必须携带学校签发的 CSRF 值和单次请求标识。
 pub async fn sso_post(connection: &Connection, path: &str, input: &Value) -> Result<Value, String> {
-    let security = read(connection, "api/sso/security").await?;
+    protected_post(connection, path, input, "api/sso/security").await
+}
+
+/// Agent 使用独立 CSRF 来源，不依赖单点登录配置。
+pub async fn client_agent_post(
+    connection: &Connection,
+    path: &str,
+    input: &Value,
+) -> Result<Value, String> {
+    protected_post(connection, path, input, "api/client-agent/bootstrap").await
+}
+
+async fn protected_post(
+    connection: &Connection,
+    path: &str,
+    input: &Value,
+    security_path: &str,
+) -> Result<Value, String> {
+    let security = read(connection, security_path).await?;
     let csrf = security["csrf_token"]
         .as_str()
         .ok_or("授权操作校验不可用")?;

@@ -25,7 +25,7 @@
             <small v-if="sql.executed_at">人工登记于 {{ sql.executed_at }}，不代表系统验证了执行结果。</small>
           </section>
         </template>
-        <ReleaseAssets v-if="tab === 'assets'" v-model:deferred="deferredPlatforms" :assets="selected.assets" :disabled="busy" @busy="busy = $event" @uploaded="selected.assets = $event.assets" @retry="mutate('retry')" @refresh="detail(selected.item.id)" />
+        <ReleaseAssets v-if="tab === 'assets'" v-model:deferred="deferredPlatforms" :assets="selected.assets" :settings="selected.item.product === 'desktop' ? selected.download_settings : null" :disabled="busy" :refreshing="refreshingAssets" :auto-updating="Boolean(pollTarget)" @busy="busy = $event" @uploaded="selected.assets = $event.assets" @retry="mutate('retry')" @refresh="refreshAssets()" @source="changeDownloadSource" />
       </div>
       <template #footer>
         <el-button v-if="selected?.item.status === 'published'" type="danger" :disabled="busy" @click="confirmAction('withdraw')">撤回发布</el-button>
@@ -36,7 +36,7 @@
   </section>
 </template>
 <script setup>
-import { onBeforeUnmount, ref } from 'vue';
+import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { RefreshCw, Download, Copy } from '@lucide/vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { request } from '../api/client';
@@ -49,9 +49,45 @@ const deferredPlatforms = ref([]);
 const product = ref('system'), items = ref([]), page = ref(1), total = ref(0), loading = ref(false), busy = ref(false), error = ref(''), selected = ref(null), tab = ref('notes');
 const githubVisible = ref(false), githubItems = ref([]), githubId = ref(null);
 const githubError = ref('');
+const refreshingAssets = ref(false);
+const pollTarget = computed(() => !busy.value && tab.value === 'assets' && selected.value?.item.product === 'desktop' && selected.value.assets?.some(asset => ['pending', 'downloading'].includes(asset.status) || (asset.status === 'failed' && Number(asset.download_progress?.next_retry_at) > 0 && Number(asset.download_progress?.attempts || 0) < Number(asset.download_progress?.max_attempts || 3))) ? selected.value.item.id : null);
 const tabs = [{ key: 'notes', name: '用户更新说明' }, { key: 'upgrade', name: '升级/部署事项' }, { key: 'sql', name: '升级 SQL' }, { key: 'assets', name: '客户端安装包' }];
 let baseline = '';
-let alive = true, listRevision = 0;
+let alive = true, listRevision = 0, assetRevision = 0, assetTimer, assetController;
+function stopAssetRefresh() {
+  clearTimeout(assetTimer); assetTimer = null; assetRevision++;
+  assetController?.abort(); assetController = null; refreshingAssets.value = false;
+}
+function scheduleAssetRefresh() {
+  clearTimeout(assetTimer);
+  if (alive && pollTarget.value) assetTimer = setTimeout(() => refreshAssets(true), 3000);
+}
+watch(pollTarget, () => { stopAssetRefresh(); scheduleAssetRefresh(); });
+async function refreshAssets(automatic = false) {
+  if (!alive || busy.value || !selected.value || tab.value !== 'assets' || (automatic && !pollTarget.value)) return;
+  stopAssetRefresh();
+  const ticket = assetRevision, target = selected.value, controller = new AbortController();
+  assetController = controller; refreshingAssets.value = true;
+  const isCurrent = () => alive && ticket === assetRevision && selected.value === target && tab.value === 'assets' && !busy.value;
+  try {
+    const data = await request(`/release/detail?id=${target.item.id}`, { signal: controller.signal, isCurrent });
+    if (!isCurrent()) return;
+    target.assets = data.assets;
+    target.download_settings = data.download_settings;
+  } catch (e) { if (isCurrent() && !automatic && e.name !== 'AbortError') ElMessage.error(e.message); }
+  finally { if (alive && ticket === assetRevision) { assetController = null; refreshingAssets.value = false; scheduleAssetRefresh(); } }
+}
+async function changeDownloadSource(source) {
+  if (!alive || busy.value || !selected.value || !['mirror', 'github'].includes(source) || (source === 'mirror' && !selected.value.download_settings?.mirror_available)) return;
+  const target = selected.value; busy.value = true;
+  try {
+    const data = await request('/release/download-settings', { method: 'POST', body: JSON.stringify({ source }) });
+    if (!alive || selected.value !== target) return;
+    target.download_settings = data.download_settings;
+    ElMessage.success('下载源已切换');
+  } catch (e) { if (alive && selected.value === target) ElMessage.error(e.message); }
+  finally { if (alive) busy.value = false; }
+}
 const status = s => ({ draft: '草稿', published: '已发布', withdrawn: '已撤回' }[s] || s);
 const payload = () => ({ id: selected.value.item.id, revision: selected.value.item.revision, title: selected.value.item.title, notes_html: selected.value.item.notes_html, upgrade_notes_html: selected.value.item.upgrade_notes_html ?? '' });
 async function load(target = 1) { if (!alive) return; const ticket = ++listRevision; loading.value = true; error.value = ''; try { const data = await request(`/release/admin-list?product=${product.value}&page=${target}`); if (!alive || ticket !== listRevision) return; items.value = data.items; page.value = target; total.value = data.pagination.total; } catch (e) { if (alive && ticket === listRevision) error.value = e.message; } finally { if (alive && ticket === listRevision) loading.value = false; } }
@@ -75,7 +111,7 @@ async function markSql(sql) { if (!alive || busy.value || !selected.value) retur
 async function github() { if (!alive || busy.value) return; busy.value = true; githubError.value = ''; try { const data = await request('/release/github', { timeoutMs: 60000 }); if (!alive) return; githubItems.value = data.items; githubVisible.value = true; } catch (e) { if (alive) ElMessage.error(e.message); } finally { busy.value = false; } }
 async function importVersion() { if (!alive || busy.value) return; busy.value = true; githubError.value = ''; try { const data = await request('/release/import', { method: 'POST', timeoutMs: 90000, body: JSON.stringify({ id: githubId.value }) }); if (!alive) return; selected.value = data; baseline = JSON.stringify(payload()); deferredPlatforms.value = []; githubVisible.value = false; tab.value = 'assets'; await load(1); } catch (e) { if (alive) githubError.value = e.message; } finally { busy.value = false; } }
 load();
-onBeforeUnmount(() => { alive = false; listRevision++; });
+onBeforeUnmount(() => { alive = false; listRevision++; stopAssetRefresh(); });
 </script>
 <style scoped>
 .release-manager{height:100%;min-height:0;display:flex;flex-direction:column;gap:16px;padding:22px;box-sizing:border-box}.release-manager>header{display:flex;gap:12px;align-items:center;flex-wrap:wrap}.release-manager>footer{display:flex;align-items:center;justify-content:space-between;color:var(--muted);font-size:12px}.release-detail{padding:24px;display:flex;flex-direction:column;gap:20px;overflow:auto;min-height:0}.release-detail label{display:flex;flex-direction:column;gap:10px}.release-detail small{color:var(--muted);line-height:1.6;overflow-wrap:anywhere}.release-sql{display:flex;flex-direction:column;gap:12px}.release-sql pre{padding:18px;background:var(--surface-2);border-radius:5px;overflow:auto;max-height:280px;font:12px/1.8 monospace}.release-sql>div{display:flex;gap:10px}

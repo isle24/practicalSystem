@@ -1,4 +1,10 @@
-use crate::{agent_store, connection::Connection, school_api};
+use crate::{
+    agent_models,
+    agent_process::{bounded_line, plugin_configs, probe_mcp, send, spawn_runtime},
+    agent_store, agent_workspace,
+    connection::Connection,
+    school_api,
+};
 use aes_gcm::aead::rand_core::RngCore;
 use aes_gcm::{
     aead::{Aead, KeyInit, OsRng, Payload},
@@ -8,23 +14,23 @@ use base64::{engine::general_purpose::STANDARD, Engine};
 use serde_json::{json, Value};
 use std::{
     collections::HashMap,
-    process::Stdio,
     sync::{Arc, Mutex, OnceLock},
     time::{Duration, Instant},
 };
 use tauri::{AppHandle, Manager};
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons};
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+use tokio::io::BufReader;
 use tokio_util::sync::CancellationToken;
 use zeroize::{Zeroize, Zeroizing};
 
-const LINE_LIMIT: usize = 4 * 1024 * 1024;
 const RESULT_LIMIT: usize = 256 * 1024;
 
 #[derive(Default)]
 struct OwnerState {
     run: Option<Arc<Run>>,
     tools: Arc<tokio::sync::Mutex<Tools>>,
+    scope: Value,
+    schedule_recovered: bool,
 }
 
 struct Tools {
@@ -54,6 +60,7 @@ struct Run {
     scope: Value,
     cancel: CancellationToken,
     state: Mutex<Value>,
+    options: Value,
 }
 
 struct ModelConfig(Value);
@@ -109,6 +116,7 @@ pub fn open(
     let label = crate::windows::school_window_label("agent", owner, "main");
     if let Some(window) = app.get_webview_window(&label) {
         window.show().map_err(|_| "无法显示 Agent 窗口")?;
+        window.unminimize().map_err(|_| "无法恢复 Agent 窗口")?;
         window.set_focus().ok();
     } else {
         let url = local
@@ -130,35 +138,68 @@ pub fn open(
     Ok(json!({"ok":true}))
 }
 
+fn snapshot(data: &Value) -> Result<Value, String> {
+    let active = agent_workspace::active(data)?;
+    Ok(
+        json!({"workspace":agent_workspace::view(data),"history":active["history"],"conversation_id":active["id"]}),
+    )
+}
+
+fn running(owner: &str) -> Option<Arc<Run>> {
+    owners()
+        .lock()
+        .ok()?
+        .get(owner)?
+        .run
+        .as_ref()
+        .filter(|run| {
+            run.state
+                .lock()
+                .is_ok_and(|state| state["status"] == "running")
+        })
+        .cloned()
+}
+
 async fn bootstrap(app: &AppHandle, connection: &Connection, owner: &str) -> Result<Value, String> {
     let mut value = school_api::read(connection, "api/client-agent/bootstrap").await?;
     check_scope(connection, &value["scope"])?;
     value["busy"] = json!(false);
-    let mut running_history = None;
-    if let Ok(owners) = owners().lock() {
-        if let Some(state) = owners.get(owner) {
-            if let Some(run) = state.run.as_ref().filter(|run| run.scope == value["scope"]) {
-                if let Ok(snapshot) = run.state.lock() {
-                    value["run_id"] = json!(run.id);
-                    value["busy"] = json!(snapshot["status"] == "running");
-                    value["run"] = snapshot.clone();
-                    if snapshot["status"] == "running" {
-                        running_history = Some(snapshot["history"].clone());
+    let active_run = running(owner).filter(|run| run.scope == value["scope"]);
+    if let Some(run) = active_run {
+        let state = run.state.lock().map_err(|_| "Agent 状态不可用")?.clone();
+        for field in ["workspace", "history", "conversation_id"] {
+            value[field] = state[field].clone();
+        }
+        value["busy"] = json!(true);
+        value["run_id"] = json!(run.id);
+        value["run"] = state;
+    } else {
+        match agent_store::acquire(app, &value["scope"]).and_then(|_guard| {
+            let previous = agent_store::read_locked(app, &value["scope"])?;
+            let data = agent_workspace::normalize(&value["scope"], previous.clone());
+            let mut visible = snapshot(&data)?;
+            if data != previous {
+                if let Err(message) = agent_store::write(app, &value["scope"], &data) {
+                    visible["memory_error"] = json!(message);
+                }
+            }
+            Ok(visible)
+        }) {
+            Ok(workspace) => {
+                for field in ["workspace", "history", "conversation_id", "memory_error"] {
+                    if let Some(item) = workspace.get(field) {
+                        value[field] = item.clone();
                     }
                 }
             }
-        }
-    }
-    if let Some(history) = running_history {
-        value["history"] = history;
-    } else {
-        match agent_store::read(app, &value["scope"]) {
-            Ok(stored) => value["history"] = stored["history"].clone(),
             Err(message) => {
                 value["history"] = json!([]);
                 value["memory_error"] = json!(message);
             }
         }
+    }
+    if let Ok(mut state) = owners().lock() {
+        state.entry(owner.to_owned()).or_default().scope = value["scope"].clone();
     }
     Ok(value)
 }
@@ -172,6 +213,11 @@ fn check_scope(connection: &Connection, scope: &Value) -> Result<(), String> {
         .unwrap_or(0);
     if scope["origin"].as_str() != Some(connection.origin.origin().ascii_serialization().as_str())
         || scope["account_id"].as_u64() != Some(account)
+        || scope["school_id"].as_u64()
+            != connection
+                .operation_context
+                .as_ref()
+                .and_then(|value| value["school_database_id"].as_u64())
         || account == 0
     {
         return Err("Agent 配置与当前学校账号不匹配".into());
@@ -190,48 +236,17 @@ pub async fn action(
         return Err("Agent 学校会话已结束".into());
     }
     let action = input["action"].as_str().unwrap_or("");
-    if action == "save" {
-        school_api::sso_post(
-            connection,
-            "api/client-agent/personal-save",
-            &json!({
-                "enabled":input["enabled"], "endpoint":input["endpoint"],"model":input["model"],
-                "api_key":input["api_key"],"clear_key":input["clear_key"]
-            }),
-        )
-        .await?;
-        return bootstrap(app, connection, owner).await;
-    }
-    if action == "bootstrap" {
-        return bootstrap(app, connection, owner).await;
-    }
-    if action == "reconnect" {
-        let mut owners = owners().lock().map_err(|_| "Agent 状态不可用")?;
-        let state = owners.entry(owner.to_owned()).or_default();
-        if state
-            .run
-            .as_ref()
-            .is_some_and(|run| run.state.lock().is_ok_and(|s| s["status"] == "running"))
-        {
-            return Err("请先停止当前运行".into());
-        }
-        state.tools = Arc::new(tokio::sync::Mutex::new(Tools {
-            blocked: false,
-            ..Tools::default()
-        }));
-        drop(owners);
-        return Ok(json!({"ok":true}));
-    }
     if matches!(action, "poll" | "cancel") {
-        let owners = owners().lock().map_err(|_| "Agent 状态不可用")?;
-        let run = owners
+        let run = owners()
+            .lock()
+            .map_err(|_| "Agent 状态不可用")?
             .get(owner)
-            .and_then(|s| s.run.clone())
+            .and_then(|state| state.run.clone())
             .ok_or("Agent 运行已结束，请重新读取")?;
         let account = connection
             .operation_context
             .as_ref()
-            .and_then(|v| v["account_id"].as_u64())
+            .and_then(|value| value["account_id"].as_u64())
             .unwrap_or(0);
         if run.id != input["run_id"].as_str().unwrap_or("")
             || run.scope["account_id"].as_u64() != Some(account)
@@ -244,61 +259,291 @@ pub async fn action(
         let value = run.state.lock().map_err(|_| "Agent 状态不可用")?.clone();
         return Ok(value);
     }
+    if action == "bootstrap" {
+        return bootstrap(app, connection, owner).await;
+    }
+    if matches!(action, "save" | "delete-profile") {
+        if running(owner).is_some() {
+            return Err("请先停止当前运行，再修改模型配置".into());
+        }
+        let body = if action == "save" {
+            input
+                .as_object()
+                .map(|object| {
+                    object
+                        .iter()
+                        .filter(|(key, _)| key.as_str() != "action")
+                        .map(|(key, value)| (key.clone(), value.clone()))
+                        .collect::<serde_json::Map<_, _>>()
+                })
+                .map(Value::Object)
+                .ok_or("模型配置格式无效")?
+        } else {
+            let mut body = json!({"id":input["id"]});
+            if let Some(revision) = input["revision"].as_str() {
+                body["revision"] = json!(revision);
+            }
+            body
+        };
+        let result = school_api::client_agent_post(
+            connection,
+            if action == "save" {
+                "api/client-agent/personal-save"
+            } else {
+                "api/client-agent/personal-delete"
+            },
+            &body,
+        )
+        .await?;
+        let mut value = bootstrap(app, connection, owner).await?;
+        value["saved_profile_id"] = result["saved_profile_id"].clone();
+        return Ok(value);
+    }
+    if action == "reconnect" {
+        if running(owner).is_some() {
+            return Err("请先停止当前运行".into());
+        }
+        owners()
+            .lock()
+            .map_err(|_| "Agent 状态不可用")?
+            .entry(owner.to_owned())
+            .or_default()
+            .tools = Arc::new(tokio::sync::Mutex::new(Tools {
+            blocked: false,
+            ..Tools::default()
+        }));
+        return Ok(json!({"ok":true}));
+    }
     let config = bootstrap(app, connection, owner).await?;
     let scope = config["scope"].clone();
-    if action == "clear" {
-        let mut owners = owners().lock().map_err(|_| "Agent 状态不可用")?;
-        if let Some(state) = owners.get_mut(owner) {
-            if state
-                .run
-                .as_ref()
-                .is_some_and(|run| run.state.lock().is_ok_and(|s| s["status"] == "running"))
-            {
-                return Err("请先停止当前运行，再清除本机记忆".into());
+    if action == "workspace" {
+        return Ok(
+            json!({"workspace":config["workspace"],"history":config["history"],"conversation_id":config["conversation_id"]}),
+        );
+    }
+    if matches!(action, "models" | "probe") {
+        let run = Run {
+            id: uuid::Uuid::new_v4().to_string(),
+            scope: scope.clone(),
+            cancel: cancel.clone(),
+            state: Mutex::new(json!({})),
+            options: Value::Null,
+        };
+        let supplied_key = input["api_key"].as_str().unwrap_or("");
+        let mut model = ModelConfig(if supplied_key.is_empty() {
+            let mut saved = personal(
+                connection,
+                &run,
+                &uuid::Uuid::new_v4().to_string(),
+                input["profile_id"].as_str().unwrap_or(""),
+                true,
+            )
+            .await?;
+            if let Some(endpoint) = input["endpoint"].as_str().filter(|value| !value.is_empty()) {
+                if agent_models::endpoint(endpoint)?
+                    != agent_models::endpoint(saved["endpoint"].as_str().unwrap_or(""))?
+                {
+                    wipe_key(&mut saved);
+                    return Err("更换接口地址后请重新填写 API Key".into());
+                }
             }
-            state.run = None;
+            saved
+        } else {
+            json!({"endpoint":input["endpoint"],"api_key":supplied_key,"model":input["model"]})
+        });
+        if let Some(name) = input["model"].as_str().filter(|value| !value.is_empty()) {
+            model["model"] = json!(name);
         }
-        agent_store::clear(app, &scope)?;
-        return Ok(json!({"history":[]}));
+        return agent_models::inspect(&model, action, &cancel).await;
+    }
+    if running(owner).is_some() {
+        return Err("请先等待或停止当前运行，再修改本机工作区".into());
+    }
+    if matches!(
+        action,
+        "workspace-edit" | "import-skill" | "probe-mcp" | "clear"
+    ) {
+        let imported = if action == "import-skill" {
+            let app = app.clone();
+            Some(
+                tokio::select! {biased;_=cancel.cancelled()=>return Err("Skill 导入已取消".into()),result=tokio::task::spawn_blocking(move||agent_workspace::import_skill(&app))=>result.map_err(|_|"无法选择 Skill 文件")??},
+            )
+        } else {
+            None
+        };
+        let guard = agent_store::acquire(app, &scope)?;
+        let mut data = agent_workspace::normalize(&scope, agent_store::read_locked(app, &scope)?);
+        if action == "probe-mcp" {
+            let plugin = data["plugins"]
+                .as_array()
+                .and_then(|items| {
+                    items
+                        .iter()
+                        .find(|item| item["id"] == input["id"] && item["type"] == "mcp")
+                })
+                .cloned()
+                .ok_or("MCP 插件不存在")?;
+            drop(guard);
+            approve_plugin(app, &plugin, &cancel).await?;
+            return probe_mcp(app, &plugin, &cancel).await;
+        }
+        let edit_input = if let Some(plugin) = imported {
+            json!({"section":"plugins","operation":"save","item":plugin})
+        } else {
+            input.clone()
+        };
+        if action == "clear" {
+            let id = data["active_conversation_id"].clone();
+            if let Some(items) = data["conversations"].as_array_mut() {
+                if let Some(item) = items.iter_mut().find(|item| item["id"] == id) {
+                    item["history"] = json!([]);
+                    item["messages"] = json!([]);
+                }
+            }
+        } else {
+            let mut candidate = data.clone();
+            let result = agent_workspace::edit(&mut candidate, &edit_input)?;
+            if edit_input["section"] == "plugins" && edit_input["operation"] == "save" {
+                if let Some(plugin) = candidate["plugins"]
+                    .as_array()
+                    .and_then(|items| items.iter().find(|item| item["id"] == result["id"]))
+                    .filter(|item| item["type"] == "mcp" && item["enabled"] == true)
+                {
+                    approve_plugin(app, plugin, &cancel).await?;
+                }
+            }
+            data = candidate;
+            if edit_input["operation"] == "run" && edit_input["section"] == "tasks" {
+                let task = result["item"].clone();
+                agent_store::write(app, &scope, &data)?;
+                drop(guard);
+                return start_task(app, connection, owner, cancel, &task).await;
+            }
+            if edit_input["operation"] == "run" && edit_input["section"] == "reminders" {
+                show_reminder(app, &result["item"]);
+                agent_workspace::finish(
+                    &mut data,
+                    "reminder",
+                    result["id"].as_str().unwrap_or(""),
+                    "completed",
+                    now(),
+                )?;
+            }
+        }
+        if cancel.is_cancelled() || connection.cancel.is_cancelled() {
+            return Err("学校会话已结束，未保存本机配置".into());
+        }
+        agent_store::write(app, &scope, &data)?;
+        return snapshot(&data);
     }
     if action != "start" {
         return Err("Agent 操作无效".into());
     }
+    start_run(app, connection, owner, cancel, input, config).await
+}
+
+async fn start_run(
+    app: &AppHandle,
+    connection: &Connection,
+    owner: &str,
+    cancel: CancellationToken,
+    input: &Value,
+    config: Value,
+) -> Result<Value, String> {
+    let scope = config["scope"].clone();
     let mode = input["mode"].as_str().unwrap_or("");
     if !matches!(mode, "personal" | "school") {
         return Err("请选择模型来源".into());
     }
-    if config[mode]["enabled"].as_bool() != Some(true) {
+    let profile_id = input["profile_id"].as_str().unwrap_or("");
+    let selected = if mode == "personal" {
+        config["profiles"]
+            .as_array()
+            .and_then(|items| {
+                if profile_id.is_empty() {
+                    items.first()
+                } else {
+                    items.iter().find(|item| item["id"] == profile_id)
+                }
+            })
+            .unwrap_or(&config["personal"])
+    } else {
+        &config["school"]
+    };
+    if selected["enabled"] != true {
         return Err("所选模型尚未启用，请检查配置".into());
+    }
+    if mode == "personal" && !profile_id.is_empty() && selected["id"] != profile_id {
+        return Err("所选个人模型配置不存在".into());
+    }
+    let model = input["model"]
+        .as_str()
+        .filter(|name| !name.is_empty())
+        .or_else(|| selected["model"].as_str())
+        .unwrap_or("");
+    if model.is_empty() || model.len() > 160 || model.chars().any(char::is_control) {
+        return Err("请选择有效模型".into());
+    }
+    if mode == "school" && selected["model"] != model {
+        return Err("学校统一模型由管理员配置".into());
     }
     let prompt = input["prompt"].as_str().unwrap_or("").trim();
     if prompt.is_empty() || prompt.chars().count() > 12000 {
         return Err("请输入不超过 12000 字的问题".into());
     }
-    let memory_guard = agent_store::acquire(app, &scope)?;
-    let stored = agent_store::read_locked(app, &scope)?;
+    let guard = agent_store::acquire(app, &scope)?;
+    let mut stored = agent_workspace::normalize(&scope, agent_store::read_locked(app, &scope)?);
+    if let Some(id) = input["conversation_id"]
+        .as_str()
+        .filter(|id| !id.is_empty())
+    {
+        agent_workspace::edit(
+            &mut stored,
+            &json!({"section":"conversations","operation":"select","id":id}),
+        )?;
+    }
+    let active_id = stored["active_conversation_id"].clone();
+    if let Some(item) = stored["conversations"]
+        .as_array_mut()
+        .and_then(|items| items.iter_mut().find(|item| item["id"] == active_id))
+    {
+        if item["mode"] != mode || item["profile_id"] != profile_id || item["model"] != model {
+            item["revision"] = Value::Null;
+            item["messages"] = json!([]);
+        }
+        item["mode"] = json!(mode);
+        item["profile_id"] = json!(profile_id);
+        item["model"] = json!(model);
+    }
+    let conversation_id = stored["active_conversation_id"]
+        .as_str()
+        .ok_or("会话标识无效")?
+        .to_owned();
+    let options = json!({"mode":mode,"profile_id":profile_id,"model":model,"conversation_id":conversation_id,"scheduled":input["scheduled"]==true,"task_id":input["task_id"]});
     agent_store::write(app, &scope, &stored)?;
+    let initial = snapshot(&stored)?;
     let run = Arc::new(Run {
         id: uuid::Uuid::new_v4().to_string(),
         scope: scope.clone(),
         cancel: cancel.child_token(),
         state: Mutex::new(
-            json!({"run_id":"","status":"running","text":"","history":stored["history"],"tool_status":"正在准备模型与业务权限"}),
+            json!({"status":"running","text":"","history":initial["history"],"workspace":initial["workspace"],"conversation_id":conversation_id,"tool_status":"正在准备模型与工具"}),
         ),
+        options,
     });
     update(&run, json!({"run_id":run.id}));
     let tools = {
         let mut owners = owners().lock().map_err(|_| "Agent 状态不可用")?;
-        let owner = owners.entry(owner.to_owned()).or_default();
-        if owner
-            .run
-            .as_ref()
-            .is_some_and(|run| run.state.lock().is_ok_and(|s| s["status"] == "running"))
-        {
+        let state = owners.entry(owner.to_owned()).or_default();
+        if state.run.as_ref().is_some_and(|run| {
+            run.state
+                .lock()
+                .is_ok_and(|state| state["status"] == "running")
+        }) {
             return Err("当前账号已有 Agent 正在运行".into());
         }
-        owner.run = Some(run.clone());
-        owner.tools.clone()
+        state.run = Some(run.clone());
+        state.tools.clone()
     };
     let app = app.clone();
     let connection = connection.clone();
@@ -306,33 +551,230 @@ pub async fn action(
     let mode = mode.to_owned();
     let running = run.clone();
     tauri::async_runtime::spawn(async move {
-        let _memory_guard = memory_guard;
-        let result = tokio::select! {
-            biased;
-            _ = running.cancel.cancelled() => Err("运行已停止；已发送的写请求请先核对结果".to_owned()),
-            _ = connection.cancel.cancelled() => Err("学校连接已关闭".to_owned()),
-            _ = tokio::time::sleep(Duration::from_secs(180)) => Err("运行达到 180 秒上限，已停止；写请求请先核对结果".to_owned()),
-            result = execute(&app,&connection,&running,&mode,&prompt,&config,stored,tools) => result,
+        let _guard = guard;
+        let result = tokio::select! {biased;
+            _=running.cancel.cancelled()=>Err("运行已停止；已发送的写请求请先核对结果".to_owned()),
+            _=connection.cancel.cancelled()=>Err("学校连接已关闭".to_owned()),
+            _=tokio::time::sleep(Duration::from_secs(180))=>Err("运行达到 180 秒上限，已停止；写请求请先核对结果".to_owned()),
+            result=execute(&app,&connection,&running,&mode,&prompt,&config,stored,tools)=>result,
         };
+        let status = if result.is_ok() {
+            "completed"
+        } else if running.cancel.is_cancelled() || connection.cancel.is_cancelled() {
+            "cancelled"
+        } else {
+            "failed"
+        };
+        if let Ok(mut data) = agent_store::read_locked(&app, &running.scope)
+            .map(|data| agent_workspace::normalize(&running.scope, data))
+        {
+            if let Some(id) = running.options["task_id"].as_str() {
+                let _ = agent_workspace::finish(&mut data, "task", id, status, now());
+            }
+            let _ = agent_store::write(&app, &running.scope, &data);
+            if let Ok(snapshot) = snapshot(&data) {
+                update(&running, snapshot);
+            }
+        }
         match result {
             Ok(value) => update(
                 &running,
                 json!({"status":"done","text":value["answer"],"history":value["history"],"tool_status":"运行结束"}),
             ),
-            Err(message) => {
-                let status = if running.cancel.is_cancelled() || connection.cancel.is_cancelled() {
-                    "cancelled"
-                } else {
-                    "error"
-                };
-                update(
-                    &running,
-                    json!({"status":status,"error":message,"tool_status":"已停止"}),
+            Err(message) => update(
+                &running,
+                json!({"status":if status=="cancelled"{"cancelled"}else{"error"},"error":message,"tool_status":"已停止"}),
+            ),
+        };
+    });
+    Ok(
+        json!({"run_id":run.id,"workspace":initial["workspace"],"history":initial["history"],"conversation_id":conversation_id}),
+    )
+}
+
+fn now() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|value| value.as_secs() as i64)
+        .unwrap_or(0)
+}
+
+async fn confirm(
+    app: &AppHandle,
+    title: &str,
+    description: String,
+    cancel: &CancellationToken,
+) -> Result<(), String> {
+    if cancel.is_cancelled() {
+        return Err("操作已取消".into());
+    }
+    let dialog = app.dialog().message(description).title(title).buttons(
+        MessageDialogButtons::OkCancelCustom("允许".into(), "拒绝".into()),
+    );
+    let accepted = tokio::select! {biased;_=cancel.cancelled()=>return Err("操作已取消".into()),result=tokio::task::spawn_blocking(move||dialog.blocking_show())=>result.map_err(|_|"无法显示原生确认窗口")?};
+    if !accepted || cancel.is_cancelled() {
+        return Err("用户未批准操作或会话已结束".into());
+    }
+    Ok(())
+}
+
+async fn approve_plugin(
+    app: &AppHandle,
+    plugin: &Value,
+    cancel: &CancellationToken,
+) -> Result<(), String> {
+    let description = if plugin["transport"] == "stdio" {
+        format!("插件：{}\n命令：{}\n参数：{}\n\n该程序将以当前用户的系统权限在本机运行。仅启用你信任的服务。配置的环境变量不会在此显示。",plugin["name"].as_str().unwrap_or("MCP"),plugin["command"].as_str().unwrap_or(""),serde_json::to_string(&plugin["args"]).unwrap_or_default())
+    } else {
+        format!(
+            "插件：{}\n服务：{}\n\n客户端将直接连接此 MCP 服务，工具调用仍需逐次确认。",
+            plugin["name"].as_str().unwrap_or("MCP"),
+            plugin["url"].as_str().unwrap_or("")
+        )
+    };
+    if description.len() > 16000 {
+        return Err("插件配置过长，无法完整确认".into());
+    }
+    confirm(app, "确认 MCP 服务", description, cancel).await
+}
+
+fn show_reminder(app: &AppHandle, item: &Value) {
+    app.dialog()
+        .message(item["content"].as_str().unwrap_or("本机提醒已到期"))
+        .title(item["name"].as_str().unwrap_or("Agent 提醒"))
+        .show(|_| {});
+}
+
+async fn approve_mcp_call(
+    app: &AppHandle,
+    run: &Run,
+    plugins: &Value,
+    params: &Value,
+) -> Result<Value, String> {
+    if run.options["scheduled"] == true {
+        return Err("计划任务不允许调用 MCP 工具".into());
+    }
+    let plugin = plugins
+        .as_array()
+        .and_then(|items| {
+            items.iter().find(|item| {
+                item["id"] == params["plugin_id"]
+                    && item["type"] == "mcp"
+                    && item["enabled"] == true
+            })
+        })
+        .ok_or("MCP 插件未启用")?;
+    let tool = params["tool"]
+        .as_str()
+        .filter(|value| {
+            !value.is_empty() && value.len() <= 128 && !value.chars().any(char::is_control)
+        })
+        .ok_or("MCP 工具名无效")?;
+    let preview = serde_json::to_string_pretty(&params["arguments"]).map_err(|_| "MCP 参数无效")?;
+    if preview.len() > 16000 || !params["arguments"].is_object() {
+        return Err("MCP 参数过长或格式无效，无法确认".into());
+    }
+    update(run, json!({"tool_status":format!("等待确认 MCP：{tool}")}));
+    if let Err(message)=confirm(app,"确认 MCP 工具调用",format!("插件：{}\n工具：{tool}\n学校：{}\n\n参数：\n{preview}\n\n插件可能读取或修改本机及外部服务数据，请核对后确认。",plugin["name"].as_str().unwrap_or(""),run.scope["origin"].as_str().unwrap_or("")),&run.cancel).await {run.cancel.cancel();return Err(message);}
+    Ok(json!({"approved":true}))
+}
+
+async fn start_task(
+    app: &AppHandle,
+    connection: &Connection,
+    owner: &str,
+    cancel: CancellationToken,
+    task: &Value,
+) -> Result<Value, String> {
+    let scope = owners()
+        .lock()
+        .map_err(|_| "Agent 状态不可用")?
+        .get(owner)
+        .map(|state| state.scope.clone())
+        .ok_or("Agent 尚未初始化")?;
+    let result=async {
+        let config=bootstrap(app,connection,owner).await?;
+        let guard=agent_store::acquire(app,&scope)?;
+        let mut data=agent_workspace::normalize(&scope,agent_store::read_locked(app,&scope)?);
+        agent_workspace::edit(&mut data,&json!({"section":"conversations","operation":"save","item":{"title":format!("定时任务：{}",task["name"].as_str().unwrap_or("任务"))}}))?;
+        let id=data["active_conversation_id"].clone();
+        agent_store::write(app,&scope,&data)?;drop(guard);
+        let input=json!({"mode":task["mode"],"profile_id":task["profile_id"],"model":if task["mode"]=="school"{config["school"]["model"].clone()}else{task["model"].clone()},"conversation_id":id,"prompt":task["prompt"],"scheduled":true,"task_id":task["id"]});
+        start_run(app,connection,owner,cancel,&input,config).await
+    }.await;
+    if result.is_err() {
+        if let Ok(_guard) = agent_store::acquire(app, &scope) {
+            if let Ok(mut data) = agent_store::read_locked(app, &scope)
+                .map(|data| agent_workspace::normalize(&scope, data))
+            {
+                let _ = agent_workspace::finish(
+                    &mut data,
+                    "task",
+                    task["id"].as_str().unwrap_or(""),
+                    "failed",
+                    now(),
                 );
+                let _ = agent_store::write(app, &scope, &data);
             }
         }
-    });
-    Ok(json!({"run_id":run.id}))
+    }
+    result
+}
+
+pub async fn scheduler_tick(
+    app: &AppHandle,
+    connection: &Connection,
+    owner: &str,
+    cancel: CancellationToken,
+    interrupted: bool,
+) -> Result<(), String> {
+    if running(owner).is_some() {
+        return Ok(());
+    }
+    let context = connection
+        .operation_context
+        .as_ref()
+        .ok_or("本机学校身份不可用")?;
+    let scope = json!({"origin":connection.origin.origin().ascii_serialization(),"school_id":context["school_database_id"],"account_id":context["account_id"]});
+    check_scope(connection, &scope)?;
+    let recovered = {
+        let mut owners = owners().lock().map_err(|_| "Agent 状态不可用")?;
+        let state = owners.entry(owner.to_owned()).or_default();
+        state.scope = scope.clone();
+        state.schedule_recovered
+    };
+    let guard = match agent_store::acquire(app, &scope) {
+        Ok(guard) => guard,
+        Err(_) => return Ok(()),
+    };
+    let mut data = agent_workspace::normalize(&scope, agent_store::read_locked(app, &scope)?);
+    let before = data.clone();
+    let ready = agent_workspace::due(&mut data, now(), interrupted || !recovered);
+    let mut task = None;
+    for item in ready {
+        let id = item["id"].as_str().unwrap_or("");
+        if item["kind"] == "reminder" {
+            show_reminder(app, &item);
+            agent_workspace::finish(&mut data, "reminder", id, "completed", now())?;
+        } else if task.is_none() {
+            task = Some(item);
+        } else {
+            agent_workspace::finish(&mut data, "task", id, "missed", now())?;
+        }
+    }
+    if data != before {
+        agent_store::write(app, &scope, &data)?;
+    }
+    drop(guard);
+    if let Ok(mut owners) = owners().lock() {
+        if let Some(state) = owners.get_mut(owner) {
+            state.schedule_recovered = true;
+        }
+    }
+    if let Some(task) = task {
+        start_task(app, connection, owner, cancel, &task).await?;
+    }
+    Ok(())
 }
 
 async fn agent_post(
@@ -349,14 +791,27 @@ async fn agent_post(
     if run.cancel.is_cancelled() || connection.cancel.is_cancelled() {
         return Err("Agent 学校会话已结束".into());
     }
-    school_api::sso_post(connection, path, body).await
+    school_api::client_agent_post(connection, path, body).await
 }
 
-async fn personal(connection: &Connection, run: &Run, device_id: &str) -> Result<Value, String> {
+async fn personal(
+    connection: &Connection,
+    run: &Run,
+    device_id: &str,
+    profile_id: &str,
+    session_guarded: bool,
+) -> Result<Value, String> {
     let mut key = Zeroizing::new([0u8; 32]);
     OsRng.fill_bytes(key.as_mut());
     let mut body = json!({"transport_key":STANDARD.encode(key.as_ref()),"device_id":device_id});
-    let envelope = agent_post(connection, run, "api/client-agent/personal-download", &body).await;
+    if !profile_id.is_empty() {
+        body["profile_id"] = json!(profile_id);
+    }
+    let envelope = if session_guarded {
+        school_api::client_agent_post(connection, "api/client-agent/personal-download", &body).await
+    } else {
+        agent_post(connection, run, "api/client-agent/personal-download", &body).await
+    };
     if let Some(Value::String(s)) = body.get_mut("transport_key") {
         s.zeroize();
     }
@@ -392,7 +847,10 @@ async fn personal(connection: &Connection, run: &Run, device_id: &str) -> Result
             .map_err(|_| "个人配置解密失败")?,
     );
     let mut value: Value = serde_json::from_slice(&clear).map_err(|_| "个人配置格式无效")?;
-    if value["scope"] != run.scope || value["device_id"] != device_id || value["mode"] != "personal"
+    if value["scope"] != run.scope
+        || value["device_id"] != device_id
+        || value["mode"] != "personal"
+        || (!profile_id.is_empty() && value["profile_id"] != profile_id)
     {
         wipe_key(&mut value);
         return Err("个人配置不属于当前学校账号或设备".into());
@@ -590,95 +1048,6 @@ async fn tools(
     result
 }
 
-fn runtime(app: &AppHandle) -> Result<(std::path::PathBuf, std::path::PathBuf), String> {
-    let executable = std::env::current_exe().map_err(|_| "无法定位 Agent 运行环境")?;
-    let parent = executable.parent().ok_or("无法定位 Agent 运行环境")?;
-    let binary = if cfg!(target_os = "windows") {
-        "agent-node.exe"
-    } else {
-        "agent-node"
-    };
-    let node = parent.join(binary);
-    let script = app
-        .path()
-        .resource_dir()
-        .map_err(|_| "无法定位 Agent 资源")?
-        .join("agent-runtime/runtime.mjs");
-    if node.is_file() && script.is_file() {
-        return Ok((node, script));
-    }
-    #[cfg(debug_assertions)]
-    {
-        let target = if cfg!(all(target_os = "macos", target_arch = "aarch64")) {
-            "aarch64-apple-darwin"
-        } else if cfg!(target_os = "macos") {
-            "x86_64-apple-darwin"
-        } else if cfg!(target_os = "windows") {
-            "x86_64-pc-windows-msvc"
-        } else {
-            "x86_64-unknown-linux-gnu"
-        };
-        let suffix = if cfg!(target_os = "windows") {
-            ".exe"
-        } else {
-            ""
-        };
-        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
-        let node = root.join(format!("binaries/agent-node-{target}{suffix}"));
-        let script = root.join("agent-runtime/runtime.mjs");
-        if node.is_file() && script.is_file() {
-            return Ok((node, script));
-        }
-    }
-    Err("安装包缺少 Agent 运行环境，请重新安装完整客户端".into())
-}
-
-async fn bounded_line(
-    reader: &mut BufReader<tokio::process::ChildStdout>,
-) -> Result<Option<Vec<u8>>, String> {
-    let mut output = Vec::new();
-    loop {
-        let bytes = reader.fill_buf().await.map_err(|_| "Agent 通道读取失败")?;
-        if bytes.is_empty() {
-            return if output.is_empty() {
-                Ok(None)
-            } else {
-                Err("Agent 通道提前结束".into())
-            };
-        }
-        let length = bytes
-            .iter()
-            .position(|b| *b == b'\n')
-            .map(|n| n + 1)
-            .unwrap_or(bytes.len());
-        if output.len() + length > LINE_LIMIT {
-            return Err("Agent 通道内容过大，已停止".into());
-        }
-        let done = bytes[length - 1] == b'\n';
-        output.extend_from_slice(&bytes[..length]);
-        reader.consume(length);
-        if done {
-            return Ok(Some(output));
-        }
-    }
-}
-
-async fn send(stdin: &mut tokio::process::ChildStdin, value: &Value) -> Result<(), String> {
-    let mut bytes = Zeroizing::new(serde_json::to_vec(value).map_err(|_| "Agent 通道参数无效")?);
-    if bytes.len() > LINE_LIMIT - 1 {
-        return Err("会话上下文过多，请清除本机记忆后继续".into());
-    }
-    bytes.push(b'\n');
-    stdin
-        .write_all(&bytes)
-        .await
-        .map_err(|_| "Agent 通道已关闭")?;
-    stdin
-        .flush()
-        .await
-        .map_err(|_| "Agent 通道已关闭".to_owned())
-}
-
 async fn execute(
     app: &AppHandle,
     connection: &Connection,
@@ -690,15 +1059,41 @@ async fn execute(
     tools_state: Arc<tokio::sync::Mutex<Tools>>,
 ) -> Result<Value, String> {
     let device_id = uuid::Uuid::new_v4().to_string();
+    let conversation = agent_workspace::active(&stored)?.clone();
+    let profile_id = run.options["profile_id"].as_str().unwrap_or("");
     let mut model = ModelConfig(if mode == "personal" {
-        personal(connection, run, &device_id).await?
+        personal(connection, run, &device_id, profile_id, false).await?
     } else {
         config["school"].clone()
     });
-    let revision = model["revision"].clone();
-    if stored["mode"] != mode || stored["revision"] != model["revision"] {
-        stored["messages"] = json!([]);
+    model["model"] = run.options["model"].clone();
+    if mode == "personal" {
+        model["endpoint"] =
+            json!(agent_models::endpoint(model["endpoint"].as_str().unwrap_or(""))?.as_str());
     }
+    let revision = model["revision"].as_str().unwrap_or("").to_owned();
+    let actual_profile = model["profile_id"]
+        .as_str()
+        .unwrap_or(profile_id)
+        .to_owned();
+    let selected_model = model["model"].as_str().unwrap_or("").to_owned();
+    let messages = if conversation["mode"] == mode
+        && conversation["revision"] == revision
+        && conversation["profile_id"] == actual_profile
+        && conversation["model"] == selected_model
+    {
+        conversation["messages"].clone()
+    } else {
+        json!(conversation["history"].as_array().into_iter().flatten().filter_map(|item|{
+            let role=item["role"].as_str()?;let text=item["text"].as_str()?;
+            match role {"user"=>Some(json!({"role":"user","content":text,"timestamp":now()*1000})),"assistant"=>Some(json!({"role":"assistant","content":[{"type":"text","text":text}],"timestamp":now()*1000})),_=>None}
+        }).collect::<Vec<_>>())
+    };
+    let plugins = if run.options["scheduled"] == true {
+        json!([])
+    } else {
+        plugin_configs(&stored)
+    };
     let client = reqwest::Client::builder()
         .redirect(reqwest::redirect::Policy::none())
         .no_proxy()
@@ -706,34 +1101,35 @@ async fn execute(
         .build()
         .map_err(|_| "Agent 工具连接无法初始化")?;
     let mut session = tools_state.lock().await;
-    let catalog = match tools(connection, run, &mut session, &device_id, &client).await {
-        Ok(value) => value,
-        Err(message) => {
-            update(run, json!({"tool_status":format!("仅模型对话：{message}")}));
-            json!([])
+    let builtin_enabled = stored["plugins"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .any(|plugin| plugin["builtin"] == true && plugin["enabled"] == true);
+    let mut catalog = if !builtin_enabled {
+        json!([])
+    } else {
+        match tools(connection, run, &mut session, &device_id, &client).await {
+            Ok(value) => value,
+            Err(message) => {
+                update(run, json!({"tool_status":format!("仅模型对话：{message}")}));
+                json!([])
+            }
         }
     };
-    let (node, script) = runtime(app)?;
-    let mut command = tokio::process::Command::new(node);
-    command
-        .arg("--disable-proto=throw")
-        .arg(script)
-        .env_clear()
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null())
-        .kill_on_drop(true);
-    #[cfg(target_os = "windows")]
-    {
-        if let Some(value) = std::env::var_os("SystemRoot") {
-            command.env("SystemRoot", value);
-        }
-        command.creation_flags(0x08000000);
+    if run.options["scheduled"] == true {
+        catalog = json!(catalog
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter(|cap| cap["kind"] == "read")
+            .cloned()
+            .collect::<Vec<_>>());
     }
-    let mut child = command.spawn().map_err(|_| "无法启动随包 Agent 运行环境")?;
+    let mut child = spawn_runtime(app)?;
     let mut stdin = child.stdin.take().ok_or("Agent 输入通道不可用")?;
     let stdout = child.stdout.take().ok_or("Agent 输出通道不可用")?;
-    let mut packet = json!({"type":"start","run_id":run.id,"mode":mode,"config":model.0,"prompt":prompt,"messages":stored["messages"],"capabilities":catalog});
+    let mut packet = json!({"type":"start","run_id":run.id,"mode":mode,"config":model.0,"prompt":prompt,"messages":messages,"capabilities":catalog,"plugins":plugins,"workspace_context":agent_workspace::context(&stored)});
     let sent = send(&mut stdin, &packet).await;
     if let Some(config) = packet.get_mut("config") {
         wipe_key(config);
@@ -770,6 +1166,7 @@ async fn execute(
                         update(run, json!({"tool_status":"学校模型推理中"}));
                         agent_post(connection,run,"api/client-agent/model",&json!({"revision":config["school"]["revision"],"body":value["params"]["body"]})).await
                     }
+                    "confirm_mcp" => approve_mcp_call(app, run, &plugins, &value["params"]).await,
                     "tool" => {
                         call_tool(
                             app,
@@ -800,16 +1197,27 @@ async fn execute(
                 if answer.len() > 120000 || !value["messages"].is_array() {
                     return Err("Agent 会话响应无效".into());
                 }
-                let mut history = stored["history"].as_array().cloned().unwrap_or_default();
+                let mut history = conversation["history"]
+                    .as_array()
+                    .cloned()
+                    .unwrap_or_default();
                 history.push(json!({"role":"user","text":prompt}));
                 history.push(json!({"role":"assistant","text":answer}));
                 if history.len() > 60 {
                     history.drain(..history.len() - 60);
                 }
-                let memory = json!({"scope":run.scope,"mode":mode,"revision":revision,"messages":value["messages"],"history":history});
-                agent_store::write(app, &run.scope, &memory)?;
-                child.kill().await.ok();
-                child.wait().await.ok();
+                agent_workspace::complete(
+                    &mut stored,
+                    run.options["conversation_id"].as_str().unwrap_or(""),
+                    mode,
+                    &actual_profile,
+                    &selected_model,
+                    &revision,
+                    value["messages"].clone(),
+                    json!(history),
+                )?;
+                agent_store::write(app, &run.scope, &stored)?;
+                let _ = tokio::time::timeout(Duration::from_secs(3), child.wait()).await;
                 return Ok(json!({"answer":answer,"history":history}));
             }
             "error" => {
@@ -854,6 +1262,9 @@ async fn call_tool(
         return Err("业务工具连接已失效，请重新连接".into());
     }
     let write = cap["kind"] == "write";
+    if write && run.options["scheduled"] == true {
+        return Err("计划任务只允许读取学校业务数据".into());
+    }
     let label = cap["label"].as_str().unwrap_or(id);
     update(
         run,

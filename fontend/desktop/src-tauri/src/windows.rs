@@ -196,6 +196,45 @@ pub fn show_connection(app: &AppHandle) {
     }
 }
 
+/// 恢复应用内上次使用的窗口。
+#[cfg(target_os = "macos")]
+pub fn restore_active(app: &AppHandle) {
+    let school = app.get_webview_window("school");
+    let window = if crate::current_school_locked(app) {
+        school
+    } else {
+        let label = app
+            .state::<crate::AppState>()
+            .active_window
+            .lock()
+            .ok()
+            .and_then(|active| active.clone());
+        let owner = app
+            .state::<crate::AppState>()
+            .gateway
+            .lock()
+            .ok()
+            .and_then(|gateway| gateway.as_ref().map(|gateway| gateway.owner.clone()));
+        label
+            .filter(|label| {
+                label == "school"
+                    || label == "connection"
+                    || owner.as_ref().is_some_and(|owner| {
+                        belongs_to_school(label, owner) || label.starts_with("external-")
+                    })
+            })
+            .and_then(|label| app.get_webview_window(&label))
+            .or(school)
+    };
+    if let Some(window) = window {
+        let _ = window.show();
+        let _ = window.unminimize();
+        let _ = window.set_focus();
+    } else {
+        show_connection(app);
+    }
+}
+
 pub fn school_window_label(kind: &str, owner: &str, suffix: &str) -> String {
     format!("{kind}-{owner}-{suffix}")
 }
