@@ -1,5 +1,5 @@
 <template>
-  <section class="release-manager"><header><el-radio-group v-model="product" @change="load(1)"><el-radio-button value="system">系统更新</el-radio-button><el-radio-button value="desktop">客户端版本</el-radio-button></el-radio-group><el-button :icon="RefreshCw" :loading="loading" @click="load(page)">刷新</el-button><el-button v-if="product === 'desktop'" :icon="Download" :loading="busy" @click="github">从 GitHub 导入</el-button></header>
+  <section class="release-manager"><header><el-radio-group v-model="product" @change="load(1)"><el-radio-button value="system">系统更新</el-radio-button><el-radio-button value="desktop">客户端版本</el-radio-button></el-radio-group><el-button :icon="RefreshCw" :loading="loading" @click="load(page)">刷新</el-button><el-button v-if="product === 'desktop'" :icon="Download" :loading="busy" @click="github">从 GitHub 导入</el-button><ServerUpdatePanel /></header>
     <el-alert v-if="error" :title="error" type="error" :closable="false" />
     <el-table width-storage-key="release-manager:items" :data="items" v-loading="loading" height="100%"><el-table-column type="index" label="序号" width="68" :index="i => (page - 1) * 20 + i + 1" /><el-table-column prop="version" label="版本" width="100" /><el-table-column prop="title" label="标题" min-width="230" /><el-table-column label="状态" width="100"><template #default="{ row }"><el-tag :type="row.status === 'published' ? 'success' : 'info'">{{ status(row.status) }}</el-tag></template></el-table-column><el-table-column prop="published_at" label="发布时间" width="170" /><el-table-column label="操作" fixed="right" width="130"><template #default="{ row }"><el-button link type="primary" @click="detail(row.id)">编辑 / 详情</el-button></template></el-table-column></el-table>
     <footer><span>共 {{ total }} 个版本</span><ListPagination layout="prev, pager, next" :current-page="page" :page-size="20" :total="total" @current-change="load" /></footer>
@@ -44,6 +44,7 @@ import OperationDialog from './OperationDialog.vue';
 import TextTabs from './TextTabs.vue';
 import RichTextEditor from '../../../shared/components/RichTextEditor.vue';
 import ReleaseAssets from './ReleaseAssets.vue';
+import ServerUpdatePanel from './ServerUpdatePanel.vue';
 const deferredPlatforms = ref([]);
 const product = ref('system'), items = ref([]), page = ref(1), total = ref(0), loading = ref(false), busy = ref(false), error = ref(''), selected = ref(null), tab = ref('notes');
 const githubVisible = ref(false), githubItems = ref([]), githubId = ref(null);

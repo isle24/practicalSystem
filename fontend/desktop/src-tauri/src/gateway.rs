@@ -20,6 +20,10 @@ use url::Url;
 #[folder = "../dist/pc/"]
 struct PcAssets;
 
+#[derive(RustEmbed)]
+#[folder = "../dist/shell/"]
+struct AgentAssets;
+
 pub struct Gateway {
     pub origin: Url,
     pub remote: Url,
@@ -90,6 +94,7 @@ struct GatewayState {
 impl Drop for Gateway {
     /// 关闭当前学校本机通道。
     fn drop(&mut self) {
+        crate::client_agent::cancel_owner(&self.owner);
         if let Some((client, origin)) = self.login_cancel.take() {
             tauri::async_runtime::spawn(async move {
                 if let Ok(url) = origin.join("api/auth/wechat-login/cancel") {
@@ -421,6 +426,107 @@ async fn handle(State(state): State<Arc<GatewayState>>, request: Request) -> Res
             Err(message) => error(StatusCode::BAD_REQUEST, &message),
         };
     }
+    if path == "/_desktop/agent.html" || path.starts_with("/_desktop/assets/") {
+        if request.method() != axum::http::Method::GET {
+            return error(StatusCode::METHOD_NOT_ALLOWED, "请使用 GET");
+        }
+        let key = path.trim_start_matches("/_desktop/");
+        return match AgentAssets::get(key) {
+            Some(asset) => {
+                let mime = mime_guess::from_path(key).first_or_octet_stream();
+                let mut response = Response::new(Body::from(asset.data.into_owned()));
+                if let Ok(value) = HeaderValue::from_str(mime.as_ref()) {
+                    response.headers_mut().insert(header::CONTENT_TYPE, value);
+                }
+                response
+                    .headers_mut()
+                    .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+                response.headers_mut().insert("content-security-policy", HeaderValue::from_static("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"));
+                response
+            }
+            None => error(
+                StatusCode::NOT_FOUND,
+                "Agent 资源不存在，请重新安装完整客户端",
+            ),
+        };
+    }
+    if path == "/_desktop/agent" {
+        if request.method() != axum::http::Method::POST
+            || headers.get(header::ORIGIN).and_then(|v| v.to_str().ok())
+                != Some(state.local.origin().ascii_serialization().as_str())
+        {
+            return error(StatusCode::FORBIDDEN, "仅学校页面可以调用客户端 Agent");
+        }
+        let bytes = match axum::body::to_bytes(request.into_body(), 65536).await {
+            Ok(bytes) => bytes,
+            Err(_) => return error(StatusCode::BAD_REQUEST, "Agent 参数过长"),
+        };
+        let mut input: serde_json::Value = match serde_json::from_slice(&bytes) {
+            Ok(value) => value,
+            Err(_) => return error(StatusCode::BAD_REQUEST, "Agent 参数无效"),
+        };
+        if matches!(input["action"].as_str(), Some("poll" | "cancel")) {
+            let (context, _) = match state.lock.password_context(false) {
+                Ok(value) => value,
+                Err(message) => return error(StatusCode::UNAUTHORIZED, &message),
+            };
+            let mut connection = state.connection.clone();
+            connection.operation_context = Some(context);
+            let result = crate::client_agent::action(
+                &state.app,
+                &connection,
+                &state.owner,
+                authorization_cancel.clone(),
+                &input,
+            )
+            .await;
+            if state.lock.is_locked()
+                || state.cancel.is_cancelled()
+                || authorization_cancel.is_cancelled()
+            {
+                return error(StatusCode::LOCKED, "客户端已锁定或账号已变更");
+            }
+            return match result {
+                Ok(value) => local_json(value),
+                Err(message) => error(StatusCode::BAD_REQUEST, &message),
+            };
+        }
+        let (connection, _session) = match account_operation(&state, &authorization_cancel).await {
+            Ok(value) => value,
+            Err(message) => return error(StatusCode::UNAUTHORIZED, &message),
+        };
+        let result = if input["action"] == "open" {
+            crate::client_agent::open(
+                &state.app,
+                &state.local,
+                &state.connection.origin,
+                &state.owner,
+            )
+        } else {
+            crate::client_agent::action(
+                &state.app,
+                &connection,
+                &state.owner,
+                authorization_cancel.clone(),
+                &input,
+            )
+            .await
+        };
+        if let Some(serde_json::Value::String(key)) = input.get_mut("api_key") {
+            use zeroize::Zeroize;
+            key.zeroize();
+        }
+        if state.lock.is_locked()
+            || state.cancel.is_cancelled()
+            || authorization_cancel.is_cancelled()
+        {
+            return error(StatusCode::LOCKED, "客户端已锁定或账号已变更");
+        }
+        return match result {
+            Ok(value) => local_json(value),
+            Err(message) => error(StatusCode::BAD_REQUEST, &message),
+        };
+    }
     if path == "/_desktop/office-preview" {
         if request.method() != axum::http::Method::POST
             || headers.get(header::ORIGIN).and_then(|v| v.to_str().ok())
@@ -644,11 +750,17 @@ async fn handle(State(state): State<Arc<GatewayState>>, request: Request) -> Res
         );
         return response;
     }
-    if path.starts_with("/api/credential-vault/") {
+    if path.starts_with("/api/credential-vault/") || path.starts_with("/api/client-agent/") {
         return error(
             StatusCode::FORBIDDEN,
             "凭据同步只能通过原生安全凭据入口操作",
         );
+    }
+    if matches!(
+        path,
+        "/api/assistant/ask" | "/api/assistant/threads" | "/api/assistant/turns"
+    ) {
+        return error(StatusCode::FORBIDDEN, "请通过客户端 Agent 使用本机会话");
     }
     if path.starts_with("/api/") || path.starts_with("/files/") {
         return proxy(state, request, authorization_cancel).await;
@@ -711,6 +823,7 @@ async fn proxy(
         session_change || matches!(parts.uri.path(), "/api/auth/refresh" | "/api/auth/context");
     if session_change {
         crate::office_preview::cancel_owner(&state.owner);
+        crate::client_agent::cancel_owner(&state.owner);
     }
     let (_reader, _writer) = if serialized {
         (None, Some(state.connection.session_lock.write().await))
@@ -921,6 +1034,7 @@ async fn renew_authorization_context(state: &GatewayState, body: &[u8], authenti
 
 /// Cookie 身份边界已变更时立即结束旧窗口和请求代次。
 async fn invalidate_authorization_context(state: &GatewayState) {
+    crate::client_agent::cancel_owner(&state.owner);
     {
         let mut cancel = state.authorization_cancel.lock().await;
         cancel.cancel();
@@ -1099,6 +1213,7 @@ async fn lock_session(state: &GatewayState) -> Result<serde_json::Value, String>
     if !state.lock.is_locked() {
         return persisted.and_then(|_| state.lock.status());
     }
+    crate::client_agent::cancel_owner(&state.owner);
     {
         let mut cancel = state.authorization_cancel.lock().await;
         cancel.cancel();

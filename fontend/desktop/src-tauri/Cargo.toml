@@ -1,6 +1,6 @@
 [package]
 name = "practical-system-desktop"
-version = "0.3.25"
+version = "0.3.29"
 description = "Practical System desktop client"
 edition = "2021"
 rust-version = "1.88"
@@ -34,6 +34,7 @@ quick-xml = "0.42"
 rust-embed = "8"
 mime_guess = "2"
 tempfile = "3"
+fs2 = "=0.4.3"
 keyring = { version = "3.6", default-features = false, features = ["apple-native", "windows-native", "linux-native-sync-persistent"] }
 aes-gcm = "0.10.3"
 base64 = "0.22.1"

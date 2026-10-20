@@ -27,3 +27,6 @@ tmp/
 .worktrees/
 *.log
 test/*
+
+fontend/desktop/src-tauri/binaries/
+fontend/desktop/src-tauri/agent-runtime/

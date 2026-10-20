@@ -22,6 +22,7 @@
       </header>
       <h1 v-if="loginMethod === 'password'" class="login-view-title">账号密码登录</h1>
       <p v-if="pendingSsoResume">请重新使用密码或企业微信扫码登录，完成应用授权。</p>
+      <p v-else-if="cliEntryMode">{{ cliEntryMode === 'authorize' ? '登录后核对设备及授权码，再确认 CLI 授权。' : '登录后查看并管理本人的 CLI 会话。' }}</p>
       <WechatLogin v-if="loginMethod === 'wechat' && !passwordRecoveryVisible" :request="request" :public-origin="publicSchoolOrigin" @logged-in="onFreshAuthentication" />
       <div v-else-if="nativePasswordEntry" class="native-password-entry">
         <p>请在客户端登录窗口校验账号密码。</p>
@@ -78,6 +79,8 @@
     </section>
   </main>
 
+  <CliAccessEntry v-else-if="cliEntryMode && !wechatBlocked" :key="cliSessionKey" :mode="cliEntryMode" :user-code="cliUserCode" :session-key="cliSessionKey" :account-name="operatorName" @close="closeCliEntry" @logout="submitLogout" />
+
   <main v-else-if="!wechatBlocked" class="desktop-shell" :class="{ 'desktop-shell-mac': desktopStyleMode === 'mac', 'desktop-shell-maximized': !isDesktopShell && hasMaximizedWindow, 'desktop-shell-native': isDesktopShell, 'desktop-shell-dock-auto-hide': dockShouldAutoHide }" :style="desktopStyle" @click.left="closeDesktopContextMenu" @contextmenu.prevent="openDesktopContextMenu">
     <section class="workspace">
       <AdaptiveDesktopGrid
@@ -128,6 +131,7 @@
               <el-alert v-if="profileState.message" :type="profileAlertType" :closable="false" show-icon :title="profileState.message" />
             </template>
             <template #general>
+              <section class="profile-panel-card"><h3>CLI 设备</h3><p>查看当前账号已授权的 CLI 设备，并撤销不再使用的会话。</p><el-button @click="openCliSessions">管理 CLI 会话</el-button></section>
               <section class="profile-panel-card profile-card-main">
                 <div class="avatar-edit">
                   <label
@@ -2777,6 +2781,7 @@
                 <NotebookPanel v-else-if="win.module.id === 'notebook'" :key="noteSessionKey" :ref="el => setNotebookRef(win.id, el)" :request="request" :session-key="noteSessionKey" />
                 <ReleaseNotesPanel v-else-if="win.module.id === 'releaseNotes'" :request="request" />
                 <SchoolSettingsPanel v-else-if="win.module.id === 'config' && win.panel === 'schoolAppearance' && canManageConfig" @updated="applyLoginPageData" />
+                <CliPolicyPanel v-else-if="win.module.id === 'config' && win.panel === 'cliAuthorization' && canManageConfig" :key="cliSessionKey" :session-key="cliSessionKey" :public-origin="publicSchoolOrigin" />
                 <SsoClientPanel v-else-if="win.module.id === 'config' && win.panel === 'ssoClients' && canManageConfig" />
                 <WorkflowSettingsPanel v-else-if="win.module.id === 'config' && win.panel === 'workflowSettings' && canManageConfig" />
                 <MessageChannelSettings v-else-if="win.module.id === 'config' && win.panel === 'messageChannels' && canManageConfig" />
@@ -4276,6 +4281,8 @@ import { closeFilePreview, previewFile } from '../../shared/filePreview';
 import PreviewCacheSettings from './components/PreviewCacheSettings.vue';
 import ClientDownloadButton from './components/ClientDownloadButton.vue';
 import SchoolSettingsPanel from './components/SchoolSettingsPanel.vue';
+import CliPolicyPanel from './components/cli/CliPolicyPanel.vue';
+import CliAccessEntry from './components/cli/CliAccessEntry.vue';
 import SsoClientPanel from './components/SsoClientPanel.vue';
 import WorkflowSettingsPanel from './components/WorkflowSettingsPanel.vue';
 import RemoteAccountSelect from './components/RemoteAccountSelect.vue';
@@ -5843,6 +5850,7 @@ const launcherModuleIds = modules.filter(module => !module.collectionParent && !
 const launcherModuleIdSet = new Set(launcherModuleIds);
 const configSidebarDefinitions = [
   { key: 'schoolAppearance', name: '学校设置', permission: 'config:manage', schoolConfig: true, icon: Building2 },
+  { key: 'cliAuthorization', name: 'CLI 授权', permission: 'config:manage', schoolConfig: true, icon: ShieldCheck },
   { key: 'ssoClients', name: '授权应用', permission: 'config:manage', schoolConfig: true, icon: Globe2 },
   { key: 'workflowSettings', name: '审批流程', permission: 'config:manage', schoolConfig: true, icon: ClipboardList },
   { key: 'messageChannels', name: '消息渠道', permission: 'config:manage', schoolConfig: true, icon: MessageCircle },
@@ -5876,7 +5884,10 @@ let activeWorkspaceTransition = null;
 const workspaceIdentityKey = computed(() => JSON.stringify([publicSchoolOrigin, permissionState.context.school_database_id, permissionState.context.school_id, permissionState.context.user_id, permissionState.context.account_id, permissionState.context.role_id, permissionState.context.role_type]));
 const workspaceContextKey = computed(() => JSON.stringify([workspaceSourceEpoch.value, workspaceIdentityKey.value]));
 const startupState = reactive({ loading: true, error: '' });
-const loginMethod = ref(window.__PRACTICAL_DESKTOP__?.loginMethod === 'wechat' ? 'wechat' : 'password');
+const cliEntryParams = new URLSearchParams(window.location.search);
+const cliUserCode = cliEntryParams.get('cli_authorize')?.trim() || '';
+const cliEntryMode = ref(cliEntryParams.has('cli_authorize') ? 'authorize' : cliEntryParams.get('cli_sessions') === '1' ? 'sessions' : '');
+const loginMethod = ref(cliEntryMode.value || window.__PRACTICAL_DESKTOP__?.loginMethod === 'wechat' ? 'wechat' : 'password');
 const pendingSsoResume = ref(Boolean(ssoResume()));
 const themeScope = computed(() => permissionState.context.user_id ? `${publicSchoolOrigin}:${permissionState.context.school_database_id}:${permissionState.context.user_id}` : '');
 const tableWidthScope = computed(() => permissionState.context.account_id
@@ -5939,6 +5950,24 @@ const visibleWindows = computed(() => openWindows.filter(win => !win.minimized))
 const taskbarWindows = computed(() => openWindows.filter(win => win.module.id !== 'message'
   && !(desktopStyleMode.value === 'mac' && visibleDesktopModules.value.some(module => module.id === win.module.id))));
 const canManageConfig = computed(() => hasPermission('config:manage') && ['super_admin', 'school_admin'].includes(permissionState.context.role_type));
+const cliSessionKey = computed(() => isLoggedIn.value && !workspaceFrozen.value && !wechatBlocked.value && !desktopIsLocked.value
+  ? JSON.stringify([workspaceContextKey.value, permissionState.permissions, permissionState.dataScope, permissionState.context.organization_scopes]) : '');
+
+function closeCliEntry() {
+  cliEntryMode.value = '';
+  const url = new URL(window.location.href);
+  url.searchParams.delete('cli_authorize');
+  url.searchParams.delete('cli_sessions');
+  window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`);
+}
+
+function openCliSessions() {
+  cliEntryMode.value = 'sessions';
+  const url = new URL(window.location.href);
+  url.searchParams.delete('cli_authorize');
+  url.searchParams.set('cli_sessions', '1');
+  window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`);
+}
 const canManageAccounts = computed(() => ['super_admin', 'school_admin'].includes(permissionState.context.role_type));
 const accountImportSessionKey = computed(() => canManageAccounts.value && permissionState.context.account_id
   ? [noteSessionKey.value, permissionState.context.school_id, permissionState.context.role_type].join(':')

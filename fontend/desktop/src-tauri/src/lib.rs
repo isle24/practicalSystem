@@ -1,3 +1,5 @@
+mod agent_store;
+mod client_agent;
 mod client_lock;
 mod connection;
 mod connection_login;
@@ -197,6 +199,7 @@ async fn revoke_school(app: &AppHandle, reconnect: bool) -> Result<Option<String
     };
     if let Some((owner, session)) = previous {
         office_preview::cancel_owner(&owner);
+        client_agent::cancel_owner(&owner);
         if reconnect {
             session.logout_for_reconnect().await?;
         } else {
@@ -767,6 +770,13 @@ fn application_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         &[
             &about,
             &settings,
+            &MenuItem::with_id(
+                app,
+                "client-agent",
+                "客户端 Agent…",
+                true,
+                Some("CmdOrCtrl+Shift+A"),
+            )?,
             &MenuItem::with_id(app, "check-update", "检查更新…", true, None::<&str>)?,
             &PredefinedMenuItem::separator(app)?,
             &PredefinedMenuItem::quit(app, Some("退出"))?,
@@ -815,6 +825,17 @@ fn application_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
 
 /// 处理原生导航与窗口菜单。
 fn handle_menu(app: &AppHandle, id: &str) {
+    if id == "client-agent" {
+        if let Some(window) = app.get_webview_window("school") {
+            let _ = window
+                .eval("window.__PRACTICAL_DESKTOP__?.agent('open').catch(e=>alert(e.message))");
+        } else {
+            app.dialog()
+                .message("请先连接学校并登录后打开 Agent")
+                .show(|_| {});
+        }
+        return;
+    }
     if id == "check-update" {
         if let Some(window) = app.get_webview_window("school") {
             let _ = window.eval("window.__PRACTICAL_DESKTOP__?.checkUpdate(true)");

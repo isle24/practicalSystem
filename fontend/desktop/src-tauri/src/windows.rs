@@ -71,6 +71,7 @@ pub fn build(
                     openSso:(favorite_id,mode='client')=>bridge('sso',{{favorite_id,mode}}),
                     favoriteCredentials:(id,action,profile)=>bridge('favorite-credentials',{{id,action,profile}}),
                     credentialVault:(action,payload={{}})=>bridge('credential-vault',{{action,...payload}}),
+                    agent:(action,payload={{}})=>bridge('agent',{{...payload,action}}),
                     windowControls:(action)=>bridge('window',{{action}}),
                     lock:(action,payload={{}})=>bridge('lock',{{...payload,action}}),
                     previewCache:(action='status',max_gb)=>bridge('preview-cache',{{action,max_gb}}),
@@ -79,6 +80,18 @@ pub fn build(
                     checkUpdate:(interactive=true)=>bridge('update',{{interactive}})
                 }}), writable:false
             }});
+            const agentButtons = () => document.querySelectorAll('.message-mode-tabs button').forEach(button => {{
+                if (button.textContent.trim() === '问答助手') {{ button.textContent = 'Agent'; button.dataset.clientAgent = 'true'; }}
+            }});
+            document.addEventListener('click', event => {{
+                const button = event.target.closest?.('.message-mode-tabs button');
+                if (!button || button.dataset.clientAgent !== 'true' && button.textContent.trim() !== '问答助手') return;
+                event.preventDefault(); event.stopImmediatePropagation();
+                bridge('agent', {{action:'open'}}).catch(error => alert(error.message));
+            }}, true);
+            document.addEventListener('DOMContentLoaded', () => {{
+                agentButtons(); new MutationObserver(agentButtons).observe(document.body, {{subtree:true,childList:true}});
+            }}, {{once:true}});
         }})();"#,
             env!("CARGO_PKG_VERSION")
         ))
@@ -188,7 +201,7 @@ pub fn school_window_label(kind: &str, owner: &str, suffix: &str) -> String {
 }
 
 pub(crate) fn belongs_to_school(label: &str, owner: &str) -> bool {
-    ["preview", "sso", "authenticated"]
+    ["preview", "sso", "authenticated", "agent"]
         .iter()
         .any(|kind| label.starts_with(&format!("{kind}-{owner}-")))
 }

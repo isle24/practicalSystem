@@ -1403,6 +1403,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "fs2"
+version = "0.4.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9564fc758e15025b46aa6643b1b77d047d1a56a1aea6e01002ac0c7026876213"
+dependencies = [
+ "libc",
+ "winapi",
+]
+
+[[package]]
 name = "futures-channel"
 version = "0.3.34"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3266,12 +3276,13 @@ checksum = "439ee305def115ba05938db6eb1644ff94165c5ab5e9420d1c1bcedbba909391"
 
 [[package]]
 name = "practical-system-desktop"
-version = "0.3.25"
+version = "0.3.29"
 dependencies = [
  "aes-gcm",
  "argon2",
  "axum",
  "base64 0.22.1",
+ "fs2",
  "gtk",
  "keyring",
  "libc",
