@@ -4,6 +4,7 @@ import { getCurrentTools, getCurrentSystemPrompt } from '@earendil-works/pi-ai/u
 import { validateToolArguments } from '@earendil-works/pi-ai/utils/validation';
 import { randomUUID } from 'node:crypto';
 import { mcpTools, probeMcp, closeMcp } from './mcp.mjs';
+import modelErrors from './model-errors.json' with { type: 'json' };
 
 const LIMIT = { line: 4 * 1024 * 1024, result: 256 * 1024, body: 512 * 1024, messages: 64, rounds: 12, tools: 32, duration: 180_000 };
 const TOOL_NAME = 'school_capability';
@@ -31,7 +32,6 @@ const controller = new AbortController();
 let agent;
 let started = false;
 let finished = false;
-let apiKey = '';
 const secrets = new Set();
 let timeout;
 let input = Buffer.alloc(0);
@@ -45,7 +45,15 @@ if (systemRoot) { process.env.SystemRoot = systemRoot; process.env.PATH = `${sys
 function redact(_key, value) {
   if (typeof value !== 'string') return value;
   for (const key of secrets) if (key) value = value.split(key).join('[已隐藏]');
-  return apiKey ? value.split(apiKey).join('[已隐藏]') : value;
+  return value;
+}
+
+function nativeModelError(reply) {
+  if (!Object.hasOwn(modelErrors, reply.error_code)) return ERROR.model;
+  const status = Number.isInteger(reply.http_status) && reply.http_status >= 100 && reply.http_status <= 599 ? `（HTTP ${reply.http_status}）` : '';
+  const message = `${modelErrors[reply.error_code]}${status}`;
+  allowedErrors.add(message);
+  return message;
 }
 
 function emit(message) {
@@ -220,33 +228,6 @@ function requestBody(context, finishOnly) {
   return body;
 }
 
-async function personalRequest(config, body, signal) {
-  let response;
-  try {
-    response = await fetch(config.endpoint, {
-      method: 'POST',
-      redirect: 'error',
-      credentials: 'omit',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${config.api_key}` },
-      body: JSON.stringify({ ...body, model: config.model, stream: false }),
-      signal,
-    });
-    if (!response.ok) { await response.body?.cancel(); fail(ERROR.model); }
-    const chunks = [];
-    let size = 0;
-    if (!response.body) fail(ERROR.protocol);
-    for await (const chunk of response.body) {
-      size += chunk.byteLength;
-      if (size > LIMIT.line) { await response.body.cancel().catch(() => {}); fail(ERROR.size); }
-      chunks.push(Buffer.from(chunk));
-    }
-    return JSON.parse(Buffer.concat(chunks).toString('utf8'));
-  } catch (error) {
-    if (signal.aborted) fail(ERROR.abort);
-    fail(allowedErrors.has(error?.message) ? error.message : ERROR.model);
-  }
-}
-
 function streamModel(config, model, usedIds, counts) {
   return (_model, context, options) => {
     const stream = createAssistantMessageEventStream();
@@ -257,7 +238,7 @@ function streamModel(config, model, usedIds, counts) {
         const finishOnly = counts.rounds === LIMIT.rounds || counts.tools >= LIMIT.tools;
         const body = requestBody(context, finishOnly);
         const signal = AbortSignal.any([controller.signal, options.signal]);
-        const result = config.mode === 'school' ? await rpc('model', { body }, signal) : await personalRequest(config, body, signal);
+        const result = await rpc(config.mode === 'school' ? 'model' : 'personal_model', { body }, signal);
         if (signal.aborted) fail(ERROR.abort);
         if (!object(result) || !Array.isArray(result.choices) || !result.choices.length) fail(ERROR.protocol);
         const choice = result.choices[0];
@@ -302,13 +283,7 @@ async function run(start) {
   if (!['school', 'personal'].includes(start.mode) || !object(start.config) || typeof start.run_id !== 'string' || !start.run_id || typeof start.prompt !== 'string' || !start.prompt.trim()) fail(ERROR.input);
   const config = { ...start.config, mode: start.mode };
   if (typeof config.model !== 'string' || !config.model.trim() || config.model.length > 160) fail(ERROR.config);
-  if (config.mode === 'personal') {
-    let url;
-    try { url = new URL(config.endpoint); } catch { fail(ERROR.config); }
-    if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.search || url.hash || typeof config.api_key !== 'string' || !config.api_key || /[\r\n]/.test(config.api_key)) fail(ERROR.config);
-    config.endpoint = url.href;
-    apiKey = config.api_key;
-  } else if (config.api_key) fail(ERROR.config);
+  if (config.api_key || config.endpoint) fail(ERROR.config);
   const model = { id: config.model, name: config.model, api: 'openai-completions', provider: 'desktop', baseUrl: '', reasoning: false, input: ['text'], cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }, contextWindow: 32768, maxTokens: 4096 };
   const { history, used } = historyMessages(start.messages ?? [], model);
   const counts = { rounds: 0, tools: 0 };
@@ -370,7 +345,7 @@ function receive(line) {
   if (message.type === 'rpc_result' && typeof message.id === 'string') {
     const task = pending.get(message.id);
     if (!task) fail(ERROR.input);
-    if (message.error !== undefined) task.reject(new Error(task.method === 'tool' ? ERROR.tool : ERROR.model));
+    if (message.error !== undefined) task.reject(new Error(task.method === 'tool' ? ERROR.tool : task.method === 'personal_model' ? nativeModelError(message) : ERROR.model));
     else if (!Object.hasOwn(message, 'result')) task.reject(new Error(ERROR.input));
     else if (byteLength(message.result) > (task.method === 'tool' ? LIMIT.result : LIMIT.line)) task.reject(new Error(ERROR.size));
     else task.resolve(message.result);

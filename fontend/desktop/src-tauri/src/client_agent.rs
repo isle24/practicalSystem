@@ -1076,12 +1076,8 @@ async fn execute(
     let mut child = spawn_runtime(app)?;
     let mut stdin = child.stdin.take().ok_or("Agent 输入通道不可用")?;
     let stdout = child.stdout.take().ok_or("Agent 输出通道不可用")?;
-    let mut packet = json!({"type":"start","run_id":run.id,"mode":mode,"config":model.0,"prompt":prompt,"messages":messages,"capabilities":catalog,"plugins":plugins,"workspace_context":agent_workspace::context(&stored)});
+    let packet = json!({"type":"start","run_id":run.id,"mode":mode,"config":{"model":model["model"]},"prompt":prompt,"messages":messages,"capabilities":catalog,"plugins":plugins,"workspace_context":agent_workspace::context(&stored)});
     let sent = send(&mut stdin, &packet).await;
-    if let Some(config) = packet.get_mut("config") {
-        wipe_key(config);
-    }
-    wipe_key(&mut model);
     sent?;
     drop(packet);
     let mut reader = BufReader::new(stdout);
@@ -1093,7 +1089,28 @@ async fn execute(
         let line = bounded_line(&mut reader)
             .await?
             .ok_or("Agent 进程意外结束，请检查完整安装包")?;
-        let value: Value = serde_json::from_slice(&line).map_err(|_| "Agent 通道格式无效")?;
+        let mut value: Value = serde_json::from_slice(&line).map_err(|_| "Agent 通道格式无效")?;
+        let key = model["api_key"].as_str().unwrap_or("");
+        let protected = if mode == "personal" {
+            match value["type"].as_str() {
+                Some("rpc") if matches!(value["method"].as_str(), Some("tool" | "confirm_mcp")) => {
+                    value
+                        .get_mut("params")
+                        .and_then(|params| params.get_mut("arguments"))
+                        .is_some_and(|arguments| agent_models::redact(arguments, key))
+                }
+                Some("text") => agent_models::redact(&mut value["text"], key),
+                Some("done") => {
+                    agent_models::redact(&mut value["answer"], key);
+                    agent_models::redact_messages(&mut value["messages"], key);
+                    false
+                }
+                Some("error") => agent_models::redact(&mut value["message"], key),
+                _ => false,
+            }
+        } else {
+            false
+        };
         match value["type"].as_str().unwrap_or("") {
             "ready" => (),
             "text" => {
@@ -1104,9 +1121,31 @@ async fn execute(
                 update(run, json!({"text":text}));
             }
             "rpc" => {
+                if value["id"]
+                    .as_str()
+                    .is_none_or(|id| uuid::Uuid::parse_str(id).is_err())
+                {
+                    return Err("Agent 请求标识无效".into());
+                }
+                if protected && matches!(value["method"].as_str(), Some("tool" | "confirm_mcp")) {
+                    return Err("工具参数包含受保护凭据，未执行，请移除凭据后重试".into());
+                }
                 rpc_count += 1;
                 if rpc_count > 44 {
                     return Err("Agent 调用次数达到上限".into());
+                }
+                if value["method"] == "personal_model" && mode == "personal" {
+                    update(run, json!({"tool_status":"本机模型推理中"}));
+                    let mut reply =
+                        match agent_models::complete(&model, &value["params"]["body"], &run.cancel)
+                            .await
+                        {
+                            Ok(result) => json!({"type":"rpc_result","result":result}),
+                            Err(failure) => failure.reply(),
+                        };
+                    reply["id"] = value["id"].clone();
+                    send(&mut stdin, &reply).await?;
+                    continue;
                 }
                 let result = match value["method"].as_str().unwrap_or("") {
                     "model" if mode == "school" => {
@@ -1152,6 +1191,11 @@ async fn execute(
                 history.push(json!({"role":"assistant","text":answer}));
                 if history.len() > 60 {
                     history.drain(..history.len() - 60);
+                }
+                if mode == "personal" {
+                    for item in &mut history {
+                        agent_models::redact(&mut item["text"], key);
+                    }
                 }
                 agent_workspace::complete(
                     &mut stored,
