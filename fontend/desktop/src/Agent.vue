@@ -38,8 +38,21 @@
         <small v-if="scope">
           学校 {{ scope.school_id }} · 账号 {{ scope.account_id }}
         </small>
-        <button type="button" :disabled="loading || pending" @click="bootstrap">
-          同步配置
+        <button
+          v-if="!scope"
+          type="button"
+          :disabled="loading || pending"
+          @click="bootstrap"
+        >
+          重新加载
+        </button>
+        <button
+          v-else
+          type="button"
+          :disabled="blocked || editorDialog?.open"
+          @click="syncProfiles()"
+        >
+          {{ syncing ? '同步中' : '同步配置' }}
         </button>
       </div>
     </aside>
@@ -159,6 +172,9 @@
       </header>
       <div class="feedback" aria-live="polite">
         <p v-if="error" class="notice error" role="alert">{{ error }}</p>
+        <p v-if="cloudError" class="notice" role="status">
+          云端同步暂不可用：{{ cloudError }} 本机配置仍可保存和使用。
+        </p>
         <p v-if="notice" class="notice" role="status">{{ notice }}</p>
       </div>
 
@@ -308,8 +324,70 @@
       <div v-else class="page-content">
         <template v-if="section === 'models'">
           <p class="section-description">
-            学校模型由管理员配置。个人提供方配置加密保存在云端，模型请求由本机直连。
+            学校模型由管理员配置。个人提供方配置先加密保存在本机，点击“同步配置”后双向同步云端；模型请求由本机直连。会话和记忆不参与配置同步。
           </p>
+          <section
+            v-if="conflicts.length"
+            class="sync-conflicts"
+            aria-label="配置同步冲突"
+          >
+            <div class="item-heading">
+              <h2>选择需要保留的配置</h2>
+              <span class="muted">{{ conflicts.length }} 项冲突</span>
+            </div>
+            <p class="muted">
+              两端配置均有变更，尚未覆盖。选择保留的一侧后再提交；未选择的冲突继续保留。
+            </p>
+            <article
+              v-for="conflict in conflicts"
+              :key="conflict.id"
+              class="item-card"
+            >
+              <h3>{{ conflict.local?.name || conflict.cloud?.name || '个人提供方' }}</h3>
+              <div class="conflict-columns">
+                <div
+                  v-for="side in conflictSides"
+                  :key="side.id"
+                  class="conflict-side"
+                >
+                  <label class="check-label">
+                    <input
+                      v-model="conflictChoices[conflict.id]"
+                      type="radio"
+                      :name="`conflict-${conflict.id}`"
+                      :value="side.id"
+                      :disabled="blocked"
+                    />
+                    保留{{ side.label }}
+                  </label>
+                  <dl v-if="conflict[side.id]" class="conflict-details">
+                    <dt>名称</dt>
+                    <dd>{{ conflict[side.id].name || '未命名' }}</dd>
+                    <dt>地址</dt>
+                    <dd>{{ conflict[side.id].endpoint || '未配置' }}</dd>
+                    <dt>模型</dt>
+                    <dd>{{ conflict[side.id].model || '未选择' }}</dd>
+                    <dt>状态</dt>
+                    <dd>{{ conflict[side.id].enabled ? '已启用' : '已停用' }}</dd>
+                    <dt>密钥</dt>
+                    <dd>{{ conflict[side.id].has_key ? '已保存，不回显' : '未保存' }}</dd>
+                  </dl>
+                  <span v-else class="muted">
+                    此侧已删除，保留此侧会同步删除另一侧配置。
+                  </span>
+                </div>
+              </div>
+            </article>
+            <div class="item-actions">
+              <button
+                type="button"
+                :disabled="blocked || !selectedConflictCount"
+                @click="syncProfiles(true)"
+              >
+                {{ syncing ? '同步中' : `同步已选 ${selectedConflictCount} 项` }}
+              </button>
+            </div>
+          </section>
           <article class="item-card">
             <div class="item-heading">
               <div>
@@ -329,6 +407,7 @@
                   <span v-if="item.id === 'legacy'" class="badge">
                     旧版兼容
                   </span>
+                  <span v-if="item.pending_sync" class="badge">待同步</span>
                 </h2>
                 <p>{{ item.model || '未选择模型' }}</p>
               </div>
@@ -339,7 +418,7 @@
             <p class="endpoint">{{ item.endpoint }}</p>
             <div class="item-footer">
               <span class="muted">
-                {{ item.has_key ? '密钥已安全保存' : '未保存密钥' }}
+                {{ item.has_key ? '密钥已在本机加密保存' : '未保存密钥' }}
               </span>
               <div class="item-actions">
                 <button
@@ -667,6 +746,9 @@
             {{ editorError }}
           </p>
           <template v-if="editorType === 'profile'">
+            <p class="muted">
+              保存仅更新本机加密配置，点击“同步配置”后才上传或下载云端变更。
+            </p>
             <label>
               提供方名称
               <input
@@ -963,7 +1045,9 @@
             class="primary"
             :disabled="pending || modelLoading"
           >
-            {{ pending ? '保存中' : '保存' }}
+            {{
+              pending ? '保存中' : editorType === 'profile' ? '保存到本机' : '保存'
+            }}
           </button>
         </footer>
       </form>
@@ -1043,6 +1127,14 @@ const section = ref('chat'),
   scope = ref(null),
   profiles = ref([]),
   school = ref({ enabled: false, model: '' });
+const conflicts = ref([]),
+  conflictChoices = reactive({}),
+  syncing = ref(false),
+  cloudError = ref('');
+const conflictSides = [
+  { id: 'local', label: '本机' },
+  { id: 'cloud', label: '云端' }
+];
 const workspace = reactive(emptyWorkspace());
 const history = ref([]),
   prompt = ref(''),
@@ -1118,6 +1210,12 @@ const filteredConversations = computed(() =>
 const enabledProfiles = computed(() =>
   profiles.value.filter((item) => item.enabled)
 );
+const selectedConflictCount = computed(
+  () =>
+    conflicts.value.filter((item) =>
+      ['local', 'cloud'].includes(conflictChoices[item.id])
+    ).length
+);
 const enabledMemories = computed(
   () => workspace.memories.filter((item) => item.enabled).length
 );
@@ -1144,12 +1242,14 @@ const canSend = computed(
 );
 const statusText = computed(() =>
   loading.value
-    ? '正在同步'
-    : busy.value
-      ? '任务运行中'
-      : scope.value
-        ? '已连接'
-        : '等待登录解锁'
+    ? '正在加载'
+    : syncing.value
+      ? '正在同步配置'
+      : busy.value
+        ? '任务运行中'
+        : scope.value
+          ? '已连接'
+          : '等待登录解锁'
 );
 const providerChanged = computed(
   () =>
@@ -1262,6 +1362,9 @@ function wipe() {
   promptDrafts.clear();
   scope.value = null;
   profiles.value = [];
+  resetConflicts();
+  syncing.value = false;
+  cloudError.value = '';
   school.value = { enabled: false, model: '' };
   Object.assign(workspace, emptyWorkspace());
   history.value = [];
@@ -1291,7 +1394,11 @@ async function request(action, payload = {}, channel = '') {
   }
   const timer = setTimeout(
     () => controller.abort(),
-    ['models', 'probe', 'probe-mcp'].includes(action) ? 45000 : 30000
+    action === 'sync'
+      ? 180000
+      : ['models', 'probe', 'probe-mcp'].includes(action)
+        ? 45000
+        : 30000
   );
   try {
     const response = await fetch('/_desktop/agent', {
@@ -1303,12 +1410,14 @@ async function request(action, payload = {}, channel = '') {
       signal: controller.signal
     });
     if (disposed || version !== generation) return null;
-    if ([401, 423].includes(response.status)) {
+    if ([401, 403, 423].includes(response.status)) {
       wipe();
       error.value =
         response.status === 423
-          ? '客户端已锁定，请解锁后同步配置。'
-          : '登录已失效，请重新登录。';
+          ? '客户端已锁定，请解锁后重试。'
+          : response.status === 403
+            ? 'Agent 仅允许本人真实登录，请退出代登并使用本人账号登录。'
+            : '登录已失效，请重新登录。';
       return null;
     }
     const result = await response.json().catch(() => null);
@@ -1324,7 +1433,9 @@ async function request(action, payload = {}, channel = '') {
     if (disposed || version !== generation) return null;
     throw new Error(
       reason.name === 'AbortError'
-        ? '请求超时，请重新同步后重试。'
+        ? action === 'sync'
+          ? '同步超时，本机配置仍已保存，请重新点击“同步配置”。'
+          : '请求超时，请重试。'
         : reason.message || '无法连接客户端。'
     );
   } finally {
@@ -1336,6 +1447,8 @@ async function request(action, payload = {}, channel = '') {
 function applyWorkspace(value, select = false) {
   const data = value?.workspace || value;
   if (!data || !Array.isArray(data.conversations)) return false;
+  const previousSource = source.value,
+    previousModel = model.value;
   const previousId = workspace.active_conversation_id;
   const nextId = text(data.active_conversation_id);
   const transitioned = nextId !== previousId;
@@ -1360,22 +1473,110 @@ function applyWorkspace(value, select = false) {
   if (transitioned) prompt.value = promptDrafts.get(nextId) || '';
   if (select || transitioned) {
     history.value = readHistory(activeConversation.value?.history);
-    source.value =
-      activeConversation.value?.mode === 'personal'
-        ? activeConversation.value.profile_id || 'legacy'
-        : 'school';
-    model.value =
-      source.value === 'school'
-        ? school.value.model
-        : activeConversation.value?.model || defaultModel(source.value);
+    if (activeConversation.value) {
+      source.value =
+        activeConversation.value.mode === 'personal'
+          ? activeConversation.value.profile_id || 'legacy'
+          : 'school';
+      model.value =
+        source.value === 'school'
+          ? school.value.model
+          : activeConversation.value.model || defaultModel(source.value);
+    }
     activeText.value = '';
     chatModels.value = [];
     chatModelGeneration++;
     listingChatModels.value = false;
     cancelChannel('chat-models');
   }
-  if (source.value === 'school') model.value = school.value.model;
+  reconcileSource(previousSource, previousModel);
   return true;
+}
+function sourceAvailable(id) {
+  return id === 'school'
+    ? school.value.enabled
+    : enabledProfiles.value.some((item) => item.id === id);
+}
+function reconcileSource(fallbackSource = '', fallbackModel = '') {
+  if (!sourceAvailable(source.value)) {
+    if (sourceAvailable(fallbackSource)) {
+      source.value = fallbackSource;
+      model.value = fallbackModel || defaultModel(fallbackSource);
+    } else {
+      source.value = school.value.enabled
+        ? 'school'
+        : enabledProfiles.value[0]?.id || 'school';
+      model.value = defaultModel(source.value);
+    }
+  }
+  if (source.value === 'school' || !model.value)
+    model.value = defaultModel(source.value);
+}
+function resetConflicts() {
+  conflicts.value = [];
+  for (const id of Object.keys(conflictChoices)) delete conflictChoices[id];
+}
+function applyProfiles(value) {
+  if (!Array.isArray(value)) throw new Error('本机提供方配置数据无效。');
+  const previousSource = source.value,
+    previousDefault = defaultModel(previousSource);
+  profiles.value = value;
+  reconcileSource();
+  if (source.value === previousSource && model.value === previousDefault) {
+    model.value = defaultModel(source.value);
+  }
+  if (
+    previousSource !== source.value ||
+    previousDefault !== defaultModel(source.value)
+  ) {
+    chatModels.value = [];
+    chatModelGeneration++;
+    listingChatModels.value = false;
+    cancelChannel('chat-models');
+  }
+}
+function applySchool(value) {
+  if (!value || typeof value !== 'object') return;
+  school.value = { enabled: value.enabled === true, model: text(value.model) };
+  if (source.value === 'school') model.value = school.value.model;
+}
+async function syncProfiles(resolveConflicts = false) {
+  if (blocked.value || editorDialog.value?.open) return;
+  const resolutions = resolveConflicts
+    ? conflicts.value
+        .filter((item) => ['local', 'cloud'].includes(conflictChoices[item.id]))
+        .map((item) => ({
+          id: item.id,
+          choice: conflictChoices[item.id],
+          local_revision: item.local_revision,
+          cloud_revision: item.cloud_revision
+        }))
+    : [];
+  if (resolveConflicts && !resolutions.length) return;
+  mutationRevision++;
+  pending.value = true;
+  syncing.value = true;
+  error.value = '';
+  notice.value = '';
+  try {
+    const value = await request(
+      'sync',
+      resolutions.length ? { resolutions } : {}
+    );
+    if (!value) return;
+    applySchool(value.school);
+    applyProfiles(value.profiles);
+    resetConflicts();
+    conflicts.value = Array.isArray(value.conflicts) ? value.conflicts : [];
+    cloudError.value = text(value.cloud_error);
+    notice.value = text(value.sync_summary) || '配置同步已结束。';
+    if (conflicts.value.length) section.value = 'models';
+  } catch (reason) {
+    error.value = reason.message;
+  } finally {
+    syncing.value = false;
+    pending.value = false;
+  }
 }
 function applyBootstrap(value) {
   if (!value.scope || typeof value.scope !== 'object')
@@ -1387,19 +1588,20 @@ function applyBootstrap(value) {
     error.value = '';
   }
   scope.value = value.scope;
-  school.value = {
-    enabled: value.school?.enabled === true,
-    model: text(value.school?.model)
-  };
-  profiles.value = Array.isArray(value.profiles) ? value.profiles : [];
+  applySchool(value.school);
+  cloudError.value = text(value.cloud_error);
+  let nextProfiles = Array.isArray(value.profiles)
+    ? value.profiles
+    : profiles.value;
   if (
-    !profiles.value.length &&
+    !nextProfiles.length &&
     (value.personal?.endpoint || value.personal?.has_key)
   )
-    profiles.value = [
+    nextProfiles = [
       { ...value.personal, id: 'legacy', name: '旧版个人配置' }
     ];
   const firstLoad = !workspace.active_conversation_id;
+  applyProfiles(nextProfiles);
   applyWorkspace(value.workspace, firstLoad || changed);
   history.value = readHistory(value.history);
   if (
@@ -1645,6 +1847,9 @@ function profilePayload() {
     throw new Error('修改接口地址后必须重新输入 API Key。');
   return {
     id: editingItem.value?.id || '',
+    ...(editingItem.value?.revision
+      ? { revision: editingItem.value.revision }
+      : {}),
     name: draft.name.trim(),
     enabled: draft.enabled,
     endpoint: draft.endpoint.trim(),
@@ -1805,10 +2010,12 @@ async function saveEditor() {
     );
     if (!value) return;
     if (type === 'profile') {
-      const boot = value.scope ? value : await request('bootstrap');
-      if (boot) applyBootstrap(boot);
+      applyProfiles(value.profiles);
+      resetConflicts();
     } else if (!applyWorkspace(value)) await refreshWorkspace();
-    notice.value = '已保存。';
+    notice.value = type === 'profile'
+      ? '已加密保存到本机，待手动同步云端。'
+      : '已保存。';
     editorDialog.value?.close();
     clearDraft();
   } catch (reason) {
@@ -1824,11 +2031,15 @@ function confirmDelete(target, item) {
   if (blocked.value) return;
   Object.assign(confirmation, {
     title: target === 'conversations' ? '删除会话' : '删除项目',
-    description: `确认删除“${item.name || item.title || '此项目'}”？${target === 'conversations' ? '会话文本与上下文将从当前工作区移除。' : '此操作无法撤销。'}`,
+    description: `确认删除“${item.name || item.title || '此项目'}”？${target === 'conversations' ? '会话文本与上下文将从当前工作区移除。' : target === 'profiles' ? '先从本机移除，点击“同步配置”后再同步云端删除。' : '此操作无法撤销。'}`,
     action: async () => {
       const value =
         target === 'profiles'
-          ? await perform('delete-profile', { id: item.id }, '提供方已删除。')
+          ? await perform(
+              'delete-profile',
+              { id: item.id, revision: item.revision },
+              '提供方已从本机删除，待手动同步云端。'
+            )
           : await workspaceEdit(
               target,
               'delete',
@@ -1837,7 +2048,10 @@ function confirmDelete(target, item) {
               '已删除。',
               target === 'conversations'
             );
-      if (value && target === 'profiles') await bootstrap();
+      if (value && target === 'profiles') {
+        applyProfiles(value.profiles);
+        resetConflicts();
+      }
     }
   });
   confirmDialog.value?.showModal();

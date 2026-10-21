@@ -508,6 +508,9 @@ async fn handle(State(state): State<Arc<GatewayState>>, request: Request) -> Res
             };
             let mut connection = state.connection.clone();
             connection.operation_context = Some(context);
+            if let Err(message) = crate::client_agent::require_real_identity(&connection) {
+                return error(StatusCode::FORBIDDEN, &message);
+            }
             let result = crate::client_agent::action(
                 &state.app,
                 &connection,
@@ -527,10 +530,32 @@ async fn handle(State(state): State<Arc<GatewayState>>, request: Request) -> Res
                 Err(message) => error(StatusCode::BAD_REQUEST, &message),
             };
         }
-        let (connection, _session) = match account_operation(&state, &authorization_cancel).await {
+        let operation = if matches!(
+            input["action"].as_str(),
+            Some(
+                "bootstrap"
+                    | "save"
+                    | "delete-profile"
+                    | "models"
+                    | "probe"
+                    | "workspace"
+                    | "workspace-edit"
+                    | "import-skill"
+                    | "probe-mcp"
+                    | "clear"
+            )
+        ) {
+            local_account_operation(&state, &authorization_cancel).await
+        } else {
+            account_operation(&state, &authorization_cancel).await
+        };
+        let (connection, _session) = match operation {
             Ok(value) => value,
             Err(message) => return error(StatusCode::UNAUTHORIZED, &message),
         };
+        if let Err(message) = crate::client_agent::require_real_identity(&connection) {
+            return error(StatusCode::FORBIDDEN, &message);
+        }
         let result = if input["action"] == "open" {
             crate::client_agent::open(
                 &state.app,
@@ -1011,6 +1036,21 @@ async fn proxy(
 }
 
 /// 同一次原生操作使用锁内确认的账号上下文。
+async fn local_account_operation<'a>(
+    state: &'a GatewayState,
+    authorization_cancel: &tokio_util::sync::CancellationToken,
+) -> Result<(Connection, RwLockReadGuard<'a, ()>), String> {
+    let session = state.connection.session_lock.read().await;
+    if state.cancel.is_cancelled() || authorization_cancel.is_cancelled() || state.lock.is_locked()
+    {
+        return Err("客户端已锁定或学校账号已变更".into());
+    }
+    let (context, _) = state.lock.password_context(false)?;
+    let mut connection = state.connection.clone();
+    connection.operation_context = Some(context);
+    Ok((connection, session))
+}
+
 async fn account_operation<'a>(
     state: &'a GatewayState,
     authorization_cancel: &tokio_util::sync::CancellationToken,

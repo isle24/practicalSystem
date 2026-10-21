@@ -1,4 +1,6 @@
 mod agent_models;
+mod agent_profile_sync;
+mod agent_profiles;
 mod agent_process;
 mod agent_store;
 mod agent_workspace;

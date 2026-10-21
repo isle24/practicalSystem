@@ -1,16 +1,10 @@
 use crate::{
     agent_models,
     agent_process::{bounded_line, plugin_configs, probe_mcp, send, spawn_runtime},
-    agent_store, agent_workspace,
+    agent_profile_sync, agent_profiles, agent_store, agent_workspace,
     connection::Connection,
     school_api,
 };
-use aes_gcm::aead::rand_core::RngCore;
-use aes_gcm::{
-    aead::{Aead, KeyInit, OsRng, Payload},
-    Aes256Gcm, Nonce,
-};
-use base64::{engine::general_purpose::STANDARD, Engine};
 use serde_json::{json, Value};
 use std::{
     collections::HashMap,
@@ -161,8 +155,18 @@ fn running(owner: &str) -> Option<Arc<Run>> {
 }
 
 async fn bootstrap(app: &AppHandle, connection: &Connection, owner: &str) -> Result<Value, String> {
-    let mut value = school_api::read(connection, "api/client-agent/bootstrap").await?;
-    check_scope(connection, &value["scope"])?;
+    let scope = account_scope(connection)?;
+    let mut value = match school_api::read(connection, "api/client-agent/bootstrap").await {
+        Ok(value) => {
+            check_scope(connection, &value["scope"])?;
+            value
+        }
+        Err(message) => {
+            json!({"scope":scope,"cloud_error":format!("云端配置暂不可用：{message}。本机模型仍可保存和使用。")})
+        }
+    };
+    value["profiles"] = agent_profiles::Store::open(app, &scope)?.snapshots();
+    value["personal"] = json!({});
     value["busy"] = json!(false);
     let active_run = running(owner).filter(|run| run.scope == value["scope"]);
     if let Some(run) = active_run {
@@ -205,6 +209,7 @@ async fn bootstrap(app: &AppHandle, connection: &Connection, owner: &str) -> Res
 }
 
 fn check_scope(connection: &Connection, scope: &Value) -> Result<(), String> {
+    require_real_identity(connection)?;
     agent_store::scope_key(scope)?;
     let account = connection
         .operation_context
@@ -225,6 +230,31 @@ fn check_scope(connection: &Connection, scope: &Value) -> Result<(), String> {
     Ok(())
 }
 
+pub(crate) fn require_real_identity(connection: &Connection) -> Result<(), String> {
+    let context = connection
+        .operation_context
+        .as_ref()
+        .ok_or("请使用本人学校账号重新登录后使用 Agent")?;
+    if context["sso_impersonated"].as_bool() != Some(false)
+        || context["auth_time"].as_u64().unwrap_or(0) == 0
+        || context["device_jti"].as_str().is_none_or(str::is_empty)
+        || context["account_id"].as_u64().unwrap_or(0) == 0
+    {
+        return Err("Agent 仅允许本人真实登录，代登账号不能读取本机模型、记忆或会话".into());
+    }
+    Ok(())
+}
+
+fn account_scope(connection: &Connection) -> Result<Value, String> {
+    let context = connection
+        .operation_context
+        .as_ref()
+        .ok_or("本机学校身份不可用")?;
+    let scope = json!({"origin":connection.origin.origin().ascii_serialization(),"school_id":context["school_database_id"],"account_id":context["account_id"]});
+    check_scope(connection, &scope)?;
+    Ok(scope)
+}
+
 pub async fn action(
     app: &AppHandle,
     connection: &Connection,
@@ -235,6 +265,7 @@ pub async fn action(
     if connection.cancel.is_cancelled() || cancel.is_cancelled() {
         return Err("Agent 学校会话已结束".into());
     }
+    require_real_identity(connection)?;
     let action = input["action"].as_str().unwrap_or("");
     if matches!(action, "poll" | "cancel") {
         let run = owners()
@@ -262,42 +293,26 @@ pub async fn action(
     if action == "bootstrap" {
         return bootstrap(app, connection, owner).await;
     }
+    if action == "sync" {
+        if running(owner).is_some() {
+            return Err("请先停止当前运行，再同步模型配置".into());
+        }
+        let scope = account_scope(connection)?;
+        return agent_profile_sync::sync(app, connection, &scope, input, &cancel).await;
+    }
     if matches!(action, "save" | "delete-profile") {
         if running(owner).is_some() {
             return Err("请先停止当前运行，再修改模型配置".into());
         }
-        let body = if action == "save" {
-            input
-                .as_object()
-                .map(|object| {
-                    object
-                        .iter()
-                        .filter(|(key, _)| key.as_str() != "action")
-                        .map(|(key, value)| (key.clone(), value.clone()))
-                        .collect::<serde_json::Map<_, _>>()
-                })
-                .map(Value::Object)
-                .ok_or("模型配置格式无效")?
+        let scope = account_scope(connection)?;
+        let mut store = agent_profiles::Store::open(app, &scope)?;
+        let id = if action == "save" {
+            Some(store.save(app, input)?)
         } else {
-            let mut body = json!({"id":input["id"]});
-            if let Some(revision) = input["revision"].as_str() {
-                body["revision"] = json!(revision);
-            }
-            body
+            store.delete(app, input)?;
+            None
         };
-        let result = school_api::client_agent_post(
-            connection,
-            if action == "save" {
-                "api/client-agent/personal-save"
-            } else {
-                "api/client-agent/personal-delete"
-            },
-            &body,
-        )
-        .await?;
-        let mut value = bootstrap(app, connection, owner).await?;
-        value["saved_profile_id"] = result["saved_profile_id"].clone();
-        return Ok(value);
+        return Ok(json!({"profiles":store.snapshots(),"saved_profile_id":id}));
     }
     if action == "reconnect" {
         if running(owner).is_some() {
@@ -314,31 +329,12 @@ pub async fn action(
         }));
         return Ok(json!({"ok":true}));
     }
-    let config = bootstrap(app, connection, owner).await?;
-    let scope = config["scope"].clone();
-    if action == "workspace" {
-        return Ok(
-            json!({"workspace":config["workspace"],"history":config["history"],"conversation_id":config["conversation_id"]}),
-        );
-    }
+    let scope = account_scope(connection)?;
     if matches!(action, "models" | "probe") {
-        let run = Run {
-            id: uuid::Uuid::new_v4().to_string(),
-            scope: scope.clone(),
-            cancel: cancel.clone(),
-            state: Mutex::new(json!({})),
-            options: Value::Null,
-        };
         let supplied_key = input["api_key"].as_str().unwrap_or("");
         let mut model = ModelConfig(if supplied_key.is_empty() {
-            let mut saved = personal(
-                connection,
-                &run,
-                &uuid::Uuid::new_v4().to_string(),
-                input["profile_id"].as_str().unwrap_or(""),
-                true,
-            )
-            .await?;
+            let mut saved = agent_profiles::Store::open(app, &scope)?
+                .resolve(input["profile_id"].as_str().unwrap_or(""), false)?;
             if let Some(endpoint) = input["endpoint"].as_str().filter(|value| !value.is_empty()) {
                 if agent_models::endpoint(endpoint)?
                     != agent_models::endpoint(saved["endpoint"].as_str().unwrap_or(""))?
@@ -355,6 +351,12 @@ pub async fn action(
             model["model"] = json!(name);
         }
         return agent_models::inspect(&model, action, &cancel).await;
+    }
+    let config = bootstrap(app, connection, owner).await?;
+    if action == "workspace" {
+        return Ok(
+            json!({"workspace":config["workspace"],"history":config["history"],"conversation_id":config["conversation_id"]}),
+        );
     }
     if running(owner).is_some() {
         return Err("请先等待或停止当前运行，再修改本机工作区".into());
@@ -794,70 +796,6 @@ async fn agent_post(
     school_api::client_agent_post(connection, path, body).await
 }
 
-async fn personal(
-    connection: &Connection,
-    run: &Run,
-    device_id: &str,
-    profile_id: &str,
-    session_guarded: bool,
-) -> Result<Value, String> {
-    let mut key = Zeroizing::new([0u8; 32]);
-    OsRng.fill_bytes(key.as_mut());
-    let mut body = json!({"transport_key":STANDARD.encode(key.as_ref()),"device_id":device_id});
-    if !profile_id.is_empty() {
-        body["profile_id"] = json!(profile_id);
-    }
-    let envelope = if session_guarded {
-        school_api::client_agent_post(connection, "api/client-agent/personal-download", &body).await
-    } else {
-        agent_post(connection, run, "api/client-agent/personal-download", &body).await
-    };
-    if let Some(Value::String(s)) = body.get_mut("transport_key") {
-        s.zeroize();
-    }
-    body = Value::Null;
-    drop(body);
-    let envelope = envelope?;
-    if envelope["algorithm"] != "AES-256-GCM" {
-        return Err("个人模型加密信封格式无效".into());
-    }
-    let nonce = STANDARD
-        .decode(envelope["nonce"].as_str().unwrap_or(""))
-        .map_err(|_| "个人配置加密信封无效")?;
-    let mut encrypted = STANDARD
-        .decode(envelope["ciphertext"].as_str().unwrap_or(""))
-        .map_err(|_| "个人配置加密信封无效")?;
-    let tag = STANDARD
-        .decode(envelope["tag"].as_str().unwrap_or(""))
-        .map_err(|_| "个人配置加密信封无效")?;
-    if nonce.len() != 12 || tag.len() != 16 || encrypted.len() > 32768 {
-        return Err("个人配置加密信封无效".into());
-    }
-    encrypted.extend_from_slice(&tag);
-    let cipher = Aes256Gcm::new_from_slice(key.as_ref()).map_err(|_| "个人配置解密失败")?;
-    let clear = Zeroizing::new(
-        cipher
-            .decrypt(
-                Nonce::from_slice(&nonce),
-                Payload {
-                    msg: &encrypted,
-                    aad: b"practical-client-agent:v1",
-                },
-            )
-            .map_err(|_| "个人配置解密失败")?,
-    );
-    let mut value: Value = serde_json::from_slice(&clear).map_err(|_| "个人配置格式无效")?;
-    if value["scope"] != run.scope
-        || value["device_id"] != device_id
-        || value["mode"] != "personal"
-        || (!profile_id.is_empty() && value["profile_id"] != profile_id)
-    {
-        wipe_key(&mut value);
-        return Err("个人配置不属于当前学校账号或设备".into());
-    }
-    Ok(value)
-}
-
 fn wipe_key(value: &mut Value) {
     if let Some(Value::String(key)) = value.get_mut("api_key") {
         key.zeroize();
@@ -1062,7 +1000,7 @@ async fn execute(
     let conversation = agent_workspace::active(&stored)?.clone();
     let profile_id = run.options["profile_id"].as_str().unwrap_or("");
     let mut model = ModelConfig(if mode == "personal" {
-        personal(connection, run, &device_id, profile_id, false).await?
+        agent_profiles::Store::open(app, &run.scope)?.resolve(profile_id, true)?
     } else {
         config["school"].clone()
     });

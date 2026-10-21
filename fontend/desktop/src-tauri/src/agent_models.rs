@@ -1,5 +1,5 @@
 use serde_json::{json, Value};
-use std::time::Duration;
+use std::{error::Error, io::ErrorKind, time::Duration};
 use tokio_util::sync::CancellationToken;
 use url::Url;
 
@@ -27,12 +27,60 @@ pub fn endpoint(value: &str) -> Result<Url, String> {
     Ok(url)
 }
 
+fn connection_error(reason: &reqwest::Error, https: bool) -> String {
+    if reason.is_timeout() {
+        return "本机连接模型服务超时，请检查地址、端口和网络".into();
+    }
+    let mut source: Option<&(dyn Error + 'static)> = Some(reason);
+    for _ in 0..16 {
+        let Some(error) = source else { break };
+        if let Some(error) = error.downcast_ref::<std::io::Error>() {
+            match error.kind() {
+                ErrorKind::ConnectionRefused => {
+                    return "模型服务拒绝连接，请检查端口、服务是否启动及是否允许其他设备访问"
+                        .into();
+                }
+                ErrorKind::PermissionDenied => {
+                    return "本机系统拒绝网络访问；macOS 请在系统设置的隐私与安全性、本地网络中允许实践系统访问".into();
+                }
+                ErrorKind::NetworkUnreachable | ErrorKind::HostUnreachable => {
+                    return "本机无法到达模型服务，请检查局域网、VPN、路由及防火墙；macOS 同时检查本地网络权限".into();
+                }
+                _ => (),
+            }
+        }
+        let message = error.to_string().to_ascii_lowercase();
+        if message.contains("dns error")
+            || message.contains("failed to lookup address")
+            || message.contains("name or service not known")
+            || message.contains("nodename nor servname provided")
+        {
+            return "本机无法解析模型服务主机名，请检查内网 DNS，或使用可访问的内网 IP 地址".into();
+        }
+        if https && (message.contains("certificate") || message.contains("certvalid")) {
+            return "模型服务 HTTPS 证书验证失败，请检查证书主机名、有效期及证书链".into();
+        }
+        source = error.source();
+    }
+    if reason.is_connect() {
+        if https {
+            "本机无法建立 HTTPS 模型连接，请核对协议、端口和网络权限".into()
+        } else {
+            "本机无法建立 HTTP 模型连接，请核对地址、端口和网络权限；HTTP 连接不涉及 TLS 证书"
+                .into()
+        }
+    } else {
+        "本机模型请求失败，请核对服务是否提供 OpenAI 兼容接口".into()
+    }
+}
+
 pub async fn inspect(
     config: &Value,
     action: &str,
     cancel: &CancellationToken,
 ) -> Result<Value, String> {
     let mut target = endpoint(config["endpoint"].as_str().unwrap_or(""))?;
+    let https = target.scheme() == "https";
     let key = config["api_key"].as_str().unwrap_or("");
     if key.is_empty() || key.len() > 2048 || key.chars().any(char::is_control) {
         return Err("请填写有效的 API Key".into());
@@ -60,16 +108,10 @@ pub async fn inspect(
         client.post(target).bearer_auth(key).json(&json!({"model":model,"messages":[{"role":"user","content":"请回复 OK"}],"max_tokens":16,"stream":false}))
     };
     let operation = async {
-        let mut response = request.send().await.map_err(|reason| {
-            if reason.is_timeout() {
-                "本机连接模型服务超时，请检查地址和网络"
-            } else if reason.is_connect() {
-                "本机无法连接模型服务，请检查内网连通性和 TLS 证书"
-            } else {
-                "本机模型请求失败"
-            }
-            .to_owned()
-        })?;
+        let mut response = request
+            .send()
+            .await
+            .map_err(|reason| connection_error(&reason, https))?;
         let status = response.status();
         if !status.is_success() {
             return Err(match status.as_u16() {
