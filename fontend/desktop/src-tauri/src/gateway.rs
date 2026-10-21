@@ -508,7 +508,7 @@ async fn handle(State(state): State<Arc<GatewayState>>, request: Request) -> Res
             };
             let mut connection = state.connection.clone();
             connection.operation_context = Some(context);
-            if let Err(message) = crate::client_agent::require_real_identity(&connection) {
+            if let Err(message) = crate::client_agent::require_account_session(&connection) {
                 return error(StatusCode::FORBIDDEN, &message);
             }
             let result = crate::client_agent::action(
@@ -553,7 +553,7 @@ async fn handle(State(state): State<Arc<GatewayState>>, request: Request) -> Res
             Ok(value) => value,
             Err(message) => return error(StatusCode::UNAUTHORIZED, &message),
         };
-        if let Err(message) = crate::client_agent::require_real_identity(&connection) {
+        if let Err(message) = crate::client_agent::require_account_session(&connection) {
             return error(StatusCode::FORBIDDEN, &message);
         }
         let result = if input["action"] == "open" {
@@ -876,8 +876,10 @@ async fn proxy(
                 parts.uri.path(),
                 "/api/auth/logout" | "/api/auth/password-recovery/reset"
             );
-    let serialized =
-        session_change || matches!(parts.uri.path(), "/api/auth/refresh" | "/api/auth/context");
+    let identity_read = matches!(parts.uri.path(), "/api/auth/refresh" | "/api/auth/context");
+    let oidc_switch =
+        parts.method == axum::http::Method::POST && parts.uri.path() == "/api/oidc/interaction";
+    let serialized = session_change || identity_read || oidc_switch;
     if session_change {
         crate::office_preview::cancel_owner(&state.owner);
         crate::client_agent::cancel_owner(&state.owner);
@@ -951,8 +953,10 @@ async fn proxy(
         }
     };
     let status = response.status();
-    let cookie_changed = session_change && authentication_cookie_changed(response.headers());
-    if cookie_changed {
+    let cookie_changed =
+        (session_change || oidc_switch) && authentication_cookie_changed(response.headers());
+    let identity_invalid = identity_read && status == StatusCode::UNAUTHORIZED;
+    if cookie_changed || identity_invalid {
         invalidate_authorization_context(&state).await;
     }
     let mut outgoing = HeaderMap::new();
@@ -987,25 +991,20 @@ async fn proxy(
     outgoing.insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
     let body = if serialized {
         let bytes = match tokio::select! {
-            _ = authorization_cancel.cancelled(), if !session_change => return error(StatusCode::LOCKED, "客户端已锁定或账号已变更"),
+            _ = authorization_cancel.cancelled(), if !session_change && !cookie_changed && !identity_invalid => return error(StatusCode::LOCKED, "客户端已锁定或账号已变更"),
             bytes = login_response_body(response) => bytes,
         } {
             Ok(bytes) => bytes,
             Err(message) => return error(StatusCode::BAD_GATEWAY, &message),
         };
-        if !session_change && !state.cancel.is_cancelled() && !authorization_cancel.is_cancelled() {
-            if status == StatusCode::UNAUTHORIZED {
-                state.lock.clear_context();
-            }
-        }
-        if !session_change
+        if identity_read
             && status.is_success()
             && !state.cancel.is_cancelled()
             && !authorization_cancel.is_cancelled()
         {
             if let Ok(value) = serde_json::from_slice::<serde_json::Value>(&bytes) {
                 if value["code"].as_i64() == Some(40100) {
-                    state.lock.clear_context();
+                    invalidate_authorization_context(&state).await;
                 }
                 if value["code"].as_i64() == Some(0) {
                     let context = if value["data"]["context"].is_object() {
@@ -1013,7 +1012,14 @@ async fn proxy(
                     } else {
                         &value["data"]
                     };
-                    state.lock.remember_context(context);
+                    if context["account_id"].as_u64().unwrap_or(0) == 0 {
+                        invalidate_authorization_context(&state).await;
+                    } else {
+                        if context_boundary_changed(&state, context) {
+                            invalidate_authorization_context(&state).await;
+                        }
+                        state.lock.remember_context(context);
+                    }
                 }
             }
         }
@@ -1062,14 +1068,21 @@ async fn account_operation<'a>(
     if state.lock.is_locked() {
         return Err("客户端已锁定，请先验证当前账号".into());
     }
-    let context = crate::school_api::read_context_guarded(&state.connection, &session).await?;
+    let context =
+        match crate::school_api::read_context_guarded_checked(&state.connection, &session).await? {
+            Some(context) => context,
+            None => {
+                invalidate_authorization_context(state).await;
+                return Err("学校登录会话已失效，请重新登录".into());
+            }
+        };
     if state.lock.is_locked() || state.cancel.is_cancelled() || authorization_cancel.is_cancelled()
     {
         return Err("学校账号已变更，请重新操作".into());
     }
-    if context["account_id"].as_u64().unwrap_or(0) == 0 {
-        state.lock.clear_context();
-        return Err("请先登录有效学校账号".into());
+    if context_boundary_changed(state, &context) {
+        invalidate_authorization_context(state).await;
+        return Err("客户端当前账号已变化，请重新打开 Agent".into());
     }
     state.lock.remember_context(&context);
     let mut connection = state.connection.clone();
@@ -1091,6 +1104,21 @@ async fn login_response_body(mut response: reqwest::Response) -> Result<Vec<u8>,
     Ok(bytes)
 }
 
+fn context_boundary_changed(state: &GatewayState, context: &serde_json::Value) -> bool {
+    state
+        .lock
+        .password_context(false)
+        .is_ok_and(|(previous, _)| {
+            previous["account_id"] != context["account_id"]
+                || previous["school_database_id"].as_u64().unwrap_or(0) > 0
+                    && previous["school_database_id"] != context["school_database_id"]
+                || previous["device_jti"]
+                    .as_str()
+                    .is_some_and(|id| !id.is_empty())
+                    && previous["device_jti"] != context["device_jti"]
+        })
+}
+
 /// 认证成功后结束原账号的授权窗口和未完成请求。
 async fn renew_authorization_context(state: &GatewayState, body: &[u8], authenticated: bool) {
     let Ok(value) = serde_json::from_slice::<serde_json::Value>(body) else {
@@ -1106,6 +1134,7 @@ async fn renew_authorization_context(state: &GatewayState, body: &[u8], authenti
 
 /// Cookie 身份边界已变更时立即结束旧窗口和请求代次。
 async fn invalidate_authorization_context(state: &GatewayState) {
+    let had_account = state.lock.password_context(false).is_ok();
     crate::client_agent::cancel_owner(&state.owner);
     {
         let mut cancel = state.authorization_cancel.lock().await;
@@ -1113,7 +1142,11 @@ async fn invalidate_authorization_context(state: &GatewayState) {
         *cancel = state.cancel.child_token();
     }
     state.lock.clear_context();
-    crate::windows::reset_account_windows(&state.app, &state.owner);
+    if had_account {
+        crate::windows::reset_account_windows(&state.app, &state.owner);
+    } else {
+        crate::windows::close_account_windows(&state.app, &state.owner);
+    }
 }
 
 /// 仅按学校成功认证的账号更新本机连接记录。

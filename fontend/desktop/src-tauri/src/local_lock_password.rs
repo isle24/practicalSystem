@@ -82,8 +82,8 @@ fn derive(password: &str, salt: &[u8; 16]) -> Result<Zeroizing<[u8; 32]>, String
 }
 
 pub fn validate(password: &str) -> Result<(), String> {
-    if !(6..=128).contains(&password.chars().count()) || password.len() > 512 {
-        return Err("本机锁屏密码须为 6 至 128 个字符".into());
+    if !(4..=64).contains(&password.chars().count()) || password.len() > 256 {
+        return Err("本机锁屏密码须为 4 至 64 个字符".into());
     }
     Ok(())
 }
@@ -130,7 +130,9 @@ impl LocalLockPassword {
     }
 
     pub fn verify(&self, key: &str, password: &str) -> Result<bool, String> {
-        validate(password)?;
+        if !(4..=128).contains(&password.chars().count()) || password.len() > 512 {
+            return Err("本机锁屏密码长度无效，请输入已设置的密码".into());
+        }
         let mut attempts = self.attempts.lock().map_err(|_| "本机密码校验状态不可用")?;
         if attempts.key != key {
             *attempts = Attempts {

@@ -9,7 +9,7 @@
     </form>
     <form class="local-password-settings" @submit.prevent="savePassword">
       <div class="lock-setting-row"><div><strong>本机锁屏密码（可选）</strong><small>仅保存在此设备，按学校和账号分别保存，不修改账号密码。退出或关闭客户端后保留，直到手动修改或清除。</small></div><span class="local-password-status">{{ configured === null ? '状态未读取' : configured ? '已设置' : '未设置' }}</span></div>
-      <div class="local-password-field"><label for="desktop-local-password">{{ configured ? '新的本机锁屏密码' : '设置本机锁屏密码' }}</label><el-input id="desktop-local-password" v-model="password" type="password" show-password autocomplete="new-password" placeholder="6 至 128 个字符" :disabled="lock.busy || lock.locked" /></div>
+      <div class="local-password-field"><label for="desktop-local-password">{{ configured ? '新的本机锁屏密码' : '设置本机锁屏密码' }}</label><el-input id="desktop-local-password" v-model="password" type="password" show-password autocomplete="new-password" placeholder="4 至 64 个字符" :disabled="lock.busy || lock.locked" /></div>
       <div class="local-password-field"><label for="desktop-local-confirmation">确认本机锁屏密码</label><el-input id="desktop-local-confirmation" v-model="confirmation" type="password" show-password autocomplete="new-password" placeholder="请再次输入" :disabled="lock.busy || lock.locked" /></div>
       <p v-if="passwordMessage" class="lock-setting-message" :class="{ saved: passwordSaved }" role="status">{{ passwordMessage }}</p>
       <div class="lock-setting-actions local-password-actions"><el-button :disabled="lock.busy || lock.locked" @click="readPassword">刷新状态</el-button><el-button :disabled="lock.busy || lock.locked || configured === false" @click="clearPassword">清除本机密码</el-button><el-button type="primary" native-type="submit" :loading="lock.busy" :disabled="lock.locked || !password || !confirmation">{{ configured ? '修改本机密码' : '保存本机密码' }}</el-button></div>
@@ -49,7 +49,7 @@ async function passwordOperation(operation, success = '') {
 function readPassword() { return passwordOperation(() => props.lock.readLocalPassword()); }
 async function savePassword() {
   if (props.lock.busy || props.lock.locked) return;
-  if ([...password.value].length < 6 || [...password.value].length > 128) { passwordMessage.value = '本机锁屏密码须为 6 至 128 个字符'; passwordSaved.value = false; return; }
+  if ([...password.value].length < 4 || [...password.value].length > 64) { passwordMessage.value = '本机锁屏密码须为 4 至 64 个字符'; passwordSaved.value = false; return; }
   if (password.value !== confirmation.value) { passwordMessage.value = '两次输入的本机锁屏密码不一致'; passwordSaved.value = false; return; }
   const value = password.value; const repeated = confirmation.value; password.value = ''; confirmation.value = '';
   await passwordOperation(() => props.lock.saveLocalPassword(value, repeated), '本机锁屏密码已保存，退出或关闭客户端后仍可使用');

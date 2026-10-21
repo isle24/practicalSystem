@@ -66,6 +66,7 @@ pub fn normalize(scope: &Value, stored: Value) -> Value {
     };
     data["version"] = json!(2);
     data["scope"] = scope.clone();
+    data.as_object_mut().unwrap().remove("__storage_dirty");
     for field in [
         "conversations",
         "memories",
@@ -104,7 +105,6 @@ pub fn normalize(scope: &Value, stored: Value) -> Value {
         .unwrap_or(true);
     plugins.retain(|item| item["id"] != BUILTIN_ID);
     plugins.insert(0, builtin(enabled));
-    trim_events(&mut data);
     data
 }
 
@@ -112,11 +112,14 @@ pub fn view(data: &Value) -> Value {
     let mut visible = data.clone();
     if let Some(object) = visible.as_object_mut() {
         object.remove("scope");
+        object.remove("__imported_scope_keys");
+        object.remove("__storage_dirty");
     }
     if let Some(items) = visible["conversations"].as_array_mut() {
         for item in items {
             if let Some(object) = item.as_object_mut() {
                 object.remove("messages");
+                object.remove("execution_scope");
             }
         }
     }

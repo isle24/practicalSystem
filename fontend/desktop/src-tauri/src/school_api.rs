@@ -28,27 +28,57 @@ pub async fn read(connection: &Connection, path: &str) -> Result<Value, String> 
 /// 调用方已持有学校会话写锁。
 pub async fn read_context_guarded(
     connection: &Connection,
-    _session: &tokio::sync::RwLockWriteGuard<'_, ()>,
+    session: &tokio::sync::RwLockWriteGuard<'_, ()>,
 ) -> Result<Value, String> {
+    read_context_guarded_checked(connection, session)
+        .await?
+        .ok_or_else(|| "学校登录会话已失效，请重新登录".into())
+}
+
+pub async fn read_context_guarded_checked(
+    connection: &Connection,
+    _session: &tokio::sync::RwLockWriteGuard<'_, ()>,
+) -> Result<Option<Value>, String> {
     let target = connection
         .origin
         .join("api/auth/context")
         .map_err(|_| "学校接口地址无效")?;
-    read_target(connection, target).await
+    let response = get(connection, target).await?;
+    let status = response.status();
+    if status == reqwest::StatusCode::UNAUTHORIZED {
+        return Ok(None);
+    }
+    let value = read_json(response, 1024 * 1024).await?;
+    if value["code"].as_i64() == Some(40100) {
+        return Ok(None);
+    }
+    if !status.is_success() || value["code"].as_i64() != Some(0) {
+        return Err(value["message"]
+            .as_str()
+            .unwrap_or("学校身份读取失败")
+            .to_owned());
+    }
+    if value["data"]["account_id"].as_u64().unwrap_or(0) == 0 {
+        return Ok(None);
+    }
+    Ok(Some(value["data"].clone()))
 }
 
 async fn read_target(connection: &Connection, target: url::Url) -> Result<Value, String> {
+    decode(get(connection, target).await?, 1024 * 1024).await
+}
+
+async fn get(connection: &Connection, target: url::Url) -> Result<reqwest::Response, String> {
     if connection.cancel.is_cancelled() {
         return Err("学校连接已关闭，请重新连接".into());
     }
-    let response = connection
+    connection
         .client
         .get(target)
         .timeout(std::time::Duration::from_secs(15))
         .send()
         .await
-        .map_err(|_| "学校接口连接失败，请检查网络")?;
-    decode(response, 1024 * 1024).await
+        .map_err(|_| "学校接口连接失败，请检查网络".into())
 }
 
 /// 通过学校 HTTPS 会话发送凭据库操作。
@@ -137,16 +167,9 @@ async fn protected_post(
     decode(response, 1024 * 1024).await
 }
 
-async fn decode(mut response: reqwest::Response, limit: usize) -> Result<Value, String> {
+async fn decode(response: reqwest::Response, limit: usize) -> Result<Value, String> {
     let status = response.status();
-    let mut bytes = Vec::new();
-    while let Some(chunk) = response.chunk().await.map_err(|_| "读取学校信息失败")? {
-        if bytes.len() + chunk.len() > limit {
-            return Err("学校响应过大".into());
-        }
-        bytes.extend_from_slice(&chunk);
-    }
-    let value: Value = serde_json::from_slice(&bytes).map_err(|_| "学校接口格式不正确")?;
+    let value = read_json(response, limit).await?;
     if !status.is_success() || value["code"].as_i64() != Some(0) {
         return Err(value["message"]
             .as_str()
@@ -154,6 +177,17 @@ async fn decode(mut response: reqwest::Response, limit: usize) -> Result<Value, 
             .to_owned());
     }
     Ok(value["data"].clone())
+}
+
+async fn read_json(mut response: reqwest::Response, limit: usize) -> Result<Value, String> {
+    let mut bytes = Vec::new();
+    while let Some(chunk) = response.chunk().await.map_err(|_| "读取学校信息失败")? {
+        if bytes.len() + chunk.len() > limit {
+            return Err("学校响应过大".into());
+        }
+        bytes.extend_from_slice(&chunk);
+    }
+    serde_json::from_slice(&bytes).map_err(|_| "学校接口格式不正确".into())
 }
 
 /// 获取服务器确认的当前账号，禁止使用前端自报账号。

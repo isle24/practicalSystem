@@ -134,9 +134,11 @@ pub fn open(
 
 fn snapshot(data: &Value) -> Result<Value, String> {
     let active = agent_workspace::active(data)?;
-    Ok(
-        json!({"workspace":agent_workspace::view(data),"history":active["history"],"conversation_id":active["id"]}),
-    )
+    let mut value = json!({"workspace":agent_workspace::view(data),"history":active["history"],"conversation_id":active["id"]});
+    if let Some(message) = data["migration_notice"].as_str() {
+        value["memory_error"] = json!(message);
+    }
+    Ok(value)
 }
 
 fn running(owner: &str) -> Option<Arc<Run>> {
@@ -209,7 +211,7 @@ async fn bootstrap(app: &AppHandle, connection: &Connection, owner: &str) -> Res
 }
 
 fn check_scope(connection: &Connection, scope: &Value) -> Result<(), String> {
-    require_real_identity(connection)?;
+    require_account_session(connection)?;
     agent_store::scope_key(scope)?;
     let account = connection
         .operation_context
@@ -230,17 +232,18 @@ fn check_scope(connection: &Connection, scope: &Value) -> Result<(), String> {
     Ok(())
 }
 
-pub(crate) fn require_real_identity(connection: &Connection) -> Result<(), String> {
+pub(crate) fn require_account_session(connection: &Connection) -> Result<(), String> {
     let context = connection
         .operation_context
         .as_ref()
-        .ok_or("请使用本人学校账号重新登录后使用 Agent")?;
-    if context["sso_impersonated"].as_bool() != Some(false)
-        || context["auth_time"].as_u64().unwrap_or(0) == 0
-        || context["device_jti"].as_str().is_none_or(str::is_empty)
+        .ok_or("学校登录会话不可用，请重新登录后打开 Agent")?;
+    if context["device_jti"].as_str().is_none_or(str::is_empty)
         || context["account_id"].as_u64().unwrap_or(0) == 0
     {
-        return Err("Agent 仅允许本人真实登录，代登账号不能读取本机模型、记忆或会话".into());
+        return Err("学校登录会话已失效，请重新登录当前账号后打开 Agent".into());
+    }
+    if context["school_database_id"].as_u64().unwrap_or(0) == 0 {
+        return Err("学校会话缺少学校范围，请更新服务端后重新读取登录状态".into());
     }
     Ok(())
 }
@@ -265,7 +268,7 @@ pub async fn action(
     if connection.cancel.is_cancelled() || cancel.is_cancelled() {
         return Err("Agent 学校会话已结束".into());
     }
-    require_real_identity(connection)?;
+    require_account_session(connection)?;
     let action = input["action"].as_str().unwrap_or("");
     if matches!(action, "poll" | "cancel") {
         let run = owners()
@@ -509,10 +512,15 @@ async fn start_run(
         .as_array_mut()
         .and_then(|items| items.iter_mut().find(|item| item["id"] == active_id))
     {
-        if item["mode"] != mode || item["profile_id"] != profile_id || item["model"] != model {
+        if item["mode"] != mode
+            || item["profile_id"] != profile_id
+            || item["model"] != model
+            || item["execution_scope"] != scope
+        {
             item["revision"] = Value::Null;
             item["messages"] = json!([]);
         }
+        item["execution_scope"] = scope.clone();
         item["mode"] = json!(mode);
         item["profile_id"] = json!(profile_id);
         item["model"] = json!(model);
@@ -1016,6 +1024,7 @@ async fn execute(
         .to_owned();
     let selected_model = model["model"].as_str().unwrap_or("").to_owned();
     let messages = if conversation["mode"] == mode
+        && conversation["execution_scope"] == run.scope
         && conversation["revision"] == revision
         && conversation["profile_id"] == actual_profile
         && conversation["model"] == selected_model

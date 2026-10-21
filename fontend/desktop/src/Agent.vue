@@ -1410,18 +1410,18 @@ async function request(action, payload = {}, channel = '') {
       signal: controller.signal
     });
     if (disposed || version !== generation) return null;
+    const result = await response.json().catch(() => null);
+    if (disposed || version !== generation) return null;
     if ([401, 403, 423].includes(response.status)) {
       wipe();
       error.value =
         response.status === 423
           ? '客户端已锁定，请解锁后重试。'
           : response.status === 403
-            ? 'Agent 仅允许本人真实登录，请退出代登并使用本人账号登录。'
+            ? text(result?.message) || '当前学校或账号无法访问，请重新读取登录状态。'
             : '登录已失效，请重新登录。';
       return null;
     }
-    const result = await response.json().catch(() => null);
-    if (disposed || version !== generation) return null;
     if (!response.ok)
       throw new Error(
         text(result?.message) || `请求失败（${response.status}）`
