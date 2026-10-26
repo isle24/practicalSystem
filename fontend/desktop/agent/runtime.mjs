@@ -130,7 +130,7 @@ function buildTool(capabilities, countTool) {
   const ids = new Set();
   const branches = capabilities.map((capability) => {
     if (!object(capability) || typeof capability.id !== 'string' || !/^[a-zA-Z0-9_.:-]{1,160}$/.test(capability.id) || ids.has(capability.id)
-      || capability.phase !== 'B' || capability.available !== true || !['read', 'write'].includes(capability.kind)) fail(ERROR.input);
+      || !['B', 'C'].includes(capability.phase) || capability.available !== true || (capability.phase === 'C' && capability.confirmation_required !== true) || !['read', 'write'].includes(capability.kind)) fail(ERROR.input);
     ids.add(capability.id);
     return {
       type: 'object',
@@ -144,7 +144,7 @@ function buildTool(capabilities, countTool) {
   return [{
     name: TOOL_NAME,
     label: '学校已授权功能',
-    description: '调用学校已授权功能。严格选择 capability_id 并按对应参数结构提供 arguments；写操作需要用户在本机确认。',
+    description: '调用学校已授权功能。严格按 capability_id 的参数结构提供 arguments。C 操作先生成服务器预览，由用户人工确认后执行；模型不能批准操作。结果未知时只核对同一操作的完整回执，不重新创建操作。',
     parameters: { type: 'object', properties: { capability_id: { type: 'string', enum: [...ids] }, arguments: { type: 'object' } }, required: ['capability_id', 'arguments'], additionalProperties: false, oneOf: branches },
     executionMode: 'sequential',
     async execute(_id, params, signal) {

@@ -1,6 +1,7 @@
 <script setup>
 import { computed, ref, watch } from 'vue';
 import { RefreshCw, Save } from '@lucide/vue';
+import { ElMessageBox } from 'element-plus';
 import { request } from '../../api/client';
 import { cliDownloadUrl, cliError, cliMutation, useCliScope } from '../../utils/cli';
 import CliSessionList from './CliSessionList.vue';
@@ -17,7 +18,7 @@ const conflict = ref(false);
 const error = ref('');
 const message = ref('');
 let loadVersion = 0;
-const available = item => (item.available === true || item.available === 1) && String(item.phase || '').toUpperCase() !== 'C';
+const available = item => (item.available === true || item.available === 1) && (item.phase === 'B' || (item.phase === 'C' && item.confirmation_required === true));
 const selectableIds = computed(() => (policy.value?.catalog || []).filter(available).map(item => item.id));
 const selectedIds = computed(() => new Set(selected.value));
 const moduleNames = { note: '个人笔记', favorite: '收藏', file: '文件', doc: '文档', archive: '基础档案', internship: '实习管理', practice: '实验实训', social_practice: '社会实践', config: '系统配置' };
@@ -98,6 +99,13 @@ async function save() {
   error.value = '';
   message.value = '';
   try {
+    const added = (policy.value.catalog || []).filter(item => item.phase === 'C' && payload.capabilities.includes(item.id) && (!policy.value.enabled || !policy.value.capabilities.includes(item.id)));
+    if (payload.enabled && added.length) {
+      try {
+        await ElMessageBox.confirm(`将为本校用户开放 ${added.length} 项需确认操作：${added.map(item => item.label || item.id).join('、')}。调用仍受账号权限和原业务范围约束，每次执行需另行核对服务器预览并确认。`, '确认学校功能授权', { confirmButtonText: '保存授权', cancelButtonText: '继续核对', type: 'warning', closeOnClickModal: false });
+      } catch { return; }
+      if (!scope.current()) return;
+    }
     const data = await cliMutation('/cli/admin/policy', payload, scope.options);
     if (!scope.current()) return;
     apply(data);
@@ -136,9 +144,9 @@ watch(() => props.sessionKey, key => {
       <template v-if="policy">
         <section class="cli-card cli-enable"><div><h3>学校 CLI 开关</h3><p>本校用户统一受此配置约束。已勾选功能还需满足账号原有权限与数据范围。</p><small>配置修订 {{ policy.revision }}{{ dirty ? ' · 有未保存修改' : '' }}</small></div><el-switch v-model="enabled" active-text="启用" inactive-text="关闭" :disabled="!writable || loading || saving" aria-label="学校 CLI 开关" /></section>
         <el-alert v-if="!enabled" title="学校 CLI 已关闭，设备授权与后续调用不可用。更改后请保存。" type="info" :closable="false" show-icon />
-        <section class="cli-card"><div class="cli-catalog-heading"><h3>允许调用的功能</h3><div class="cli-catalog-controls"><small aria-live="polite">已选 {{ selected.length }} / {{ selectableIds.length }} 项</small><el-button size="small" :disabled="!writable || loading || saving || !selectableIds.length" aria-label="全选已开放能力" @click="changeSelection('all')">全选</el-button><el-button size="small" :disabled="!writable || loading || saving || !selectableIds.length" aria-label="反选已开放能力" @click="changeSelection('invert')">反选</el-button><el-button size="small" :disabled="!writable || loading || saving || !selected.length" aria-label="清空已选能力" @click="changeSelection('clear')">清空</el-button></div></div><p>查询、普通新增和修改按目录逐项开放。批量勾选仅作用于已开放功能，更改后请保存。阶段 C 的删除、审批、导入和系统配置首版不开放。</p>
+        <section class="cli-card"><div class="cli-catalog-heading"><h3>允许调用的功能</h3><div class="cli-catalog-controls"><small aria-live="polite">已选 {{ selected.length }} / {{ selectableIds.length }} 项</small><el-button size="small" :disabled="!writable || loading || saving || !selectableIds.length" aria-label="全选已开放能力" @click="changeSelection('all')">全选</el-button><el-button size="small" :disabled="!writable || loading || saving || !selectableIds.length" aria-label="反选已开放能力" @click="changeSelection('invert')">反选</el-button><el-button size="small" :disabled="!writable || loading || saving || !selected.length" aria-label="清空已选能力" @click="changeSelection('clear')">清空</el-button></div></div><p>查询和业务写入按目录逐项开放。批量勾选仅作用于已适配功能，更改后请保存。标有“执行前需确认”的功能，每次调用均需核对服务器预览并人工确认。永久删除、文件删除和任意系统配置继续关闭。</p>
           <el-checkbox-group v-model="selected" :disabled="!writable || loading || saving" class="cli-catalog">
-            <section v-for="group in groups" :key="group.name" class="cli-capability-group"><div class="cli-catalog-heading cli-group-heading"><h4>{{ group.name }}</h4><div class="cli-catalog-controls"><small>已选 {{ group.ids.filter(id => selectedIds.has(id)).length }} / {{ group.ids.length }} 项</small><el-button size="small" :disabled="!writable || loading || saving || !group.ids.length" :aria-label="`全选${group.name}能力`" @click="changeSelection('all', group.ids)">全选</el-button><el-button size="small" :disabled="!writable || loading || saving || !group.ids.length" :aria-label="`反选${group.name}能力`" @click="changeSelection('invert', group.ids)">反选</el-button><el-button size="small" :disabled="!writable || loading || saving || !group.ids.some(id => selectedIds.has(id))" :aria-label="`清空${group.name}能力`" @click="changeSelection('clear', group.ids)">清空</el-button></div></div><div v-for="item in group.items" :key="item.id" class="cli-capability"><el-checkbox :value="item.id" :disabled="!available(item)"><span>{{ item.label || item.id }}</span><el-tag v-if="!available(item)" type="info" size="small">{{ String(item.phase || '').toUpperCase() === 'C' ? '阶段 C · 首版不开放' : '暂不可用' }}</el-tag></el-checkbox><small>{{ item.description || item.id }}</small><code>{{ item.method }} {{ item.path }}</code></div></section>
+            <section v-for="group in groups" :key="group.name" class="cli-capability-group"><div class="cli-catalog-heading cli-group-heading"><h4>{{ group.name }}</h4><div class="cli-catalog-controls"><small>已选 {{ group.ids.filter(id => selectedIds.has(id)).length }} / {{ group.ids.length }} 项</small><el-button size="small" :disabled="!writable || loading || saving || !group.ids.length" :aria-label="`全选${group.name}能力`" @click="changeSelection('all', group.ids)">全选</el-button><el-button size="small" :disabled="!writable || loading || saving || !group.ids.length" :aria-label="`反选${group.name}能力`" @click="changeSelection('invert', group.ids)">反选</el-button><el-button size="small" :disabled="!writable || loading || saving || !group.ids.some(id => selectedIds.has(id))" :aria-label="`清空${group.name}能力`" @click="changeSelection('clear', group.ids)">清空</el-button></div></div><div v-for="item in group.items" :key="item.id" class="cli-capability"><el-checkbox :value="item.id" :disabled="!available(item)"><span>{{ item.label || item.id }}</span><el-tag v-if="!available(item)" type="info" size="small">暂未开放</el-tag><el-tag v-else-if="item.confirmation_required" type="warning" size="small">执行前需确认</el-tag></el-checkbox><small>{{ item.description || item.id }}</small><code>{{ item.method }} {{ item.business_path || item.path }}</code></div></section>
           </el-checkbox-group>
           <el-empty v-if="!groups.length" description="暂无可配置的 CLI 功能" :image-size="64" />
         </section>

@@ -271,6 +271,27 @@
             </h3>
             <p>{{ activeText || '正在处理任务…' }}</p>
           </article>
+          <details v-if="operations.length" class="operation-receipts" open>
+            <summary>操作回执（{{ operations.length }}）</summary>
+            <p>本机记录最后已知状态；请在学校页面核对最新结果。浏览器需登录对应账号。</p>
+            <p v-if="operationStorageError" role="alert">{{ operationStorageError }}</p>
+            <div class="operation-receipt-list">
+              <article v-for="item in operations" :key="item.operation_id">
+                <strong>{{ item.label || item.capability_id }}</strong>
+                <span>{{ operationStatus(item.state) }} · {{ formatTime(item.updated_at) }}</span>
+                <small>{{ item.origin }} · 账号 ID：{{ item.account_id }}</small>
+                <code>{{ item.operation_id }}</code>
+                <template v-if="receiptUrl(item)">
+                  <input :value="receiptUrl(item)" readonly aria-label="完整回执地址" />
+                  <div class="operation-receipt-actions">
+                    <button type="button" @click="openOperation(item)">查看回执</button>
+                    <button type="button" @click="copyOperation(item)">复制地址</button>
+                  </div>
+                </template>
+                <small v-else>请切换到此操作所属的学校账号后查阅回执。</small>
+              </article>
+            </div>
+          </details>
         </div>
         <div class="chat-bottom">
           <div class="privacy-strip">
@@ -1197,6 +1218,50 @@ const activeConversation = computed(() =>
     (item) => item.id === workspace.active_conversation_id
   )
 );
+const operations = computed(() => (Array.isArray(activeConversation.value?.operations)
+  ? activeConversation.value.operations : []).slice(-50).reverse());
+const operationStorageError = ref('');
+
+function receiptUrl(item) {
+  if (!scope.value || item.origin !== scope.value.origin
+    || item.school_id !== scope.value.school_id || item.account_id !== scope.value.account_id
+    || !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(item.operation_id || '')) return '';
+  try {
+    const url = new URL(item.receipt_url);
+    if (url.protocol !== 'https:' || url.origin !== scope.value.origin || url.username || url.password
+      || url.pathname !== '/pc/index.html' || url.hash || url.searchParams.size !== 1
+      || url.searchParams.get('cli_operation') !== item.operation_id) return '';
+    return url.href;
+  } catch { return ''; }
+}
+
+function operationStatus(state) {
+  return ({ preparing: '预览请求已准备', pending: '等待确认', approved: '已批准，等待执行',
+    executing: '执行中，结果待核对', completed: '执行完成', failed: '执行失败', unknown: '结果待核对',
+    denied: '已拒绝', cancelled: '已取消', expired: '已过期' })[state] || '状态待核对';
+}
+
+function applyOperationState(value) {
+  operationStorageError.value = text(value?.operation_storage_error);
+  const item = value?.operation;
+  const conversation = workspace.conversations.find(entry => entry.id === value?.conversation_id);
+  if (!item?.operation_id || !conversation) return;
+  conversation.operations = [...(Array.isArray(conversation.operations) ? conversation.operations : [])
+    .filter(entry => entry.operation_id !== item.operation_id), item].slice(-50);
+}
+
+async function openOperation(item) {
+  if (!receiptUrl(item)) return;
+  try { await request('open-operation', { operation_id: item.operation_id }); }
+  catch (reason) { error.value = reason.message; }
+}
+
+async function copyOperation(item) {
+  const url = receiptUrl(item);
+  if (!url) return;
+  try { await navigator.clipboard.writeText(url); notice.value = '回执地址已复制。'; }
+  catch { notice.value = '未能访问剪贴板，请选择上方回执地址手动复制。'; }
+}
 const filteredConversations = computed(() =>
   workspace.conversations
     .filter((item) =>
@@ -1375,6 +1440,7 @@ function wipe() {
   pending.value = false;
   loading.value = false;
   toolStatus.value = '';
+  operationStorageError.value = '';
   source.value = 'school';
   model.value = '';
   chatModels.value = [];
@@ -1616,6 +1682,7 @@ function applyBootstrap(value) {
   }
   if (source.value === 'school') model.value = school.value.model;
   const run = value.run;
+  applyOperationState(run || value);
   busy.value = run ? run.status === 'running' : value.busy === true;
   runId.value = text(run?.run_id || value.run_id);
   toolStatus.value = text(
@@ -2151,6 +2218,8 @@ async function poll() {
   try {
     const value = await request('poll', { run_id: id });
     if (!value || id !== runId.value) return;
+    applyWorkspace(value);
+    applyOperationState(value);
     activeText.value = text(value.text);
     toolStatus.value = text(value.tools_status || value.tool_status);
     if (value.status === 'running') schedulePoll();
@@ -2271,3 +2340,14 @@ onBeforeUnmount(() => {
   document.removeEventListener('visibilitychange', restoreVisibility);
 });
 </script>
+
+<style scoped>
+.operation-receipts { margin: 20px 0; padding: 14px; border: 1px solid var(--line, #d9dce3); border-radius: 8px; }
+.operation-receipts summary { cursor: pointer; font-weight: 600; }
+.operation-receipts > p { font-size: 12px; line-height: 1.6; }
+.operation-receipt-list { max-height: 300px; overflow-y: auto; }
+.operation-receipt-list article { display: flex; flex-direction: column; gap: 8px; padding: 14px 0; border-top: 1px solid var(--line, #d9dce3); }
+.operation-receipt-list span, .operation-receipt-list small, .operation-receipt-list code { font-size: 12px; overflow-wrap: anywhere; }
+.operation-receipt-list input { box-sizing: border-box; width: 100%; min-width: 0; font-size: 12px; }
+.operation-receipt-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+</style>

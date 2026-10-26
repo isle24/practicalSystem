@@ -13,11 +13,13 @@ use std::{
 };
 use tauri::{AppHandle, Manager};
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons};
+use tauri_plugin_opener::OpenerExt;
 use tokio::io::BufReader;
 use tokio_util::sync::CancellationToken;
 use zeroize::{Zeroize, Zeroizing};
 
 const RESULT_LIMIT: usize = 256 * 1024;
+const OPERATION_LIMIT: usize = 8 * 1024 * 1024;
 
 #[derive(Default)]
 struct OwnerState {
@@ -356,6 +358,35 @@ pub async fn action(
         return agent_models::inspect(&model, action, &cancel).await;
     }
     let config = bootstrap(app, connection, owner).await?;
+    if action == "open-operation" {
+        let id = input["operation_id"].as_str().ok_or("操作编号无效")?;
+        uuid::Uuid::parse_str(id).map_err(|_| "操作编号无效")?;
+        let operation = config["workspace"]["conversations"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .flat_map(|item| item["operations"].as_array().into_iter().flatten())
+            .find(|item| item["operation_id"] == id)
+            .ok_or("本机会话中没有此操作")?;
+        if operation["origin"] != scope["origin"]
+            || operation["school_id"] != scope["school_id"]
+            || operation["account_id"] != scope["account_id"]
+        {
+            return Err("请切换到此操作所属的学校账号后查阅回执".into());
+        }
+        let mut url = connection
+            .origin
+            .join("pc/index.html")
+            .map_err(|_| "回执地址无效")?;
+        url.query_pairs_mut().append_pair("cli_operation", id);
+        if cancel.is_cancelled() || connection.cancel.is_cancelled() {
+            return Err("学校会话已结束".into());
+        }
+        app.opener()
+            .open_url(url.as_str(), None::<&str>)
+            .map_err(|_| "无法打开回执，请复制地址到浏览器")?;
+        return Ok(json!({"ok":true}));
+    }
     if action == "workspace" {
         return Ok(
             json!({"workspace":config["workspace"],"history":config["history"],"conversation_id":config["conversation_id"]}),
@@ -566,8 +597,11 @@ async fn start_run(
             _=running.cancel.cancelled()=>Err("运行已停止；已发送的写请求请先核对结果".to_owned()),
             _=connection.cancel.cancelled()=>Err("学校连接已关闭".to_owned()),
             _=tokio::time::sleep(Duration::from_secs(180))=>Err("运行达到 180 秒上限，已停止；写请求请先核对结果".to_owned()),
-            result=execute(&app,&connection,&running,&mode,&prompt,&config,stored,tools)=>result,
+            result=execute(&app,&connection,&running,&mode,&prompt,&config,stored,tools.clone())=>result,
         };
+        if result.is_err() {
+            cancel_pending_operation(&app, &connection, &running, &tools).await;
+        }
         let status = if result.is_ok() {
             "completed"
         } else if running.cancel.is_cancelled() || connection.cancel.is_cancelled() {
@@ -841,6 +875,33 @@ async fn cli(
     task: &str,
     write: bool,
 ) -> Result<Value, String> {
+    cli_request(
+        client,
+        connection,
+        token,
+        method,
+        path,
+        body,
+        task,
+        write,
+        None,
+        RESULT_LIMIT,
+    )
+    .await
+}
+
+async fn cli_request(
+    client: &reqwest::Client,
+    connection: &Connection,
+    token: &str,
+    method: &str,
+    path: &str,
+    body: &Value,
+    task: &str,
+    write: bool,
+    operation_id: Option<&str>,
+    limit: usize,
+) -> Result<Value, String> {
     let mut url = connection
         .origin
         .join(path)
@@ -865,12 +926,23 @@ async fn cli(
             }
         }
     }
-    let mut request = client.request(method.clone(), url).bearer_auth(token);
+    let mut request = client
+        .request(method.clone(), url)
+        .bearer_auth(token)
+        .header("x-cli-operation-version", "1");
+    if path.starts_with("api/cli/operations/") && method == reqwest::Method::POST {
+        request = request.timeout(Duration::from_secs(180));
+    }
     if !task.is_empty() {
         request = request.header("x-cli-task", task);
     }
     if write {
-        request = request.header("x-idempotency-key", uuid::Uuid::new_v4().to_string());
+        request = request.header(
+            "x-idempotency-key",
+            operation_id
+                .map(str::to_owned)
+                .unwrap_or_else(|| uuid::Uuid::new_v4().to_string()),
+        );
     }
     if method != reqwest::Method::GET {
         request = request.json(body);
@@ -882,7 +954,343 @@ async fn cli(
             "学校工具连接失败"
         }
     })?;
-    decode(response, RESULT_LIMIT).await
+    decode(response, limit).await
+}
+
+async fn operation_request(
+    client: &reqwest::Client,
+    connection: &Connection,
+    session: &Tools,
+    method: &str,
+    path: &str,
+    body: &Value,
+    operation_id: &str,
+) -> Result<Value, String> {
+    let task = if matches!(
+        path,
+        "api/cli/operations/prepare" | "api/cli/operations/execute"
+    ) {
+        session.task.as_str()
+    } else {
+        ""
+    };
+    cli_request(
+        client,
+        connection,
+        &session.access,
+        method,
+        path,
+        body,
+        task,
+        method == "POST",
+        Some(operation_id),
+        OPERATION_LIMIT,
+    )
+    .await
+}
+
+fn remember_operation(app: &AppHandle, run: &Run, operation: Value) -> Result<(), String> {
+    update(run, json!({"operation":operation}));
+    let saved = (|| {
+        let mut data =
+            agent_workspace::normalize(&run.scope, agent_store::read_locked(app, &run.scope)?);
+        let conversation = data["conversations"]
+            .as_array_mut()
+            .ok_or("本机会话无效")?
+            .iter_mut()
+            .find(|item| item["id"] == run.options["conversation_id"])
+            .ok_or("本机会话不存在")?;
+        let mut operations = conversation["operations"]
+            .as_array()
+            .cloned()
+            .unwrap_or_default();
+        operations.retain(|item| item["operation_id"] != operation["operation_id"]);
+        operations.push(operation);
+        if operations.len() > 50 {
+            operations.drain(..operations.len() - 50);
+        }
+        conversation["operations"] = json!(operations);
+        agent_store::write(app, &run.scope, &data)?;
+        update(run, snapshot(&data)?);
+        Ok::<(), String>(())
+    })();
+    update(
+        run,
+        json!({"operation_storage_error":saved.as_ref().err().map(|message| format!("操作查阅记录未保存：{message}。请复制本次回执地址。"))}),
+    );
+    saved
+}
+
+fn remember_operation_state(app: &AppHandle, run: &Run, state: &Value) {
+    let Some(mut operation) = run
+        .state
+        .lock()
+        .ok()
+        .and_then(|value| value.get("operation").cloned())
+    else {
+        return;
+    };
+    operation["state"] = json!(match state.as_str() {
+        Some(
+            value @ ("pending" | "approved" | "executing" | "completed" | "failed" | "unknown"
+            | "denied" | "cancelled" | "expired"),
+        ) => value,
+        _ => "unknown",
+    });
+    operation["updated_at"] = json!(now());
+    let _ = remember_operation(app, run, operation);
+}
+
+async fn cancel_pending_operation(
+    app: &AppHandle,
+    connection: &Connection,
+    run: &Run,
+    tools: &Arc<tokio::sync::Mutex<Tools>>,
+) {
+    let operation_id = run.state.lock().ok().and_then(|state| {
+        if state["operation_pending"] == true {
+            state["operation_id"].as_str().map(str::to_owned)
+        } else {
+            None
+        }
+    });
+    let Some(id) = operation_id else {
+        return;
+    };
+    let Ok(client) = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .no_proxy()
+        .timeout(Duration::from_secs(5))
+        .build()
+    else {
+        return;
+    };
+    let mut session = tools.lock().await;
+    session.blocked = true;
+    if let Ok(value) = operation_request(
+        &client,
+        connection,
+        &session,
+        "POST",
+        "api/cli/operations/cancel",
+        &json!({"operation_id":id}),
+        &id,
+    )
+    .await
+    {
+        update(
+            run,
+            json!({"operation_pending":false,"operation_state":value["state"]}),
+        );
+        remember_operation_state(app, run, &value["state"]);
+    } else {
+        remember_operation_state(app, run, &json!("unknown"));
+    }
+}
+
+fn operation_result(mut value: Value, receipt_url: &str) -> Result<Value, String> {
+    value["complete_receipt_url"] = json!(receipt_url);
+    value.as_object_mut().map(|object| object.remove("preview"));
+    if serde_json::to_vec(&value)
+        .map_err(|_| "业务回执格式无效")?
+        .len()
+        <= RESULT_LIMIT - 1024
+    {
+        return Ok(value);
+    }
+    let mut result = json!({"operation_id":value["operation_id"],"capability_id":value["capability_id"],"state":value["state"],"error":value["error"],"truncated":true,"complete_receipt_url":receipt_url,"message":"完整回执超过模型输入上限，请打开完整回执地址查看逐项结果；不得据此宣称所有条目成功。"});
+    for key in ["total", "created", "updated", "skipped", "failed"] {
+        if value["result"][key].is_number() {
+            result[key] = value["result"][key].clone();
+        }
+    }
+    Ok(result)
+}
+
+async fn call_confirmed_tool(
+    app: &AppHandle,
+    connection: &Connection,
+    run: &Run,
+    client: &reqwest::Client,
+    session: &mut Tools,
+    cap: &Value,
+    params: &Value,
+) -> Result<Value, String> {
+    let id = uuid::Uuid::new_v4().to_string();
+    let mut receipt_url = connection
+        .origin
+        .join("pc/index.html")
+        .map_err(|_| "确认地址无效")?;
+    receipt_url
+        .query_pairs_mut()
+        .append_pair("cli_operation", &id);
+    update(
+        run,
+        json!({"operation_id":id,"operation_pending":true,"operation_url":receipt_url.as_str(),"tool_status":"正在生成服务器操作预览"}),
+    );
+    remember_operation(
+        app,
+        run,
+        json!({"operation_id":id,"receipt_url":receipt_url.as_str(),"origin":run.scope["origin"],"school_id":run.scope["school_id"],"account_id":run.scope["account_id"],"capability_id":params["capability_id"],"label":cap["label"],"state":"preparing","created_at":now(),"updated_at":now()}),
+    )?;
+    let prepared = match operation_request(
+        client,
+        connection,
+        session,
+        "POST",
+        "api/cli/operations/prepare",
+        &json!({"capability_id":params["capability_id"],"arguments":params["arguments"]}),
+        &id,
+    )
+    .await
+    {
+        Ok(value) => value,
+        Err(message) => {
+            session.blocked = true;
+            remember_operation_state(app, run, &json!("unknown"));
+            return Ok(
+                json!({"operation_id":id,"state":"unknown","complete_receipt_url":receipt_url.as_str(),"message":format!("预览请求未取得确定结果：{message}。请查询此操作，不能换操作编号自动重试。") }),
+            );
+        }
+    };
+    if prepared["operation_id"] != id
+        || prepared["state"] != "pending"
+        || !prepared["preview"].is_object()
+        || prepared["preview_hash"]
+            .as_str()
+            .is_none_or(|hash| hash.len() != 64)
+    {
+        session.blocked = true;
+        remember_operation_state(app, run, &json!("unknown"));
+        return Err("服务器操作预览不完整，请查询该操作状态".into());
+    }
+    remember_operation_state(app, run, &prepared["state"]);
+    let preview =
+        serde_json::to_string_pretty(&prepared["preview"]).map_err(|_| "操作预览格式无效")?;
+    let label = cap["label"].as_str().unwrap_or("业务操作");
+    update(run, json!({"tool_status":format!("等待人工确认：{label}")}));
+    let decision = if preview.len() <= 16000 {
+        let description = format!(
+            "学校：{}\n账号 ID：{}\n\n服务器预览：\n{preview}\n\n确认仅授权执行这一操作。",
+            run.scope["origin"].as_str().unwrap_or(""),
+            run.scope["account_id"]
+        );
+        match confirm(app, "确认业务操作", description, &run.cancel).await {
+            Ok(()) => {
+                let _guard = connection.session_lock.read().await;
+                if run.cancel.is_cancelled() || connection.cancel.is_cancelled() {
+                    Err("运行已停止，未批准操作".into())
+                } else {
+                    school_api::cli_operation_post(
+                        connection,
+                        "api/cli/operations/approve",
+                        &json!({"operation_id":id,"preview_hash":prepared["preview_hash"]}),
+                    )
+                    .await
+                }
+            }
+            Err(message) => Err(message),
+        }
+    } else {
+        match confirm(app, "打开完整业务预览", format!("操作：{label}\n预览内容较多，请在学校确认页核对完整参数和影响，再人工批准。\n\n{}\n\n客户端将等待这一个操作的确认结果。",receipt_url.as_str()), &run.cancel).await {
+            Ok(()) => {
+                app.opener().open_url(receipt_url.as_str(), None::<&str>).map_err(|_| "无法打开完整预览，请使用确认地址")?;
+                let wait = async {
+                    loop {
+                        tokio::select! {biased; _=run.cancel.cancelled()=>return Err("运行已取消".to_owned()), _=connection.cancel.cancelled()=>return Err("学校会话已结束".to_owned()), _=tokio::time::sleep(Duration::from_secs(3))=>()};
+                        let value = operation_request(client, connection, session, "GET", "api/cli/operations/status", &json!({"operation_id":id}), &id).await?;
+                        if value["state"] != "pending" { return Ok(value); }
+                    }
+                };
+                match tokio::time::timeout(Duration::from_secs(120), wait).await { Ok(value) => value, Err(_) => Err("等待人工确认超时，未执行操作".into()) }
+            }
+            Err(message) => Err(message),
+        }
+    };
+    let decision = match decision {
+        Ok(value) => value,
+        Err(message) => {
+            session.blocked = true;
+            let cancelled = operation_request(
+                client,
+                connection,
+                session,
+                "POST",
+                "api/cli/operations/cancel",
+                &json!({"operation_id":id}),
+                &id,
+            )
+            .await;
+            update(
+                run,
+                json!({"operation_pending":cancelled.is_err(),"tool_status":message}),
+            );
+            remember_operation_state(
+                app,
+                run,
+                &cancelled
+                    .as_ref()
+                    .map(|value| value["state"].clone())
+                    .unwrap_or(json!("unknown")),
+            );
+            return operation_result(
+                cancelled.unwrap_or_else(
+                    |_| json!({"operation_id":id,"state":"unknown","message":message}),
+                ),
+                receipt_url.as_str(),
+            );
+        }
+    };
+    remember_operation_state(app, run, &decision["state"]);
+    if decision["state"] != "approved" {
+        session.blocked = true;
+        update(
+            run,
+            json!({"operation_pending":false,"operation_state":decision["state"]}),
+        );
+        return operation_result(decision, receipt_url.as_str());
+    }
+    if run.cancel.is_cancelled() || connection.cancel.is_cancelled() {
+        return Err("运行已停止，未执行本次操作".into());
+    }
+    update(
+        run,
+        json!({"tool_status":format!("正在执行已确认操作：{label}")}),
+    );
+    remember_operation_state(app, run, &json!("executing"));
+    if run.cancel.is_cancelled() || connection.cancel.is_cancelled() {
+        return Err("运行已停止，未执行本次操作".into());
+    }
+    let result = match operation_request(
+        client,
+        connection,
+        session,
+        "POST",
+        "api/cli/operations/execute",
+        &json!({"operation_id":id}),
+        &id,
+    )
+    .await
+    {
+        Ok(value) => value,
+        Err(message) => {
+            session.blocked = true;
+            operation_request(client, connection, session, "GET", "api/cli/operations/status", &json!({"operation_id":id}), &id).await.unwrap_or_else(|_| json!({"operation_id":id,"state":"unknown","message":format!("{message}；请先核对回执，不能重新执行。") }))
+        }
+    };
+    let terminal = matches!(
+        result["state"].as_str(),
+        Some("completed" | "failed" | "unknown" | "denied" | "cancelled" | "expired")
+    );
+    if result["state"] != "completed" {
+        session.blocked = true;
+    }
+    update(
+        run,
+        json!({"operation_pending":!terminal,"operation_state":result["state"]}),
+    );
+    remember_operation_state(app, run, &result["state"]);
+    operation_result(result, receipt_url.as_str())
 }
 
 async fn tools(
@@ -1197,6 +1605,10 @@ async fn execute(
                         agent_models::redact(&mut item["text"], key);
                     }
                 }
+                stored = agent_workspace::normalize(
+                    &run.scope,
+                    agent_store::read_locked(app, &run.scope)?,
+                );
                 agent_workspace::complete(
                     &mut stored,
                     run.options["conversation_id"].as_str().unwrap_or(""),
@@ -1238,7 +1650,10 @@ async fn call_tool(
         .as_array()
         .and_then(|items| items.iter().find(|c| c["id"] == id))
         .ok_or("当前账号未开放该工具")?;
-    if cap["phase"] != "B" || cap["available"] != true {
+    if !matches!(cap["phase"].as_str(), Some("B" | "C"))
+        || cap["available"] != true
+        || (cap["phase"] == "C" && cap["confirmation_required"] != true)
+    {
         return Err("该工具尚未开放".into());
     }
     let args = params["arguments"].as_object().ok_or("工具参数无效")?;
@@ -1255,6 +1670,9 @@ async fn call_tool(
     let write = cap["kind"] == "write";
     if write && run.options["scheduled"] == true {
         return Err("计划任务只允许读取学校业务数据".into());
+    }
+    if cap["phase"] == "C" {
+        return call_confirmed_tool(app, connection, run, client, session, cap, params).await;
     }
     let label = cap["label"].as_str().unwrap_or(id);
     update(

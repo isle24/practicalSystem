@@ -27,8 +27,9 @@ export function useCliScope(sessionKey) {
 }
 
 export async function cliMutation(path, payload, options = {}) {
-  const security = await request('/cli/security', options);
-  if (options.isCurrent && !options.isCurrent()) {
+  const { accountSession = false, ...requestOptions } = options;
+  const security = await request(accountSession ? '/cli/operations/security' : '/cli/security', requestOptions);
+  if (requestOptions.isCurrent && !requestOptions.isCurrent()) {
     const error = new Error('登录上下文已变化，请重新读取');
     error.name = 'AbortError';
     throw error;
@@ -36,7 +37,7 @@ export async function cliMutation(path, payload, options = {}) {
   if (!security?.csrf_token) throw new Error('CLI 操作校验不可用，请重新读取');
   if (!crypto.randomUUID) throw new Error('当前连接不支持安全授权，请使用学校 HTTPS 地址');
   return request(path, {
-    ...options,
+    ...requestOptions,
     method: 'POST',
     headers: { 'X-CSRF-Token': security.csrf_token, 'X-Request-Token': crypto.randomUUID() },
     body: JSON.stringify(payload),

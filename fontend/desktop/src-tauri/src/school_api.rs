@@ -133,6 +133,17 @@ pub async fn client_agent_post(
     protected_post(connection, path, input, "api/client-agent/bootstrap").await
 }
 
+pub async fn cli_operation_post(
+    connection: &Connection,
+    path: &str,
+    input: &Value,
+) -> Result<Value, String> {
+    if !matches!(path, "api/cli/operations/approve" | "api/cli/operations/deny") {
+        return Err("业务确认接口无效".into());
+    }
+    protected_post(connection, path, input, "api/cli/operations/security").await
+}
+
 async fn protected_post(
     connection: &Connection,
     path: &str,

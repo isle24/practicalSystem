@@ -22,7 +22,7 @@
       </header>
       <h1 v-if="loginMethod === 'password'" class="login-view-title">账号密码登录</h1>
       <p v-if="pendingSsoResume">请重新使用密码或企业微信扫码登录，完成应用授权。</p>
-      <p v-else-if="cliEntryMode">{{ cliEntryMode === 'authorize' ? '登录后核对设备及授权码，再确认 CLI 授权。' : '登录后查看并管理本人的 CLI 会话。' }}</p>
+      <p v-else-if="cliEntryMode">{{ cliEntryMode === 'authorize' ? '登录后核对设备及授权码，再确认 CLI 授权。' : cliEntryMode === 'operation' ? '登录当前学校账号，核对本次业务操作并确认。' : '登录后查看并管理本人的 CLI 会话。' }}</p>
       <WechatLogin v-if="loginMethod === 'wechat' && !passwordRecoveryVisible" :request="request" :public-origin="publicSchoolOrigin" @logged-in="onFreshAuthentication" />
       <div v-else-if="nativePasswordEntry" class="native-password-entry">
         <p>请在客户端登录窗口校验账号密码。</p>
@@ -79,6 +79,7 @@
     </section>
   </main>
 
+  <CliOperationEntry v-else-if="cliEntryMode === 'operation' && !wechatBlocked" :key="cliSessionKey" :operation-id="cliOperationId" :session-key="cliSessionKey" :account-name="operatorName" @close="closeCliEntry" @logout="submitLogout" />
   <CliAccessEntry v-else-if="cliEntryMode && !wechatBlocked" :key="cliSessionKey" :mode="cliEntryMode" :user-code="cliUserCode" :session-key="cliSessionKey" :account-name="operatorName" @close="closeCliEntry" @logout="submitLogout" />
 
   <main v-else-if="!wechatBlocked" class="desktop-shell" :class="{ 'desktop-shell-mac': desktopStyleMode === 'mac', 'desktop-shell-maximized': !isDesktopShell && hasMaximizedWindow, 'desktop-shell-native': isDesktopShell, 'desktop-shell-dock-auto-hide': dockShouldAutoHide }" :style="desktopStyle" @click.left="closeDesktopContextMenu" @contextmenu.prevent="openDesktopContextMenu">
@@ -4283,6 +4284,7 @@ import ClientDownloadButton from './components/ClientDownloadButton.vue';
 import SchoolSettingsPanel from './components/SchoolSettingsPanel.vue';
 import CliPolicyPanel from './components/cli/CliPolicyPanel.vue';
 import CliAccessEntry from './components/cli/CliAccessEntry.vue';
+import CliOperationEntry from './components/cli/CliOperationEntry.vue';
 import SsoClientPanel from './components/SsoClientPanel.vue';
 import WorkflowSettingsPanel from './components/WorkflowSettingsPanel.vue';
 import RemoteAccountSelect from './components/RemoteAccountSelect.vue';
@@ -5886,7 +5888,8 @@ const workspaceContextKey = computed(() => JSON.stringify([workspaceSourceEpoch.
 const startupState = reactive({ loading: true, error: '' });
 const cliEntryParams = new URLSearchParams(window.location.search);
 const cliUserCode = cliEntryParams.get('cli_authorize')?.trim() || '';
-const cliEntryMode = ref(cliEntryParams.has('cli_authorize') ? 'authorize' : cliEntryParams.get('cli_sessions') === '1' ? 'sessions' : '');
+const cliOperationId = cliEntryParams.get('cli_operation')?.trim() || '';
+const cliEntryMode = ref(cliEntryParams.has('cli_operation') ? 'operation' : cliEntryParams.has('cli_authorize') ? 'authorize' : cliEntryParams.get('cli_sessions') === '1' ? 'sessions' : '');
 const loginMethod = ref(cliEntryMode.value || window.__PRACTICAL_DESKTOP__?.loginMethod === 'wechat' ? 'wechat' : 'password');
 const pendingSsoResume = ref(Boolean(ssoResume()));
 const themeScope = computed(() => permissionState.context.user_id ? `${publicSchoolOrigin}:${permissionState.context.school_database_id}:${permissionState.context.user_id}` : '');
@@ -5958,6 +5961,7 @@ function closeCliEntry() {
   const url = new URL(window.location.href);
   url.searchParams.delete('cli_authorize');
   url.searchParams.delete('cli_sessions');
+  url.searchParams.delete('cli_operation');
   window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`);
 }
 
@@ -5966,6 +5970,7 @@ function openCliSessions() {
   const url = new URL(window.location.href);
   url.searchParams.delete('cli_authorize');
   url.searchParams.set('cli_sessions', '1');
+  url.searchParams.delete('cli_operation');
   window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`);
 }
 const canManageAccounts = computed(() => ['super_admin', 'school_admin'].includes(permissionState.context.role_type));
