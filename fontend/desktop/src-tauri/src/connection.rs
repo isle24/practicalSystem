@@ -115,7 +115,7 @@ pub fn save_password(origin: &str, username: &str, password: &str) -> Result<(),
     if username.trim().is_empty() || password.is_empty() {
         return Ok(());
     }
-    let entry = keyring::Entry::new(
+    let entry = crate::system_credentials::Entry::new(
         "com.2iwm.practical.desktop.school",
         &credential_key(origin, username),
     )
@@ -130,7 +130,7 @@ pub fn load_password(origin: &str, username: &str) -> Result<Option<String>, Str
     if username.trim().is_empty() {
         return Ok(None);
     }
-    let entry = keyring::Entry::new(
+    let entry = crate::system_credentials::Entry::new(
         "com.2iwm.practical.desktop.school",
         &credential_key(origin, username),
     )
@@ -147,7 +147,7 @@ pub fn delete_password(origin: &str, username: &str) -> Result<(), String> {
     if username.trim().is_empty() {
         return Ok(());
     }
-    let entry = keyring::Entry::new(
+    let entry = crate::system_credentials::Entry::new(
         "com.2iwm.practical.desktop.school",
         &credential_key(origin, username),
     )

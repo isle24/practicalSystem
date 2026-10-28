@@ -249,6 +249,7 @@ impl ClientLock {
         })
     }
     pub fn clear_context(&self) {
+        crate::system_credentials::clear();
         if let Ok(mut details) = self.details.lock() {
             if details.context.is_some() || details.snapshot.is_some() {
                 details.revision += 1;
@@ -313,6 +314,7 @@ impl ClientLock {
         details.pending_lock = true;
         details.wechat_session = None;
         self.locked.store(true, Ordering::Release);
+        crate::system_credentials::clear();
         details.hidden_windows = crate::windows::hide_for_lock(app, owner);
         drop(details);
         crate::windows::notify_lock(app);

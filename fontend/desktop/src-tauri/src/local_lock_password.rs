@@ -48,8 +48,8 @@ pub fn scope(origin: &url::Url, context: &Value) -> Result<String, String> {
     )))
 }
 
-fn entry(key: &str) -> Result<keyring::Entry, String> {
-    keyring::Entry::new(SERVICE, key)
+fn entry(key: &str) -> Result<crate::system_credentials::Entry, String> {
+    crate::system_credentials::Entry::new(SERVICE, key)
         .map_err(|_| "系统凭据库不可用，请使用账号密码或企业微信解锁".into())
 }
 

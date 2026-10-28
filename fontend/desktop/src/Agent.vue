@@ -39,15 +39,15 @@
           学校 {{ scope.school_id }} · 账号 {{ scope.account_id }}
         </small>
         <button
-          v-if="!scope"
+          v-if="!scope || localRefreshBlocked"
           type="button"
           :disabled="loading || pending"
-          @click="bootstrap"
+          @click="bootstrap(true)"
         >
           重新加载
         </button>
         <button
-          v-else
+          v-if="scope"
           type="button"
           :disabled="blocked || editorDialog?.open"
           @click="syncProfiles()"
@@ -1239,6 +1239,7 @@ const activeMarkdown = computed(() => renderAgentMarkdown(activeText.value, scop
 const error = ref(''),
   notice = ref(''),
   toolStatus = ref('');
+const localRefreshBlocked = ref(false);
 const toolConnection = ref(null),
   toolRegistration = ref(null),
   toolDispatch = ref(null),
@@ -1887,9 +1888,10 @@ async function refreshWorkspace(select = false) {
   if (value && !applyWorkspace(value, select))
     throw new Error('工作区数据无效。');
 }
-async function bootstrap() {
+async function bootstrap(retryStorage = false) {
   if (
     disposed ||
+    (localRefreshBlocked.value && retryStorage !== true) ||
     bootstrapping ||
     pending.value ||
     modelLoading.value ||
@@ -1899,14 +1901,17 @@ async function bootstrap() {
   bootstrapping = true;
   loading.value = true;
   error.value = '';
+  if (retryStorage === true) localRefreshBlocked.value = false;
   try {
-    const value = await request('bootstrap');
+    const value = await request('bootstrap', { retry_storage: retryStorage === true });
     if (value) {
+      localRefreshBlocked.value = Boolean(value.memory_error);
       applyBootstrap(value);
-      if (!value.workspace && !busy.value)
+      if (!localRefreshBlocked.value && !value.workspace && !busy.value)
         await refreshWorkspace(!workspace.active_conversation_id);
     }
   } catch (reason) {
+    localRefreshBlocked.value = true;
     error.value = reason.message;
   } finally {
     loading.value = false;
@@ -2488,6 +2493,7 @@ async function scrollMessages() {
 async function refreshStatus() {
   if (
     disposed ||
+    localRefreshBlocked.value ||
     document.hidden ||
     !scope.value ||
     loading.value ||
@@ -2518,9 +2524,13 @@ async function refreshStatus() {
       conversationId !== workspace.active_conversation_id
     )
       return;
+    localRefreshBlocked.value = Boolean(value.memory_error);
     applyBootstrap(value);
   } catch (reason) {
-    if (revision === mutationRevision) error.value = reason.message;
+    if (revision === mutationRevision) {
+      localRefreshBlocked.value = true;
+      error.value = reason.message;
+    }
   } finally {
     bootstrapping = false;
   }

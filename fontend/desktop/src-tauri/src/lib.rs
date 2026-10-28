@@ -21,6 +21,7 @@ mod office_preview;
 mod preview_cache;
 mod project_guides;
 mod school_api;
+mod system_credentials;
 mod updater;
 mod windows;
 
@@ -1044,6 +1045,9 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("无法启动实践管理客户端")
         .run(|app, event| {
+            if matches!(&event, tauri::RunEvent::Exit) {
+                crate::system_credentials::clear();
+            }
             if let tauri::RunEvent::ExitRequested { api, .. } = &event {
                 let state = app.state::<AppState>();
                 let active = state

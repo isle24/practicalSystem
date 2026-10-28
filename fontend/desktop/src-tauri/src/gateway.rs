@@ -94,6 +94,7 @@ struct GatewayState {
 impl Drop for Gateway {
     /// 关闭当前学校本机通道。
     fn drop(&mut self) {
+        crate::system_credentials::clear();
         crate::client_agent::cancel_owner(&self.owner);
         if let Some((client, origin)) = self.login_cancel.take() {
             tauri::async_runtime::spawn(async move {

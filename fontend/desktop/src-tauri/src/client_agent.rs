@@ -323,6 +323,9 @@ pub async fn action(
         return Ok(value);
     }
     if action == "bootstrap" {
+        if input["retry_storage"] == true {
+            crate::system_credentials::retry();
+        }
         return bootstrap(app, connection, owner).await;
     }
     if action == "sync" {

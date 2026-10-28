@@ -169,12 +169,13 @@ fn save(scope: &Scope, index: &Index) -> Result<(), String> {
     Ok(())
 }
 
-fn entry(key: &str) -> Result<keyring::Entry, String> {
-    keyring::Entry::new(SERVICE, key).map_err(|_| "系统凭据库不可用".into())
+fn entry(key: &str) -> Result<crate::system_credentials::Entry, String> {
+    crate::system_credentials::Entry::new(SERVICE, key).map_err(|_| "系统凭据库不可用".into())
 }
 
-fn legacy_entry(key: &str) -> Result<keyring::Entry, String> {
-    keyring::Entry::new(LEGACY_SERVICE, key).map_err(|_| "系统凭据库不可用".into())
+fn legacy_entry(key: &str) -> Result<crate::system_credentials::Entry, String> {
+    crate::system_credentials::Entry::new(LEGACY_SERVICE, key)
+        .map_err(|_| "系统凭据库不可用".into())
 }
 
 fn read_profile(key: &str) -> Result<Option<Profile>, String> {
@@ -191,7 +192,7 @@ fn read_profile(key: &str) -> Result<Option<Profile>, String> {
     }
 }
 
-fn delete_entry(entry: keyring::Entry) -> Result<(), String> {
+fn delete_entry(entry: crate::system_credentials::Entry) -> Result<(), String> {
     match entry.delete_credential() {
         Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
         Err(_) => Err("无法清除系统凭据；请解锁系统凭据存储".into()),
@@ -680,8 +681,8 @@ pub async fn configure(connection: &Connection, input: &Value) -> Result<Value, 
     match input["action"].as_str().unwrap_or("") {
         "list" => Ok(listing(&index)),
         "status" => {
-            let migration_error = migrate_visible(connection, &scope, &mut index).await.err();
             let mut result = listing(&index);
+            result["legacy_pending"] = json!(!index.legacy_scanned);
             match cloud_status(connection, &scope).await {
                 Ok(cloud) => {
                     result["available"] = cloud["available"].clone();
@@ -693,9 +694,6 @@ pub async fn configure(connection: &Connection, input: &Value) -> Result<Value, 
                     result["available"] = json!(false);
                     result["reason"] = json!(error);
                 }
-            }
-            if let Some(error) = migration_error {
-                result["migration_error"] = json!(error);
             }
             Ok(result)
         }
@@ -731,9 +729,15 @@ pub async fn configure(connection: &Connection, input: &Value) -> Result<Value, 
             post(connection, &scope, "settings", json!({"enabled":true})).await?;
             index.sync_enabled = true;
             save(&scope, &index)?;
+            migrate_visible(connection, &scope, &mut index).await?;
             sync(connection, &scope, &mut index, true).await
         }
-        "sync" => sync(connection, &scope, &mut index, true).await,
+        "sync" => {
+            if index.sync_enabled {
+                migrate_visible(connection, &scope, &mut index).await?;
+            }
+            sync(connection, &scope, &mut index, true).await
+        }
         "delete-cloud" => {
             if input["confirm"].as_bool() != Some(true) {
                 return Err("请确认删除服务器凭据副本".into());

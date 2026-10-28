@@ -93,8 +93,8 @@ fn checked_file(path: &Path) -> Result<Option<fs::Metadata>, String> {
 }
 
 fn secret(key: &str, create: bool) -> Result<Zeroizing<Vec<u8>>, String> {
-    let entry =
-        keyring::Entry::new(SERVICE, key).map_err(|_| "系统凭据库不可用，无法加密本机记忆")?;
+    let entry = crate::system_credentials::Entry::new(SERVICE, key)
+        .map_err(|_| "系统凭据库不可用，无法加密本机记忆")?;
     let value = match entry.get_password() {
         Ok(value) => Zeroizing::new(value),
         Err(keyring::Error::NoEntry) if create => {

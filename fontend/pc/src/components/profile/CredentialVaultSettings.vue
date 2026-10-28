@@ -123,7 +123,7 @@ onBeforeUnmount(() => { alive = false; sequence++; operation++; window.removeEve
       <el-empty v-if="!state.loading && !state.items.length" description="暂无已建立索引的本机凭据" :image-size="48" />
     </div>
     <div class="vault-toolbar"><span>本机 {{ state.items.length }} 条</span><el-button type="danger" plain :disabled="locked || !state.items.length" @click="clear">清空本机凭据</el-button></div>
-    <p>通过收藏的“本机认证配置”保存或更新。列表只管理已建立索引的记录；旧版本中已删除或改址的收藏无法自动恢复索引，其历史凭据请通过系统凭据管理器处理。</p>
+    <p>通过收藏的“本机认证配置”保存或更新。旧版凭据在使用对应收藏或手动同步时迁移，读取状态不再批量申请密码访问。列表只管理已建立索引的记录；旧版本中已删除或改址的收藏无法自动恢复索引，其历史凭据请通过系统凭据管理器处理。</p>
   </section>
 </template>
 
