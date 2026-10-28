@@ -234,6 +234,43 @@
             {{ listingChatModels ? '获取中' : '获取模型' }}
           </button>
         </div>
+        <section
+          class="business-connection"
+          :class="toolConnectionTone"
+          aria-label="业务工具连接"
+          aria-live="polite"
+        >
+          <div class="business-connection-copy">
+            <strong><span class="business-connection-dot" aria-hidden="true"></span>{{ toolConnectionTitle }}</strong>
+            <p v-if="toolConnectionMessage">{{ toolConnectionMessage }}</p>
+            <p v-if="toolRetryAfter > 0" aria-live="off">请在 {{ toolRetryAfter }} 秒后重试。</p>
+            <p v-if="toolConnection?.action === 'review_result'">请先查看操作回执并核对实际结果。</p>
+            <details class="business-connection-details">
+              <summary>连接详情</summary>
+              <dl>
+                <dt>连接阶段</dt><dd>{{ toolConnectionStage }}</dd>
+                <dt>错误码</dt><dd><code>{{ toolConnection?.error || '未记录' }}</code></dd>
+                <dt>HTTP 状态</dt><dd>{{ toolConnection?.http_status ?? '未记录' }}</dd>
+                <dt>已注册 school_capability</dt>
+                <dd>{{ toolRegistration?.school_capability === true ? '是' : toolRegistration?.school_capability === false ? '否' : '未知' }}</dd>
+                <dt>已注册工具数量</dt><dd>{{ toolRegistration?.tool_count ?? '未知' }}</dd>
+                <dt>已注册学校能力数量</dt><dd>{{ toolRegistration?.capability_count ?? '未知' }}</dd>
+                <dt>已加入模型请求的 school_capability</dt>
+                <dd>{{ toolDispatch?.school_capability === true ? '是' : toolDispatch?.school_capability === false ? '否' : '尚未构建请求或状态未知' }}</dd>
+                <dt>模型请求携带工具数量</dt><dd>{{ toolDispatch?.tool_count ?? '尚未构建请求或状态未知' }}</dd>
+              </dl>
+              <p>工具记录来自最近一轮模型任务。注册和加入请求不代表模型已接受或调用工具，也不代表业务执行成功。</p>
+            </details>
+          </div>
+          <button
+            v-if="toolActionLabel"
+            type="button"
+            :disabled="toolActionBlocked"
+            @click="handleToolConnectionAction"
+          >
+            {{ toolActionPending ? '处理中…' : toolActionLabel }}
+          </button>
+        </section>
         <p v-if="providerChanged" class="context-note">
           切换在下一轮发送时生效；当前可见会话将作为上下文发送给所选提供方。
         </p>
@@ -257,20 +294,34 @@
             </div>
           </div>
           <article
-            v-for="(message, index) in history"
+            v-for="(message, index) in renderedHistory"
             :key="index"
             class="message"
             :class="message.role"
           >
             <h3>{{ message.role === 'user' ? '你' : 'Agent' }}</h3>
-            <p>{{ message.text }}</p>
+            <div
+              v-if="message.role === 'assistant'"
+              class="agent-markdown"
+              v-html="message.html"
+              @click="openMarkdownLink"
+              @auxclick="openMarkdownLink"
+            ></div>
+            <p v-else>{{ message.text }}</p>
           </article>
           <article v-if="busy || activeText" class="message assistant">
             <h3>
               Agent
               <span v-if="busy" class="muted">处理中</span>
             </h3>
-            <p>{{ activeText || '正在处理任务…' }}</p>
+            <div
+              v-if="activeText"
+              class="agent-markdown"
+              v-html="activeMarkdown"
+              @click="openMarkdownLink"
+              @auxclick="openMarkdownLink"
+            ></div>
+            <p v-else>正在处理任务…</p>
           </article>
           <details v-if="operations.length" class="operation-receipts" open>
             <summary>操作回执（{{ operations.length }}）</summary>
@@ -336,9 +387,6 @@
           </form>
           <div class="chat-footnote">
             <span>会话、记忆和插件凭据仅加密保存在本机。</span>
-            <button type="button" :disabled="blocked" @click="reconnect">
-              连接业务工具
-            </button>
           </div>
         </div>
       </template>
@@ -1114,6 +1162,7 @@ import {
   watch
 } from 'vue';
 import menuGuides from '../../shared/operation-guides.json';
+import { renderAgentMarkdown, resolveAgentMarkdownUrl } from '../../shared/agentMarkdown';
 const navigation = [
   {
     id: 'chat',
@@ -1182,9 +1231,60 @@ const activeText = ref(''),
   loading = ref(true),
   pending = ref(false),
   stopping = ref(false);
+const renderedHistory = computed(() => history.value.map(message => ({
+  ...message,
+  html: message.role === 'assistant' ? renderAgentMarkdown(message.text, scope.value?.origin) : ''
+})));
+const activeMarkdown = computed(() => renderAgentMarkdown(activeText.value, scope.value?.origin));
 const error = ref(''),
   notice = ref(''),
   toolStatus = ref('');
+const toolConnection = ref(null),
+  toolRegistration = ref(null),
+  toolDispatch = ref(null),
+  toolActionPending = ref(false),
+  toolRetryAt = ref(0),
+  clockNow = ref(Date.now());
+const toolConnectionStates = {
+  idle: '业务工具尚未连接', connecting: '正在连接业务工具', ready: '业务工具已连接',
+  disabled: '业务工具未启用', no_capabilities: '当前账号无可用业务能力',
+  authorization_required: '业务工具需要学校授权', binding_required: '业务工具需要账号绑定',
+  rate_limited: '业务工具连接暂受限', error: '业务工具连接失败', paused: '业务工具已暂停',
+  task_expired: '业务任务已过期', task_budget_exhausted: '业务任务调用额度已用完'
+};
+const toolConnectionStage = computed(() => ({ session: '学校授权', capabilities: '读取功能', task: '准备业务任务', call: '业务调用' })[toolConnection.value?.stage] || '未记录');
+const toolConnectionTitle = computed(() => toolConnection.value
+  ? `${toolConnectionStates[toolConnection.value.state]}${['ready', 'no_capabilities'].includes(toolConnection.value.state) ? ` · ${toolConnection.value.capability_count} 项能力` : ''}`
+  : loading.value ? '正在读取业务工具状态' : '业务工具状态暂不可用');
+const toolConnectionMessage = computed(() => {
+  const connection = toolConnection.value;
+  if (!connection) return loading.value ? '正在加载当前账号的学校授权功能。' : '尚未取得业务工具状态，请重新加载。';
+  const message = connection.message || ({
+    idle: '开始连接后可使用学校已授权的功能。',
+    connecting: '正在加载当前账号的学校授权功能。',
+    disabled: '请在插件中启用内置学校 Skill。',
+    no_capabilities: '学校已连接，当前账号尚无可调用的业务能力。',
+    authorization_required: '当前账号尚未获得所需的学校 CLI 授权。',
+    binding_required: '请完成当前账号绑定后重新连接。',
+    rate_limited: '请等待后重试连接。', error: '未能加载学校业务工具，请重试连接。',
+    paused: '请按当前提示恢复业务工具连接。',
+    task_expired: '请明确确认后新建业务任务，再继续调用。',
+    task_budget_exhausted: '当前业务任务已达到调用上限，请明确确认后新建业务任务。'
+  })[connection.state] || '';
+  return connection.action === 'authorize' && !connection.can_manage_cli
+    ? `${message} 请联系学校管理员开放当前账号的 CLI 能力。` : message;
+});
+const toolConnectionTone = computed(() => toolConnection.value?.state === 'ready'
+  ? 'ready' : toolConnection.value?.state === 'connecting' ? 'connecting'
+    : ['idle', 'disabled'].includes(toolConnection.value?.state) || !toolConnection.value ? '' : 'unavailable');
+const toolRetryAfter = computed(() => Math.max(0, Math.ceil((toolRetryAt.value - clockNow.value) / 1000)));
+const toolActionLabel = computed(() => {
+  if (toolConnection.value?.action === 'authorize' && !toolConnection.value.can_manage_cli) return '';
+  return ({ connect: '连接业务工具', retry: '重试连接', authorize: '打开 CLI 授权', login: '重新登录业务工具',
+    binding: '打开绑定设置', new_task: '新建业务任务', review_result: '核对结果后继续', enable_plugin: '管理插件' })[toolConnection.value?.action] || '';
+});
+const toolActionBlocked = computed(() => blocked.value || bootstrapping || editorDialog.value?.open
+  || modelLoading.value || listingChatModels.value || toolConnection.value?.state === 'connecting' || toolRetryAfter.value > 0);
 const editorDialog = ref(null),
   confirmDialog = ref(null),
   messageList = ref(null),
@@ -1206,8 +1306,10 @@ let generation = 0,
   bootstrapping = false,
   polling = false,
   pollTimer,
-  statusTimer;
+  statusTimer,
+  clockTimer;
 let mutationRevision = 0;
+let toolMetadataRunId = '';
 const requests = new Set(),
   channels = new Map(),
   promptDrafts = new Map();
@@ -1327,7 +1429,7 @@ const statusText = computed(() =>
       : busy.value
         ? '任务运行中'
         : scope.value
-          ? '已连接'
+          ? '客户端已登录'
           : '等待登录解锁'
 );
 const providerChanged = computed(
@@ -1361,6 +1463,22 @@ const editorTitle = computed(
     })[editorType.value]
 );
 const text = (value) => (typeof value === 'string' ? value : '');
+async function openMarkdownLink(event) {
+  const link = event.target?.closest?.('a');
+  if (!link || !event.currentTarget.contains(link)) return;
+  event.preventDefault();
+  event.stopPropagation();
+  if (event.type === 'auxclick' && event.button !== 1) return;
+  const url = resolveAgentMarkdownUrl(link.getAttribute('href'), scope.value?.origin);
+  if (!url) return;
+  const version = generation;
+  try {
+    if (window.__PRACTICAL_DESKTOP__?.openExternal) await window.__PRACTICAL_DESKTOP__.openExternal(url, 'browser');
+    else window.open(url, '_blank', 'noopener,noreferrer');
+  } catch (reason) {
+    if (!disposed && version === generation) error.value = reason.message || '无法打开链接。';
+  }
+}
 function readHistory(value) {
   return Array.isArray(value)
     ? value
@@ -1454,6 +1572,12 @@ function wipe() {
   pending.value = false;
   loading.value = false;
   toolStatus.value = '';
+  toolConnection.value = null;
+  toolRegistration.value = null;
+  toolDispatch.value = null;
+  toolMetadataRunId = '';
+  toolActionPending.value = false;
+  toolRetryAt.value = 0;
   operationStorageError.value = '';
   source.value = 'school';
   model.value = '';
@@ -1476,6 +1600,8 @@ async function request(action, payload = {}, channel = '') {
     () => controller.abort(),
     action === 'sync'
       ? 180000
+      : ['reconnect', 'restart-business-task'].includes(action)
+        ? 90000
       : ['models', 'probe', 'probe-mcp'].includes(action)
         ? 45000
         : 30000
@@ -1620,6 +1746,45 @@ function applySchool(value) {
   school.value = { enabled: value.enabled === true, model: text(value.model) };
   if (source.value === 'school') model.value = school.value.model;
 }
+function applyToolConnection(value) {
+  const connection = value?.tool_connection || value?.run?.tool_connection;
+  if (!connection || typeof connection !== 'object' || !Object.hasOwn(toolConnectionStates, connection.state)) return;
+  toolConnection.value = {
+    state: connection.state,
+    stage: text(connection.stage),
+    error: typeof connection.error === 'string' && /^[A-Za-z0-9_.:-]{1,128}$/.test(connection.error) ? connection.error : '',
+    http_status: Number.isInteger(connection.http_status) && connection.http_status >= 100 && connection.http_status <= 599 ? connection.http_status : null,
+    message: text(connection.message).slice(0, 2048),
+    capability_count: Number.isInteger(connection.capability_count) && connection.capability_count >= 0 ? connection.capability_count : 0,
+    action: text(connection.action),
+    can_manage_cli: connection.can_manage_cli === true
+  };
+  const retryAfter = Number(connection.retry_after);
+  clockNow.value = Date.now();
+  toolRetryAt.value = Number.isFinite(retryAfter) && retryAfter > 0 ? clockNow.value + retryAfter * 1000 : 0;
+}
+function applyToolMetadata(value, id) {
+  if (id && id !== toolMetadataRunId) {
+    toolMetadataRunId = id;
+    toolRegistration.value = null;
+    toolDispatch.value = null;
+  }
+  const registration = value?.tool_registration || value?.run?.tool_registration;
+  const dispatch = value?.tool_dispatch || value?.run?.tool_dispatch;
+  if (registration && typeof registration === 'object') {
+    toolRegistration.value = {
+      school_capability: typeof registration.school_capability === 'boolean' ? registration.school_capability : null,
+      capability_count: Number.isInteger(registration.capability_count) && registration.capability_count >= 0 ? registration.capability_count : null,
+      tool_count: Array.isArray(registration.tool_names) ? registration.tool_names.length : null
+    };
+  }
+  if (dispatch && typeof dispatch === 'object') {
+    toolDispatch.value = {
+      school_capability: typeof dispatch.school_capability === 'boolean' ? dispatch.school_capability : null,
+      tool_count: Number.isInteger(dispatch.tool_count) && dispatch.tool_count >= 0 ? dispatch.tool_count : null
+    };
+  }
+}
 async function syncProfiles(resolveConflicts = false) {
   if (blocked.value || editorDialog.value?.open) return;
   const resolutions = resolveConflicts
@@ -1668,6 +1833,7 @@ function applyBootstrap(value) {
     error.value = '';
   }
   scope.value = value.scope;
+  applyToolConnection(value);
   applySchool(value.school);
   cloudError.value = text(value.cloud_error);
   let nextProfiles = Array.isArray(value.profiles)
@@ -1699,6 +1865,7 @@ function applyBootstrap(value) {
   applyOperationState(run || value);
   busy.value = run ? run.status === 'running' : value.busy === true;
   runId.value = text(run?.run_id || value.run_id);
+  applyToolMetadata(value, runId.value);
   toolStatus.value = text(
     run?.tools_status ||
       run?.tool_status ||
@@ -1753,6 +1920,7 @@ async function perform(
   { select = false, refresh = false } = {}
 ) {
   if (blocked.value) return null;
+  const version = generation;
   mutationRevision++;
   pending.value = true;
   error.value = '';
@@ -1760,15 +1928,17 @@ async function perform(
   try {
     const result = await request(action, payload);
     if (!result) return null;
+    applyToolConnection(result);
     if (refresh && !applyWorkspace(result, select))
       await refreshWorkspace(select);
+    if (disposed || version !== generation) return null;
     if (success) notice.value = success;
     return result;
   } catch (reason) {
-    error.value = reason.message;
+    if (version === generation) error.value = reason.message;
     return null;
   } finally {
-    pending.value = false;
+    if (version === generation) pending.value = false;
   }
 }
 async function workspaceEdit(
@@ -2202,6 +2372,8 @@ async function send() {
     if (!value) return;
     if (!text(value.run_id))
       throw new Error('客户端未返回任务编号，请同步配置。');
+    applyToolConnection(value);
+    applyToolMetadata(value, value.run_id);
     history.value = [...history.value, { role: 'user', text: content }].slice(
       -60
     );
@@ -2232,6 +2404,8 @@ async function poll() {
   try {
     const value = await request('poll', { run_id: id });
     if (!value || id !== runId.value) return;
+    applyToolConnection(value);
+    applyToolMetadata(value, id);
     applyWorkspace(value);
     applyOperationState(value);
     activeText.value = text(value.text);
@@ -2279,9 +2453,21 @@ async function stop() {
     stopping.value = false;
   }
 }
-async function reconnect() {
-  const value = await perform('reconnect', {}, '业务工具将在下次任务连接。');
-  if (value) await bootstrap();
+async function handleToolConnectionAction() {
+  if (toolActionBlocked.value || bootstrapping) return;
+  const action = toolConnection.value?.action;
+  if (action === 'enable_plugin') { section.value = 'plugins'; return; }
+  const requestAction = ({ connect: 'reconnect', retry: 'reconnect', login: 'reconnect',
+    authorize: 'open-cli-authorization', binding: 'open-binding', new_task: 'restart-business-task', review_result: 'reconnect' })[action];
+  if (!requestAction) return;
+  const version = generation;
+  toolActionPending.value = true;
+  try {
+    const value = await perform(requestAction, {}, '');
+    if (value && version === generation && text(value.message)) notice.value = text(value.message);
+  } finally {
+    if (version === generation) toolActionPending.value = false;
+  }
 }
 function handlePromptKeydown(event) {
   if (
@@ -2345,17 +2531,36 @@ function restoreVisibility() {
 onMounted(() => {
   bootstrap();
   statusTimer = setInterval(refreshStatus, 5000);
+  clockTimer = setInterval(() => { clockNow.value = Date.now(); }, 1000);
   document.addEventListener('visibilitychange', restoreVisibility);
 });
 onBeforeUnmount(() => {
   disposed = true;
   clearInterval(statusTimer);
+  clearInterval(clockTimer);
   wipe();
   document.removeEventListener('visibilitychange', restoreVisibility);
 });
 </script>
 
 <style scoped>
+.business-connection { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: 0 28px 8px; padding: 11px 12px; border: 1px solid var(--border); border-radius: 7px; background: var(--sidebar); }
+.business-connection-copy { min-width: 0; }
+.business-connection strong { display: flex; align-items: center; gap: 8px; font-size: 12px; line-height: 1.7; font-weight: 600; }
+.business-connection p { margin-top: 3px; font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
+.business-connection button { flex: none; }
+.business-connection-dot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
+.business-connection.ready .business-connection-dot { background: #247b50; }
+.business-connection.connecting .business-connection-dot { background: var(--primary); }
+.business-connection.unavailable .business-connection-dot { background: var(--error); }
+.business-connection-details { margin-top: 7px; font-size: 12px; }
+.business-connection-details summary { cursor: pointer; line-height: 1.7; }
+.business-connection-details dl { display: grid; grid-template-columns: minmax(0, 1fr) minmax(72px, 1fr); gap: 6px 16px; margin: 9px 0; }
+.business-connection-details dt, .business-connection-details dd { margin: 0; line-height: 1.6; overflow-wrap: anywhere; }
+.business-connection-details code { font-size: inherit; }
+@media (max-width: 900px) {
+  .business-connection { align-items: flex-start; flex-wrap: wrap; margin-right: 16px; margin-left: 16px; gap: 8px; }
+}
 .operation-receipts { margin: 20px 0; padding: 14px; border: 1px solid var(--line, #d9dce3); border-radius: 8px; }
 .operation-receipts summary { cursor: pointer; font-weight: 600; }
 .operation-receipts > p { font-size: 12px; line-height: 1.6; }

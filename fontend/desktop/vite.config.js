@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 export default defineConfig({
   base: './',
   plugins: [vue()],
-  resolve: { dedupe: ['vue', '@lucide/vue'] },
+  resolve: { dedupe: ['vue', '@lucide/vue', 'markdown-it', 'dompurify'] },
   build: {
     outDir: 'dist/shell',
     rollupOptions: {

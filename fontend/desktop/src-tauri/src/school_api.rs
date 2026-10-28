@@ -138,7 +138,10 @@ pub async fn cli_operation_post(
     path: &str,
     input: &Value,
 ) -> Result<Value, String> {
-    if !matches!(path, "api/cli/operations/approve" | "api/cli/operations/deny") {
+    if !matches!(
+        path,
+        "api/cli/operations/approve" | "api/cli/operations/deny"
+    ) {
         return Err("业务确认接口无效".into());
     }
     protected_post(connection, path, input, "api/cli/operations/security").await
@@ -218,4 +221,139 @@ pub fn digest(value: &str) -> String {
 
 pub fn digest_bytes(value: &[u8]) -> String {
     format!("{:x}", Sha256::digest(value))
+}
+
+#[derive(Debug, Clone)]
+pub struct ApiFailure {
+    pub status: u16,
+    pub code: String,
+    pub message: String,
+    pub retry_after: u64,
+}
+
+impl ApiFailure {
+    pub fn new(status: u16, code: &str, message: &str) -> Self {
+        Self {
+            status,
+            code: code.into(),
+            message: message.chars().take(400).collect(),
+            retry_after: 0,
+        }
+    }
+}
+
+pub async fn decode_api(
+    mut response: reqwest::Response,
+    limit: usize,
+) -> Result<Value, ApiFailure> {
+    let status = response.status().as_u16();
+    let retry = response
+        .headers()
+        .get("retry-after")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.parse::<u64>().ok())
+        .unwrap_or(0);
+    let mut bytes = Vec::new();
+    while let Some(chunk) = response
+        .chunk()
+        .await
+        .map_err(|_| ApiFailure::new(status, "response_read_failed", "读取学校业务响应失败"))?
+    {
+        if bytes.len() + chunk.len() > limit {
+            return Err(ApiFailure::new(
+                status,
+                "response_too_large",
+                "学校能力目录响应过大，请管理员检查服务版本",
+            ));
+        }
+        bytes.extend_from_slice(&chunk);
+    }
+    let value: Value = serde_json::from_slice(&bytes).map_err(|_| {
+        ApiFailure::new(
+            status,
+            "invalid_response",
+            "学校接口没有返回有效 JSON，请检查服务或反向代理",
+        )
+    })?;
+    if !(200..300).contains(&status) || value["code"].as_i64() != Some(0) {
+        let code = value["data"]["error"]
+            .as_str()
+            .filter(|s| {
+                s.len() <= 80
+                    && s.bytes()
+                        .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_')
+            })
+            .unwrap_or("api_error");
+        let mut failure = ApiFailure::new(
+            status,
+            code,
+            value["message"].as_str().unwrap_or("学校业务接口拒绝请求"),
+        );
+        failure.retry_after = retry.max(value["data"]["retry_after"].as_u64().unwrap_or(0));
+        return Err(failure);
+    }
+    if !value.get("data").is_some_and(Value::is_object) {
+        return Err(ApiFailure::new(
+            status,
+            "invalid_response",
+            "学校业务接口返回结构不正确",
+        ));
+    }
+    Ok(value["data"].clone())
+}
+
+pub async fn client_agent_session(
+    connection: &Connection,
+    device_id: &str,
+) -> Result<Value, ApiFailure> {
+    if connection.cancel.is_cancelled() {
+        return Err(ApiFailure::new(0, "connection_closed", "学校会话已关闭"));
+    }
+    if connection.origin.scheme() != "https" {
+        return Err(ApiFailure::new(
+            403,
+            "https_required",
+            "业务工具授权需要学校 HTTPS 地址",
+        ));
+    }
+    let target = connection
+        .origin
+        .join("api/client-agent/bootstrap")
+        .map_err(|_| ApiFailure::new(400, "invalid_origin", "学校地址无效"))?;
+    let response = connection
+        .client
+        .get(target)
+        .timeout(std::time::Duration::from_secs(15))
+        .send()
+        .await
+        .map_err(|_| ApiFailure::new(0, "network_error", "无法读取学校授权校验信息，请检查网络"))?;
+    let bootstrap = decode_api(response, 1024 * 1024).await?;
+    let csrf = bootstrap["csrf_token"]
+        .as_str()
+        .ok_or_else(|| ApiFailure::new(0, "invalid_response", "学校未返回业务工具授权校验信息"))?;
+    let target = connection
+        .origin
+        .join("api/client-agent/session")
+        .map_err(|_| ApiFailure::new(400, "invalid_origin", "学校地址无效"))?;
+    let response = connection
+        .client
+        .post(target)
+        .header(
+            reqwest::header::ORIGIN,
+            connection.origin.origin().ascii_serialization(),
+        )
+        .header("x-csrf-token", csrf)
+        .header("x-request-token", uuid::Uuid::new_v4().to_string())
+        .timeout(std::time::Duration::from_secs(20))
+        .json(&serde_json::json!({"device_id":device_id}))
+        .send()
+        .await
+        .map_err(|_| {
+            ApiFailure::new(
+                0,
+                "network_error",
+                "学校业务授权请求未完成，请点击重新连接，不要重复登录",
+            )
+        })?;
+    decode_api(response, 1024 * 1024).await
 }

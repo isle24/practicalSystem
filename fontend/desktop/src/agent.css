@@ -416,6 +416,8 @@ h3 {
   color: var(--muted);
 }
 .message {
+  min-width: 0;
+  max-width: 100%;
   margin: 12px 0 23px;
 }
 .message h3 {
@@ -438,6 +440,45 @@ h3 {
 .message.assistant {
   padding: 7px 0;
 }
+.agent-markdown {
+  min-width: 0;
+  max-width: 100%;
+  font-size: 13px;
+  line-height: 1.85;
+  overflow-wrap: anywhere;
+}
+.message .agent-markdown p {
+  white-space: normal;
+  margin: 0 0 10px;
+}
+.message .agent-markdown :is(h1, h2, h3, h4, h5, h6) {
+  color: inherit;
+  font-weight: 600;
+  line-height: 1.5;
+  margin: 18px 0 9px;
+}
+.agent-markdown h1 { font-size: 20px; }
+.agent-markdown h2 { font-size: 18px; }
+.agent-markdown h3 { font-size: 16px; }
+.agent-markdown :is(h4, h5, h6) { font-size: 14px; }
+.agent-markdown :is(ul, ol) { padding-left: 1.7em; margin: 10px 0; }
+.agent-markdown li { margin: 4px 0; }
+.agent-markdown li > p { margin-bottom: 4px; }
+.agent-markdown blockquote { margin: 12px 0; padding: 2px 14px; border-left: 3px solid var(--border); }
+.agent-markdown hr { border: 0; border-top: 1px solid var(--border); margin: 16px 0; }
+.agent-markdown code { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 12px; background: var(--sidebar); border-radius: 4px; padding: 2px 4px; }
+.agent-markdown pre { max-width: 100%; overflow-x: auto; white-space: pre; margin: 12px 0; padding: 12px; border: 1px solid var(--border); border-radius: 7px; background: var(--sidebar); }
+.agent-markdown pre code { display: block; white-space: inherit; padding: 0; border-radius: 0; background: transparent; line-height: 1.65; overflow-wrap: normal; }
+.agent-markdown a[href] { color: var(--primary); text-decoration: underline; text-underline-offset: 3px; }
+.agent-markdown-table { max-width: 100%; overflow-x: auto; margin: 12px 0; border: 1px solid var(--border); border-radius: 7px; }
+.agent-markdown-table table { width: max-content; min-width: 100%; border-collapse: collapse; }
+.agent-markdown-table :is(th, td) { padding: 8px 12px; max-width: 32rem; min-width: 80px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--border); }
+.agent-markdown-table th { font-weight: 600; background: var(--sidebar); }
+.agent-markdown-table tbody tr:last-child td { border-bottom: 0; }
+.agent-markdown-table [align='center'] { text-align: center; }
+.agent-markdown-table [align='right'] { text-align: right; }
+.agent-markdown > :first-child { margin-top: 0; }
+.agent-markdown > :last-child { margin-bottom: 0; }
 .chat-bottom {
   padding: 0 28px 15px;
 }

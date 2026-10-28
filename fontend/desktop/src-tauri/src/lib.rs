@@ -4,6 +4,7 @@ mod agent_profiles;
 mod agent_process;
 mod agent_store;
 mod agent_workspace;
+mod business_tools;
 mod client_agent;
 mod client_lock;
 mod connection;

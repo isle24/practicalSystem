@@ -2,6 +2,7 @@ use crate::{
     agent_models,
     agent_process::{bounded_line, plugin_configs, probe_mcp, send, spawn_runtime},
     agent_profile_sync, agent_profiles, agent_store, agent_workspace,
+    business_tools::{self, Tools},
     connection::Connection,
     school_api,
 };
@@ -9,14 +10,14 @@ use serde_json::{json, Value};
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex, OnceLock},
-    time::{Duration, Instant},
+    time::Duration,
 };
 use tauri::{AppHandle, Manager};
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons};
 use tauri_plugin_opener::OpenerExt;
 use tokio::io::BufReader;
 use tokio_util::sync::CancellationToken;
-use zeroize::{Zeroize, Zeroizing};
+use zeroize::Zeroize;
 
 const RESULT_LIMIT: usize = 256 * 1024;
 const OPERATION_LIMIT: usize = 8 * 1024 * 1024;
@@ -27,28 +28,6 @@ struct OwnerState {
     tools: Arc<tokio::sync::Mutex<Tools>>,
     scope: Value,
     schedule_recovered: bool,
-}
-
-struct Tools {
-    access: Zeroizing<String>,
-    refresh: Zeroizing<String>,
-    expires: Option<Instant>,
-    task: String,
-    task_expires: Option<Instant>,
-    blocked: bool,
-}
-
-impl Default for Tools {
-    fn default() -> Self {
-        Self {
-            access: Zeroizing::new(String::new()),
-            refresh: Zeroizing::new(String::new()),
-            expires: None,
-            task: String::new(),
-            task_expires: None,
-            blocked: true,
-        }
-    }
 }
 
 struct Run {
@@ -160,7 +139,13 @@ fn running(owner: &str) -> Option<Arc<Run>> {
 
 async fn bootstrap(app: &AppHandle, connection: &Connection, owner: &str) -> Result<Value, String> {
     let scope = account_scope(connection)?;
-    let mut value = match school_api::read(connection, "api/client-agent/bootstrap").await {
+    let cloud = tokio::time::timeout(
+        Duration::from_secs(6),
+        school_api::read(connection, "api/client-agent/bootstrap"),
+    )
+    .await
+    .unwrap_or_else(|_| Err("学校配置读取超时".into()));
+    let mut value = match cloud {
         Ok(value) => {
             check_scope(connection, &value["scope"])?;
             value
@@ -206,8 +191,50 @@ async fn bootstrap(app: &AppHandle, connection: &Connection, owner: &str) -> Res
             }
         }
     }
-    if let Ok(mut state) = owners().lock() {
-        state.entry(owner.to_owned()).or_default().scope = value["scope"].clone();
+    let tools = {
+        let mut state = owners().lock().map_err(|_| "Agent 状态不可用")?;
+        let entry = state.entry(owner.to_owned()).or_default();
+        entry.scope = value["scope"].clone();
+        entry.tools.clone()
+    };
+    if value["busy"] == true {
+        value["tool_connection"] = value["run"]["tool_connection"].clone();
+    } else if let Ok(mut state) = tools.try_lock() {
+        state.bind(&scope);
+        state.connection["can_manage_cli"] = json!(business_tools::can_manage_cli(connection));
+        state.apply_policy(&value["tool_policy"]);
+        let enabled = value["workspace"]["plugins"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .any(|plugin| plugin["builtin"] == true && plugin["enabled"] == true);
+        if !enabled && !state.blocked {
+            state.connection = json!({"state":"disabled","stage":"capabilities","error":"builtin_disabled","message":"本项目内置 Skill 已停用，请在插件中启用","action":"enable_plugin"});
+        } else if enabled {
+            if !state.blocked && state.connection["error"] == "builtin_disabled" {
+                state.resume(false);
+            }
+            {
+                let client = connection.client.clone();
+                if tokio::time::timeout(
+                    Duration::from_secs(6),
+                    business_tools::connect(connection, &scope, &mut state, &client, false, false),
+                )
+                .await
+                .is_err()
+                {
+                    let stage = state.connection["stage"]
+                        .as_str()
+                        .unwrap_or("session")
+                        .to_owned();
+                    let manage = state.connection["can_manage_cli"].clone();
+                    state.connection = json!({"state":"error","stage":stage,"error":"auto_connect_timeout","message":"自动连接学校业务工具超时；本机模型可继续使用，请点击重试以完成连接","action":"retry","can_manage_cli":manage});
+                }
+            }
+        }
+        value["tool_connection"] = state.status();
+    } else {
+        value["tool_connection"] = json!({"state":"connecting","message":"正在连接当前账号的业务工具","capability_count":0,"action":"none"});
     }
     Ok(value)
 }
@@ -319,19 +346,83 @@ pub async fn action(
         };
         return Ok(json!({"profiles":store.snapshots(),"saved_profile_id":id}));
     }
-    if action == "reconnect" {
+    if matches!(action, "reconnect" | "restart-business-task") {
         if running(owner).is_some() {
-            return Err("请先停止当前运行".into());
+            return Err("请先停止当前运行再处理业务连接".into());
         }
-        owners()
+        let scope = account_scope(connection)?;
+        let tools = owners()
             .lock()
             .map_err(|_| "Agent 状态不可用")?
             .entry(owner.to_owned())
             .or_default()
-            .tools = Arc::new(tokio::sync::Mutex::new(Tools {
-            blocked: false,
-            ..Tools::default()
-        }));
+            .tools
+            .clone();
+        let mut state = tools.lock().await;
+        state.bind(&scope);
+        state.connection["can_manage_cli"] = json!(business_tools::can_manage_cli(connection));
+        let fresh_task = action == "restart-business-task";
+        if fresh_task && state.blocked {
+            return Err("请先通过回执核对已发送操作，再重新连接业务工具".into());
+        }
+        if fresh_task
+            && !["task_expired", "task_budget_exhausted"]
+                .contains(&state.connection["state"].as_str().unwrap_or(""))
+        {
+            return Err("当前业务任务无需新建，请先读取连接状态".into());
+        }
+        if fresh_task || state.blocked {
+            let message = if fresh_task {
+                "原业务任务已过期或预算已用尽。请确认继续当前工作并新建业务任务；这不会重放已提交操作。"
+            } else {
+                "请先在回执或原业务页面核对已发送操作的结果。确认已核对后继续连接；不会自动重发原操作。"
+            };
+            confirm(app, "继续业务调用", message.into(), &cancel).await?;
+        }
+        if !fresh_task
+            && ["task_expired", "task_budget_exhausted"]
+                .contains(&state.connection["state"].as_str().unwrap_or(""))
+        {
+            return Ok(json!({"tool_connection":state.status()}));
+        }
+        state.resume(fresh_task);
+        let client = connection.client.clone();
+        let result = tokio::time::timeout(
+            Duration::from_secs(20),
+            business_tools::connect(connection, &scope, &mut state, &client, true, true),
+        )
+        .await;
+        let ok = matches!(result, Ok(Ok(_)));
+        if result.is_err() {
+            let stage = state.connection["stage"].clone();
+            let manage = state.connection["can_manage_cli"].clone();
+            state.connection = json!({"state":"error","stage":stage,"error":"connect_timeout","message":"学校业务连接超时，请检查网络或稍后重试；无需提供数据库地址或密码","action":"retry","can_manage_cli":manage});
+        }
+        return Ok(json!({"ok":ok,"tool_connection":state.status()}));
+    }
+    if matches!(action, "open-cli-authorization" | "open-binding") {
+        let mut url = connection
+            .origin
+            .join("pc/index.html")
+            .map_err(|_| "学校入口无效")?;
+        if action == "open-cli-authorization" {
+            let config = school_api::read(connection, "api/client-agent/bootstrap").await?;
+            let allowed = config["tool_policy"]["can_manage_cli"]
+                .as_bool()
+                .unwrap_or_else(|| business_tools::can_manage_cli(connection));
+            if !allowed {
+                return Err("当前账号不能管理本校 CLI 授权，请联系学校管理员开放对应功能".into());
+            }
+            url.set_fragment(Some("panel=config:cliAuthorization"));
+        } else {
+            url.set_fragment(Some("module=profile"));
+        }
+        if cancel.is_cancelled() || connection.cancel.is_cancelled() {
+            return Err("学校会话已结束".into());
+        }
+        app.opener()
+            .open_url(url.as_str(), None::<&str>)
+            .map_err(|_| "无法打开学校页面，请从客户端进入对应设置")?;
         return Ok(json!({"ok":true}));
     }
     let scope = account_scope(connection)?;
@@ -568,7 +659,7 @@ async fn start_run(
         scope: scope.clone(),
         cancel: cancel.child_token(),
         state: Mutex::new(
-            json!({"status":"running","text":"","history":initial["history"],"workspace":initial["workspace"],"conversation_id":conversation_id,"tool_status":"正在准备模型与工具"}),
+            json!({"status":"running","text":"","history":initial["history"],"workspace":initial["workspace"],"conversation_id":conversation_id,"tool_status":"正在准备模型与工具","tool_connection":config["tool_connection"]}),
         ),
         options,
     });
@@ -601,6 +692,15 @@ async fn start_run(
         };
         if result.is_err() {
             cancel_pending_operation(&app, &connection, &running, &tools).await;
+            let pending = running
+                .state
+                .lock()
+                .is_ok_and(|value| value["business_write_pending"] == true);
+            if pending {
+                let mut state = tools.lock().await;
+                state.paused();
+                update(&running, json!({"tool_connection":state.status()}));
+            }
         }
         let status = if result.is_ok() {
             "completed"
@@ -929,9 +1029,16 @@ async fn cli_request(
     let mut request = client
         .request(method.clone(), url)
         .bearer_auth(token)
-        .header("x-cli-operation-version", "1");
+        .header("x-cli-operation-version", "1")
+        .timeout(Duration::from_secs(45));
     if path.starts_with("api/cli/operations/") && method == reqwest::Method::POST {
-        request = request.timeout(Duration::from_secs(180));
+        request = request.timeout(Duration::from_secs(
+            if path == "api/cli/operations/cancel" {
+                5
+            } else {
+                180
+            },
+        ));
     }
     if !task.is_empty() {
         request = request.header("x-cli-task", task);
@@ -1057,16 +1164,10 @@ async fn cancel_pending_operation(
     let Some(id) = operation_id else {
         return;
     };
-    let Ok(client) = reqwest::Client::builder()
-        .redirect(reqwest::redirect::Policy::none())
-        .no_proxy()
-        .timeout(Duration::from_secs(5))
-        .build()
-    else {
-        return;
-    };
+    let client = connection.client.clone();
     let mut session = tools.lock().await;
-    session.blocked = true;
+    session.paused();
+    update(run, json!({"tool_connection":session.status()}));
     if let Ok(value) = operation_request(
         &client,
         connection,
@@ -1146,7 +1247,7 @@ async fn call_confirmed_tool(
     {
         Ok(value) => value,
         Err(message) => {
-            session.blocked = true;
+            session.paused();
             remember_operation_state(app, run, &json!("unknown"));
             return Ok(
                 json!({"operation_id":id,"state":"unknown","complete_receipt_url":receipt_url.as_str(),"message":format!("预览请求未取得确定结果：{message}。请查询此操作，不能换操作编号自动重试。") }),
@@ -1160,7 +1261,7 @@ async fn call_confirmed_tool(
             .as_str()
             .is_none_or(|hash| hash.len() != 64)
     {
-        session.blocked = true;
+        session.paused();
         remember_operation_state(app, run, &json!("unknown"));
         return Err("服务器操作预览不完整，请查询该操作状态".into());
     }
@@ -1210,7 +1311,7 @@ async fn call_confirmed_tool(
     let decision = match decision {
         Ok(value) => value,
         Err(message) => {
-            session.blocked = true;
+            session.paused();
             let cancelled = operation_request(
                 client,
                 connection,
@@ -1243,7 +1344,7 @@ async fn call_confirmed_tool(
     };
     remember_operation_state(app, run, &decision["state"]);
     if decision["state"] != "approved" {
-        session.blocked = true;
+        session.paused();
         update(
             run,
             json!({"operation_pending":false,"operation_state":decision["state"]}),
@@ -1274,7 +1375,7 @@ async fn call_confirmed_tool(
     {
         Ok(value) => value,
         Err(message) => {
-            session.blocked = true;
+            session.paused();
             operation_request(client, connection, session, "GET", "api/cli/operations/status", &json!({"operation_id":id}), &id).await.unwrap_or_else(|_| json!({"operation_id":id,"state":"unknown","message":format!("{message}；请先核对回执，不能重新执行。") }))
         }
     };
@@ -1283,7 +1384,7 @@ async fn call_confirmed_tool(
         Some("completed" | "failed" | "unknown" | "denied" | "cancelled" | "expired")
     );
     if result["state"] != "completed" {
-        session.blocked = true;
+        session.paused();
     }
     update(
         run,
@@ -1297,108 +1398,19 @@ async fn tools(
     connection: &Connection,
     run: &Run,
     state: &mut Tools,
-    device_id: &str,
+    _device_id: &str,
     client: &reqwest::Client,
 ) -> Result<Value, String> {
-    if state.blocked {
-        return Err("业务工具连接已失效，请点击重新连接业务工具".into());
+    update(
+        run,
+        json!({"tool_connection":{"state":"connecting","message":"正在自动读取当前学校账号的业务能力","capability_count":0,"action":"none"}}),
+    );
+    let _guard = connection.session_lock.read().await;
+    if run.cancel.is_cancelled() || connection.cancel.is_cancelled() {
+        return Err("当前学校会话已结束".into());
     }
-    let result = async {
-        if state.access.is_empty() {
-            let value = agent_post(
-                connection,
-                run,
-                "api/client-agent/session",
-                &json!({"device_id":device_id}),
-            )
-            .await?;
-            state.access = Zeroizing::new(
-                value["access_token"]
-                    .as_str()
-                    .ok_or("CLI 会话格式无效")?
-                    .to_owned(),
-            );
-            state.refresh = Zeroizing::new(
-                value["refresh_token"]
-                    .as_str()
-                    .ok_or("CLI 续期格式无效")?
-                    .to_owned(),
-            );
-            state.expires = Some(
-                Instant::now() + Duration::from_secs(value["expires_in"].as_u64().unwrap_or(0)),
-            );
-        } else if state
-            .expires
-            .is_none_or(|t| t <= Instant::now() + Duration::from_secs(30))
-        {
-            let value = cli(
-                client,
-                connection,
-                "",
-                "POST",
-                "api/cli/token/refresh",
-                &json!({"refresh_token":state.refresh.as_str()}),
-                "",
-                false,
-            )
-            .await?;
-            state.access = Zeroizing::new(
-                value["access_token"]
-                    .as_str()
-                    .ok_or("CLI 续期格式无效")?
-                    .to_owned(),
-            );
-            state.refresh = Zeroizing::new(
-                value["refresh_token"]
-                    .as_str()
-                    .ok_or("CLI 续期格式无效")?
-                    .to_owned(),
-            );
-            state.expires = Some(
-                Instant::now() + Duration::from_secs(value["expires_in"].as_u64().unwrap_or(0)),
-            );
-        }
-        let catalog = cli(
-            client,
-            connection,
-            &state.access,
-            "GET",
-            "api/cli/capabilities",
-            &json!({}),
-            "",
-            false,
-        )
-        .await?;
-        if catalog["items"].as_array().is_some_and(|v| !v.is_empty())
-            && state
-                .task_expires
-                .is_none_or(|t| t <= Instant::now() + Duration::from_secs(180))
-        {
-            let task = cli(
-                client,
-                connection,
-                &state.access,
-                "POST",
-                "api/cli/tasks/create",
-                &json!({"label":"客户端 Agent"}),
-                "",
-                false,
-            )
-            .await?;
-            state.task = task["task_id"]
-                .as_str()
-                .ok_or("CLI 任务格式无效")?
-                .to_owned();
-            state.task_expires = Some(
-                Instant::now() + Duration::from_secs(task["expires_in"].as_u64().unwrap_or(0)),
-            );
-        }
-        Ok(catalog["items"].clone())
-    }
-    .await;
-    if result.is_err() {
-        state.blocked = true;
-    }
+    let result = business_tools::connect(connection, &run.scope, state, client, true, false).await;
+    update(run, json!({"tool_connection":state.status()}));
     result
 }
 
@@ -1449,12 +1461,7 @@ async fn execute(
     } else {
         plugin_configs(&stored)
     };
-    let client = reqwest::Client::builder()
-        .redirect(reqwest::redirect::Policy::none())
-        .no_proxy()
-        .timeout(Duration::from_secs(45))
-        .build()
-        .map_err(|_| "Agent 工具连接无法初始化")?;
+    let client = connection.client.clone();
     let mut session = tools_state.lock().await;
     let builtin_enabled = stored["plugins"]
         .as_array()
@@ -1462,6 +1469,10 @@ async fn execute(
         .flatten()
         .any(|plugin| plugin["builtin"] == true && plugin["enabled"] == true);
     let mut catalog = if !builtin_enabled {
+        if !session.blocked {
+            session.connection = json!({"state":"disabled","error":"builtin_disabled","message":"本项目内置 Skill 已停用，请在插件中启用","action":"enable_plugin"});
+        }
+        update(run, json!({"tool_connection":session.status()}));
         json!([])
     } else {
         match tools(connection, run, &mut session, &device_id, &client).await {
@@ -1484,7 +1495,7 @@ async fn execute(
     let mut child = spawn_runtime(app)?;
     let mut stdin = child.stdin.take().ok_or("Agent 输入通道不可用")?;
     let stdout = child.stdout.take().ok_or("Agent 输出通道不可用")?;
-    let packet = json!({"type":"start","run_id":run.id,"mode":mode,"config":{"model":model["model"]},"prompt":prompt,"messages":messages,"capabilities":catalog,"plugins":plugins,"workspace_context":agent_workspace::context(&stored)});
+    let packet = json!({"type":"start","run_id":run.id,"mode":mode,"config":{"model":model["model"]},"prompt":prompt,"messages":messages,"capabilities":catalog,"plugins":plugins,"workspace_context":agent_workspace::context(&stored),"tool_connection":session.status()});
     let sent = send(&mut stdin, &packet).await;
     sent?;
     drop(packet);
@@ -1521,6 +1532,14 @@ async fn execute(
         };
         match value["type"].as_str().unwrap_or("") {
             "ready" => (),
+            "tools" => update(
+                run,
+                json!({"tool_registration":{"school_capability":value["school_capability"],"capability_count":value["capability_count"],"tool_names":value["tool_names"]}}),
+            ),
+            "tool_dispatch" => update(
+                run,
+                json!({"tool_dispatch":{"school_capability":value["school_capability"],"tool_count":value["tool_count"]}}),
+            ),
             "text" => {
                 let text = value["text"].as_str().unwrap_or("");
                 if text.len() > 120000 {
@@ -1565,7 +1584,7 @@ async fn execute(
                     }
                     "confirm_mcp" => approve_mcp_call(app, run, &plugins, &value["params"]).await,
                     "tool" => {
-                        call_tool(
+                        let outcome = call_tool(
                             app,
                             connection,
                             run,
@@ -1574,7 +1593,9 @@ async fn execute(
                             &catalog,
                             &value["params"],
                         )
-                        .await
+                        .await;
+                        update(run, json!({"tool_connection":session.status()}));
+                        outcome
                     }
                     _ => Err("Agent 请求了未开放的本机功能".into()),
                 };
@@ -1709,6 +1730,9 @@ async fn call_tool(
         return Err("运行已停止，未提交本次请求".into());
     }
     update(run, json!({"tool_status":format!("正在执行：{label}")}));
+    if write {
+        update(run, json!({"business_write_pending":true}));
+    }
     let result = cli(
         client,
         connection,
@@ -1720,11 +1744,15 @@ async fn call_tool(
         write,
     )
     .await;
+    update(run, json!({"business_write_pending":false}));
     if result.is_err() {
-        session.blocked = true;
         if write {
+            session.paused();
             run.cancel.cancel();
+        } else {
+            session.connection = json!({"state":"error","stage":"call","error":"business_read_failed","message":result.as_ref().err(),"action":"retry","can_manage_cli":session.connection["can_manage_cli"]});
         }
+        update(run, json!({"tool_connection":session.status()}));
     }
     result
 }
