@@ -161,7 +161,8 @@
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
+import { filterAcademicProfessions } from '../../../shared/academicCascade';
 import { Plus } from '@lucide/vue';
 import { ElMessage, ElMessageBox, ElSelectV2 } from 'element-plus';
 import {
@@ -180,12 +181,14 @@ const props = defineProps({
   options: { type: Object, default: () => ({}) },
   defaultFilters: { type: Object, default: () => ({}) },
   canApprove: { type: Boolean, default: false },
+  sessionKey: { type: [String, Number], default: '' },
 });
 
 const isStudent = computed(() => props.roleType === 'student');
 const isTeacher = computed(() => props.roleType === 'teacher');
 const activeView = ref(props.roleType === 'student' ? 'profiles' : 'changes');
-const loading = ref(false);
+const listLoading = reactive({ profiles: false, changes: false });
+const loading = computed(() => listLoading[activeView.value]);
 const saving = ref(false);
 const message = ref('');
 const mentors = ref([]);
@@ -195,6 +198,10 @@ const filters = reactive(emptyFilters());
 const dialog = reactive(emptyDialog());
 const form = reactive(emptyForm());
 const review = reactive({ status: 'accept', opinion: '' });
+let disposed = false;
+let generation = 0;
+let detailRequest = 0;
+const listRequests = { profiles: 0, changes: 0 };
 
 const changeTypeOptions = [
   { value: 'profile', label: '综合资料' },
@@ -214,11 +221,7 @@ const showLocationFields = computed(() => ['profile', 'location', 'other'].inclu
 const availableBases = computed(() => (props.options.bases || []).filter(item => !form.after_payload.company_id || Number(item.company_id) === Number(form.after_payload.company_id)));
 const availableMentors = computed(() => mentors.value.filter(item => !form.after_payload.company_id || Number(item.company_id) === Number(form.after_payload.company_id)));
 const selectedCategory = computed(() => (props.options.internship_categories || []).find(item => Number(item.id) === Number(filters.category_id || 0)) || null);
-const filteredProfessions = computed(() => (props.options.professions || []).filter((item) => {
-  const gradeMatches = !filters.grade_id || Number(item.grade_id || 0) === Number(filters.grade_id);
-  const departmentMatches = !filters.dep_id || Number(item.dep_id || 0) === Number(filters.dep_id);
-  return gradeMatches && departmentMatches;
-}));
+const filteredProfessions = computed(() => filterAcademicProfessions(props.options, filters));
 const filteredArrangements = computed(() => (props.options.arrangements || []).filter((item) => {
   const categoryMatches = !filters.category_id || Number(item.category_id || 0) === Number(filters.category_id);
   const gradeMatches = !filters.grade_id || Number(item.grade_id || 0) === Number(filters.grade_id);
@@ -287,49 +290,83 @@ onMounted(async () => {
   await Promise.all([loadProfiles(1), loadChanges(1), loadMentors()]);
 });
 
-watch(() => props.roleType, role => {
-  activeView.value = role === 'student' ? 'profiles' : 'changes';
-});
+watch(() => [props.sessionKey, props.roleType], () => {
+  generation++;
+  detailRequest++;
+  listRequests.profiles++;
+  listRequests.changes++;
+  Object.assign(listLoading, { profiles: false, changes: false });
+  Object.assign(profiles, emptyList());
+  Object.assign(changes, emptyList());
+  Object.assign(filters, emptyFilters());
+  Object.assign(dialog, emptyDialog());
+  Object.assign(form, emptyForm());
+  mentors.value = [];
+  message.value = '';
+  saving.value = false;
+  activeView.value = isStudent.value ? 'profiles' : 'changes';
+  applyDefaults();
+  loadProfiles(1);
+  loadChanges(1);
+  loadMentors();
+}, { flush: 'sync' });
+
+onBeforeUnmount(() => { disposed = true; generation++; detailRequest++; });
 
 watch(() => JSON.stringify(props.defaultFilters || {}), () => {
-  if (applyDefaults()) loadActive(1);
+  if (applyDefaults()) { normalizeFilters(); loadActive(1); }
 });
 
 watch(() => JSON.stringify([
   props.options.internship_categories,
   props.options.grades,
   props.options.graduation_cohorts,
+  props.options.professions,
+  props.options.classes,
+  props.options.students,
+  props.options.plans,
+  props.options.arrangements,
 ]), () => {
-  if (applyDefaults()) loadActive(1);
+  const changed = applyDefaults();
+  if (normalizeFilters() || changed) loadActive(1);
 });
 
 async function loadProfiles(page = 1) {
-  await loadList(profiles, fetchInternshipStudentProfiles, page);
+  await loadList('profiles', profiles, fetchInternshipStudentProfiles, page);
 }
 
 async function loadChanges(page = 1) {
-  await loadList(changes, fetchInternshipStudentChanges, page);
+  await loadList('changes', changes, fetchInternshipStudentChanges, page);
 }
 
-async function loadList(target, fetcher, page) {
-  loading.value = true;
-  message.value = '';
+async function loadList(key, target, fetcher, page) {
+  const request = ++listRequests[key];
+  const context = generation;
+  const session = props.sessionKey;
+  const params = queryParams(page);
+  const current = () => !disposed && context === generation && session === props.sessionKey && request === listRequests[key];
+  listLoading[key] = true;
+  if (activeView.value === key) message.value = '';
   try {
-    const data = await fetcher(queryParams(page));
+    const data = await fetcher(params);
+    if (!current() || JSON.stringify(params) !== JSON.stringify(queryParams(page))) return;
     Object.assign(target, emptyList(), data || {});
   } catch (error) {
-    message.value = error.message;
+    if (current() && activeView.value === key && JSON.stringify(params) === JSON.stringify(queryParams(page))) message.value = error.message;
   } finally {
-    loading.value = false;
+    if (current()) listLoading[key] = false;
   }
 }
 
 async function loadMentors() {
+  const context = generation;
+  const session = props.sessionKey;
   try {
     const data = await fetchInternshipMentors({ page: 1, page_size: 100 });
+    if (disposed || context !== generation || session !== props.sessionKey) return;
     mentors.value = data.items || [];
   } catch {
-    mentors.value = [];
+    if (!disposed && context === generation && session === props.sessionKey) mentors.value = [];
   }
 }
 
@@ -355,15 +392,20 @@ function queryParams(page) {
 function updateFilter({ key, value }) {
   filters[key] = value ?? '';
   if (key === 'category_id') normalizeCategoryFilters();
-  if (key === 'dep_id' && filters.profession_id && !(props.options.professions || []).some(item => Number(item.profession_id) === Number(filters.profession_id) && Number(item.dep_id) === Number(value))) {
-    filters.profession_id = '';
-  }
+  normalizeFilters();
+}
+
+function normalizeFilters() {
+  let changed = false;
   if (filters.profession_id && !filteredProfessions.value.some(item => Number(item.profession_id) === Number(filters.profession_id))) {
     filters.profession_id = '';
+    changed = true;
   }
   if (filters.arrangement_id && !filteredArrangements.value.some(item => Number(item.id) === Number(filters.arrangement_id))) {
     filters.arrangement_id = '';
+    changed = true;
   }
+  return changed;
 }
 
 function resetFilters() {
@@ -464,10 +506,15 @@ function normalizeCompanyRelations() {
 }
 
 async function openDetail(row) {
+  const request = ++detailRequest;
+  const context = generation;
+  const session = props.sessionKey;
+  const current = () => !disposed && context === generation && session === props.sessionKey && request === detailRequest;
   saving.value = true;
   message.value = '';
   try {
     const data = await fetchInternshipStudentChangeDetail({ id: row.id });
+    if (!current()) return;
     Object.assign(dialog, emptyDialog(), {
       visible: true,
       mode: 'detail',
@@ -477,9 +524,9 @@ async function openDetail(row) {
       reviews: data.reviews || [],
     });
   } catch (error) {
-    message.value = error.message;
+    if (current()) message.value = error.message;
   } finally {
-    saving.value = false;
+    if (current()) saving.value = false;
   }
 }
 

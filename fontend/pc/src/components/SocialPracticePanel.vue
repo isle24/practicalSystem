@@ -128,7 +128,7 @@
       <form class="social-practice-form" @submit.prevent>
         <template v-if="state.form.resource === 'plan'">
           <label class="span-2"><span>计划名称</span><input v-model="state.form.title" maxlength="180" placeholder="请输入社会实践计划名称"></label>
-          <label><span>年级</span><el-select v-model="state.form.grade_id" filterable placeholder="请选择年级"><el-option v-for="item in state.options.grades" :key="item.grade_id" :label="item.grade_name" :value="item.grade_id" /></el-select></label>
+          <label><span>年级</span><el-select v-model="state.form.grade_id" filterable placeholder="请选择年级" @change="normalizePlanScopes"><el-option v-for="item in state.options.grades" :key="item.grade_id" :label="item.grade_name" :value="item.grade_id" /></el-select></label>
           <label><span>组织学院</span><el-select v-model="state.form.organizer_dep_id" clearable filterable placeholder="请选择学院"><el-option v-for="item in state.options.departments" :key="item.dep_id" :label="item.dep_name" :value="item.dep_id" /></el-select></label>
           <label><span>审批流程</span><el-select v-model="state.form.approval_flow_id" filterable placeholder="请选择审批流程"><el-option v-for="item in state.options.approval_flows" :key="item.id" :label="item.name" :value="item.id" /></el-select></label>
           <label><span>学分</span><el-input-number v-model="state.form.credit" :min="0" :max="99" :precision="1" /></label>
@@ -148,9 +148,9 @@
             <header><strong>适用范围</strong><el-button link type="primary" :icon="Plus" @click="addScope">添加范围</el-button></header>
             <div v-for="(scope, index) in state.form.scopes" :key="index" class="social-inline-row scope-row">
               <el-select v-model="scope.scope_type" placeholder="请选择范围类型"><el-option label="全校" value="school" /><el-option label="学院" value="college" /><el-option label="专业" value="profession" /><el-option label="班级" value="class" /></el-select>
-              <el-select v-if="scope.scope_type !== 'school'" v-model="scope.dep_id" clearable filterable placeholder="请选择学院"><el-option v-for="item in state.options.departments" :key="item.dep_id" :label="item.dep_name" :value="item.dep_id" /></el-select>
-              <el-select-v2 v-if="['profession', 'class'].includes(scope.scope_type)" v-model="scope.profession_id" clearable filterable placeholder="请选择专业" :options="professionsFor(scope.dep_id)" :props="{ label: 'profession_name', value: 'profession_id' }" />
-              <el-select-v2 v-if="scope.scope_type === 'class'" v-model="scope.class_id" clearable filterable placeholder="请选择班级" :options="classesFor(scope.profession_id)" :props="{ label: 'class_name', value: 'class_id' }" />
+              <el-select v-if="scope.scope_type !== 'school'" v-model="scope.dep_id" clearable filterable placeholder="请选择学院" @change="changeScopeDepartment(scope)"><el-option v-for="item in state.options.departments" :key="item.dep_id" :label="item.dep_name" :value="item.dep_id" /></el-select>
+              <el-select-v2 v-if="['profession', 'class'].includes(scope.scope_type)" v-model="scope.profession_id" clearable filterable placeholder="请选择专业" :options="professionsFor(scope.dep_id)" :props="{ label: 'profession_name', value: 'profession_id' }" @change="scope.class_id = null" />
+              <el-select-v2 v-if="scope.scope_type === 'class'" v-model="scope.class_id" clearable filterable placeholder="请选择班级" :options="classesFor(scope)" :props="{ label: 'class_name', value: 'class_id' }" />
               <el-button link type="danger" :disabled="state.form.scopes.length === 1" @click="removeArrayItem('scopes', index)">移除</el-button>
             </div>
           </section>
@@ -177,7 +177,7 @@
         </template>
 
         <template v-else-if="state.form.resource === 'project'">
-          <label><span>所属计划</span><el-select-v2 v-model="state.form.plan_id" filterable placeholder="请选择计划" @change="loadPlanStudents" :options="state.options.plans" :props="{ label: 'title', value: 'id' }" /></label>
+          <label><span>所属计划</span><el-select-v2 v-model="state.form.plan_id" filterable placeholder="请选择计划" :options="state.options.plans" :props="{ label: 'title', value: 'id' }" /></label>
           <label><span>项目编号</span><input v-model="state.form.project_code" maxlength="120" placeholder="不填则自动生成"></label>
           <label class="span-2"><span>项目名称</span><input v-model="state.form.title" maxlength="180" placeholder="请输入集中实践项目名称"></label>
           <label><span>开始时间</span><input v-model="state.form.start_at" type="datetime-local"></label>
@@ -198,7 +198,7 @@
         </template>
 
         <template v-else-if="state.form.resource === 'declaration'">
-          <label><span>所属计划</span><el-select-v2 v-model="state.form.plan_id" filterable placeholder="请选择计划" :options="state.options.plans" :props="{ label: 'title', value: 'id' }" /></label>
+          <label><span>所属计划</span><el-select-v2 v-model="state.form.plan_id" filterable placeholder="请选择计划" @change="changeDeclarationPlan" :options="state.options.plans" :props="{ label: 'title', value: 'id' }" /></label>
           <label><span>申报类型</span><el-select v-model="state.form.declaration_type" placeholder="请选择申报类型"><el-option label="个人申报" value="individual" /><el-option label="团队申报" value="team" /></el-select></label>
           <label v-if="state.form.declaration_type === 'team'"><span>团队提交</span><el-select v-model="state.form.team_submit_mode" placeholder="请选择团队提交方式"><el-option label="分别提交" value="individual" /><el-option label="共同提交" value="shared" /></el-select></label>
           <label><span>指导教师</span><el-select-v2 v-model="state.form.selected_teacher_id" filterable placeholder="请选择指导教师" :options="teacherSelectOptions" /></label>
@@ -419,7 +419,8 @@
 
 <script setup>
 import FilePreviewButton from '../../../shared/components/FilePreviewButton.vue';
-import { computed, reactive, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue';
+import { filterAcademicClasses, filterAcademicProfessions } from '../../../shared/academicCascade';
 import { ElMessage, ElMessageBox, ElSelectV2 } from 'element-plus';
 import {
   Archive,
@@ -475,6 +476,7 @@ const props = defineProps({
   roleType: { type: String, default: '' },
   accountId: { type: [Number, String], default: 0 },
   hasPermission: { type: Function, default: () => false },
+  sessionKey: { type: [String, Number], default: '' },
 });
 
 const panelDefinitions = {
@@ -519,6 +521,12 @@ const state = reactive({
   planImport: { fileId: null, items: [], summary: null },
 });
 const materialFileInput = ref(null);
+let disposed = false;
+let generation = 0;
+let readRequest = 0;
+let optionsRequest = 0;
+let optionsPromise = null;
+let studentRequest = 0;
 const detailPageSize = 20;
 const assignmentPage = ref(1);
 const detailParticipantPage = ref(1);
@@ -573,7 +581,7 @@ const statisticCards = [{ key: 'plan_count', label: '计划总数', icon: Route,
 const listFilters = computed(() => [
   { key: 'grade_id', label: '年级', type: 'select', options: state.options.grades.map(item => ({ label: item.grade_name, value: item.grade_id })) },
   { key: 'dep_id', label: '学院', type: 'select', options: state.options.departments.map(item => ({ label: item.dep_name, value: item.dep_id })) },
-  { key: 'profession_id', label: '专业', type: 'select', options: state.options.professions.filter(item => !state.filters.dep_id || Number(item.dep_id) === Number(state.filters.dep_id)).map(item => ({ label: item.profession_name, value: item.profession_id })) },
+  { key: 'profession_id', label: '专业', type: 'select', options: filterAcademicProfessions(state.options, state.filters).map(item => ({ label: item.profession_name, value: item.profession_id })) },
   { key: 'status', label: '状态', type: 'select', options: statusOptions },
   { key: 'keyword', label: '关键词', type: 'input', placeholder: '名称、学生、教师或内容' },
 ]);
@@ -584,29 +592,66 @@ const reviewPlaceholder = computed(() => reviewLimit.value.min ? `请填写不�
 
 watch(() => state.detail, () => { detailParticipantPage.value = 1; detailMemberPage.value = 1; });
 
-watch(() => props.panel, async () => {
+watch(() => [props.panel, props.sessionKey, props.accountId, props.roleType], async (next, previous) => {
+  generation++;
+  readRequest++;
+  optionsRequest++;
+  studentRequest++;
+  optionsPromise = null;
+  if (previous && next.slice(1).some((value, index) => value !== previous[index + 1])) state.options = emptyOptions();
+  state.loading = false;
+  state.message = '';
+  state.error = false;
+  state.rows = [];
+  state.overview = {};
+  state.statistics = { summary: {}, by_grade: [], by_mode: [], by_college: [] };
+  state.pagination = { page: 1, page_size: 20, total: 0 };
+  state.dialog = { type: '', title: '', row: null };
+  state.detail = {};
+  state.timeline = { records: [], reviews: [] };
+  state.planStudents = [];
   state.filters = defaultFilters();
   if (props.panel === 'overview') await loadOverview();
   else if (props.panel === 'statistics') await loadStatistics();
   else await loadList(1);
-}, { immediate: true });
+}, { immediate: true, flush: 'sync' });
+
+onBeforeUnmount(() => { disposed = true; generation++; readRequest++; optionsRequest++; studentRequest++; });
 
 /** 读取社会实践基础选项。 */
 async function ensureOptions(force = false) {
-  if (!force && state.options.loaded) return;
-  const data = await fetchSocialPracticeOptions();
-  state.options = { ...emptyOptions(), ...data, loaded: true };
-  if (!state.filters.grade_id) state.filters.grade_id = data.current_grade_id || null;
+  if (!force && state.options.loaded) return true;
+  if (!force && optionsPromise) return optionsPromise;
+  const request = ++optionsRequest;
+  const context = generation;
+  const promise = (async () => {
+    const data = await fetchSocialPracticeOptions();
+    if (disposed || context !== generation || request !== optionsRequest) return false;
+    state.options = { ...emptyOptions(), ...data, loaded: true };
+    if (!state.filters.grade_id) state.filters.grade_id = data.current_grade_id || null;
+    return true;
+  })();
+  optionsPromise = promise;
+  try { return await promise; }
+  finally { if (optionsPromise === promise) optionsPromise = null; }
 }
 
 /** 读取所选计划范围内的团队成员。 */
 async function loadPlanStudents() {
-  if (!state.form.plan_id) {
-    state.planStudents = [];
-    return;
-  }
-  const data = await fetchSocialPracticeEligibleStudents(state.form.plan_id);
+  const request = ++studentRequest;
+  const context = generation;
+  const form = state.form;
+  const planId = form.plan_id;
+  state.planStudents = [];
+  if (!planId) return;
+  const data = await fetchSocialPracticeEligibleStudents(planId);
+  if (disposed || context !== generation || request !== studentRequest || form !== state.form || planId !== state.form.plan_id) return;
   state.planStudents = (data.items || []).filter(item => Number(item.student_id) !== Number(state.options.current_student_id || 0));
+}
+
+function changeDeclarationPlan() {
+  state.form.member_student_ids = [];
+  loadPlanStudents();
 }
 
 /** 应用管理员默认组织范围。 */
@@ -627,18 +672,24 @@ function applyPlanScopeDefaults(form) {
 
 /** 读取社会实践总览数据。 */
 async function loadOverview() {
-  await runLoading(async () => {
+  await runLoading(async current => {
     const data = await fetchSocialPracticeOverview();
+    if (!current()) return;
     state.overview = data.statistics || {};
   });
 }
 
 /** 读取社会实践统计报表。 */
 async function loadStatistics() {
-  await runLoading(async () => {
-    await ensureOptions();
-    state.statistics = await fetchSocialPracticeStatistics({ grade_id: state.filters.grade_id, dep_id: state.filters.dep_id });
-  });
+  let signature = null;
+  const filterKey = () => JSON.stringify([state.filters.grade_id, state.filters.dep_id]);
+  await runLoading(async current => {
+    if (!await ensureOptions() || !current()) return;
+    const params = { grade_id: state.filters.grade_id, dep_id: state.filters.dep_id };
+    signature = filterKey();
+    const data = await fetchSocialPracticeStatistics(params);
+    if (current()) state.statistics = data;
+  }, () => signature === null || signature === filterKey());
 }
 
 /** 创建社会实践统计导出任务。 */
@@ -712,21 +763,24 @@ async function confirmPlanImport() {
 
 /** 读取当前业务列表。 */
 async function loadList(page = 1) {
-  await runLoading(async () => {
-    await ensureOptions();
+  let signature = null;
+  await runLoading(async current => {
+    if (!await ensureOptions() || !current()) return;
     const params = { ...state.filters, page, page_size: state.pagination.page_size };
     if (panelConfig.value.practice_mode) params.practice_mode = panelConfig.value.practice_mode;
+    signature = JSON.stringify(state.filters);
     const data = await fetchSocialPracticeList(panelResource.value, params);
+    if (!current()) return;
     state.rows = data.items || [];
     const pagination = data.pagination || data;
     state.pagination = { page: Number(pagination.page || page), page_size: Number(pagination.page_size || 20), total: Number(pagination.total || 0) };
-  });
+  }, () => signature === null || signature === JSON.stringify(state.filters));
 }
 
 /** 更新列表筛选值。 */
 function setFilter({ key, value }) {
   state.filters[key] = value ?? '';
-  if (key === 'dep_id') state.filters.profession_id = '';
+  if (state.filters.profession_id && !filterAcademicProfessions(state.options, state.filters).some(item => Number(item.profession_id) === Number(state.filters.profession_id))) state.filters.profession_id = '';
 }
 
 /** 恢复角色默认筛选值。 */
@@ -737,7 +791,8 @@ async function resetFilters() {
 
 /** 打开当前面板的新建表单。 */
 async function openCreate() {
-  await ensureOptions();
+  const context = generation;
+  if (!await ensureOptions() || disposed || context !== generation) return;
   const resource = ['safety', 'material'].includes(panelResource.value) ? 'material' : panelResource.value;
   state.form = emptyForm(resource);
   applyPlanScopeDefaults(state.form);
@@ -747,11 +802,15 @@ async function openCreate() {
 
 /** 打开业务记录编辑表单。 */
 async function openEdit(row) {
+  const context = generation;
   const resource = actionResource(row);
   let detail = row;
   if (workflowResources.includes(resource)) detail = await fetchSocialPracticeDetail(resource, row.id);
+  if (disposed || context !== generation) return;
   state.form = formFromRow(resource, detail);
+  if (resource === 'score') prepareScoreRules(state.form.project_id);
   if (resource === 'declaration' && state.form.plan_id) await loadPlanStudents();
+  if (disposed || context !== generation) return;
   state.dialog = { type: 'form', title: `编辑${panelConfig.value.title}`, row: { ...row, resource } };
 }
 
@@ -824,34 +883,42 @@ async function handleRowAction({ action, row }) {
 
 /** 打开业务详情。 */
 async function openDetail(row) {
-  await runLoading(async () => {
+  await runLoading(async current => {
     const resource = actionResource(row);
-    state.detail = workflowResources.includes(resource) ? await fetchSocialPracticeDetail(resource, row.id) : { ...row };
+    const data = workflowResources.includes(resource) ? await fetchSocialPracticeDetail(resource, row.id) : { ...row };
+    if (!current()) return;
+    state.detail = data;
     state.dialog = { type: 'detail', title: `${panelConfig.value.title}详情`, row: { ...row, resource } };
   });
 }
 
 /** 打开流程记录。 */
 async function openTimeline(row) {
-  await runLoading(async () => {
+  await runLoading(async current => {
     const resource = actionResource(row);
-    state.timeline = await fetchSocialPracticeTimeline(resource, row.id);
+    const data = await fetchSocialPracticeTimeline(resource, row.id);
+    if (!current()) return;
+    state.timeline = data;
     state.dialog = { type: 'timeline', title: '流程记录', row: { ...row, resource } };
   });
 }
 
 /** 打开审核或通过后修改表单。 */
 async function openReview(row, type) {
+  const context = generation;
   const resource = actionResource(row);
   state.review = { status: type === 'modify' ? 'modify' : 'accept', opinion: '' };
   if (type === 'review') {
     try {
       const data = await fetchSocialPracticeReviewDraft(resource, row.id);
+      if (disposed || context !== generation) return;
       if (data.draft) state.review = { status: data.draft.review_status || 'accept', opinion: data.draft.opinion || '' };
     } catch {
+      if (disposed || context !== generation) return;
       state.review = { status: 'accept', opinion: '' };
     }
   }
+  if (disposed || context !== generation) return;
   state.dialog = { type, title: type === 'modify' ? '通过后修改' : `审核${panelConfig.value.title}`, row: { ...row, resource } };
 }
 
@@ -913,7 +980,9 @@ async function confirmPublish(row) {
 
 /** 打开项目教师分配。 */
 async function openTeacherAssignment(row) {
+  const context = generation;
   const detail = await fetchSocialPracticeDetail('project', row.id);
+  if (disposed || context !== generation) return;
   state.assignment = { projectId: row.id, teachers: detail.teachers?.length ? detail.teachers.map(item => ({ teacher_id: item.teacher_id, teacher_role: item.teacher_role, capacity: Number(item.capacity || 0) })) : [{ teacher_id: null, teacher_role: 'leader', capacity: Number(row.capacity || 0) }], participants: detail.participants || [] };
   state.dialog = { type: 'assignTeachers', title: '分配指导教师', row: { ...row, resource: 'project' } };
 }
@@ -925,7 +994,9 @@ async function submitTeacherAssignment() {
 
 /** 打开项目学生分配。 */
 async function openStudentAssignment(row) {
+  const context = generation;
   const detail = await fetchSocialPracticeDetail('project', row.id);
+  if (disposed || context !== generation) return;
   state.assignment = {
     projectId: row.id,
     teachers: detail.teachers || [],
@@ -1034,14 +1105,18 @@ async function runSaving(callback, message) {
 }
 
 /** 执行读取并统一显示错误。 */
-async function runLoading(callback) {
-  if (state.loading) return;
+async function runLoading(callback, matches = () => true) {
+  const request = ++readRequest;
+  const context = generation;
+  const active = () => !disposed && context === generation && request === readRequest;
+  const current = () => active() && matches();
   state.loading = true;
   state.error = false;
   state.message = '';
   try {
-    await callback();
+    await callback(current);
   } catch (error) {
+    if (!current()) return;
     state.error = true;
     const detail = [
       error.message || '请求失败',
@@ -1050,13 +1125,16 @@ async function runLoading(callback) {
     ].filter(Boolean);
     state.message = detail.join('，');
   } finally {
-    state.loading = false;
+    if (active()) state.loading = false;
   }
 }
 
 /** 关闭当前弹窗。 */
 function closeDialog() {
   if (state.saving) return;
+  readRequest++;
+  studentRequest++;
+  state.loading = false;
   state.dialog = { type: '', title: '', row: null };
   state.detail = {};
   state.timeline = { records: [], reviews: [] };
@@ -1160,12 +1238,27 @@ function teacherName(id) {
 
 /** 返回指定学院的专业。 */
 function professionsFor(depId) {
-  return state.options.professions.filter(item => !depId || Number(item.dep_id) === Number(depId));
+  return filterAcademicProfessions(state.options, { dep_id: depId, grade_id: state.form.grade_id }, { allowLinkedGrades: false });
 }
 
 /** 返回指定专业的班级。 */
-function classesFor(professionId) {
-  return state.options.classes.filter(item => !professionId || Number(item.profession_id) === Number(professionId));
+function classesFor(scope) {
+  return filterAcademicClasses(state.options, { grade_id: state.form.grade_id, dep_id: scope.dep_id, profession_id: scope.profession_id });
+}
+
+function changeScopeDepartment(scope) {
+  scope.profession_id = null;
+  scope.class_id = null;
+}
+
+function normalizePlanScopes() {
+  for (const scope of state.form.scopes) {
+    if (['profession', 'class'].includes(scope.scope_type) && scope.profession_id && !professionsFor(scope.dep_id).some(item => Number(item.profession_id) === Number(scope.profession_id))) {
+      scope.profession_id = null;
+      scope.class_id = null;
+    }
+    if (scope.scope_type === 'class' && scope.class_id && !classesFor(scope).some(item => Number(item.class_id) === Number(scope.class_id))) scope.class_id = null;
+  }
 }
 
 /** 返回指定计划的项目。 */
@@ -1195,13 +1288,16 @@ function removeArrayItem(key, index) {
 
 /** 按项目读取评分规则。 */
 async function prepareScoreRules(projectId) {
+  const context = generation;
+  const form = state.form;
   const project = state.options.projects.find(item => Number(item.id) === Number(projectId));
   if (!project) return;
   try {
     const plan = await fetchSocialPracticeDetail('plan', project.plan_id);
+    if (disposed || context !== generation || form !== state.form || Number(projectId) !== Number(state.form.project_id)) return;
     state.form.items = (plan.score_rules || []).filter(item => item.practice_mode === project.practice_mode).map(item => ({ ...item, score_value: 0 }));
   } catch (error) {
-    ElMessage.error(error.message);
+    if (!disposed && context === generation && form === state.form) ElMessage.error(error.message);
   }
 }
 
@@ -1221,7 +1317,6 @@ function formFromRow(resource, row) {
     form.attachments = (row.attachments || []).map(item => ({ ...item, file_id: item.file_id || item.id }));
     form.file_ids = form.attachments.map(item => item.file_id || item.id);
   }
-  if (resource === 'score') prepareScoreRules(row.project_id);
   return normalizeDateFields(form);
 }
 

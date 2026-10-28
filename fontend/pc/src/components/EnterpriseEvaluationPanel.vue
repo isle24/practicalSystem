@@ -109,7 +109,8 @@
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
+import { filterAcademicProfessions } from '../../../shared/academicCascade';
 import { Copy, Plus, Settings, Trash2 } from '@lucide/vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import {
@@ -126,6 +127,7 @@ const props = defineProps({
   defaultFilters: { type: Object, default: () => ({}) },
   canManage: { type: Boolean, default: false },
   canConfigure: { type: Boolean, default: false },
+  sessionKey: { type: [String, Number], default: '' },
 });
 
 const loading = ref(false);
@@ -139,6 +141,10 @@ const ruleForm = reactive({ items: [] });
 const detail = reactive({ visible: false, item: {} });
 const invitation = reactive({ visible: false, data: {} });
 const ruleDialog = reactive({ visible: false });
+let disposed = false;
+let generation = 0;
+let listRequest = 0;
+let ruleRequest = 0;
 
 const ruleTotal = computed(() => ruleForm.items.reduce((total, item) => total + Number(item.max_score || 0), 0));
 const detailCriteria = computed(() => Array.isArray(detail.item.criteria_json) ? detail.item.criteria_json : []);
@@ -150,10 +156,10 @@ const listFilters = computed(() => [
   { key: 'evaluation_status', label: '评价状态', type: 'select', options: [{ value: 'pending', label: '待评价' }, { value: 'submitted', label: '已评价' }] },
   { key: 'keyword', label: '关键词', placeholder: '学生、学号、任务或课程' },
 ]);
-const filteredProfessions = computed(() => (props.options.professions || []).filter(item => !filters.dep_id || Number(item.dep_id) === Number(filters.dep_id)));
+const filteredProfessions = computed(() => filterAcademicProfessions(props.options, filters));
 const graduationArrangements = computed(() => (props.options.arrangements || []).filter(item => (
   item.type === 'graduation' || item.category_code === 'graduation' || item.scope_type === 'cohort'
-)));
+) && ['graduation_cohort_id', 'dep_id', 'profession_id'].every(key => !filters[key] || Number(item[key]) === Number(filters[key]))));
 const columns = [
   { prop: 'student_name', label: '学生', width: 110 },
   { prop: 'student_num', label: '学号', width: 130 },
@@ -173,28 +179,67 @@ onMounted(async () => {
 });
 
 watch(() => JSON.stringify(props.defaultFilters || {}), () => {
-  if (applyDefaults()) load(1);
+  if (applyDefaults()) { normalizeFilters(); load(1); }
 });
 
+watch(() => props.options, () => {
+  const changed = applyDefaults();
+  if (normalizeFilters() || changed) load(1);
+}, { deep: true });
+
+watch(() => props.sessionKey, () => {
+  generation++;
+  listRequest++;
+  ruleRequest++;
+  loading.value = false;
+  savingRule.value = false;
+  invitingId.value = 0;
+  message.value = '';
+  Object.assign(list, emptyList());
+  Object.assign(filters, emptyFilters());
+  detail.visible = false;
+  detail.item = {};
+  closeInvitation();
+  ruleDialog.visible = false;
+  ruleForm.items = [];
+  Object.assign(rule, { practice_type: 'graduation', total_score: 30, items: [] });
+  applyDefaults();
+  load(1);
+  loadRule();
+}, { flush: 'sync' });
+
+onBeforeUnmount(() => { disposed = true; generation++; listRequest++; ruleRequest++; });
+
 async function load(page = 1) {
+  const request = ++listRequest;
+  const context = generation;
+  const session = props.sessionKey;
+  const params = queryParams(page);
+  const current = () => !disposed && context === generation && session === props.sessionKey && request === listRequest;
   loading.value = true;
   message.value = '';
   try {
-    const data = await fetchEnterpriseEvaluationProgress(queryParams(page));
+    const data = await fetchEnterpriseEvaluationProgress(params);
+    if (!current() || JSON.stringify(params) !== JSON.stringify(queryParams(page))) return;
     Object.assign(list, emptyList(), data || {});
   } catch (error) {
-    message.value = error.message;
+    if (current() && JSON.stringify(params) === JSON.stringify(queryParams(page))) message.value = error.message;
   } finally {
-    loading.value = false;
+    if (current()) loading.value = false;
   }
 }
 
 async function loadRule() {
+  const request = ++ruleRequest;
+  const context = generation;
+  const session = props.sessionKey;
+  const current = () => !disposed && context === generation && session === props.sessionKey && request === ruleRequest;
   try {
     const data = await fetchEnterpriseEvaluationRule({ practice_type: 'graduation' });
+    if (!current()) return;
     Object.assign(rule, data || {});
   } catch (error) {
-    message.value = error.message;
+    if (current()) message.value = error.message;
   }
 }
 
@@ -208,9 +253,20 @@ function queryParams(page) {
 
 function updateFilter({ key, value }) {
   filters[key] = value ?? '';
-  if (key === 'dep_id' && filters.profession_id && !filteredProfessions.value.some(item => Number(item.profession_id) === Number(filters.profession_id))) {
+  normalizeFilters();
+}
+
+function normalizeFilters() {
+  let changed = false;
+  if (Array.isArray(props.options.professions) && filters.profession_id && !filteredProfessions.value.some(item => Number(item.profession_id) === Number(filters.profession_id))) {
     filters.profession_id = '';
+    changed = true;
   }
+  if (Array.isArray(props.options.arrangements) && filters.arrangement_id && !graduationArrangements.value.some(item => Number(item.id) === Number(filters.arrangement_id))) {
+    filters.arrangement_id = '';
+    changed = true;
+  }
+  return changed;
 }
 
 function resetFilters() {
@@ -240,25 +296,35 @@ function currentCohortId() {
   return current?.cohort_id || props.options.graduation_cohorts?.[0]?.cohort_id || '';
 }
 
+function operationContext() {
+  const context = generation;
+  const session = props.sessionKey;
+  return () => !disposed && context === generation && session === props.sessionKey;
+}
+
 async function createInvitation(row) {
-  if (invitingId.value) return;
+  const current = operationContext();
+  if (!current() || invitingId.value) return;
   try {
     await ElMessageBox.confirm(`确认生成“${row.enterprise_mentor_name || '企业导师'}”的评价邀请？`, '生成邀请', { type: 'warning' });
   } catch {
     return;
   }
+  if (!current() || invitingId.value) return;
   invitingId.value = row.pair_id;
   message.value = '';
   try {
     const data = await createEnterpriseEvaluationInvitation({ arrangement_id: row.arrangement_id, enterprise_mentor_id: row.enterprise_mentor_id });
+    if (!current()) return;
     invitation.data = data || {};
     invitation.visible = true;
-    await copyText(data.evaluation_url, false);
-    ElMessage.success('邀请已生成并复制');
+    const copied = await copyText(data.evaluation_url, false, current);
+    if (!current()) return;
+    ElMessage.success(copied ? '邀请已生成并复制' : '邀请已生成');
   } catch (error) {
-    message.value = error.message;
+    if (current()) message.value = error.message;
   } finally {
-    invitingId.value = 0;
+    if (current()) invitingId.value = 0;
   }
 }
 
@@ -273,15 +339,18 @@ function closeInvitation() {
 }
 
 async function copyInvitation() {
-  if (await copyText(invitation.data.evaluation_url, true)) ElMessage.success('评价地址已复制');
+  const current = operationContext();
+  if (!current()) return;
+  if (await copyText(invitation.data.evaluation_url, true, current) && current()) ElMessage.success('评价地址已复制');
 }
 
-async function copyText(value, reportError) {
+async function copyText(value, reportError, current) {
+  if (!current()) return false;
   try {
     await navigator.clipboard.writeText(String(value || ''));
-    return true;
+    return current();
   } catch {
-    if (reportError) ElMessage.warning('浏览器未允许自动复制，请手动复制地址');
+    if (current() && reportError) ElMessage.warning('浏览器未允许自动复制，请手动复制地址');
     return false;
   }
 }
@@ -309,19 +378,22 @@ function removeRuleItem(index) {
 }
 
 async function saveRule() {
-  if (savingRule.value) return;
+  const current = operationContext();
+  if (!current() || savingRule.value) return;
   if (ruleForm.items.some(item => !String(item.name || '').trim() || Number(item.max_score || 0) <= 0)) return ElMessage.warning('请完整填写评价项名称和分值');
   savingRule.value = true;
+  ruleRequest++;
   message.value = '';
   try {
     const data = await saveEnterpriseEvaluationRule({ practice_type: 'graduation', criteria: ruleForm.items, total_score: ruleTotal.value });
+    if (!current()) return;
     Object.assign(rule, data.rule || {});
     ruleDialog.visible = false;
     ElMessage.success('企业评价规则已保存');
   } catch (error) {
-    message.value = error.message;
+    if (current()) message.value = error.message;
   } finally {
-    savingRule.value = false;
+    if (current()) savingRule.value = false;
   }
 }
 

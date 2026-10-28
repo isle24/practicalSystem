@@ -982,6 +982,7 @@
 
                   <InternshipStudentChangePanel
                     v-else-if="win.panel === 'studentChanges'"
+                    :session-key="workspaceContextKey"
                     :role-type="currentRoleType"
                     :options="internshipState.options"
                     :default-filters="defaultScopedFilters()"
@@ -990,6 +991,7 @@
 
                   <EnterpriseEvaluationPanel
                     v-else-if="win.panel === 'enterpriseEvaluations'"
+                    :session-key="workspaceContextKey"
                     :options="internshipState.options"
                     :default-filters="defaultScopedFilters()"
                     :can-manage="canManageInternship && isAdminRole"
@@ -1736,6 +1738,7 @@
 
                 <SocialPracticePanel
                   v-else-if="win.module.id === 'socialPractice'"
+                  :session-key="workspaceContextKey"
                   :panel="win.panel"
                   :role-type="currentRoleType"
                   :account-id="permissionState.context.account_id"
@@ -1867,6 +1870,7 @@
                         <label>
                           <span>专业</span>
                           <el-select-v2 v-model="practiceModuleState(win.module.id).form.profession_id" clearable filterable placeholder="请选择专业" @change="handlePracticeProfessionChange(win.module.id)" :options="practiceProfessionOptions(win.module.id)" :props="{ label: 'profession_name', value: 'profession_id' }" />
+                          <small v-if="win.panel === 'schedules'">选择学院后，仅显示该学院所选年级可用的专业。</small>
                         </label>
                         <label>
                           <span>任课教师</span>
@@ -3550,12 +3554,12 @@
                     </el-table-column>
                     <el-table-column label="专业" min-width="160">
                       <template #default="{ row }">
-                        <el-select-v2 v-model="row.profession_id" clearable filterable placeholder="不限" :options="(adminState.options.professions.filter(item => !row.dep_id || String(item.dep_id) === String(row.dep_id))).map(profession => ({ label: profession.profession_name, value: String(profession.profession_id) }))" />
+                        <el-select-v2 v-model="row.profession_id" clearable filterable placeholder="不限" @change="row.class_id = null" :options="filterAcademicProfessions(adminState.options, row).map(profession => ({ label: profession.profession_name, value: String(profession.profession_id) }))" />
                       </template>
                     </el-table-column>
                     <el-table-column label="班级" min-width="160">
                       <template #default="{ row }">
-                        <el-select-v2 v-model="row.class_id" clearable filterable placeholder="不限" :options="(adminState.options.classes).map(clazz => ({ label: clazz.class_name, value: String(clazz.class_id) }))" />
+                        <el-select-v2 v-model="row.class_id" clearable filterable placeholder="不限" :options="filterAcademicClasses(adminState.options, row).map(clazz => ({ label: clazz.class_name, value: String(clazz.class_id) }))" />
                       </template>
                     </el-table-column>
                     <el-table-column label="基地" min-width="180">
@@ -4279,6 +4283,7 @@
 
 <script setup>
 import { useWechatBinding } from '../../shared/useWechatBinding';
+import { filterAcademicClasses, filterAcademicProfessions } from '../../shared/academicCascade.js';
 import WechatBindingGate from '../../shared/components/WechatBindingGate.vue';
 import { closeFilePreview, previewFile } from '../../shared/filePreview';
 import PreviewCacheSettings from './components/PreviewCacheSettings.vue';
@@ -4922,6 +4927,8 @@ let organizationScopeRequest = 0;
 let statRequest = 0;
 let practiceLoadRequest = 0;
 const practicePanelRequests = new Map();
+let internshipLoadRequest = 0;
+const internshipPanelRequests = new Map();
 
 const userAdminState = reactive({
   items: [],
@@ -9445,17 +9452,24 @@ function userEditDepartmentOptions() {
   return filterAcademicDepartments(userAcademicOptions(), userAdminState.editing);
 }
 
+function userEditingAcademicValues() {
+  const { grade_id, dep_id, profession_id, class_id } = userAdminState.editing;
+  return { grade_id, dep_id, profession_id, class_id };
+}
+
 function userEditProfessionOptions() {
-  const keys = userEditingRoleType.value === 'student' ? ['grade_id', 'dep_id'] : ['dep_id'];
-  return filterAcademicItems(adminState.options.professions, userAdminState.editing, keys);
+  const values = userEditingRoleType.value === 'student' ? userEditingAcademicValues() : { dep_id: userAdminState.editing.dep_id };
+  return filterAcademicProfessions(userAcademicOptions(), values);
 }
 
 function userEditClassOptions() {
-  return filterAcademicItems(adminState.options.classes, userAdminState.editing, ['grade_id', 'dep_id', 'profession_id']);
+  return filterAcademicClasses(userAcademicOptions(), userEditingAcademicValues());
 }
 
 function handleUserAcademicChange(field) {
-  normalizeFilterCascade(userAdminState.editing, userAcademicOptions(), field);
+  const values = userEditingAcademicValues();
+  normalizeFilterCascade(values, userAcademicOptions(), field);
+  for (const key of ['grade_id', 'dep_id', 'profession_id', 'class_id']) userAdminState.editing[key] = values[key];
   const selectedClass = adminState.options.classes.find(item => sameFilterValue(item.class_id, userAdminState.editing.class_id));
   if (selectedClass) {
     userAdminState.editing.class_num = selectedClass.class_num || userAdminState.editing.class_num || '';
@@ -10599,12 +10613,7 @@ function archiveEditFieldOptions(field, type) {
   }
 
   const editing = archiveStateByType(type).editing;
-  return adminState.options.professions
-    .filter((item) => {
-      const matchGrade = !editing.grade_id || Number(item.grade_id || 0) === Number(editing.grade_id);
-      const matchDepartment = !editing.dep_id || Number(item.dep_id || 0) === Number(editing.dep_id);
-      return matchGrade && matchDepartment;
-    })
+  return filterAcademicProfessions(userAcademicOptions(), editing, { allowLinkedGrades: false })
     .map(item => ({ label: item.profession_name, value: String(item.profession_id) }));
 }
 
@@ -10615,10 +10624,13 @@ function handleArchiveFieldChange(type, fieldKey) {
 
   const editing = archiveStateByType(type).editing;
   if (fieldKey === 'profession_id') {
-    const profession = adminState.options.professions.find(item => String(item.profession_id) === String(editing.profession_id));
+    const profession = filterAcademicProfessions(userAcademicOptions(), editing, { allowLinkedGrades: false })
+      .find(item => sameFilterValue(item.profession_id, editing.profession_id));
     if (profession) {
-      editing.grade_id = String(profession.grade_id || editing.grade_id || '');
-      editing.dep_id = String(profession.dep_id || editing.dep_id || '');
+      editing.grade_id = String(editing.grade_id || profession.grade_id || '');
+      editing.dep_id = String(editing.dep_id || profession.dep_id || '');
+    } else {
+      editing.profession_id = '';
     }
     return;
   }
@@ -10633,9 +10645,7 @@ function handleArchiveFieldChange(type, fieldKey) {
     return;
   }
 
-  const mismatchGrade = editing.grade_id && Number(profession.grade_id || 0) !== Number(editing.grade_id);
-  const mismatchDepartment = editing.dep_id && Number(profession.dep_id || 0) !== Number(editing.dep_id);
-  if (mismatchGrade || mismatchDepartment) {
+  if (!filterAcademicProfessions(userAcademicOptions(), editing, { allowLinkedGrades: false }).some(item => sameFilterValue(item.profession_id, editing.profession_id))) {
     editing.profession_id = '';
   }
 }
@@ -11536,7 +11546,7 @@ function practicePeriodEndOptions(module) {
 
 function practiceScheduleProfessionOptions(module) {
   const state = practiceModuleState(module);
-  return filterAcademicItems(state.options.professions, state.filters.schedules, ['grade_id', 'dep_id']);
+  return filterAcademicProfessions(state.options, state.filters.schedules);
 }
 
 function changePracticeModuleType(module, value, panel) {
@@ -12053,8 +12063,8 @@ function practiceFilterDefinitions(module, panel, keys) {
     keyword: { key: 'keyword', label: '关键词', placeholder: '标题、课程、学生、内容' },
     grade_id: { key: 'grade_id', label: '年级', type: 'select', options: optionItems(options.grades, 'grade_id', 'grade_name') },
     dep_id: { key: 'dep_id', label: '学院', type: 'select', options: optionItems(filterAcademicDepartments(options, values), 'dep_id', 'dep_name') },
-    profession_id: { key: 'profession_id', label: '专业', type: 'select', options: optionItems(filterAcademicItems(options.professions, values, ['grade_id', 'dep_id']), 'profession_id', 'profession_name') },
-    class_id: { key: 'class_id', label: '班级', type: 'select', options: optionItems(filterAcademicItems(options.classes, values, ['grade_id', 'dep_id', 'profession_id']), 'class_id', 'class_name') },
+    profession_id: { key: 'profession_id', label: '专业', type: 'select', options: optionItems(filterAcademicProfessions(options, values), 'profession_id', 'profession_name') },
+    class_id: { key: 'class_id', label: '班级', type: 'select', options: optionItems(filterAcademicClasses(options, values), 'class_id', 'class_name') },
     plan_id: { key: 'plan_id', label: '教学计划', type: 'select', options: optionItems(filterAcademicItems(options.plans, values, ['grade_id', 'dep_id', 'profession_id', 'class_id']), 'id', 'title') },
     project_id: { key: 'project_id', label: '项目', type: 'select', options: optionItems(filterAcademicItems(options.projects || [], values, ['grade_id', 'dep_id', 'profession_id', 'class_id', 'plan_id']), 'id', 'title') },
     schedule_id: { key: 'schedule_id', label: '课表', type: 'select', options: optionItems(filterAcademicItems(options.schedules, values, ['grade_id', 'dep_id', 'profession_id', 'class_id', 'plan_id']), 'id', 'title') },
@@ -12094,13 +12104,7 @@ function practiceSourceText(value) {
 
 function practiceProfessionOptions(module) {
   const state = practiceModuleState(module);
-  const gradeId = Number(state.form.grade_id || 0);
-  const depId = Number(state.form.dep_id || 0);
-  return state.options.professions.filter((item) => {
-    const matchGrade = !gradeId || !Number(item.grade_id || 0) || Number(item.grade_id) === gradeId;
-    const matchDepartment = !depId || Number(item.dep_id || 0) === depId;
-    return matchGrade && matchDepartment;
-  });
+  return filterAcademicProfessions(state.options, state.form);
 }
 
 function normalizePracticeCascade(module) {
@@ -12127,15 +12131,15 @@ function normalizePracticeSchedule(module) {
 
 function handlePracticeProfessionChange(module) {
   const state = practiceModuleState(module);
-  const profession = state.options.professions.find(item => Number(item.profession_id) === Number(state.form.profession_id || 0));
+  const profession = practiceProfessionOptions(module).find(item => Number(item.profession_id) === Number(state.form.profession_id || 0));
   if (!profession) {
-    normalizePracticeSchedule(module);
+    state.form.profession_id = null;
+    normalizePracticeCascade(module);
     return;
   }
-  state.form.grade_id = profession.grade_id || state.form.grade_id;
-  state.form.dep_id = profession.dep_id || state.form.dep_id;
-  normalizePracticeClass(module);
-  normalizePracticeSchedule(module);
+  state.form.grade_id = state.form.grade_id || profession.grade_id || null;
+  state.form.dep_id = state.form.dep_id || profession.dep_id || null;
+  normalizePracticeCascade(module);
 }
 
 function handlePracticePlanChange(module) {
@@ -12183,7 +12187,7 @@ function handlePracticeScheduleChange(module) {
 
 function practiceClassOptions(module) {
   const state = practiceModuleState(module);
-  return filterAcademicItems(state.options.classes, state.form, ['grade_id', 'dep_id', 'profession_id']);
+  return filterAcademicClasses(state.options, state.form);
 }
 
 function practicePlanOptions(module, panel) {
@@ -12485,15 +12489,22 @@ function practiceQueryParams(module, panel, page = 1) {
 function setPracticeFilter(module, panel, event) {
   const state = practiceModuleState(module);
   const values = state.filters[panel];
+  practicePanelRequests.delete(panel);
   values[event.key] = event.value ?? '';
   if (event.key === 'module_type') {
     state.module_type = values.module_type || 'all';
   }
   normalizeFilterCascade(values, state.options, event.key);
+  for (const definition of practiceFilterDefinitions(module, panel, ['schedule_id', 'project_id'])) {
+    if (hasFilterValue(values[definition.key]) && !definition.options.some(item => sameFilterValue(item.value, values[definition.key]))) {
+      values[definition.key] = '';
+    }
+  }
 }
 
 function resetPracticeFilters(module, panel) {
   const state = practiceModuleState(module);
+  practicePanelRequests.delete(panel);
   state.filters[panel] = {
     ...emptyPracticeFilters(),
     ...organizationScopeDefaults(state.options),
@@ -12596,9 +12607,10 @@ async function exportPracticeScheduleList(module) {
   state.message = '';
   try {
     const moduleType = practiceRequestModuleType(module, state.filters.schedules.module_type);
+    const query = practiceQueryParams(module, 'schedules', 1);
     const rows = await collectPagedRows(
-      params => fetchPracticeList(moduleType, { ...practiceQueryParams(module, 'schedules', params.page), page_size: params.page_size }),
-      practiceQueryParams(module, 'schedules', 1),
+      params => fetchPracticeList(moduleType, params),
+      query,
     );
     exportRowsToCsv('实验实训课表', practiceListConfig(module, 'schedules').columns, rows);
   } catch (error) {
@@ -13361,8 +13373,8 @@ function internshipFilters(keys, values = {}, options = internshipState.options)
     grade_id: { key: 'grade_id', label: '年级', type: 'select', options: optionItems(options.grades, 'grade_id', 'grade_name') },
     graduation_cohort_id: { key: 'graduation_cohort_id', label: '毕业届次', type: 'select', options: optionItems(options.graduation_cohorts, 'cohort_id', 'cohort_name') },
     dep_id: { key: 'dep_id', label: '学院', type: 'select', options: optionItems(filterAcademicDepartments(options, values), 'dep_id', 'dep_name') },
-    profession_id: { key: 'profession_id', label: '专业', type: 'select', options: optionItems(filterAcademicItems(options.professions, values, professionFilterKeys(values)), 'profession_id', 'profession_name') },
-    class_id: { key: 'class_id', label: '班级', type: 'select', options: optionItems(filterAcademicItems(options.classes, values, ['grade_id', 'dep_id', 'profession_id']), 'class_id', 'class_name') },
+    profession_id: { key: 'profession_id', label: '专业', type: 'select', options: optionItems(filterAcademicProfessions(options, values), 'profession_id', 'profession_name') },
+    class_id: { key: 'class_id', label: '班级', type: 'select', options: optionItems(filterAcademicClasses(options, values), 'class_id', 'class_name') },
     plan_id: { key: 'plan_id', label: '实习计划', type: 'select', options: optionItems(filterAcademicItems(options.plans, values, ['grade_id', 'dep_id', 'profession_id']), 'id', 'course_name') },
     arrangement_id: { key: 'arrangement_id', label: '实习任务', type: 'select', options: optionItems(filterAcademicItems(options.arrangements, values, ['grade_id', 'dep_id', 'profession_id', 'class_id']), 'id', 'title') },
     config_key: { key: 'config_key', label: '延期类型', type: 'select', options: delayConfigOptions() },
@@ -13415,10 +13427,6 @@ function optionItems(items, valueKey, labelKey) {
 
 function valueOptions(items = []) {
   return (items || []).map(value => ({ value, label: String(value) }));
-}
-
-function professionFilterKeys(values = {}) {
-  return hasFilterValue(values.graduation_cohort_id) ? ['dep_id'] : ['grade_id', 'dep_id'];
 }
 
 function sameFilterValue(left, right) {
@@ -13516,9 +13524,9 @@ function normalizeFilterCascade(values = {}, options = {}, changedKey = '') {
     values.class_id = '';
   }
   if (changedKey === 'class_id' && selectedClass) {
-    values.grade_id = selectedClass.grade_id || values.grade_id || '';
-    values.dep_id = selectedClass.dep_id || values.dep_id || '';
-    values.profession_id = selectedClass.profession_id || values.profession_id || '';
+    values.grade_id = values.grade_id || selectedClass.grade_id || '';
+    values.dep_id = values.dep_id || selectedClass.dep_id || '';
+    values.profession_id = values.profession_id || selectedClass.profession_id || '';
   }
 
   const selectedProfession = hasFilterValue(values.profession_id)
@@ -13529,8 +13537,8 @@ function normalizeFilterCascade(values = {}, options = {}, changedKey = '') {
     values.class_id = '';
   }
   if (changedKey === 'profession_id' && selectedProfession) {
-    values.grade_id = selectedProfession.grade_id || values.grade_id || '';
-    values.dep_id = selectedProfession.dep_id || values.dep_id || '';
+    if (!hasFilterValue(values.graduation_cohort_id)) values.grade_id = values.grade_id || selectedProfession.grade_id || '';
+    values.dep_id = values.dep_id || selectedProfession.dep_id || '';
   }
 
   const departments = options.departments || [];
@@ -13542,7 +13550,7 @@ function normalizeFilterCascade(values = {}, options = {}, changedKey = '') {
   }
 
   if (hasFilterValue(values.profession_id)) {
-    const professionVisible = filterAcademicItems(options.professions || [], values, ['grade_id', 'dep_id'])
+    const professionVisible = filterAcademicProfessions(options, values)
       .some(item => sameFilterValue(item.profession_id, values.profession_id));
     if (!professionVisible) {
       values.profession_id = '';
@@ -13552,7 +13560,7 @@ function normalizeFilterCascade(values = {}, options = {}, changedKey = '') {
   }
 
   if (hasFilterValue(values.class_id)) {
-    const classVisible = filterAcademicItems(options.classes || [], values, ['grade_id', 'dep_id', 'profession_id'])
+    const classVisible = filterAcademicClasses(options, values)
       .some(item => sameFilterValue(item.class_id, values.class_id));
     if (!classVisible) {
       values.class_id = '';
@@ -13605,14 +13613,11 @@ function statDepartmentOptions() {
 }
 
 function statProfessionOptions() {
-  return optionItems(filterAcademicItems(statAcademicOptions().professions, statState.filters, professionFilterKeys(statState.filters)), 'profession_id', 'profession_name');
+  return optionItems(filterAcademicProfessions(statAcademicOptions(), statState.filters), 'profession_id', 'profession_name');
 }
 
 function statClassOptions() {
-  const keys = hasFilterValue(statState.filters.graduation_cohort_id)
-    ? ['dep_id', 'profession_id']
-    : ['grade_id', 'dep_id', 'profession_id'];
-  return optionItems(filterAcademicItems(statAcademicOptions().classes, statState.filters, keys), 'class_id', 'class_name');
+  return optionItems(filterAcademicClasses(statAcademicOptions(), statState.filters), 'class_id', 'class_name');
 }
 
 async function handleStatFilterChange(key) {
@@ -13710,13 +13715,9 @@ function arrangementDepartmentOptions() {
 
 function arrangementProfessionOptions() {
   const plan = arrangementSelectedPlan();
-  const gradeId = Number(internshipState.arrangementForm.grade_id || 0);
-  const depId = Number(internshipState.arrangementForm.dep_id || 0);
-  return internshipState.options.professions.filter((item) => {
-    const matchGrade = plan?.scope_type === 'cohort' || !gradeId || Number(item.grade_id || 0) === gradeId;
-    const matchDepartment = !depId || Number(item.dep_id || 0) === depId;
-    return matchGrade && matchDepartment;
-  });
+  const values = { ...internshipState.arrangementForm };
+  if (plan?.scope_type === 'cohort') values.grade_id = '';
+  return filterAcademicProfessions(internshipState.options, values);
 }
 
 function arrangementTeacherOptions() {
@@ -13731,19 +13732,15 @@ function arrangementTeacherOptions() {
 
 function arrangementClassOptions() {
   const values = internshipState.arrangementForm;
-  const keys = values.scope_type === 'cohort' ? ['dep_id', 'profession_id'] : ['grade_id', 'dep_id', 'profession_id'];
-  return filterAcademicItems(internshipState.options.classes, values, keys);
+  return filterAcademicClasses(internshipState.options, values.scope_type === 'cohort' ? { ...values, grade_id: '' } : values);
 }
 
 function planProfessionOptions() {
   const category = selectedPlanCategory();
-  return internshipState.options.professions.filter((profession) => {
-    const gradeId = Number(internshipState.planForm.grade_id || 0);
-    const depId = Number(internshipState.planForm.dep_id || 0);
-    const matchGrade = category?.scope_type === 'cohort' || !gradeId || Number(profession.grade_id || 0) === gradeId;
-    const matchDep = !depId || Number(profession.dep_id || 0) === depId;
-    return matchGrade && matchDep;
-  });
+  const values = { ...internshipState.planForm };
+  if (category?.scope_type === 'cohort') values.grade_id = '';
+  return filterAcademicProfessions(internshipState.options, values, { allowLinkedGrades: false })
+    .filter(item => !hasFilterValue(values.grade_id) || sameFilterValue(item.grade_id, values.grade_id));
 }
 
 function handleArrangementGradeChange() {
@@ -13759,10 +13756,11 @@ function handleArrangementProfessionChange() {
   if (!profession) {
     return;
   }
-  internshipState.arrangementForm.dep_id = profession.dep_id || internshipState.arrangementForm.dep_id;
+  internshipState.arrangementForm.dep_id = internshipState.arrangementForm.dep_id || profession.dep_id;
   if (internshipState.arrangementForm.scope_type !== 'cohort') {
-    internshipState.arrangementForm.grade_id = profession.grade_id || internshipState.arrangementForm.grade_id;
+    internshipState.arrangementForm.grade_id = internshipState.arrangementForm.grade_id || profession.grade_id;
   }
+  normalizeArrangementClasses();
 }
 
 function handleArrangementPlanChange() {
@@ -14366,6 +14364,7 @@ function internshipQueryParams(key, page) {
 
 function setInternshipFilter(listKey, event) {
   const values = internshipState.filters[listKey];
+  internshipPanelRequests.delete(listKey);
   values[event.key] = event.value ?? '';
   normalizeFilterCascade(values, internshipState.options, event.key);
   if (listKey === 'plans') {
@@ -14374,6 +14373,7 @@ function setInternshipFilter(listKey, event) {
 }
 
 function resetInternshipFilters(listKey) {
+  internshipPanelRequests.delete(listKey);
   internshipState.filters[listKey] = defaultScopedFilters();
   if (isSyllabusGuidePanel(listKey)) {
     internshipState.filters[listKey].document_type = syllabusGuideDocumentType(listKey);
@@ -15931,8 +15931,16 @@ async function loadInternshipPanel(panel = 'overview', page = 1, forceFoundation
 
   const session = internshipFoundationSessionKey();
   const generation = baseOperationGeneration;
-  const current = () => generation === baseOperationGeneration && session === internshipFoundationSessionKey();
-  const applyPage = (key, data) => { if (current()) setPagedList(key, data); };
+  const revision = ++internshipLoadRequest;
+  const requestTab = activeInternshipRequestTab.value;
+  const listKeys = panel === 'overview' ? ['arrangements', 'applications']
+    : panel === 'scores' ? ['scores', 'pairs', 'courseScores']
+    : panel === 'requests' ? [requestTab]
+    : panel === 'documents' ? ['archiveMaterials'] : [panel];
+  listKeys.forEach(key => internshipPanelRequests.set(key, revision));
+  const sameSession = () => generation === baseOperationGeneration && session === internshipFoundationSessionKey();
+  const current = () => sameSession() && listKeys.some(key => internshipPanelRequests.get(key) === revision);
+  const applyPage = (key, data) => { if (sameSession() && internshipPanelRequests.get(key) === revision) setPagedList(key, data); };
   internshipState.loading = true;
   internshipState.message = '';
   try {
@@ -15972,7 +15980,6 @@ async function loadInternshipPanel(panel = 'overview', page = 1, forceFoundation
     } else if (panel === 'implementationSheets') {
       applyPage('implementationSheets', await fetchInternshipImplementationSheets(params('implementationSheets')));
     } else if (panel === 'requests') {
-      const requestTab = activeInternshipRequestTab.value;
       if (requestTab === 'delays') {
         applyPage('delays', await fetchInternshipDelays(params('delays')));
       } else {
@@ -16013,9 +16020,9 @@ async function loadInternshipPanel(panel = 'overview', page = 1, forceFoundation
       applyPage('safetyLetters', await fetchInternshipSafetyLetters(params('safetyLetters')));
     }
   } catch (error) {
-    if (current()) internshipState.message = error.message;
+    if (sameSession() && listKeys.every(key => internshipPanelRequests.get(key) === revision)) internshipState.message = error.message;
   } finally {
-    if (current()) internshipState.loading = false;
+    if (sameSession() && revision === internshipLoadRequest) internshipState.loading = false;
   }
 }
 
@@ -16767,6 +16774,8 @@ function resetFavoriteState() {
 
 function resetInternshipState() {
   baseOperationGeneration++;
+  internshipLoadRequest++;
+  internshipPanelRequests.clear();
   baseFlowBaseRequest++;
   internshipState.baseStatusSaving = {};
   internshipState.baseSelected = [];
