@@ -1,0 +1,3929 @@
+[
+  {
+    "key": "internship",
+    "module": "internship",
+    "panel": "",
+    "title": "实习管理",
+    "purpose": "按计划与实习任务组织学生、教师及过程材料。",
+    "prerequisites": [
+      "使用有实习查看权限的账号；仅处理本人或授权组织、任务范围。"
+    ],
+    "steps": [
+      {
+        "action": "进入总览，核对当前角色及待处理数量。",
+        "expected": "显示可见任务、绑定及待评记录。",
+        "next": "从左侧进入计划表或实习任务。"
+      },
+      {
+        "action": "按实际阶段选择申请管理、签到记录、日志、报告或归档材料。",
+        "expected": "打开对应记录及当前状态。",
+        "next": "按该菜单说明办理。"
+      }
+    ],
+    "next": [
+      "管理员先核对计划与任务；学生先查看本人任务，需提交签到、日志和报告时使用移动端实习提交页面。"
+    ],
+    "issues": [
+      "看不到学生时先核对任务绑定及学院、专业范围。"
+    ],
+    "capabilities": [
+      "internship.overview",
+      "internship.options"
+    ]
+  },
+  {
+    "key": "practice",
+    "module": "practice",
+    "panel": "",
+    "title": "实验实训管理",
+    "purpose": "完成实验、实训的教学准备、项目实施、评阅与课程归档。",
+    "prerequisites": [
+      "先区分实验与实训，确认任课或学生身份。"
+    ],
+    "steps": [
+      {
+        "action": "从左侧进入开课任务；学生进入我的课程。",
+        "expected": "列出当前角色可见课程。",
+        "next": "定位本次课程。"
+      },
+      {
+        "action": "按教学阶段进入项目与任务、报告评阅、成绩管理或归档中心。",
+        "expected": "显示课程关联资料及处理入口。",
+        "next": "按当前面板步骤办理。"
+      }
+    ],
+    "next": [
+      "先准备开课任务，再安排项目和教学材料。"
+    ],
+    "issues": [
+      "课程缺失时核对教务导入、教师绑定与班级范围。"
+    ],
+    "capabilities": [
+      "practice.overview",
+      "practice.list"
+    ]
+  },
+  {
+    "key": "socialPractice",
+    "module": "socialPractice",
+    "panel": "",
+    "title": "社会实践管理",
+    "purpose": "组织集中或分散实践，跟进安全、签到、成果和归档。",
+    "prerequisites": [
+      "已获社会实践查看权限；参与计划须对本人组织开放。"
+    ],
+    "steps": [
+      {
+        "action": "在总览查看计划、参与学生和待审材料数量。",
+        "expected": "显示当前账号范围内的实践进度。",
+        "next": "进入计划管理核对具体计划。"
+      },
+      {
+        "action": "根据计划模式选择集中实践或分散实践。",
+        "expected": "显示项目或申报记录。",
+        "next": "继续实施申请、安全材料及成果提交。"
+      }
+    ],
+    "next": [
+      "按计划发布、分配或申报、安全确认、实施、成果、评分顺序办理。"
+    ],
+    "issues": [
+      "查不到计划时核对年级、适用范围及发布状态。"
+    ],
+    "capabilities": [
+      "social-practice.overview"
+    ]
+  },
+  {
+    "key": "dataCenter",
+    "module": "dataCenter",
+    "panel": "",
+    "title": "数据管理",
+    "purpose": "集中进入统计、用户、基础档案、基地与教务数据。",
+    "prerequisites": [
+      "当前角色可见数据管理集合；具体页面仍分别校验权限。"
+    ],
+    "steps": [
+      {
+        "action": "在集合中选择统计报表、用户管理或需要维护的档案。",
+        "expected": "打开所选业务窗口。",
+        "next": "按子菜单说明查询或维护。"
+      },
+      {
+        "action": "需要导入教务源数据时进入教务数据。",
+        "expected": "显示批次、业务候选与导入问题。",
+        "next": "核对差异后按页面确认。"
+      }
+    ],
+    "next": [
+      "先维护学院、年级、专业和班级，再核对用户与教学数据关联。"
+    ],
+    "issues": [
+      "集合缺少入口时核对角色权限和组织范围。"
+    ],
+    "capabilities": []
+  },
+  {
+    "key": "auditCenter",
+    "module": "auditCenter",
+    "panel": "",
+    "title": "日志审计",
+    "purpose": "进入操作日志与导出任务，追踪操作和文件生成状态。",
+    "prerequisites": [
+      "具体日志或导出页面需相应查看权限。"
+    ],
+    "steps": [
+      {
+        "action": "选择操作日志，按账号、动作或时间查询。",
+        "expected": "显示匹配的审计记录。",
+        "next": "核对发生时间及请求内容。"
+      },
+      {
+        "action": "选择导出任务，查询本人或授权范围内任务。",
+        "expected": "显示排队、成功或失败状态。",
+        "next": "成功后下载，失败时查看原因。"
+      }
+    ],
+    "next": [
+      "将日志时间与导出任务时间对应后处理异常。"
+    ],
+    "issues": [
+      "没有记录时先扩大日期范围，再核对当前学校和账号。"
+    ],
+    "capabilities": []
+  },
+  {
+    "key": "resourceCenter",
+    "module": "resourceCenter",
+    "panel": "",
+    "title": "资源中心",
+    "purpose": "集中打开文件、文档、模板、插件、收藏和个人记事。",
+    "prerequisites": [
+      "已登录；文件、文档和模板按各自权限展示。"
+    ],
+    "steps": [
+      {
+        "action": "选择文件管理、文档中心或模板库查找材料。",
+        "expected": "打开对应资源列表。",
+        "next": "筛选、预览或下载需要的文件。"
+      },
+      {
+        "action": "选择插件中心、收藏夹或记事本处理个人工作入口。",
+        "expected": "打开受控应用、网址或本人笔记。",
+        "next": "按各页面说明继续。"
+      }
+    ],
+    "next": [
+      "填写业务材料前先在模板库核对用途和版本。"
+    ],
+    "issues": [
+      "入口不可见时核对资源权限；外部应用不可用时核对启用状态。"
+    ],
+    "capabilities": []
+  },
+  {
+    "key": "stat",
+    "module": "stat",
+    "panel": "",
+    "title": "统计报表",
+    "purpose": "查看实习统计和实验实训课程成绩记载表。",
+    "prerequisites": [
+      "具备统计查看权限；报表只汇总当前账号范围。"
+    ],
+    "steps": [
+      {
+        "action": "从左侧选择统计维度。",
+        "expected": "报表标题切换到所选维度。",
+        "next": "设置学期、类别及组织筛选。"
+      },
+      {
+        "action": "点击查询后核对结果；需要留档时点击页面导出入口。",
+        "expected": "显示汇总，或由当前页面生成CSV等下载文件。",
+        "next": "打开下载文件核对列名和筛选范围。"
+      }
+    ],
+    "next": [
+      "需要定位个体材料时返回对应业务记录。"
+    ],
+    "issues": [
+      "空表先检查学期、年级或届次、组织和课程；当前统计页面导出结果按页面下载。"
+    ],
+    "capabilities": []
+  },
+  {
+    "key": "log",
+    "module": "log",
+    "panel": "",
+    "title": "操作日志",
+    "purpose": "按操作者、动作、IP及时间追溯校内操作。",
+    "prerequisites": [
+      "具备日志查看权限；确认正在查看的学校。"
+    ],
+    "steps": [
+      {
+        "action": "填写关键词、动作、IP或日期范围后查询。",
+        "expected": "列表显示符合条件的操作及时间。",
+        "next": "定位目标记录。"
+      },
+      {
+        "action": "查看记录的操作、路径和内容。",
+        "expected": "读取请求摘要与操作者信息。",
+        "next": "与业务记录状态交叉核对。"
+      }
+    ],
+    "next": [
+      "记录异常时间、动作与对象后交管理员处理。"
+    ],
+    "issues": [
+      "无结果时清除多余条件并核对时区；日志本身不替代业务处理结果。"
+    ],
+    "capabilities": []
+  },
+  {
+    "key": "file",
+    "module": "file",
+    "panel": "",
+    "title": "文件管理",
+    "purpose": "查询可见上传文件并预览或下载。",
+    "prerequisites": [
+      "具备文件查看权限；普通账号与管理员读取范围不同。"
+    ],
+    "steps": [
+      {
+        "action": "进入文件列表，按关键词、分类或状态查询。",
+        "expected": "显示文件名、上传人、时间等信息。",
+        "next": "核对目标文件。"
+      },
+      {
+        "action": "使用文件预览或下载入口。",
+        "expected": "打开可访问文件或下载信息。",
+        "next": "返回关联业务填写或核对材料。"
+      }
+    ],
+    "next": [
+      "需修改业务附件时回到对应业务记录。"
+    ],
+    "issues": [
+      "文件打不开时核对文件状态、当前账号及关联业务权限。"
+    ],
+    "capabilities": [
+      "file.list",
+      "file.info",
+      "file.download",
+      "file.relations"
+    ]
+  },
+  {
+    "key": "doc",
+    "module": "doc",
+    "panel": "",
+    "title": "文档中心",
+    "purpose": "阅读制度、流程与帮助文档；有权限者维护分类及文档。",
+    "prerequisites": [
+      "普通账号只能读取已发布且对本角色可见的内容。"
+    ],
+    "steps": [
+      {
+        "action": "选择分类或输入关键词查询，再点击文档。",
+        "expected": "右侧显示正文、版本与浏览信息。",
+        "next": "核对适用角色及版本。"
+      },
+      {
+        "action": "有维护权限时新增或编辑正文、分类、状态与可见角色后保存。",
+        "expected": "列表和版本记录反映保存结果。",
+        "next": "按页面状态管理发布可见性。"
+      }
+    ],
+    "next": [
+      "需要业务操作时按文档进入相关菜单；历史内容通过版本记录核对。"
+    ],
+    "issues": [
+      "普通用户看不到草稿；已有文档编辑与发布请使用页面，CLI仅开放新增草稿。"
+    ],
+    "capabilities": [
+      "doc.categories",
+      "doc.list",
+      "doc.detail",
+      "doc.history",
+      "doc.save",
+      "doc.category.save",
+      "doc.delete"
+    ]
+  },
+  {
+    "key": "templateLib",
+    "module": "templateLib",
+    "panel": "",
+    "title": "模板库",
+    "purpose": "提供流程审核待办、消息模板及材料文件模板。",
+    "prerequisites": [
+      "具备模板查看权限；维护操作要求相应管理权限。"
+    ],
+    "steps": [
+      {
+        "action": "选择流程审核待办/消息模板或材料文件模板。",
+        "expected": "显示该类模板列表。",
+        "next": "按类型、用途、分类或状态筛选。"
+      },
+      {
+        "action": "材料模板可预览下载；管理者可上传文件模板或编辑流程消息模板。",
+        "expected": "得到所需文件，或保存模板配置。",
+        "next": "返回对应材料页面填写或核对消息效果。"
+      }
+    ],
+    "next": [
+      "填写前核对材料用途、适用类型与版本。"
+    ],
+    "issues": [
+      "消息模板为空时先检查启用状态与筛选条件，再联系学校管理员。"
+    ],
+    "capabilities": []
+  },
+  {
+    "key": "exportTask",
+    "module": "exportTask",
+    "panel": "",
+    "title": "导出任务",
+    "purpose": "查看导出队列状态、失败原因并下载生成文件。",
+    "prerequisites": [
+      "具备导出查看权限；创建任务还需创建权限。"
+    ],
+    "steps": [
+      {
+        "action": "按类型、状态或关键词查询任务并刷新。",
+        "expected": "显示任务处理进度和错误原因。",
+        "next": "等待任务成功。"
+      },
+      {
+        "action": "成功后点击下载；可重试的失败任务先核对原因再重试。",
+        "expected": "下载文件，或任务重新进入处理。",
+        "next": "检查导出内容与原筛选范围一致。"
+      }
+    ],
+    "next": [
+      "需新导出时优先从来源业务页面发起。"
+    ],
+    "issues": [
+      "长时间排队联系管理员核对队列；下载失效时刷新任务后重试。"
+    ],
+    "capabilities": []
+  },
+  {
+    "key": "pluginCenter",
+    "module": "pluginCenter",
+    "panel": "",
+    "title": "插件中心",
+    "purpose": "打开学校配置的受控 Web 或 OAuth 应用入口。",
+    "prerequisites": [
+      "已登录；目标应用已启用并对当前账号开放。"
+    ],
+    "steps": [
+      {
+        "action": "在插件列表查找目标应用。",
+        "expected": "显示可访问应用及其说明。",
+        "next": "核对应用用途。"
+      },
+      {
+        "action": "点击应用入口并按页面完成授权或打开。",
+        "expected": "进入应用或显示授权提示。",
+        "next": "在目标应用继续办理。"
+      }
+    ],
+    "next": [
+      "常用网址可通过收藏夹管理桌面快捷入口。"
+    ],
+    "issues": [
+      "无法打开时联系管理员核对应用状态、回调地址及授权范围。"
+    ],
+    "capabilities": []
+  },
+  {
+    "key": "favorite",
+    "module": "favorite",
+    "panel": "",
+    "title": "收藏夹",
+    "purpose": "管理个人网址、共享收藏与桌面快捷方式。",
+    "prerequisites": [
+      "已登录；共享维护权限与个人收藏权限分别校验。"
+    ],
+    "steps": [
+      {
+        "action": "按标题、网址或范围查询，点击收藏打开。",
+        "expected": "按收藏的打开方式访问网址。",
+        "next": "在目标服务继续操作。"
+      },
+      {
+        "action": "新增收藏时填写标题、网址、认证方式与打开方式后保存。",
+        "expected": "收藏出现在列表，可按页面操作加入桌面。",
+        "next": "重新打开核对链接。"
+      }
+    ],
+    "next": [
+      "共享收藏的桌面展示按管理员设置执行。"
+    ],
+    "issues": [
+      "CLI新增仅支持普通个人链接；已有收藏修改、共享和认证配置请在页面办理。"
+    ],
+    "capabilities": [
+      "favorite.list",
+      "favorite.detail",
+      "favorite.save",
+      "favorite.delete"
+    ]
+  },
+  {
+    "key": "notebook",
+    "module": "notebook",
+    "panel": "",
+    "title": "记事本",
+    "purpose": "保存当前账号的 Markdown 备忘录。",
+    "prerequisites": [
+      "已登录当前账号；笔记按所有者隔离。"
+    ],
+    "steps": [
+      {
+        "action": "从列表选择笔记或新建，填写标题和正文。",
+        "expected": "编辑区显示本人笔记内容。",
+        "next": "保存并核对当前修订。"
+      },
+      {
+        "action": "需要找回删除的笔记时进入回收站恢复。",
+        "expected": "笔记回到正常列表。",
+        "next": "重新打开确认内容。"
+      }
+    ],
+    "next": [
+      "继续编辑前读取最新版本，避免覆盖其他端修改。"
+    ],
+    "issues": [
+      "修订冲突时先保留本次内容再重新读取；永久删除未向CLI开放。"
+    ],
+    "capabilities": [
+      "note.list",
+      "note.detail",
+      "note.save",
+      "note.delete",
+      "note.restore"
+    ]
+  },
+  {
+    "key": "releaseNotes",
+    "module": "releaseNotes",
+    "panel": "",
+    "title": "更新说明",
+    "purpose": "阅读学校已发布版本的用户更新说明。",
+    "prerequisites": [
+      "已登录；仅显示对用户发布的版本内容。"
+    ],
+    "steps": [
+      {
+        "action": "进入更新说明，选择需要查看的版本。",
+        "expected": "显示版本及已发布说明。",
+        "next": "核对变更项与当前使用场景。"
+      },
+      {
+        "action": "需要了解历史行为时查看其他已发布版本。",
+        "expected": "显示相应版本内容。",
+        "next": "按当前系统菜单继续操作。"
+      }
+    ],
+    "next": [
+      "安装更新或维护版本需由有权限人员进入版本与更新。"
+    ],
+    "issues": [
+      "没有说明时联系管理员确认版本是否已发布。"
+    ],
+    "capabilities": []
+  },
+  {
+    "key": "userManage",
+    "module": "userManage",
+    "panel": "",
+    "title": "用户管理",
+    "purpose": "查询校内账号、角色、状态与绑定信息。",
+    "prerequisites": [
+      "按当前管理角色和组织范围查询；账号维护仅对有权限人员显示。"
+    ],
+    "steps": [
+      {
+        "action": "按姓名、账号、角色、组织或企业微信状态查询。",
+        "expected": "显示符合当前范围的账号。",
+        "next": "打开绑定信息或操作日志核对身份。"
+      },
+      {
+        "action": "有权限时新增、编辑、导入或重置密码；保存后重新查询。",
+        "expected": "账号字段及状态更新。",
+        "next": "由账号本人核对登录与绑定。"
+      }
+    ],
+    "next": [
+      "学生档案先从教务数据导入，再按页面生成用户。"
+    ],
+    "issues": [
+      "查不到账号先核对角色及组织筛选；涉及其他用户的绑定操作按页面权限处理。"
+    ],
+    "capabilities": []
+  },
+  {
+    "key": "gradeManage",
+    "module": "gradeManage",
+    "panel": "",
+    "title": "年级管理",
+    "purpose": "维护入学年级与当前年级标识。",
+    "prerequisites": [
+      "学校级管理员，具备年级及配置维护权限。"
+    ],
+    "steps": [
+      {
+        "action": "按名称或状态查询年级，选择新增或编辑。",
+        "expected": "表单显示代码、名称、当前年级、排序和状态。",
+        "next": "核对年级信息。"
+      },
+      {
+        "action": "保存后刷新列表，检查当前年级与启用状态。",
+        "expected": "列表反映保存结果。",
+        "next": "继续维护专业和班级。"
+      }
+    ],
+    "next": [
+      "将学生及开课任务关联到正确入学年级。"
+    ],
+    "issues": [
+      "设置当前年级会影响默认筛选；不要把毕业届次当作入学年级。"
+    ],
+    "capabilities": [
+      "archive.list",
+      "archive.save",
+      "archive.delete"
+    ]
+  },
+  {
+    "key": "graduationCohortManage",
+    "module": "graduationCohortManage",
+    "panel": "",
+    "title": "毕业届次管理",
+    "purpose": "维护毕业年份、届次和当前届次。",
+    "prerequisites": [
+      "学校级管理员，具备毕业届次和配置维护权限。"
+    ],
+    "steps": [
+      {
+        "action": "新增或选择届次编辑名称、毕业年份、当前届次和状态。",
+        "expected": "表单显示届次独立字段。",
+        "next": "核对毕业年份。"
+      },
+      {
+        "action": "保存并刷新届次列表。",
+        "expected": "目标届次和当前标识更新。",
+        "next": "在使用届次归属的实习计划中选择。"
+      }
+    ],
+    "next": [
+      "继续核对实习类别使用年级还是届次。"
+    ],
+    "issues": [
+      "缺少届次选项时先确认档案启用状态和类别归属维度。"
+    ],
+    "capabilities": [
+      "archive.list",
+      "archive.save",
+      "archive.delete"
+    ]
+  },
+  {
+    "key": "internshipCategoryManage",
+    "module": "internshipCategoryManage",
+    "panel": "",
+    "title": "实习类别管理",
+    "purpose": "配置实习类别代码及年级或毕业届次归属。",
+    "prerequisites": [
+      "学校级管理员，具备实习类别和配置维护权限。"
+    ],
+    "steps": [
+      {
+        "action": "新增或编辑类别，填写名称、代码和归属维度。",
+        "expected": "显示年级或届次的维度选择。",
+        "next": "核对该类别实际使用方式。"
+      },
+      {
+        "action": "保存类别后检查排序与启用状态。",
+        "expected": "类别可供计划选择。",
+        "next": "按选定维度创建或核对实习计划。"
+      }
+    ],
+    "next": [
+      "已有计划引用类别时先查看关联情况再调整。"
+    ],
+    "issues": [
+      "代码须符合页面规则；被计划使用的类别不能直接删除。"
+    ],
+    "capabilities": [
+      "archive.list",
+      "archive.save",
+      "archive.delete"
+    ]
+  },
+  {
+    "key": "departmentManage",
+    "module": "departmentManage",
+    "panel": "",
+    "title": "学院管理",
+    "purpose": "维护学院名称、简称、代码、排序和状态。",
+    "prerequisites": [
+      "学校级管理员，具备学院和配置维护权限。"
+    ],
+    "steps": [
+      {
+        "action": "查询学院并选择新增或编辑。",
+        "expected": "打开学院档案表单。",
+        "next": "填写或核对名称与代码。"
+      },
+      {
+        "action": "保存后刷新并检查状态。",
+        "expected": "学院出现在可用档案中。",
+        "next": "继续关联专业、教师与组织范围。"
+      }
+    ],
+    "next": [
+      "学院准备好后维护所属专业。"
+    ],
+    "issues": [
+      "学院缺失时检查停用筛选；名称修订后核对已有档案关联。"
+    ],
+    "capabilities": [
+      "archive.list",
+      "archive.save",
+      "archive.delete"
+    ]
+  },
+  {
+    "key": "professionManage",
+    "module": "professionManage",
+    "panel": "",
+    "title": "专业管理",
+    "purpose": "维护专业及所属年级、学院，支持页面提供的 Excel 导入。",
+    "prerequisites": [
+      "学院和年级档案已准备；学校级管理员具备维护权限。"
+    ],
+    "steps": [
+      {
+        "action": "新增或编辑专业，先选年级和学院，再填名称、简称、代码。",
+        "expected": "专业归属明确。",
+        "next": "保存并核对列表。"
+      },
+      {
+        "action": "批量录入时下载模板，上传并核对预览后确认导入。",
+        "expected": "页面显示导入结果和错误行。",
+        "next": "检查专业归属后继续维护班级。"
+      }
+    ],
+    "next": [
+      "将班级和学生关联到正确专业。"
+    ],
+    "issues": [
+      "导入学院无法匹配时先维护已有学院；错误行修正后重新预览。"
+    ],
+    "capabilities": [
+      "archive.list",
+      "archive.save",
+      "archive.delete",
+      "archive.import",
+      "archive.profession.import"
+    ]
+  },
+  {
+    "key": "classManage",
+    "module": "classManage",
+    "panel": "",
+    "title": "班级管理",
+    "purpose": "维护班级名称、人数及所属年级、学院、专业。",
+    "prerequisites": [
+      "对应年级、学院和专业已存在；学校级管理员具备维护权限。"
+    ],
+    "steps": [
+      {
+        "action": "新增或选择班级编辑，按级联顺序选择组织归属。",
+        "expected": "可选专业与上级组织对应。",
+        "next": "填写班级名称等字段。"
+      },
+      {
+        "action": "保存或按页面导入 Excel 后刷新列表。",
+        "expected": "班级资料显示最新结果。",
+        "next": "核对学生档案所属班级。"
+      }
+    ],
+    "next": [
+      "在用户或教务数据中核对学生班级映射。"
+    ],
+    "issues": [
+      "选不到专业时核对年级和学院；导入报错时按错误行修正。"
+    ],
+    "capabilities": [
+      "archive.list",
+      "archive.save",
+      "archive.delete",
+      "archive.import"
+    ]
+  },
+  {
+    "key": "expenseManage",
+    "module": "expenseManage",
+    "panel": "",
+    "title": "经费管理",
+    "purpose": "填写基地建设费用申请并跟进既有审批流程。",
+    "prerequisites": [
+      "具备经费查看权限；新建、提交与审批入口按账号权限显示。"
+    ],
+    "steps": [
+      {
+        "action": "点击新建申请，选择基地并填写建设项目、金额及相关资料。",
+        "expected": "形成费用申请。",
+        "next": "保存后核对明细与总金额。"
+      },
+      {
+        "action": "提交前查看审批流程；处理者从详情核对金额与当前节点后办理。",
+        "expected": "申请状态随原流程变化。",
+        "next": "查看详情和流程记录。"
+      }
+    ],
+    "next": [
+      "按流程反馈补齐申请或等待后续节点。"
+    ],
+    "issues": [
+      "未出现提交或审批按钮时核对当前状态与节点；CLI尚未开放此菜单。"
+    ],
+    "capabilities": []
+  },
+  {
+    "key": "companyManage",
+    "module": "companyManage",
+    "panel": "",
+    "title": "基地管理",
+    "purpose": "管理基地申报、审批、巡查、走访与实习流量。",
+    "prerequisites": [
+      "管理员具备实习查看权限；维护动作仍受组织范围约束。"
+    ],
+    "steps": [
+      {
+        "action": "从左侧选择基地申报或基地审批，核对基地资料。",
+        "expected": "显示当前范围内的基地。",
+        "next": "完成资料维护或查看审批状态。"
+      },
+      {
+        "action": "选择基地巡查、走访记录或基地统计。",
+        "expected": "打开安排、记录或实习流量页面。",
+        "next": "按对应菜单处理。"
+      }
+    ],
+    "next": [
+      "基地资料齐备后再用于任务、巡查或费用申请。"
+    ],
+    "issues": [
+      "查不到基地时核对学院、专业、基地状态及关键词。"
+    ],
+    "capabilities": [
+      "internship.bases",
+      "internship.base.detail"
+    ]
+  },
+  {
+    "key": "baseVisits",
+    "module": "baseVisits",
+    "panel": "",
+    "title": "基地巡查",
+    "purpose": "安排基地走访人员、填写走访时间和记录。",
+    "prerequisites": [
+      "具备基地巡查查看权限；分配、填时间、填记录由页面权限决定。"
+    ],
+    "steps": [
+      {
+        "action": "按基地、教师、学院、日期或状态查询；有分配权限者新增安排。",
+        "expected": "显示参加人员、负责人和待填时间状态。",
+        "next": "由有权限人员填写走访时间。"
+      },
+      {
+        "action": "走访后填写内容、发现问题、后续措施及附件。",
+        "expected": "安排显示已完成并保留走访记录。",
+        "next": "到走访记录核对。"
+      }
+    ],
+    "next": [
+      "按记录中的后续措施跟进问题。"
+    ],
+    "issues": [
+      "时间冲突时检查冲突提示并调整；选不到人员时输入姓名或单位搜索。"
+    ],
+    "capabilities": []
+  },
+  {
+    "key": "baseVisitRecords",
+    "module": "baseVisitRecords",
+    "panel": "",
+    "title": "走访记录",
+    "purpose": "查询既有基地巡查产生的走访内容和附件。",
+    "prerequisites": [
+      "具备走访记录查看权限；修正入口由当前记录权限决定。"
+    ],
+    "steps": [
+      {
+        "action": "按基地、教师或日期等页面条件查询记录。",
+        "expected": "列表显示走访及关联基地。",
+        "next": "打开目标记录详情。"
+      },
+      {
+        "action": "核对走访内容、问题、后续措施和附件；允许修正时使用页面入口。",
+        "expected": "显示保存结果或原记录资料。",
+        "next": "继续跟进后续措施。"
+      }
+    ],
+    "next": [
+      "需要新安排时进入基地巡查。"
+    ],
+    "issues": [
+      "记录为空时先确认巡查已填写记录；没有编辑入口时核对本人身份和记录权限。"
+    ],
+    "capabilities": []
+  },
+  {
+    "key": "eduData",
+    "module": "eduData",
+    "panel": "",
+    "title": "教务数据",
+    "purpose": "分批导入学生、课程计划和开课情况，核对差异及生成业务候选。",
+    "prerequisites": [
+      "具备教务数据查看权限；上传、确认、问题处理分别要求对应权限。"
+    ],
+    "steps": [
+      {
+        "action": "下载对应模板后上传；开课数据先选择所属学年学期。",
+        "expected": "导入批次显示解析、校验和问题数量。",
+        "next": "查看批次详情的差异与问题。"
+      },
+      {
+        "action": "确认无误后发布批次；在业务候选核对分类和映射，再选择生成业务草稿。",
+        "expected": "源数据发布并生成所选候选草稿。",
+        "next": "到相应业务模块继续核对和提交。"
+      }
+    ],
+    "next": [
+      "学生档案发布后，学校级管理员可按页面一键导入用户。"
+    ],
+    "issues": [
+      "解析失败先看问题行；部分发布失败使用继续发布；候选待分类或映射失败时先纠正再生成。"
+    ],
+    "capabilities": []
+  },
+  {
+    "key": "dataManage",
+    "module": "dataManage",
+    "panel": "",
+    "title": "测试数据清理",
+    "purpose": "在测试环境提交异步业务数据清理，保留角色、菜单、基础档案、流程及系统配置。",
+    "prerequisites": [
+      "仅超级管理员且服务端APP_MODE为test时允许提交；先核对页面列出的清理影响。"
+    ],
+    "steps": [
+      {
+        "action": "读取清理说明，选择需要清理的项目并核对影响范围。",
+        "expected": "页面显示当前选择和确认要求。",
+        "next": "确认确属需清理的数据。"
+      },
+      {
+        "action": "按页面确认步骤执行并读取返回结果。",
+        "expected": "页面报告执行结果。",
+        "next": "重新进入相关业务核对剩余数据。"
+      }
+    ],
+    "next": [
+      "异常时记录清理项目、时间与错误交管理员处理。"
+    ],
+    "issues": [
+      "正式环境由服务端禁止执行；CLI未开放此清理功能。",
+      "清理会涉及账号、用户业务数据、消息、文件记录与操作日志；教务导入数据默认保留。"
+    ],
+    "capabilities": []
+  },
+  {
+    "key": "config",
+    "module": "config",
+    "panel": "",
+    "title": "系统配置",
+    "purpose": "进入学校设置、授权、审批、菜单、角色与组织范围维护。",
+    "prerequisites": [
+      "侧栏仅显示当前角色获准进入的配置；各保存动作另有权限校验。"
+    ],
+    "steps": [
+      {
+        "action": "从左侧选择需要维护的配置项。",
+        "expected": "打开对应设置页面。",
+        "next": "先读取现有值。"
+      },
+      {
+        "action": "按具体配置说明核对并保存。",
+        "expected": "页面提示保存或发布结果。",
+        "next": "到关联业务页面核对实际结果。"
+      }
+    ],
+    "next": [
+      "账号可做什么由角色权限、组织范围与具体业务状态共同决定。"
+    ],
+    "issues": [
+      "没有保存入口时检查学校级身份和配置权限；CLI任意系统配置仍关闭。"
+    ],
+    "capabilities": []
+  },
+  {
+    "key": "profile",
+    "module": "profile",
+    "panel": "",
+    "title": "个人设置",
+    "purpose": "维护本人资料、设备外观、账号安全、通知及签名。",
+    "prerequisites": [
+      "已登录；桌面专属项目只在桌面客户端显示。"
+    ],
+    "steps": [
+      {
+        "action": "选择左侧基本资料、主题与壁纸、账号与安全等分类。",
+        "expected": "右侧显示当前分类设置。",
+        "next": "读取当前值。"
+      },
+      {
+        "action": "按该分类的保存或立即应用入口更新设置。",
+        "expected": "页面反馈结果。",
+        "next": "重新读取或查看实际显示。"
+      }
+    ],
+    "next": [
+      "消息接收异常时先核对通知偏好和企业微信绑定。"
+    ],
+    "issues": [
+      "学校标识与默认壁纸由系统配置中的学校设置维护。"
+    ],
+    "capabilities": []
+  },
+  {
+    "key": "message",
+    "module": "message",
+    "panel": "",
+    "title": "消息中心",
+    "purpose": "查看站内消息与业务待办，并按权限发送通知。",
+    "prerequisites": [
+      "已登录；发送、模板维护仅对有权限账号显示。"
+    ],
+    "steps": [
+      {
+        "action": "按类型、已读状态、关键词筛选消息，打开详情。",
+        "expected": "显示消息内容并更新读取状态。",
+        "next": "核对关联业务链接。"
+      },
+      {
+        "action": "需处理业务时进入待办或关联记录，先读内容再办理。",
+        "expected": "打开当前账号有权限的业务页面。",
+        "next": "回到消息中心核对后续结果通知。"
+      }
+    ],
+    "next": [
+      "发送通知前在页面核对接收范围、内容与渠道。"
+    ],
+    "issues": [
+      "消息存在不代表业务已完成；渠道未投递时核对个人偏好、绑定和学校设置。"
+    ],
+    "capabilities": []
+  },
+  {
+    "key": "internship.overview",
+    "module": "internship",
+    "panel": "overview",
+    "title": "实习总览",
+    "purpose": "汇总可见任务、绑定、待评日志和申请。",
+    "prerequisites": [
+      "具备实习查看权限。"
+    ],
+    "steps": [
+      {
+        "action": "在总览切换当前可见的汇总标签。",
+        "expected": "展示对应进度或指标。",
+        "next": "定位需要跟进的环节。"
+      },
+      {
+        "action": "进入侧栏相应业务菜单查询具体记录。",
+        "expected": "查看明细和当前状态。",
+        "next": "按记录可用操作处理。"
+      }
+    ],
+    "next": [
+      "先排查未绑定任务和待处理材料。"
+    ],
+    "issues": [
+      "汇总与预期不一致时核对当前组织和任务范围。"
+    ],
+    "capabilities": [
+      "internship.overview"
+    ]
+  },
+  {
+    "key": "internship.plans",
+    "module": "internship",
+    "panel": "plans",
+    "title": "计划表",
+    "purpose": "维护实习课程计划并提交既有审核流程。",
+    "prerequisites": [
+      "管理员具备实习计划权限；实习类别及相应年级或届次已配置。"
+    ],
+    "steps": [
+      {
+        "action": "查询计划；新增或编辑时选择类别、归属、学院、专业和课程内容。",
+        "expected": "草稿保存并列入计划表。",
+        "next": "检查课程名称、学分和成绩规则。"
+      },
+      {
+        "action": "资料齐备后提交审核；批量导入先下载模板、预览并确认行。",
+        "expected": "计划进入原审核节点或显示逐行导入结果。",
+        "next": "查看记录及实习任务关联。"
+      }
+    ],
+    "next": [
+      "审核人员按当前节点办理；审核通过后继续安排任务。"
+    ],
+    "issues": [
+      "类别决定使用年级或届次；导入错误行修正后重新预览，不能把保存草稿当成审核通过。"
+    ],
+    "capabilities": [
+      "internship.plans",
+      "internship.plan.save",
+      "internship.plan.submit",
+      "internship.plan.review",
+      "internship.plan.import",
+      "internship.plan.delete"
+    ]
+  },
+  {
+    "key": "internship.educationPlanSync",
+    "module": "internship",
+    "panel": "educationPlanSync",
+    "title": "教务计划同步",
+    "purpose": "读取教务计划来源并按页面规则同步实习计划候选。",
+    "prerequisites": [
+      "具备实习计划权限；配置入口仅对学校级管理员显示。"
+    ],
+    "steps": [
+      {
+        "action": "学校级管理员核对拉取地址、应用编号及密钥后按页面保存；有权限者拉取教学计划。",
+        "expected": "计划接收箱显示待接收、已生成与已忽略记录。",
+        "next": "筛选待接收课程。"
+      },
+      {
+        "action": "点击查看差异，核对组织映射；已匹配记录点击确认生成，不需要的记录填写原因后忽略。",
+        "expected": "显示本地计划生成或忽略结果。",
+        "next": "到计划表复核。"
+      }
+    ],
+    "next": [
+      "计划核对后再进入原提交审核流程。"
+    ],
+    "issues": [
+      "映射未匹配时确认生成不可用，先维护组织映射；此同步功能未向CLI开放。"
+    ],
+    "capabilities": []
+  },
+  {
+    "key": "internship.implementationSheets",
+    "module": "internship",
+    "panel": "implementationSheets",
+    "title": "实习实施",
+    "purpose": "查看任务对应的实施资料并处理当前审核节点。",
+    "prerequisites": [
+      "实习任务已有实施资料；当前账号在任务或审批范围内。"
+    ],
+    "steps": [
+      {
+        "action": "按任务、组织和状态查询，点击查看实施。",
+        "expected": "显示本任务实施资料与材料。",
+        "next": "核对安排及提交内容。"
+      },
+      {
+        "action": "出现通过或退回入口时按当前节点填写意见并确认。",
+        "expected": "页面更新实施资料状态。",
+        "next": "继续查看流程记录及任务执行。"
+      }
+    ],
+    "next": [
+      "退回的资料由提交方修订后重新提交。"
+    ],
+    "issues": [
+      "无法审核时检查资料状态与审批人；CLI只开放按任务读取实施资料。"
+    ],
+    "capabilities": [
+      "internship.implementation.detail"
+    ]
+  },
+  {
+    "key": "internship.arrangements",
+    "module": "internship",
+    "panel": "arrangements",
+    "title": "实习任务",
+    "purpose": "查看课程计划下的任务、时间、组织范围与学生绑定。",
+    "prerequisites": [
+      "已建立对应实习计划；当前账号可见该任务。"
+    ],
+    "steps": [
+      {
+        "action": "按计划、任务、学院或状态查询，打开任务详情。",
+        "expected": "显示任务时间、教师和绑定信息。",
+        "next": "核对本人或待管理学生是否已绑定。"
+      },
+      {
+        "action": "有维护权限时使用页面提供的任务、绑定或变更入口。",
+        "expected": "任务或关系在保存后更新。",
+        "next": "通知相关人员按任务提交材料。"
+      }
+    ],
+    "next": [
+      "学生核对任务后进入申请管理或过程材料菜单。"
+    ],
+    "issues": [
+      "学生缺失时检查任务级绑定；解除绑定前核对关联学生和影响。"
+    ],
+    "capabilities": [
+      "internship.arrangements",
+      "internship.arrangement.detail",
+      "internship.arrangement.changes",
+      "internship.pairs",
+      "internship.pair.delete"
+    ]
+  },
+  {
+    "key": "internship.syllabuses",
+    "module": "internship",
+    "panel": "syllabuses",
+    "title": "实习大纲",
+    "purpose": "维护或阅读实习教学大纲及关联附件。",
+    "prerequisites": [
+      "具有实习查看权限；新增编辑入口要求实习管理权限。"
+    ],
+    "steps": [
+      {
+        "action": "按计划及组织查询，点击查看大纲。",
+        "expected": "显示正文与附件。",
+        "next": "核对适用计划。"
+      },
+      {
+        "action": "有管理权限时新增或编辑大纲，选择关联计划并保存。",
+        "expected": "列表反映大纲内容。",
+        "next": "通过记录核对历史后供师生使用。"
+      }
+    ],
+    "next": [
+      "继续准备实习指导书与实施材料。"
+    ],
+    "issues": [
+      "附件缺失时核对上传结果与关联计划；CLI未开放大纲专属维护。"
+    ],
+    "capabilities": []
+  },
+  {
+    "key": "internship.guides",
+    "module": "internship",
+    "panel": "guides",
+    "title": "实习指导书",
+    "purpose": "为实习任务提供指导内容与附件。",
+    "prerequisites": [
+      "具有实习查看权限；维护时需实习管理权限。"
+    ],
+    "steps": [
+      {
+        "action": "筛选目标计划并打开指导书查看。",
+        "expected": "显示指导正文及文件。",
+        "next": "确认适用课程或任务。"
+      },
+      {
+        "action": "管理者按新增或编辑入口维护内容并保存。",
+        "expected": "指导书记录更新。",
+        "next": "通过记录核对修改并供相关师生阅读。"
+      }
+    ],
+    "next": [
+      "按指导要求完成日志、报告和材料。"
+    ],
+    "issues": [
+      "看不到资料先检查计划筛选与可见范围；CLI未开放指导书维护。"
+    ],
+    "capabilities": []
+  },
+  {
+    "key": "internship.signIns",
+    "module": "internship",
+    "panel": "signIns",
+    "title": "签到记录",
+    "purpose": "查看学生在实习任务中的签到时间、方式、位置及记录。",
+    "prerequisites": [
+      "学生已有有效任务绑定；其他角色只查看授权范围。"
+    ],
+    "steps": [
+      {
+        "action": "按任务、学生或日期等条件查询；学生查看本人的签到卡片。",
+        "expected": "显示已存在的签到日期、时间、方式和位置。",
+        "next": "核对缺失日期及任务。"
+      },
+      {
+        "action": "点击记录，查看签到流程或操作记录。",
+        "expected": "显示既有记录及状态。",
+        "next": "需新增签到时使用移动端实习提交中的签到入口。"
+      }
+    ],
+    "next": [
+      "学生在移动端获取定位后提交签到，再返回此处刷新核对。"
+    ],
+    "issues": [
+      "当前PC签到菜单提供查询与记录查看，没有新增签到表单。",
+      "无任务可选时检查绑定；签到提交CLI尚未开放。"
+    ],
+    "capabilities": [
+      "internship.sign-ins"
+    ]
+  },
+  {
+    "key": "internship.journals",
+    "module": "internship",
+    "panel": "journals",
+    "title": "实习日志",
+    "purpose": "查看实习日志和评阅状态，教师按当前节点评阅。",
+    "prerequisites": [
+      "学生绑定目标任务；评阅人员在任务或管理范围内。"
+    ],
+    "steps": [
+      {
+        "action": "查询日志；学生查看本人日志卡片，教师或管理员可点击查看正文与附件。",
+        "expected": "显示已有日志内容或概况及状态。",
+        "next": "核对所属任务和提交时间。"
+      },
+      {
+        "action": "有评阅权限者点击通过或退回，填写意见；学生需要新增或修订时使用移动端实习日志表单。",
+        "expected": "页面显示处理结果与记录。",
+        "next": "学生按退回意见修改后重新提交。"
+      }
+    ],
+    "next": [
+      "按任务要求持续填写日志，之后完成实习报告。"
+    ],
+    "issues": [
+      "当前PC学生日志页面只提供查看、刷新和记录入口；填写与修改在移动端完成。",
+      "已通过后的修改按原流程办理；CLI仅开放实习日志查询。"
+    ],
+    "capabilities": [
+      "internship.journals"
+    ]
+  },
+  {
+    "key": "internship.reports",
+    "module": "internship",
+    "panel": "reports",
+    "title": "实习报告",
+    "purpose": "查看实习报告及评阅状态，教师按当前节点处理报告。",
+    "prerequisites": [
+      "目标学生已绑定实习任务；报告内容按当前页面要求填写。"
+    ],
+    "steps": [
+      {
+        "action": "查询报告；学生查看本人报告卡片，教师或管理员点击查看正文和附件。",
+        "expected": "显示已有报告资料与当前状态。",
+        "next": "核对内容完整性。"
+      },
+      {
+        "action": "有权限者在可处理状态通过或退回并填写意见；学生提交或修订报告使用移动端实习报告表单。",
+        "expected": "报告状态和记录更新。",
+        "next": "按反馈修订或继续成绩管理。"
+      }
+    ],
+    "next": [
+      "报告完成后核对归档材料清单。"
+    ],
+    "issues": [
+      "当前PC学生报告页面没有填写表单；提交和修改从移动端办理。",
+      "无法评阅时检查任务范围与报告状态；CLI仅开放实习报告查询。"
+    ],
+    "capabilities": [
+      "internship.reports"
+    ]
+  },
+  {
+    "key": "internship.studentChanges",
+    "module": "internship",
+    "panel": "studentChanges",
+    "title": "实习资料变更",
+    "purpose": "处理学生实习相关资料的变更申请。",
+    "prerequisites": [
+      "学生已有可变更的任务资料；审核者具备对应处理权限。"
+    ],
+    "steps": [
+      {
+        "action": "查询资料变更记录，打开目标申请。",
+        "expected": "显示变更内容与当前状态。",
+        "next": "对照原资料核对。"
+      },
+      {
+        "action": "按页面可用的新建、提交或审核入口办理并填写原因。",
+        "expected": "页面显示申请处理结果。",
+        "next": "回到学生任务核对生效资料。"
+      }
+    ],
+    "next": [
+      "退回时根据具体意见补充资料再提交。"
+    ],
+    "issues": [
+      "申请处理和最终资料生效以页面状态为准；CLI未开放此菜单。"
+    ],
+    "capabilities": []
+  },
+  {
+    "key": "internship.enterpriseEvaluations",
+    "module": "internship",
+    "panel": "enterpriseEvaluations",
+    "title": "企业评价",
+    "purpose": "查看和管理实习企业评价记录及相关配置。",
+    "prerequisites": [
+      "当前账号可见目标任务；配置仅学校级管理员可见。"
+    ],
+    "steps": [
+      {
+        "action": "按任务、学生或页面筛选条件查询评价。",
+        "expected": "显示可见企业评价记录。",
+        "next": "打开详情核对评价对象。"
+      },
+      {
+        "action": "有管理权限时使用页面提供的维护或配置入口。",
+        "expected": "保存后刷新记录状态。",
+        "next": "到成绩管理核对相应评价资料。"
+      }
+    ],
+    "next": [
+      "评价完成后继续核对任务成绩。"
+    ],
+    "issues": [
+      "没有评价或维护入口时核对关联企业、任务和角色；CLI未开放此菜单。"
+    ],
+    "capabilities": []
+  },
+  {
+    "key": "internship.requests",
+    "module": "internship",
+    "panel": "requests",
+    "title": "申请管理",
+    "purpose": "集中处理实习方式申请与延期申请。",
+    "prerequisites": [
+      "学生绑定目标任务；审核入口依角色、状态和节点显示。"
+    ],
+    "steps": [
+      {
+        "action": "切换实习方式申请或延期申请，按学生、任务及状态查询。",
+        "expected": "显示各自独立的申请记录。",
+        "next": "打开记录核对内容。"
+      },
+      {
+        "action": "有审核权限者按当前节点通过或退回并填写意见；学生需要新建时使用移动端申请或提交入口。",
+        "expected": "记录显示审核结果和意见。",
+        "next": "按反馈修订并重新提交。"
+      }
+    ],
+    "next": [
+      "申请办理后回到任务与截止日期核对实际状态。"
+    ],
+    "issues": [
+      "PC学生申请管理仅展示已有记录和状态；方式申请通过移动端任务申请，延期通过移动端提交页面办理。",
+      "延期提交与审核尚未向CLI开放，不能用方式申请能力代办延期。"
+    ],
+    "capabilities": [
+      "internship.applications",
+      "internship.application.save",
+      "internship.application.submit",
+      "internship.application.review",
+      "internship.delays"
+    ]
+  },
+  {
+    "key": "internship.teacherWorkReports",
+    "module": "internship",
+    "panel": "teacherWorkReports",
+    "title": "教师工作报告",
+    "purpose": "查看任务教师工作报告和流程记录。",
+    "prerequisites": [
+      "当前账号对目标计划或任务具有读取权限。"
+    ],
+    "steps": [
+      {
+        "action": "按任务、教师或组织筛选报告。",
+        "expected": "列出当前范围内工作报告。",
+        "next": "打开正文与附件。"
+      },
+      {
+        "action": "核对报告内容并查看页面提供的记录。",
+        "expected": "显示历史提交及处理信息。",
+        "next": "根据记录跟进缺失或退回事项。"
+      }
+    ],
+    "next": [
+      "需要补充时由对应教师通过可用业务入口办理。"
+    ],
+    "issues": [
+      "本列表无维护入口时按页面权限处理；CLI未开放此报告专属能力。"
+    ],
+    "capabilities": []
+  },
+  {
+    "key": "internship.scores",
+    "module": "internship",
+    "panel": "scores",
+    "title": "成绩管理",
+    "purpose": "查看或维护学生实习任务成绩与分项分数。",
+    "prerequisites": [
+      "学生有有效任务；成绩保存入口要求评分或管理权限。"
+    ],
+    "steps": [
+      {
+        "action": "按学生和任务查询成绩，打开可编辑记录。",
+        "expected": "显示签到、日志、报告、企业等分项。",
+        "next": "对照评分资料核对。"
+      },
+      {
+        "action": "有权限者填写成绩并保存，重新查询确认结果。",
+        "expected": "任务总评及分项显示最新值。",
+        "next": "进入课程成绩核对汇总。"
+      }
+    ],
+    "next": [
+      "成绩确认后补齐归档材料。"
+    ],
+    "issues": [
+      "没有可选学生时检查任务绑定；CLI未开放成绩保存。"
+    ],
+    "capabilities": [
+      "internship.scores"
+    ]
+  },
+  {
+    "key": "internship.courseScores",
+    "module": "internship",
+    "panel": "courseScores",
+    "title": "课程成绩",
+    "purpose": "按课程计划汇总多任务成绩并处理页面允许的人工核定。",
+    "prerequisites": [
+      "课程计划已有学生任务及成绩；按当前角色查看。"
+    ],
+    "steps": [
+      {
+        "action": "筛选课程、学生或组织，核对任务数、已评分数与汇总状态。",
+        "expected": "显示课程汇总成绩和各任务成绩。",
+        "next": "定位缺少评分的任务。"
+      },
+      {
+        "action": "人工核定入口可用时按规则填写成绩和说明并保存。",
+        "expected": "显示核定值、说明和操作人。",
+        "next": "复核课程总分。"
+      }
+    ],
+    "next": [
+      "回到成绩管理补齐未评分任务，再核对课程汇总。"
+    ],
+    "issues": [
+      "汇总不完整先检查任务评分；CLI仅开放读取。"
+    ],
+    "capabilities": [
+      "internship.course-scores"
+    ]
+  },
+  {
+    "key": "internship.inspections",
+    "module": "internship",
+    "panel": "inspections",
+    "title": "巡查记录",
+    "purpose": "查看实习过程巡查结果及相关记录。",
+    "prerequisites": [
+      "具备实习归档查看权限并处于授权组织范围。"
+    ],
+    "steps": [
+      {
+        "action": "按任务、学生或页面条件筛选巡查。",
+        "expected": "显示巡查时间、结果等记录。",
+        "next": "选择目标记录。"
+      },
+      {
+        "action": "使用页面提供的查看或记录入口核对内容。",
+        "expected": "读取巡查事实及历史信息。",
+        "next": "跟进异常结果。"
+      }
+    ],
+    "next": [
+      "基地走访安排请进入基地巡查。"
+    ],
+    "issues": [
+      "区分实习过程巡查与基地走访；此菜单未向CLI开放。"
+    ],
+    "capabilities": []
+  },
+  {
+    "key": "internship.documents",
+    "module": "internship",
+    "panel": "documents",
+    "title": "归档材料",
+    "purpose": "按计划查看分层档案、材料要求与缺失项。",
+    "prerequisites": [
+      "具备实习查看权限；材料要求维护仅学校级归档管理员可用。"
+    ],
+    "steps": [
+      {
+        "action": "按计划和组织查询，查看归档进度及缺失材料。",
+        "expected": "列表显示计划归档完整情况。",
+        "next": "点击查看档案。"
+      },
+      {
+        "action": "在档案详情核对各层材料和历史；有权限者可打开材料要求维护必交项。",
+        "expected": "显示材料版本或保存后的要求。",
+        "next": "回到对应提交入口补齐缺项。"
+      }
+    ],
+    "next": [
+      "补齐后重新查看档案完整性。"
+    ],
+    "issues": [
+      "材料要求保存使用完整清单；未包含的旧项可能改为非必需，先读取现值再维护。"
+    ],
+    "capabilities": [
+      "internship.archive.materials",
+      "internship.archive.detail",
+      "internship.archive.history",
+      "internship.archive.requirements",
+      "internship.archive.requirements.save"
+    ]
+  },
+  {
+    "key": "practice.overview",
+    "module": "practice",
+    "panel": "overview",
+    "title": "实验实训总览",
+    "purpose": "查看教学任务、项目、报告和归档进度。",
+    "prerequisites": [
+      "当前角色具有实验实训查看权限。"
+    ],
+    "steps": [
+      {
+        "action": "选择实验或实训类别并刷新。",
+        "expected": "显示本类别及账号范围内汇总。",
+        "next": "识别待准备或待评阅事项。"
+      },
+      {
+        "action": "从左侧进入相应教学环节。",
+        "expected": "打开该环节明细。",
+        "next": "按课程定位记录。"
+      }
+    ],
+    "next": [
+      "教学准备从开课任务开始。"
+    ],
+    "issues": [
+      "总数偏差先核对类别和任课、组织范围。"
+    ],
+    "capabilities": [
+      "practice.overview"
+    ]
+  },
+  {
+    "key": "practice.plans",
+    "module": "practice",
+    "panel": "plans",
+    "title": "开课任务 / 我的课程",
+    "purpose": "维护开课任务，学生查看本人课程及任务要求。",
+    "prerequisites": [
+      "课程组织档案已准备；学生只查看关联课程。"
+    ],
+    "steps": [
+      {
+        "action": "按类别、课程或组织查询开课任务。",
+        "expected": "显示本人可见课程及状态。",
+        "next": "打开课程核对教师和班级。"
+      },
+      {
+        "action": "管理员按可用入口维护开课草稿并提交；教师查看任课课程，学生阅读本人课程要求。",
+        "expected": "显示课程关联资料及当前审核状态。",
+        "next": "按课程准备项目和教学资料。"
+      }
+    ],
+    "next": [
+      "管理人员核对教师绑定后进入项目与任务。"
+    ],
+    "issues": [
+      "课程不见时核对教务来源与教师、班级关联；保存不等于通过审核。",
+      "教师的开课任务列表不提供新增和编辑课程；需管理员维护及核对任课教师绑定。"
+    ],
+    "capabilities": [
+      "practice.list",
+      "practice.plan-teachers",
+      "practice.save",
+      "practice.submit",
+      "practice.review"
+    ]
+  },
+  {
+    "key": "practice.schedules",
+    "module": "practice",
+    "panel": "schedules",
+    "title": "课表安排",
+    "purpose": "按周或列表维护课程的时间、课节和场地。",
+    "prerequisites": [
+      "课节配置和场地档案已准备；具备课表维护权限。"
+    ],
+    "steps": [
+      {
+        "action": "周视图先选择年级、学院、专业，再切换周次或回到本周。",
+        "expected": "课表显示该专业本周安排。",
+        "next": "核对教师和场地时间。"
+      },
+      {
+        "action": "用新增或空课表时段入口填写安排；也可切换列表查询。",
+        "expected": "保存后课表与列表反映安排。",
+        "next": "核对冲突及课程关联。"
+      }
+    ],
+    "next": [
+      "按安排开展项目实施。"
+    ],
+    "issues": [
+      "未选年级、学院、专业时周视图不会加载；维护尚未开放CLI。"
+    ],
+    "capabilities": [
+      "practice.list",
+      "practice.schedule-week"
+    ]
+  },
+  {
+    "key": "practice.projects",
+    "module": "practice",
+    "panel": "projects",
+    "title": "项目与任务 / 我的项目",
+    "purpose": "维护课程项目及其学生、时间和教学任务。",
+    "prerequisites": [
+      "存在可见开课任务；学生只处理已分配项目。"
+    ],
+    "steps": [
+      {
+        "action": "按开课任务筛选项目，核对课程及执行要求。",
+        "expected": "显示项目、课表及学生范围。",
+        "next": "选择需要执行或维护的项目。"
+      },
+      {
+        "action": "有权限者新增时选择课表带出教师与关联信息，填写时间及任务后保存；学生从本人可用项目进入执行。",
+        "expected": "页面显示项目资料和学生执行进度。",
+        "next": "继续签到与项目报告。"
+      }
+    ],
+    "next": [
+      "教师根据项目学生名单开展评阅。"
+    ],
+    "issues": [
+      "看不到项目先核对课程与学生分配；项目发布和维护尚未开放CLI。"
+    ],
+    "capabilities": [
+      "practice.list",
+      "practice.project-students"
+    ]
+  },
+  {
+    "key": "practice.signIns",
+    "module": "practice",
+    "panel": "signIns",
+    "title": "实验实训签到记录",
+    "purpose": "查询项目签到并按学生页面入口完成签到。",
+    "prerequisites": [
+      "本人已关联可执行项目；签到需满足页面当前条件。"
+    ],
+    "steps": [
+      {
+        "action": "按类别、课程或项目筛选签到。",
+        "expected": "显示学生签到记录。",
+        "next": "核对日期与项目。"
+      },
+      {
+        "action": "学生按可用签到入口办理；教师查看项目学生记录。",
+        "expected": "列表反映签到结果。",
+        "next": "继续项目学习与报告。"
+      }
+    ],
+    "next": [
+      "缺勤或异常按课程要求联系任课教师。"
+    ],
+    "issues": [
+      "项目缺失时核对学生关联和项目状态；CLI只开放查询。"
+    ],
+    "capabilities": [
+      "practice.sign-ins"
+    ]
+  },
+  {
+    "key": "practice.journals",
+    "module": "practice",
+    "panel": "journals",
+    "title": "历史过程记录",
+    "purpose": "查看既有实验实训日志及处理记录。",
+    "prerequisites": [
+      "历史过程记录仅对可见角色和课程范围展示。"
+    ],
+    "steps": [
+      {
+        "action": "按课程、项目和学生查询日志。",
+        "expected": "显示历史过程记录及状态。",
+        "next": "打开内容核对。"
+      },
+      {
+        "action": "有可用入口时查看记录或按原流程评阅。",
+        "expected": "显示提交、退回或通过信息。",
+        "next": "回到当前项目继续实施。"
+      }
+    ],
+    "next": [
+      "当前项目材料按课程要求从项目或报告页面提交。"
+    ],
+    "issues": [
+      "学生和教师侧栏可能不显示此历史菜单；CLI日志草稿或提交仍受本人项目及原业务规则限制。"
+    ],
+    "capabilities": [
+      "practice.journals",
+      "practice.journal.save",
+      "practice.journal.submit",
+      "practice.journal.review"
+    ]
+  },
+  {
+    "key": "practice.reports",
+    "module": "practice",
+    "panel": "reports",
+    "title": "项目报告 / 项目报告评阅",
+    "purpose": "提交项目报告、反思总结并由教师评阅。",
+    "prerequisites": [
+      "学生关联项目；评阅者具有原业务审核权限。"
+    ],
+    "steps": [
+      {
+        "action": "学生选定项目，填写报告正文、模板相关内容及反思总结。",
+        "expected": "形成可保存的报告资料。",
+        "next": "保存草稿或提交审核。"
+      },
+      {
+        "action": "教师按项目或学生查阅报告并按可用入口通过或退回。",
+        "expected": "报告显示审核状态及意见。",
+        "next": "按退回意见修订重提或继续评分。"
+      }
+    ],
+    "next": [
+      "教师在成绩管理核对项目成绩。"
+    ],
+    "issues": [
+      "提交要求反思总结；已通过后修改须走原页面流程，不能覆盖为普通草稿。"
+    ],
+    "capabilities": [
+      "practice.reports",
+      "practice.report.save",
+      "practice.report.submit",
+      "practice.report.review"
+    ]
+  },
+  {
+    "key": "practice.syllabus",
+    "module": "practice",
+    "panel": "syllabus",
+    "title": "课程大纲",
+    "purpose": "维护课程教学大纲并按原流程提交审核。",
+    "prerequisites": [
+      "有大纲维护权限；教师入口还取决于课程负责人身份。"
+    ],
+    "steps": [
+      {
+        "action": "按课程查询，新增或编辑对应大纲正文。",
+        "expected": "显示课程与大纲草稿。",
+        "next": "核对适用开课任务。"
+      },
+      {
+        "action": "保存草稿或提交审核，处理者按当前状态评阅。",
+        "expected": "页面显示保存或审核状态。",
+        "next": "根据意见完善后继续教案。"
+      }
+    ],
+    "next": [
+      "以核定课程大纲准备教案和项目。"
+    ],
+    "issues": [
+      "教师看不到入口时核对课程负责人关系；CLI实体使用 syllabus。"
+    ],
+    "capabilities": [
+      "practice.list",
+      "practice.save",
+      "practice.submit",
+      "practice.review"
+    ]
+  },
+  {
+    "key": "practice.lessonPlans",
+    "module": "practice",
+    "panel": "lessonPlans",
+    "title": "教案编写",
+    "purpose": "为课程编写教案并提交教学资料审核。",
+    "prerequisites": [
+      "可见开课任务已存在，具备相应资料维护权限。"
+    ],
+    "steps": [
+      {
+        "action": "选择关联课程并新增或编辑教案。",
+        "expected": "显示教案结构化内容及正文。",
+        "next": "完整填写本次教学安排。"
+      },
+      {
+        "action": "保存草稿或提交审核；审核者核对内容后按页面办理。",
+        "expected": "教案状态及记录更新。",
+        "next": "按审核意见修订。"
+      }
+    ],
+    "next": [
+      "继续开展课程项目并保留教学资料。"
+    ],
+    "issues": [
+      "修改时保留完整正文与结构内容；CLI实体使用 lessonPlan。"
+    ],
+    "capabilities": [
+      "practice.list",
+      "practice.save",
+      "practice.submit",
+      "practice.review"
+    ]
+  },
+  {
+    "key": "practice.gradeRules",
+    "module": "practice",
+    "panel": "gradeRules",
+    "title": "成绩方案",
+    "purpose": "配置课程评分项目、比例及成绩规则。",
+    "prerequisites": [
+      "管理员或符合条件的课程负责人；已有开课任务。"
+    ],
+    "steps": [
+      {
+        "action": "在成绩管理选择成绩方案，按课程查询。",
+        "expected": "显示当前课程评分方案。",
+        "next": "核对比例和评分项目。"
+      },
+      {
+        "action": "按页面新增或编辑方案并保存。",
+        "expected": "保存后显示当前规则。",
+        "next": "切换成绩录入与评定。"
+      }
+    ],
+    "next": [
+      "录分前先确认采用的课程成绩方案。"
+    ],
+    "issues": [
+      "比例不符合页面校验时先修正规则；CLI未开放方案保存。"
+    ],
+    "capabilities": [
+      "practice.list"
+    ]
+  },
+  {
+    "key": "practice.scores",
+    "module": "practice",
+    "panel": "scores",
+    "title": "成绩录入与评定",
+    "purpose": "维护项目分项成绩并处理评定。",
+    "prerequisites": [
+      "课程及项目已有学生，评分方案已核对；维护和审核权限分开。"
+    ],
+    "steps": [
+      {
+        "action": "在成绩管理选择成绩录入与评定，按课程或学生筛选。",
+        "expected": "显示学生成绩与状态。",
+        "next": "核对分项评分依据。"
+      },
+      {
+        "action": "有权限时录入并按页面提交或审核。",
+        "expected": "成绩状态及评阅记录更新。",
+        "next": "切换课程汇总复核。"
+      }
+    ],
+    "next": [
+      "缺失成绩回到对应项目和报告核对。"
+    ],
+    "issues": [
+      "成绩保存尚未开放CLI；审核能力仅用于已经符合原状态规则的成绩。"
+    ],
+    "capabilities": [
+      "practice.list",
+      "practice.project-students",
+      "practice.review"
+    ]
+  },
+  {
+    "key": "practice.courseScores",
+    "module": "practice",
+    "panel": "courseScores",
+    "title": "实验实训课程汇总",
+    "purpose": "读取课程内学生项目成绩及课程总评。",
+    "prerequisites": [
+      "已选择有效开课任务；成绩仍受当前角色范围限制。"
+    ],
+    "steps": [
+      {
+        "action": "在成绩管理切换课程汇总，选择开课任务。",
+        "expected": "显示该课程学生的汇总成绩。",
+        "next": "核对缺失或异常项。"
+      },
+      {
+        "action": "对照项目评分和报告评阅结果检查总评。",
+        "expected": "确认当前课程成绩情况。",
+        "next": "需要明细时返回成绩录入与评定。"
+      }
+    ],
+    "next": [
+      "需记载表时到统计报表的实验实训成绩记载表。"
+    ],
+    "issues": [
+      "课程总评为空时先检查项目成绩及课程方案。"
+    ],
+    "capabilities": [
+      "practice.course-scores"
+    ]
+  },
+  {
+    "key": "practice.reflections",
+    "module": "practice",
+    "panel": "reflections",
+    "title": "课程教学反思",
+    "purpose": "记录课程教学反思并提交审核。",
+    "prerequisites": [
+      "关联可见开课任务；具备反思资料维护权限。"
+    ],
+    "steps": [
+      {
+        "action": "查询目标课程，新增或编辑教学反思正文。",
+        "expected": "反思与课程关联。",
+        "next": "检查内容完整性。"
+      },
+      {
+        "action": "保存草稿或提交审核，按反馈修订。",
+        "expected": "列表显示当前审核状态。",
+        "next": "补齐课程归档所需资料。"
+      }
+    ],
+    "next": [
+      "反思完成后到归档中心检查条件。"
+    ],
+    "issues": [
+      "教学反思与学生报告中的反思总结用途不同；CLI实体使用 reflection。"
+    ],
+    "capabilities": [
+      "practice.list",
+      "practice.save",
+      "practice.submit",
+      "practice.review"
+    ]
+  },
+  {
+    "key": "practice.archives",
+    "module": "practice",
+    "panel": "archives",
+    "title": "归档中心",
+    "purpose": "检查课程归档条件，查看与下载已有归档版本。",
+    "prerequisites": [
+      "具备课程归档读取或管理身份；目标课程在本人范围内。"
+    ],
+    "steps": [
+      {
+        "action": "选择开课任务检查归档条件。",
+        "expected": "显示材料齐备或缺失情况。",
+        "next": "按缺项返回相应教学菜单补齐。"
+      },
+      {
+        "action": "查看归档列表，打开版本详情或下载归档包；有权限时按页面生成归档。",
+        "expected": "取得该版本材料和生成状态。",
+        "next": "核对归档包内容。"
+      }
+    ],
+    "next": [
+      "资料变更后按页面规则生成新版本，历史版本用于追溯。"
+    ],
+    "issues": [
+      "归档生成未开放CLI；读取及下载仍校验版本权限。"
+    ],
+    "capabilities": [
+      "practice.archive.check",
+      "practice.archive.list",
+      "practice.archive.detail",
+      "practice.archive.download"
+    ]
+  },
+  {
+    "key": "practice.rooms",
+    "module": "practice",
+    "panel": "rooms",
+    "title": "场地管理",
+    "purpose": "维护实验实训使用的场地资料。",
+    "prerequisites": [
+      "具备实验实训管理权限；当前角色侧栏可见场地管理。"
+    ],
+    "steps": [
+      {
+        "action": "查询场地并打开新增或编辑入口。",
+        "expected": "显示场地名称及页面要求字段。",
+        "next": "核对场地信息。"
+      },
+      {
+        "action": "保存并刷新列表。",
+        "expected": "可用场地资料更新。",
+        "next": "回到课表安排选择场地。"
+      }
+    ],
+    "next": [
+      "排课时继续检查教师与场地冲突。"
+    ],
+    "issues": [
+      "场地未出现时核对类别、状态和范围；CLI未开放场地保存。"
+    ],
+    "capabilities": [
+      "practice.list"
+    ]
+  },
+  {
+    "key": "socialPractice.overview",
+    "module": "socialPractice",
+    "panel": "overview",
+    "title": "社会实践总览",
+    "purpose": "查看计划、项目、参与学生和待审材料等进度。",
+    "prerequisites": [
+      "具备社会实践查看权限。"
+    ],
+    "steps": [
+      {
+        "action": "点击刷新读取当前账号范围内汇总。",
+        "expected": "显示计划、集中与分散项目等数量。",
+        "next": "识别待审材料或成绩。"
+      },
+      {
+        "action": "从侧栏进入对应明细菜单。",
+        "expected": "列出该业务记录。",
+        "next": "按计划及对象处理。"
+      }
+    ],
+    "next": [
+      "新实践先到计划管理准备计划。"
+    ],
+    "issues": [
+      "统计范围来自账号角色与组织，空值先核对适用计划。"
+    ],
+    "capabilities": [
+      "social-practice.overview"
+    ]
+  },
+  {
+    "key": "socialPractice.plans",
+    "module": "socialPractice",
+    "panel": "plans",
+    "title": "社会实践计划管理",
+    "purpose": "设置参与范围、实践日期、材料要求、教师匹配及评分规则。",
+    "prerequisites": [
+      "管理员具有计划管理权限；有效审批流程已配置。"
+    ],
+    "steps": [
+      {
+        "action": "新增计划，填写年级、举办学院、范围、日期与规则后保存草稿。",
+        "expected": "列表显示计划草稿。",
+        "next": "检查适用学生与审批流程。"
+      },
+      {
+        "action": "提交原审核流程；审核通过后使用发布入口。Excel 导入先上传预览确认行。",
+        "expected": "页面显示审核、发布或逐行导入结果。",
+        "next": "安排集中项目或开放分散申报。"
+      }
+    ],
+    "next": [
+      "发布后核对参与人及通知，再开展分配。"
+    ],
+    "issues": [
+      "发布可能同步必修参与人并发送通知；未通过不能当成已发布。"
+    ],
+    "capabilities": [
+      "social-practice.list",
+      "social-practice.detail",
+      "social-practice.save",
+      "social-practice.submit",
+      "social-practice.review",
+      "social-practice.publish",
+      "social-practice.plan.import"
+    ]
+  },
+  {
+    "key": "socialPractice.centralized",
+    "module": "socialPractice",
+    "panel": "centralized",
+    "title": "集中实践",
+    "purpose": "维护集中实践项目并分配指导教师与参与学生。",
+    "prerequisites": [
+      "管理员具备项目管理权限；计划已准备并处于可操作阶段。"
+    ],
+    "steps": [
+      {
+        "action": "新增集中项目，选择计划并填写项目、地点和实践时间等资料。",
+        "expected": "项目保存到列表。",
+        "next": "打开项目详情。"
+      },
+      {
+        "action": "使用页面分配入口选择教师与学生并保存。",
+        "expected": "项目详情显示教师和参与人。",
+        "next": "进入实施申请准备实施资料。"
+      }
+    ],
+    "next": [
+      "核对参与名单后完成安全材料及签到安排。"
+    ],
+    "issues": [
+      "名单为空先核对计划适用范围；项目保存、分配未开放CLI。"
+    ],
+    "capabilities": [
+      "social-practice.list"
+    ]
+  },
+  {
+    "key": "socialPractice.implementations",
+    "module": "socialPractice",
+    "panel": "implementations",
+    "title": "实施申请",
+    "purpose": "提交集中实践项目实施资料并跟进审批。",
+    "prerequisites": [
+      "教师或管理员具备项目管理权限；目标集中项目可见。"
+    ],
+    "steps": [
+      {
+        "action": "新增实施申请，选择计划与集中项目并填写实施资料。",
+        "expected": "形成实施申请记录。",
+        "next": "核对人员和时间。"
+      },
+      {
+        "action": "按可用入口提交或查看流程；处理者在当前节点审核。",
+        "expected": "申请状态和流程记录更新。",
+        "next": "按结果开展实施或补充资料。"
+      }
+    ],
+    "next": [
+      "获准实施后继续安全材料与实践活动。"
+    ],
+    "issues": [
+      "申请保存未开放CLI；已有符合条件记录可用提交、审核能力。"
+    ],
+    "capabilities": [
+      "social-practice.list",
+      "social-practice.detail",
+      "social-practice.timeline",
+      "social-practice.submit",
+      "social-practice.review"
+    ]
+  },
+  {
+    "key": "socialPractice.distributed",
+    "module": "socialPractice",
+    "panel": "distributed",
+    "title": "分散实践",
+    "purpose": "由学生发起个人或团队分散实践申报并选择指导方式。",
+    "prerequisites": [
+      "学生处于计划适用范围与报名期；教师匹配方式由计划决定。"
+    ],
+    "steps": [
+      {
+        "action": "发起分散申报，选择计划，填写实践资料与团队成员。",
+        "expected": "申报保存到列表。",
+        "next": "核对指导教师或分配方式。"
+      },
+      {
+        "action": "按页面提交并查看流程；教师或管理员按节点处理。",
+        "expected": "记录显示申报状态及教师确认信息。",
+        "next": "按反馈修订或继续安全材料。"
+      }
+    ],
+    "next": [
+      "通过后在参与学生及项目关联中核对信息。"
+    ],
+    "issues": [
+      "不可重新选教师时检查计划次数和时间限制；新建申报未开放CLI。"
+    ],
+    "capabilities": [
+      "social-practice.list",
+      "social-practice.detail",
+      "social-practice.timeline",
+      "social-practice.submit",
+      "social-practice.review"
+    ]
+  },
+  {
+    "key": "socialPractice.participants",
+    "module": "socialPractice",
+    "panel": "participants",
+    "title": "参与学生",
+    "purpose": "核对计划和项目中的学生参与、分配状态。",
+    "prerequisites": [
+      "当前账号可查看目标计划或项目。"
+    ],
+    "steps": [
+      {
+        "action": "按年级、学院、专业、状态或关键词筛选。",
+        "expected": "列出当前范围内参与学生。",
+        "next": "核对学生及关联项目。"
+      },
+      {
+        "action": "打开可用详情，检查参与方式与关系。",
+        "expected": "显示当前参与信息。",
+        "next": "需要变更时返回集中项目分配或相应申报入口。"
+      }
+    ],
+    "next": [
+      "名单齐备后继续安全确认及实践实施。"
+    ],
+    "issues": [
+      "学生缺失先核对计划范围与发布状态；此菜单CLI仅提供列表查询。"
+    ],
+    "capabilities": [
+      "social-practice.list"
+    ]
+  },
+  {
+    "key": "socialPractice.teachers",
+    "module": "socialPractice",
+    "panel": "teachers",
+    "title": "指导教师",
+    "purpose": "查看实践项目的指导教师关系。",
+    "prerequisites": [
+      "目标项目或申报在当前账号可见范围。"
+    ],
+    "steps": [
+      {
+        "action": "按计划、组织或教师关键词查询。",
+        "expected": "显示指导教师及关联记录。",
+        "next": "核对分配对象。"
+      },
+      {
+        "action": "从可用详情核对项目与指导关系。",
+        "expected": "显示当前教师关联。",
+        "next": "需要调整时回到项目分配或分散申报入口。"
+      }
+    ],
+    "next": [
+      "教师确认后继续材料评阅与成绩处理。"
+    ],
+    "issues": [
+      "看不到教师先核对项目分配和计划教师匹配方式；CLI只提供列表读取。"
+    ],
+    "capabilities": [
+      "social-practice.list"
+    ]
+  },
+  {
+    "key": "socialPractice.safety",
+    "module": "socialPractice",
+    "panel": "safety",
+    "title": "安全材料",
+    "purpose": "按计划要求提交安全承诺书、保险等安全材料。",
+    "prerequisites": [
+      "已有关联项目或分散申报；具备材料提交权限。"
+    ],
+    "steps": [
+      {
+        "action": "点击提交安全材料，选择计划、关联项目或申报及材料类型。",
+        "expected": "表单定位安全材料归属。",
+        "next": "上传附件并核对完整文件列表。"
+      },
+      {
+        "action": "保存草稿或提交，之后查看审核状态及记录。",
+        "expected": "显示保存、待审或处理结果。",
+        "next": "缺项按反馈补齐。"
+      }
+    ],
+    "next": [
+      "安全要求满足后按计划开展实践。"
+    ],
+    "issues": [
+      "个人电子签名不能代替安全承诺书签字文件；附件上传尚未开放CLI。"
+    ],
+    "capabilities": [
+      "social-practice.list",
+      "social-practice.detail",
+      "social-practice.material.save",
+      "social-practice.material.submit",
+      "social-practice.review",
+      "social-practice.timeline"
+    ]
+  },
+  {
+    "key": "socialPractice.attendance",
+    "module": "socialPractice",
+    "panel": "attendance",
+    "title": "社会实践签到记录",
+    "purpose": "查看实践签到时间、位置及关联项目。",
+    "prerequisites": [
+      "已参与对应计划或项目；实际签到由页面可用入口办理。"
+    ],
+    "steps": [
+      {
+        "action": "按年级、组织、状态或关键词查询签到。",
+        "expected": "显示可见签到记录。",
+        "next": "核对学生与活动日期。"
+      },
+      {
+        "action": "打开页面允许的记录详情；缺签时进入补签申请。",
+        "expected": "确认缺签事实或已有签到。",
+        "next": "按计划要求补充。"
+      }
+    ],
+    "next": [
+      "学生缺签按补签申请流程说明原因。"
+    ],
+    "issues": [
+      "CLI未开放签到写入；列表查询需 resource=attendance。"
+    ],
+    "capabilities": [
+      "social-practice.list"
+    ]
+  },
+  {
+    "key": "socialPractice.patchSigns",
+    "module": "socialPractice",
+    "panel": "patchSigns",
+    "title": "补签申请",
+    "purpose": "为缺失签到提交原因和证明并跟进处理。",
+    "prerequisites": [
+      "学生具备签到管理权限，且关联可见项目。"
+    ],
+    "steps": [
+      {
+        "action": "点击申请补签，选择计划或项目、日期并填写原因等资料。",
+        "expected": "形成补签申请。",
+        "next": "核对缺勤日期及证明。"
+      },
+      {
+        "action": "按可用入口提交，处理者核对申请后按当前节点审核。",
+        "expected": "申请状态更新；通过后的签到以页面结果为准。",
+        "next": "返回签到记录核对。"
+      }
+    ],
+    "next": [
+      "核对补签记录后继续成果提交。"
+    ],
+    "issues": [
+      "新建补签未开放CLI；已有申请可按原状态提交和审核。"
+    ],
+    "capabilities": [
+      "social-practice.list",
+      "social-practice.detail",
+      "social-practice.timeline",
+      "social-practice.submit",
+      "social-practice.review"
+    ]
+  },
+  {
+    "key": "socialPractice.materials",
+    "module": "socialPractice",
+    "panel": "materials",
+    "title": "成果材料",
+    "purpose": "按学生、团队或项目归属提交实践报告、照片和证明。",
+    "prerequisites": [
+      "已关联实践项目或申报；材料类型与截止时间按计划要求。"
+    ],
+    "steps": [
+      {
+        "action": "点击提交成果材料，选择归属、类型，填写标题正文并上传附件。",
+        "expected": "表单列出本次完整材料和文件。",
+        "next": "核对个人或团队提交范围。"
+      },
+      {
+        "action": "保存草稿或提交后查看审核及流程记录。",
+        "expected": "材料显示最新状态和意见。",
+        "next": "退回时修订后重提。"
+      }
+    ],
+    "next": [
+      "材料齐备后由指导教师进入成绩管理。"
+    ],
+    "issues": [
+      "CLI不负责上传附件；材料保存必须保留完整附件ID列表并明确是否提交。"
+    ],
+    "capabilities": [
+      "social-practice.list",
+      "social-practice.detail",
+      "social-practice.material.save",
+      "social-practice.material.submit",
+      "social-practice.review",
+      "social-practice.timeline"
+    ]
+  },
+  {
+    "key": "socialPractice.scores",
+    "module": "socialPractice",
+    "panel": "scores",
+    "title": "社会实践成绩管理",
+    "purpose": "按计划评分规则录入、提交和审核实践成绩。",
+    "prerequisites": [
+      "教师或管理员具有成绩管理权限；成绩审核要求独立审批权限。"
+    ],
+    "steps": [
+      {
+        "action": "点击录入成绩，选择计划、项目和学生并填写评分资料。",
+        "expected": "生成学生成绩记录。",
+        "next": "核对分项与评分规则。"
+      },
+      {
+        "action": "按页面提交；有审核权限者按当前节点核对后办理。",
+        "expected": "成绩状态及流程记录更新。",
+        "next": "查看学分认定与归档条件。"
+      }
+    ],
+    "next": [
+      "成绩处理完成后到归档管理核对学生档案。"
+    ],
+    "issues": [
+      "成绩录入未开放CLI；提交、审核仅作用于原业务允许的已有记录。"
+    ],
+    "capabilities": [
+      "social-practice.list",
+      "social-practice.detail",
+      "social-practice.timeline",
+      "social-practice.submit",
+      "social-practice.review"
+    ]
+  },
+  {
+    "key": "socialPractice.archives",
+    "module": "socialPractice",
+    "panel": "archives",
+    "title": "社会实践归档管理",
+    "purpose": "按学生查看版本化实践档案与材料、成绩及流程信息。",
+    "prerequisites": [
+      "管理员角色且有归档权限；相关材料与成绩已按要求处理。"
+    ],
+    "steps": [
+      {
+        "action": "筛选计划和学生，检查已有归档记录。",
+        "expected": "显示当前学生归档版本。",
+        "next": "查看详情。"
+      },
+      {
+        "action": "有权限时使用页面生成归档，完成后核对版本内容。",
+        "expected": "显示本次归档结果。",
+        "next": "保存或下载页面允许的档案。"
+      }
+    ],
+    "next": [
+      "缺少材料时回到成果、安全或成绩菜单补齐。"
+    ],
+    "issues": [
+      "生成归档未向CLI开放；resource=archive仅用于已登记列表查询。"
+    ],
+    "capabilities": [
+      "social-practice.list"
+    ]
+  },
+  {
+    "key": "socialPractice.statistics",
+    "module": "socialPractice",
+    "panel": "statistics",
+    "title": "社会实践统计分析",
+    "purpose": "按年级、实践模式与学院汇总计划和参与情况。",
+    "prerequisites": [
+      "管理员角色，具有社会实践查看权限。"
+    ],
+    "steps": [
+      {
+        "action": "选择年级和学院后点击查询。",
+        "expected": "显示筛选范围内汇总及明细统计。",
+        "next": "核对计划、项目、参与和材料数量。"
+      },
+      {
+        "action": "有导出权限时点击导出。",
+        "expected": "创建统计导出任务。",
+        "next": "到导出任务中心下载。"
+      }
+    ],
+    "next": [
+      "需追踪个体时返回参与学生、材料或成绩列表。"
+    ],
+    "issues": [
+      "CLI可查询统计；导出生成仍使用页面。"
+    ],
+    "capabilities": [
+      "social-practice.statistics"
+    ]
+  },
+  {
+    "key": "companyManage.baseApplications",
+    "module": "companyManage",
+    "panel": "baseApplications",
+    "title": "基地申报",
+    "purpose": "提交关联基地的申报资料并查看审核记录。",
+    "prerequisites": [
+      "管理员具备实习管理权限；先在基地统计维护需要关联的基地。"
+    ],
+    "steps": [
+      {
+        "action": "点击新增申报，选择实习基地、学院、标题、基地类型及内容。",
+        "expected": "表单显示申报资料和关联基地启用状态。",
+        "next": "核对基地与申报信息。"
+      },
+      {
+        "action": "按页面确认提交，处理者在可用状态下通过或退回。",
+        "expected": "申报状态和流程记录更新。",
+        "next": "查看记录，按意见修订。"
+      }
+    ],
+    "next": [
+      "需要新增基地本体或导入基地时进入基地统计。"
+    ],
+    "issues": [
+      "申报中的启用状态变更会在保存时同步到关联基地。",
+      "申报保存和审批未向CLI开放；不得用基地保存能力代替申报流程。"
+    ],
+    "capabilities": []
+  },
+  {
+    "key": "companyManage.baseUsage",
+    "module": "companyManage",
+    "panel": "baseUsage",
+    "title": "基地审批",
+    "purpose": "通过基地审批菜单维护和审核基地使用记录。",
+    "prerequisites": [
+      "管理员具有实习查看权限；维护要求实习管理权限并已有可关联基地。"
+    ],
+    "steps": [
+      {
+        "action": "点击新增使用记录，选择基地、学院并填写标题、使用类型和内容。",
+        "expected": "页面形成基地使用记录资料。",
+        "next": "核对文件制度或基地运行等使用说明。"
+      },
+      {
+        "action": "按页面提交，当前审批人员核对后通过或退回。",
+        "expected": "使用记录显示最新状态。",
+        "next": "查看记录及后续修改意见。"
+      }
+    ],
+    "next": [
+      "与基地统计、巡查和走访资料交叉核对。"
+    ],
+    "issues": [
+      "当前菜单名为基地审批，实际列表和新增入口处理基地使用记录。",
+      "使用记录保存和审批未向CLI开放。"
+    ],
+    "capabilities": []
+  },
+  {
+    "key": "companyManage.baseVisits",
+    "module": "companyManage",
+    "panel": "baseVisits",
+    "title": "基地巡查",
+    "purpose": "在基地管理内安排走访、填写时间和走访内容。",
+    "prerequisites": [
+      "具备基地巡查查看权限；分配、填时间和填记录分开授权。"
+    ],
+    "steps": [
+      {
+        "action": "查询走访安排；有权限时新增基地及参加人员。",
+        "expected": "形成待填时间或已安排巡查。",
+        "next": "填写走访时间并检查冲突。"
+      },
+      {
+        "action": "走访后填写内容、问题、后续措施和附件。",
+        "expected": "巡查变为已完成并产生记录。",
+        "next": "进入走访记录复核。"
+      }
+    ],
+    "next": [
+      "继续落实记录中的后续措施。"
+    ],
+    "issues": [
+      "时间冲突按提示调整；本巡查功能未向CLI开放。"
+    ],
+    "capabilities": []
+  },
+  {
+    "key": "companyManage.baseVisitRecords",
+    "module": "companyManage",
+    "panel": "baseVisitRecords",
+    "title": "走访记录",
+    "purpose": "从基地管理中查阅走访记录和附件。",
+    "prerequisites": [
+      "当前角色具有基地走访记录读取权限。"
+    ],
+    "steps": [
+      {
+        "action": "按基地、教师或日期等条件查询。",
+        "expected": "显示已填写的走访记录。",
+        "next": "打开详情。"
+      },
+      {
+        "action": "核对内容、问题、措施和附件，允许修正时在页面保存。",
+        "expected": "显示当前记录。",
+        "next": "跟进后续措施。"
+      }
+    ],
+    "next": [
+      "新走访先到基地巡查安排。"
+    ],
+    "issues": [
+      "仅创建巡查安排不会自动产生走访正文；CLI未开放此记录菜单。"
+    ],
+    "capabilities": []
+  },
+  {
+    "key": "companyManage.baseFlows",
+    "module": "companyManage",
+    "panel": "baseFlows",
+    "title": "基地统计",
+    "purpose": "维护基地本体资料，查询基地及实习流量，支持基地导入。",
+    "prerequisites": [
+      "具有实习查看权限；新增编辑导入删除要求实习管理权限。"
+    ],
+    "steps": [
+      {
+        "action": "按学院、专业、基地类型等条件查询，查看或编辑基地详情。",
+        "expected": "显示基地名称、状态、关联人员与服务专业等完整资料。",
+        "next": "核对原有关系后保存。"
+      },
+      {
+        "action": "新增基地或按下载模板、导入基地步骤上传预览，确认重复项及错误行后导入。",
+        "expected": "列表更新或返回逐行导入结果。",
+        "next": "核对资料，再进入基地申报、巡查等菜单。"
+      }
+    ],
+    "next": [
+      "需要Word资料时使用长期基地的导出Word入口；批量删除前核对所选基地。"
+    ],
+    "issues": [
+      "更新须保留完整专业、教师、导师、场地等数组。",
+      "CLI基地保存仅允许status=enabled；状态切换和Word导出仍使用页面。"
+    ],
+    "capabilities": [
+      "internship.bases",
+      "internship.base.detail",
+      "internship.base.save",
+      "internship.base.import",
+      "internship.base.delete",
+      "internship.mentor.save"
+    ]
+  },
+  {
+    "key": "config.schoolAppearance",
+    "module": "config",
+    "panel": "schoolAppearance",
+    "title": "学校设置",
+    "purpose": "维护学校标识图片与全校默认桌面壁纸。",
+    "prerequisites": [
+      "学校级管理员具备配置管理权限；图片满足页面格式和大小要求。"
+    ],
+    "steps": [
+      {
+        "action": "重新读取设置，选择标识图片上传或更换。",
+        "expected": "页面显示已上传的学校图片。",
+        "next": "核对实际预览。"
+      },
+      {
+        "action": "上传默认壁纸或从共享壁纸库选择。",
+        "expected": "页面更新学校默认壁纸。",
+        "next": "重新查看登录页和默认桌面效果。"
+      }
+    ],
+    "next": [
+      "个人壁纸仍在个人设置的主题与壁纸中选择。"
+    ],
+    "issues": [
+      "上传失败核对文件类型与大小；默认壁纸推荐横图且不超过页面上限。"
+    ],
+    "capabilities": []
+  },
+  {
+    "key": "config.cliAuthorization",
+    "module": "config",
+    "panel": "cliAuthorization",
+    "title": "CLI 授权",
+    "purpose": "管理本校 CLI 开关、开放能力、调用限额及安装信息。",
+    "prerequisites": [
+      "学校级管理员具备配置管理权限。"
+    ],
+    "steps": [
+      {
+        "action": "重新读取，检查学校开关与各能力当前勾选状态。",
+        "expected": "显示本校已开放项及暂未开放项。",
+        "next": "按实际需要逐项选择。"
+      },
+      {
+        "action": "核对调用限额后保存配置；按本机系统和架构使用安装下载入口。",
+        "expected": "配置修订更新，设备授权仍按原流程办理。",
+        "next": "到个人设置管理本人CLI会话。"
+      }
+    ],
+    "next": [
+      "开放能力后仍须满足账号原权限和数据范围。"
+    ],
+    "issues": [
+      "暂未开放项不能靠勾选启用；修改开关后以服务器读取结果为准。"
+    ],
+    "capabilities": []
+  },
+  {
+    "key": "config.ssoClients",
+    "module": "config",
+    "panel": "ssoClients",
+    "title": "授权应用",
+    "purpose": "注册和维护允许接入的学校授权应用。",
+    "prerequisites": [
+      "学校级管理员具备配置管理权限；已明确应用回调及授权范围。"
+    ],
+    "steps": [
+      {
+        "action": "查询现有应用或点击注册应用，核对名称、地址和授权参数。",
+        "expected": "保存后应用出现在列表。",
+        "next": "检查启用状态。"
+      },
+      {
+        "action": "需要轮换密钥时使用页面入口，立即复制并安全保管新值。",
+        "expected": "密钥仅在本次页面显示。",
+        "next": "同步更新目标应用配置。"
+      }
+    ],
+    "next": [
+      "回到目标应用核对登录授权链路。"
+    ],
+    "issues": [
+      "授权失败先核对回调地址、应用状态和密钥；CLI未开放授权应用维护。"
+    ],
+    "capabilities": []
+  },
+  {
+    "key": "config.workflowSettings",
+    "module": "config",
+    "panel": "workflowSettings",
+    "title": "审批流程",
+    "purpose": "维护业务审批定义、节点及版本发布。",
+    "prerequisites": [
+      "学校级管理员具备配置管理权限；各节点审批人员已准备。"
+    ],
+    "steps": [
+      {
+        "action": "选择现有流程或新建流程，核对业务类型及学校或学院归属。",
+        "expected": "显示当前版本节点。",
+        "next": "设置节点人员、顺序、会签或或签及渠道。"
+      },
+      {
+        "action": "保存为新版本，逐节点检查有效人员后发布选定版本。",
+        "expected": "页面标注已发布版本。",
+        "next": "到关联业务核对采用的流程。"
+      }
+    ],
+    "next": [
+      "后续业务按原规则使用相应版本及节点。"
+    ],
+    "issues": [
+      "节点缺有效人员不能发布；保存版本不代表已经发布。"
+    ],
+    "capabilities": []
+  },
+  {
+    "key": "config.messageChannels",
+    "module": "config",
+    "panel": "messageChannels",
+    "title": "消息渠道",
+    "purpose": "配置学校允许的站内、企业微信和业务短信渠道。",
+    "prerequisites": [
+      "学校级管理员具备配置管理权限；需要短信时已有网关信息。"
+    ],
+    "steps": [
+      {
+        "action": "读取学校允许渠道，核对现有开关。",
+        "expected": "显示当前渠道与短信网关配置。",
+        "next": "按需要设置地址、签名和凭据。"
+      },
+      {
+        "action": "保存渠道设置并核对结果提示。",
+        "expected": "页面显示保存结果。",
+        "next": "继续检查流程节点、模板及个人通知偏好。"
+      }
+    ],
+    "next": [
+      "企业微信沿用企业微信应用配置。"
+    ],
+    "issues": [
+      "实际投递同时取决于流程节点、学校、模板和个人偏好；短信还需已验证手机号。"
+    ],
+    "capabilities": []
+  },
+  {
+    "key": "config.releases",
+    "module": "config",
+    "panel": "releases",
+    "title": "版本与更新",
+    "purpose": "维护系统及客户端版本、用户说明和更新相关资料。",
+    "prerequisites": [
+      "学校级管理员具有版本维护权限；明确系统更新和客户端版本区别。"
+    ],
+    "steps": [
+      {
+        "action": "选择版本类别，查询现有版本或从GitHub导入。",
+        "expected": "导入形成草稿，安装包由后台队列下载。",
+        "next": "查看下载状态及版本详情。"
+      },
+      {
+        "action": "核对用户说明与维护资料，保存草稿后按页面发布。",
+        "expected": "已发布内容对用户可见。",
+        "next": "让使用方查看更新说明。"
+      }
+    ],
+    "next": [
+      "SQL仅按实际执行情况人工登记；记录不代表系统验证执行结果。"
+    ],
+    "issues": [
+      "网络慢时查看下载状态；保存说明草稿后需再次发布才更新用户可见内容。"
+    ],
+    "capabilities": []
+  },
+  {
+    "key": "config.databaseSchema",
+    "module": "config",
+    "panel": "databaseSchema",
+    "title": "数据库结构",
+    "purpose": "对照结构基准检查差异并预览或下载升级SQL。",
+    "prerequisites": [
+      "学校级管理员具备配置管理权限；明确检查的数据库范围。"
+    ],
+    "steps": [
+      {
+        "action": "选择检查范围，重新加载后点击检查结构。",
+        "expected": "显示基准版本、检查时间及差异分类。",
+        "next": "逐项核对新增、人工确认和保留项。"
+      },
+      {
+        "action": "预览或下载升级SQL。",
+        "expected": "得到供人工处理的SQL文件。",
+        "next": "按学校既有数据库变更流程核对和执行。"
+      }
+    ],
+    "next": [
+      "实际变更后重新检查结构确认差异。"
+    ],
+    "issues": [
+      "预览和下载不会执行数据库变更；此菜单未向CLI开放。"
+    ],
+    "capabilities": []
+  },
+  {
+    "key": "config.userManage",
+    "module": "config",
+    "panel": "userManage",
+    "title": "用户管理",
+    "purpose": "查询校内账号、角色、状态与绑定信息。",
+    "prerequisites": [
+      "按当前管理角色和组织范围查询；账号维护仅对有权限人员显示。"
+    ],
+    "steps": [
+      {
+        "action": "按姓名、账号、角色、组织或企业微信状态查询。",
+        "expected": "显示符合当前范围的账号。",
+        "next": "打开绑定信息或操作日志核对身份。"
+      },
+      {
+        "action": "有权限时新增、编辑、导入或重置密码；保存后重新查询。",
+        "expected": "账号字段及状态更新。",
+        "next": "由账号本人核对登录与绑定。"
+      }
+    ],
+    "next": [
+      "学生档案先从教务数据导入，再按页面生成用户。"
+    ],
+    "issues": [
+      "查不到账号先核对角色及组织筛选；涉及其他用户的绑定操作按页面权限处理。"
+    ],
+    "capabilities": []
+  },
+  {
+    "key": "config.gradeManage",
+    "module": "config",
+    "panel": "gradeManage",
+    "title": "年级管理",
+    "purpose": "维护入学年级与当前年级标识。",
+    "prerequisites": [
+      "学校级管理员，具备年级及配置维护权限。"
+    ],
+    "steps": [
+      {
+        "action": "按名称或状态查询年级，选择新增或编辑。",
+        "expected": "表单显示代码、名称、当前年级、排序和状态。",
+        "next": "核对年级信息。"
+      },
+      {
+        "action": "保存后刷新列表，检查当前年级与启用状态。",
+        "expected": "列表反映保存结果。",
+        "next": "继续维护专业和班级。"
+      }
+    ],
+    "next": [
+      "将学生及开课任务关联到正确入学年级。"
+    ],
+    "issues": [
+      "设置当前年级会影响默认筛选；不要把毕业届次当作入学年级。"
+    ],
+    "capabilities": [
+      "archive.list",
+      "archive.save",
+      "archive.delete"
+    ]
+  },
+  {
+    "key": "config.graduationCohortManage",
+    "module": "config",
+    "panel": "graduationCohortManage",
+    "title": "毕业届次管理",
+    "purpose": "维护毕业年份、届次和当前届次。",
+    "prerequisites": [
+      "学校级管理员，具备毕业届次和配置维护权限。"
+    ],
+    "steps": [
+      {
+        "action": "新增或选择届次编辑名称、毕业年份、当前届次和状态。",
+        "expected": "表单显示届次独立字段。",
+        "next": "核对毕业年份。"
+      },
+      {
+        "action": "保存并刷新届次列表。",
+        "expected": "目标届次和当前标识更新。",
+        "next": "在使用届次归属的实习计划中选择。"
+      }
+    ],
+    "next": [
+      "继续核对实习类别使用年级还是届次。"
+    ],
+    "issues": [
+      "缺少届次选项时先确认档案启用状态和类别归属维度。"
+    ],
+    "capabilities": [
+      "archive.list",
+      "archive.save",
+      "archive.delete"
+    ]
+  },
+  {
+    "key": "config.internshipCategoryManage",
+    "module": "config",
+    "panel": "internshipCategoryManage",
+    "title": "实习类别管理",
+    "purpose": "配置实习类别代码及年级或毕业届次归属。",
+    "prerequisites": [
+      "学校级管理员，具备实习类别和配置维护权限。"
+    ],
+    "steps": [
+      {
+        "action": "新增或编辑类别，填写名称、代码和归属维度。",
+        "expected": "显示年级或届次的维度选择。",
+        "next": "核对该类别实际使用方式。"
+      },
+      {
+        "action": "保存类别后检查排序与启用状态。",
+        "expected": "类别可供计划选择。",
+        "next": "按选定维度创建或核对实习计划。"
+      }
+    ],
+    "next": [
+      "已有计划引用类别时先查看关联情况再调整。"
+    ],
+    "issues": [
+      "代码须符合页面规则；被计划使用的类别不能直接删除。"
+    ],
+    "capabilities": [
+      "archive.list",
+      "archive.save",
+      "archive.delete"
+    ]
+  },
+  {
+    "key": "config.departmentManage",
+    "module": "config",
+    "panel": "departmentManage",
+    "title": "学院管理",
+    "purpose": "维护学院名称、简称、代码、排序和状态。",
+    "prerequisites": [
+      "学校级管理员，具备学院和配置维护权限。"
+    ],
+    "steps": [
+      {
+        "action": "查询学院并选择新增或编辑。",
+        "expected": "打开学院档案表单。",
+        "next": "填写或核对名称与代码。"
+      },
+      {
+        "action": "保存后刷新并检查状态。",
+        "expected": "学院出现在可用档案中。",
+        "next": "继续关联专业、教师与组织范围。"
+      }
+    ],
+    "next": [
+      "学院准备好后维护所属专业。"
+    ],
+    "issues": [
+      "学院缺失时检查停用筛选；名称修订后核对已有档案关联。"
+    ],
+    "capabilities": [
+      "archive.list",
+      "archive.save",
+      "archive.delete"
+    ]
+  },
+  {
+    "key": "config.professionManage",
+    "module": "config",
+    "panel": "professionManage",
+    "title": "专业管理",
+    "purpose": "维护专业及所属年级、学院，支持页面提供的 Excel 导入。",
+    "prerequisites": [
+      "学院和年级档案已准备；学校级管理员具备维护权限。"
+    ],
+    "steps": [
+      {
+        "action": "新增或编辑专业，先选年级和学院，再填名称、简称、代码。",
+        "expected": "专业归属明确。",
+        "next": "保存并核对列表。"
+      },
+      {
+        "action": "批量录入时下载模板，上传并核对预览后确认导入。",
+        "expected": "页面显示导入结果和错误行。",
+        "next": "检查专业归属后继续维护班级。"
+      }
+    ],
+    "next": [
+      "将班级和学生关联到正确专业。"
+    ],
+    "issues": [
+      "导入学院无法匹配时先维护已有学院；错误行修正后重新预览。"
+    ],
+    "capabilities": [
+      "archive.list",
+      "archive.save",
+      "archive.delete",
+      "archive.import",
+      "archive.profession.import"
+    ]
+  },
+  {
+    "key": "config.classManage",
+    "module": "config",
+    "panel": "classManage",
+    "title": "班级管理",
+    "purpose": "维护班级名称、人数及所属年级、学院、专业。",
+    "prerequisites": [
+      "对应年级、学院和专业已存在；学校级管理员具备维护权限。"
+    ],
+    "steps": [
+      {
+        "action": "新增或选择班级编辑，按级联顺序选择组织归属。",
+        "expected": "可选专业与上级组织对应。",
+        "next": "填写班级名称等字段。"
+      },
+      {
+        "action": "保存或按页面导入 Excel 后刷新列表。",
+        "expected": "班级资料显示最新结果。",
+        "next": "核对学生档案所属班级。"
+      }
+    ],
+    "next": [
+      "在用户或教务数据中核对学生班级映射。"
+    ],
+    "issues": [
+      "选不到专业时核对年级和学院；导入报错时按错误行修正。"
+    ],
+    "capabilities": [
+      "archive.list",
+      "archive.save",
+      "archive.delete",
+      "archive.import"
+    ]
+  },
+  {
+    "key": "config.practicePeriods",
+    "module": "config",
+    "panel": "practicePeriods",
+    "title": "课节配置",
+    "purpose": "维护实验实训排课使用的课节时间、排序和状态。",
+    "prerequisites": [
+      "具备课节管理权限；明确当前学校作息。"
+    ],
+    "steps": [
+      {
+        "action": "刷新列表，新增或编辑课节名称、开始结束时间及排序。",
+        "expected": "表单显示本次时间段。",
+        "next": "核对结束时间晚于开始时间。"
+      },
+      {
+        "action": "保存并检查启用状态及排序。",
+        "expected": "课节列表更新。",
+        "next": "回到课表安排核对引用。"
+      }
+    ],
+    "next": [
+      "已被课表引用的课节变更后需核对相关安排。"
+    ],
+    "issues": [
+      "CLI执行前预览原值和关联课表；停用前检查后续排课需要。"
+    ],
+    "capabilities": [
+      "practice.period.save"
+    ]
+  },
+  {
+    "key": "config.menuManage",
+    "module": "config",
+    "panel": "menuManage",
+    "title": "菜单管理",
+    "purpose": "维护主菜单、业务菜单、列表与按钮权限节点。",
+    "prerequisites": [
+      "具备配置查看权限；增删改按页面对应操作权限校验。"
+    ],
+    "steps": [
+      {
+        "action": "刷新菜单树，选择目标节点，查看类型、平台、路径与权限码。",
+        "expected": "树中定位到当前菜单。",
+        "next": "确认需要主菜单还是子级。"
+      },
+      {
+        "action": "使用新增或编辑入口维护节点后保存。",
+        "expected": "菜单树显示修改后的节点。",
+        "next": "到角色权限核对授权。"
+      }
+    ],
+    "next": [
+      "再以相应角色读取菜单，核对入口及页面权限。"
+    ],
+    "issues": [
+      "按钮权限节点不是独立业务菜单；路径或平台错误会影响启动入口。"
+    ],
+    "capabilities": []
+  },
+  {
+    "key": "config.roleMenus",
+    "module": "config",
+    "panel": "roleMenus",
+    "title": "角色权限",
+    "purpose": "按角色维护菜单树及页面操作权限。",
+    "prerequisites": [
+      "具备配置查看权限和页面保存权限；明确目标角色。"
+    ],
+    "steps": [
+      {
+        "action": "选择角色后读取菜单授权。",
+        "expected": "树中显示该角色当前勾选项。",
+        "next": "核对主菜单、业务菜单与按钮节点。"
+      },
+      {
+        "action": "调整完整授权选择后保存。",
+        "expected": "页面反馈保存结果。",
+        "next": "以相应角色重新读取权限。"
+      }
+    ],
+    "next": [
+      "继续在组织范围中核对该角色可访问的数据。"
+    ],
+    "issues": [
+      "有菜单入口仍可能缺按钮权限；组织范围与角色授权分别校验。"
+    ],
+    "capabilities": []
+  },
+  {
+    "key": "config.organizationScope",
+    "module": "config",
+    "panel": "organizationScope",
+    "title": "组织范围",
+    "purpose": "维护角色对应学院、专业、班级及基地的数据边界。",
+    "prerequisites": [
+      "具备配置查看权限及范围保存权限；组织档案已准备。"
+    ],
+    "steps": [
+      {
+        "action": "选择角色并读取已有范围。",
+        "expected": "表格列出该角色现有范围行。",
+        "next": "核对每行归属。"
+      },
+      {
+        "action": "按需要添加或移除范围行，选择实际组织后保存完整表格。",
+        "expected": "页面显示保存结果。",
+        "next": "用目标角色重新查询业务数据。"
+      }
+    ],
+    "next": [
+      "业务记录自身的任务或项目绑定仍需单独满足。"
+    ],
+    "issues": [
+      "专业选项受学院限制；不要仅保存新增行而遗漏原有范围。"
+    ],
+    "capabilities": []
+  },
+  {
+    "key": "config.operationGuides",
+    "module": "config",
+    "panel": "operationGuides",
+    "title": "操作说明",
+    "purpose": "维护学校自定义模块说明，供逐菜单内置指南后补充展示。",
+    "prerequisites": [
+      "具备配置查看权限；新增编辑要求guide:save，删除要求guide:delete。"
+    ],
+    "steps": [
+      {
+        "action": "点击读取，查看各模块已有说明；选择新增说明或编辑。",
+        "expected": "表单显示模块、标题、排序及富文本内容。",
+        "next": "补充学校专属要求。"
+      },
+      {
+        "action": "保存后打开该模块窗口的操作说明。",
+        "expected": "先显示当前菜单内置步骤，再显示学校补充说明。",
+        "next": "核对内容适用范围。"
+      }
+    ],
+    "next": [
+      "已有说明无需迁移；学校补充内容按原模块保存。"
+    ],
+    "issues": [
+      "未显示先核对模块选择与读取结果；学校说明不会替代当前菜单内置步骤。"
+    ],
+    "capabilities": []
+  },
+  {
+    "key": "config.wechatProxy",
+    "module": "config",
+    "panel": "wechatProxy",
+    "title": "企业微信应用",
+    "purpose": "维护企业微信应用凭据、回调、代理及应用菜单。",
+    "prerequisites": [
+      "具有相关配置操作权限；应用参数来自学校实际配置。"
+    ],
+    "steps": [
+      {
+        "action": "重新读取并核对企业ID、AgentId、回调和代理参数；修改后保存配置。",
+        "expected": "参数保存到本系统。",
+        "next": "点击测试配置查看连接结果。"
+      },
+      {
+        "action": "选择菜单节点维护名称与动作；需要对外生效时点击立即同步菜单。",
+        "expected": "先保存当前配置，再同步覆盖企业微信应用菜单。",
+        "next": "在企业微信应用核对。"
+      }
+    ],
+    "next": [
+      "通知仍需消息渠道、流程模板和用户绑定共同满足。"
+    ],
+    "issues": [
+      "一级最多3个、每个最多5个子菜单；保存配置不会单独同步外部菜单。"
+    ],
+    "capabilities": []
+  },
+  {
+    "key": "stat.overview",
+    "module": "stat",
+    "panel": "overview",
+    "title": "实习总览",
+    "purpose": "按当前范围汇总实习任务与过程材料。",
+    "prerequisites": [
+      "具备统计查看权限；只汇总当前账号可见范围。"
+    ],
+    "steps": [
+      {
+        "action": "从统计侧栏选择实习总览，填写该报表提供的筛选条件。",
+        "expected": "标题和查询条件对应当前维度。",
+        "next": "点击查询。"
+      },
+      {
+        "action": "查看任务、绑定、提交和成绩等汇总卡片。",
+        "expected": "表格显示当前筛选的统计结果。",
+        "next": "按待处理环节返回相应实习菜单。"
+      }
+    ],
+    "next": [
+      "按待处理环节返回相应实习菜单。"
+    ],
+    "issues": [
+      "空表先检查学期、类别、组织及课程选择；使用当前统计页面导出并核对下载文件。"
+    ],
+    "capabilities": []
+  },
+  {
+    "key": "stat.department",
+    "module": "stat",
+    "panel": "department",
+    "title": "学院统计",
+    "purpose": "比较学院参与、审核进度与成绩分布。",
+    "prerequisites": [
+      "具备统计查看权限；只汇总当前账号可见范围。"
+    ],
+    "steps": [
+      {
+        "action": "从统计侧栏选择学院统计，填写该报表提供的筛选条件。",
+        "expected": "标题和查询条件对应当前维度。",
+        "next": "点击查询。"
+      },
+      {
+        "action": "按学院筛选后核对学生参与及审核进度。",
+        "expected": "表格显示当前筛选的统计结果。",
+        "next": "对异常学院继续按专业或学生查询。"
+      }
+    ],
+    "next": [
+      "对异常学院继续按专业或学生查询。"
+    ],
+    "issues": [
+      "空表先检查学期、类别、组织及课程选择；使用当前统计页面导出并核对下载文件。"
+    ],
+    "capabilities": []
+  },
+  {
+    "key": "stat.profession",
+    "module": "stat",
+    "panel": "profession",
+    "title": "专业统计",
+    "purpose": "按专业核对实习覆盖、提交与归档。",
+    "prerequisites": [
+      "具备统计查看权限；只汇总当前账号可见范围。"
+    ],
+    "steps": [
+      {
+        "action": "从统计侧栏选择专业统计，填写该报表提供的筛选条件。",
+        "expected": "标题和查询条件对应当前维度。",
+        "next": "点击查询。"
+      },
+      {
+        "action": "选择学院及专业，查询提交和材料情况。",
+        "expected": "表格显示当前筛选的统计结果。",
+        "next": "返回目标专业的任务及归档材料。"
+      }
+    ],
+    "next": [
+      "返回目标专业的任务及归档材料。"
+    ],
+    "issues": [
+      "空表先检查学期、类别、组织及课程选择；使用当前统计页面导出并核对下载文件。"
+    ],
+    "capabilities": []
+  },
+  {
+    "key": "stat.teacher",
+    "module": "stat",
+    "panel": "teacher",
+    "title": "任务老师统计",
+    "purpose": "按任务老师核对学生数量和评阅进度。",
+    "prerequisites": [
+      "具备统计查看权限；只汇总当前账号可见范围。"
+    ],
+    "steps": [
+      {
+        "action": "从统计侧栏选择任务老师统计，填写该报表提供的筛选条件。",
+        "expected": "标题和查询条件对应当前维度。",
+        "next": "点击查询。"
+      },
+      {
+        "action": "选择任务老师等筛选，核对待评日志与报告。",
+        "expected": "表格显示当前筛选的统计结果。",
+        "next": "由对应老师进入日志或报告评阅。"
+      }
+    ],
+    "next": [
+      "由对应老师进入日志或报告评阅。"
+    ],
+    "issues": [
+      "空表先检查学期、类别、组织及课程选择；使用当前统计页面导出并核对下载文件。"
+    ],
+    "capabilities": []
+  },
+  {
+    "key": "stat.student",
+    "module": "stat",
+    "panel": "student",
+    "title": "学生过程统计",
+    "purpose": "核对学生申请、签到、日志、报告和成绩状态。",
+    "prerequisites": [
+      "具备统计查看权限；只汇总当前账号可见范围。"
+    ],
+    "steps": [
+      {
+        "action": "从统计侧栏选择学生过程统计，填写该报表提供的筛选条件。",
+        "expected": "标题和查询条件对应当前维度。",
+        "next": "点击查询。"
+      },
+      {
+        "action": "按组织及学生条件查询过程状态。",
+        "expected": "表格显示当前筛选的统计结果。",
+        "next": "进入对应学生的任务或材料记录。"
+      }
+    ],
+    "next": [
+      "进入对应学生的任务或材料记录。"
+    ],
+    "issues": [
+      "空表先检查学期、类别、组织及课程选择；使用当前统计页面导出并核对下载文件。"
+    ],
+    "capabilities": []
+  },
+  {
+    "key": "stat.archive",
+    "module": "stat",
+    "panel": "archive",
+    "title": "归档材料统计",
+    "purpose": "核对保险、安全承诺及报告等材料完整性。",
+    "prerequisites": [
+      "具备统计查看权限；只汇总当前账号可见范围。"
+    ],
+    "steps": [
+      {
+        "action": "从统计侧栏选择归档材料统计，填写该报表提供的筛选条件。",
+        "expected": "标题和查询条件对应当前维度。",
+        "next": "点击查询。"
+      },
+      {
+        "action": "按类别、年级或届次查询材料齐备情况。",
+        "expected": "表格显示当前筛选的统计结果。",
+        "next": "进入实习归档材料补齐缺失项。"
+      }
+    ],
+    "next": [
+      "进入实习归档材料补齐缺失项。"
+    ],
+    "issues": [
+      "空表先检查学期、类别、组织及课程选择；使用当前统计页面导出并核对下载文件。"
+    ],
+    "capabilities": []
+  },
+  {
+    "key": "stat.practice_score_sheet",
+    "module": "stat",
+    "panel": "practice_score_sheet",
+    "title": "实验实训成绩记载表",
+    "purpose": "按开课任务查看考勤、项目、报告和总分记载表。",
+    "prerequisites": [
+      "具备统计查看权限；只汇总当前账号可见范围。"
+    ],
+    "steps": [
+      {
+        "action": "从统计侧栏选择实验实训成绩记载表，填写该报表提供的筛选条件。",
+        "expected": "标题和查询条件对应当前维度。",
+        "next": "点击查询。"
+      },
+      {
+        "action": "选择目标实验实训开课任务并查询学生成绩。",
+        "expected": "表格显示当前筛选的统计结果。",
+        "next": "核对考勤、项目分项和总评后按页面导出。"
+      }
+    ],
+    "next": [
+      "核对考勤、项目分项和总评后按页面导出。"
+    ],
+    "issues": [
+      "空表先检查学期、类别、组织及课程选择；使用当前统计页面导出并核对下载文件。"
+    ],
+    "capabilities": []
+  },
+  {
+    "key": "profile.general",
+    "module": "profile",
+    "panel": "general",
+    "title": "基本资料",
+    "purpose": "修改本人头像、姓名、邮箱，验证手机号并管理本人CLI设备。",
+    "prerequisites": [
+      "已登录；只修改当前系统用户的资料。"
+    ],
+    "steps": [
+      {
+        "action": "重新读取，修改姓名、邮箱或上传头像；手机号按绑定入口验证。",
+        "expected": "表单显示当前修改或验证结果。",
+        "next": "点击保存修改。"
+      },
+      {
+        "action": "需要管理CLI设备时点击管理CLI会话。",
+        "expected": "显示本人授权会话。",
+        "next": "核对后撤销不再使用的设备。"
+      }
+    ],
+    "next": [
+      "重新读取确认资料；通知渠道在消息通知设置。"
+    ],
+    "issues": [
+      "手机号需验证绑定；账号角色由管理员维护。"
+    ],
+    "capabilities": []
+  },
+  {
+    "key": "profile.appearance",
+    "module": "profile",
+    "panel": "appearance",
+    "title": "主题与壁纸",
+    "purpose": "设置本设备主题、桌面栏、客户端风格及个人壁纸。",
+    "prerequisites": [
+      "桌面或网页功能按当前设备展示。"
+    ],
+    "steps": [
+      {
+        "action": "在主题与壁纸调整主题、桌面栏或Windows/Mac风格。",
+        "expected": "当前设备即时显示外观变化。",
+        "next": "核对桌面栏效果。"
+      },
+      {
+        "action": "从壁纸库选择或上传个人壁纸。",
+        "expected": "工作台应用所选壁纸。",
+        "next": "返回桌面确认。"
+      }
+    ],
+    "next": [
+      "全校默认壁纸到学校设置维护。"
+    ],
+    "issues": [
+      "主题及设备外观按页面标注本机保存；学校壁纸与个人选择分别管理。"
+    ],
+    "capabilities": []
+  },
+  {
+    "key": "profile.accounts",
+    "module": "profile",
+    "panel": "accounts",
+    "title": "账号与安全",
+    "purpose": "管理本人关联账号、桌面锁屏与桌面凭据保管。",
+    "prerequisites": [
+      "关联账号须按页面验证；锁屏及凭据功能只在支持的客户端显示。"
+    ],
+    "steps": [
+      {
+        "action": "在账号关联区域按页面验证并添加本人登录账号。",
+        "expected": "列表显示可切换的关联账号。",
+        "next": "核对目标学校与角色。"
+      },
+      {
+        "action": "桌面端按可用设置配置锁屏和凭据保管。",
+        "expected": "页面显示保存状态。",
+        "next": "使用当前设备核对解锁或账号切换。"
+      }
+    ],
+    "next": [
+      "切换身份后重新核对学校及角色再处理业务。"
+    ],
+    "issues": [
+      "关联账号不扩大权限；凭据异常按设置页面重新验证，勿把密钥写入聊天内容。"
+    ],
+    "capabilities": []
+  },
+  {
+    "key": "profile.notifications",
+    "module": "profile",
+    "panel": "notifications",
+    "title": "消息通知",
+    "purpose": "设置个人接收渠道、企业微信绑定与接收时间。",
+    "prerequisites": [
+      "已登录；企业微信绑定入口仅适用角色显示。"
+    ],
+    "steps": [
+      {
+        "action": "选择站内、企业微信、邮件或业务短信，按需要完成绑定与邮箱、手机号信息。",
+        "expected": "开关反映本次选择。",
+        "next": "核对接收资料。"
+      },
+      {
+        "action": "选择全天接收或填写每日时间后保存修改。",
+        "expected": "页面显示保存结果。",
+        "next": "重新读取核对。"
+      }
+    ],
+    "next": [
+      "投递问题继续核对学校渠道、流程节点和模板。"
+    ],
+    "issues": [
+      "跨午夜时间可按页面填写；业务短信需已验证手机号且学校配置网关。"
+    ],
+    "capabilities": []
+  },
+  {
+    "key": "profile.signature",
+    "module": "profile",
+    "panel": "signature",
+    "title": "电子签名",
+    "purpose": "通过手机扫码生成本人用于审批确认的电子签名版本。",
+    "prerequisites": [
+      "手机已登录同一系统用户；可用扫码签名页面。"
+    ],
+    "steps": [
+      {
+        "action": "点击手机扫码签名或手机扫码重新签名。",
+        "expected": "显示有时效的二维码。",
+        "next": "用手机扫码并完成本人签名。"
+      },
+      {
+        "action": "等待页面显示新签名与版本。",
+        "expected": "签名及生成时间更新。",
+        "next": "后续审批按本人确认使用。"
+      }
+    ],
+    "next": [
+      "历史审批保留原签名版本。"
+    ],
+    "issues": [
+      "二维码过期后重新生成；电子签名不能代替安全承诺书签字文件。"
+    ],
+    "capabilities": []
+  },
+  {
+    "key": "profile.storage",
+    "module": "profile",
+    "panel": "storage",
+    "title": "存储与缓存",
+    "purpose": "设置本机Office预览方式与文件预览缓存上限。",
+    "prerequisites": [
+      "仅桌面客户端显示；本机转换需已安装可用引擎。"
+    ],
+    "steps": [
+      {
+        "action": "选择预览方式与转换引擎，保存或重新检测。",
+        "expected": "显示Word或LibreOffice检测结果。",
+        "next": "预览文件核对效果。"
+      },
+      {
+        "action": "设置最大缓存GB并保存；需要清理时使用清空缓存。",
+        "expected": "显示缓存用量与设置。",
+        "next": "重新预览时按需读取文件。"
+      }
+    ],
+    "next": [
+      "缺引擎时可按页面手动用本机Office打开只读副本。"
+    ],
+    "issues": [
+      "外部Office另存或修改不会自动上传；设为0关闭持久缓存。"
+    ],
+    "capabilities": []
+  },
+  {
+    "key": "agent.chat",
+    "module": "agent",
+    "panel": "chat",
+    "title": "Agent聊天",
+    "purpose": "选择模型，通过当前账号可用的能力处理对话。",
+    "prerequisites": [
+      "桌面客户端已登录且解锁；所选学校或个人模型可用。"
+    ],
+    "steps": [
+      {
+        "action": "点击新建聊天或选择已有会话，核对模型来源和模型。",
+        "expected": "会话及当前模型显示在聊天区。",
+        "next": "填写清楚的对象与操作目标。"
+      },
+      {
+        "action": "发送后查看回复及原生确认；需要停止时点击停止，有操作结果时打开回执。",
+        "expected": "界面显示消息、运行状态及可用操作回执。",
+        "next": "按回执核对业务页面实际结果。"
+      }
+    ],
+    "next": [
+      "需要新背景时编辑记忆；模型配置到模型菜单。"
+    ],
+    "issues": [
+      "连接异常先检查模型连接和状态；确认窗口必须由本人核对，不能把草稿或预览当执行成功。"
+    ],
+    "capabilities": []
+  },
+  {
+    "key": "agent.models",
+    "module": "agent",
+    "panel": "models",
+    "title": "Agent模型",
+    "purpose": "维护个人模型提供方并在本机与云端间手动同步配置。",
+    "prerequisites": [
+      "学校模型由管理员提供；个人提供方需正确的地址、密钥和模型。"
+    ],
+    "steps": [
+      {
+        "action": "添加个人提供方，填写名称、接口地址和密钥，读取并选择模型后保存。",
+        "expected": "个人配置先加密保存在本机。",
+        "next": "点击检查连接核对。"
+      },
+      {
+        "action": "需要同步时点击同步配置；有冲突时逐项选择保留本机或云端后同步已选项。",
+        "expected": "已选冲突按确认侧同步，未选冲突保留。",
+        "next": "回聊天选择该提供方和模型。"
+      }
+    ],
+    "next": [
+      "个人模型请求由本机直连；学校统一模型经学校服务器转发，聊天中可切换可用来源。"
+    ],
+    "issues": [
+      "同步配置不包含会话和记忆；选择已删除一侧会同步删除另一侧，先核对冲突详情。"
+    ],
+    "capabilities": []
+  },
+  {
+    "key": "agent.plugins",
+    "module": "agent",
+    "panel": "plugins",
+    "title": "Agent插件",
+    "purpose": "在本机工作区启用Skill文本资源或配置MCP工具服务。",
+    "prerequisites": [
+      "已登录且解锁；已了解目标Skill内容或MCP服务用途。"
+    ],
+    "steps": [
+      {
+        "action": "导入SKILL.md或文本资源包，或添加MCP并填写HTTP或本机stdio连接信息。",
+        "expected": "插件显示在列表，凭据按本机规则保存。",
+        "next": "按需启用插件。"
+      },
+      {
+        "action": "MCP点击连接并列出工具；Skill可查看指令。",
+        "expected": "显示连接结果及工具名称或指令内容。",
+        "next": "回聊天按任务使用。"
+      }
+    ],
+    "next": [
+      "每次MCP调用通过原生窗口核对确认。"
+    ],
+    "issues": [
+      "本机stdio命令以当前用户权限运行；连接失败核对命令参数、环境或服务地址。",
+      "插件属于本机工作区；业务调用仍须使用当前学校、账号权限。"
+    ],
+    "capabilities": []
+  },
+  {
+    "key": "agent.memories",
+    "module": "agent",
+    "panel": "memories",
+    "title": "Agent记忆",
+    "purpose": "保存本机各会话共用的背景及偏好，会话和记忆不随学校或账号切换。",
+    "prerequisites": [
+      "明确记忆内容会发送给后续选择的模型提供方。"
+    ],
+    "steps": [
+      {
+        "action": "新增记忆，填写标题和正文并保存。",
+        "expected": "记忆显示在本机列表。",
+        "next": "按需要启用。"
+      },
+      {
+        "action": "使用编辑或删除维护内容，回聊天开始后续对话。",
+        "expected": "启用的记忆加入后续上下文。",
+        "next": "核对记忆是否仍准确。"
+      }
+    ],
+    "next": [
+      "本机后续会话共享启用记忆；切换账号后业务请求仍使用当前账号的权限。"
+    ],
+    "issues": [
+      "会话和记忆保存在本机，不参与个人模型配置同步。",
+      "学校或账号切换不会隔离本机记忆；不要把历史对话中的身份当作当前业务身份。"
+    ],
+    "capabilities": []
+  },
+  {
+    "key": "agent.tasks",
+    "module": "agent",
+    "panel": "tasks",
+    "title": "Agent定时任务",
+    "purpose": "创建仅在本机运行的只读Agent定时工作。",
+    "prerequisites": [
+      "客户端已登录且解锁；定时Agent只执行只读任务且不启用MCP。"
+    ],
+    "steps": [
+      {
+        "action": "新建任务，填写名称、只读任务内容、模型来源和模型。",
+        "expected": "任务表单显示完整工作内容。",
+        "next": "选择单次或间隔及本机运行时间。"
+      },
+      {
+        "action": "保存并启用，查看下次运行和状态；错过项目由本人选择补跑一次或跳过。",
+        "expected": "列表显示运行计划和后续状态。",
+        "next": "到状态查看最近事件。"
+      }
+    ],
+    "next": [
+      "需要修改计划时编辑或停用任务。"
+    ],
+    "issues": [
+      "间隔至少5分钟；关闭、休眠或锁定时暂停，到期项目记为错过，不会当作云端后台持续运行。"
+    ],
+    "capabilities": []
+  },
+  {
+    "key": "agent.reminders",
+    "module": "agent",
+    "panel": "reminders",
+    "title": "Agent提醒",
+    "purpose": "设置只在本机提示的单次或间隔提醒。",
+    "prerequisites": [
+      "客户端已登录且解锁；时间使用本机时区。"
+    ],
+    "steps": [
+      {
+        "action": "新建提醒，填写名称、提醒内容、单次或间隔及运行时间。",
+        "expected": "表单显示本机计划。",
+        "next": "保存并启用。"
+      },
+      {
+        "action": "查看下次提醒时间与状态；错过的提醒选择补跑一次或跳过。",
+        "expected": "记录显示处理结果。",
+        "next": "按需要编辑、停用或删除。"
+      }
+    ],
+    "next": [
+      "提醒后由本人进入相关业务页面办理。"
+    ],
+    "issues": [
+      "关闭、锁定或休眠时暂停；提醒不会自动执行业务写入或变成云端通知。"
+    ],
+    "capabilities": []
+  },
+  {
+    "key": "agent.status",
+    "module": "agent",
+    "panel": "status",
+    "title": "Agent状态",
+    "purpose": "查看本机工作区、当前业务账号连接状态与最近事件。",
+    "prerequisites": [
+      "客户端已登录；当前学校和账号决定模型配置与业务访问权限。"
+    ],
+    "steps": [
+      {
+        "action": "打开状态，核对当前客户端连接、学校来源及账号。",
+        "expected": "显示当前业务连接与本机会话、记忆数量。",
+        "next": "确认是否为预期业务身份。"
+      },
+      {
+        "action": "查看最近事件的时间、状态与内容，必要时重新加载。",
+        "expected": "显示本机最近任务或运行反馈。",
+        "next": "回对应聊天、任务或模型菜单处理。"
+      }
+    ],
+    "next": [
+      "操作涉及学校业务时同时查看回执及业务页面。"
+    ],
+    "issues": [
+      "本机会话和记忆共享，不随账号切换；业务权限及模型配置按当前账号校验。",
+      "无事件不代表远端业务已执行；连接异常先核对登录、锁屏与模型状态。"
+    ],
+    "capabilities": []
+  },
+  {
+    "key": "internship.applications",
+    "module": "internship",
+    "panel": "applications",
+    "title": "实习方式申请",
+    "purpose": "按任务提交集中、分散或自主实习方式申请并跟进原审核流程。",
+    "prerequisites": [
+      "学生已绑定可申请的实习任务；办理入口按当前角色和状态显示。"
+    ],
+    "steps": [
+      {
+        "action": "在申请管理选择实习方式申请，查看本人的申请卡片或按任务、学生筛选。",
+        "expected": "显示集中、分散或自主方式及状态。",
+        "next": "打开记录核对意见。"
+      },
+      {
+        "action": "学生需新增或修改时在移动端任务申请填写任务、类型和说明，保存草稿或提交审核；审核者在PC按当前节点处理。",
+        "expected": "申请状态和记录更新。",
+        "next": "按意见修订或继续任务实施。"
+      }
+    ],
+    "next": [
+      "办理后回到任务核对实习方式与绑定。"
+    ],
+    "issues": [
+      "PC学生菜单仅展示已有申请；新增和填写使用移动端任务申请或已开放的CLI能力。",
+      "草稿保存不等于提交，提交后继续查看原审核状态。"
+    ],
+    "capabilities": [
+      "internship.applications",
+      "internship.application.save",
+      "internship.application.submit",
+      "internship.application.review"
+    ]
+  },
+  {
+    "key": "internship.delays",
+    "module": "internship",
+    "panel": "delays",
+    "title": "延期申请",
+    "purpose": "查看和办理任务材料等延期申请。",
+    "prerequisites": [
+      "学生有可申请延期的任务及延期类型；审核者位于原处理范围。"
+    ],
+    "steps": [
+      {
+        "action": "在申请管理选择延期申请，查看任务、延期类型、期望日期和原因。",
+        "expected": "显示已有延期记录及审核状态。",
+        "next": "核对当前申请内容。"
+      },
+      {
+        "action": "学生需新增或修改时使用移动端实习提交中的延期入口；审核者在PC按当前节点通过或退回。",
+        "expected": "申请状态和流程记录更新。",
+        "next": "回到原任务核对生效截止时间。"
+      }
+    ],
+    "next": [
+      "按生效截止要求完成原材料或任务。"
+    ],
+    "issues": [
+      "PC学生延期菜单只查看既有记录；延期保存、提交及审核均未向CLI开放。"
+    ],
+    "capabilities": [
+      "internship.delays"
+    ]
+  }
+]

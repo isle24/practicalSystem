@@ -18,6 +18,7 @@ mod local_lock_password;
 mod office_engine;
 mod office_preview;
 mod preview_cache;
+mod project_guides;
 mod school_api;
 mod updater;
 mod windows;

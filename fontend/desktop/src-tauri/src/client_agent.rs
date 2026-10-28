@@ -1556,6 +1556,9 @@ async fn execute(
                     continue;
                 }
                 let result = match value["method"].as_str().unwrap_or("") {
+                    "project_guide" if builtin_enabled => {
+                        crate::project_guides::query(&value["params"])
+                    }
                     "model" if mode == "school" => {
                         update(run, json!({"tool_status":"学校模型推理中"}));
                         agent_post(connection,run,"api/client-agent/model",&json!({"revision":config["school"]["revision"],"body":value["params"]["body"]})).await

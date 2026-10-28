@@ -26,7 +26,7 @@ const current = computed(() => tabs.value.find(tab => tab.id === props.modelValu
     <section class="profile-detail">
       <header class="profile-detail-header">
         <div><h1>{{ current.label }}</h1><p>{{ current.hint }}</p></div>
-        <div v-if="['general', 'notifications'].includes(current.id)" class="profile-detail-actions"><slot name="actions" /></div>
+        <div class="profile-detail-actions"><slot name="help" /><template v-if="['general', 'notifications'].includes(current.id)"><slot name="actions" /></template></div>
       </header>
       <div :key="current.id" class="profile-detail-body">
         <slot name="message" />

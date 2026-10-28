@@ -9,6 +9,8 @@ import { homedir, tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
+const skillResources = spawnSync(process.execPath, [join(root, 'scripts/sync-project-skill.mjs'), '--check'], { stdio: 'inherit', windowsHide: true });
+if (skillResources.error || skillResources.status !== 0) throw new Error('Built-in project Skill resources are not synchronized');
 const nodeVersion = '22.23.3';
 const distributions = {
   'aarch64-apple-darwin': { archive: `node-v${nodeVersion}-darwin-arm64.tar.gz`, sha256: '23b25245dcfb9af7262f8ff142e9e2e0af025368117329e7a7458a51e5922f53', directory: `node-v${nodeVersion}-darwin-arm64`, executable: 'bin/node' },

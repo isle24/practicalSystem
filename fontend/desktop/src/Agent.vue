@@ -169,6 +169,7 @@
                 : '添加提醒'
           }}
         </button>
+        <button type="button" :disabled="!menuGuide" @click="menuGuideDialog?.showModal()">操作说明</button>
       </header>
       <div class="feedback" aria-live="polite">
         <p v-if="error" class="notice error" role="alert">{{ error }}</p>
@@ -1089,6 +1090,16 @@
         </button>
       </div>
     </dialog>
+    <dialog ref="menuGuideDialog" class="menu-guide-dialog" aria-labelledby="menu-guide-title">
+      <template v-if="menuGuide">
+        <header><h2 id="menu-guide-title">{{ menuGuide.title }}操作说明</h2><button type="button" autofocus @click="menuGuideDialog.close()">关闭</button></header>
+        <p>{{ menuGuide.purpose }}</p>
+        <h3>开始前</h3><ul><li v-for="(item, index) in menuGuide.prerequisites" :key="index">{{ item }}</li></ul>
+        <h3>当前怎么操作</h3><ol><li v-for="(step, index) in menuGuide.steps" :key="index"><strong>{{ step.action }}</strong><p>完成标志：{{ step.expected }}</p><p>下一步：{{ step.next }}</p></li></ol>
+        <h3>完成后做什么</h3><ul><li v-for="(item, index) in menuGuide.next" :key="index">{{ item }}</li></ul>
+        <h3>遇到问题</h3><ul><li v-for="(item, index) in menuGuide.issues" :key="index">{{ item }}</li></ul>
+      </template>
+    </dialog>
   </main>
 </template>
 
@@ -1102,6 +1113,7 @@ import {
   ref,
   watch
 } from 'vue';
+import menuGuides from '../../shared/operation-guides.json';
 const navigation = [
   {
     id: 'chat',
@@ -1148,6 +1160,8 @@ const section = ref('chat'),
   scope = ref(null),
   profiles = ref([]),
   school = ref({ enabled: false, model: '' });
+const menuGuideDialog = ref(null);
+const menuGuide = computed(() => menuGuides.find(item => item.key === `agent.${section.value}`));
 const conflicts = ref([]),
   conflictChoices = reactive({}),
   syncing = ref(false),
@@ -2350,4 +2364,14 @@ onBeforeUnmount(() => {
 .operation-receipt-list span, .operation-receipt-list small, .operation-receipt-list code { font-size: 12px; overflow-wrap: anywhere; }
 .operation-receipt-list input { box-sizing: border-box; width: 100%; min-width: 0; font-size: 12px; }
 .operation-receipt-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+</style>
+
+<style scoped>
+.menu-guide-dialog { box-sizing: border-box; width: min(760px, calc(100vw - 32px)); max-height: 85vh; overflow: auto; padding: 24px; }
+.menu-guide-dialog header { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.menu-guide-dialog h2 { margin: 0; font-size: 20px; }
+.menu-guide-dialog h3 { margin: 24px 0 8px; font-size: 15px; }
+.menu-guide-dialog p, .menu-guide-dialog li { font-size: 14px; line-height: 1.75; overflow-wrap: anywhere; }
+.menu-guide-dialog li { margin: 10px 0; }
+.menu-guide-dialog li p { margin: 4px 0; }
 </style>

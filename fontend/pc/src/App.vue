@@ -115,7 +115,7 @@
         @minimize="minimizeWindow(win.id)"
         @close="closeWindow(win.id)"
       >
-        <template v-if="win.module.id !== 'profile' && !isModuleCollection(win.module.id)" #actions>
+        <template v-if="win.module.id !== 'profile'" #actions>
           <button type="button" class="window-guide-button" title="操作说明" @click="openGuide(win)">
             <BookOpen :size="14" />
             <span>操作说明</span>
@@ -124,6 +124,9 @@
 
         <div v-if="win.module.id === 'profile'" class="profile-app">
           <ProfileSettingsLayout v-model="profileSection" :desktop="isDesktopClient">
+            <template #help>
+              <el-button :icon="BookOpen" @click="openGuide(win)">操作说明</el-button>
+            </template>
             <template #actions>
               <el-button :icon="RefreshCw" :loading="profileState.loading" @click="loadProfile">重新读取</el-button>
               <el-button type="primary" :icon="Save" :loading="profileState.loading" @click="saveProfile">保存修改</el-button>
@@ -4073,13 +4076,12 @@
       :visible="guideState.visible"
       :title="guideState.title"
       dialog-class="guide-dialog"
-      :busy="guideState.loading"
       @close="closeGuide"
     >
         <div class="guide-content rich-content">
           <el-alert v-if="guideState.message" type="warning" :closable="false" :title="guideState.message" />
-          <div v-if="guideState.loading" class="guide-loading">正在读取操作说明...</div>
-          <article v-else v-html="sanitizeRichHtml(guideState.content)" />
+          <div v-if="guideState.loading" class="guide-loading">正在读取学校补充说明...</div>
+          <article v-html="sanitizeRichHtml(guideState.content)" />
         </div>
         <footer>
           <el-button type="primary" @click="closeGuide">知道了</el-button>
@@ -4419,6 +4421,7 @@ import { DEFAULT_DESKTOP_MODULE_IDS, useDesktopLauncher } from './composables/us
 import { usePermissions } from './composables/usePermissions';
 import { buildLaunchableMenuModules, mergeLaunchableModules as mergeMenuModules } from './utils/menuModules';
 import { tableSequence } from './utils/table';
+import { findOperationGuide, renderOperationGuide } from './utils/operationGuides';
 import { backendUrl, frontendPublicUrl, request, waitForPendingRefresh, invalidateSessionRequests } from './api/client';
 import {
   changeOwnPassword,
@@ -8115,19 +8118,19 @@ async function openGuide(win) {
   const version = ++guideReadVersion;
   const source = workspaceContextKey.value;
   const current = () => version === guideReadVersion && source === workspaceContextKey.value && !workspaceFrozen.value;
-  guideState.title = `${win.module.name}操作说明`;
-  guideState.content = fallbackGuideContent(win);
+  const guide = operationGuideForWindow(win);
+  const builtInContent = fallbackGuideContent(win, guide);
+  guideState.title = `${guide.title}操作说明`;
+  guideState.content = builtInContent;
   guideState.message = '';
   guideState.loading = true;
   guideState.visible = true;
   try {
     const data = await fetchOperationGuide(win.module.id);
     if (!current()) return;
-    if (data.guide?.title) {
-      guideState.title = data.guide.title;
-    }
     if (data.guide?.content) {
-      guideState.content = data.guide.content;
+      const schoolTitle = data.guide.title ? `学校补充说明：${data.guide.title}` : '学校补充说明';
+      guideState.content = `${builtInContent}<section><h3>${escapeHtml(schoolTitle)}</h3>${sanitizeRichHtml(data.guide.content)}</section>`;
     }
   } catch (error) {
     if (current()) guideState.message = error.message;
@@ -8197,34 +8200,32 @@ async function setFavoriteDesktopShortcut(row, enabled) {
 }
 
 
-function fallbackGuideContent(win) {
-  const common = [
-    {
-      title: '窗口操作',
-      lines: ['窗口可拖动、最小化、关闭，也可以拖拽边缘调整大小。', '底部任务栏图标用于恢复已最小化窗口。'],
-    },
-  ];
-  const map = {
-    internship: [
-      { title: '实习业务', lines: ['学生端以管理员分配的本人实习任务为主，按任务提交签到、日志、报告和材料。', '教师端默认按任务查看绑定学生，审核类操作会进入确认弹窗并记录流程。', '管理员端通过计划、任务、班级绑定、记录查看和归档材料完成过程监管。'] },
+function operationGuideForWindow(win) {
+  const moduleId = win.module.id;
+  let panel = win.panel || '';
+  if (moduleId === 'profile') panel = profileSection.value;
+  if (moduleId === 'stat') panel = statState.report;
+  if (moduleId === 'internship' && panel === 'requests') panel = activeInternshipRequestTab.value;
+  const guide = findOperationGuide(moduleId, panel, win.panel);
+  if (guide) {
+    const panelName = sidebarItems(win).find(item => item.key === panel)?.name;
+    return panelName ? { ...guide, title: panelName } : guide;
+  }
+  return {
+    title: win.module.name || '当前入口',
+    purpose: win.module.scope || '打开当前账号获准访问的页面或外部应用。',
+    prerequisites: ['确认当前学校、账号与角色，并阅读目标页面的操作要求。'],
+    steps: [
+      { action: '读取当前入口页面，核对标题、来源与可见内容。', expected: '显示目标页面或访问提示。', next: '按页面已有入口继续。' },
+      { action: '按当前页面实际提供的表单和按钮办理。', expected: '页面给出保存、提交或打开结果。', next: '核对目标记录实际状态。' },
     ],
-    config: [
-      { title: '系统配置', lines: ['菜单管理用于维护主菜单、业务菜单、列表和按钮节点。', '角色权限按菜单树授权，按钮节点用于控制页面内操作。', '组织范围用于配置学院、专业、班级、基地等数据边界。'] },
-    ],
-    log: [
-      { title: '日志审计', lines: ['默认读取当前学校下所有操作日志。', '可按关键词、动作、IP 和日期范围查询。'] },
-    ],
-    stat: [
-      { title: '统计报表', lines: ['统计项按当前角色的数据范围展示。', '后续实训和实验流程确认后，可在此扩展跨模块统计卡片和报表。'] },
-    ],
-    file: [
-      { title: '文件管理', lines: ['展示学校上传文件、上传人、上传时间和设备信息。', '管理员可通过关键词、状态和分类快速定位文件。'] },
-    ],
+    next: ['如需返回其他业务，通过启动台选择对应菜单。'],
+    issues: ['此入口没有专属内置指南时，参考下方学校补充说明；访问失败联系管理员核对菜单路径与权限。'],
   };
+}
 
-  return [...(map[win.module.id] || [{ title: '模块说明', lines: ['该模块流程确认后接入具体业务页面。'] }]), ...common]
-    .map(section => `<section><h3>${escapeHtml(section.title)}</h3>${section.lines.map(line => `<p>${escapeHtml(line)}</p>`).join('')}</section>`)
-    .join('');
+function fallbackGuideContent(win, guide = operationGuideForWindow(win)) {
+  return renderOperationGuide(guide);
 }
 
 function emptyGuideForm() {

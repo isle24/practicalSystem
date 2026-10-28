@@ -15,6 +15,10 @@ const BUILTIN_ID: &str = "builtin-practical-system";
 const MAX_BYTES: usize = 3 * 1024 * 1024;
 const SKILL_BYTES: usize = 1024 * 1024;
 const BUILTIN_CONTENT: &str = include_str!("../../agent/skills/practical-system/SKILL.md");
+const BUILTIN_WORKFLOWS: &str =
+    include_str!("../../agent/skills/practical-system/references/workflows.md");
+const BUILTIN_MENUS: &str =
+    include_str!("../../agent/skills/practical-system/references/menu-guides.json");
 
 fn now() -> i64 {
     SystemTime::now()
@@ -33,7 +37,7 @@ fn conversation() -> Value {
 }
 
 fn builtin(enabled: bool) -> Value {
-    json!({"id":BUILTIN_ID,"type":"skill","name":"实习实践系统","description":"通过受学校授权和本人权限约束的工具访问系统能力。","enabled":enabled,"content":BUILTIN_CONTENT,"resources":[],"builtin":true})
+    json!({"id":BUILTIN_ID,"type":"skill","name":"实习实践系统","description":"本项目内置流程、逐菜单操作说明与已授权工具。","enabled":enabled,"content":BUILTIN_CONTENT,"resources":[{"path":"references/workflows.md","content":BUILTIN_WORKFLOWS},{"path":"references/menu-guides.json","content":BUILTIN_MENUS}],"builtin":true})
 }
 
 pub fn normalize(scope: &Value, stored: Value) -> Value {
@@ -597,7 +601,9 @@ pub fn context(data: &Value) -> Value {
         .as_array()
         .into_iter()
         .flatten()
-        .filter(|item| item["type"] == "skill" && item["enabled"] == true)
+        .filter(|item| {
+            item["type"] == "skill" && item["enabled"] == true && item["id"] != BUILTIN_ID
+        })
     {
         let text = format!(
             "\n{}\n{}\n{}\n",
@@ -615,7 +621,17 @@ pub fn context(data: &Value) -> Value {
             append_context(&mut skills, &text, 16 * 1024);
         }
     }
-    json!({"memories":memories,"skills":skills})
+    let builtin_enabled = data["plugins"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .any(|item| item["id"] == BUILTIN_ID && item["enabled"] == true);
+    let builtin_skill = if builtin_enabled {
+        format!("{}\n\n{}", BUILTIN_CONTENT, BUILTIN_WORKFLOWS)
+    } else {
+        String::new()
+    };
+    json!({"memories":memories,"skills":skills,"builtin_skill":builtin_skill,"project_guide_enabled":builtin_enabled})
 }
 
 fn advance(item: &mut Value, timestamp: i64) {
