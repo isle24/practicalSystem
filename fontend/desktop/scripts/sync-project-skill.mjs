@@ -9,10 +9,14 @@ const skill = join(root, 'server/cli/skill/practical-system');
 const desktop = join(root, 'fontend/desktop/agent/skills/practical-system');
 const menusPath = join(root, 'fontend/shared/operation-guides.json');
 const manifestPath = join(desktop, 'resources.json');
-const hash = value => createHash('sha256').update(value).digest('hex');
+const canonicalText = value => {
+  const bytes = Buffer.from(value);
+  return bytes.filter((byte, index) => byte !== 13 || bytes[index + 1] !== 10);
+};
+const hash = value => createHash('sha256').update(canonicalText(value)).digest('hex');
 const write = (path, value) => {
   if (check) {
-    if (!existsSync(path) || !readFileSync(path).equals(Buffer.from(value))) throw Error(`Skill resource differs: ${path}`);
+    if (!existsSync(path) || !canonicalText(readFileSync(path)).equals(canonicalText(Buffer.from(value)))) throw Error(`Skill resource differs: ${path}`);
   } else { mkdirSync(dirname(path), { recursive: true }); writeFileSync(path, value); }
 };
 const menus = JSON.parse(readFileSync(menusPath, 'utf8'));
