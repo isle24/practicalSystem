@@ -128,100 +128,105 @@
     >
       <form class="social-practice-form" @submit.prevent>
         <template v-if="state.form.resource === 'plan'">
-          <label class="span-2"><span>计划名称</span><input v-model="state.form.title" maxlength="180" placeholder="请输入社会实践计划名称"></label>
-          <label><span>年级</span><el-select v-model="state.form.grade_id" filterable placeholder="请选择年级" @change="normalizePlanScopes"><el-option v-for="item in state.options.grades" :key="item.grade_id" :label="item.grade_name" :value="item.grade_id" /></el-select></label>
-          <label><span>组织学院</span><el-select v-model="state.form.organizer_dep_id" clearable filterable placeholder="请选择学院"><el-option v-for="item in state.options.departments" :key="item.dep_id" :label="item.dep_name" :value="item.dep_id" /></el-select></label>
+          <label class="span-2"><FormFieldLabel required help="保存草稿时也须填写，最多 180 字">计划名称</FormFieldLabel><input v-model="state.form.title" maxlength="180" placeholder="请输入社会实践计划名称"></label>
+          <label><FormFieldLabel required help="保存时必填；须选择已启用年级">年级</FormFieldLabel><el-select v-model="state.form.grade_id" filterable placeholder="请选择年级" @change="normalizePlanScopes"><el-option v-for="item in state.options.grades" :key="item.grade_id" :label="item.grade_name" :value="item.grade_id" /></el-select></label>
+          <label><FormFieldLabel :required="['college_admin', 'profession_admin'].includes(roleType)" help="学院、专业管理员保存时必选授权学院；校级计划可不选">组织学院</FormFieldLabel><el-select v-model="state.form.organizer_dep_id" clearable filterable placeholder="请选择学院"><el-option v-for="item in state.options.departments" :key="item.dep_id" :label="item.dep_name" :value="item.dep_id" /></el-select></label>
           <p class="span-2">审批流程由系统配置决定；未配置时进行一次人工审核，退回后可修改并重新提交。</p>
-          <label><span>学分</span><el-input-number v-model="state.form.credit" :min="0" :max="99" :precision="1" /></label>
-          <label><span>参与方式</span><el-select v-model="state.form.participation_mode" placeholder="请选择参与方式"><el-option label="必修" value="mandatory" /><el-option label="自愿" value="voluntary" /></el-select></label>
-          <label><span>教师匹配</span><el-select v-model="state.form.teacher_match_mode" placeholder="请选择教师匹配方式"><el-option label="学生选择" value="student_choose" /><el-option label="管理员分配" value="admin_assign" /><el-option label="混合匹配" value="mixed" /></el-select></label>
-          <label><span>团队提交</span><el-select v-model="state.form.default_team_submit_mode" placeholder="请选择团队提交方式"><el-option label="分别提交" value="individual" /><el-option label="共同提交" value="shared" /></el-select></label>
-          <label><span>教师确认时限（小时）</span><el-input-number v-model="state.form.teacher_confirm_hours" :min="1" :max="720" /></label>
-          <label><span>可重选教师次数</span><el-input-number v-model="state.form.max_reselect_count" :min="0" :max="20" /></label>
-          <label><span>报名开始</span><input v-model="state.form.register_start_at" type="datetime-local"></label>
-          <label><span>报名截止</span><input v-model="state.form.register_end_at" type="datetime-local"></label>
-          <label><span>实践开始</span><input v-model="state.form.practice_start_at" type="datetime-local"></label>
-          <label><span>实践结束</span><input v-model="state.form.practice_end_at" type="datetime-local"></label>
-          <label><span>成果截止</span><input v-model="state.form.result_deadline_at" type="datetime-local"></label>
-          <label><span>成绩截止</span><input v-model="state.form.score_deadline_at" type="datetime-local"></label>
-          <label class="span-2"><span>计划说明</span><textarea v-model="state.form.description" rows="4" maxlength="100000" placeholder="请输入目标、范围和执行要求" /></label>
+          <label><FormFieldLabel :required="false" help="可留空，默认 0 学分">学分</FormFieldLabel><el-input-number v-model="state.form.credit" :min="0" :max="99" :precision="1" /></label>
+          <label><FormFieldLabel required help="请选择必修或自愿参与；默认必修">参与方式</FormFieldLabel><el-select v-model="state.form.participation_mode" placeholder="请选择参与方式"><el-option label="必修" value="mandatory" /><el-option label="自愿" value="voluntary" /></el-select></label>
+          <label><FormFieldLabel required help="请选择学生选择、管理员分配或混合匹配；默认混合">教师匹配</FormFieldLabel><el-select v-model="state.form.teacher_match_mode" placeholder="请选择教师匹配方式"><el-option label="学生选择" value="student_choose" /><el-option label="管理员分配" value="admin_assign" /><el-option label="混合匹配" value="mixed" /></el-select></label>
+          <label><FormFieldLabel required help="请选择分别提交或共同提交">团队提交</FormFieldLabel><el-select v-model="state.form.default_team_submit_mode" placeholder="请选择团队提交方式"><el-option label="分别提交" value="individual" /><el-option label="共同提交" value="shared" /></el-select></label>
+          <label><FormFieldLabel :required="false" help="1–720 小时；留空默认 48 小时">教师确认时限（小时）</FormFieldLabel><el-input-number v-model="state.form.teacher_confirm_hours" :min="1" :max="720" /></label>
+          <label><FormFieldLabel :required="false" help="0–20 次；留空默认 2 次">可重选教师次数</FormFieldLabel><el-input-number v-model="state.form.max_reselect_count" :min="0" :max="20" /></label>
+          <label><FormFieldLabel submit-required help="保存草稿可暂缺；不得晚于报名截止">报名开始</FormFieldLabel><input v-model="state.form.register_start_at" type="datetime-local"></label>
+          <label><FormFieldLabel submit-required help="保存草稿可暂缺；不得早于报名开始或晚于实践开始">报名截止</FormFieldLabel><input v-model="state.form.register_end_at" type="datetime-local"></label>
+          <label><FormFieldLabel submit-required help="保存草稿可暂缺；不得早于报名截止或晚于实践结束">实践开始</FormFieldLabel><input v-model="state.form.practice_start_at" type="datetime-local"></label>
+          <label><FormFieldLabel submit-required help="保存草稿可暂缺；不得早于实践开始或晚于成果截止">实践结束</FormFieldLabel><input v-model="state.form.practice_end_at" type="datetime-local"></label>
+          <label><FormFieldLabel submit-required help="保存草稿可暂缺；不得早于实践结束或晚于成绩截止">成果截止</FormFieldLabel><input v-model="state.form.result_deadline_at" type="datetime-local"></label>
+          <label><FormFieldLabel submit-required help="保存草稿可暂缺；不得早于成果截止">成绩截止</FormFieldLabel><input v-model="state.form.score_deadline_at" type="datetime-local"></label>
+          <label class="span-2"><FormFieldLabel :required="false" help="最多 100000 字">计划说明</FormFieldLabel><textarea v-model="state.form.description" rows="4" maxlength="100000" placeholder="请输入目标、范围和执行要求" /></label>
           <section class="span-2 social-inline-editor">
-            <header><strong>适用范围</strong><el-button link type="primary" :icon="Plus" @click="addScope">添加范围</el-button></header>
+            <header><FormFieldLabel required help="至少保留一项；学院、专业、班级须与年级和管理范围一致">适用范围</FormFieldLabel><el-button link type="primary" :icon="Plus" @click="addScope">添加范围</el-button></header>
             <div v-for="(scope, index) in state.form.scopes" :key="index" class="social-inline-row scope-row">
-              <el-select v-model="scope.scope_type" placeholder="请选择范围类型"><el-option label="全校" value="school" /><el-option label="学院" value="college" /><el-option label="专业" value="profession" /><el-option label="班级" value="class" /></el-select>
-              <el-select v-if="scope.scope_type !== 'school'" v-model="scope.dep_id" clearable filterable placeholder="请选择学院" @change="changeScopeDepartment(scope)"><el-option v-for="item in state.options.departments" :key="item.dep_id" :label="item.dep_name" :value="item.dep_id" /></el-select>
-              <el-select-v2 v-if="['profession', 'class'].includes(scope.scope_type)" v-model="scope.profession_id" clearable filterable placeholder="请选择专业" :options="professionsFor(scope.dep_id)" :props="{ label: 'profession_name', value: 'profession_id' }" @change="scope.class_id = null" />
-              <el-select-v2 v-if="scope.scope_type === 'class'" v-model="scope.class_id" clearable filterable placeholder="请选择班级" :options="classesFor(scope)" :props="{ label: 'class_name', value: 'class_id' }" />
+              <label><FormFieldLabel required help="请选择全校、学院、专业或班级">范围类型</FormFieldLabel><el-select v-model="scope.scope_type" placeholder="请选择范围类型"><el-option label="全校" value="school" /><el-option label="学院" value="college" /><el-option label="专业" value="profession" /><el-option label="班级" value="class" /></el-select></label>
+              <label v-if="scope.scope_type !== 'school'"><FormFieldLabel required help="非全校范围必选">学院</FormFieldLabel><el-select v-model="scope.dep_id" clearable filterable placeholder="请选择学院" @change="changeScopeDepartment(scope)"><el-option v-for="item in state.options.departments" :key="item.dep_id" :label="item.dep_name" :value="item.dep_id" /></el-select></label>
+              <label v-if="['profession', 'class'].includes(scope.scope_type)"><FormFieldLabel required help="专业或班级范围必选">专业</FormFieldLabel><el-select-v2 v-model="scope.profession_id" clearable filterable placeholder="请选择专业" :options="professionsFor(scope.dep_id)" :props="{ label: 'profession_name', value: 'profession_id' }" @change="scope.class_id = null" /></label>
+              <label v-if="scope.scope_type === 'class'"><FormFieldLabel required help="班级范围必选">班级</FormFieldLabel><el-select-v2 v-model="scope.class_id" clearable filterable placeholder="请选择班级" :options="classesFor(scope)" :props="{ label: 'class_name', value: 'class_id' }" /></label>
               <el-button link type="danger" :disabled="state.form.scopes.length === 1" @click="removeArrayItem('scopes', index)">移除</el-button>
             </div>
           </section>
           <section class="span-2 social-inline-editor">
-            <header><strong>材料要求</strong><el-button link type="primary" :icon="Plus" @click="addRequirement">添加材料</el-button></header>
+            <header><FormFieldLabel submit-required help="提交前至少配置一项材料要求">材料要求</FormFieldLabel><el-button link type="primary" :icon="Plus" @click="addRequirement">添加材料</el-button></header>
             <div v-for="(item, index) in state.form.requirements" :key="index" class="social-inline-row material-row">
-              <el-select v-model="item.practice_mode" placeholder="请选择实践模式"><el-option label="全部模式" value="all" /><el-option label="集中实践" value="centralized" /><el-option label="分散实践" value="distributed" /></el-select>
-              <el-select v-model="item.requirement_type" filterable allow-create default-first-option placeholder="请选择材料类型"><el-option v-for="option in materialTypeOptions" :key="option.value" :label="option.label" :value="option.value" /></el-select>
-              <el-select v-model="item.submit_scope" placeholder="请选择提交范围"><el-option label="学生" value="student" /><el-option label="团队" value="team" /><el-option label="项目" value="project" /></el-select>
-              <el-switch v-model="item.required_flag" :disabled="item.requirement_type === 'parent_notice'" inline-prompt active-text="必交" inactive-text="选交" />
+              <label><FormFieldLabel required>实践模式</FormFieldLabel><el-select v-model="item.practice_mode" placeholder="请选择实践模式"><el-option label="全部模式" value="all" /><el-option label="集中实践" value="centralized" /><el-option label="分散实践" value="distributed" /></el-select></label>
+              <label><FormFieldLabel required help="保留本项时必填，空类型行不保存">材料类型</FormFieldLabel><el-select v-model="item.requirement_type" filterable allow-create default-first-option placeholder="请选择材料类型"><el-option v-for="option in materialTypeOptions" :key="option.value" :label="option.label" :value="option.value" /></el-select></label>
+              <label><FormFieldLabel required help="请选择学生、团队或项目">提交范围</FormFieldLabel><el-select v-model="item.submit_scope" placeholder="请选择提交范围"><el-option label="学生" value="student" /><el-option label="团队" value="team" /><el-option label="项目" value="project" /></el-select></label>
+              <label><FormFieldLabel :required="false" help="默认必交；家长告知书固定选交">是否必交</FormFieldLabel><el-switch v-model="item.required_flag" :disabled="item.requirement_type === 'parent_notice'" inline-prompt active-text="必交" inactive-text="选交" /></label>
               <el-button link type="danger" @click="removeArrayItem('requirements', index)">移除</el-button>
             </div>
           </section>
           <section class="span-2 social-inline-editor">
-            <header><strong>成绩规则</strong><el-button link type="primary" :icon="Plus" @click="addScoreRule">添加评分项</el-button></header>
+            <header><FormFieldLabel submit-required help="提交前两种实践模式均须配置；每种模式权重合计 100%，保存时已填写的正权重也须合计 100%">成绩规则</FormFieldLabel><el-button link type="primary" :icon="Plus" @click="addScoreRule">添加评分项</el-button></header>
             <div v-for="(item, index) in state.form.score_rules" :key="index" class="social-inline-row score-row">
-              <el-select v-model="item.practice_mode" placeholder="请选择实践模式"><el-option label="集中实践" value="centralized" /><el-option label="分散实践" value="distributed" /></el-select>
-              <input v-model="item.item_code" placeholder="评分项编码">
-              <input v-model="item.item_name" placeholder="评分项名称">
-              <el-input-number v-model="item.weight" :min="0" :max="100" :precision="1" />
+              <label><FormFieldLabel required>实践模式</FormFieldLabel><el-select v-model="item.practice_mode" placeholder="请选择实践模式"><el-option label="集中实践" value="centralized" /><el-option label="分散实践" value="distributed" /></el-select></label>
+              <label><FormFieldLabel required help="保留本项时必填，空编码行不保存">评分项编码</FormFieldLabel><input v-model="item.item_code" placeholder="评分项编码"></label>
+              <label><FormFieldLabel :required="false">评分项名称</FormFieldLabel><input v-model="item.item_name" placeholder="评分项名称"></label>
+              <label><FormFieldLabel :required="false" help="0–100；同模式合计 100%">权重（%）</FormFieldLabel><el-input-number v-model="item.weight" :min="0" :max="100" :precision="1" /></label>
               <el-button link type="danger" @click="removeArrayItem('score_rules', index)">移除</el-button>
             </div>
           </section>
         </template>
 
         <template v-else-if="state.form.resource === 'project'">
-          <label><span>所属计划</span><el-select-v2 v-model="state.form.plan_id" filterable placeholder="请选择计划" :options="state.options.plans" :props="{ label: 'title', value: 'id' }" /></label>
-          <label><span>项目编号</span><input v-model="state.form.project_code" maxlength="120" placeholder="不填则自动生成"></label>
-          <label class="span-2"><span>项目名称</span><input v-model="state.form.title" maxlength="180" placeholder="请输入集中实践项目名称"></label>
-          <label><span>开始时间</span><input v-model="state.form.start_at" type="datetime-local"></label>
-          <label><span>结束时间</span><input v-model="state.form.end_at" type="datetime-local"></label>
-          <label><span>地点</span><input v-model="state.form.location" maxlength="255" placeholder="请输入实践地点"></label>
-          <label><span>容量</span><el-input-number v-model="state.form.capacity" :min="0" :max="100000" /></label>
-          <label class="span-2"><span>实践目标</span><textarea v-model="state.form.objective" rows="3" maxlength="10000" /></label>
-          <label class="span-2"><span>实践内容</span><textarea v-model="state.form.content" rows="5" maxlength="100000" /></label>
+          <p class="span-2 social-project-note">计划审核通过并发布后，可创建集中项目。保存后在项目列表分配负责人、指导教师和学生，再进入“实施申请”准备实施资料。</p>
+          <label class="span-2"><span>所属计划（必填）</span><el-select-v2 v-model="state.form.plan_id" filterable clearable placeholder="请选择已审核通过并发布的计划" :disabled="state.saving" :options="projectPlanOptions" @change="validateProjectPlan" /></label>
+          <div class="span-2 social-project-note" :class="{ 'is-error': projectPlan.error || (state.form.plan_id && !selectedProjectPlanEligibility.canCreate) }" role="status" aria-live="polite">
+            {{ projectPlanMessage }}
+            <el-button v-if="state.form.plan_id" link type="primary" :disabled="state.saving || projectPlan.checking" @click="validateProjectPlan">重新核对计划</el-button>
+          </div>
+          <label><span>项目编号（选填）</span><input v-model="state.form.project_code" maxlength="120" placeholder="不填则自动生成"></label>
+          <label class="span-2"><span>项目名称（必填）</span><input v-model="state.form.title" required maxlength="180" placeholder="请输入集中实践项目名称"></label>
+          <label><span>开始时间（选填）</span><input v-model="state.form.start_at" type="datetime-local"></label>
+          <label><span>结束时间（选填）</span><input v-model="state.form.end_at" type="datetime-local"></label>
+          <label><span>地点（选填）</span><input v-model="state.form.location" maxlength="255" placeholder="请输入实践地点"></label>
+          <label><span>容量（选填）</span><el-input-number v-model="state.form.capacity" :min="0" :max="100000" /></label>
+          <label class="span-2"><span>实践目标（选填）</span><textarea v-model="state.form.objective" rows="3" maxlength="10000" /></label>
+          <label class="span-2"><span>实践内容（选填）</span><textarea v-model="state.form.content" rows="5" maxlength="100000" /></label>
         </template>
 
         <template v-else-if="state.form.resource === 'implementation'">
-          <label class="span-2"><span>集中实践项目</span><el-select-v2 v-model="state.form.project_id" filterable placeholder="请选择项目" :options="centralizedProjects" :props="{ label: 'title', value: 'id' }" /></label>
-          <label class="span-2"><span>实施申请名称</span><input v-model="state.form.title" maxlength="180" placeholder="请输入实施申请名称"></label>
-          <label><span>预算金额</span><el-input-number v-model="state.form.budget_amount" :min="0" :max="99999999" :precision="2" /></label>
-          <label><span>场地要求</span><input v-model="state.form.venue_requirement" maxlength="10000"></label>
-          <label class="span-2"><span>材料要求</span><textarea v-model="state.form.material_requirement" rows="3" maxlength="10000" /></label>
-          <label class="span-2"><span>实施内容</span><textarea v-model="state.form.content" rows="6" maxlength="100000" /></label>
+          <label class="span-2"><FormFieldLabel required help="保存时必填；须选择可操作的集中实践项目">集中实践项目</FormFieldLabel><el-select-v2 v-model="state.form.project_id" filterable placeholder="请选择项目" :options="centralizedProjects" :props="{ label: 'title', value: 'id' }" /></label>
+          <label class="span-2"><FormFieldLabel required help="保存时必填，最多 180 字">实施申请名称</FormFieldLabel><input v-model="state.form.title" maxlength="180" placeholder="请输入实施申请名称"></label>
+          <label><FormFieldLabel :required="false" help="金额单位为元，可留空，默认 0，保留两位小数">预算金额</FormFieldLabel><el-input-number v-model="state.form.budget_amount" :min="0" :max="99999999" :precision="2" /></label>
+          <label><FormFieldLabel :required="false" help="最多 10000 字">场地要求</FormFieldLabel><input v-model="state.form.venue_requirement" maxlength="10000"></label>
+          <label class="span-2"><FormFieldLabel :required="false" help="最多 10000 字">材料要求</FormFieldLabel><textarea v-model="state.form.material_requirement" rows="3" maxlength="10000" /></label>
+          <label class="span-2"><FormFieldLabel :required="false" help="最多 100000 字；提交前项目须完成负责人、教师和学生分配">实施内容</FormFieldLabel><textarea v-model="state.form.content" rows="6" maxlength="100000" /></label>
         </template>
 
         <template v-else-if="state.form.resource === 'declaration'">
-          <label><span>所属计划</span><el-select-v2 v-model="state.form.plan_id" filterable placeholder="请选择计划" @change="changeDeclarationPlan" :options="state.options.plans" :props="{ label: 'title', value: 'id' }" /></label>
-          <label><span>申报类型</span><el-select v-model="state.form.declaration_type" placeholder="请选择申报类型"><el-option label="个人申报" value="individual" /><el-option label="团队申报" value="team" /></el-select></label>
-          <label v-if="state.form.declaration_type === 'team'"><span>团队提交</span><el-select v-model="state.form.team_submit_mode" placeholder="请选择团队提交方式"><el-option label="分别提交" value="individual" /><el-option label="共同提交" value="shared" /></el-select></label>
-          <label><span>指导教师</span><el-select-v2 v-model="state.form.selected_teacher_id" filterable placeholder="请选择指导教师" :options="teacherSelectOptions" /></label>
-          <label v-if="state.form.declaration_type === 'team'" class="span-2"><span>团队成员</span><el-select-v2 v-model="state.form.member_student_ids" multiple filterable collapse-tags placeholder="请选择团队成员" :options="planStudentSelectOptions" /></label>
-          <label class="span-2"><span>申报名称</span><input v-model="state.form.title" maxlength="180"></label>
-          <label><span>预计时长</span><input v-model="state.form.expected_duration" maxlength="120" placeholder="例如：5天"></label>
-          <label><span>实践地点</span><input v-model="state.form.location" maxlength="255"></label>
-          <label class="span-2"><span>实践目标</span><textarea v-model="state.form.objective" rows="3" maxlength="10000" /></label>
-          <label class="span-2"><span>预期成果</span><textarea v-model="state.form.expected_result" rows="3" maxlength="10000" /></label>
-          <label class="span-2"><span>申报内容</span><textarea v-model="state.form.content" rows="5" maxlength="100000" /></label>
+          <label><FormFieldLabel required help="保存时必填；须选择当前账号可访问的计划">所属计划</FormFieldLabel><el-select-v2 v-model="state.form.plan_id" filterable placeholder="请选择计划" @change="changeDeclarationPlan" :options="state.options.plans" :props="{ label: 'title', value: 'id' }" /></label>
+          <label><FormFieldLabel required help="请选择个人或团队申报；默认个人">申报类型</FormFieldLabel><el-select v-model="state.form.declaration_type" placeholder="请选择申报类型"><el-option label="个人申报" value="individual" /><el-option label="团队申报" value="team" /></el-select></label>
+          <label v-if="state.form.declaration_type === 'team'"><FormFieldLabel required help="请选择分别提交或共同提交">团队提交</FormFieldLabel><el-select v-model="state.form.team_submit_mode" placeholder="请选择团队提交方式"><el-option label="分别提交" value="individual" /><el-option label="共同提交" value="shared" /></el-select></label>
+          <label><FormFieldLabel :required="false" help="保存草稿可不选；提交前须已选择或由管理员分配教师。管理员分配模式下请勿自行选择">指导教师</FormFieldLabel><el-select-v2 v-model="state.form.selected_teacher_id" filterable placeholder="请选择指导教师" :options="teacherSelectOptions" /></label>
+          <label v-if="state.form.declaration_type === 'team'" class="span-2"><FormFieldLabel :required="false" help="本人自动加入；可选择同计划范围的其他成员，提交前成员须全部确认">团队成员</FormFieldLabel><el-select-v2 v-model="state.form.member_student_ids" multiple filterable collapse-tags placeholder="请选择团队成员" :options="planStudentSelectOptions" /></label>
+          <label class="span-2"><FormFieldLabel required help="保存时必填，最多 180 字">申报名称</FormFieldLabel><input v-model="state.form.title" maxlength="180"></label>
+          <label><FormFieldLabel :required="false" help="最多 120 字，例如：5 天">预计时长</FormFieldLabel><input v-model="state.form.expected_duration" maxlength="120" placeholder="例如：5天"></label>
+          <label><FormFieldLabel :required="false" help="最多 255 字">实践地点</FormFieldLabel><input v-model="state.form.location" maxlength="255"></label>
+          <label class="span-2"><FormFieldLabel :required="false" help="最多 10000 字">实践目标</FormFieldLabel><textarea v-model="state.form.objective" rows="3" maxlength="10000" /></label>
+          <label class="span-2"><FormFieldLabel :required="false" help="最多 10000 字">预期成果</FormFieldLabel><textarea v-model="state.form.expected_result" rows="3" maxlength="10000" /></label>
+          <label class="span-2"><FormFieldLabel :required="false" help="最多 100000 字">申报内容</FormFieldLabel><textarea v-model="state.form.content" rows="5" maxlength="100000" /></label>
         </template>
 
         <template v-else-if="state.form.resource === 'material'">
-          <label><span>所属计划</span><el-select-v2 v-model="state.form.plan_id" filterable placeholder="请选择所属计划" @change="state.form.project_id = null" :options="state.options.plans" :props="{ label: 'title', value: 'id' }" /></label>
-          <label><span>实践项目</span><el-select-v2 v-model="state.form.project_id" filterable placeholder="请选择实践项目" :options="projectsForPlan(state.form.plan_id)" :props="{ label: 'title', value: 'id' }" /></label>
-          <label v-if="!isStudent"><span>学生</span><el-select-v2 v-model="state.form.student_id" filterable placeholder="请选择学生" :options="studentSelectOptions" /></label>
-          <label><span>材料类型</span><el-select v-model="state.form.material_type" filterable allow-create placeholder="请选择材料类型"><el-option v-for="option in materialTypeOptions" :key="option.value" :label="option.label" :value="option.value" /></el-select></label>
-          <label><span>提交范围</span><el-select v-model="state.form.submit_scope" placeholder="请选择提交范围"><el-option label="学生" value="student" /><el-option label="团队" value="team" /><el-option label="项目" value="project" /></el-select></label>
-          <label class="span-2"><span>材料标题</span><input v-model="state.form.title" maxlength="180"></label>
-          <label class="span-2"><span>材料内容</span><textarea v-model="state.form.content" rows="8" maxlength="500000" /></label>
+          <label><FormFieldLabel required help="保存时必填；须选择当前账号可访问的计划">所属计划</FormFieldLabel><el-select-v2 v-model="state.form.plan_id" filterable placeholder="请选择所属计划" @change="state.form.project_id = null" :options="state.options.plans" :props="{ label: 'title', value: 'id' }" /></label>
+          <label><FormFieldLabel :required="state.form.resource !== 'material' || !state.form.declaration_id" help="材料须且只能关联项目或申报；项目须属于所选计划">实践项目</FormFieldLabel><el-select-v2 v-model="state.form.project_id" filterable placeholder="请选择实践项目" :options="projectsForPlan(state.form.plan_id)" :props="{ label: 'title', value: 'id' }" /></label>
+          <label v-if="!isStudent"><FormFieldLabel :required="state.form.resource !== 'material' || (Boolean(state.form.project_id) && (state.form.submit_scope || 'student') === 'student')" help="成绩保存必选项目学生；学生范围的项目材料须指定学生">学生</FormFieldLabel><el-select-v2 v-model="state.form.student_id" filterable placeholder="请选择学生" :options="studentSelectOptions" /></label>
+          <label><FormFieldLabel required help="保存时必填，最多 80 字">材料类型</FormFieldLabel><el-select v-model="state.form.material_type" filterable allow-create placeholder="请选择材料类型"><el-option v-for="option in materialTypeOptions" :key="option.value" :label="option.label" :value="option.value" /></el-select></label>
+          <label><FormFieldLabel required help="请选择学生、团队或项目；默认学生">提交范围</FormFieldLabel><el-select v-model="state.form.submit_scope" placeholder="请选择提交范围"><el-option label="学生" value="student" /><el-option label="团队" value="team" /><el-option label="项目" value="project" /></el-select></label>
+          <label class="span-2"><FormFieldLabel :required="false" help="最多 180 字">材料标题</FormFieldLabel><input v-model="state.form.title" maxlength="180"></label>
+          <label class="span-2"><FormFieldLabel :required="false" help="最多 500000 字；提交须在对应材料截止时间内">材料内容</FormFieldLabel><textarea v-model="state.form.content" rows="8" maxlength="500000" /></label>
           <section class="span-2 social-material-files">
-            <header><strong>附件</strong><el-button :icon="Upload" :loading="state.uploading" @click="materialFileInput?.click()">上传附件</el-button></header>
+            <header><FormFieldLabel :required="false" help="可添加材料附件；保存时保留当前附件列表">附件</FormFieldLabel><el-button :icon="Upload" :loading="state.uploading" @click="materialFileInput?.click()">上传附件</el-button></header>
             <input ref="materialFileInput" type="file" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.zip,.txt" @change="uploadMaterialFiles">
             <div v-if="state.form.attachments.length" class="social-material-file-list">
               <article v-for="file in state.form.attachments" :key="file.id || file.file_id">
@@ -235,28 +240,28 @@
         </template>
 
         <template v-else-if="state.form.resource === 'patch_sign'">
-          <label class="span-2"><span>集中实践项目</span><el-select-v2 v-model="state.form.project_id" filterable placeholder="请选择集中实践项目" :options="centralizedProjects" :props="{ label: 'title', value: 'id' }" /></label>
-          <label><span>补签日期</span><input v-model="state.form.sign_date" type="date"></label>
-          <label class="span-2"><span>补签原因</span><textarea v-model="state.form.reason" rows="4" maxlength="10000" /></label>
-          <label class="span-2"><span>证明说明</span><textarea v-model="state.form.proof" rows="4" maxlength="100000" /></label>
+          <label class="span-2"><FormFieldLabel required help="保存时必填；须选择可操作的集中实践项目">集中实践项目</FormFieldLabel><el-select-v2 v-model="state.form.project_id" filterable placeholder="请选择集中实践项目" :options="centralizedProjects" :props="{ label: 'title', value: 'id' }" /></label>
+          <label><FormFieldLabel required help="保存时必填；日期须在项目或计划实践时间内">补签日期</FormFieldLabel><input v-model="state.form.sign_date" type="date"></label>
+          <label class="span-2"><FormFieldLabel required help="保存时必填，最多 10000 字">补签原因</FormFieldLabel><textarea v-model="state.form.reason" rows="4" maxlength="10000" /></label>
+          <label class="span-2"><FormFieldLabel :required="false" help="最多 100000 字">证明说明</FormFieldLabel><textarea v-model="state.form.proof" rows="4" maxlength="100000" /></label>
         </template>
 
         <template v-else-if="state.form.resource === 'score'">
-          <label><span>实践项目</span><el-select-v2 v-model="state.form.project_id" filterable placeholder="请选择实践项目" @change="prepareScoreRules" :options="state.options.projects" :props="{ label: 'title', value: 'id' }" /></label>
-          <label><span>学生</span><el-select-v2 v-model="state.form.student_id" filterable placeholder="请选择学生" :options="scoreStudentSelectOptions" /></label>
+          <label><FormFieldLabel :required="state.form.resource !== 'material' || !state.form.declaration_id" help="材料须且只能关联项目或申报；项目须属于所选计划">实践项目</FormFieldLabel><el-select-v2 v-model="state.form.project_id" filterable placeholder="请选择实践项目" @change="prepareScoreRules" :options="state.options.projects" :props="{ label: 'title', value: 'id' }" /></label>
+          <label><FormFieldLabel :required="state.form.resource !== 'material' || (Boolean(state.form.project_id) && (state.form.submit_scope || 'student') === 'student')" help="成绩保存必选项目学生；学生范围的项目材料须指定学生">学生</FormFieldLabel><el-select-v2 v-model="state.form.student_id" filterable placeholder="请选择学生" :options="scoreStudentSelectOptions" /></label>
           <section class="span-2 social-inline-editor">
-            <header><strong>评分项</strong><small>按计划规则自动计算总评</small></header>
+            <header><FormFieldLabel required help="保存时须包含当前计划的全部评分项">评分项</FormFieldLabel><small>按计划规则自动计算总评</small></header>
             <div v-for="item in state.form.items" :key="item.item_code" class="social-score-input">
-              <span>{{ item.item_name }}（{{ item.weight }}%）</span>
+              <FormFieldLabel :required="false" :help="`0–${item.max_score || 100} 分，留空按 0 分；须保留全部评分项`">{{ item.item_name }}（{{ item.weight }}%）</FormFieldLabel>
               <el-input-number v-model="item.score_value" :min="0" :max="item.max_score || 100" :precision="1" />
             </div>
           </section>
-          <label class="span-2"><span>评语</span><textarea v-model="state.form.comment" rows="4" maxlength="10000" /></label>
+          <label class="span-2"><FormFieldLabel :required="false" help="最多 10000 字">评语</FormFieldLabel><textarea v-model="state.form.comment" rows="4" maxlength="10000" /></label>
         </template>
       </form>
       <template #footer>
         <el-button :disabled="state.saving" @click="closeDialog">取消</el-button>
-        <el-button :loading="state.saving" @click="saveForm(false)">{{ state.form.resource === 'project' ? '保存' : '保存草稿' }}</el-button>
+        <el-button :loading="state.saving" :disabled="state.form.resource === 'project' && !projectPlanReady" @click="saveForm(false)">{{ state.form.resource === 'project' ? '保存' : '保存草稿' }}</el-button>
         <el-button v-if="state.form.resource !== 'project'" type="primary" :loading="state.saving" @click="saveForm(true)">提交审核</el-button>
       </template>
     </OperationDialog>
@@ -302,12 +307,13 @@
       @close="closeDialog"
     >
       <div class="social-review-form">
+        <FormFieldLabel v-if="state.dialog.type === 'review'" required>审核结果</FormFieldLabel>
         <el-radio-group v-if="state.dialog.type === 'review'" v-model="state.review.status" :disabled="state.saving">
           <el-radio-button value="accept">通过</el-radio-button>
           <el-radio-button value="modify">退回修改</el-radio-button>
         </el-radio-group>
         <label>
-          <span>{{ state.dialog.type === 'modify' ? '修改理由' : '审核意见' }}</span>
+          <FormFieldLabel :required="state.dialog.type === 'modify' || state.review.status === 'modify' ? true : state.review.status === 'accept' ? false : undefined" :help="!state.review.status && state.dialog.type !== 'modify' ? '请先选择审核结果；退回时须填写原因' : reviewLimit.min ? `保存或提交时填写 ${reviewLimit.min}–${reviewLimit.max} 字` : `可留空，最多 ${reviewLimit.max} 字`">{{ state.dialog.type === 'modify' ? '修改理由' : '审核意见' }}</FormFieldLabel>
           <textarea :disabled="state.saving" v-model="state.review.opinion" :maxlength="reviewLimit.max" rows="7" :placeholder="reviewPlaceholder" />
           <small>{{ state.review.opinion.length }} / {{ reviewLimit.max }} 字<span v-if="reviewLimit.min">，至少 {{ reviewLimit.min }} 字</span></small>
         </label>
@@ -331,7 +337,7 @@
           <div class="social-timeline-main">
             <header><strong>{{ actionText(record.action) }}</strong><time>{{ record.created_at }}</time></header>
             <p>{{ socialPracticeRecordOutcome(record, reviewsFor(record.id), statusText) }}</p>
-            <blockquote v-if="record.content">{{ record.content }}</blockquote>
+            <blockquote v-if="record.content">{{ workflowRecordContent(record) }}</blockquote>
             <section v-for="review in reviewsFor(record.id)" :key="review.id" class="social-review-branch">
               <span /><div><strong>{{ review.reviewer_name || review.reviewer_login || '审核人' }} · {{ statusText(review.status) }}</strong><p>{{ review.opinion || '无审核意见' }}</p></div>
             </section>
@@ -344,9 +350,9 @@
     <OperationDialog :visible="state.dialog.type === 'assignTeachers'" title="分配指导教师" :busy="state.saving" @close="closeDialog">
       <div class="social-assignment-form">
         <div v-for="(item, index) in state.assignment.teachers" :key="index" class="social-inline-row teacher-row">
-          <el-select-v2 v-model="item.teacher_id" filterable placeholder="请选择教师" :options="teacherSelectOptions" />
-          <el-select v-model="item.teacher_role" placeholder="请选择教师角色"><el-option label="负责人" value="leader" /><el-option label="指导教师" value="guide" /></el-select>
-          <el-input-number v-model="item.capacity" :min="0" :max="10000" />
+          <label><FormFieldLabel required help="保留本行时必选，教师不能重复">教师</FormFieldLabel><el-select-v2 v-model="item.teacher_id" filterable placeholder="请选择教师" :options="teacherSelectOptions" /></label>
+          <label><FormFieldLabel required help="配置中须恰有一名负责人">教师角色</FormFieldLabel><el-select v-model="item.teacher_role" placeholder="请选择教师角色"><el-option label="负责人" value="leader" /><el-option label="指导教师" value="guide" /></el-select></label>
+          <label><FormFieldLabel :required="false" help="0 表示不限制分配人数">指导容量</FormFieldLabel><el-input-number v-model="item.capacity" :min="0" :max="10000" /></label>
           <el-button link type="danger" @click="state.assignment.teachers.splice(index, 1)">移除</el-button>
         </div>
         <el-button :icon="Plus" @click="state.assignment.teachers.push({ teacher_id: null, teacher_role: 'guide', capacity: 0 })">添加教师</el-button>
@@ -359,8 +365,8 @@
         <header><el-button :icon="Plus" @click="addParticipant">添加学生</el-button><small>每名学生必须绑定当前项目中的一名指导教师。</small></header>
         <el-table width-storage-key="social-practice-panel:visibleAssignmentParticipants" :data="visibleAssignmentParticipants" size="small" height="420">
           <el-table-column type="index" label="序号" width="66" :index="index => (assignmentPage - 1) * detailPageSize + index + 1" />
-          <el-table-column label="学生" min-width="220"><template #default="{ row }"><el-select-v2 v-model="row.student_id" filterable placeholder="请选择学生" :options="studentSelectOptions" /></template></el-table-column>
-          <el-table-column label="指导教师" min-width="200"><template #default="{ row }"><el-select-v2 v-model="row.teacher_id" filterable placeholder="请选择指导教师" :options="assignmentTeacherSelectOptions" /></template></el-table-column>
+          <el-table-column label="学生" min-width="220"><template #header><FormFieldLabel required help="须属于当前计划范围，不能重复">学生</FormFieldLabel></template><template #default="{ row }"><el-select-v2 v-model="row.student_id" filterable placeholder="请选择学生" :options="studentSelectOptions" /></template></el-table-column>
+          <el-table-column label="指导教师" min-width="200"><template #header><FormFieldLabel required help="每名学生须绑定一名项目教师">指导教师</FormFieldLabel></template><template #default="{ row }"><el-select-v2 v-model="row.teacher_id" filterable placeholder="请选择指导教师" :options="assignmentTeacherSelectOptions" /></template></el-table-column>
           <el-table-column label="操作" width="80"><template #default="{ $index }"><el-button link type="danger" @click="removeParticipant($index)">移除</el-button></template></el-table-column>
         </el-table>
         <ListPagination v-model:current-page="assignmentPage" layout="total, prev, pager, next" :page-size="detailPageSize" :total="state.assignment.participants.length" />
@@ -370,7 +376,7 @@
 
     <OperationDialog :visible="state.dialog.type === 'assignDeclarationTeacher'" title="分配分散实践指导教师" :busy="state.saving" @close="closeDialog">
       <div class="social-assignment-form">
-        <label class="social-assignment-field"><span>指导教师</span><el-select-v2 v-model="state.assignment.declarationTeacherId" filterable placeholder="请选择指导教师" :options="teacherSelectOptions" /></label>
+        <label class="social-assignment-field"><FormFieldLabel required help="须选择已启用且有权限访问的教师">指导教师</FormFieldLabel><el-select-v2 v-model="state.assignment.declarationTeacherId" filterable placeholder="请选择指导教师" :options="teacherSelectOptions" /></label>
         <small class="social-assignment-hint">分配后教师需要在确认期限内确认，申报审核会使用最新的确认结果。</small>
       </div>
       <template #footer><el-button @click="closeDialog">取消</el-button><el-button type="primary" :loading="state.saving" @click="submitDeclarationTeacherAssignment">保存分配</el-button></template>
@@ -387,7 +393,7 @@
 
     <OperationDialog :visible="state.dialog.type === 'teacherReselect'" title="重新选择指导教师" :busy="state.saving" @close="closeDialog">
       <div class="social-assignment-form">
-        <label class="social-assignment-field"><span>指导教师</span><el-select-v2 v-model="state.assignment.declarationTeacherId" filterable placeholder="请选择其他指导教师" :options="teacherSelectOptions" /></label>
+        <label class="social-assignment-field"><FormFieldLabel required help="须选择已启用且有权限访问的教师">指导教师</FormFieldLabel><el-select-v2 v-model="state.assignment.declarationTeacherId" filterable placeholder="请选择其他指导教师" :options="teacherSelectOptions" /></label>
         <small class="social-assignment-hint">仅在教师拒绝或确认超时后可重新选择，次数受计划配置限制。</small>
       </div>
       <template #footer><el-button @click="closeDialog">取消</el-button><el-button type="primary" :loading="state.saving" @click="submitTeacherReselect">提交选择</el-button></template>
@@ -397,6 +403,7 @@
       <div class="social-plan-import">
         <el-alert title="Excel 中的年级、学院、专业和班级必须已在基础档案中启用；导入只生成或更新草稿。" type="info" :closable="false" show-icon />
         <label class="social-import-upload">
+          <FormFieldLabel required help="xls 或 xlsx，先预览校验后确认导入">计划文件</FormFieldLabel>
           <input type="file" accept=".xls,.xlsx" :disabled="state.uploading" @change="previewPlanImport">
           <span><Upload :size="18" />{{ state.uploading ? '正在解析...' : '选择 Excel 文件' }}</span>
         </label>
@@ -424,8 +431,9 @@
 </template>
 
 <script setup>
+import FormFieldLabel from '../../../shared/components/FormFieldLabel.vue';
 import FilePreviewButton from '../../../shared/components/FilePreviewButton.vue';
-import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue';
 import { filterAcademicClasses, filterAcademicProfessions } from '../../../shared/academicCascade';
 import { ElMessage, ElMessageBox, ElSelectV2 } from 'element-plus';
 import {
@@ -477,9 +485,12 @@ import {
 } from '../api/system';
 import WorkflowHistory from '../../../shared/components/WorkflowHistory.vue';
 import { socialPracticeRecordOutcome } from '../../../shared/workflowPresentation';
+import { socialPracticeProjectPlanEligibility, socialPracticeProjectPlanOptions } from '../../../shared/socialPracticePlanEligibility';
 import { backendUrl, request } from '../api/client';
 
+const emit = defineEmits(['target-opened']);
 const props = defineProps({
+  targetPlan: { type: Object, default: null },
   panel: { type: String, default: 'overview' },
   roleType: { type: String, default: '' },
   accountId: { type: [Number, String], default: 0 },
@@ -529,9 +540,12 @@ const state = reactive({
   planImport: { fileId: null, items: [], summary: null },
 });
 const materialFileInput = ref(null);
+const projectPlan = reactive({ checking: false, checkedId: null, error: '' });
+let projectPlanRequest = 0;
 let disposed = false;
 let generation = 0;
 let readRequest = 0;
+let targetOpenRequest = 0;
 let optionsRequest = 0;
 let optionsPromise = null;
 let studentRequest = 0;
@@ -556,6 +570,16 @@ const isStudent = computed(() => props.roleType === 'student');
 const isTeacher = computed(() => props.roleType === 'teacher');
 const isAdmin = computed(() => ['super_admin', 'school_admin', 'college_admin', 'profession_admin'].includes(props.roleType));
 const centralizedProjects = computed(() => state.options.projects.filter(item => item.practice_mode === 'centralized'));
+const projectPlanOptions = computed(() => socialPracticeProjectPlanOptions(state.options.plans));
+const selectedProjectPlanEligibility = computed(() => socialPracticeProjectPlanEligibility(state.options.plans.find(item => Number(item.id) === Number(state.form.plan_id))));
+const projectPlanReady = computed(() => Boolean(state.form.plan_id) && !projectPlan.checking && !projectPlan.error && Number(projectPlan.checkedId) === Number(state.form.plan_id) && selectedProjectPlanEligibility.value.canCreate);
+const projectPlanMessage = computed(() => {
+  if (!state.form.plan_id) return projectPlanOptions.value.some(item => !item.disabled) ? '请选择计划，系统将立即核对最新审核与发布状态。不可用计划已置灰并注明原因。' : '当前没有可创建项目的计划，请先在“计划管理”完成审核并发布。';
+  if (projectPlan.checking) return '正在核对计划最新状态，请稍候。';
+  if (projectPlan.error) return projectPlan.error;
+  if (!selectedProjectPlanEligibility.value.canCreate) return selectedProjectPlanEligibility.value.reason;
+  return projectPlanReady.value ? '计划已审核通过并发布，可以填写项目资料。' : '请核对计划最新状态后继续。';
+});
 const scoreStudentOptions = computed(() => {
   const projectId = Number(state.form.project_id || 0);
   const assignedIds = state.rows.filter(row => Number(row.project_id) === projectId).map(row => Number(row.student_id));
@@ -600,7 +624,10 @@ const listFilters = computed(() => [
 const tableActions = computed(() => uniqueActions(state.rows.flatMap(rowActions)));
 const detailFacts = computed(() => detailFields(state.dialog.row?.resource || panelResource.value).map(item => ({ label: item.label, value: item.format ? item.format(state.detail) : state.detail[item.key] })));
 const reviewSubmitLabel = computed(() => state.dialog.type === 'modify' ? '发起修改' : state.review.status === 'accept' ? '确认通过' : state.review.status === 'modify' ? '退回修改' : '请选择审核结果');
-const reviewLimit = computed(() => state.review.status === 'modify' || state.dialog.type === 'modify' ? { min: 8, max: 800 } : { min: 0, max: 300 });
+const reviewLimit = computed(() => {
+  if (state.review.status !== 'modify' && state.dialog.type !== 'modify') return { min: 0, max: 300 };
+  return ['material', 'patch_sign', 'score'].includes(state.dialog.row?.resource) ? { min: 5, max: 500 } : { min: 8, max: 800 };
+});
 const reviewPlaceholder = computed(() => reviewLimit.value.min ? `请填写不少于 ${reviewLimit.value.min} 字的具体原因` : '可填写审核意见');
 
 watch(() => [state.review.status, state.review.opinion], () => { reviewEditVersion++; }, { flush: 'sync' });
@@ -613,6 +640,7 @@ watch(() => [props.panel, props.sessionKey, props.accountId, props.roleType], as
   optionsRequest++;
   studentRequest++;
   optionsPromise = null;
+  resetProjectPlan();
   if (previous && next.slice(1).some((value, index) => value !== previous[index + 1])) state.options = emptyOptions();
   state.loading = false;
   state.saving = false;
@@ -633,7 +661,71 @@ watch(() => [props.panel, props.sessionKey, props.accountId, props.roleType], as
   else await loadList(1);
 }, { immediate: true, flush: 'sync' });
 
-onBeforeUnmount(() => { disposed = true; generation++; readRequest++; optionsRequest++; studentRequest++; });
+onBeforeUnmount(() => { disposed = true; generation++; readRequest++; optionsRequest++; studentRequest++; projectPlanRequest++; });
+
+watch(() => [props.targetPlan, props.panel], async (next, previous) => {
+  const target = props.targetPlan;
+  const targetRequest = ++targetOpenRequest;
+  if (props.panel === 'plans' && (target?.id || previous?.[0]?.id)) { readRequest++; resetProjectPlan(); state.loading = false; }
+  if (!target?.id || props.panel !== 'plans') return;
+  const context = generation;
+  const current = () => !disposed && generation === context && targetRequest === targetOpenRequest
+    && props.targetPlan === target && props.panel === 'plans';
+  await nextTick();
+  if (!current()) return;
+  try {
+    const row = await fetchSocialPracticeDetail('plan', target.id);
+    if (!current()) return;
+    if (Number(row.id) !== Number(target.id)) throw new Error('目标计划不匹配，请刷新后重试');
+    state.filters.keyword = row.code || row.title || '';
+    if (['draft', 'modify'].includes(row.status) && canEditResource('plan', row)) await openEdit({ ...row, resource: 'plan' });
+    else await openDetail({ ...row, resource: 'plan' });
+    if (!current()) return;
+    emit('target-opened', target.token);
+  } catch (error) { if (current()) ElMessage.error(error.message); }
+}, { immediate: true, flush: 'sync' });
+
+function invalidateOptions() {
+  optionsRequest++;
+  optionsPromise = null;
+  state.options.loaded = false;
+}
+
+function resetProjectPlan() {
+  projectPlanRequest++;
+  Object.assign(projectPlan, { checking: false, checkedId: null, error: '' });
+}
+
+async function validateProjectPlan() {
+  const requestId = ++projectPlanRequest;
+  const context = generation;
+  const operation = readRequest;
+  const form = state.form;
+  const dialog = state.dialog;
+  const planId = form.plan_id;
+  const current = () => !disposed && context === generation && operation === readRequest && requestId === projectPlanRequest && form === state.form && dialog === state.dialog && dialog.type === 'form' && Number(planId) === Number(form.plan_id);
+  Object.assign(projectPlan, { checking: false, checkedId: null, error: '' });
+  if (form.resource !== 'project' || !planId) return false;
+  projectPlan.checking = true;
+  try {
+    const plan = await fetchSocialPracticeDetail('plan', planId);
+    if (!current()) return false;
+    if (Number(plan.id) !== Number(planId)) throw new Error('计划信息不匹配，请重新选择');
+    const eligibility = socialPracticeProjectPlanEligibility(plan);
+    const option = { id: plan.id, title: plan.title, status: plan.status, published_at: plan.published_at, can_create_project: eligibility.canCreate, project_unavailable_reason: eligibility.reason };
+    const index = state.options.plans.findIndex(item => Number(item.id) === Number(planId));
+    if (index < 0) state.options.plans.push(option);
+    else state.options.plans[index] = { ...state.options.plans[index], ...option };
+    projectPlan.checkedId = planId;
+    if (!eligibility.canCreate) ElMessage.warning(eligibility.reason);
+    return eligibility.canCreate;
+  } catch (error) {
+    if (current()) projectPlan.error = `无法核对计划状态：${error.message || '请求失败'}。请重新核对后继续。`;
+    return false;
+  } finally {
+    if (current()) projectPlan.checking = false;
+  }
+}
 
 /** 读取社会实践基础选项。 */
 async function ensureOptions(force = false) {
@@ -812,13 +904,19 @@ async function openCreate() {
   if (state.saving) return;
   const operation = ++readRequest;
   const context = generation;
-  if (!await ensureOptions() || disposed || context !== generation || operation !== readRequest) return;
   const resource = ['safety', 'material'].includes(panelResource.value) ? 'material' : panelResource.value;
-  if (!requirePlanApprovalEngine(resource)) return;
-  state.form = emptyForm(resource);
-  applyPlanScopeDefaults(state.form);
-  if (resource === 'material' && props.panel === 'safety') state.form.material_type = 'safety_agreement';
-  state.dialog = { type: 'form', title: createLabel.value, row: { resource } };
+  const current = () => !disposed && context === generation && operation === readRequest;
+  resetProjectPlan();
+  try {
+    if (!await ensureOptions(resource === 'project') || !current()) return;
+    if (!requirePlanApprovalEngine(resource)) return;
+    state.form = emptyForm(resource);
+    applyPlanScopeDefaults(state.form);
+    if (resource === 'material' && props.panel === 'safety') state.form.material_type = 'safety_agreement';
+    state.dialog = { type: 'form', title: createLabel.value, row: { resource } };
+  } catch (error) {
+    if (current()) ElMessage.error(error.message);
+  }
 }
 
 /** 打开业务记录编辑表单。 */
@@ -827,15 +925,23 @@ async function openEdit(row) {
   const operation = ++readRequest;
   const context = generation;
   const resource = actionResource(row);
-  if (!requirePlanApprovalEngine(resource)) return;
-  let detail = row;
-  if (workflowResources.includes(resource)) detail = await fetchSocialPracticeDetail(resource, row.id);
-  if (disposed || context !== generation || operation !== readRequest) return;
-  state.form = formFromRow(resource, detail);
-  if (resource === 'score') prepareScoreRules(state.form.project_id);
-  if (resource === 'declaration' && state.form.plan_id) await loadPlanStudents();
-  if (disposed || context !== generation || operation !== readRequest) return;
-  state.dialog = { type: 'form', title: `编辑${panelConfig.value.title}`, row: { ...row, resource } };
+  const current = () => !disposed && context === generation && operation === readRequest;
+  resetProjectPlan();
+  try {
+    if (!await ensureOptions(resource === 'project') || !current()) return;
+    if (!requirePlanApprovalEngine(resource)) return;
+    let detail = row;
+    if (workflowResources.includes(resource)) detail = await fetchSocialPracticeDetail(resource, row.id);
+    if (!current()) return;
+    state.form = formFromRow(resource, detail);
+    if (resource === 'score') prepareScoreRules(state.form.project_id);
+    if (resource === 'declaration' && state.form.plan_id) await loadPlanStudents();
+    if (!current()) return;
+    state.dialog = { type: 'form', title: `编辑${panelConfig.value.title}`, row: { ...row, resource } };
+    if (resource === 'project') await validateProjectPlan();
+  } catch (error) {
+    if (current()) ElMessage.error(error.message);
+  }
 }
 
 /** 上传社会实践材料附件。 */
@@ -873,9 +979,14 @@ async function saveForm(submit) {
   const dialog = state.dialog;
   const current = () => !disposed && context === generation && dialog === state.dialog && form === state.form;
   const resource = form.resource;
-  const payload = normalizeFormPayload(form);
   state.saving = true;
   try {
+    if (resource === 'project') {
+      if (!form.plan_id) { ElMessage.warning('请选择已审核通过并发布的计划'); return; }
+      if (!await validateProjectPlan() || !current() || !projectPlanReady.value) return;
+      if (!form.title.trim()) { ElMessage.warning('请填写项目名称'); return; }
+    }
+    const payload = normalizeFormPayload(form);
     let result;
     if (resource === 'material') result = await saveSocialPracticeMaterial({ ...payload, submit });
     else if (resource === 'patch_sign') result = await saveSocialPracticePatchSign({ ...payload, submit });
@@ -887,6 +998,7 @@ async function saveForm(submit) {
       if (submit && resource !== 'project') await submitEntity(resource, result.id);
     }
     if (!current()) return;
+    if (['plan', 'project'].includes(resource)) invalidateOptions();
     ElMessage.success(resource === 'project' ? '项目已保存' : (submit ? '已提交审核' : '草稿已保存'));
     closeDialog(true);
     await loadList(1);
@@ -968,6 +1080,7 @@ async function openReview(row, type) {
 async function workflowUpdated() {
   const context = generation;
   const dialog = state.dialog;
+  invalidateOptions();
   await loadList(state.pagination.page);
   if (disposed || context !== generation || dialog !== state.dialog) return;
   if (dialog.type === 'workflow') closeDialog(true);
@@ -1010,6 +1123,7 @@ async function submitReview() {
   try {
     const result = dialog.type === 'modify' ? await requestSocialPracticeModification(payload) : await reviewSocialPractice(payload);
     if (!current()) return;
+    if (payload.resource === 'plan') invalidateOptions();
     ElMessage.success(dialog.type === 'modify' ? '已发起修改' : payload.status === 'accept' ? (result.status === 'wait' ? '本次已通过，流程仍待后续审核' : '已确认通过') : '已退回修改');
     closeDialog(true);
     await loadList(state.pagination.page);
@@ -1048,6 +1162,7 @@ async function confirmSubmit(row) {
     state.saving = true;
     await submitEntity(resource, row.id);
     if (!current()) return;
+    if (resource === 'plan') invalidateOptions();
     ElMessage.success('已提交审核');
     await loadList(state.pagination.page);
   } catch (error) {
@@ -1060,11 +1175,15 @@ async function confirmSubmit(row) {
 /** 二次确认发布计划。 */
 async function confirmPublish(row) {
   if (!requirePlanApprovalEngine('plan')) return;
+  const context = generation;
   try {
-    await ElMessageBox.confirm('发布后，计划范围内的学生将收到通知。', '发布计划', { type: 'warning', confirmButtonText: '确认发布' });
-    await runSaving(async () => publishSocialPractice({ id: row.id }), '计划已发布');
+    if (!await ensureOptions(true) || disposed || context !== generation) return;
+    if (state.options.plan_publish_notifies !== false) throw new Error('服务器尚未提供本步骤不发通知的发布规则，请更新服务端并重启后重新读取。');
+    await ElMessageBox.confirm('发布后可继续添加实践项目，必修计划会同步参与名单；本步骤暂不发送通知。', '发布计划', { type: 'warning', confirmButtonText: '确认发布' });
+    if (disposed || context !== generation) return;
+    await runSaving(async () => publishSocialPractice({ id: row.id }), '计划已发布', true);
   } catch (error) {
-    if (error !== 'cancel' && error !== 'close') ElMessage.error(error.message || String(error));
+    if (!disposed && context === generation && error !== 'cancel' && error !== 'close') ElMessage.error(error.message || String(error));
   }
 }
 
@@ -1186,15 +1305,19 @@ async function runAssignment(callback, message) {
 }
 
 /** 执行普通写操作并刷新。 */
-async function runSaving(callback, message) {
+async function runSaving(callback, message, refreshOptions = false) {
   if (state.saving) return;
+  const context = generation;
+  const current = () => !disposed && context === generation;
   state.saving = true;
   try {
     await callback();
+    if (!current()) return;
+    if (refreshOptions) invalidateOptions();
     ElMessage.success(message);
     await loadList(state.pagination.page);
   } finally {
-    state.saving = false;
+    if (current()) state.saving = false;
   }
 }
 
@@ -1228,6 +1351,7 @@ function closeDialog(force = false) {
   if (state.saving && force !== true) return;
   readRequest++;
   studentRequest++;
+  resetProjectPlan();
   state.loading = false;
   state.dialog = { type: '', title: '', row: null };
   state.detail = {};
@@ -1315,9 +1439,14 @@ function confirmStatusText(status) {
   return { pending: '待确认', accepted: '已确认', rejected: '已拒绝' }[status] || status || '-';
 }
 
+/** 返回流程记录的展示内容。 */
+function workflowRecordContent(record) {
+  return record.action === 'trusted_initial_accept' ? '由教学计划中心完成首次可信导入，计划免审生效。后续修改按原计划审核流程处理。' : record.content;
+}
+
 /** 返回流程动作中文名。 */
 function actionText(action) {
-  return { submit: '提交审核', review: '审核处理', modify_after_accept: '通过后修改', publish: '发布计划', auto_filing: '旧流程自动备案', archive: '完成归档', assign_teachers: '分配教师', assign_students: '分配学生', confirm_teacher: '教师确认', confirm_member: '成员确认' }[action] || action || '流程处理';
+  return { trusted_initial_accept: '首次导入免审确认', submit: '提交审核', review: '审核处理', modify_after_accept: '通过后修改', publish: '发布计划', auto_filing: '旧流程自动备案', archive: '完成归档', assign_teachers: '分配教师', assign_students: '分配学生', confirm_teacher: '教师确认', confirm_member: '成员确认' }[action] || action || '流程处理';
 }
 
 /** 返回流程记录对应的审核支线。 */
@@ -1520,9 +1649,11 @@ function defaultScoreRules() { return [{ practice_mode: 'centralized', item_code
 .social-plan-import { display: grid; gap: 14px; padding: 18px 20px; }.social-import-upload { position: relative; min-height: 76px; display: grid; place-items: center; border: 1px dashed var(--primary); border-radius: 6px; color: var(--primary-ink, var(--primary)); background: color-mix(in srgb, var(--primary) 5%, var(--surface)); cursor: pointer; }.social-import-upload input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }.social-import-upload span { display: flex; align-items: center; gap: 8px; }.social-import-summary { display: flex; align-items: center; gap: 18px; color: var(--muted); font-size: 13px; }
 .social-stat-filters { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 10px 0 2px; }.social-stat-filters .el-select { width: 190px; }.social-stat-summary { margin-top: 4px; }.social-stat-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; min-height: 0; overflow: auto; }.social-stat-card { min-width: 0; padding: 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }.social-stat-card-wide { grid-column: 1 / -1; }.social-stat-card header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 10px; }.social-stat-card header small { color: var(--muted); }
 .social-practice-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; padding: 18px 20px; overflow: auto; }
+.social-project-note { margin: 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: 6px; color: var(--muted); line-height: 1.6; font-size: 13px; }.social-project-note.is-error { color: var(--el-color-danger); border-color: var(--el-color-danger-light-7); }
 .social-practice-form > label { display: grid; gap: 6px; }.social-practice-form > label > span { color: var(--muted); font-size: 12px; }.social-practice-form input:not(.el-select__input):not(.el-input__inner):not([type="checkbox"]):not([type="radio"]):not([type="file"]),.social-practice-form textarea { width: 100%; box-sizing: border-box; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); font: inherit; }.social-practice-form input:not(.el-select__input):not(.el-input__inner):not([type="checkbox"]):not([type="radio"]):not([type="file"]) { height: var(--control-height); padding: 0 10px; }.social-practice-form textarea { padding: 9px 11px; resize: vertical; line-height: 1.6; }.social-practice-form :deep(.el-input__wrapper),.social-practice-form :deep(.el-select__wrapper),.social-practice-form :deep(.el-input-number) { width: 100%; min-height: var(--control-height); height: var(--control-height); border-radius: var(--control-radius); }.span-2 { grid-column: 1 / -1; }
 .social-inline-editor { display: grid; gap: 8px; padding: 12px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface-2); }.social-inline-editor > header { display: flex; align-items: center; justify-content: space-between; }.social-inline-editor > header small { color: var(--muted); }
 .social-material-files { display: grid; gap: 10px; padding: 12px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface-2); }.social-material-files > header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }.social-material-files > input { display: none; }.social-material-files > small { color: var(--muted); }.social-material-file-list { display: grid; gap: 7px; }.social-material-file-list article { min-height: 36px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 7px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); }.social-material-file-list a { min-width: 0; color: var(--primary-ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.social-inline-row > label { display: grid; gap: 6px; min-width: 0; align-self: start; }
 .social-inline-row { display: grid; gap: 8px; align-items: center; }.scope-row { grid-template-columns: 120px repeat(3, minmax(130px, 1fr)) 54px; }.material-row { grid-template-columns: 120px minmax(170px, 1fr) 110px 80px 54px; }.score-row { grid-template-columns: 120px 1fr 1fr 130px 54px; }.teacher-row { grid-template-columns: minmax(220px, 1fr) 130px 130px 54px; }
 .social-detail-content { display: grid; gap: 16px; padding: 18px 20px; overflow: auto; }.social-detail-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); }.social-detail-grid article { min-height: 64px; display: grid; align-content: center; gap: 5px; padding: 10px 13px; background: var(--surface); }.social-detail-grid span { color: var(--muted); font-size: 12px; }.social-detail-grid strong { font-size: 14px; overflow-wrap: anywhere; }.social-detail-block { display: grid; gap: 10px; }.social-detail-block p { margin: 0; padding: 13px; border: 1px solid var(--line); border-radius: 6px; line-height: 1.7; white-space: pre-wrap; }
 .social-review-form { display: grid; gap: 16px; padding: 20px; }.social-review-form label { display: grid; gap: 7px; }.social-review-form textarea { border: 1px solid var(--line); border-radius: 6px; padding: 11px; resize: vertical; font: inherit; line-height: 1.6; }.social-review-form small { justify-self: end; color: var(--muted); }

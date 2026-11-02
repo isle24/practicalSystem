@@ -6,7 +6,7 @@
       <template v-if="activeTab === 'profile'">
         <div class="internship-section-head">
           <div>
-            <strong>{{ readonly ? (local.name || '未命名基地') : '基地类型' }}</strong>
+            <FormFieldLabel v-if="!readonly" :required="false">基地类型</FormFieldLabel><strong v-else>{{ local.name || '未命名基地' }}</strong>
             <small>{{ local.base_type === 'temporary' ? '临时基地仅维护必要联系和服务范围' : '长期基地维护完整申报资料' }}</small>
           </div>
           <el-segmented v-if="!readonly" v-model="local.base_type" :options="baseTypeOptions" />
@@ -50,47 +50,47 @@
 
         <div v-else class="operation-form base-main-form">
           <label>
-            <span>基地名称{{ local.base_type === 'temporary' ? '（可选）' : '' }}</span>
+            <FormFieldLabel :required="local.base_type !== 'temporary'" help="临时基地留空时按基地位置和负责人信息生成名称">基地名称</FormFieldLabel>
             <input v-model="local.name" :placeholder="local.base_type === 'temporary' ? '留空后按位置和负责人自动生成' : ''">
           </label>
-          <label v-if="local.base_type === 'long_term'"><span>基地编号</span><input v-model="local.code"></label>
-          <label><span>是否立项</span><el-switch v-model="local.is_project_approved" active-text="已立项" inactive-text="未立项" aria-label="是否立项" /></label>
-          <label><span>启用状态</span><el-switch v-model="local.status" active-value="enabled" inactive-value="disabled" active-text="启用" inactive-text="关闭" aria-label="基地启用状态" /></label>
+          <label v-if="local.base_type === 'long_term'"><FormFieldLabel :required="false">基地编号</FormFieldLabel><input v-model="local.code"></label>
+          <label><FormFieldLabel :required="false">是否立项</FormFieldLabel><el-switch v-model="local.is_project_approved" active-text="已立项" inactive-text="未立项" aria-label="是否立项" /></label>
+          <label><FormFieldLabel :required="false">启用状态</FormFieldLabel><el-switch v-model="local.status" active-value="enabled" inactive-value="disabled" active-text="启用" inactive-text="关闭" aria-label="基地启用状态" /></label>
           <label>
-            <span>所属学院</span>
+            <FormFieldLabel :required="false">所属学院</FormFieldLabel>
             <el-select v-model="local.dep_id" clearable filterable placeholder="请选择所属学院">
               <el-option v-for="item in options.departments || []" :key="item.dep_id" :label="item.dep_name" :value="item.dep_id" />
             </el-select>
           </label>
           <label>
-            <span>服务专业</span>
+            <FormFieldLabel v-if="permissionState.context.role_type" :required="permissionState.context.role_type === 'profession_admin'" :help="permissionState.context.role_type === 'profession_admin' ? '专业管理员至少选择一个服务专业' : ''">服务专业</FormFieldLabel><span v-else>服务专业</span>
             <el-select-v2 v-model="local.profession_ids" :options="professionOptions" :props="{ label: 'profession_name', value: 'profession_id' }" multiple collapse-tags collapse-tags-tooltip filterable placeholder="请选择服务专业" />
           </label>
           <div class="base-address-label span-2"><span>基地所在地址</span><BaseAddressField :model-value="local" /></div>
-          <div class="base-address-label span-2"><span>服务课程</span><BaseCourseField v-model="local.course_ids" :selected="detail.courses || []" :departments="options.departments || []" :dep-id="local.dep_id" :legacy-text="detail.courses?.length ? '' : local.service_courses" /></div>
-          <label><span>基地负责人</span><BaseManagerSelect v-model="local.manager_account_id" :selected="local.manager" @change="selectManager" /></label>
-          <label><span>负责人电话</span><input v-model="local.manager.phone"></label>
+          <div class="base-address-label span-2"><FormFieldLabel :required="false">服务课程</FormFieldLabel><BaseCourseField v-model="local.course_ids" :selected="detail.courses || []" :departments="options.departments || []" :dep-id="local.dep_id" :legacy-text="detail.courses?.length ? '' : local.service_courses" /></div>
+          <label><FormFieldLabel :required="false">基地负责人</FormFieldLabel><BaseManagerSelect v-model="local.manager_account_id" :selected="local.manager" @change="selectManager" /></label>
+          <label><FormFieldLabel :required="false">负责人电话</FormFieldLabel><input v-model="local.manager.phone"></label>
           <template v-if="local.base_type === 'long_term'">
             <label>
-              <span>合作单位</span>
+              <FormFieldLabel :required="false">合作单位</FormFieldLabel>
               <el-select-v2 v-model="local.company_id" :options="options.companies || []" :props="{ label: 'company_name', value: 'company_id' }" clearable filterable placeholder="请选择合作单位" />
             </label>
-            <label><span>基地类别</span><input v-model="local.category"></label>
-            <label><span>基地面积（平方米）</span><input v-model="local.area" type="number" min="0"></label>
-            <label><span>可接收人数</span><input v-model="local.capacity" type="number" min="0"></label>
-            <label><span>年均接收人数</span><input v-model="local.annual_student_count" type="number" min="0"></label>
-            <label><span>当前接收人数</span><input v-model="local.current_student_count" type="number" min="0"></label>
+            <label><FormFieldLabel :required="false">基地类别</FormFieldLabel><input v-model="local.category"></label>
+            <label><FormFieldLabel :required="false">基地面积（平方米）</FormFieldLabel><input v-model="local.area" type="number" min="0"></label>
+            <label><FormFieldLabel :required="false">可接收人数</FormFieldLabel><input v-model="local.capacity" type="number" min="0"></label>
+            <label><FormFieldLabel :required="false">年均接收人数</FormFieldLabel><input v-model="local.annual_student_count" type="number" min="0"></label>
+            <label><FormFieldLabel :required="false">当前接收人数</FormFieldLabel><input v-model="local.current_student_count" type="number" min="0"></label>
             <label>
-              <span>负责人性别</span>
+              <FormFieldLabel :required="false">负责人性别</FormFieldLabel>
               <el-select v-model="local.manager.gender" clearable placeholder="请选择负责人性别">
                 <el-option label="男" value="男" />
                 <el-option label="女" value="女" />
               </el-select>
             </label>
-            <label><span>负责人出生日期</span><input v-model="local.manager.birth_date" type="date"></label>
-            <label><span>负责人职务/职称</span><input v-model="local.manager.title"></label>
-            <label><span>负责人学历</span><input v-model="local.manager.education"></label>
-            <label class="span-2"><span>负责人职责</span><textarea v-model="local.manager.duties" rows="3" /></label>
+            <label><FormFieldLabel :required="false">负责人出生日期</FormFieldLabel><input v-model="local.manager.birth_date" type="date"></label>
+            <label><FormFieldLabel :required="false">负责人职务/职称</FormFieldLabel><input v-model="local.manager.title"></label>
+            <label><FormFieldLabel :required="false">负责人学历</FormFieldLabel><input v-model="local.manager.education"></label>
+            <label class="span-2"><FormFieldLabel :required="false">负责人职责</FormFieldLabel><textarea v-model="local.manager.duties" rows="3" /></label>
           </template>
         </div>
       </template>
@@ -119,8 +119,8 @@
           </el-table>
           <div v-else-if="local.existing_sites.length" class="dynamic-row-list">
             <div v-for="(item, index) in local.existing_sites" :key="`site-${index}`" class="dynamic-form-row two-columns">
-              <label><span>基地名称</span><input v-model="item.site_name"></label>
-              <label><span>合作内容</span><input v-model="item.cooperation"></label>
+              <label><FormFieldLabel :required="false" help="基地名称留空时，此行不保存">基地名称</FormFieldLabel><input v-model="item.site_name"></label>
+              <label><FormFieldLabel :required="false">合作内容</FormFieldLabel><input v-model="item.cooperation"></label>
               <el-button text type="danger" :icon="Trash2" @click="local.existing_sites.splice(index, 1)">删除</el-button>
             </div>
           </div>
@@ -140,12 +140,12 @@
             <div class="base-long-text-list"><article><span>主营业务</span><p>{{ valueText(local.company_profile.main_business) }}</p></article></div>
           </template>
           <div v-else class="operation-form base-main-form compact-form">
-            <label><span>单位名称</span><input v-model="local.company_profile.company_name"></label>
-            <label><span>注册资本</span><input v-model="local.company_profile.registered_capital"></label>
-            <label><span>员工人数</span><input v-model="local.company_profile.employee_count" type="number" min="0"></label>
-            <label><span>年均接收实习人数</span><input v-model="local.company_profile.annual_intern_count" type="number" min="0"></label>
-            <label><span>高级职称人数</span><input v-model="local.company_profile.senior_title_count" type="number" min="0"></label>
-            <label class="span-2"><span>主营业务</span><textarea v-model="local.company_profile.main_business" rows="3" /></label>
+            <label><FormFieldLabel :required="false">单位名称</FormFieldLabel><input v-model="local.company_profile.company_name"></label>
+            <label><FormFieldLabel :required="false">注册资本</FormFieldLabel><input v-model="local.company_profile.registered_capital"></label>
+            <label><FormFieldLabel :required="false">员工人数</FormFieldLabel><input v-model="local.company_profile.employee_count" type="number" min="0"></label>
+            <label><FormFieldLabel :required="false">年均接收实习人数</FormFieldLabel><input v-model="local.company_profile.annual_intern_count" type="number" min="0"></label>
+            <label><FormFieldLabel :required="false">高级职称人数</FormFieldLabel><input v-model="local.company_profile.senior_title_count" type="number" min="0"></label>
+            <label class="span-2"><FormFieldLabel :required="false">主营业务</FormFieldLabel><textarea v-model="local.company_profile.main_business" rows="3" /></label>
           </div>
         </section>
       </template>
@@ -205,7 +205,7 @@
 
       <template v-else-if="activeTab === 'construction'">
         <section class="internship-edit-section">
-          <header><div><strong>基地建设方案</strong><small>填写建设目标、实施内容和保障措施</small></div></header>
+          <header><div><FormFieldLabel v-if="!readonly" :required="false">基地建设方案</FormFieldLabel><strong v-else>基地建设方案</strong><small>填写建设目标、实施内容和保障措施</small></div></header>
           <p v-if="readonly" class="detail-long-text">{{ valueText(local.construction_content) }}</p>
           <textarea v-else v-model="local.construction_content" class="section-textarea" rows="7" />
         </section>
@@ -224,10 +224,10 @@
           </el-table>
           <div v-else-if="local.budgets.length" class="dynamic-row-list">
             <div v-for="(item, index) in local.budgets" :key="`budget-${index}`" class="dynamic-form-row budget-row">
-              <label><span>项目</span><input v-model="item.item_name"></label>
-              <label><span>内容</span><input v-model="item.content"></label>
-              <label><span>金额</span><input v-model="item.amount" type="number" min="0" step="0.01"></label>
-              <label><span>备注</span><input v-model="item.remark"></label>
+              <label><FormFieldLabel :required="false" help="项目名称留空时，此行不保存">项目</FormFieldLabel><input v-model="item.item_name"></label>
+              <label><FormFieldLabel :required="false">内容</FormFieldLabel><input v-model="item.content"></label>
+              <label><FormFieldLabel :required="false">金额</FormFieldLabel><input v-model="item.amount" type="number" min="0" step="0.01"></label>
+              <label><FormFieldLabel :required="false">备注</FormFieldLabel><input v-model="item.remark"></label>
               <el-button text type="danger" :icon="Trash2" @click="local.budgets.splice(index, 1)">删除</el-button>
             </div>
           </div>
@@ -246,6 +246,7 @@
 </template>
 
 <script setup>
+import FormFieldLabel from '../../../shared/components/FormFieldLabel.vue';
 import { computed, reactive, ref, watch } from 'vue';
 import { ElSelectV2 } from 'element-plus';
 import { Building2, CalendarRange, ClipboardList, Handshake, Plus, Save, Trash2, UsersRound } from '@lucide/vue';
@@ -254,6 +255,9 @@ import TextTabs from './TextTabs.vue';
 import BaseAddressField from './BaseAddressField.vue';
 import BaseCourseField from './BaseCourseField.vue';
 import BaseManagerSelect from './BaseManagerSelect.vue';
+import { usePermissions } from '../composables/usePermissions';
+
+const { state: permissionState } = usePermissions();
 
 const props = defineProps({
   detail: { type: Object, default: () => ({}) },

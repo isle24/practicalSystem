@@ -93,7 +93,7 @@
         </template>
 
         <form v-else-if="!state.detailLoading && state.dialogMode === 'assign'" class="base-visit-form" @submit.prevent="saveDialog">
-          <label><span>实习基地</span>
+          <label><FormFieldLabel :required="true">实习基地</FormFieldLabel>
             <el-select v-model="state.form.base_id" filterable remote :remote-method="searchBases" :loading="state.baseLoading" placeholder="输入基地名称搜索" @change="selectBase">
               <el-option v-for="base in baseOptions" :key="base.id" :label="base.name" :value="Number(base.id)" />
             </el-select>
@@ -107,43 +107,43 @@
               <dt>负责人电话</dt><dd>{{ selectedBase.manager_phone || '—' }}</dd>
             </dl>
           </label>
-          <label><span>走访人员</span>
+          <label><FormFieldLabel :required="true">走访人员</FormFieldLabel>
             <el-select v-model="state.form.participant_ids" multiple filterable remote :remote-method="searchParticipants" :loading="state.optionsLoading" collapse-tags collapse-tags-tooltip placeholder="输入姓名或单位搜索走访人员">
               <el-option v-for="person in participantOptions" :key="personId(person)" :label="accountLabel(person)" :value="personId(person)" />
             </el-select>
           </label>
-          <label><span>主管院长</span>
+          <label><FormFieldLabel :required="false">主管院长</FormFieldLabel>
             <el-select v-model="state.form.supervisor_id" filterable remote clearable :remote-method="searchSupervisors" :loading="state.optionsLoading" placeholder="输入姓名或单位搜索主管院长">
               <el-option v-for="person in supervisorOptions" :key="personId(person)" :label="accountLabel(person)" :value="personId(person)" />
             </el-select>
           </label>
-          <label><span>本次联系人</span>
+          <label><FormFieldLabel :required="false">本次联系人</FormFieldLabel>
             <el-select v-model="state.form.contact_account_id" filterable remote clearable :remote-method="searchContacts" :loading="state.optionsLoading" placeholder="输入姓名或单位搜索系统联系人" @change="selectContact">
               <el-option v-for="person in contactOptions" :key="personId(person)" :label="accountLabel(person)" :value="personId(person)" />
             </el-select>
           </label>
-          <label><span>联系人姓名</span><el-input v-model="state.form.contact_person" maxlength="180" placeholder="请输入本次走访联系人" /></label>
-          <label><span>联系电话</span><el-input v-model="state.form.contact_phone" maxlength="40" placeholder="请输入本次走访联系电话" /></label>
-          <label><span>立项年份</span><el-input v-model="state.form.project_year" maxlength="4" inputmode="numeric" placeholder="例如 2026，可留空" /></label>
-          <label class="base-visit-wide"><span>新闻链接</span><el-input v-model="state.form.news_url" maxlength="500" placeholder="可选，仅支持 http 或 https" /></label>
-          <label class="base-visit-wide"><span>备注</span><el-input v-model="state.form.remark" type="textarea" :rows="3" maxlength="10000" /></label>
+          <label><FormFieldLabel :required="false">联系人姓名</FormFieldLabel><el-input v-model="state.form.contact_person" maxlength="180" placeholder="请输入本次走访联系人" /></label>
+          <label><FormFieldLabel :required="false">联系电话</FormFieldLabel><el-input v-model="state.form.contact_phone" maxlength="40" placeholder="请输入本次走访联系电话" /></label>
+          <label><FormFieldLabel :required="false">立项年份</FormFieldLabel><el-input v-model="state.form.project_year" maxlength="4" inputmode="numeric" placeholder="例如 2026，可留空" /></label>
+          <label class="base-visit-wide"><FormFieldLabel :required="false">新闻链接</FormFieldLabel><el-input v-model="state.form.news_url" maxlength="500" placeholder="可选，仅支持 http 或 https" /></label>
+          <label class="base-visit-wide"><FormFieldLabel :required="false">备注</FormFieldLabel><el-input v-model="state.form.remark" type="textarea" :rows="3" maxlength="10000" /></label>
         </form>
 
         <form v-else-if="!state.detailLoading && state.dialogMode === 'schedule'" class="base-visit-form" @submit.prevent="saveDialog">
-          <label><span>走访日期</span><input v-model="state.form.visit_date" type="date" required></label>
-          <label><span>开始时间</span><input v-model="state.form.start_time" type="time" required></label>
-          <label><span>结束时间</span><input v-model="state.form.end_time" type="time" required></label>
+          <label><FormFieldLabel :required="true">走访日期</FormFieldLabel><input v-model="state.form.visit_date" type="date" required></label>
+          <label><FormFieldLabel :required="true">开始时间</FormFieldLabel><input v-model="state.form.start_time" type="time" required></label>
+          <label><FormFieldLabel :required="true">结束时间</FormFieldLabel><input v-model="state.form.end_time" type="time" required></label>
           <small class="base-visit-wide">走访人员在同一时间段已有其他基地安排时，系统会阻止保存。</small>
         </form>
 
         <form v-else-if="!state.detailLoading && state.dialogMode === 'record'" class="base-visit-form" @submit.prevent="saveDialog">
-          <label class="base-visit-wide"><span>实际走访时间</span><input v-model="state.form.actual_at" type="datetime-local" step="1" required></label>
-          <label><span>参加人员账号（必选）</span><el-select v-model="state.form.participant_ids" multiple filterable remote :remote-method="searchParticipants" :loading="state.optionsLoading" placeholder="输入姓名或单位搜索"><el-option v-for="person in participantOptions" :key="personId(person)" :label="accountLabel(person)" :value="personId(person)" /></el-select></label>
-          <label><span>参加人员补充</span><el-input v-model="state.form.participants" maxlength="500" /></label>
-          <label><span>接待人员</span><el-input v-model="state.form.contact_person" maxlength="180" /></label>
-          <label v-for="field in recordTextFields" :key="field.key" class="base-visit-wide"><span>{{ field.label }}{{ field.key === 'content' ? '（必填）' : '' }}</span><el-input v-model="state.form[field.key]" type="textarea" :rows="field.key === 'content' ? 6 : 3" :maxlength="field.maxlength" /></label>
+          <label class="base-visit-wide"><FormFieldLabel :required="true">实际走访时间</FormFieldLabel><input v-model="state.form.actual_at" type="datetime-local" step="1" required></label>
+          <label><FormFieldLabel :required="true">参加人员账号</FormFieldLabel><el-select v-model="state.form.participant_ids" multiple filterable remote :remote-method="searchParticipants" :loading="state.optionsLoading" placeholder="输入姓名或单位搜索"><el-option v-for="person in participantOptions" :key="personId(person)" :label="accountLabel(person)" :value="personId(person)" /></el-select></label>
+          <label><FormFieldLabel :required="false">参加人员补充</FormFieldLabel><el-input v-model="state.form.participants" maxlength="500" /></label>
+          <label><FormFieldLabel :required="false">接待人员</FormFieldLabel><el-input v-model="state.form.contact_person" maxlength="180" /></label>
+          <label v-for="field in recordTextFields" :key="field.key" class="base-visit-wide"><FormFieldLabel :required="field.key === 'content'">{{ field.label }}</FormFieldLabel><el-input v-model="state.form[field.key]" type="textarea" :rows="field.key === 'content' ? 6 : 3" :maxlength="field.maxlength" /></label>
           <section class="base-visit-wide base-visit-files">
-            <header><strong>附件（{{ state.form.attachments.length }}/20）</strong><el-button :icon="Upload" :loading="state.uploading" :disabled="state.form.attachments.length >= 20" @click="attachmentInput?.click()">上传附件</el-button></header>
+            <header><FormFieldLabel :required="false">附件（{{ state.form.attachments.length }}/20）</FormFieldLabel><el-button :icon="Upload" :loading="state.uploading" :disabled="state.form.attachments.length >= 20" @click="attachmentInput?.click()">上传附件</el-button></header>
             <input ref="attachmentInput" type="file" hidden multiple accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.zip,.txt" @change="uploadAttachments">
             <article v-for="file in state.form.attachments" :key="file.file_id || file.id">
               <a v-if="file.url" :href="backendUrl(file.url)" target="_blank" rel="noopener noreferrer">{{ fileName(file) }}</a><span v-else>{{ fileName(file) }}</span>
@@ -154,7 +154,7 @@
         </form>
 
         <form v-else-if="!state.detailLoading && state.dialogMode === 'cancel'" class="base-visit-form" @submit.prevent="saveDialog">
-          <label class="base-visit-wide"><span>取消原因</span><el-input v-model="state.form.reason" type="textarea" :rows="4" maxlength="1000" placeholder="请输入取消原因" /></label>
+          <label class="base-visit-wide"><FormFieldLabel :required="true">取消原因</FormFieldLabel><el-input v-model="state.form.reason" type="textarea" :rows="4" maxlength="1000" placeholder="请输入取消原因" /></label>
         </form>
         <el-alert v-else-if="!state.detailLoading && state.dialogMode === 'delete'" title="确认删除该巡查？" description="删除后不再显示该巡查，也不再占用走访时间。不再安排后续提醒；已发送或正在处理的提醒无法撤回。历史走访记录和附件将保留。" type="warning" :closable="false" show-icon />
       </div>
@@ -174,6 +174,7 @@
 </template>
 
 <script setup>
+import FormFieldLabel from '../../../shared/components/FormFieldLabel.vue';
 import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue';
 import { Plus, Upload } from '@lucide/vue';
 import DataListPanel from './DataListPanel.vue';

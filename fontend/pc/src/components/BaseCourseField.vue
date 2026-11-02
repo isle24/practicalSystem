@@ -7,10 +7,10 @@
       <div class="base-course-library-body">
         <form class="base-course-edit-form" @submit.prevent="save">
           <strong>{{ library.form.id ? '修改课程' : '新增课程' }}</strong>
-          <label><span>课程代码</span><el-input v-model="library.form.code" maxlength="120" :disabled="library.saving" placeholder="请输入课程代码" /></label>
-          <label><span>课程名称</span><el-input v-model="library.form.name" maxlength="180" :disabled="library.saving" placeholder="请输入课程名称" /></label>
-          <label><span>所属学院</span><el-select-v2 v-model="library.form.dep_id" :options="departmentOptions" clearable filterable :disabled="library.saving" placeholder="请选择学院" /></label>
-          <label><span>启用状态</span><el-switch v-model="library.form.status" active-value="enabled" inactive-value="disabled" active-text="启用" inactive-text="停用" :disabled="library.saving" /></label>
+          <label><FormFieldLabel :required="true">课程代码</FormFieldLabel><el-input v-model="library.form.code" maxlength="120" :disabled="library.saving" placeholder="请输入课程代码" /></label>
+          <label><FormFieldLabel :required="true">课程名称</FormFieldLabel><el-input v-model="library.form.name" maxlength="180" :disabled="library.saving" placeholder="请输入课程名称" /></label>
+          <label><FormFieldLabel v-if="permissionState.context.role_type" :required="!['super_admin', 'school_admin'].includes(permissionState.context.role_type)" help="学院或专业管理员须选择授权学院">所属学院</FormFieldLabel><span v-else>所属学院</span><el-select-v2 v-model="library.form.dep_id" :options="departmentOptions" clearable filterable :disabled="library.saving" placeholder="请选择学院" /></label>
+          <label><FormFieldLabel :required="false">启用状态</FormFieldLabel><el-switch v-model="library.form.status" active-value="enabled" inactive-value="disabled" active-text="启用" inactive-text="停用" :disabled="library.saving" /></label>
           <div class="base-course-edit-actions"><el-button :disabled="library.saving" @click="newCourse">新增课程</el-button><el-button type="primary" :loading="library.saving" native-type="submit">保存课程</el-button></div>
           <el-alert v-if="library.error" :title="library.error" type="error" :closable="false" class="wide" />
         </form>
@@ -22,10 +22,13 @@
 </template>
 
 <script setup>
+import FormFieldLabel from '../../../shared/components/FormFieldLabel.vue';
 import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue';
 import DataListPanel from './DataListPanel.vue';
 import OperationDialog from './OperationDialog.vue';
 import { fetchBaseCourses, saveBaseCourse } from '../api/baseCatalog';
+import { usePermissions } from '../composables/usePermissions';
+const { state: permissionState } = usePermissions();
 const props = defineProps({ modelValue: { type: Array, default: () => [] }, selected: { type: Array, default: () => [] }, departments: { type: Array, default: () => [] }, depId: { type: [Number, String], default: null }, legacyText: { type: String, default: '' } });
 const emit = defineEmits(['update:modelValue']);
 const rows = ref([]), savedRows = ref([]), loading = ref(false), error = ref(''), hasMore = ref(false);

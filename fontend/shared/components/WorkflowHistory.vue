@@ -1,4 +1,5 @@
 <script setup>
+import FormFieldLabel from './FormFieldLabel.vue';
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { workflowEventOutcome } from '../workflowPresentation';
 
@@ -16,6 +17,17 @@ const activeNode = computed(() => current.value?.nodes_json?.[Number(current.val
 const canReview = computed(() => props.reviewAllowed && current.value?.status === 'wait' && current.value.tasks?.some(task => task.kind === 'review' && task.status === 'pending' && Number(task.position) === Number(current.value.active_position) && Number(task.account_id) === Number(props.accountId)));
 const statusNames = { draft: '草稿', wait: '待审批', accept: '已通过', modify: '已退回', cancelled: '已取消' };
 const actionNames = { start: '提交', accept: '通过', modify: '退回', cancel: '取消' };
+const visibleHistory = instance => (instance.history || []).filter(event => event.action !== 'save_submit');
+const opinionRule = computed(() => {
+  const plan = ['internship_plan', 'lab_plan', 'training_plan', 'social_practice_plan'].includes(props.entityType);
+  return decision.value === 'modify' ? { min: plan ? 8 : 1, max: plan ? 800 : 2000 } : { min: 0, max: plan && decision.value === 'accept' ? 300 : 2000 };
+});
+const opinionHelp = computed(() => !decision.value ? '请选择审批结果；退回必须说明原因' : decision.value === 'modify' ? `请说明修改要求，${opinionRule.value.min} 至 ${opinionRule.value.max} 字` : `可填写审批意见，最多 ${opinionRule.value.max} 字`);
+const opinionError = computed(() => {
+  if (!decision.value) return '';
+  const length = Array.from(opinion.value.trim()).length;
+  return length < opinionRule.value.min || length > opinionRule.value.max ? `审批意见须为 ${opinionRule.value.min} 至 ${opinionRule.value.max} 字` : '';
+});
 function candidateName(instance, actorId) {
   for (const node of instance.nodes_json || []) {
     const actor = node.candidates?.find(item => Number(item.account_id) === Number(actorId));
@@ -54,7 +66,7 @@ async function review() {
   const version = generation;
   const source = [props.entityType, props.entityId, props.accountId].join(':');
   if (!['accept', 'modify'].includes(action)) { message.value = '请选择审批结果'; return; }
-  if (action === 'modify' && !opinion.value.trim()) { message.value = '请填写退回意见'; return; }
+  if (opinionError.value) { message.value = opinionError.value; return; }
   if (activeNode.value?.signature_required && (!signature.value || !useSignature.value)) { message.value = '此节点需要本人签名，请先在个人设置中保存签名，并勾选用于本次审批。'; return; }
   busy.value = true;
   message.value = '';
@@ -76,7 +88,8 @@ defineExpose({ reload });
   <section class="workflow-history" :aria-busy="busy">
     <header><strong>审批流程</strong><button type="button" :disabled="busy" @click="reload">刷新</button></header>
     <p v-if="message" class="workflow-feedback" role="status">{{ message }}</p>
-    <p v-if="!busy && !items.length && !message" class="workflow-muted">尚未提交审批。</p>
+    <p v-if="!busy && !items.length && !message" class="workflow-muted">尚未提交审批。请返回业务表单保存并提交。</p>
+    <p v-if="current" class="workflow-muted">当前状态：{{ statusNames[current.status] || current.status }}。{{ current.status === 'wait' ? (canReview ? '请选择审批结果；节点要求签名时，确认使用本人签名后提交。' : '等待当前节点审批人处理，可刷新查看进度。') : current.status === 'modify' || current.status === 'cancelled' ? '请返回原业务表单按意见修改，再重新提交审核。' : '本轮审批已完成；需调整内容时先在原业务中发起通过后修改。' }}</p>
     <article v-for="instance in items" :key="instance.id" class="workflow-round">
       <div class="workflow-round-title"><strong>第 {{ instance.round }} 轮</strong><span>{{ statusNames[instance.status] || instance.status }}</span><time>{{ instance.created_at }}</time></div>
       <ol class="workflow-nodes">
@@ -86,14 +99,14 @@ defineExpose({ reload });
         </li>
       </ol>
       <ul class="workflow-events">
-        <li v-for="event in instance.history" :key="event.id"><div><strong>{{ instance.nodes_json?.[Number(event.position) - 1]?.name || '流程' }} · {{ candidateName(instance, event.actor_id) }} · {{ actionNames[event.action] || event.action }}</strong><time>{{ event.created_at }}</time></div><p v-if="workflowEventOutcome(instance, event)">{{ workflowEventOutcome(instance, event) }}</p><p v-if="event.opinion">{{ event.opinion }}</p><small v-if="event.signature_json">已签名 · 版本 {{ event.signature_json.version }} · {{ event.signature_json.signed_at }}</small></li>
+        <li v-for="event in visibleHistory(instance)" :key="event.id"><div><strong>{{ instance.nodes_json?.[Number(event.position) - 1]?.name || '流程' }} · {{ candidateName(instance, event.actor_id) }} · {{ actionNames[event.action] || event.action }}</strong><time>{{ event.created_at }}</time></div><p v-if="workflowEventOutcome(instance, event)">{{ workflowEventOutcome(instance, event) }}</p><p v-if="event.opinion">{{ event.opinion }}</p><small v-if="event.signature_json">已签名 · 版本 {{ event.signature_json.version }} · {{ event.signature_json.signed_at }}</small></li>
       </ul>
     </article>
     <form v-if="canReview" class="workflow-review" @submit.prevent="review">
-      <fieldset :disabled="busy"><legend>审批结果</legend><label><input v-model="decision" type="radio" value="accept" /> 通过</label><label><input v-model="decision" type="radio" value="modify" /> 退回修改</label></fieldset>
-      <label>审批意见<textarea v-model="opinion" rows="3" maxlength="2000" :disabled="busy" placeholder="退回时必须填写意见" /></label>
-      <div v-if="signature" class="workflow-signature-choice"><label><input v-model="useSignature" type="checkbox" :disabled="busy" /> 使用本人电子签名{{ activeNode?.signature_required ? '（必填）' : '' }}</label><img :src="backendUrl(signature.url)" alt="本人电子签名" /></div>
-      <p v-else class="workflow-muted">尚未设置电子签名，可在个人设置中手写或扫码签名。</p>
+      <fieldset :disabled="busy"><legend><FormFieldLabel :required="true">审批结果</FormFieldLabel></legend><label><input v-model="decision" type="radio" value="accept" /> 通过</label><label><input v-model="decision" type="radio" value="modify" /> 退回修改</label></fieldset>
+      <label><FormFieldLabel :required="decision ? decision === 'modify' : undefined" :help="opinionHelp" :error="opinionError">审批意见</FormFieldLabel><textarea v-model="opinion" rows="3" :maxlength="opinionRule.max" :disabled="busy" placeholder="退回时必须填写意见" /></label>
+      <div v-if="signature" class="workflow-signature-choice"><label><input v-model="useSignature" type="checkbox" :disabled="busy" /> <FormFieldLabel :required="Boolean(activeNode?.signature_required)">使用本人电子签名</FormFieldLabel></label><img :src="backendUrl(signature.url)" alt="本人电子签名" /></div>
+      <p v-else class="workflow-muted">{{ activeNode?.signature_required ? '本节点要求本人电子签名，请先在个人设置中保存签名，再刷新并确认用于本次审批。' : '尚未设置电子签名，可在个人设置中手写或扫码签名。' }}</p>
       <div class="workflow-review-actions"><button class="workflow-accept" type="submit" :disabled="busy || !decision">{{ decision === 'accept' ? '确认通过' : decision === 'modify' ? '退回修改' : '请选择审批结果' }}</button></div>
     </form>
   </section>
@@ -122,6 +135,7 @@ defineExpose({ reload });
 .workflow-review fieldset { display: flex; gap: 20px; border: 1px solid var(--line, #dbe1ea); border-radius: 5px; padding: 10px; }
 .workflow-review textarea { display: block; width: 100%; box-sizing: border-box; margin-top: 6px; padding: 10px; border: 1px solid var(--line, #dbe1ea); border-radius: 5px; font: inherit; resize: vertical; color: var(--text, #253248); background: var(--surface, #fff); }
 .workflow-signature-choice { display: flex; align-items: center; flex-wrap: wrap; gap: 16px; }
+.workflow-signature-choice label { display: flex; align-items: center; gap: 6px; }
 .workflow-signature-choice img { width: 150px; height: 70px; object-fit: contain; background: #fff; border: 1px solid var(--line, #e2e7ef); }
 .workflow-review-actions { display: flex; gap: 10px; }
 .workflow-review-actions .workflow-accept { background: var(--primary, #285fae); color: var(--primary-contrast, #fff); }

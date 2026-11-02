@@ -31,19 +31,19 @@
         <section class="appraisal-section">
           <header><strong>学生与实习信息</strong><span>对应模板基本信息和自我小结</span></header>
           <div class="appraisal-grid two-columns">
-            <el-form-item label="实习单位">
+            <el-form-item label="实习单位"><template #label><FormFieldLabel v-if="editable" :required="false">实习单位</FormFieldLabel><span v-else>实习单位</span></template>
               <el-input v-model="form.form_data.internship_unit" :disabled="!editable" maxlength="180" />
             </el-form-item>
-            <el-form-item label="实习岗位">
+            <el-form-item label="实习岗位"><template #label><FormFieldLabel v-if="editable" :required="false">实习岗位</FormFieldLabel><span v-else>实习岗位</span></template>
               <el-input v-model="form.form_data.internship_position" :disabled="!editable" maxlength="120" />
             </el-form-item>
-            <el-form-item label="校外指导老师">
+            <el-form-item label="校外指导老师"><template #label><FormFieldLabel v-if="editable" :required="false">校外指导老师</FormFieldLabel><span v-else>校外指导老师</span></template>
               <el-input v-model="form.form_data.external_mentor" :disabled="!editable" maxlength="80" />
             </el-form-item>
-            <el-form-item label="单位电话">
+            <el-form-item label="单位电话"><template #label><FormFieldLabel v-if="editable" :required="false">单位电话</FormFieldLabel><span v-else>单位电话</span></template>
               <el-input v-model="form.form_data.enterprise_phone" :disabled="!editable" maxlength="40" />
             </el-form-item>
-            <el-form-item label="自我小结" class="span-two">
+            <el-form-item label="自我小结" class="span-two"><template #label><FormFieldLabel v-if="editable" :required="false">自我小结</FormFieldLabel><span v-else>自我小结</span></template>
               <el-input v-model="form.form_data.self_summary" :disabled="!editable" type="textarea" :rows="4" maxlength="5000" show-word-limit />
             </el-form-item>
           </div>
@@ -52,14 +52,14 @@
         <section class="appraisal-section">
           <header><strong>评分与评语</strong><span>过程管理 50 分、实习单位 30 分、校内指导教师 20 分</span></header>
           <div class="appraisal-score-grid">
-            <el-form-item label="过程管理得分（50分）">
+            <el-form-item label="过程管理得分（50分）"><template #label><FormFieldLabel v-if="editable" :required="false" :submit-required="true">过程管理得分（50分）</FormFieldLabel><span v-else>过程管理得分（50分）</span></template>
               <el-input-number v-model="form.process_score" :disabled="!editable" :min="0" :max="50" :precision="1" controls-position="right" />
             </el-form-item>
             <el-form-item label="实习单位评分（30分）">
               <el-input-number v-model="form.enterprise_score" disabled :min="0" :max="30" :precision="1" controls-position="right" />
               <small class="enterprise-evaluation-source">来自企业导师独立评价</small>
             </el-form-item>
-            <el-form-item label="校内指导教师评分（20分）">
+            <el-form-item label="校内指导教师评分（20分）"><template #label><FormFieldLabel v-if="editable" :required="false" :submit-required="true">校内指导教师评分（20分）</FormFieldLabel><span v-else>校内指导教师评分（20分）</span></template>
               <el-input-number v-model="form.school_score" :disabled="!editable" :min="0" :max="20" :precision="1" controls-position="right" />
             </el-form-item>
           </div>
@@ -68,14 +68,14 @@
               <el-input v-model="form.enterprise_comment" disabled type="textarea" :rows="4" maxlength="5000" show-word-limit placeholder="等待企业导师提交独立评价" />
               <small class="enterprise-evaluation-source">来自企业导师独立评价，不可在鉴定表中修改</small>
             </el-form-item>
-            <el-form-item label="校内指导教师评语">
+            <el-form-item label="校内指导教师评语"><template #label><FormFieldLabel v-if="editable" :required="false">校内指导教师评语</FormFieldLabel><span v-else>校内指导教师评语</span></template>
               <el-input v-model="form.school_comment" :disabled="!editable" type="textarea" :rows="4" maxlength="5000" show-word-limit />
             </el-form-item>
           </div>
         </section>
 
         <section class="appraisal-section">
-          <header><strong>签章定稿件</strong><span>审核后可下载生成件打印签章，再上传定稿用于归档</span></header>
+          <header><FormFieldLabel v-if="editable" :required="false">签章定稿件</FormFieldLabel><strong v-else>签章定稿件</strong><span>审核后可下载生成件打印签章，再上传定稿用于归档</span></header>
           <div class="appraisal-file-row">
             <button v-if="form.attachment" type="button" class="appraisal-file" @click="openAttachment">
               <FileText :size="17" />
@@ -92,11 +92,11 @@
         <section v-if="reviewable" class="appraisal-section review-section">
           <header><strong>审核处理</strong><span>保存草稿不会通知提交人，提交审核后才发送结果</span></header>
           <div class="review-form-row">
-            <el-radio-group v-model="review.status">
+            <div class="appraisal-review-field"><FormFieldLabel :required="false">审核结果</FormFieldLabel><el-radio-group v-model="review.status">
               <el-radio-button value="accept">通过</el-radio-button>
               <el-radio-button value="modify">退回修改</el-radio-button>
-            </el-radio-group>
-            <el-input v-model="review.opinion" type="textarea" :rows="3" maxlength="500" show-word-limit placeholder="填写审核意见" />
+            </el-radio-group></div>
+            <label class="appraisal-review-field"><FormFieldLabel :required="false" :submit-required="review.status === 'modify'" :help="review.status === 'modify' ? '提交退回意见时至少填写 5 个字' : ''">审核意见</FormFieldLabel><el-input v-model="review.opinion" type="textarea" :rows="3" maxlength="500" show-word-limit placeholder="填写审核意见" /></label>
           </div>
           <div class="review-actions">
             <el-button :loading="saving" @click="saveReviewDraft">保存审核草稿</el-button>
@@ -129,6 +129,7 @@
 </template>
 
 <script setup>
+import FormFieldLabel from '../../../shared/components/FormFieldLabel.vue';
 import ManagedElementDialog from './ManagedElementDialog.vue';
 import { previewFile } from '../../../shared/filePreview';
 import { computed, reactive, ref, watch } from 'vue';
@@ -547,6 +548,8 @@ function actionLabel(action) {
   border-radius: 6px;
   background: var(--primary-soft);
 }
+
+.appraisal-review-field { display: grid; gap: 6px; min-width: 0; }
 
 .review-form-row {
   display: grid;

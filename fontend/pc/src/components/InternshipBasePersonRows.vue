@@ -30,7 +30,7 @@
     <div v-else-if="model.length" class="dynamic-row-list">
       <div v-for="(item, index) in model" :key="`${title}-${index}`" class="dynamic-form-row person-row">
         <label v-if="directory" class="wide-field teacher-directory-field">
-          <span>可从教师档案选择</span>
+          <FormFieldLabel v-if="!readonly" :required="false">可从教师档案选择</FormFieldLabel><span v-else>可从教师档案选择</span>
           <el-select
             v-model="item.teacher_id"
             clearable
@@ -54,19 +54,19 @@
             {{ [item.dep_name, item.profession_name].filter(Boolean).join(' / ') || '未维护组织信息' }}
           </small>
         </label>
-        <label><span>姓名</span><input v-model="item.name" :disabled="readonly"></label>
+        <label><FormFieldLabel v-if="!readonly" :required="false" help="姓名和关联人员均为空时，此行不保存">姓名</FormFieldLabel><span v-else>姓名</span><input v-model="item.name" :disabled="readonly"></label>
         <label>
-          <span>性别</span>
+          <FormFieldLabel v-if="!readonly" :required="false">性别</FormFieldLabel><span v-else>性别</span>
           <el-select v-model="item.gender" clearable :disabled="readonly" placeholder="请选择性别">
             <el-option label="男" value="男" />
             <el-option label="女" value="女" />
           </el-select>
         </label>
-        <label><span>出生日期</span><input v-model="item.birth_date" type="date" :disabled="readonly"></label>
-        <label><span>职务/职称</span><input v-model="item.title" :disabled="readonly"></label>
-        <label><span>学历</span><input v-model="item.education" :disabled="readonly"></label>
-        <label><span>联系电话</span><input v-model="item.phone" :disabled="readonly"></label>
-        <label class="wide-field"><span>主要职责</span><input v-model="item.duties" :disabled="readonly"></label>
+        <label><FormFieldLabel v-if="!readonly" :required="false">出生日期</FormFieldLabel><span v-else>出生日期</span><input v-model="item.birth_date" type="date" :disabled="readonly"></label>
+        <label><FormFieldLabel v-if="!readonly" :required="false">职务/职称</FormFieldLabel><span v-else>职务/职称</span><input v-model="item.title" :disabled="readonly"></label>
+        <label><FormFieldLabel v-if="!readonly" :required="false">学历</FormFieldLabel><span v-else>学历</span><input v-model="item.education" :disabled="readonly"></label>
+        <label><FormFieldLabel v-if="!readonly" :required="false">联系电话</FormFieldLabel><span v-else>联系电话</span><input v-model="item.phone" :disabled="readonly"></label>
+        <label class="wide-field"><FormFieldLabel v-if="!readonly" :required="false">主要职责</FormFieldLabel><span v-else>主要职责</span><input v-model="item.duties" :disabled="readonly"></label>
         <el-button v-if="!readonly" text type="danger" :icon="Trash2" @click="model.splice(index, 1)">删除</el-button>
       </div>
     </div>
@@ -75,6 +75,7 @@
 </template>
 
 <script setup>
+import FormFieldLabel from '../../../shared/components/FormFieldLabel.vue';
 import { computed, onBeforeUnmount, ref } from 'vue';
 import { ElMessage } from 'element-plus';
 import { Plus, RefreshCw, Trash2 } from '@lucide/vue';

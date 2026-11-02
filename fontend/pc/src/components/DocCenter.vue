@@ -103,21 +103,21 @@
         <div class="operation-form">
           <el-alert v-if="articleError" class="span-2" :title="articleError" type="error" :closable="false" />
           <label>
-            <span>标题</span>
+            <FormFieldLabel :required="true">标题</FormFieldLabel>
             <input v-model="articleDialog.form.title">
           </label>
           <label>
-            <span>分类</span>
+            <FormFieldLabel :required="false">分类</FormFieldLabel>
             <el-select v-model="articleDialog.form.category_id" clearable filterable placeholder="选择分类" @change="syncArticleVisibleRolesByCategory">
               <el-option v-for="item in flatCategories" :key="item.id" :label="item.name" :value="item.id" />
             </el-select>
           </label>
           <label>
-            <span>版本</span>
+            <FormFieldLabel :required="false" help="留空使用 1.0">版本</FormFieldLabel>
             <input v-model="articleDialog.form.version">
           </label>
           <label>
-            <span>状态</span>
+            <FormFieldLabel :required="false">状态</FormFieldLabel>
             <el-select v-model="articleDialog.form.status" placeholder="请选择文档状态">
               <el-option label="草稿" value="draft" />
               <el-option label="发布" value="published" />
@@ -125,17 +125,17 @@
             </el-select>
           </label>
           <label>
-            <span>适用角色</span>
+            <FormFieldLabel :required="false" help="未选择时使用分类的默认可见角色">适用角色</FormFieldLabel>
             <el-select v-model="articleDialog.form.visible_roles" multiple collapse-tags collapse-tags-tooltip placeholder="请选择适用角色">
               <el-option v-for="item in roleOptions" :key="item.value" :label="item.label" :value="item.value" />
             </el-select>
           </label>
           <label class="span-2">
-            <span>变更说明</span>
+            <FormFieldLabel :required="false">变更说明</FormFieldLabel>
             <input v-model="articleDialog.form.change_note" placeholder="用于版本记录">
           </label>
           <section class="span-2 doc-rich-field">
-            <span>正文</span>
+            <FormFieldLabel :required="false">正文</FormFieldLabel>
             <div class="rich-editor-toolbar">
               <button type="button" @click="applyArticleBlock('h3')">标题</button>
               <button type="button" @click="applyArticleBlock('p')">正文</button>
@@ -170,21 +170,21 @@
     >
         <div class="operation-form">
           <label>
-            <span>分类名称</span>
+            <FormFieldLabel :required="true">分类名称</FormFieldLabel>
             <input v-model="categoryDialog.form.name">
           </label>
           <label>
-            <span>编码</span>
+            <FormFieldLabel :required="false">编码</FormFieldLabel>
             <input v-model="categoryDialog.form.code" placeholder="如 practice_flow">
           </label>
           <label>
-            <span>父级</span>
+            <FormFieldLabel :required="false">父级</FormFieldLabel>
             <el-select v-model="categoryDialog.form.parent_id" clearable filterable placeholder="顶级">
               <el-option v-for="item in flatCategories" :key="item.id" :label="item.name" :value="item.id" />
             </el-select>
           </label>
           <label>
-            <span>排序</span>
+            <FormFieldLabel :required="false">排序</FormFieldLabel>
             <input v-model="categoryDialog.form.sort" type="number">
           </label>
         </div>
@@ -208,6 +208,7 @@
 </template>
 
 <script setup>
+import FormFieldLabel from '../../../shared/components/FormFieldLabel.vue';
 import FilterToolbar from './FilterToolbar.vue';
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
 import { sanitizeRichHtml } from '../../../shared/richHtml';

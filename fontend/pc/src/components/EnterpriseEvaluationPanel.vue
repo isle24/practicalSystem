@@ -89,8 +89,8 @@
         <el-alert title="企业评价固定为 30 分，各项最高分之和必须等于 30 分；历史评价不受规则修改影响。" type="info" :closable="false" show-icon />
         <div class="enterprise-rule-items">
           <div v-for="(item, index) in ruleForm.items" :key="`${item.code}-${index}`" class="enterprise-rule-item">
-            <el-input v-model="item.name" maxlength="80" placeholder="请输入评价项名称" />
-            <el-input-number v-model="item.max_score" :min="1" :max="100" :precision="1" controls-position="right" />
+            <label><FormFieldLabel :required="true">评价项名称</FormFieldLabel><el-input v-model="item.name" maxlength="80" placeholder="请输入评价项名称" /></label>
+            <label><FormFieldLabel :required="true">最高分</FormFieldLabel><el-input-number v-model="item.max_score" :min="1" :max="100" :precision="1" controls-position="right" /></label>
             <el-button text type="danger" :icon="Trash2" :disabled="ruleForm.items.length <= 1" @click="removeRuleItem(index)" />
           </div>
         </div>
@@ -109,6 +109,7 @@
 </template>
 
 <script setup>
+import FormFieldLabel from '../../../shared/components/FormFieldLabel.vue';
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { filterAcademicProfessions } from '../../../shared/academicCascade';
 import { Copy, Plus, Settings, Trash2 } from '@lucide/vue';
@@ -411,6 +412,7 @@ function selectFilter(key, label, items = [], valueKey, labelKey) {
 </script>
 
 <style scoped>
+.enterprise-rule-item label { display: grid; gap: 6px; min-width: 0; }
 .enterprise-evaluation-panel {
   min-height: 0;
   height: 100%;

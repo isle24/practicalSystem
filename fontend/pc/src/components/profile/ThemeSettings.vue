@@ -9,14 +9,15 @@
       <label><span>窗口颜色</span><input v-model="windowColor" type="color"></label>
       <label><span>窗口透明度</span><el-slider v-model="draft.opacity" :min="0.65" :max="1" :step="0.01" /></label>
       <label><span>图标密度</span><el-select v-model="draft.density"><el-option label="紧凑" value="compact" /><el-option label="标准" value="normal" /><el-option label="宽松" value="comfortable" /></el-select></label>
-      <label><span>本地壁纸</span><input type="file" accept="image/jpeg,image/png,image/webp" @change="chooseWallpaper"><el-button v-if="draft.wallpaper_id" link @click="draft.wallpaper_id = ''">使用服务器壁纸</el-button></label>
-      <label><span>另存主题名称</span><el-input v-model="name" maxlength="40" placeholder="留空只应用，不新增主题" /></label>
+      <label><FormFieldLabel :required="false" help="JPG、PNG 或 WebP，不超过 8 MB，仅保存在本机">本地壁纸</FormFieldLabel><input type="file" accept="image/jpeg,image/png,image/webp" @change="chooseWallpaper"><el-button v-if="draft.wallpaper_id" link @click="draft.wallpaper_id = ''">使用服务器壁纸</el-button></label>
+      <label><FormFieldLabel :required="false" help="最多 40 字；留空只应用，不新增主题">另存主题名称</FormFieldLabel><el-input v-model="name" maxlength="40" placeholder="留空只应用，不新增主题" /></label>
     </div>
     <el-alert v-if="error || theme.state.error" :title="error || theme.state.error" type="error" :closable="false" />
     <div class="theme-actions"><el-button :disabled="busy" @click="preview">预览</el-button><el-button :disabled="busy" @click="cancel">取消预览</el-button><el-button type="primary" :loading="busy" @click="apply">应用</el-button><el-button :disabled="busy" @click="reset">恢复默认</el-button><el-button v-if="theme.state.custom.some(item => item.id === draft.id)" type="danger" plain :disabled="busy" @click="remove">删除自定义主题</el-button></div>
   </section>
 </template>
 <script setup>
+import FormFieldLabel from '../../../../shared/components/FormFieldLabel.vue';
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { ElMessageBox } from 'element-plus';
 const props = defineProps({ theme: { type: Object, required: true } });

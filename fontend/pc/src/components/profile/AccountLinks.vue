@@ -30,15 +30,16 @@
     <p v-if="!loading && !linkingAvailable" class="notice">当前学校尚未升级账号关联结构，可继续切换同一用户的有效账号。</p>
     <form class="link-form" autocomplete="off" @submit.prevent="add">
       <h4>添加关联账号</h4>
-      <label>当前账号密码<input v-model="form.current_password" type="password" autocomplete="current-password" maxlength="1024" :disabled="busy || loading || !linkingAvailable" required></label>
-      <label>待关联登录账号<input v-model.trim="form.login_name" autocomplete="off" maxlength="80" :disabled="busy || loading || !linkingAvailable" required></label>
-      <label>待关联账号密码<input v-model="form.password" type="password" autocomplete="off" maxlength="1024" :disabled="busy || loading || !linkingAvailable" required></label>
+      <label><FormFieldLabel :required="true" help="验证当前登录账号的本人身份">当前账号密码</FormFieldLabel><input v-model="form.current_password" type="password" autocomplete="current-password" maxlength="1024" :disabled="busy || loading || !linkingAvailable" required></label>
+      <label><FormFieldLabel :required="true" help="仅支持当前学校内的账号">待关联登录账号</FormFieldLabel><input v-model.trim="form.login_name" autocomplete="off" maxlength="80" :disabled="busy || loading || !linkingAvailable" required></label>
+      <label><FormFieldLabel :required="true" help="验证双方账号后才能建立关联">待关联账号密码</FormFieldLabel><input v-model="form.password" type="password" autocomplete="off" maxlength="1024" :disabled="busy || loading || !linkingAvailable" required></label>
       <button type="submit" :disabled="busy || loading || !linkingAvailable">{{ busy ? '处理中…' : '验证双方并添加关联' }}</button>
     </form>
   </section>
 </template>
 
 <script setup>
+import FormFieldLabel from '../../../../shared/components/FormFieldLabel.vue';
 import { onBeforeUnmount, reactive, ref, watch } from 'vue';
 import { request } from '../../api/client';
 

@@ -4,7 +4,7 @@
       <el-button v-if="canManage" type="primary" :icon="Plus" @click="openDialog()">新增课节</el-button>
       <el-button :icon="RefreshCw" :loading="state.loading" @click="loadPeriods">刷新</el-button>
     </div>
-    <el-alert v-if="state.message" type="warning" :closable="false" show-icon :title="state.message" />
+    <el-alert v-if="state.message && !state.visible" type="warning" :closable="false" show-icon :title="state.message" />
     <el-table width-storage-key="practice-period-manager:state-rows" :data="state.rows" height="100%" stripe v-loading="state.loading">
       <el-table-column type="index" label="序号" width="66" align="center" />
       <el-table-column prop="name" label="课节名称" min-width="180" />
@@ -26,20 +26,22 @@
       :busy="state.saving"
       @close="closeDialog"
     >
+        <el-alert v-if="state.message" type="warning" :closable="false" show-icon :title="state.message" />
         <div class="operation-form">
-          <label><span>课节名称</span><input v-model="state.form.name"></label>
-          <label><span>排序</span><input v-model.number="state.form.sort" type="number" min="0"></label>
-          <label><span>开始时间</span><input v-model="state.form.start_time" type="time"></label>
-          <label><span>结束时间</span><input v-model="state.form.end_time" type="time"></label>
-          <label><span>状态</span><el-switch v-model="state.form.status" active-value="enabled" inactive-value="disabled" active-text="启用" inactive-text="停用" /></label>
+          <label><FormFieldLabel :required="true" help="最多 60 字" :error="formErrors.name">课节名称</FormFieldLabel><input v-model="state.form.name" maxlength="60" :aria-invalid="Boolean(formErrors.name)"></label>
+          <label><FormFieldLabel :required="false" help="非负整数，默认 0">排序</FormFieldLabel><input v-model.number="state.form.sort" type="number" min="0" step="1"></label>
+          <label><FormFieldLabel :required="true" :error="formErrors.start_time">开始时间</FormFieldLabel><input v-model="state.form.start_time" type="time" :aria-invalid="Boolean(formErrors.start_time)"></label>
+          <label><FormFieldLabel :required="true" help="结束时间必须晚于开始时间" :error="formErrors.end_time">结束时间</FormFieldLabel><input v-model="state.form.end_time" type="time" :aria-invalid="Boolean(formErrors.end_time)"></label>
+          <label><FormFieldLabel :required="false">状态</FormFieldLabel><el-switch v-model="state.form.status" active-value="enabled" inactive-value="disabled" active-text="启用" inactive-text="停用" /></label>
         </div>
-        <template #footer><el-button @click="closeDialog">取消</el-button><el-button type="primary" :loading="state.saving" @click="save">保存</el-button></template>
+        <template #footer><el-button :disabled="state.saving" @click="closeDialog">取消</el-button><el-button type="primary" :loading="state.saving" @click="save">保存</el-button></template>
     </OperationDialog>
   </section>
 </template>
 
 <script setup>
-import { onMounted, reactive } from 'vue';
+import FormFieldLabel from '../../../shared/components/FormFieldLabel.vue';
+import { computed, onMounted, reactive } from 'vue';
 import { Plus, RefreshCw } from '@lucide/vue';
 import { fetchPracticePeriods, savePracticePeriod } from '../api/system';
 import OperationDialog from './OperationDialog.vue';
@@ -52,7 +54,20 @@ const state = reactive({
   message: '',
   rows: [],
   visible: false,
+  validating: false,
   form: emptyForm(),
+});
+
+const formErrors = computed(() => {
+  if (!state.validating) return {};
+  const errors = {};
+  const name = String(state.form.name || '').trim();
+  if (!name) errors.name = '请填写课节名称';
+  else if (Array.from(name).length > 60) errors.name = '课节名称最多 60 字';
+  if (!state.form.start_time) errors.start_time = '请选择开始时间';
+  if (!state.form.end_time) errors.end_time = '请选择结束时间';
+  else if (state.form.start_time && state.form.end_time <= state.form.start_time) errors.end_time = '结束时间必须晚于开始时间';
+  return errors;
 });
 
 onMounted(loadPeriods);
@@ -72,28 +87,26 @@ async function loadPeriods() {
 
 function openDialog(row = null) {
   state.form = emptyForm(row || {});
+  state.validating = false;
+  state.message = '';
   state.visible = true;
 }
 
 function closeDialog() {
+  if (state.saving) return;
   state.visible = false;
 }
 
 async function save() {
+  if (state.saving) return;
   const form = state.form;
-  if (!form.name.trim() || !form.start_time || !form.end_time) {
-    state.message = '请填写完整课节信息';
-    return;
-  }
-  if (form.end_time <= form.start_time) {
-    state.message = '结束时间必须晚于开始时间';
-    return;
-  }
+  state.validating = true;
+  if (Object.keys(formErrors.value).length) return;
   state.saving = true;
   state.message = '';
   try {
     await savePracticePeriod(form);
-    closeDialog();
+    state.visible = false;
     await loadPeriods();
   } catch (error) {
     state.message = error.message;

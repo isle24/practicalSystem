@@ -223,7 +223,7 @@
     >
         <div class="message-template-edit-body">
           <label>
-            <span>模板名称</span>
+            <FormFieldLabel :required="true">模板名称</FormFieldLabel>
             <el-input v-model="messageTemplateDialog.form.name" maxlength="180" />
           </label>
           <label>
@@ -231,7 +231,7 @@
             <el-input v-model="messageTemplateDialog.form.code" disabled maxlength="120" />
           </label>
           <label>
-            <span>消息类型</span>
+            <FormFieldLabel :required="false">消息类型</FormFieldLabel>
             <el-select v-model="messageTemplateDialog.form.type" placeholder="请选择消息类型">
               <el-option
                 v-for="item in messageTemplateTypeOptions.filter(option => option.value !== 'all')"
@@ -242,7 +242,7 @@
             </el-select>
           </label>
           <label>
-            <span>消息级别</span>
+            <FormFieldLabel :required="false">消息级别</FormFieldLabel>
             <el-select v-model="messageTemplateDialog.form.level" placeholder="请选择消息级别">
               <el-option label="普通" value="normal" />
               <el-option label="重要" value="important" />
@@ -250,7 +250,7 @@
             </el-select>
           </label>
           <label>
-            <span>状态</span>
+            <FormFieldLabel :required="false">状态</FormFieldLabel>
             <el-switch
               v-model="messageTemplateDialog.form.status"
               active-value="enabled"
@@ -260,34 +260,34 @@
             />
           </label>
           <label>
-            <span>排序</span>
+            <FormFieldLabel :required="false">排序</FormFieldLabel>
             <el-input v-model.number="messageTemplateDialog.form.sort" type="number" />
           </label>
           <label>
-            <span>发送渠道</span>
+            <FormFieldLabel :required="false" help="站内消息固定保留，企业微信可按需启用">发送渠道</FormFieldLabel>
             <el-checkbox-group v-model="messageTemplateDialog.form.channels">
               <el-checkbox value="internal" disabled>站内消息</el-checkbox>
               <el-checkbox value="wechat">企业微信</el-checkbox>
             </el-checkbox-group>
           </label>
           <label class="wide">
-            <span>标题模板</span>
+            <FormFieldLabel :required="true">标题模板</FormFieldLabel>
             <el-input v-model="messageTemplateDialog.form.title_tpl" maxlength="255" show-word-limit />
           </label>
           <label class="wide">
-            <span>内容模板</span>
+            <FormFieldLabel :required="true">内容模板</FormFieldLabel>
             <el-input v-model="messageTemplateDialog.form.content_tpl" type="textarea" :rows="4" />
           </label>
           <label class="wide">
-            <span>跳转地址模板</span>
+            <FormFieldLabel :required="false">跳转地址模板</FormFieldLabel>
             <el-input v-model="messageTemplateDialog.form.link_url_tpl" placeholder="#panel={module_key}:{panel_key}" />
           </label>
           <label class="wide">
-            <span>变量说明 JSON</span>
+            <FormFieldLabel :required="false" help="填写时须为有效 JSON">变量说明 JSON</FormFieldLabel>
             <el-input v-model="messageTemplateDialog.form.variables_text" type="textarea" :rows="5" />
           </label>
           <label class="wide">
-            <span>说明</span>
+            <FormFieldLabel :required="false">说明</FormFieldLabel>
             <el-input v-model="messageTemplateDialog.form.description" type="textarea" :rows="2" maxlength="500" show-word-limit />
           </label>
         </div>
@@ -306,21 +306,21 @@
     >
         <div class="operation-form">
           <label>
-            <span>模板名称</span>
+            <FormFieldLabel :required="true">模板名称</FormFieldLabel>
             <input v-model="templateDialog.form.name">
           </label>
           <label>
-            <span>分类</span>
+            <FormFieldLabel :required="false">分类</FormFieldLabel>
             <el-select v-model="templateDialog.form.category_id" clearable filterable placeholder="选择分类">
               <el-option v-for="item in categories" :key="item.id" :label="item.name" :value="item.id" />
             </el-select>
           </label>
           <label>
-            <span>版本</span>
+            <FormFieldLabel :required="false" help="留空使用 1.0">版本</FormFieldLabel>
             <input v-model="templateDialog.form.version">
           </label>
           <label>
-            <span>状态</span>
+            <FormFieldLabel :required="false">状态</FormFieldLabel>
             <el-switch
               v-model="templateDialog.form.flag"
               active-value="on"
@@ -330,35 +330,35 @@
             />
           </label>
           <label>
-            <span>业务编码</span>
+            <FormFieldLabel :required="false">业务编码</FormFieldLabel>
             <el-select v-model="templateDialog.form.business_code" clearable filterable allow-create default-first-option placeholder="选择或输入业务编码">
               <el-option v-for="item in businessOptions" :key="item.value" :label="item.label" :value="item.value" />
             </el-select>
           </label>
           <label>
-            <span>材料类型</span>
+            <FormFieldLabel :required="false">材料类型</FormFieldLabel>
             <el-select v-model="templateDialog.form.material_type" clearable filterable placeholder="选择材料类型">
               <el-option v-for="item in materialOptions" :key="item.value" :label="item.label" :value="item.value" />
             </el-select>
           </label>
           <label>
-            <span>材料层级</span>
+            <FormFieldLabel :required="false">材料层级</FormFieldLabel>
             <el-select v-model="templateDialog.form.scope_type" clearable placeholder="选择材料层级">
               <el-option v-for="item in scopeOptions" :key="item.value" :label="item.label" :value="item.value" />
             </el-select>
           </label>
           <label class="span-2">
-            <span>适用实习类型</span>
+            <FormFieldLabel :required="false" help="未选择时适用全部实习类型">适用实习类型</FormFieldLabel>
             <el-select v-model="templateDialog.form.practice_types" multiple collapse-tags collapse-tags-tooltip clearable placeholder="全部类型">
               <el-option v-for="item in practiceTypeOptions" :key="item.value" :label="item.label" :value="item.value" />
             </el-select>
           </label>
           <label class="span-2">
-            <span>说明</span>
+            <FormFieldLabel :required="false">说明</FormFieldLabel>
             <textarea v-model="templateDialog.form.description" rows="3" />
           </label>
           <div class="span-2 template-upload-row">
-            <span>模板文件</span>
+            <FormFieldLabel :required="true">模板文件</FormFieldLabel>
             <button type="button" @click="chooseFile">
               <Upload :size="16" />
               <strong>{{ templateDialog.fileName || '选择文件' }}</strong>
@@ -382,19 +382,19 @@
     >
         <div class="operation-form">
           <label>
-            <span>分类名称</span>
+            <FormFieldLabel :required="true">分类名称</FormFieldLabel>
             <input v-model="categoryDialog.form.name">
           </label>
           <label>
-            <span>编码</span>
+            <FormFieldLabel :required="false">编码</FormFieldLabel>
             <input v-model="categoryDialog.form.code">
           </label>
           <label>
-            <span>排序</span>
+            <FormFieldLabel :required="false">排序</FormFieldLabel>
             <input v-model="categoryDialog.form.sort" type="number">
           </label>
           <label>
-            <span>状态</span>
+            <FormFieldLabel :required="false">状态</FormFieldLabel>
             <el-switch
               v-model="categoryDialog.form.flag"
               active-value="on"
@@ -404,7 +404,7 @@
             />
           </label>
           <label class="span-2">
-            <span>说明</span>
+            <FormFieldLabel :required="false">说明</FormFieldLabel>
             <textarea v-model="categoryDialog.form.description" rows="3" />
           </label>
         </div>
@@ -417,6 +417,7 @@
 </template>
 
 <script setup>
+import FormFieldLabel from '../../../shared/components/FormFieldLabel.vue';
 import FilterToolbar from './FilterToolbar.vue';
 import { previewFile } from '../../../shared/filePreview';
 import { computed, onMounted, reactive, ref, watch } from 'vue';

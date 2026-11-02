@@ -7,19 +7,19 @@
   >
     <div class="operation-form menu-dialog-form">
       <label>
-        <span>名称</span>
+        <FormFieldLabel :required="true">名称</FormFieldLabel>
         <input v-model="form.name">
       </label>
       <label>
-        <span>权限码</span>
+        <FormFieldLabel :required="false">权限码</FormFieldLabel>
         <input v-model="form.code" placeholder="如 internship:apply">
       </label>
       <label>
-        <span>路径</span>
+        <FormFieldLabel :required="false">路径</FormFieldLabel>
         <input v-model="form.path" placeholder="页面菜单填写路由，按钮可为空">
       </label>
       <label>
-        <span>外链地址</span>
+        <FormFieldLabel :required="false">外链地址</FormFieldLabel>
         <input v-model="form.url" placeholder="需要打开文件或网址时填写">
       </label>
       <IconConfigField
@@ -33,7 +33,7 @@
         @select="file => emit('select-icon', file)"
       />
       <label>
-        <span>作为模块</span>
+        <FormFieldLabel :required="false">作为模块</FormFieldLabel>
         <el-switch
           v-model="form.is_module"
           active-value="true"
@@ -43,11 +43,11 @@
         />
       </label>
       <label>
-        <span>模块标识</span>
+        <FormFieldLabel v-if="form.is_module === 'true'" :required="false" help="留空时自动使用菜单 ID">模块标识</FormFieldLabel><span v-else>模块标识</span>
         <input v-model="form.module_key" :disabled="form.is_module !== 'true'" placeholder="为空时自动使用菜单ID">
       </label>
       <label>
-        <span>父级</span>
+        <FormFieldLabel :required="form.type !== 'directory'" help="目录不设父级；菜单挂目录或菜单下，列表挂菜单下，按钮挂列表下">父级</FormFieldLabel>
         <el-tree-select
           v-model="form.parent_id"
           :data="parentOptions"
@@ -60,7 +60,7 @@
         />
       </label>
       <label>
-        <span>平台</span>
+        <FormFieldLabel :required="false">平台</FormFieldLabel>
         <el-select v-model="form.platform" placeholder="请选择平台">
           <el-option label="PC" value="pc" />
           <el-option label="H5" value="h5" />
@@ -68,7 +68,7 @@
         </el-select>
       </label>
       <label>
-        <span>类型</span>
+        <FormFieldLabel :required="false">类型</FormFieldLabel>
         <el-radio-group v-model="form.type" class="menu-type-radios">
           <el-radio-button label="directory">目录</el-radio-button>
           <el-radio-button label="menu">菜单</el-radio-button>
@@ -77,11 +77,11 @@
         </el-radio-group>
       </label>
       <label>
-        <span>排序</span>
+        <FormFieldLabel :required="false">排序</FormFieldLabel>
         <input v-model="form.sort" type="number">
       </label>
       <label>
-        <span>可见</span>
+        <FormFieldLabel :required="false">可见</FormFieldLabel>
         <el-switch
           v-model="form.visible"
           active-value="true"
@@ -91,7 +91,7 @@
         />
       </label>
       <label>
-        <span>状态</span>
+        <FormFieldLabel :required="false">状态</FormFieldLabel>
         <el-switch
           v-model="form.status"
           active-value="enabled"
@@ -114,6 +114,7 @@
 </template>
 
 <script setup>
+import FormFieldLabel from '../../../shared/components/FormFieldLabel.vue';
 import IconConfigField from './IconConfigField.vue';
 import OperationDialog from './OperationDialog.vue';
 

@@ -34,8 +34,9 @@
             <strong>任务拆分</strong>
             <small>一个计划可拆分多个任务，每个任务唯一对应一名负责老师</small>
           </div>
-          <el-button v-if="canManage" type="primary" plain :icon="Plus" @click="emit('add-task', plan)">新增任务</el-button>
+          <el-button v-if="canManage" type="primary" plain :icon="Plus" :disabled="!canCreateTask" :title="taskBlockedReason" @click="addTask">新增任务</el-button>
         </header>
+        <p v-if="canManage && taskBlockedReason" role="status">{{ taskBlockedReason }}</p>
         <el-table width-storage-key="internship-plan-detail:tasks" v-if="tasks.length" :data="tasks" max-height="360" stripe size="small">
           <el-table-column type="index" label="序号" width="66" align="center" />
           <el-table-column prop="task_no" label="任务编号" width="130" />
@@ -82,8 +83,17 @@ const props = defineProps({
 const emit = defineEmits(['add-task', 'close', 'edit-plan', 'edit-task', 'implementation']);
 const tasks = computed(() => Array.isArray(props.plan.tasks) ? props.plan.tasks : []);
 const canEdit = computed(() => props.canManage && ['draft', 'modify'].includes(String(props.plan.status || '')));
+const canCreateTask = computed(() => props.canManage && ['accept', 'enabled'].includes(String(props.plan.status || '')));
+const taskBlockedReason = computed(() => {
+  if (canCreateTask.value) return '';
+  return `当前计划${props.statusText(props.plan.status)}，审核通过后才能拆分任务。${canEdit.value ? '请先通过“编辑计划”补齐内容并提交审核。' : '请先在实习计划中查看并完成当前审核。'}`;
+});
 const scopeLabel = computed(() => props.plan.scope_type === 'cohort' || props.plan.graduation_cohort_id ? '毕业届次' : '年级');
 const scopeName = computed(() => scopeLabel.value === '毕业届次' ? props.plan.cohort_name : props.plan.grade_name);
+
+function addTask() {
+  if (canCreateTask.value) emit('add-task', props.plan);
+}
 
 function scoreRuleText(value) {
   return {

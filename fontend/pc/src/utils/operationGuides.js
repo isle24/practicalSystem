@@ -1,13 +1,4 @@
-import entries from '../../../shared/operation-guides.json';
-
-const guides = new Map(entries.map(entry => [entry.key, entry]));
-
-export function findOperationGuide(module, panel = '', parentPanel = '') {
-  return (panel && guides.get(`${module}.${panel}`))
-    || (parentPanel && guides.get(`${module}.${parentPanel}`))
-    || guides.get(module)
-    || null;
-}
+export { findOperationGuide } from '../../../shared/operationGuideData.js';
 
 function escapeText(value) {
   return String(value ?? '').replace(/[&<>"']/g, character => ({

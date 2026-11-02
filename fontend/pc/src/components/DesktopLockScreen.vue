@@ -13,7 +13,7 @@
 
         <form v-if="lock.initialized && lock.locked && mode === 'password'" class="desktop-lock-form" @submit.prevent="unlock">
           <div class="desktop-lock-password-types" role="group" aria-label="密码验证方式"><button v-for="item in passwordTypes" :key="item.value" type="button" :aria-pressed="passwordType === item.value" :disabled="lock.busy || !lock.initialized" @click="selectPasswordType(item.value)">{{ item.label }}</button></div>
-          <label for="desktop-unlock-password">{{ passwordType === 'local' ? '本机锁屏密码' : '当前账号密码' }}</label><input id="desktop-unlock-password" ref="passwordInput" v-model="password" type="password" :autocomplete="passwordType === 'local' ? 'off' : 'current-password'" :disabled="lock.busy || !lock.initialized" required :placeholder="passwordType === 'local' ? '请输入已设置的本机锁屏密码' : '请输入当前账号密码'">
+          <label for="desktop-unlock-password"><FormFieldLabel :required="true">{{ passwordType === 'local' ? '本机锁屏密码' : '当前账号密码' }}</FormFieldLabel></label><input id="desktop-unlock-password" ref="passwordInput" v-model="password" type="password" :autocomplete="passwordType === 'local' ? 'off' : 'current-password'" :disabled="lock.busy || !lock.initialized" required :placeholder="passwordType === 'local' ? '请输入已设置的本机锁屏密码' : '请输入当前账号密码'">
           <p v-if="passwordType === 'local'" class="desktop-lock-password-hint">仅用于此设备的当前学校和账号。未设置或忘记时，可使用账号密码或企业微信解锁。</p>
           <button type="submit" class="desktop-lock-primary" :disabled="lock.busy || !password || !lock.initialized">{{ lock.busy ? '正在验证…' : '解锁' }}</button>
         </form>
@@ -30,6 +30,7 @@
   </Teleport>
 </template>
 <script setup>
+import FormFieldLabel from '../../../shared/components/FormFieldLabel.vue';
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
 import { LockKeyhole, Minus, Square, X } from '@lucide/vue';
 import QRCode from '../../../shared/components/QRCode.vue';

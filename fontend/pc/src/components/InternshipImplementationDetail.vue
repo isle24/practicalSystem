@@ -32,7 +32,7 @@
 
       <template v-else-if="activeTab === 'students'">
         <section v-if="canManage" class="implementation-add-student">
-          <el-select-v2 v-model="newStudentId" :options="studentSelectOptions" filterable clearable placeholder="选择任务班级内学生" />
+          <label class="implementation-student-field"><FormFieldLabel :required="true">绑定学生</FormFieldLabel><el-select-v2 v-model="newStudentId" :options="studentSelectOptions" filterable clearable placeholder="选择任务班级内学生" /></label>
           <el-button type="primary" :icon="UserPlus" :disabled="!newStudentId || loading" :loading="loading" @click="addStudent">绑定学生</el-button>
         </section>
         <el-table width-storage-key="internship-implementation-detail:visibleStudents" :data="visibleStudents" height="100%" stripe size="small">
@@ -70,25 +70,25 @@
 
       <template v-else>
         <div class="operation-form implementation-sheet-form">
-          <label><span>申请人</span><input v-model="sheet.applicant_name" :disabled="!canManage"></label>
-          <label><span>申请部门</span><input v-model="sheet.applicant_department" :disabled="!canManage"></label>
-          <label><span>审批编号</span><input v-model="sheet.approval_no" :disabled="!canManage"></label>
-          <label><span>届次</span>
+          <label><FormFieldLabel v-if="canManage" :required="false">申请人</FormFieldLabel><span v-else>申请人</span><input v-model="sheet.applicant_name" :disabled="!canManage"></label>
+          <label><FormFieldLabel v-if="canManage" :required="false">申请部门</FormFieldLabel><span v-else>申请部门</span><input v-model="sheet.applicant_department" :disabled="!canManage"></label>
+          <label><FormFieldLabel v-if="canManage" :required="false">审批编号</FormFieldLabel><span v-else>审批编号</span><input v-model="sheet.approval_no" :disabled="!canManage"></label>
+          <label><FormFieldLabel v-if="canManage" :required="false">届次</FormFieldLabel><span v-else>届次</span>
         <el-select v-model="sheet.grade_id" filterable :disabled="!canManage" placeholder="请选择年级">
               <el-option v-for="item in options.grades || []" :key="item.grade_id" :label="item.grade_name" :value="item.grade_id" />
             </el-select>
           </label>
-          <label><span>课程名称</span><input v-model="sheet.course_name" :disabled="!canManage"></label>
-          <label><span>课程性质</span><input v-model="sheet.course_type" :disabled="!canManage"></label>
-          <label><span>学分</span><input v-model="sheet.credit" type="number" min="0" step="0.5" :disabled="!canManage"></label>
-          <label><span>实习类型</span><input v-model="sheet.practice_type" :disabled="!canManage"></label>
-          <label><span>实习方式</span><input v-model="sheet.internship_mode" :disabled="!canManage"></label>
-          <label><span>组织方式</span><input v-model="sheet.organize_mode" :disabled="!canManage"></label>
-          <label><span>已签承诺人数</span><input v-model="sheet.signed_count" type="number" min="0" :disabled="!canManage"></label>
-          <label><span>未签承诺人数</span><input v-model="sheet.unsigned_count" type="number" min="0" :disabled="!canManage"></label>
-          <label class="switch-field"><span>保险已核验</span><el-switch v-model="sheet.insurance_verified" active-value="true" inactive-value="false" :disabled="!canManage" /></label>
-          <label class="span-2"><span>申请内容</span><textarea v-model="sheet.detail_content" rows="5" :disabled="!canManage" /></label>
-          <label class="span-2"><span>备注</span><textarea v-model="sheet.remark" rows="3" :disabled="!canManage" /></label>
+          <label><FormFieldLabel v-if="canManage" :required="false">课程名称</FormFieldLabel><span v-else>课程名称</span><input v-model="sheet.course_name" :disabled="!canManage"></label>
+          <label><FormFieldLabel v-if="canManage" :required="false">课程性质</FormFieldLabel><span v-else>课程性质</span><input v-model="sheet.course_type" :disabled="!canManage"></label>
+          <label><FormFieldLabel v-if="canManage" :required="false">学分</FormFieldLabel><span v-else>学分</span><input v-model="sheet.credit" type="number" min="0" step="0.5" :disabled="!canManage"></label>
+          <label><FormFieldLabel v-if="canManage" :required="false">实习类型</FormFieldLabel><span v-else>实习类型</span><input v-model="sheet.practice_type" :disabled="!canManage"></label>
+          <label><FormFieldLabel v-if="canManage" :required="false">实习方式</FormFieldLabel><span v-else>实习方式</span><input v-model="sheet.internship_mode" :disabled="!canManage"></label>
+          <label><FormFieldLabel v-if="canManage" :required="false">组织方式</FormFieldLabel><span v-else>组织方式</span><input v-model="sheet.organize_mode" :disabled="!canManage"></label>
+          <label><FormFieldLabel v-if="canManage" :required="false">已签承诺人数</FormFieldLabel><span v-else>已签承诺人数</span><input v-model="sheet.signed_count" type="number" min="0" :disabled="!canManage"></label>
+          <label><FormFieldLabel v-if="canManage" :required="false">未签承诺人数</FormFieldLabel><span v-else>未签承诺人数</span><input v-model="sheet.unsigned_count" type="number" min="0" :disabled="!canManage"></label>
+          <label class="switch-field"><FormFieldLabel v-if="canManage" :required="false">保险已核验</FormFieldLabel><span v-else>保险已核验</span><el-switch v-model="sheet.insurance_verified" active-value="true" inactive-value="false" :disabled="!canManage" /></label>
+          <label class="span-2"><FormFieldLabel v-if="canManage" :required="false">申请内容</FormFieldLabel><span v-else>申请内容</span><textarea v-model="sheet.detail_content" rows="5" :disabled="!canManage" /></label>
+          <label class="span-2"><FormFieldLabel v-if="canManage" :required="false">备注</FormFieldLabel><span v-else>备注</span><textarea v-model="sheet.remark" rows="3" :disabled="!canManage" /></label>
         </div>
 
         <section class="internship-edit-section">
@@ -98,20 +98,20 @@
           </header>
           <div v-if="schedules.length" class="dynamic-row-list">
             <div v-for="(item, index) in schedules" :key="`schedule-${index}`" class="dynamic-form-row schedule-row">
-              <label><span>专业</span>
+              <label><FormFieldLabel v-if="canManage" :required="false">专业</FormFieldLabel><span v-else>专业</span>
                 <el-select-v2 v-model="item.profession_id" :options="options.professions || []" :props="{ label: 'profession_name', value: 'profession_id' }" filterable clearable :disabled="!canManage" placeholder="请选择专业" @change="syncProfession(item)" />
               </label>
-              <label><span>届次</span>
+              <label><FormFieldLabel v-if="canManage" :required="false">届次</FormFieldLabel><span v-else>届次</span>
             <el-select v-model="item.grade_id" filterable clearable :disabled="!canManage" placeholder="请选择年级" @change="syncGrade(item)">
                   <el-option v-for="option in options.grades || []" :key="option.grade_id" :label="option.grade_name" :value="option.grade_id" />
                 </el-select>
               </label>
-              <label><span>人数</span><input v-model="item.people_count" type="number" min="0" :disabled="!canManage"></label>
-              <label><span>周次</span><input v-model="item.week_text" :disabled="!canManage"></label>
-              <label><span>星期</span><input v-model="item.weekday_text" :disabled="!canManage"></label>
-              <label><span>地点</span><input v-model="item.location" :disabled="!canManage"></label>
-              <label><span>时间</span><input v-model="item.time_text" :disabled="!canManage"></label>
-              <label><span>带队教师</span>
+              <label><FormFieldLabel v-if="canManage" :required="false">人数</FormFieldLabel><span v-else>人数</span><input v-model="item.people_count" type="number" min="0" :disabled="!canManage"></label>
+              <label><FormFieldLabel v-if="canManage" :required="false">周次</FormFieldLabel><span v-else>周次</span><input v-model="item.week_text" :disabled="!canManage"></label>
+              <label><FormFieldLabel v-if="canManage" :required="false">星期</FormFieldLabel><span v-else>星期</span><input v-model="item.weekday_text" :disabled="!canManage"></label>
+              <label><FormFieldLabel v-if="canManage" :required="false">地点</FormFieldLabel><span v-else>地点</span><input v-model="item.location" :disabled="!canManage"></label>
+              <label><FormFieldLabel v-if="canManage" :required="false">时间</FormFieldLabel><span v-else>时间</span><input v-model="item.time_text" :disabled="!canManage"></label>
+              <label><FormFieldLabel v-if="canManage" :required="false">带队教师</FormFieldLabel><span v-else>带队教师</span>
                 <el-select-v2 v-model="item.teacher_id" :options="options.teachers || []" :props="{ label: 'teacher_name', value: 'teacher_id' }" filterable clearable :disabled="!canManage" placeholder="请选择指导教师" @change="syncTeacher(item)" />
               </label>
               <el-button v-if="canManage" text type="danger" :icon="Trash2" @click="schedules.splice(index, 1)">删除</el-button>
@@ -127,10 +127,10 @@
           </header>
           <div v-if="expenses.length" class="dynamic-row-list">
             <div v-for="(item, index) in expenses" :key="`expense-${index}`" class="dynamic-form-row budget-row">
-              <label><span>费用名称</span><input v-model="item.item_name" :disabled="!canManage"></label>
-              <label><span>内容</span><input v-model="item.content" :disabled="!canManage"></label>
-              <label><span>金额</span><input v-model="item.amount" type="number" min="0" step="0.01" :disabled="!canManage"></label>
-              <label><span>备注</span><input v-model="item.remark" :disabled="!canManage"></label>
+              <label><FormFieldLabel v-if="canManage" :required="false" help="费用名称留空时，此行不保存">费用名称</FormFieldLabel><span v-else>费用名称</span><input v-model="item.item_name" :disabled="!canManage"></label>
+              <label><FormFieldLabel v-if="canManage" :required="false">内容</FormFieldLabel><span v-else>内容</span><input v-model="item.content" :disabled="!canManage"></label>
+              <label><FormFieldLabel v-if="canManage" :required="false">金额</FormFieldLabel><span v-else>金额</span><input v-model="item.amount" type="number" min="0" step="0.01" :disabled="!canManage"></label>
+              <label><FormFieldLabel v-if="canManage" :required="false">备注</FormFieldLabel><span v-else>备注</span><input v-model="item.remark" :disabled="!canManage"></label>
               <el-button v-if="canManage" text type="danger" :icon="Trash2" @click="expenses.splice(index, 1)">删除</el-button>
             </div>
           </div>
@@ -156,6 +156,7 @@
 </template>
 
 <script setup>
+import FormFieldLabel from '../../../shared/components/FormFieldLabel.vue';
 import { computed, reactive, ref, watch } from 'vue';
 import { ElSelectV2 } from 'element-plus';
 import { ClipboardList, Download, Edit3, History, Plus, Trash2, UserPlus, UsersRound } from '@lucide/vue';
@@ -325,5 +326,6 @@ function dateRange(start, end) {
 </script>
 
 <style scoped>
+.implementation-student-field { display: grid; gap: 6px; min-width: 0; }
 .implementation-detail-pagination { flex-shrink: 0; padding-top: 10px; }
 </style>

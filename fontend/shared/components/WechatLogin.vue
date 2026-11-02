@@ -11,7 +11,7 @@
     <p v-if="scan?.state === 'scanned'" class="scan-guidance">已扫码，请在企业微信中完成授权。</p>
     <p v-if="scan?.state === 'ready' && accounts.length === 1" class="scan-guidance" role="status">正在登录…</p>
     <fieldset v-if="scan?.state === 'ready' && accounts.length > 1">
-      <legend>请选择登录账号</legend>
+      <legend><FormFieldLabel :required="true" help="选择当前学校中本人已绑定的账号">请选择登录账号</FormFieldLabel></legend>
       <label v-for="account in accounts" :key="account.id" class="account-option">
         <input v-model="selectedAccount" type="radio" :value="account.id" name="wechat-login-account" :disabled="busy">
         <span>{{ account.name }} · {{ account.login_name }}<small>{{ account.role_name }}{{ organizationLabel(account) }}</small></span>
@@ -29,6 +29,7 @@
 </template>
 
 <script setup>
+import FormFieldLabel from './FormFieldLabel.vue';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import QRCode from './QRCode.vue';
 

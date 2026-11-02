@@ -1,8 +1,8 @@
 <template>
   <div class="mobile-binding">
-    <el-input v-model="mobile" inputmode="tel" maxlength="11" placeholder="请输入手机号" :disabled="busy" />
+    <label class="mobile-binding-field"><FormFieldLabel :required="true" help="填写 11 位手机号，获取验证码后完成绑定">绑定手机号</FormFieldLabel><el-input v-model="mobile" inputmode="tel" maxlength="11" placeholder="请输入手机号" :disabled="busy" /></label>
     <div class="mobile-code-row">
-      <el-input v-model="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="请输入验证码" :disabled="busy" />
+      <label class="mobile-code-field"><FormFieldLabel :required="true" help="填写短信中的 6 位数字">验证码</FormFieldLabel><el-input v-model="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="请输入验证码" :disabled="busy" /></label>
       <el-button :disabled="busy || remaining > 0 || !validMobile" @click="send">{{ remaining ? `${remaining}s` : '获取验证码' }}</el-button>
       <el-button type="primary" :disabled="busy || !validMobile || !/^\d{6}$/.test(code)" :loading="busy" @click="verify">验证绑定</el-button>
     </div>
@@ -11,6 +11,7 @@
 </template>
 
 <script setup>
+import FormFieldLabel from '../../../shared/components/FormFieldLabel.vue';
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { sendMobileCode, verifyMobile } from '../api/system';
 const props = defineProps({ mobile: { type: String, default: '' } });
@@ -53,7 +54,8 @@ async function verify() {
 <style scoped>
 .mobile-binding { display: grid; gap: 10px; min-width: 0; }
 .mobile-code-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-.mobile-code-row > .el-input { flex: 1 1 120px; min-width: 100px; }
+.mobile-binding-field, .mobile-code-field { display: grid; gap: 6px; min-width: 0; }
+.mobile-code-field { flex: 1 1 160px; }
 .mobile-code-row > .el-button { margin: 0; }
 .mobile-binding small { color: var(--muted); line-height: 1.5; }
 </style>

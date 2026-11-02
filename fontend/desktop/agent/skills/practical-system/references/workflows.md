@@ -15,6 +15,17 @@
 
 以下各流程每一步都沿用上述停止条件。C 步骤均包含预览、用户批准、单次执行和回执核对；只在用户要求该项变更时执行。
 
+实习、实验、实训和社会实践计划均支持配置审批。读取计划的 `workflow`；存在实例时审核须带 `instance_id/revision`，要求签名时使用本人明确授权的 `signature_id`，不能猜测或跳过。提交的 `request_id` 由预览生成并固定。已有实例按快照流转，单节点通过不等于全部通过；未配置时沿用该模块原审核。缺少实例字段或目录未提供这些参数时转原页面，不按旧节点强行审核。
+
+## 教学计划中心
+
+本菜单通过原页面操作，未登记独立 CLI 能力；Agent 使用 `project_guide` 查询 `teachingPlanCenter`，不能自行构造接口。
+
+1. 学校管理员选择学年、学期上传原 Excel；看原始字段、错误及差异后确认。按专业学院全称/简称唯一匹配，不用开课部门替代归属。
+2. 学院管理员选实习、社会实践、实验或实训；缺对应模块管理权限先处理权限。实习需类别，按届次管理时补毕业届次。
+3. 打开绑定目标，补缺少的必填资料并保存草稿，再回中心确认首次补齐。仅来源映射未修改、未进入人工审批且资料完整时免审；社会实践仍需发布后再建项目。
+4. 生成后修改或重导差异先核对，再从原模块进入可修改状态并审核；审核后回中心同步。退回可再准备；保留人工审核后的不同内容必须核实审批、填写原因并确认当前指纹。旧绑定冲突交管理员对账，不重复创建或自动删除。
+
 ## 个人笔记
 
 1. `note.list`：关键词定位本人唯一 id；普通笔记 `trash=false`，恢复用 `trash=true`。无匹配停止。
@@ -75,7 +86,7 @@
 
 1. `internship.plan.save`（B）：仅改 draft/modify；显式 status=draft，填 category_id、对应年级/届次、dep_id/profession_id/course_name；完整保留 source_type（edu_system/manual）、course_code/semester/credit/score_rule/plan_content。返回 id 后 internship.plans 核对；范围不符即停。
 2. `internship.plan.submit`（C）：internship.plans 确认已有 draft/modify，仅传 id，保留原资料提交；预览 wait、流程/通知影响，执行后回查。无草稿先保存，不能把完整字段塞入此能力。
-3. `internship.plan.review`（C）：列表确认 wait、节点/审核记录；用户给 accept/modify 和意见，传 id，approval_level 仅填已核实节点或由服务计算。退回意见 8 至 800 字。预览后执行并回查进度，单节点通过不等于全流程通过。
+3. `internship.plan.review`（C）：列表确认 wait、节点/审核记录；用户给 accept/modify 和意见，传 id；有 workflow 遵循本文件配置审批参数，无实例时 approval_level 仅填已核实节点或由服务计算。退回意见 8 至 800 字。预览后执行并回查进度，单节点通过不等于全流程通过。
 4. `internship.plan.delete`（C）：用户明确 include_arrangements；预览关联任务、待取消流程和 revision。有任务而未同意一并删除即停；执行后回查计划/任务列表。版本变化重新核实，不扩大范围。
 
 ### 实习方式申请
@@ -113,7 +124,7 @@
 1. `practice.list`：entity=plan/syllabus/lessonPlan/reflection，取唯一 draft/modify；保留完整 plan_id、组织/班级/教师/课程、title/content/content_json/remark/source_type。结构化字段须为真实对象。
 2. `practice.save`（B）：显式 module_type/entity/status=draft 和完整字段，满足标题/范围规则；返回 id/status 后 list 回查。
 3. `practice.submit`（C）：完整“保存并提交”，须 module_type/entity/status=wait/title 及全部资料；修改含 id，保留正文/结构，参数齐全可直接新建提交，也可接 B 草稿。预览内容/流程后执行，list 核对 wait；不能只传 id。
-4. `practice.review`（C）：list 确认 wait/实体；用户给 accept/modify 和有效 opinion，再传 module_type/entity/id。原服务检查角色/范围/不得自审，执行后 list 回查；拒绝即停。
+4. `practice.review`（C）：list 确认 wait/实体；用户给 accept/modify 和有效 opinion，再传 module_type/entity/id。计划有 workflow 时须带配置审批参数。原服务检查角色/范围/不得自审，执行后 list 回查；拒绝即停。
 
 ### 学生日志与报告
 
@@ -144,7 +155,7 @@
 2. `social-practice.save`（B）：显式 resource=plan，填 title/grade_id 及完整字段、scopes/requirements/score_rules。approval_flow_id 仅为旧版兼容字段，不要求新建时填写。服务强制 draft，不传 status/submit/published_at/uuid；返回 id/status 后 detail 回查。数组全量替换，禁止只传改动项。
 3. `social-practice.submit`（C）：resource=plan/id 仅提交已有 draft/modify；先保存或核实内容，预览计划/流程后执行。request_id 由预览生成并固定，重复请求须复用；detail/timeline 回查 wait/节点。缺资料不自动补业务配置，不自动通过或追加备案。
 4. `social-practice.review`（C）：detail/timeline 确认 wait、workflow.can_review 和当前节点，由用户明确决定 accept/modify，不能默认通过。有 workflow 时必须带其 instance_id 与 revision；要求签名时须使用本人明确授权的 signature_id，无法取得合法签名则回原界面办理，不能跳过或猜测。modify 立即退回修改；accept 可能继续下一节点或会签等待，最终流程 accept 才是全部通过。执行后回查结果和下一步。
-5. `social-practice.publish`（C）：用户要求发布才做；detail 确认 accept，预览 phase/发布时间/必修名单同步/通知，执行后 detail/timeline 核对 phase=enrolling、published_at 和回执。审核通过不自动发布。
+5. `social-practice.publish`（C）：用户要求发布才做；detail 确认 accept 且 plan_publish_notifies=false，预览 phase/发布时间/必修名单同步，执行后 detail/timeline 核对 phase=enrolling、published_at 和回执。缺少通知策略字段时先提示升级服务端，不能按“不通知”规则调用旧服务器。此阶段暂不发送发布通知，重复发布复用已有状态和时间。审核通过不自动发布；创建集中项目前确认计划 can_create_project=true，不符合条件时先按原因完成前一步。
 
 ### 材料草稿与提交
 

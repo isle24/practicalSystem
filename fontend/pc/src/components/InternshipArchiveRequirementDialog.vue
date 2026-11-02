@@ -33,13 +33,17 @@
             <strong>{{ materialLabel(item.material_type) }}</strong>
             <span>{{ scopeLabel(item.material_type) }}</span>
           </div>
+          <label class="archive-requirement-choice">
+            <FormFieldLabel :required="false">是否必交</FormFieldLabel>
           <el-switch
             v-model="item.required"
             inline-prompt
             active-text="必交"
             inactive-text="不适用"
             :disabled="loading || saving"
+            :aria-label="`${materialLabel(item.material_type)}是否必交`"
           />
+          </label>
         </article>
         <el-empty v-if="!loading && !items.length" description="暂无可配置材料" :image-size="72" />
       </div>
@@ -55,6 +59,7 @@
 </template>
 
 <script setup>
+import FormFieldLabel from '../../../shared/components/FormFieldLabel.vue';
 import { ref, watch } from 'vue';
 import { ElMessage } from 'element-plus';
 import {
@@ -152,6 +157,7 @@ function scopeLabel(type) {
 </script>
 
 <style scoped>
+.archive-requirement-choice { display: grid; justify-items: end; gap: 4px; }
 .archive-requirement-body {
   min-height: 0;
   display: grid;

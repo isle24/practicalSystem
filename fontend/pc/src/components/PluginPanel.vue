@@ -31,17 +31,17 @@
     <ListPagination v-model:current-page="page" :page-size="pageSize" :total="total" layout="prev, pager, next" @current-change="load" />
     <OperationDialog :visible="dialog.visible" :title="dialog.form.id ? '编辑插件' : '新增插件'" :busy="saving" @close="dialog.visible = false">
       <div class="plugin-form">
-        <label><span>插件编码</span><el-input v-model="dialog.form.code" :disabled="Boolean(dialog.form.id)" placeholder="如 cloud-storage" /></label>
-        <label><span>名称</span><el-input v-model="dialog.form.name" placeholder="请输入插件名称" /></label>
-        <label><span>版本</span><el-input v-model="dialog.form.version" placeholder="1.0.0" /></label>
-        <label><span>打开方式</span><el-select v-model="dialog.form.open_mode" placeholder="请选择打开方式"><el-option label="当前页打开" value="current" /><el-option label="客户端窗口" value="client" /><el-option label="外部浏览器" value="browser" /></el-select></label>
-        <label class="wide"><span>HTTPS 入口</span><el-input v-model="dialog.form.entry_url" placeholder="https://example.com/oauth/start" /></label>
-        <label class="wide"><span>允许域名</span><el-input v-model="dialog.form.allowed_domains_text" placeholder="多个域名用逗号分隔" /></label>
-        <label class="wide"><span>图标地址</span><el-input v-model="dialog.form.icon_url" placeholder="可选 HTTPS 图片地址" /></label>
-        <label class="wide"><span>说明</span><el-input v-model="dialog.form.description" type="textarea" :rows="2" /></label>
-        <label class="wide"><span>权限说明</span><el-input v-model="dialog.form.permission_description" type="textarea" :rows="2" /></label>
-        <label><span>排序</span><el-input-number v-model="dialog.form.sort" :min="0" :max="99999" /></label>
-        <label><span>状态</span><el-switch v-model="dialog.form.status" active-value="enabled" inactive-value="disabled" active-text="启用" inactive-text="停用" /></label>
+        <label><FormFieldLabel v-if="!dialog.form.id" :required="true" help="2 至 80 位字母、数字、点、下划线、冒号或连字符">插件编码</FormFieldLabel><span v-else>插件编码</span><el-input v-model="dialog.form.code" :disabled="Boolean(dialog.form.id)" placeholder="如 cloud-storage" /></label>
+        <label><FormFieldLabel :required="true" help="最多 120 个字符">名称</FormFieldLabel><el-input v-model="dialog.form.name" placeholder="请输入插件名称" /></label>
+        <label><FormFieldLabel :required="false" help="留空使用 1.0.0">版本</FormFieldLabel><el-input v-model="dialog.form.version" placeholder="1.0.0" /></label>
+        <label><FormFieldLabel :required="false">打开方式</FormFieldLabel><el-select v-model="dialog.form.open_mode" placeholder="请选择打开方式"><el-option label="当前页打开" value="current" /><el-option label="客户端窗口" value="client" /><el-option label="外部浏览器" value="browser" /></el-select></label>
+        <label class="wide"><FormFieldLabel :required="true" help="使用 HTTPS 地址，不能携带账号密码">HTTPS 入口</FormFieldLabel><el-input v-model="dialog.form.entry_url" placeholder="https://example.com/oauth/start" /></label>
+        <label class="wide"><FormFieldLabel :required="false" help="留空使用入口域名；填写时最多 20 个域名，且须包含入口域名">允许域名</FormFieldLabel><el-input v-model="dialog.form.allowed_domains_text" placeholder="多个域名用逗号分隔" /></label>
+        <label class="wide"><FormFieldLabel :required="false" help="填写时使用 HTTPS 图片地址">图标地址</FormFieldLabel><el-input v-model="dialog.form.icon_url" placeholder="可选 HTTPS 图片地址" /></label>
+        <label class="wide"><FormFieldLabel :required="false">说明</FormFieldLabel><el-input v-model="dialog.form.description" type="textarea" :rows="2" /></label>
+        <label class="wide"><FormFieldLabel :required="false">权限说明</FormFieldLabel><el-input v-model="dialog.form.permission_description" type="textarea" :rows="2" /></label>
+        <label><FormFieldLabel :required="false">排序</FormFieldLabel><el-input-number v-model="dialog.form.sort" :min="0" :max="99999" /></label>
+        <label><FormFieldLabel :required="false">状态</FormFieldLabel><el-switch v-model="dialog.form.status" active-value="enabled" inactive-value="disabled" active-text="启用" inactive-text="停用" /></label>
       </div>
       <template #footer><el-button @click="dialog.visible = false">取消</el-button><el-button type="primary" :loading="saving" @click="save">保存</el-button></template>
     </OperationDialog>
@@ -50,6 +50,7 @@
 </template>
 
 <script setup>
+import FormFieldLabel from '../../../shared/components/FormFieldLabel.vue';
 import { onMounted, ref } from 'vue';
 import { ElMessage } from 'element-plus';
 import { ExternalLink, Globe2, Plus, Search } from '@lucide/vue';

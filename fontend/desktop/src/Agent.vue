@@ -820,7 +820,7 @@
               保存仅更新本机加密配置，点击“同步配置”后才上传或下载云端变更。
             </p>
             <label>
-              提供方名称
+              <FormFieldLabel :required="true">提供方名称</FormFieldLabel>
               <input
                 v-model="draft.name"
                 required
@@ -829,7 +829,7 @@
               />
             </label>
             <label>
-              基础 URL
+              <FormFieldLabel :required="true" help="填写 HTTP/HTTPS 接口地址，启用前需完成接口配置">基础 URL</FormFieldLabel>
               <input
                 v-model="draft.endpoint"
                 type="url"
@@ -848,7 +848,7 @@
               地址已变更，需要重新输入密钥，避免将原密钥发送给其他主机。
             </p>
             <label>
-              API Key
+              <FormFieldLabel :required="profileKeyRequired" :help="profileKeyHelp">API Key</FormFieldLabel>
               <span class="muted">
                 {{
                   editingItem?.has_key
@@ -870,7 +870,7 @@
               清除已保存密钥
             </label>
             <label>
-              默认模型
+              <FormFieldLabel :required="true" help="启用前需配置可用模型，可获取列表或手动填写">默认模型</FormFieldLabel>
               <div class="input-action">
                 <input
                   v-model="draft.model"
@@ -904,17 +904,17 @@
           </template>
           <template v-else-if="editorType === 'conversation'">
             <label>
-              会话名称
+              <FormFieldLabel :required="true">会话名称</FormFieldLabel>
               <input v-model="draft.title" required maxlength="120" />
             </label>
           </template>
           <template v-else-if="editorType === 'memories'">
             <label>
-              标题
+              <FormFieldLabel :required="true">标题</FormFieldLabel>
               <input v-model="draft.title" required maxlength="120" />
             </label>
             <label>
-              记忆内容
+              <FormFieldLabel :required="true" help="保存并启用后用于后续会话">记忆内容</FormFieldLabel>
               <textarea
                 v-model="draft.content"
                 required
@@ -945,11 +945,11 @@
           </template>
           <template v-else-if="editorType === 'plugin'">
             <label>
-              服务名称
+              <FormFieldLabel :required="true">服务名称</FormFieldLabel>
               <input v-model="draft.name" required maxlength="80" />
             </label>
             <label>
-              连接方式
+              <FormFieldLabel :required="true">连接方式</FormFieldLabel>
               <select v-model="draft.transport">
                 <option value="http">Streamable HTTP</option>
                 <option value="stdio">本机 stdio</option>
@@ -957,7 +957,7 @@
             </label>
             <template v-if="draft.transport === 'http'">
               <label>
-                服务 URL
+                <FormFieldLabel :required="true" help="HTTP/HTTPS 地址，不含账号、密码、查询参数或片段">服务 URL</FormFieldLabel>
                 <input
                   v-model="draft.url"
                   type="url"
@@ -968,7 +968,7 @@
                 />
               </label>
               <label>
-                访问令牌
+                <FormFieldLabel :required="pluginTokenRequired" :help="pluginTokenRequired ? '服务地址已改变，请重新填写访问令牌' : '无需认证时可不填；已保存且地址不变时留空保留'">访问令牌</FormFieldLabel>
                 <span v-if="editingItem?.has_token" class="muted">
                   已保存，留空保留
                 </span>
@@ -982,7 +982,7 @@
             </template>
             <template v-else>
               <label>
-                可执行程序
+                <FormFieldLabel :required="true" help="填写可执行程序的绝对路径">可执行程序</FormFieldLabel>
                 <input
                   v-model="draft.command"
                   required
@@ -992,7 +992,7 @@
                 />
               </label>
               <label>
-                参数（JSON 字符串数组）
+                <FormFieldLabel :required="false" help="留空表示无参数；最多 64 项，每项须为字符串">参数（JSON 字符串数组）</FormFieldLabel>
                 <textarea
                   v-model="draft.args_text"
                   rows="3"
@@ -1001,7 +1001,7 @@
                 ></textarea>
               </label>
               <label>
-                环境变量（JSON 对象）
+                <FormFieldLabel :required="false" help="值须为字符串；命令和参数不变时留空保留，填写 {} 清空">环境变量（JSON 对象）</FormFieldLabel>
                 <textarea
                   v-model="draft.env_text"
                   rows="3"
@@ -1028,11 +1028,11 @@
             v-else-if="editorType === 'tasks' || editorType === 'reminders'"
           >
             <label>
-              名称
+              <FormFieldLabel :required="true">名称</FormFieldLabel>
               <input v-model="draft.name" required maxlength="120" />
             </label>
             <label>
-              {{ editorType === 'tasks' ? '只读任务内容' : '提醒内容' }}
+              <FormFieldLabel :required="true">{{ editorType === 'tasks' ? '只读任务内容' : '提醒内容' }}</FormFieldLabel>
               <textarea
                 v-model="draft.content"
                 required
@@ -1042,7 +1042,7 @@
             </label>
             <template v-if="editorType === 'tasks'">
               <label>
-                模型来源
+                <FormFieldLabel :required="true" help="选择已启用的学校模型或个人提供方">模型来源</FormFieldLabel>
                 <select
                   v-model="draft.source"
                   @change="draft.model = defaultModel(draft.source)"
@@ -1060,7 +1060,7 @@
                 </select>
               </label>
               <label>
-                模型
+                <FormFieldLabel v-if="draft.source !== 'school'" :required="true">模型</FormFieldLabel><span v-else>模型（学校配置）</span>
                 <input
                   v-model="draft.model"
                   required
@@ -1071,14 +1071,14 @@
             </template>
             <div class="form-grid">
               <label>
-                计划
+                <FormFieldLabel :required="true">计划</FormFieldLabel>
                 <select v-model="draft.schedule">
                   <option value="once">单次</option>
                   <option value="interval">按间隔</option>
                 </select>
               </label>
               <label v-if="draft.schedule === 'interval'">
-                间隔（分钟）
+                <FormFieldLabel :required="true" help="5-525600 的整数，最多 1 年">间隔（分钟）</FormFieldLabel>
                 <input
                   v-model.number="draft.interval_minutes"
                   required
@@ -1089,7 +1089,7 @@
               </label>
             </div>
             <label>
-              {{ draft.schedule === 'interval' ? '首次运行时间' : '运行时间' }}
+              <FormFieldLabel :required="true" help="使用本机时区，必须晚于当前时间">{{ draft.schedule === 'interval' ? '首次运行时间' : '运行时间' }}</FormFieldLabel>
               <input
                 v-model="draft.local_time"
                 required
@@ -1152,6 +1152,7 @@
 </template>
 
 <script setup>
+import FormFieldLabel from '../../shared/components/FormFieldLabel.vue';
 import {
   computed,
   nextTick,
@@ -1448,6 +1449,19 @@ const endpointChanged = computed(
     editingItem.value?.has_key &&
     draft.endpoint?.trim() !== editingItem.value.endpoint
 );
+const profileKeyRequired = computed(() => Boolean(
+  endpointChanged.value || (!draft.clear_key && (
+    (draft.enabled && !editingItem.value?.has_key) ||
+    (editingItem.value && draft.endpoint?.trim() !== editingItem.value.endpoint)
+  ))
+));
+const profileKeyHelp = computed(() => {
+  if (endpointChanged.value) return '地址已变更，请重新输入密钥；如已勾选清除，请先取消清除。';
+  if (draft.clear_key) return '保存后清除已有密钥并停用提供方。';
+  if (profileKeyRequired.value) return '启用前或修改已有接口地址后需填写密钥。';
+  return editingItem.value?.has_key ? '密钥不回显，地址不变时留空保留。' : '停用时可暂不填写，启用前需补齐密钥。';
+});
+const pluginTokenRequired = computed(() => Boolean(editingItem.value?.url && editingItem.value.has_token && editingItem.value.url !== draft.url?.trim()));
 const editorTitle = computed(
   () =>
     ({

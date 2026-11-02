@@ -1,6 +1,6 @@
 <template>
   <section class="login-captcha" aria-label="登录安全验证码">
-    <label :for="inputId">验证码</label>
+    <label :for="inputId"><FormFieldLabel :required="true">验证码</FormFieldLabel></label>
     <div class="login-captcha-row">
       <input :id="inputId" :value="modelValue" :disabled="busy || expired || !image" maxlength="16" autocomplete="off" autocapitalize="characters" :spellcheck="false" placeholder="输入图片字符" @input="emit('update:modelValue', $event.target.value)">
       <button type="button" class="login-captcha-image" :disabled="busy" title="刷新验证码" aria-label="刷新验证码" @click="emit('refresh')"><img v-if="image" :src="image" alt="登录验证码" @error="imageFailed = true"><span v-else>点击获取</span></button>
@@ -10,6 +10,7 @@
   </section>
 </template>
 <script setup>
+import FormFieldLabel from './FormFieldLabel.vue';
 import { computed, onBeforeUnmount, onMounted, ref, useId, watch } from 'vue';
 const props = defineProps({ captcha: { type: Object, default: null }, modelValue: { type: String, default: '' }, busy: { type: Boolean, default: false } });
 const emit = defineEmits(['update:modelValue', 'refresh']);

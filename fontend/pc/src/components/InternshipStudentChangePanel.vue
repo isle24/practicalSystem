@@ -73,45 +73,45 @@
 
       <el-form v-else-if="dialog.mode === 'edit'" label-position="top" class="student-change-form">
         <div class="student-change-form-grid">
-          <el-form-item label="实习任务" class="span-two">
+          <el-form-item label="实习任务" class="span-two"><template #label><FormFieldLabel v-if="!form.id" :required="true">实习任务</FormFieldLabel><span v-else>实习任务</span></template>
             <el-select-v2 v-model="form.arrangement_id" :options="taskSelectOptions" filterable placeholder="请选择实习任务" :disabled="Boolean(form.id)" @change="selectProfile" />
           </el-form-item>
-          <el-form-item label="变更类型">
+          <el-form-item label="变更类型"><template #label><FormFieldLabel :required="false" help="默认按实习资料变更处理">变更类型</FormFieldLabel></template>
             <el-select v-model="form.change_type" placeholder="请选择变更类型">
               <el-option v-for="item in changeTypeOptions" :key="item.value" :label="item.label" :value="item.value" />
             </el-select>
           </el-form-item>
-          <el-form-item label="期望生效日期">
+          <el-form-item label="期望生效日期"><template #label><FormFieldLabel :required="false">期望生效日期</FormFieldLabel></template>
             <input v-model="form.effective_date" class="native-control" type="date">
           </el-form-item>
           <template v-if="showCompanyFields">
-            <el-form-item label="实习单位">
+            <el-form-item label="实习单位"><template #label><FormFieldLabel :required="false">实习单位</FormFieldLabel></template>
               <el-select-v2 v-model="form.after_payload.company_id" :options="options.companies || []" :props="{ label: 'company_name', value: 'company_id' }" clearable filterable placeholder="请选择实习单位" @change="normalizeCompanyRelations" />
             </el-form-item>
-            <el-form-item label="实习基地">
+            <el-form-item label="实习基地"><template #label><FormFieldLabel :required="false">实习基地</FormFieldLabel></template>
               <el-select-v2 v-model="form.after_payload.base_id" :options="availableBases" :props="{ label: 'name', value: 'id' }" clearable filterable placeholder="请选择实习基地" />
             </el-form-item>
           </template>
-          <el-form-item v-if="showMentorField" label="企业导师" class="span-two">
+          <el-form-item v-if="showMentorField" label="企业导师" class="span-two"><template #label><FormFieldLabel :required="false">企业导师</FormFieldLabel></template>
             <el-select v-model="form.after_payload.enterprise_mentor_id" clearable filterable placeholder="请选择企业导师">
               <el-option v-for="item in availableMentors" :key="item.id" :label="mentorLabel(item)" :value="item.id" />
             </el-select>
           </el-form-item>
           <template v-if="showLocationFields">
-            <el-form-item label="实习地点">
+            <el-form-item label="实习地点"><template #label><FormFieldLabel :required="false">实习地点</FormFieldLabel></template>
               <el-input v-model="form.after_payload.location" maxlength="255" placeholder="请输入实习地点" />
             </el-form-item>
-            <el-form-item label="实习岗位">
+            <el-form-item label="实习岗位"><template #label><FormFieldLabel :required="false">实习岗位</FormFieldLabel></template>
               <el-input v-model="form.after_payload.position" maxlength="180" placeholder="请输入实习岗位" />
             </el-form-item>
-            <el-form-item label="开始日期">
+            <el-form-item label="开始日期"><template #label><FormFieldLabel :required="false">开始日期</FormFieldLabel></template>
               <input v-model="form.after_payload.start_date" class="native-control" type="date">
             </el-form-item>
-            <el-form-item label="结束日期">
+            <el-form-item label="结束日期"><template #label><FormFieldLabel :required="false" help="填写起止日期时，结束日期不能早于开始日期">结束日期</FormFieldLabel></template>
               <input v-model="form.after_payload.end_date" class="native-control" type="date">
             </el-form-item>
           </template>
-          <el-form-item label="变更原因" class="span-two">
+          <el-form-item label="变更原因" class="span-two"><template #label><FormFieldLabel :required="false" :submit-required="true">变更原因</FormFieldLabel></template>
             <el-input v-model="form.reason" type="textarea" :rows="4" maxlength="2000" show-word-limit placeholder="请说明变更原因" />
           </el-form-item>
         </div>
@@ -124,8 +124,8 @@
           <el-descriptions-item label="变更类型">{{ changeTypeText(dialog.item.change_type) }}</el-descriptions-item>
           <el-descriptions-item label="变更原因">{{ dialog.item.reason || '-' }}</el-descriptions-item>
         </el-descriptions>
-        <el-segmented v-model="review.status" :options="reviewStatusOptions" />
-        <el-input v-model="review.opinion" type="textarea" :rows="5" maxlength="500" show-word-limit placeholder="请填写审核意见" />
+        <div class="student-change-review-field"><FormFieldLabel :required="false">审核结果</FormFieldLabel><el-segmented v-model="review.status" :options="reviewStatusOptions" /></div>
+        <label class="student-change-review-field"><FormFieldLabel :required="review.status === 'modify'" :help="review.status === 'modify' ? '退回原因至少填写 5 个字' : ''">审核意见</FormFieldLabel><el-input v-model="review.opinion" type="textarea" :rows="5" maxlength="500" show-word-limit placeholder="请填写审核意见" /></label>
       </div>
 
       <div v-else class="student-change-detail">
@@ -161,6 +161,7 @@
 </template>
 
 <script setup>
+import FormFieldLabel from '../../../shared/components/FormFieldLabel.vue';
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { filterAcademicProfessions } from '../../../shared/academicCascade';
 import { Plus } from '@lucide/vue';
@@ -755,6 +756,8 @@ function mentorLabel(item) {
   color: var(--text);
   background: var(--surface);
 }
+
+.student-change-review-field { display: grid; gap: 6px; }
 
 .student-change-review {
   display: grid;

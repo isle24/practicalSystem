@@ -11,14 +11,14 @@
     <footer><span>共 {{ pagination.total }} 个应用</span><el-pagination layout="prev, pager, next" :current-page="pagination.page" :page-size="pagination.page_size" :total="pagination.total" @current-change="load" /></footer>
     <el-dialog v-model="dialog" :title="form.uuid ? '编辑授权应用' : '注册授权应用'" width="min(680px, calc(100vw - 32px))" :close-on-click-modal="false" :close-on-press-escape="!saving" :show-close="!saving">
       <el-form :disabled="saving" label-position="top" :model="form" class="sso-form">
-        <el-form-item label="应用名称"><el-input v-model="form.client_name" maxlength="180" /></el-form-item>
-        <el-form-item label="回调地址（每行一个 HTTPS 固定路径）"><el-input v-model="redirectText" type="textarea" :rows="3" placeholder="https://example.com/oidc/callback" /></el-form-item>
-        <el-form-item label="登录入口"><el-input v-model="form.initiate_login_uri" placeholder="https://example.com/sso/login" /></el-form-item>
-        <el-form-item label="转接准备入口"><el-input v-model="form.launch_prepare_uri" placeholder="https://example.com/sso/prepare" /></el-form-item>
-        <el-form-item label="转接页面入口"><el-input v-model="form.launch_entry_uri" placeholder="https://example.com/sso/launch" /></el-form-item>
-        <el-form-item label="目标上下文标识"><el-input v-model="form.target_context" maxlength="80" /></el-form-item>
-        <el-form-item label="身份范围"><el-checkbox-group v-model="form.allowed_scopes"><el-checkbox value="openid" label="openid" disabled /><el-checkbox value="profile" label="profile" /></el-checkbox-group></el-form-item>
-        <el-form-item label="允许角色"><el-checkbox-group v-model="form.allowed_role_types"><el-checkbox v-for="role in roles" :key="role.value" :value="role.value" :label="role.value">{{ role.label }}</el-checkbox></el-checkbox-group></el-form-item>
+        <el-form-item label="应用名称"><template #label><FormFieldLabel :required="true">应用名称</FormFieldLabel></template><el-input v-model="form.client_name" maxlength="180" /></el-form-item>
+        <el-form-item label="回调地址（每行一个 HTTPS 固定路径）"><template #label><FormFieldLabel :required="true" help="填写 1 至 10 个回调地址，所有应用入口与回调须属于同一来源">回调地址（每行一个 HTTPS 固定路径）</FormFieldLabel></template><el-input v-model="redirectText" type="textarea" :rows="3" placeholder="https://example.com/oidc/callback" /></el-form-item>
+        <el-form-item label="登录入口"><template #label><FormFieldLabel :required="true">登录入口</FormFieldLabel></template><el-input v-model="form.initiate_login_uri" placeholder="https://example.com/sso/login" /></el-form-item>
+        <el-form-item label="转接准备入口"><template #label><FormFieldLabel :required="form.launch_profile !== ''">转接准备入口</FormFieldLabel></template><el-input v-model="form.launch_prepare_uri" placeholder="https://example.com/sso/prepare" /></el-form-item>
+        <el-form-item label="转接页面入口"><template #label><FormFieldLabel :required="form.launch_profile !== ''">转接页面入口</FormFieldLabel></template><el-input v-model="form.launch_entry_uri" placeholder="https://example.com/sso/launch" /></el-form-item>
+        <el-form-item label="目标上下文标识"><template #label><FormFieldLabel :required="true">目标上下文标识</FormFieldLabel></template><el-input v-model="form.target_context" maxlength="80" /></el-form-item>
+        <el-form-item label="身份范围"><template #label><FormFieldLabel :required="true" help="必须保留 openid，profile 可选">身份范围</FormFieldLabel></template><el-checkbox-group v-model="form.allowed_scopes"><el-checkbox value="openid" label="openid" disabled /><el-checkbox value="profile" label="profile" /></el-checkbox-group></el-form-item>
+        <el-form-item label="允许角色"><template #label><FormFieldLabel :required="true" help="至少选择一种允许角色">允许角色</FormFieldLabel></template><el-checkbox-group v-model="form.allowed_role_types"><el-checkbox v-for="role in roles" :key="role.value" :value="role.value" :label="role.value">{{ role.label }}</el-checkbox></el-checkbox-group></el-form-item>
       </el-form>
       <template #footer><el-button :disabled="saving" @click="dialog = false">取消</el-button><el-button type="primary" :loading="saving" @click="save">保存</el-button></template>
     </el-dialog>
@@ -26,6 +26,7 @@
   </section>
 </template>
 <script setup>
+import FormFieldLabel from '../../../shared/components/FormFieldLabel.vue';
 import { ref, onBeforeUnmount, onMounted } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { request } from '../api/client';

@@ -23,7 +23,7 @@
 
     <form v-else class="connection-form" @submit.prevent="connect()">
       <template v-if="editingSchool">
-      <label for="school-domain">学校域名</label>
+      <label for="school-domain"><FormFieldLabel :required="true" help="填写学校域名和可选端口；学校服务器使用 HTTPS">学校域名</FormFieldLabel></label>
       <div class="domain-field" :class="{ invalid: error }">
         <Globe2 :size="19" aria-hidden="true" />
         <input id="school-domain" v-model="domain" type="text" autocomplete="url" autocapitalize="off"
@@ -33,13 +33,13 @@
       <button v-if="profiles.length" class="switch-school history-entry" type="button" @click="switching = true">选择已连接的学校<ChevronRight :size="14" /></button>
       </template>
       <template v-if="loginMethod === 'password'">
-      <label for="school-username">账号</label>
+      <label for="school-username"><FormFieldLabel :required="true">账号</FormFieldLabel></label>
       <input id="school-username" v-model="username" type="text" autocomplete="username" placeholder="请输入账号" :disabled="busy || loading">
-      <label for="school-password">密码</label>
+      <label for="school-password"><FormFieldLabel :required="true">密码</FormFieldLabel></label>
       <input id="school-password" ref="passwordInput" v-model="password" type="password" autocomplete="current-password" placeholder="请输入密码" :disabled="busy || loading" @input="markFreshPassword">
       </template>
       <p v-else class="connection-guidance">连接学校后将显示登录二维码，请使用已绑定账号的企业微信扫码。</p>
-      <label for="school-remark">备注 <small>可选</small></label>
+      <label for="school-remark"><FormFieldLabel :required="false" help="最多 60 字，用于区分学校账号">备注</FormFieldLabel></label>
       <input id="school-remark" v-model="remark" maxlength="60" placeholder="例如：工作账号" :disabled="busy || loading">
       <div v-if="loginMethod === 'password'" class="connection-options">
         <label class="check-option"><input v-model="rememberPassword" type="checkbox" :disabled="busy || loading || !username.trim() || !password"><span>记住密码</span></label>
@@ -70,6 +70,7 @@
 </template>
 
 <script setup>
+import FormFieldLabel from '../../shared/components/FormFieldLabel.vue';
 import { ref, nextTick, onBeforeUnmount, onMounted, watch } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
 import { getVersion } from '@tauri-apps/api/app';

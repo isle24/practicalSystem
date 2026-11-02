@@ -63,7 +63,7 @@ onBeforeUnmount(() => { alive = false; sequence += 1; hydration += 1; clearTimeo
 
 <template>
   <div class="favorite-target-select">
-    <el-select-v2 :model-value="modelValue" :options="options" :disabled="disabled" multiple filterable remote :remote-method="search" :loading="loading" collapse-tags collapse-tags-tooltip :max-collapse-tags="3" :placeholder="type === 'college' ? '搜索并选择学院' : '搜索姓名或登录账号，可多选'" @update:model-value="update" @visible-change="visible => visible && search('')">
+    <el-select-v2 :aria-label="type === 'college' ? '共享学院' : '共享人员'" :aria-required="true" :model-value="modelValue" :options="options" :disabled="disabled" multiple filterable remote :remote-method="search" :loading="loading" collapse-tags collapse-tags-tooltip :max-collapse-tags="3" :placeholder="type === 'college' ? '搜索并选择学院' : '搜索姓名或登录账号，可多选'" @update:model-value="update" @visible-change="visible => visible && search('')">
       <template #footer><div class="favorite-target-footer"><span>已加载 {{ results.length }} / {{ pagination.total }} 项</span><el-button v-if="hasMore" text :loading="loading" @click.stop="load(pagination.page + 1)">加载更多</el-button></div></template>
     </el-select-v2>
     <small v-if="error" role="alert">{{ error }}</small>

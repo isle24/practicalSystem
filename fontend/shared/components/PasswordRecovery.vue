@@ -17,14 +17,14 @@
       <p v-if="activeScan" class="countdown" role="timer">{{ scan.state === 'ready' ? '身份验证' : '二维码' }}剩余 {{ seconds }} 秒</p>
       <form v-if="scan?.state === 'ready'" class="reset-form" @submit.prevent="submit">
         <fieldset>
-          <legend>选择本人账号</legend>
+          <legend><FormFieldLabel :required="true">选择本人账号</FormFieldLabel></legend>
           <label v-for="account in accounts" :key="account.id" class="account-option">
             <input v-model="selectedAccount" type="radio" :value="account.id" name="password-recovery-account" :disabled="busy" required>
             <span>{{ account.name || account.login_name }} · {{ account.login_name }}<small>{{ account.role_name }}{{ organizationLabel(account) }}</small></span>
           </label>
         </fieldset>
-        <label class="password-field"><span>新密码</span><input v-model="newPassword" type="password" autocomplete="new-password" maxlength="72" :disabled="busy" required placeholder="至少 6 个字符"></label>
-        <label class="password-field"><span>确认新密码</span><input v-model="confirmPassword" type="password" autocomplete="new-password" maxlength="72" :disabled="busy" required placeholder="再次输入新密码"></label>
+        <label class="password-field"><FormFieldLabel :required="true" help="至少 6 个字符，最多 72 个 UTF-8 字节，不能包含空字符">新密码</FormFieldLabel><input v-model="newPassword" type="password" autocomplete="new-password" maxlength="72" :disabled="busy" required placeholder="至少 6 个字符"></label>
+        <label class="password-field"><FormFieldLabel :required="true" help="两次输入必须一致">确认新密码</FormFieldLabel><input v-model="confirmPassword" type="password" autocomplete="new-password" maxlength="72" :disabled="busy" required placeholder="再次输入新密码"></label>
         <p class="guidance">重置后该账号原登录设备将退出，需要重新登录。</p>
         <button type="submit" class="primary-button" :disabled="busy || !selectedAccount">{{ submitting ? '正在重置…' : '重置密码' }}</button>
       </form>
@@ -36,6 +36,7 @@
 </template>
 
 <script setup>
+import FormFieldLabel from './FormFieldLabel.vue';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import QRCode from './QRCode.vue';
 

@@ -30,11 +30,11 @@
       </div>
       <template v-else-if="loginMethod === 'password'">
       <label>
-        <span>账号</span>
+        <FormFieldLabel :required="true">账号</FormFieldLabel>
         <input ref="loginNameInput" v-model="loginForm.login_name" :disabled="loginState.loading || loginCaptcha.state.loading" autocomplete="username" placeholder="请输入账号">
       </label>
       <label>
-        <span>密码</span>
+        <FormFieldLabel :required="true">密码</FormFieldLabel>
         <input v-model="loginForm.password" :disabled="loginState.loading || loginCaptcha.state.loading" autocomplete="current-password" placeholder="请输入密码" type="password">
       </label>
       <LoginCaptchaInput v-if="loginCaptcha.state.required" v-model="loginCaptcha.state.code" :captcha="loginCaptcha.state.captcha" :busy="loginState.loading || loginCaptcha.state.loading" @refresh="loginCaptcha.refresh" />
@@ -49,7 +49,7 @@
         </button>
         <div v-if="registerState.open" class="login-register-form">
           <label>
-            <span>注册角色</span>
+            <FormFieldLabel :required="true">注册角色</FormFieldLabel>
             <select v-model="registerForm.role_type">
               <option
                 v-for="role in registerRoleOptions"
@@ -60,12 +60,12 @@
               </option>
             </select>
           </label>
-          <label><span>姓名</span><input v-model="registerForm.name" autocomplete="name"></label>
-          <label><span>登录账号</span><input v-model="registerForm.login_name" autocomplete="username"></label>
-          <label><span>密码</span><input v-model="registerForm.password" autocomplete="new-password" type="password"></label>
-          <label><span>手机</span><input v-model="registerForm.mobile" autocomplete="tel"></label>
-          <label v-if="registerForm.role_type === 'student'"><span>学号</span><input v-model="registerForm.student_num"></label>
-          <label v-if="registerForm.role_type === 'teacher'"><span>工号</span><input v-model="registerForm.teacher_num"></label>
+          <label><FormFieldLabel :required="true">姓名</FormFieldLabel><input v-model="registerForm.name" autocomplete="name"></label>
+          <label><FormFieldLabel :required="true">登录账号</FormFieldLabel><input v-model="registerForm.login_name" autocomplete="username"></label>
+          <label><FormFieldLabel :required="true" help="至少 6 位；用于账号密码登录。">密码</FormFieldLabel><input v-model="registerForm.password" autocomplete="new-password" type="password"></label>
+          <label><FormFieldLabel :required="false">手机</FormFieldLabel><input v-model="registerForm.mobile" autocomplete="tel"></label>
+          <label v-if="registerForm.role_type === 'student'"><FormFieldLabel :required="false">学号</FormFieldLabel><input v-model="registerForm.student_num"></label>
+          <label v-if="registerForm.role_type === 'teacher'"><FormFieldLabel :required="false">工号</FormFieldLabel><input v-model="registerForm.teacher_num"></label>
           <button type="button" class="login-submit-button" :disabled="registerState.loading" @click="submitRegister">
             创建并登录
           </button>
@@ -132,6 +132,7 @@
               <el-button type="primary" :icon="Save" :loading="profileState.loading" @click="saveProfile">保存修改</el-button>
             </template>
             <template #message>
+              <OperationRoute :module="operationGuideForWindow(win).module || ''" :panel="operationGuideForWindow(win).panel || ''" :page-title="operationGuideForWindow(win).title" />
               <el-alert v-if="profileState.message" :type="profileAlertType" :closable="false" show-icon :title="profileState.message" />
             </template>
             <template #general>
@@ -164,11 +165,11 @@
                 </div>
                 <div class="profile-form-grid">
                   <label>
-                    <span>姓名</span>
+                    <FormFieldLabel :required="false" help="留空保留当前姓名。">姓名</FormFieldLabel>
                     <input v-model="profileState.form.name">
                   </label>
                   <label>
-                    <span>邮箱</span>
+                    <FormFieldLabel :required="false">邮箱</FormFieldLabel>
                     <input v-model="profileState.form.email">
                   </label>
                   <div class="profile-mobile-binding">
@@ -332,6 +333,7 @@
               :title="permissionState.error"
             />
 
+            <OperationRoute :module="operationGuideForWindow(win).module || ''" :panel="operationGuideForWindow(win).panel || ''" :page-title="operationGuideForWindow(win).title" />
             <div class="module-workspace">
               <section class="module-content-panel">
                 <BaseVisitRecordPanel
@@ -413,6 +415,7 @@
 
                       <div v-else-if="internshipState.dialog.type === 'planImport'" class="plan-import-preview">
                         <div class="plan-import-header">
+                          <small>逐行确认业务归属；重复记录默认跳过，仅草稿或退回记录可选择更新。</small>
                           <div class="plan-import-summary has-actions">
                             <article><span>原始行</span><strong>{{ internshipState.planImport.summary.source_rows }}</strong></article>
                             <article><span>拆分后</span><strong>{{ internshipState.planImport.summary.preview_rows }}</strong></article>
@@ -432,6 +435,7 @@
                           <el-table-column prop="profession_name" label="专业" min-width="150" />
                           <el-table-column prop="internship_credit" label="实习学分" width="90" />
                           <el-table-column label="业务归属" width="150">
+                            <template #header><FormFieldLabel :required="true">业务归属</FormFieldLabel></template>
                             <template #default="{ row }">
                               <el-select v-model="row.business_type" size="small" :disabled="Boolean(row.errors?.length)" placeholder="请选择业务归属">
                                 <el-option v-for="item in internshipState.planImport.business_types" :key="item.value" :label="item.label" :value="item.value" />
@@ -439,9 +443,11 @@
                             </template>
                           </el-table-column>
                           <el-table-column label="确认" width="78">
+                            <template #header><FormFieldLabel :required="true">确认</FormFieldLabel></template>
                             <template #default="{ row }"><el-switch v-model="row.business_type_confirmed" :disabled="Boolean(row.errors?.length)" /></template>
                           </el-table-column>
                           <el-table-column label="重复处理" width="120">
+                            <template #header><FormFieldLabel :required="false">重复处理</FormFieldLabel></template>
                             <template #default="{ row }">
                               <el-select v-if="row.duplicate" v-model="row.duplicate_action" size="small" placeholder="请选择重复处理方式">
                                 <el-option label="跳过" value="skip" />
@@ -513,7 +519,7 @@
                         </el-table>
                       </div>
 
-                      <WorkflowHistory v-else-if="internshipState.dialog.type === 'workflow'" entity-type="base_application" :entity-id="internshipState.dialog.row.id" :account-id="permissionState.context.account_id" :request="request" :backend-url="backendUrl" @updated="loadInternshipPanel('baseApplications', 1)" />
+                      <WorkflowHistory v-else-if="internshipState.dialog.type === 'workflow'" :entity-type="internshipState.dialog.entity" :entity-id="internshipState.dialog.row.id" :account-id="permissionState.context.account_id" :request="request" :backend-url="backendUrl" @updated="refreshInternshipPlanWorkflow" />
 
                       <div v-else-if="internshipState.dialog.type === 'contentDetail'" class="content-detail-view">
                         <section v-for="field in internshipState.dialog.fields || []" :key="field.label">
@@ -538,7 +544,7 @@
 
                       <div v-else-if="internshipState.dialog.type === 'syllabusGuide'" class="operation-form single syllabus-guide-form">
                         <label>
-                          <span>实习任务</span>
+                          <FormFieldLabel :required="true" help="先选择实习任务，再填写材料并保存草稿或发布。">实习任务</FormFieldLabel>
                           <el-select-v2
                             v-model="internshipState.syllabusGuideForm.arrangement_id"
                             filterable
@@ -547,7 +553,7 @@
                            :options="(internshipState.options.arrangements).map(arrangement => ({ label: internshipArrangementLabel(arrangement), value: arrangement.id }))" />
                         </label>
                         <label>
-                          <span>材料名称</span>
+                          <FormFieldLabel :required="true">材料名称</FormFieldLabel>
                           <input
                             v-model="internshipState.syllabusGuideForm.title"
                             :placeholder="`请输入${syllabusGuideTypeName(internshipState.syllabusGuideForm.document_type)}名称`"
@@ -555,7 +561,7 @@
                           >
                         </label>
                         <label class="span-2">
-                          <span>材料内容</span>
+                          <FormFieldLabel :required="false">材料内容</FormFieldLabel>
                           <textarea
                             v-model="internshipState.syllabusGuideForm.content"
                             rows="10"
@@ -565,7 +571,7 @@
                           <small class="material-content-counter">{{ textLength(internshipState.syllabusGuideForm.content) }}/20000</small>
                         </label>
                         <label class="span-2">
-                          <span>材料附件</span>
+                          <FormFieldLabel :required="false" help="可上传 Word、PDF 等材料附件。">材料附件</FormFieldLabel>
                           <div class="material-file-row">
                             <button
                               v-if="internshipState.syllabusGuideForm.file"
@@ -595,13 +601,14 @@
                       </div>
 
                       <div v-else-if="internshipState.dialog.type === 'arrangement'" class="operation-form">
+                        <small class="span-2">按计划、教师、班级和日期填写任务。已有生效任务的变更需经审核后生效。</small>
                         <label>
-                          <span>实习计划</span>
+                          <FormFieldLabel :required="true" help="先选择计划，年级或届次、学院和专业自动带出。">实习计划</FormFieldLabel>
                           <el-select-v2 v-model="internshipState.arrangementForm.plan_id" clearable filterable placeholder="请选择实习计划" @change="handleArrangementPlanChange" :options="(arrangementPlanOptions()).map(plan => ({ label: internshipPlanLabel(plan), value: plan.id }))" />
                         </label>
-                        <label><span>任务标题</span><input v-model="internshipState.arrangementForm.title"></label>
-                        <label><span>任务编号</span><input v-model="internshipState.arrangementForm.task_no" placeholder="同一计划下唯一"></label>
-                        <label><span>批次</span><input v-model="internshipState.arrangementForm.batch_no"></label>
+                        <label><FormFieldLabel :required="true">任务标题</FormFieldLabel><input v-model="internshipState.arrangementForm.title"></label>
+                        <label><FormFieldLabel :required="true" help="同一计划下不可重复。">任务编号</FormFieldLabel><input v-model="internshipState.arrangementForm.task_no" placeholder="同一计划下唯一"></label>
+                        <label><FormFieldLabel :required="false">批次</FormFieldLabel><input v-model="internshipState.arrangementForm.batch_no"></label>
                         <!-- 暂时隐藏学期输入，后续需要时恢复。 -->
                         <!--
                         <label><span>学期</span><input v-model="internshipState.arrangementForm.semester"></label>
@@ -619,44 +626,46 @@
                           <el-select-v2 v-model="internshipState.arrangementForm.profession_id" filterable disabled placeholder="选择计划后自动带出专业" :options="arrangementProfessionOptions()" :props="{ label: 'profession_name', value: 'profession_id' }" />
                         </label>
                         <label>
-                          <span>负责老师</span>
+                          <FormFieldLabel :required="true">负责老师</FormFieldLabel>
                           <el-select-v2 v-model="internshipState.arrangementForm.teacher_id" clearable filterable placeholder="请选择负责老师" :options="arrangementTeacherOptions()" :props="{ label: 'teacher_name', value: 'teacher_id' }" />
                         </label>
                         <label>
-                          <span>任务班级</span>
+                          <FormFieldLabel :required="true" help="至少选择一个班级，保存后同步任务学生范围。">任务班级</FormFieldLabel>
                           <el-select-v2 v-model="internshipState.arrangementForm.class_ids" multiple collapse-tags collapse-tags-tooltip filterable placeholder="请选择任务班级" :options="arrangementClassOptions()" :props="{ label: 'class_name', value: 'class_id' }" />
                         </label>
-                        <label><span>学分</span><input v-model="internshipState.arrangementForm.credit" type="number" min="0" step="0.5"></label>
+                        <label><FormFieldLabel :required="false">学分</FormFieldLabel><input v-model="internshipState.arrangementForm.credit" type="number" min="0" step="0.5"></label>
                         <label>
-                          <span>基地</span>
+                          <FormFieldLabel :required="false">基地</FormFieldLabel>
                           <el-select-v2 v-model="internshipState.arrangementForm.base_id" clearable filterable placeholder="请选择实习基地" :options="internshipState.options.bases" :props="{ label: 'name', value: 'id' }" />
                         </label>
                         <label>
-                          <span>类型</span>
+                          <FormFieldLabel :required="false" help="默认专业校外实习，可按任务调整。">类型</FormFieldLabel>
                           <el-select v-model="internshipState.arrangementForm.type" placeholder="请选择实习类型">
                             <el-option v-for="type in internshipState.options.types" :key="type" :label="arrangementTypeText(type)" :value="type" />
                           </el-select>
                         </label>
                         <label>
-                          <span>组织方式</span>
+                          <FormFieldLabel :required="false" help="默认集中组织。">组织方式</FormFieldLabel>
                           <el-select v-model="internshipState.arrangementForm.organize_mode" placeholder="请选择组织方式">
                             <el-option v-for="mode in internshipState.options.organize_modes" :key="mode" :label="organizeModeText(mode)" :value="mode" />
                           </el-select>
                         </label>
-                        <label><span>开始日期</span><input v-model="internshipState.arrangementForm.start_date" type="date"></label>
-                        <label><span>结束日期</span><input v-model="internshipState.arrangementForm.end_date" type="date"></label>
-                        <label><span>地点</span><input v-model="internshipState.arrangementForm.location"></label>
+                        <label><FormFieldLabel :required="true">开始日期</FormFieldLabel><input v-model="internshipState.arrangementForm.start_date" type="date"></label>
+                        <label><FormFieldLabel :required="true" help="不得早于开始日期。">结束日期</FormFieldLabel><input v-model="internshipState.arrangementForm.end_date" type="date"></label>
+                        <label><FormFieldLabel :required="false">地点</FormFieldLabel><input v-model="internshipState.arrangementForm.location"></label>
                         <label class="span-2">
-                          <span>任务说明</span>
+                          <FormFieldLabel :required="false">任务说明</FormFieldLabel>
                           <textarea v-model="internshipState.arrangementForm.description" rows="3" />
                         </label>
                         <label v-if="internshipState.arrangementForm.id" class="span-2">
-                          <span>变更申请原因</span>
+                          <FormFieldLabel :required="Boolean(internshipState.arrangementForm.id) &amp;&amp; !['draft', 'modify', 'wait'].includes(String(internshipState.arrangementForm.status || ''))" help="已生效任务的调整需提交变更申请，审核后生效。">变更申请原因</FormFieldLabel>
                           <textarea v-model="internshipState.arrangementForm.change_reason" rows="3" placeholder="已存在任务调整后需审核通过才会生效" />
                         </label>
                       </div>
 
                       <div v-else-if="internshipState.dialog.type === 'plan'" class="operation-form single">
+                        <small>先选择类别与归属范围，再填写课程信息。保存草稿后可继续编辑，提交审核后等待审批。</small>
+                        <small>{{ planApprovalHint(internshipState.dialog.row) }}</small>
                         <!-- 暂时隐藏学期输入，后续需要时恢复。 -->
                         <!--
                         <label>
@@ -665,42 +674,42 @@
                         </label>
                         -->
                         <label>
-                          <span>实习类别</span>
+                          <FormFieldLabel :required="true" help="类别决定使用年级或毕业届次。">实习类别</FormFieldLabel>
                           <el-select v-model="internshipState.planForm.category_id" filterable placeholder="请选择实习类别" @change="handlePlanCategoryChange">
                             <el-option v-for="category in internshipState.options.internship_categories" :key="category.id" :label="category.name" :value="category.id" />
                           </el-select>
                         </label>
                         <label>
-                          <span>课程名称</span>
-                          <input v-model="internshipState.planForm.course_name">
+                          <FormFieldLabel :required="true">课程名称</FormFieldLabel>
+                          <input v-model="internshipState.planForm.course_name" maxlength="180">
                         </label>
                         <label>
-                          <span>课程代码</span>
-                          <input v-model="internshipState.planForm.course_code">
+                          <FormFieldLabel :required="false">课程代码</FormFieldLabel>
+                          <input v-model="internshipState.planForm.course_code" maxlength="120">
                         </label>
                         <label v-if="selectedPlanCategory()?.scope_type !== 'cohort'">
-                          <span>年级</span>
+                          <FormFieldLabel :required="true">年级</FormFieldLabel>
                           <el-select v-model="internshipState.planForm.grade_id" filterable placeholder="请选择年级" @change="handlePlanGradeChange">
                             <el-option v-for="grade in internshipState.options.grades" :key="grade.grade_id" :label="grade.grade_name" :value="grade.grade_id" />
                           </el-select>
                         </label>
                         <label v-else>
-                          <span>毕业届次</span>
+                          <FormFieldLabel :required="true">毕业届次</FormFieldLabel>
                           <el-select v-model="internshipState.planForm.graduation_cohort_id" filterable placeholder="请选择毕业届次">
                             <el-option v-for="cohort in internshipState.options.graduation_cohorts" :key="cohort.cohort_id" :label="cohort.cohort_name" :value="cohort.cohort_id" />
                           </el-select>
                         </label>
                         <label>
-                          <span>学院</span>
+                          <FormFieldLabel :required="true">学院</FormFieldLabel>
                           <el-select-v2 v-model="internshipState.planForm.dep_id" filterable placeholder="请选择学院" @change="handlePlanDepartmentChange" :options="internshipState.options.departments" :props="{ label: 'dep_name', value: 'dep_id' }" />
                         </label>
                         <label>
-                          <span>专业</span>
-                          <el-select-v2 v-model="internshipState.planForm.profession_id" filterable placeholder="请选择专业" :options="planProfessionOptions()" :props="{ label: 'profession_name', value: 'profession_id' }" />
+                          <FormFieldLabel :required="true" :help="selectedPlanCategory()?.scope_type === 'cohort' ? '须属于所选学院。' : '须与所选学院及年级一致。'">专业</FormFieldLabel>
+                          <el-select-v2 v-model="internshipState.planForm.profession_id" filterable :disabled="!internshipState.planForm.dep_id || (selectedPlanCategory()?.scope_type !== 'cohort' &amp;&amp; !internshipState.planForm.grade_id)" placeholder="请选择专业" :options="planProfessionOptions()" :props="{ label: 'profession_name', value: 'profession_id' }" />
                         </label>
-                        <label><span>学分</span><input v-model="internshipState.planForm.credit" type="number" min="0" step="0.5"></label>
+                        <label><FormFieldLabel :required="false" help="非负数，最多两位小数。">学分</FormFieldLabel><input v-model="internshipState.planForm.credit" type="number" min="0" step="0.01"></label>
                         <label>
-                          <span>成绩规则</span>
+                          <FormFieldLabel :required="false" help="默认按任务平均，可按课程要求调整。">成绩规则</FormFieldLabel>
                           <el-select v-model="internshipState.planForm.score_rule" placeholder="请选择成绩规则">
                             <el-option label="按任务平均" value="average" />
                             <el-option label="按任务累计" value="sum" />
@@ -709,14 +718,14 @@
                           </el-select>
                         </label>
                         <label>
-                          <span>计划内容</span>
+                          <FormFieldLabel :required="false">计划内容</FormFieldLabel>
                           <textarea v-model="internshipState.planForm.content" rows="8" />
                         </label>
                       </div>
 
                       <div v-else-if="internshipState.dialog.type === 'score'" class="operation-form">
                         <label>
-                          <span>学生</span>
+                          <FormFieldLabel :required="true">学生</FormFieldLabel>
                           <el-select
                             v-model="internshipState.scoreForm.pair_id"
                             filterable
@@ -735,18 +744,18 @@
                             />
                           </el-select>
                         </label>
-                        <label><span>签到成绩</span><input v-model="internshipState.scoreForm.sign_in_score" type="number"></label>
-                        <label><span>日志成绩</span><input v-model="internshipState.scoreForm.journal_score" type="number"></label>
-                        <label><span>报告成绩</span><input v-model="internshipState.scoreForm.report_score" type="number"></label>
+                        <label><FormFieldLabel :required="false" help="0 至 100 分；任务成绩至少填写一项。">签到成绩</FormFieldLabel><input v-model="internshipState.scoreForm.sign_in_score" type="number"></label>
+                        <label><FormFieldLabel :required="false" help="0 至 100 分。">日志成绩</FormFieldLabel><input v-model="internshipState.scoreForm.journal_score" type="number"></label>
+                        <label><FormFieldLabel :required="false" help="0 至 100 分。">报告成绩</FormFieldLabel><input v-model="internshipState.scoreForm.report_score" type="number"></label>
                         <label><span>企业成绩</span><input v-model="internshipState.scoreForm.enterprise_score" type="number" disabled placeholder="毕业实习由企业评价自动写入"></label>
-                        <label><span>评语</span><input v-model="internshipState.scoreForm.comment"></label>
+                        <label><FormFieldLabel :required="false">评语</FormFieldLabel><input v-model="internshipState.scoreForm.comment"></label>
                       </div>
 
                       <div v-else-if="internshipState.dialog.type === 'courseScore'" class="operation-form single">
                         <p>{{ internshipState.dialog.description }}</p>
-                        <label><span>课程成绩</span><input v-model="internshipState.courseScoreForm.score_value" type="number" min="0" max="100" step="0.1"></label>
+                        <label><FormFieldLabel :required="true" help="填写 0 至 100 分的核定成绩。">课程成绩</FormFieldLabel><input v-model="internshipState.courseScoreForm.score_value" type="number" min="0" max="100" step="0.1"></label>
                         <label>
-                          <span>核定说明</span>
+                          <FormFieldLabel :required="false">核定说明</FormFieldLabel>
                           <textarea v-model="internshipState.courseScoreForm.remark" rows="4" maxlength="1000" />
                         </label>
                       </div>
@@ -759,43 +768,43 @@
                           </el-select>
                         </label>
                         <label>
-                          <span>实习基地</span>
+                          <FormFieldLabel :required="true">实习基地</FormFieldLabel>
                           <el-select-v2 v-model="internshipState.baseFlowForm.base_id" clearable filterable placeholder="请选择实习基地" :options="baseFlowBaseOptions" :props="{ label: 'name', value: 'id' }" @change="loadBaseFlowBaseAvailability" />
                         </label>
                         <label v-if="internshipState.baseFlowForm.type === 'application'">
-                          <span>基地启用状态</span>
+                          <FormFieldLabel :required="false">基地启用状态</FormFieldLabel>
                           <el-switch v-model="internshipState.baseFlowForm.base_status" active-value="enabled" inactive-value="disabled" active-text="启用" inactive-text="关闭" :loading="internshipState.baseFlowBaseLoading" :disabled="!internshipState.baseFlowCanManage || internshipState.baseFlowBaseLoading || internshipState.loading" aria-label="关联基地启用状态" />
                           <small>{{ internshipState.baseFlowCanManage ? '保存时同步修改关联基地的可用状态' : '请选择管理范围内的基地' }}</small>
                         </label>
                         <label>
-                          <span>学院</span>
+                          <FormFieldLabel :required="false" help="留空时使用基地所属学院。">学院</FormFieldLabel>
                           <el-select-v2 v-model="internshipState.baseFlowForm.dep_id" clearable filterable placeholder="请选择学院" :options="internshipState.options.departments" :props="{ label: 'dep_name', value: 'dep_id' }" />
                         </label>
                         <label>
-                          <span>标题</span>
+                          <FormFieldLabel :required="true">标题</FormFieldLabel>
                           <input v-model="internshipState.baseFlowForm.title">
                         </label>
                         <label v-if="internshipState.baseFlowForm.type === 'application'">
-                          <span>基地类型</span>
+                          <FormFieldLabel :required="false" help="默认固定基地。">基地类型</FormFieldLabel>
                           <el-select v-model="internshipState.baseFlowForm.base_type" placeholder="请选择基地类型">
                             <el-option label="固定基地" value="fixed" />
                             <el-option label="实习点" value="spot" />
                           </el-select>
                         </label>
                         <label v-if="internshipState.baseFlowForm.type === 'usage'">
-                          <span>使用类型</span>
+                          <FormFieldLabel :required="false">使用类型</FormFieldLabel>
                           <input v-model="internshipState.baseFlowForm.usage_type" placeholder="文件制度、基地运行等">
                         </label>
                         <label v-if="internshipState.baseFlowForm.type === 'result'">
-                          <span>成果类型</span>
+                          <FormFieldLabel :required="false">成果类型</FormFieldLabel>
                           <input v-model="internshipState.baseFlowForm.result_type" placeholder="成果、运行数据等">
                         </label>
                         <label v-if="internshipState.baseFlowForm.type === 'expense'">
-                          <span>费用金额</span>
+                          <FormFieldLabel :required="false">费用金额</FormFieldLabel>
                           <input v-model="internshipState.baseFlowForm.amount" type="number">
                         </label>
                         <label class="span-2">
-                          <span>内容</span>
+                          <FormFieldLabel :required="false">内容</FormFieldLabel>
                           <textarea v-model="internshipState.baseFlowForm.content" rows="7" />
                         </label>
                       </div>
@@ -881,11 +890,11 @@
                       <div v-else-if="['review', 'reopen'].includes(internshipState.dialog.type)" class="operation-form single">
                         <p>{{ internshipState.dialog.description }}</p>
                         <label v-if="internshipState.dialog.type === 'review'">
-                          <span>审核结论</span>
+                          <FormFieldLabel :required="true">审核结论</FormFieldLabel>
                           <el-segmented v-model="internshipState.dialog.status" :options="reviewStatusOptions(internshipState.dialog.entity)" />
                         </label>
                         <label>
-                          <span>{{ internshipState.dialog.type === 'reopen' ? '修改理由' : (isRejectReviewStatus(internshipState.dialog.status) ? '退回原因' : '审核意见') }}</span>
+                          <FormFieldLabel :required="internshipState.dialog.type === 'reopen'" :submit-required="internshipState.dialog.type !== 'reopen' &amp;&amp; Number(reviewRule(internshipState.dialog.entity, internshipState.dialog.status).min || 0) &gt; 0" help="字数要求随审核结论变化；保存审核草稿时可先留空。">{{ internshipState.dialog.type === 'reopen' ? '修改理由' : (isRejectReviewStatus(internshipState.dialog.status) ? '退回原因' : '审核意见') }}</FormFieldLabel>
                           <textarea
                             v-model="internshipState.dialog.reason"
                             rows="5"
@@ -1736,8 +1745,19 @@
                   </template>
                 </div>
 
+                <TeachingPlanCenter
+                  v-else-if="win.module.id === 'teachingPlanCenter'"
+                  :session-key="workspaceContextKey"
+                  :can-import="['super_admin', 'school_admin'].includes(currentRoleType) && hasPermission('teaching_plan:import')"
+                  :can-assign="hasPermission('teaching_plan:assign')"
+                  :can-change="hasPermission('teaching_plan:change')"
+                  @open-target="openTeachingPlanTarget"
+                />
+
                 <SocialPracticePanel
                   v-else-if="win.module.id === 'socialPractice'"
+                  :target-plan="win.teachingPlanTarget || null"
+                  @target-opened="consumeTeachingPlanTarget(win, $event)"
                   :session-key="workspaceContextKey"
                   :panel="win.panel"
                   :role-type="currentRoleType"
@@ -1764,49 +1784,49 @@
 
                       <div v-if="practiceModuleState(win.module.id).dialog.type === 'execution'" class="operation-form">
                         <label>
-                          <span>类别</span>
+                          <FormFieldLabel :required="true">类别</FormFieldLabel>
                           <el-segmented v-model="practiceModuleState(win.module.id).form.module_type" :options="practiceWriteModuleTypeOptions" @change="handlePracticeWriteModuleTypeChange(win.module.id)" />
                         </label>
                         <label>
-                          <span>项目</span>
+                          <FormFieldLabel :required="true">项目</FormFieldLabel>
                           <el-select-v2 v-model="practiceModuleState(win.module.id).form.project_id" clearable filterable placeholder="请选择项目" @change="changePracticeExecutionProject(win.module.id)" :options="(practiceProjectOptions(win.module.id)).map(project => ({ label: project.title || project.course_name, value: project.id }))" />
                         </label>
-                        <label v-if="win.panel === 'signIns'"><span>日期</span><input v-model="practiceModuleState(win.module.id).form.date" type="date"></label>
-                        <label v-if="win.panel === 'signIns'"><span>位置</span><input v-model="practiceModuleState(win.module.id).form.location"></label>
-                        <label v-if="win.panel === 'signIns'"><span>经度</span><input v-model="practiceModuleState(win.module.id).form.longitude" type="number"></label>
-                        <label v-if="win.panel === 'signIns'"><span>纬度</span><input v-model="practiceModuleState(win.module.id).form.latitude" type="number"></label>
-                        <label v-if="win.panel !== 'signIns'"><span>标题</span><input v-model="practiceModuleState(win.module.id).form.title"></label>
-                        <label v-if="win.panel !== 'signIns'"><span>日期</span><input v-model="practiceModuleState(win.module.id).form.date" type="date"></label>
+                        <label v-if="win.panel === 'signIns'"><FormFieldLabel :required="false" help="留空使用当天日期。">日期</FormFieldLabel><input v-model="practiceModuleState(win.module.id).form.date" type="date"></label>
+                        <label v-if="win.panel === 'signIns'"><FormFieldLabel :required="false">位置</FormFieldLabel><input v-model="practiceModuleState(win.module.id).form.location"></label>
+                        <label v-if="win.panel === 'signIns'"><FormFieldLabel :required="false">经度</FormFieldLabel><input v-model="practiceModuleState(win.module.id).form.longitude" type="number"></label>
+                        <label v-if="win.panel === 'signIns'"><FormFieldLabel :required="false">纬度</FormFieldLabel><input v-model="practiceModuleState(win.module.id).form.latitude" type="number"></label>
+                        <label v-if="win.panel !== 'signIns'"><FormFieldLabel :required="false" help="留空使用材料类型与项目名称。">标题</FormFieldLabel><input v-model="practiceModuleState(win.module.id).form.title"></label>
+                        <label v-if="win.panel !== 'signIns'"><FormFieldLabel :required="false" help="留空使用当天日期。">日期</FormFieldLabel><input v-model="practiceModuleState(win.module.id).form.date" type="date"></label>
                         <label v-if="win.panel !== 'signIns'" class="span-2">
-                          <span>内容</span>
+                          <FormFieldLabel :required="practiceModuleState(win.module.id).dialog.type === 'execution'">内容</FormFieldLabel>
                           <textarea v-model="practiceModuleState(win.module.id).form.content" rows="7" />
                         </label>
                         <label v-if="win.panel === 'reports'" class="span-2">
-                          <span>反思小结</span>
+                          <FormFieldLabel :required="false" submit-required help="草稿可暂不填写，提交审核前需补全。">反思小结</FormFieldLabel>
                           <textarea v-model="practiceModuleState(win.module.id).form.reflection_summary" rows="4" maxlength="5000" placeholder="请总结本项目的收获、问题和改进方向" />
                         </label>
                         <label class="span-2">
-                          <span>备注</span>
+                          <FormFieldLabel :required="false">备注</FormFieldLabel>
                           <textarea v-model="practiceModuleState(win.module.id).form.remark" rows="3" />
                         </label>
                       </div>
 
                       <div v-else-if="practiceModuleState(win.module.id).dialog.type === 'scoreProject'" class="operation-form">
                         <label>
-                          <span>类别</span>
+                          <FormFieldLabel :required="true">类别</FormFieldLabel>
                           <el-segmented v-model="practiceModuleState(win.module.id).form.module_type" :options="practiceWriteModuleTypeOptions" @change="handlePracticeScoreModuleTypeChange(win.module.id)" />
                         </label>
                         <label>
-                          <span>项目</span>
+                          <FormFieldLabel :required="true">项目</FormFieldLabel>
                           <el-select-v2 v-model="practiceModuleState(win.module.id).form.project_id" clearable filterable placeholder="请选择项目" @change="changePracticeScoreProject(win.module.id)" :options="(practiceScoreProjectOptions(win.module.id)).map(project => ({ label: project.title || project.course_name, value: project.id }))" />
                         </label>
                         <label>
-                          <span>学生</span>
+                          <FormFieldLabel :required="true">学生</FormFieldLabel>
                           <el-select-v2 v-model="practiceModuleState(win.module.id).form.student_id" clearable filterable placeholder="请选择学生" @change="applyPracticeScoreStudent(win.module.id)" :options="(practiceModuleState(win.module.id).scoreStudents).map(student => ({ label: `${student.student_name} / ${student.student_num}`, value: student.student_id }))" />
                         </label>
-                        <label><span>考勤与课堂表现</span><input v-model="practiceModuleState(win.module.id).form.attendance_score" min="0" max="100" type="number"></label>
-                        <label><span>项目实操</span><input v-model="practiceModuleState(win.module.id).form.material_score" min="0" max="100" type="number"></label>
-                        <label><span>项目报告</span><input v-model="practiceModuleState(win.module.id).form.report_score" min="0" max="100" type="number"></label>
+                        <label><FormFieldLabel :required="false" submit-required help="0 至 100 分；提交审核前需填齐三项成绩。">考勤与课堂表现</FormFieldLabel><input v-model="practiceModuleState(win.module.id).form.attendance_score" min="0" max="100" type="number"></label>
+                        <label><FormFieldLabel :required="false" submit-required help="0 至 100 分；提交审核前需填齐三项成绩。">项目实操</FormFieldLabel><input v-model="practiceModuleState(win.module.id).form.material_score" min="0" max="100" type="number"></label>
+                        <label><FormFieldLabel :required="false" submit-required help="0 至 100 分；提交审核前需填齐三项成绩。">项目报告</FormFieldLabel><input v-model="practiceModuleState(win.module.id).form.report_score" min="0" max="100" type="number"></label>
                         <label><span>项目成绩</span><input :value="practiceProjectScorePreview(win.module.id)" disabled placeholder="填写三项成绩后自动计算"></label>
                         <small class="span-2 practice-score-rule-hint">{{ practiceProjectScoreRuleText(win.module.id) }}</small>
                       </div>
@@ -1814,11 +1834,11 @@
                       <div v-else-if="practiceModuleState(win.module.id).dialog.type === 'planTeachers'" class="operation-form single">
                         <p>{{ practiceModuleState(win.module.id).dialog.description }}</p>
                         <label>
-                          <span>课程负责人</span>
+                          <FormFieldLabel :required="true" help="负责人自动纳入课程教师，无需重复选择。">课程负责人</FormFieldLabel>
                           <el-select-v2 v-model="practiceModuleState(win.module.id).dialog.course_leader_id" filterable placeholder="请选择课程负责人" :options="practiceModuleState(win.module.id).options.teachers" :props="{ label: 'teacher_name', value: 'teacher_id' }" />
                         </label>
                         <label>
-                          <span>任课教师</span>
+                          <FormFieldLabel :required="false">任课教师</FormFieldLabel>
                           <el-select-v2 v-model="practiceModuleState(win.module.id).dialog.teacher_ids" multiple collapse-tags collapse-tags-tooltip filterable placeholder="请选择任课教师" :options="(practiceModuleState(win.module.id).options.teachers).map(teacher => ({ label: teacher.teacher_name, value: teacher.teacher_id, disabled: Number(teacher.teacher_id) === Number(practiceModuleState(win.module.id).dialog.course_leader_id) }))" />
                         </label>
                         <small>课程负责人自动属于本课程教师，无需在任课教师中重复选择。</small>
@@ -1827,7 +1847,7 @@
                       <div v-else-if="practiceModuleState(win.module.id).dialog.type === 'archivePlan'" class="operation-form single">
                         <p>请选择需要检查归档条件的开课任务。</p>
                         <label>
-                          <span>开课任务</span>
+                          <FormFieldLabel :required="true">开课任务</FormFieldLabel>
                           <el-select-v2 v-model="practiceModuleState(win.module.id).dialog.plan_id" filterable placeholder="请选择开课任务" :options="(practiceArchivePlanOptions(win.module.id)).map(plan => ({ label: plan.title || plan.course_name, value: plan.id }))" />
                         </label>
                       </div>
@@ -1849,31 +1869,34 @@
                       </div>
 
                       <div v-else-if="practiceModuleState(win.module.id).dialog.type === 'edit'" class="operation-form" :inert="practiceModuleState(win.module.id).loading">
+                        <small v-if="win.panel === 'plans'" class="span-2">{{ planApprovalHint(practiceModuleState(win.module.id).dialog.row) }}通过后请进入课表安排课程。</small>
+                        <small v-else-if="win.panel === 'schedules'" class="span-2">先选择已通过的计划，再填写教师、场地及课节；保存课表后可关联发布项目。</small>
+                        <small v-else-if="win.panel === 'projects'" class="span-2">先选择已发布课表，再填写项目标题；教师与学生范围由课表确定。</small>
                         <label>
-                          <span>类别</span>
+                          <FormFieldLabel :required="true">类别</FormFieldLabel>
                           <el-segmented v-model="practiceModuleState(win.module.id).form.module_type" :options="practiceWriteModuleTypeOptions" @change="handlePracticeWriteModuleTypeChange(win.module.id)" />
                         </label>
                         <label>
-                          <span>标题</span>
+                          <FormFieldLabel :required="['plans', 'projects', 'syllabus', 'lessonPlans', 'gradeRules', 'reflections'].includes(win.panel)">标题</FormFieldLabel>
                           <input v-model="practiceModuleState(win.module.id).form.title">
                         </label>
                         <label>
-                          <span>年级</span>
+                          <FormFieldLabel :required="['plans', 'schedules'].includes(win.panel)">年级</FormFieldLabel>
                           <el-select v-model="practiceModuleState(win.module.id).form.grade_id" clearable filterable placeholder="请选择年级" @change="normalizePracticeCascade(win.module.id)">
                             <el-option v-for="grade in practiceModuleState(win.module.id).options.grades" :key="grade.grade_id" :label="grade.grade_name" :value="grade.grade_id" />
                           </el-select>
                         </label>
                         <label>
-                          <span>学院</span>
+                          <FormFieldLabel :required="['plans', 'schedules'].includes(win.panel) || currentRoleType === 'college_admin'">学院</FormFieldLabel>
                           <el-select-v2 v-model="practiceModuleState(win.module.id).form.dep_id" clearable filterable placeholder="请选择学院" @change="normalizePracticeCascade(win.module.id)" :options="practiceModuleState(win.module.id).options.departments" :props="{ label: 'dep_name', value: 'dep_id' }" />
                         </label>
                         <label>
-                          <span>专业</span>
+                          <FormFieldLabel :required="['plans', 'schedules'].includes(win.panel) || (currentRoleType === 'profession_admin' &amp;&amp; win.panel !== 'rooms')">专业</FormFieldLabel>
                           <el-select-v2 v-model="practiceModuleState(win.module.id).form.profession_id" clearable filterable placeholder="请选择专业" @change="handlePracticeProfessionChange(win.module.id)" :options="practiceProfessionOptions(win.module.id)" :props="{ label: 'profession_name', value: 'profession_id' }" />
                           <small v-if="win.panel === 'schedules'">选择学院后，仅显示该学院所选年级可用的专业。</small>
                         </label>
                         <label>
-                          <span>任课教师</span>
+                          <FormFieldLabel v-if="win.panel !== 'projects'" :required="win.panel === 'schedules'">任课教师</FormFieldLabel><span v-else>任课教师</span>
                           <el-select-v2
                             v-model="practiceModuleState(win.module.id).form.teacher_id"
                             clearable
@@ -1883,61 +1906,61 @@
                            :options="practiceModuleState(win.module.id).options.teachers" :props="{ label: 'teacher_name', value: 'teacher_id' }" />
                         </label>
                         <label v-if="practiceNeedsPlan(win.panel)">
-                          <span>关联计划</span>
+                          <FormFieldLabel :required="['schedules', 'gradeRules'].includes(win.panel) || isTeacherRole" help="课表必须关联已审核通过的计划。">关联计划</FormFieldLabel>
                           <el-select-v2 v-model="practiceModuleState(win.module.id).form.plan_id" clearable filterable placeholder="请选择关联计划" @change="handlePracticePlanChange(win.module.id)" :options="(practicePlanOptions(win.module.id, win.panel)).map(plan => ({ label: plan.title || plan.course_name, value: plan.id }))" />
                         </label>
                         <label v-if="win.panel === 'projects'">
-                          <span>关联课表</span>
+                          <FormFieldLabel :required="true" help="选择已发布课表，系统同步计划、教师与学生范围。">关联课表</FormFieldLabel>
                           <el-select-v2 v-model="practiceModuleState(win.module.id).form.schedule_id" clearable filterable placeholder="请选择关联课表" @change="handlePracticeScheduleChange(win.module.id)" :options="(practiceScheduleOptions(win.module.id)).map(schedule => ({ label: practiceScheduleLabel(schedule), value: schedule.id }))" />
                         </label>
                         <label v-if="win.panel === 'plans'">
-                          <span>来源</span>
+                          <FormFieldLabel :required="false" help="默认手动填报。">来源</FormFieldLabel>
                           <el-select v-model="practiceModuleState(win.module.id).form.source_type" placeholder="请选择来源">
                             <el-option label="教务拉取" value="jw" />
                             <el-option label="手动填报" value="manual" />
                           </el-select>
                         </label>
                         <label v-if="win.panel === 'schedules'">
-                          <span>地点类型</span>
+                          <FormFieldLabel :required="false" help="默认校内；校外需选择基地或填写地点。">地点类型</FormFieldLabel>
                           <el-select v-model="practiceModuleState(win.module.id).form.place_type" placeholder="请选择地点类型" @change="handlePracticePlaceTypeChange(win.module.id)">
                             <el-option label="校内" value="inside" />
                             <el-option label="校外" value="outside" />
                           </el-select>
                         </label>
                         <label v-if="win.panel === 'schedules' && practiceModuleState(win.module.id).form.place_type === 'inside'">
-                          <span>场地</span>
+                          <FormFieldLabel :required="true">场地</FormFieldLabel>
                           <el-select-v2 v-model="practiceModuleState(win.module.id).form.room_id" clearable filterable placeholder="请选择场地" :options="practiceRoomOptions(win.module.id)" :props="{ label: 'name', value: 'id' }" />
                         </label>
                         <label v-if="win.panel === 'schedules' && practiceModuleState(win.module.id).form.place_type === 'outside'">
-                          <span>校外基地</span>
+                          <FormFieldLabel :required="!String(practiceModuleState(win.module.id).form.location || '').trim()" help="校外基地与地点至少填写一项。">校外基地</FormFieldLabel>
                           <el-select-v2 v-model="practiceModuleState(win.module.id).form.base_id" clearable filterable placeholder="请选择校外基地" :options="practiceBaseOptions(win.module.id)" :props="{ label: 'name', value: 'id' }" />
                         </label>
-                        <label v-if="win.panel === 'schedules'"><span>日期</span><input v-model="practiceModuleState(win.module.id).form.schedule_date" type="date"></label>
+                        <label v-if="win.panel === 'schedules'"><FormFieldLabel :required="true">日期</FormFieldLabel><input v-model="practiceModuleState(win.module.id).form.schedule_date" type="date"></label>
                         <label v-if="win.panel === 'schedules'">
-                          <span>起始课节</span>
+                          <FormFieldLabel :required="true">起始课节</FormFieldLabel>
                           <el-select v-model="practiceModuleState(win.module.id).form.period_start_id" filterable placeholder="请选择起始课节">
                             <el-option v-for="period in practiceModuleState(win.module.id).options.periods" :key="period.id" :label="practicePeriodLabel(period)" :value="period.id" />
                           </el-select>
                         </label>
                         <label v-if="win.panel === 'schedules'">
-                          <span>结束课节</span>
+                          <FormFieldLabel :required="true" help="结束课节不得早于起始课节。">结束课节</FormFieldLabel>
                           <el-select v-model="practiceModuleState(win.module.id).form.period_end_id" filterable placeholder="请选择结束课节">
                             <el-option v-for="period in practicePeriodEndOptions(win.module.id)" :key="period.id" :label="practicePeriodLabel(period)" :value="period.id" />
                           </el-select>
                         </label>
-                        <label v-if="win.panel === 'schedules'"><span>地点</span><input v-model="practiceModuleState(win.module.id).form.location"></label>
+                        <label v-if="win.panel === 'schedules'"><FormFieldLabel :required="win.panel === 'schedules' &amp;&amp; practiceModuleState(win.module.id).form.place_type === 'outside' &amp;&amp; !practiceModuleState(win.module.id).form.base_id" help="校外课表未选择基地时需填写地点。">地点</FormFieldLabel><input v-model="practiceModuleState(win.module.id).form.location"></label>
                         <label v-if="win.panel === 'schedules'"><span>学生数</span><input v-model="practiceModuleState(win.module.id).form.student_count" type="number" disabled placeholder="保存时按专业自动计算"></label>
-                        <label v-if="win.panel === 'projects'"><span>开始日期</span><input v-model="practiceModuleState(win.module.id).form.start_date" type="date"></label>
-                        <label v-if="win.panel === 'projects'"><span>结束日期</span><input v-model="practiceModuleState(win.module.id).form.end_date" type="date"></label>
+                        <label v-if="win.panel === 'projects'"><FormFieldLabel :required="false" help="留空沿用课表日期。">开始日期</FormFieldLabel><input v-model="practiceModuleState(win.module.id).form.start_date" type="date"></label>
+                        <label v-if="win.panel === 'projects'"><FormFieldLabel :required="false" help="留空沿用课表日期；不得早于开始日期。">结束日期</FormFieldLabel><input v-model="practiceModuleState(win.module.id).form.end_date" type="date"></label>
                         <label v-if="win.panel === 'projects'"><span>学生范围</span><input v-model="practiceModuleState(win.module.id).form.student_count" type="number" disabled placeholder="保存时按年级和专业自动生成"></label>
-                        <label v-if="win.panel === 'rooms'"><span>名称</span><input v-model="practiceModuleState(win.module.id).form.name"></label>
-                        <label v-if="win.panel === 'rooms'"><span>编号</span><input v-model="practiceModuleState(win.module.id).form.code"></label>
-                        <label v-if="win.panel === 'rooms'"><span>容量</span><input v-model="practiceModuleState(win.module.id).form.capacity" type="number"></label>
-                        <label v-if="win.panel === 'rooms'"><span>位置</span><input v-model="practiceModuleState(win.module.id).form.location"></label>
+                        <label v-if="win.panel === 'rooms'"><FormFieldLabel :required="true">名称</FormFieldLabel><input v-model="practiceModuleState(win.module.id).form.name"></label>
+                        <label v-if="win.panel === 'rooms'"><FormFieldLabel :required="false">编号</FormFieldLabel><input v-model="practiceModuleState(win.module.id).form.code"></label>
+                        <label v-if="win.panel === 'rooms'"><FormFieldLabel :required="false" help="留空按 0 保存，表示不限制容量。">容量</FormFieldLabel><input v-model="practiceModuleState(win.module.id).form.capacity" type="number"></label>
+                        <label v-if="win.panel === 'rooms'"><FormFieldLabel :required="false">位置</FormFieldLabel><input v-model="practiceModuleState(win.module.id).form.location"></label>
                         <template v-if="win.panel === 'gradeRules'">
-                          <label><span>考勤与课堂表现（%）</span><input v-model="practiceModuleState(win.module.id).form.attendance_weight" type="number" min="0" max="100"></label>
-                          <label><span>项目实操（%）</span><input v-model="practiceModuleState(win.module.id).form.operation_weight" type="number" min="0" max="100"></label>
-                          <label><span>项目报告（%）</span><input v-model="practiceModuleState(win.module.id).form.report_weight" type="number" min="0" max="100"></label>
+                          <label><FormFieldLabel :required="false" help="0 至 100；留空按 0 计算，三项合计必须为 100%。">考勤与课堂表现（%）</FormFieldLabel><input v-model="practiceModuleState(win.module.id).form.attendance_weight" type="number" min="0" max="100"></label>
+                          <label><FormFieldLabel :required="false" help="0 至 100；留空按 0 计算，三项合计必须为 100%。">项目实操（%）</FormFieldLabel><input v-model="practiceModuleState(win.module.id).form.operation_weight" type="number" min="0" max="100"></label>
+                          <label><FormFieldLabel :required="false" help="0 至 100；留空按 0 计算，三项合计必须为 100%。">项目报告（%）</FormFieldLabel><input v-model="practiceModuleState(win.module.id).form.report_weight" type="number" min="0" max="100"></label>
                           <label><span>比例合计</span><input :value="practiceGradeRuleTotal(win.module.id) + '%'" disabled></label>
                           <div class="practice-project-weights span-2">
                             <header>
@@ -1946,17 +1969,17 @@
                             </header>
                             <small v-if="!practiceModuleState(win.module.id).form.ratio_projects.length">当前开课任务暂无已发布项目</small>
                             <label v-for="project in practiceModuleState(win.module.id).form.ratio_projects" :key="project.project_id">
-                              <span>{{ project.title || `项目 ${project.project_id}` }}</span>
+                              <FormFieldLabel :required="true" help="0 至 100；所有项目权重合计必须为 100%。">{{ project.title || `项目 ${project.project_id}` }}</FormFieldLabel>
                               <input v-model.number="project.weight" type="number" min="0" max="100">
                             </label>
                           </div>
                         </template>
                         <label v-if="practiceTextPanel(win.panel)" class="span-2">
-                          <span>内容</span>
+                          <FormFieldLabel :required="practiceModuleState(win.module.id).dialog.type === 'execution'">内容</FormFieldLabel>
                           <textarea v-model="practiceModuleState(win.module.id).form.content" rows="8" />
                         </label>
                         <label v-if="!practiceDialogUsesWorkflowButtons(win.module.id) && practiceStatusUsesSwitch(win.panel)">
-                          <span>状态</span>
+                          <FormFieldLabel :required="false">状态</FormFieldLabel>
                           <el-switch
                             v-model="practiceModuleState(win.module.id).form.status"
                             active-value="enabled"
@@ -1970,11 +1993,11 @@
                       <div v-else-if="['review', 'reopen'].includes(practiceModuleState(win.module.id).dialog.type)" class="operation-form single">
                         <p>{{ practiceModuleState(win.module.id).dialog.description }}</p>
                         <label v-if="practiceModuleState(win.module.id).dialog.type === 'review'">
-                          <span>审核结论</span>
+                          <FormFieldLabel :required="true">审核结论</FormFieldLabel>
                           <el-segmented v-model="practiceModuleState(win.module.id).dialog.status" :options="practiceReviewStatusOptions()" />
                         </label>
                         <label>
-                          <span>{{ practiceModuleState(win.module.id).dialog.type === 'reopen' ? '修改理由' : (practiceModuleState(win.module.id).dialog.status === 'modify' ? '退回原因' : '审核意见') }}</span>
+                          <FormFieldLabel :required="practiceModuleState(win.module.id).dialog.type === 'reopen'" :submit-required="practiceModuleState(win.module.id).dialog.type !== 'reopen' &amp;&amp; Number(practiceReviewRule(win.module.id, practiceModuleState(win.module.id).dialog.entity, practiceModuleState(win.module.id).dialog.status).min || 0) &gt; 0" help="退回或通过后修改请说明原因，字数要求见下方。">{{ practiceModuleState(win.module.id).dialog.type === 'reopen' ? '修改理由' : (practiceModuleState(win.module.id).dialog.status === 'modify' ? '退回原因' : '审核意见') }}</FormFieldLabel>
                           <textarea
                             v-model="practiceModuleState(win.module.id).dialog.reason"
                             rows="5"
@@ -1987,6 +2010,8 @@
                           </small>
                         </label>
                       </div>
+
+                      <WorkflowHistory v-else-if="practiceModuleState(win.module.id).dialog.type === 'workflow'" :entity-type="practiceModuleState(win.module.id).dialog.workflowEntity" :entity-id="practiceModuleState(win.module.id).dialog.row.id" :account-id="permissionState.context.account_id" :request="request" :backend-url="backendUrl" @updated="loadPracticePanel(win.module.id, 'plans', 1, true)" />
 
                       <div v-else-if="practiceModuleState(win.module.id).dialog.type === 'timeline'" class="operation-form single">
                         <div class="timeline-view">
@@ -2042,7 +2067,7 @@
                         <el-button v-else-if="practiceModuleState(win.module.id).dialog.type === 'archiveDetail'" type="primary" :icon="Download" :disabled="practiceModuleState(win.module.id).loading" :loading="practiceModuleState(win.module.id).loading" @click="downloadPracticeArchive(win.module.id)">
                           下载归档包
                         </el-button>
-                        <el-button v-else-if="!['timeline', 'archiveDetail'].includes(practiceModuleState(win.module.id).dialog.type)" type="primary" :disabled="practiceModuleState(win.module.id).loading" :loading="practiceModuleState(win.module.id).loading" @click="confirmPracticeDialog(win.module.id)">
+                        <el-button v-else-if="!['timeline', 'archiveDetail', 'workflow'].includes(practiceModuleState(win.module.id).dialog.type)" type="primary" :disabled="practiceModuleState(win.module.id).loading" :loading="practiceModuleState(win.module.id).loading" @click="confirmPracticeDialog(win.module.id)">
                           确认
                         </el-button>
                       </footer>
@@ -2340,10 +2365,10 @@
                   >
                       <el-alert v-if="userAdminState.message" class="operation-feedback" :title="userAdminState.message" type="warning" :closable="false" show-icon />
                       <div class="operation-form menu-dialog-form" :inert="userAdminState.loading">
-                        <label><span>姓名</span><input v-model="userAdminState.editing.name"></label>
-                        <label><span>登录账号</span><input v-model="userAdminState.editing.login_name"></label>
+                        <label><FormFieldLabel :required="true">姓名</FormFieldLabel><input v-model="userAdminState.editing.name"></label>
+                        <label><FormFieldLabel :required="true">登录账号</FormFieldLabel><input v-model="userAdminState.editing.login_name"></label>
                         <label>
-                          <span>角色</span>
+                          <FormFieldLabel :required="true">角色</FormFieldLabel>
                           <el-select v-model="userAdminState.editing.role_id" filterable placeholder="请选择角色" @change="handleUserRoleChange">
                             <el-option
                               v-for="role in manageableUserRoles()"
@@ -2353,12 +2378,12 @@
                             />
                           </el-select>
                         </label>
-                        <label><span>手机</span><input v-model="userAdminState.editing.mobile"></label>
-                        <label><span>邮箱</span><input v-model="userAdminState.editing.email"></label>
-                        <label v-if="userEditingRoleType === 'student'"><span>学号</span><input v-model="userAdminState.editing.student_num"></label>
-                        <label v-if="userEditingRoleType === 'teacher'"><span>工号</span><input v-model="userAdminState.editing.teacher_num"></label>
+                        <label><FormFieldLabel :required="false">手机</FormFieldLabel><input v-model="userAdminState.editing.mobile"></label>
+                        <label><FormFieldLabel :required="false">邮箱</FormFieldLabel><input v-model="userAdminState.editing.email"></label>
+                        <label v-if="userEditingRoleType === 'student'"><FormFieldLabel :required="false">学号</FormFieldLabel><input v-model="userAdminState.editing.student_num"></label>
+                        <label v-if="userEditingRoleType === 'teacher'"><FormFieldLabel :required="false">工号</FormFieldLabel><input v-model="userAdminState.editing.teacher_num"></label>
                         <label v-if="userEditingRoleType === 'student'">
-                          <span>年级</span>
+                          <FormFieldLabel :required="false">年级</FormFieldLabel>
                           <el-select v-model="userAdminState.editing.grade_id" clearable filterable placeholder="请选择年级" @change="handleUserAcademicChange('grade_id')">
                             <el-option
                               v-for="grade in adminState.options.grades"
@@ -2369,7 +2394,7 @@
                           </el-select>
                         </label>
                         <label v-if="userEditingRoleType === 'student'">
-                          <span>毕业届次</span>
+                          <FormFieldLabel :required="false">毕业届次</FormFieldLabel>
                           <el-select v-model="userAdminState.editing.graduation_cohort_id" clearable filterable placeholder="请选择毕业届次">
                             <el-option
                               v-for="cohort in adminState.options.graduationCohorts"
@@ -2380,20 +2405,20 @@
                           </el-select>
                         </label>
                         <label v-if="['student', 'teacher', 'college_admin', 'profession_admin'].includes(userEditingRoleType)">
-                          <span>所属学院</span>
+                          <FormFieldLabel :required="true">所属学院</FormFieldLabel>
                           <el-select-v2 v-model="userAdminState.editing.dep_id" clearable filterable placeholder="请选择所属学院" @change="handleUserAcademicChange('dep_id')" :options="userEditDepartmentOptions()" :props="{ label: 'dep_name', value: 'dep_id' }" />
                         </label>
                         <label v-if="['student', 'profession_admin'].includes(userEditingRoleType)">
-                          <span>所属专业</span>
+                          <FormFieldLabel :required="true">所属专业</FormFieldLabel>
                           <el-select-v2 v-model="userAdminState.editing.profession_id" clearable filterable placeholder="请选择所属专业" @change="handleUserAcademicChange('profession_id')" :options="userEditProfessionOptions()" :props="{ label: 'profession_name', value: 'profession_id' }" />
                         </label>
                         <label v-if="userEditingRoleType === 'student'">
-                          <span>所在班级</span>
+                          <FormFieldLabel :required="false" help="选择班级后同步年级、学院和专业；各项须一致。">所在班级</FormFieldLabel>
                           <el-select-v2 v-model="userAdminState.editing.class_id" clearable filterable placeholder="请选择所在班级" @change="handleUserAcademicChange('class_id')" :options="userEditClassOptions()" :props="{ label: 'class_name', value: 'class_id' }" />
                         </label>
-                        <label v-if="userEditingRoleType === 'student'"><span>班号</span><input v-model="userAdminState.editing.class_num"></label>
+                        <label v-if="userEditingRoleType === 'student'"><FormFieldLabel :required="false" help="可补充档案班号。">班号</FormFieldLabel><input v-model="userAdminState.editing.class_num"></label>
                         <label>
-                          <span>状态</span>
+                          <FormFieldLabel :required="false">状态</FormFieldLabel>
                           <el-switch
                             v-model="userAdminState.editing.status"
                             active-value="enabled"
@@ -2403,7 +2428,7 @@
                           />
                         </label>
                         <label>
-                          <span>{{ userAdminState.editing.id ? '新密码' : '初始密码' }}</span>
+                          <FormFieldLabel :required="false" help="填写时至少 6 位；编辑留空不修改，新建留空由系统生成初始密码。">{{ userAdminState.editing.id ? '新密码' : '初始密码' }}</FormFieldLabel>
                           <input v-model="userAdminState.editing.password" type="password" :placeholder="userAdminState.editing.id ? '留空表示不修改' : '留空使用系统初始密码'">
                         </label>
                       </div>
@@ -2423,7 +2448,7 @@
                   >
                       <div class="operation-form menu-dialog-form">
                         <label><span>用户</span><input :value="userAdminState.passwordForm.name" disabled></label>
-                        <label><span>新密码</span><input v-model="userAdminState.passwordForm.password" type="password" placeholder="请输入新密码" maxlength="120"></label>
+                        <label><FormFieldLabel :required="true" help="至少 6 位，重置后使用新密码登录。">新密码</FormFieldLabel><input v-model="userAdminState.passwordForm.password" type="password" placeholder="请输入新密码" maxlength="120"></label>
                       </div>
                       <footer>
                         <el-button @click="closeResetPasswordDialog">取消</el-button>
@@ -2635,7 +2660,7 @@
                         v-for="field in archiveFieldsForWindow(win)"
                         :key="field.key"
                       >
-                        <span>{{ field.label }}</span>
+                        <FormFieldLabel :required="field.required" :help="field.help">{{ field.label }}</FormFieldLabel>
                         <el-switch
                           v-if="archiveFieldUsesSwitch(field)"
                           v-model="archiveStateForWindow(win).editing[field.key]"
@@ -2656,6 +2681,7 @@
                           v-else
                           v-model="archiveStateForWindow(win).editing[field.key]"
                           :type="field.inputType || 'text'"
+                          :required="field.required"
                         >
                       </label>
                       </div>
@@ -2717,7 +2743,7 @@
                   >
                       <div class="guide-admin-fields">
                         <label>
-                          <span>模块</span>
+                          <FormFieldLabel :required="true" help="选择本说明所属模块。">模块</FormFieldLabel>
                           <el-select v-model="guideAdminState.editing.module_key" filterable placeholder="选择模块">
                             <el-option
                               v-for="item in guideModuleOptions"
@@ -2728,14 +2754,15 @@
                           </el-select>
                         </label>
                         <label>
-                          <span>标题</span>
+                          <FormFieldLabel :required="true">标题</FormFieldLabel>
                           <input v-model="guideAdminState.editing.title">
                         </label>
                         <label>
-                          <span>排序</span>
+                          <FormFieldLabel :required="false" help="留空按 0 保存。">排序</FormFieldLabel>
                           <input v-model="guideAdminState.editing.sort" type="number">
                         </label>
                       </div>
+                      <FormFieldLabel :required="false">说明内容</FormFieldLabel>
                       <div class="rich-editor-toolbar">
                         <button type="button" @click="applyGuideFormat('bold')">B</button>
                         <button type="button" @click="applyGuideFormat('insertUnorderedList')">列表</button>
@@ -2979,20 +3006,21 @@
                     @close="closeMessageSendDialog"
                   >
                       <div class="message-send-body">
+                        <small>先确定发送范围和收件人，再填写内容或选择模板；发送前可预览最终收件人。</small>
                         <div class="message-send-grid">
                           <label class="message-send-field">
-                            <span>发送方式</span>
+                            <FormFieldLabel :required="true">发送方式</FormFieldLabel>
                             <el-select v-model="messageState.sendDialog.form.send_mode" placeholder="请选择发送方式" @change="handleMessageSendModeChange">
                               <el-option label="直接填写" value="manual" />
                               <el-option label="使用模板" value="template" />
                             </el-select>
                           </label>
                           <label v-if="messageState.sendDialog.form.send_mode === 'template'" class="message-send-field">
-                            <span>消息模板</span>
+                            <FormFieldLabel :required="true">消息模板</FormFieldLabel>
                             <el-select-v2 v-model="messageState.sendDialog.form.template_code" filterable placeholder="请选择模板" @change="handleMessageTemplateChange" :options="(enabledMessageTemplates).map(item => ({ label: `${item.name} / ${item.code}`, value: item.code }))" />
                           </label>
                           <label v-else class="message-send-field">
-                            <span>消息级别</span>
+                            <FormFieldLabel :required="false" help="默认普通。">消息级别</FormFieldLabel>
                             <el-select v-model="messageState.sendDialog.form.level" placeholder="请选择消息级别">
                               <el-option
                                 v-for="item in messageLevelOptions"
@@ -3003,7 +3031,7 @@
                             </el-select>
                           </label>
                           <label class="message-send-field">
-                            <span>发送范围</span>
+                            <FormFieldLabel :required="true">发送范围</FormFieldLabel>
                             <el-select v-model="messageState.sendDialog.form.send_scope" placeholder="请选择发送范围" @change="handleMessageSendScopeChange">
                               <el-option label="指定人员" value="custom" />
                               <el-option label="按角色发送" value="role" />
@@ -3011,7 +3039,7 @@
                             </el-select>
                           </label>
                           <label v-if="messageState.sendDialog.form.send_scope === 'role'" class="message-send-field">
-                            <span>接收角色</span>
+                            <FormFieldLabel :required="true">接收角色</FormFieldLabel>
                             <el-select v-model="messageState.sendDialog.form.role_type" placeholder="请选择角色">
                               <el-option
                                 v-for="item in messageTargetRoleOptions"
@@ -3050,7 +3078,7 @@
                             </el-button>
                           </div>
                           <label class="message-send-field wide">
-                            <span>收件人</span>
+                            <FormFieldLabel :required="true" help="至少选择一名收件人；发送前可预览最终名单。">收件人</FormFieldLabel>
                             <el-select-v2
                               v-model="messageState.sendDialog.form.account_ids"
                               multiple
@@ -3063,7 +3091,7 @@
                         </div>
                         <div v-if="messageState.sendDialog.form.send_mode === 'manual'" class="message-send-grid message-send-grid-compact">
                           <label class="message-send-field">
-                            <span>消息类型</span>
+                            <FormFieldLabel :required="false" help="默认系统消息。">消息类型</FormFieldLabel>
                             <el-select v-model="messageState.sendDialog.form.type" placeholder="请选择消息类型">
                               <el-option
                                 v-for="item in messageTypeOptions.filter(option => option.value !== 'all')"
@@ -3074,7 +3102,7 @@
                             </el-select>
                           </label>
                           <label class="message-send-field">
-                            <span>消息级别</span>
+                            <FormFieldLabel :required="false" help="默认普通。">消息级别</FormFieldLabel>
                             <el-select v-model="messageState.sendDialog.form.level" placeholder="请选择消息级别">
                               <el-option
                                 v-for="item in messageLevelOptions"
@@ -3086,14 +3114,14 @@
                           </label>
                         </div>
                         <label class="message-send-field wide">
-                          <span>发送渠道</span>
+                          <FormFieldLabel :required="false" help="站内消息始终发送，企业微信可按需选择。">发送渠道</FormFieldLabel>
                           <el-checkbox-group v-model="messageState.sendDialog.form.channels">
                             <el-checkbox value="internal" disabled>站内消息</el-checkbox>
                             <el-checkbox value="wechat">企业微信</el-checkbox>
                           </el-checkbox-group>
                         </label>
                         <label v-if="messageState.sendDialog.form.send_mode === 'template'" class="message-send-field wide message-template-vars">
-                          <span>模板变量 JSON</span>
+                          <FormFieldLabel :required="false" help="留空按空对象处理；填写时须为有效 JSON 对象。">模板变量 JSON</FormFieldLabel>
                           <el-input
                             v-model="messageState.sendDialog.form.variables_text"
                             type="textarea"
@@ -3107,11 +3135,11 @@
                           <small>变量：{{ messageTemplateVariableText(currentMessageTemplate()) }}</small>
                         </section>
                         <label v-if="messageState.sendDialog.form.send_mode === 'manual'" class="message-send-field wide message-send-title">
-                          <span>标题</span>
+                          <FormFieldLabel :required="true">标题</FormFieldLabel>
                           <el-input v-model="messageState.sendDialog.form.title" maxlength="180" show-word-limit />
                         </label>
                         <label v-if="messageState.sendDialog.form.send_mode === 'manual'" class="message-send-field wide message-send-content">
-                          <span>内容</span>
+                          <FormFieldLabel :required="true">内容</FormFieldLabel>
                           <el-input
                             v-model="messageState.sendDialog.form.content"
                             type="textarea"
@@ -3121,7 +3149,7 @@
                           />
                         </label>
                         <label class="message-send-field wide message-send-link">
-                          <span>关联地址</span>
+                          <FormFieldLabel :required="false" help="可填写系统内页面地址或完整网页链接。">关联地址</FormFieldLabel>
                           <el-input v-model="messageState.sendDialog.form.link_url" placeholder="#panel=internship:applications 或 https://..." />
                         </label>
                       </div>
@@ -3243,24 +3271,24 @@
                     @close="closeMessageTemplateEdit"
                   >
                       <div class="message-template-edit-body">
-                        <label><span>模板名称</span><el-input v-model="messageState.templateEdit.form.name" maxlength="180" /></label>
-                        <label><span>模板编码</span><el-input v-model="messageState.templateEdit.form.code" :disabled="messageState.templateEdit.form.is_system" maxlength="120" /></label>
-                        <label><span>消息类型</span><el-select v-model="messageState.templateEdit.form.type" placeholder="请选择消息类型"><el-option v-for="item in messageTemplateTypeOptions.filter(option => option.value !== 'all')" :key="item.value" :label="item.label" :value="item.value" /></el-select></label>
-                        <label><span>消息级别</span><el-select v-model="messageState.templateEdit.form.level" placeholder="请选择消息级别"><el-option v-for="item in messageLevelOptions" :key="item.value" :label="item.label" :value="item.value" /></el-select></label>
-                        <label><span>状态</span><el-switch v-model="messageState.templateEdit.form.status" active-value="enabled" inactive-value="disabled" active-text="启用" inactive-text="停用" /></label>
-                        <label><span>排序</span><el-input v-model.number="messageState.templateEdit.form.sort" type="number" /></label>
+                        <label><FormFieldLabel :required="true">模板名称</FormFieldLabel><el-input v-model="messageState.templateEdit.form.name" maxlength="180" /></label>
+                        <label><FormFieldLabel v-if="!messageState.templateEdit.form.is_system" :required="true" help="2 至 120 位，支持字母、数字、下划线、点、冒号和连字符。">模板编码</FormFieldLabel><span v-else>模板编码</span><el-input v-model="messageState.templateEdit.form.code" :disabled="messageState.templateEdit.form.is_system" maxlength="120" /></label>
+                        <label><FormFieldLabel :required="false">消息类型</FormFieldLabel><el-select v-model="messageState.templateEdit.form.type" placeholder="请选择消息类型"><el-option v-for="item in messageTemplateTypeOptions.filter(option => option.value !== 'all')" :key="item.value" :label="item.label" :value="item.value" /></el-select></label>
+                        <label><FormFieldLabel :required="false">消息级别</FormFieldLabel><el-select v-model="messageState.templateEdit.form.level" placeholder="请选择消息级别"><el-option v-for="item in messageLevelOptions" :key="item.value" :label="item.label" :value="item.value" /></el-select></label>
+                        <label><FormFieldLabel :required="false">状态</FormFieldLabel><el-switch v-model="messageState.templateEdit.form.status" active-value="enabled" inactive-value="disabled" active-text="启用" inactive-text="停用" /></label>
+                        <label><FormFieldLabel :required="false" help="留空按 100 保存。">排序</FormFieldLabel><el-input v-model.number="messageState.templateEdit.form.sort" type="number" /></label>
                         <label>
-                          <span>发送渠道</span>
+                          <FormFieldLabel :required="false" help="保留站内消息，可追加企业微信。">发送渠道</FormFieldLabel>
                           <el-checkbox-group v-model="messageState.templateEdit.form.channels">
                             <el-checkbox value="internal" disabled>站内消息</el-checkbox>
                             <el-checkbox value="wechat">企业微信</el-checkbox>
                           </el-checkbox-group>
                         </label>
-                        <label class="wide"><span>标题模板</span><el-input v-model="messageState.templateEdit.form.title_tpl" maxlength="255" show-word-limit /></label>
-                        <label class="wide"><span>内容模板</span><el-input v-model="messageState.templateEdit.form.content_tpl" type="textarea" :rows="4" /></label>
-                        <label class="wide"><span>跳转地址模板</span><el-input v-model="messageState.templateEdit.form.link_url_tpl" placeholder="#panel={module_key}:{panel_key}" /></label>
-                        <label class="wide"><span>变量说明 JSON</span><el-input v-model="messageState.templateEdit.form.variables_text" type="textarea" :rows="5" /></label>
-                        <label class="wide"><span>说明</span><el-input v-model="messageState.templateEdit.form.description" type="textarea" :rows="2" maxlength="500" show-word-limit /></label>
+                        <label class="wide"><FormFieldLabel :required="true">标题模板</FormFieldLabel><el-input v-model="messageState.templateEdit.form.title_tpl" maxlength="255" show-word-limit /></label>
+                        <label class="wide"><FormFieldLabel :required="true">内容模板</FormFieldLabel><el-input v-model="messageState.templateEdit.form.content_tpl" type="textarea" :rows="4" /></label>
+                        <label class="wide"><FormFieldLabel :required="false">跳转地址模板</FormFieldLabel><el-input v-model="messageState.templateEdit.form.link_url_tpl" placeholder="#panel={module_key}:{panel_key}" /></label>
+                        <label class="wide"><FormFieldLabel :required="false" help="留空按空对象处理；填写时须为有效 JSON 对象。">变量说明 JSON</FormFieldLabel><el-input v-model="messageState.templateEdit.form.variables_text" type="textarea" :rows="5" /></label>
+                        <label class="wide"><FormFieldLabel :required="false">说明</FormFieldLabel><el-input v-model="messageState.templateEdit.form.description" type="textarea" :rows="2" maxlength="500" show-word-limit /></label>
                       </div>
                       <footer>
                         <el-button @click="closeMessageTemplateEdit">取消</el-button>
@@ -3548,21 +3576,25 @@
                   <el-table :width-storage-key="`app:adminState-scope-scopes:${win.module.id}:${win.panel}`" :data="adminState.scope.scopes" height="100%" stripe>
                     <el-table-column type="index" label="序号" width="66" align="center" />
                     <el-table-column label="学院" min-width="150">
+                      <template #header><FormFieldLabel :required="['college_admin', 'profession_admin'].includes(adminState.roles.find(role => Number(role.id) === Number(adminState.scope.role_id))?.role_type)" help="学院及专业管理员必须限定所属学院。">学院</FormFieldLabel></template>
                       <template #default="{ row }">
                         <el-select-v2 v-model="row.dep_id" clearable filterable placeholder="不限" @change="row.profession_id = null; row.class_id = null" :options="(adminState.options.departments).map(dep => ({ label: dep.dep_name, value: String(dep.dep_id) }))" />
                       </template>
                     </el-table-column>
                     <el-table-column label="专业" min-width="160">
+                      <template #header><FormFieldLabel :required="adminState.roles.find(role => Number(role.id) === Number(adminState.scope.role_id))?.role_type === 'profession_admin'" help="专业管理员必须限定所属专业。">专业</FormFieldLabel></template>
                       <template #default="{ row }">
                         <el-select-v2 v-model="row.profession_id" clearable filterable placeholder="不限" @change="row.class_id = null" :options="filterAcademicProfessions(adminState.options, row).map(profession => ({ label: profession.profession_name, value: String(profession.profession_id) }))" />
                       </template>
                     </el-table-column>
                     <el-table-column label="班级" min-width="160">
+                      <template #header><FormFieldLabel :required="false" help="与已选学院、专业一致；留空不限定班级。">班级</FormFieldLabel></template>
                       <template #default="{ row }">
                         <el-select-v2 v-model="row.class_id" clearable filterable placeholder="不限" :options="filterAcademicClasses(adminState.options, row).map(clazz => ({ label: clazz.class_name, value: String(clazz.class_id) }))" />
                       </template>
                     </el-table-column>
                     <el-table-column label="基地" min-width="180">
+                      <template #header><FormFieldLabel :required="false" help="按角色需要限定基地。">基地</FormFieldLabel></template>
                       <template #default="{ row }">
                         <el-select-v2 v-model="row.company_id" clearable filterable placeholder="不限" :options="(adminState.options.companies).map(company => ({ label: company.company_name, value: String(company.company_id) }))" />
                       </template>
@@ -3959,20 +3991,20 @@
                   </div>
                   <div class="wechat-config-layout">
                     <section class="settings-form wechat-app-form">
-                      <label><span>应用 AppID（可留空）</span><input v-model="wechatProxy.app_id" placeholder="企业微信自建应用无需填写"></label>
-                      <label><span>企业 ID</span><input v-model="wechatProxy.corp_id" placeholder="wwxxxxxxxx"></label>
-                      <label><span>AgentId</span><input v-model="wechatProxy.agent_id" placeholder="1000002"></label>
-                      <label><span>应用 Secret</span><input v-model="wechatProxy.secret" placeholder="企业微信应用 Secret"></label>
-                      <label><span>回调 Token</span><input v-model="wechatProxy.token"></label>
-                      <label><span>EncodingAESKey</span><input v-model="wechatProxy.encoding_aes_key"></label>
-                      <label><span>代理地址</span><input v-model="wechatProxy.proxy_url" placeholder="https://proxy.example.com/wechat-proxy"></label>
+                      <label><FormFieldLabel :required="false" help="企业微信自建应用可留空。">应用 AppID</FormFieldLabel><input v-model="wechatProxy.app_id" placeholder="企业微信自建应用无需填写"></label>
+                      <label><FormFieldLabel :required="false" help="保存配置可留空，调用企业微信接口前需配置。">企业 ID</FormFieldLabel><input v-model="wechatProxy.corp_id" placeholder="wwxxxxxxxx"></label>
+                      <label><FormFieldLabel :required="false" help="使用应用菜单与消息前需配置对应 AgentId。">AgentId</FormFieldLabel><input v-model="wechatProxy.agent_id" placeholder="1000002"></label>
+                      <label><FormFieldLabel :required="false" help="使用应用接口前需配置；已保存的密钥保持原掩码即可。">应用 Secret</FormFieldLabel><input v-model="wechatProxy.secret" placeholder="企业微信应用 Secret"></label>
+                      <label><FormFieldLabel :required="false" help="接收企业微信回调时需与后台配置一致。">回调 Token</FormFieldLabel><input v-model="wechatProxy.token"></label>
+                      <label><FormFieldLabel :required="false" help="接收加密回调时需与企业微信后台一致。">EncodingAESKey</FormFieldLabel><input v-model="wechatProxy.encoding_aes_key"></label>
+                      <label><FormFieldLabel :required="false" help="留空直连；填写时须为服务端允许的 HTTPS 代理地址。">代理地址</FormFieldLabel><input v-model="wechatProxy.proxy_url" placeholder="https://proxy.example.com/wechat-proxy"></label>
                       <label>
-                        <span>允许未绑定企业微信登录</span>
+                        <FormFieldLabel :required="false">允许未绑定企业微信登录</FormFieldLabel>
                         <el-switch v-model="wechatProxy.allow_unbound_login" active-text="允许" inactive-text="不允许" />
                       </label>
                       <small>关闭后，教师和学生须绑定企业微信后才能使用系统，管理员不受限制。</small>
                       <label>
-                        <span>启用代理</span>
+                        <FormFieldLabel :required="false">启用代理</FormFieldLabel>
                         <el-switch
                           v-model="wechatProxy.proxy_enabled"
                           active-text="启用"
@@ -4009,19 +4041,19 @@
                         </button>
                       </div>
                       <section v-if="selectedWechatMenu" class="menu-form wechat-menu-form">
-                        <label><span>菜单名称</span><input v-model="selectedWechatMenu.name"></label>
+                        <label><FormFieldLabel :required="true" help="一级菜单最多 16 字节，子菜单最多 40 字节。">菜单名称</FormFieldLabel><input v-model="selectedWechatMenu.name"></label>
                         <label>
-                          <span>菜单类型</span>
+                          <FormFieldLabel :required="true">菜单类型</FormFieldLabel>
                           <el-select v-model="selectedWechatMenu.type" placeholder="请选择菜单类型">
                             <el-option label="跳转网页" value="view" />
                             <el-option label="点击事件" value="click" />
                             <el-option label="小程序" value="miniprogram" />
                           </el-select>
                         </label>
-                        <label v-if="selectedWechatMenu.type === 'view'"><span>URL</span><input v-model="selectedWechatMenu.url"></label>
-                        <label v-if="selectedWechatMenu.type === 'click'"><span>Key</span><input v-model="selectedWechatMenu.key"></label>
-                        <label v-if="selectedWechatMenu.type === 'miniprogram'"><span>AppID</span><input v-model="selectedWechatMenu.appid"></label>
-                        <label v-if="selectedWechatMenu.type === 'miniprogram'"><span>页面路径</span><input v-model="selectedWechatMenu.pagepath"></label>
+                        <label v-if="selectedWechatMenu.type === 'view'"><FormFieldLabel :required="!selectedWechatMenu.children?.length" help="含子菜单的一级菜单不执行跳转或点击动作。">URL</FormFieldLabel><input v-model="selectedWechatMenu.url"></label>
+                        <label v-if="selectedWechatMenu.type === 'click'"><FormFieldLabel :required="!selectedWechatMenu.children?.length" help="含子菜单的一级菜单不执行跳转或点击动作。">Key</FormFieldLabel><input v-model="selectedWechatMenu.key"></label>
+                        <label v-if="selectedWechatMenu.type === 'miniprogram'"><FormFieldLabel :required="!selectedWechatMenu.children?.length" help="含子菜单的一级菜单不执行跳转或点击动作。">AppID</FormFieldLabel><input v-model="selectedWechatMenu.appid"></label>
+                        <label v-if="selectedWechatMenu.type === 'miniprogram'"><FormFieldLabel :required="!selectedWechatMenu.children?.length" help="含子菜单的一级菜单不执行跳转或点击动作。">页面路径</FormFieldLabel><input v-model="selectedWechatMenu.pagepath"></label>
                       </section>
                       <small v-else>请先新增或选择菜单。</small>
                     </section>
@@ -4103,15 +4135,15 @@
         <form class="operation-form single password-form" @submit.prevent="submitOwnPassword">
           <el-alert v-if="passwordState.message" type="warning" :closable="false" show-icon :title="passwordState.message" />
           <label>
-            <span>当前密码</span>
+            <FormFieldLabel :required="true">当前密码</FormFieldLabel>
             <input v-model="passwordState.form.current_password" type="password" autocomplete="current-password" maxlength="120" placeholder="请输入当前密码">
           </label>
           <label>
-            <span>新密码</span>
+            <FormFieldLabel :required="true" help="6 至 120 位，不能与当前密码相同。">新密码</FormFieldLabel>
             <input v-model="passwordState.form.new_password" type="password" autocomplete="new-password" maxlength="120" placeholder="6 至 120 位">
           </label>
           <label>
-            <span>确认新密码</span>
+            <FormFieldLabel :required="true" help="须与新密码一致。">确认新密码</FormFieldLabel>
             <input v-model="passwordState.form.confirm_password" type="password" autocomplete="new-password" maxlength="120" placeholder="请再次输入新密码">
           </label>
           <small>修改成功后保留当前登录，其他已登录设备将被下线。</small>
@@ -4299,6 +4331,7 @@ import MessageChannelSettings from './components/MessageChannelSettings.vue';
 import WallpaperLibrary from './components/WallpaperLibrary.vue';
 import SignatureSettings from './components/profile/SignatureSettings.vue';
 import WorkflowHistory from '../../shared/components/WorkflowHistory.vue';
+import OperationRoute from '../../shared/components/OperationRoute.vue';
 import WorkflowInbox from '../../shared/components/WorkflowInbox.vue';
 import ExpensePanel from './components/ExpensePanel.vue';
 import { hasMaximizedWindow } from './composables/useMaximizedWindows';
@@ -4384,6 +4417,7 @@ import BaseVisitRecordPanel from './components/BaseVisitRecordPanel.vue';
 import DesktopUpdateStatus from './components/DesktopUpdateStatus.vue';
 import ReleaseNotesPanel from '../../shared/components/ReleaseNotesPanel.vue';
 import LoginCaptchaInput from '../../shared/components/LoginCaptchaInput.vue';
+import FormFieldLabel from '../../shared/components/FormFieldLabel.vue';
 import { useLoginCaptcha } from '../../shared/composables/useLoginCaptcha';
 import AssistantPanel from '../../shared/components/AssistantPanel.vue';
 import { useRealtimeMessages } from '../../shared/useRealtimeMessages';
@@ -4420,6 +4454,7 @@ import OperationDialog from './components/OperationDialog.vue';
 import PluginPanel from './components/PluginPanel.vue';
 import ShortcutTile from './components/ShortcutTile.vue';
 import SocialPracticePanel from './components/SocialPracticePanel.vue';
+import TeachingPlanCenter from './components/TeachingPlanCenter.vue';
 import StudentOwnPanel from './components/StudentOwnPanel.vue';
 import TemplateLibrary from './components/TemplateLibrary.vue';
 import { DEFAULT_DESKTOP_MODULE_IDS, useDesktopLauncher } from './composables/useDesktopLauncher';
@@ -4973,6 +5008,11 @@ const userAdminState = reactive({
 
 const modules = [
   {
+    id: 'teachingPlanCenter', name: '教学计划中心', icon: ClipboardList, color: 'blue',
+    scope: '原始教学计划 / 学院分配 / 补齐与变更',
+    viewPermission: 'teaching_plan:view', managePermission: 'teaching_plan:assign', defaultPanel: 'records',
+  },
+  {
     id: 'internship',
     name: '实习管理',
     icon: BriefcaseBusiness,
@@ -5412,10 +5452,10 @@ const archiveDefinitions = [
     idField: 'dep_id',
     fields: [
       { key: 'dep_name', label: '学院名称', required: true },
-      { key: 'dep_short_name', label: '学院简称' },
-      { key: 'dep_code', label: '学院代码' },
-      { key: 'sort', label: '排序', inputType: 'number' },
-      { key: 'flag', label: '状态', options: 'flag' },
+      { key: 'dep_short_name', label: '学院简称', required: false },
+      { key: 'dep_code', label: '学院代码', required: false },
+      { key: 'sort', label: '排序', inputType: 'number', required: false },
+      { key: 'flag', label: '状态', options: 'flag', required: false },
     ],
   },
   {
@@ -5423,11 +5463,11 @@ const archiveDefinitions = [
     name: '年级',
     idField: 'grade_id',
     fields: [
-      { key: 'grade_code', label: '年级代码' },
+      { key: 'grade_code', label: '年级代码', required: false },
       { key: 'grade_name', label: '年级名称', required: true },
-      { key: 'is_current', label: '当前年级', options: 'boolean' },
-      { key: 'sort', label: '排序', inputType: 'number' },
-      { key: 'flag', label: '状态', options: 'flag' },
+      { key: 'is_current', label: '当前年级', options: 'boolean', required: false },
+      { key: 'sort', label: '排序', inputType: 'number', required: false },
+      { key: 'flag', label: '状态', options: 'flag', required: false },
     ],
   },
   {
@@ -5436,10 +5476,10 @@ const archiveDefinitions = [
     idField: 'cohort_id',
     fields: [
       { key: 'cohort_name', label: '届次名称', required: true },
-      { key: 'cohort_year', label: '毕业年份', inputType: 'number', required: true },
-      { key: 'is_current', label: '当前届次', options: 'boolean' },
-      { key: 'sort', label: '排序', inputType: 'number' },
-      { key: 'flag', label: '状态', options: 'flag' },
+      { key: 'cohort_year', label: '毕业年份', inputType: 'number', required: true, help: '填写 2000 至 2999 之间的毕业年份' },
+      { key: 'is_current', label: '当前届次', options: 'boolean', required: false },
+      { key: 'sort', label: '排序', inputType: 'number', required: false },
+      { key: 'flag', label: '状态', options: 'flag', required: false },
     ],
   },
   {
@@ -5448,10 +5488,10 @@ const archiveDefinitions = [
     idField: 'id',
     fields: [
       { key: 'name', label: '类别名称', required: true },
-      { key: 'code', label: '类别代码', required: true },
-      { key: 'scope_type', label: '归属维度', options: 'scopeType' },
-      { key: 'sort', label: '排序', inputType: 'number' },
-      { key: 'status', label: '状态', options: 'status' },
+      { key: 'code', label: '类别代码', required: true, help: '以小写字母开头，仅支持小写字母、数字和下划线' },
+      { key: 'scope_type', label: '归属维度', options: 'scopeType', required: false },
+      { key: 'sort', label: '排序', inputType: 'number', required: false },
+      { key: 'status', label: '状态', options: 'status', required: false },
     ],
   },
   {
@@ -5459,13 +5499,13 @@ const archiveDefinitions = [
     name: '专业',
     idField: 'profession_id',
     fields: [
-      { key: 'grade_id', label: '所属年级', options: 'grades' },
-      { key: 'dep_id', label: '所属学院', options: 'departments' },
+      { key: 'grade_id', label: '所属年级', options: 'grades', required: false },
+      { key: 'dep_id', label: '所属学院', options: 'departments', required: false },
       { key: 'profession_name', label: '专业名称', required: true },
-      { key: 'profession_short_name', label: '专业简称' },
-      { key: 'profession_code', label: '专业代码' },
-      { key: 'sort', label: '排序', inputType: 'number' },
-      { key: 'flag', label: '状态', options: 'flag' },
+      { key: 'profession_short_name', label: '专业简称', required: false },
+      { key: 'profession_code', label: '专业代码', required: false },
+      { key: 'sort', label: '排序', inputType: 'number', required: false },
+      { key: 'flag', label: '状态', options: 'flag', required: false },
     ],
   },
   {
@@ -5473,14 +5513,14 @@ const archiveDefinitions = [
     name: '班级',
     idField: 'class_id',
     fields: [
-      { key: 'grade_id', label: '所属年级', options: 'grades' },
-      { key: 'dep_id', label: '所属学院', options: 'departments' },
-      { key: 'profession_id', label: '所属专业', options: 'professions' },
+      { key: 'grade_id', label: '所属年级', options: 'grades', required: false },
+      { key: 'dep_id', label: '所属学院', options: 'departments', required: false },
+      { key: 'profession_id', label: '所属专业', options: 'professions', required: false },
       { key: 'class_name', label: '班级名称', required: true },
-      { key: 'class_short_name', label: '班级简称' },
-      { key: 'class_num', label: '班号' },
-      { key: 'sort', label: '排序', inputType: 'number' },
-      { key: 'flag', label: '状态', options: 'flag' },
+      { key: 'class_short_name', label: '班级简称', required: false },
+      { key: 'class_num', label: '班号', required: false },
+      { key: 'sort', label: '排序', inputType: 'number', required: false },
+      { key: 'flag', label: '状态', options: 'flag', required: false },
     ],
   },
   {
@@ -5489,13 +5529,13 @@ const archiveDefinitions = [
     idField: 'company_id',
     fields: [
       { key: 'company_name', label: '基地名称', required: true },
-      { key: 'credit_code', label: '信用代码' },
-      { key: 'contact_name', label: '联系人' },
-      { key: 'contact_mobile', label: '联系电话' },
-      { key: 'address', label: '地址' },
-      { key: 'unit_type', label: '单位类型' },
-      { key: 'enterprise_level', label: '企业等级' },
-      { key: 'flag', label: '状态', options: 'flag' },
+      { key: 'credit_code', label: '信用代码', required: false },
+      { key: 'contact_name', label: '联系人', required: false },
+      { key: 'contact_mobile', label: '联系电话', required: false },
+      { key: 'address', label: '地址', required: false },
+      { key: 'unit_type', label: '单位类型', required: false },
+      { key: 'enterprise_level', label: '企业等级', required: false },
+      { key: 'flag', label: '状态', options: 'flag', required: false },
     ],
   },
 ];
@@ -5852,6 +5892,7 @@ const moduleSearchKeywords = {
   professionManage: '专业',
   classManage: '班级',
   companyManage: '基地管理 基地统计 基地申报 基地审批 合作单位 企业',
+  teachingPlanCenter: '教学计划 开课计划 导入 分类 学院 分配 补齐 来源 变更',
   eduData: '教务数据 学生 教师 开课计划 开课情况 导入 模板 差异 候选',
   dataManage: '数据 管理 清理 测试数据 初始化',
   config: '设置 配置 菜单 权限 角色 企业微信 操作说明 学校',
@@ -6227,6 +6268,7 @@ function collectionModuleItems(moduleId) {
 }
 
 function canShowModule(module) {
+  if (module.id === 'teachingPlanCenter') return hasPermission('teaching_plan:view') && ['super_admin', 'school_admin', 'college_admin'].includes(currentRoleType.value);
   if (module.source === 'menu') {
     return isLoggedIn.value && module.menu?.visible !== 'false';
   }
@@ -6476,8 +6518,8 @@ const internshipListConfigs = computed(() => ({
       { key: 'score_rule', label: '成绩规则', width: 110, formatter: row => scoreRuleText(row.score_rule) },
       { key: 'content', label: '计划内容', minWidth: 220, formatter: row => contentSummary(planContentText(row.plan_content)) },
       { prop: 'submitter_name', label: '提交人', width: 120 },
-      { prop: 'approval_progress_text', label: '审核进度', width: 100 },
-      { prop: 'current_approval_name', label: '当前节点', width: 110 },
+      { key: 'approval_progress_text', label: '审核进度', width: 130, formatter: row => row.workflow?.instance_id ? `第 ${row.workflow.round} 轮 · ${statusText(row.status)}` : row.approval_progress_text },
+      { key: 'current_approval_name', label: '当前节点', width: 130, formatter: row => row.workflow?.instance_id ? (row.status === 'wait' ? `配置流程第 ${row.workflow.active_position} 节点` : '本轮已结束') : row.current_approval_name },
       { prop: 'status', label: '状态', width: 90, tag: true, tagType: row => statusTagType(row.status), formatter: row => statusText(row.status) },
       { prop: 'created_at', label: '提交时间', width: 168 },
     ],
@@ -7911,6 +7953,49 @@ function openModule(module, options = {}) {
     return;
   }
   openModuleWindow(module, { reuse: module.id !== 'notebook' });
+}
+
+let teachingPlanTargetRequest = 0;
+function consumeTeachingPlanTarget(win, token) {
+  if (Number.isInteger(token) && token > 0 && win.teachingPlanTarget?.token === token) win.teachingPlanTarget = null;
+}
+async function openTeachingPlanTarget(item) {
+  const version = ++teachingPlanTargetRequest;
+  const session = workspaceContextKey.value;
+  const current = () => version === teachingPlanTargetRequest && session === workspaceContextKey.value;
+  try {
+    const detail = await request(`/teaching-plan-center/detail?id=${encodeURIComponent(item.source_id || item.id)}`);
+    if (!current()) return;
+    if (!detail.target_id || Number(detail.target_id) !== Number(item.target_id)) throw new Error('计划绑定已变化，请刷新中心后重试');
+    const type = detail.target_type || detail.classification;
+    const moduleId = type === 'internship' ? 'internship' : type === 'social_practice' ? 'socialPractice' : ['lab', 'training'].includes(type) ? 'practice' : '';
+    const module = modules.find(value => value.id === moduleId);
+    if (!module || !canShowModule(module)) throw new Error('当前账号无目标计划模块权限，请联系学校管理员');
+    const row = detail.target_record || detail.target?.snapshot?.row;
+    if (!row || Number(row.id) !== Number(detail.target_id)) throw new Error('目标计划详情不可用，请刷新后重试');
+    openModule(module, { skipOpenPreference: true });
+    const win = openWindows.find(value => value.module.id === moduleId);
+    if (!win) return;
+    win.panel = 'plans';
+    if (moduleId === 'socialPractice') {
+      win.teachingPlanTarget = { id: Number(detail.target_id), token: version };
+      return;
+    }
+    if (moduleId === 'internship') {
+      await loadInternshipFoundation();
+      if (!current()) return;
+      internshipState.filters.plans.keyword = row.course_code || row.course_name || '';
+      if (canEditInternshipPlan(row)) openPlanDialog(row);
+      else openPlanDetail(row);
+    } else {
+      practiceModuleState('practice').module_type = type;
+      await loadPracticeFoundation('practice');
+      if (!current()) return;
+      practiceModuleState('practice').filters.plans.keyword = row.title || row.course_name || '';
+      if (showPracticeRowEdit('practice', 'plans', row)) await openPracticeDialog('practice', 'plans', row);
+      else await openPracticeTimelineDialog('practice', 'plans', row);
+    }
+  } catch (error) { if (current()) ElMessage.error(error.message); }
 }
 
 function desktopModuleExternalUrl(module) {
@@ -11913,6 +11998,7 @@ function practiceListConfig(module, panel) {
       { prop: 'course_leader_name', label: '课程负责人', width: 120 },
       { prop: 'related_teacher_count', label: '任课教师数', width: 105 },
       { key: 'source_type', label: '来源', width: 100, formatter: row => practiceSourceText(row.source_type) },
+      { key: 'approval_step', label: '审批流程', minWidth: 150, formatter: row => row.workflow?.instance_id ? `第 ${row.workflow.round} 轮 · ${row.status === 'wait' ? `节点 ${row.workflow.active_position}` : statusText(row.status)}` : '原业务审核' },
       { prop: 'status', label: '状态', width: 90, tag: true, tagType: row => statusTagType(row.status), formatter: row => statusText(row.status) },
       { prop: 'created_at', label: '创建时间', width: 168 },
     ],
@@ -12416,6 +12502,8 @@ function validatePracticeForm(module, panel, form) {
     if (!form.profession_id) {
       return '请选择专业';
     }
+    if (!practiceProfessionOptions(module).some(item => Number(item.profession_id) === Number(form.profession_id))) return '专业与所选年级、学院不匹配，请重新选择';
+    if (form.teacher_id && !practiceModuleState(module).options.teachers.some(item => Number(item.teacher_id) === Number(form.teacher_id))) return '任课教师不可用，请重新选择';
   }
   if (panel === 'gradeRules' && practiceGradeRuleTotal(module) !== 100) {
     return '成绩比例合计必须为 100%';
@@ -13065,7 +13153,7 @@ async function savePractice(module, workflowStatus = null) {
   state.loading = true;
   state.message = '';
   try {
-    const result = await savePracticeItem(form.module_type, payload);
+    const result = await savePracticeItem(form.module_type, panel === 'plans' ? planSubmissionPayload(form, payload) : payload);
     if (!current()) return;
     if (!Number.isInteger(Number(result?.id)) || Number(result.id) <= 0) throw new Error('保存结果未确认，请刷新列表核对');
     state.form.id = result.id;
@@ -13095,6 +13183,7 @@ function ratioTextToJson(value) {
 }
 
 function canReviewPracticeRow(module, panel, row) {
+  if (panel === 'plans' && row?.workflow?.instance_id) return row.status === 'wait' && Boolean(row.workflow.can_review);
   return Boolean(row && row.status === 'wait' && practiceReviewEntity(panel) && canApprovePracticeRow(module, panel, row));
 }
 
@@ -13123,6 +13212,7 @@ function canApprovePracticeRow(module, panel, row) {
 }
 
 async function openPracticeReviewDialog(module, panel, row, status) {
+  if (panel === 'plans' && row?.workflow?.instance_id) { openPracticePlanWorkflow(module, row); return; }
   if (!canReviewPracticeRow(module, panel, row)) {
     practiceModuleState(module).message = '仅待审核数据可处理';
     return;
@@ -13141,6 +13231,12 @@ async function openPracticeReviewDialog(module, panel, row, status) {
     reason: status === 'accept' ? '同意' : '',
   };
   await loadPracticeDialogReviewDraft(module);
+}
+
+function openPracticePlanWorkflow(module, row) {
+  const type = row.module_type || practiceModuleState(module).module_type;
+  if (!['lab', 'training'].includes(type)) return;
+  practiceModuleState(module).dialog = { ...emptyOperationDialog(), type: 'workflow', title: '教学计划审批', workflowEntity: `${type}_plan`, panel: 'plans', row };
 }
 
 function openPracticeReopenDialog(module, panel, row) {
@@ -13163,6 +13259,7 @@ function openPracticeReopenDialog(module, panel, row) {
 }
 
 async function openPracticeTimelineDialog(module, panel, row) {
+  if (panel === 'plans' && row?.workflow?.instance_id) { openPracticePlanWorkflow(module, row); return; }
   const state = practiceModuleState(module);
   state.dialog = {
     ...emptyOperationDialog(),
@@ -13172,18 +13269,23 @@ async function openPracticeTimelineDialog(module, panel, row) {
     entity: practiceReviewEntity(panel),
     row,
   };
+  const dialog = state.dialog;
+  const session = internshipFoundationSessionKey();
+  const current = () => state.dialog === dialog && session === internshipFoundationSessionKey();
   state.loading = true;
   state.message = '';
   try {
     const data = isPracticeExecutionPanel(panel)
       ? await fetchPracticeExecutionTimeline(practiceRequestModuleType(module, row.module_type), { execution: practiceExecutionType(panel), id: row.id })
       : await fetchPracticeTimeline(practiceRequestModuleType(module, row.module_type), { entity: practiceReviewEntity(panel), id: row.id });
+    if (!current()) return;
+    if (panel === 'plans' && data.workflow?.instance_id) { state.loading = false; openPracticePlanWorkflow(module, { ...row, workflow: data.workflow }); return; }
     state.dialog.cycles = data.cycles || [];
     state.dialog.timeline = data.items || data.records || [];
   } catch (error) {
-    state.message = error.message;
+    if (current()) state.message = error.message;
   } finally {
-    state.loading = false;
+    if (current()) state.loading = false;
   }
 }
 
@@ -13868,7 +13970,7 @@ function normalizePlanCascade() {
   if (current && visible.some(item => Number(item.profession_id) === current)) {
     return;
   }
-  internshipState.planForm.profession_id = visible[0]?.profession_id || null;
+  internshipState.planForm.profession_id = current ? null : visible[0]?.profession_id || null;
 }
 
 function scoreRuleText(value) {
@@ -14712,6 +14814,7 @@ function openPlanDialog(row = null) {
       credit: row.credit ?? '',
       score_rule: row.score_rule || 'average',
       content: content.content || content.summary || '',
+      plan_content: content,
       status: row.status || 'draft',
     };
   } else {
@@ -15298,6 +15401,7 @@ async function exportImplementationDocument(row) {
 }
 
 async function openReviewDialog(entity, row, status) {
+  if (entity === 'plan' && row?.workflow?.instance_id) { openInternshipPlanWorkflow(row); return; }
   if (entity === 'base_application' && row?.workflow) { openBaseWorkflowDialog(row); return; }
   if (!canReviewRow(row, entity)) {
     internshipState.message = '仅待审核数据可处理';
@@ -15336,11 +15440,21 @@ function openReopenDialog(entity, row) {
   };
 }
 
+function openInternshipPlanWorkflow(row) {
+  internshipState.dialog = { ...emptyOperationDialog(), type: 'workflow', title: '实习计划审批', entity: 'internship_plan', row };
+}
+
+async function refreshInternshipPlanWorkflow() {
+  invalidateInternshipFoundation();
+  await loadInternshipPanel(internshipState.dialog.entity === 'internship_plan' ? 'plans' : 'baseApplications', 1);
+}
+
 function openBaseWorkflowDialog(row) {
   internshipState.dialog = { ...emptyOperationDialog(), type: 'workflow', title: '基地申报审批', entity: 'base_application', row };
 }
 
 async function openTimelineDialog(entity, row) {
+  if (entity === 'plan' && row?.workflow?.instance_id) { openInternshipPlanWorkflow(row); return; }
   if (entity === 'base_application' && row?.workflow) { openBaseWorkflowDialog(row); return; }
   internshipState.dialog = {
     ...emptyOperationDialog(),
@@ -15352,16 +15466,21 @@ async function openTimelineDialog(entity, row) {
     timeline: [],
     cycles: [],
   };
+  const dialog = internshipState.dialog;
+  const session = internshipFoundationSessionKey();
+  const current = () => internshipState.dialog === dialog && session === internshipFoundationSessionKey();
   internshipState.loading = true;
   internshipState.message = '';
   try {
     const data = await fetchInternshipTimeline({ entity, id: row.id });
+    if (!current()) return;
+    if (entity === 'plan' && data.workflow?.instance_id) { internshipState.loading = false; openInternshipPlanWorkflow({ ...row, workflow: data.workflow }); return; }
     internshipState.dialog.cycles = data.cycles || [];
     internshipState.dialog.timeline = data.items || [];
   } catch (error) {
-    internshipState.message = error.message;
+    if (current()) internshipState.message = error.message;
   } finally {
-    internshipState.loading = false;
+    if (current()) internshipState.loading = false;
   }
 }
 
@@ -15486,6 +15605,25 @@ async function confirmInternshipDialog() {
   }
 }
 
+function planApprovalHint(row) {
+  if (row?.workflow?.instance_id && row.status === 'wait') return `当前为第 ${row.workflow.round} 轮审批，请在流程记录中查看节点并按要求签名。`;
+  if (row?.status === 'modify') return '当前为退回修改；请核对审核意见，保存修改后重新提交审核。';
+  if (row?.status === 'accept') return '当前已通过；修改须先发起通过后修改，再重新提交审核。';
+  return '当前为草稿；配置流程已发布时提交进入配置审批，未配置时按原业务审核。';
+}
+
+const planSubmitRequests = new WeakMap();
+function planSubmissionPayload(form, payload) {
+  if (payload.status !== 'wait') return payload;
+  const key = JSON.stringify([workspaceContextKey.value, payload]);
+  let prior = planSubmitRequests.get(form);
+  if (prior?.key !== key) {
+    prior = { key, id: globalThis.crypto?.randomUUID?.() || `plan-${Date.now()}-${Math.random().toString(36).slice(2)}` };
+    planSubmitRequests.set(form, prior);
+  }
+  return { ...payload, request_id: prior.id };
+}
+
 async function submitInternshipPlan(status) {
   if (internshipState.loading) {
     return;
@@ -15563,6 +15701,7 @@ function isRejectReviewStatus(status) {
 
 function workflowActionText(action) {
   const names = {
+    trusted_initial_accept: '\u9996\u6b21\u5bfc\u5165\u514d\u5ba1\u786e\u8ba4',
     submit: '提交',
     review: '审核',
     teacher_review: '教师审核',
@@ -15671,6 +15810,7 @@ function timelineBranchReviews(branch) {
 }
 
 function timelineBranchContent(branch) {
+  if (branch.record?.action === 'trusted_initial_accept') return '\u6559\u5b66\u8ba1\u5212\u4e2d\u5fc3\u9996\u6b21\u5bfc\u5165\u786e\u8ba4\uff0c\u539f\u59cb\u6765\u6e90\u5df2\u4fdd\u7559\uff1b\u540e\u7eed\u4fee\u6539\u9700\u91cd\u65b0\u5ba1\u6838\u3002';
   if (timelineBranchReviews(branch).length) {
     return '';
   }
@@ -15695,6 +15835,7 @@ function isModifyAfterAcceptBranch(branch) {
 }
 
 function timelineContent(item) {
+  if (item.record?.action === 'trusted_initial_accept') return '\u6559\u5b66\u8ba1\u5212\u4e2d\u5fc3\u9996\u6b21\u5bfc\u5165\u786e\u8ba4\uff0c\u539f\u59cb\u6765\u6e90\u5df2\u4fdd\u7559\uff1b\u540e\u7eed\u4fee\u6539\u9700\u91cd\u65b0\u5ba1\u6838\u3002';
   if (item.record) {
     if (item.record.action === 'submit' && isGenericSubmitContent(item.record.content)) {
       return submissionSnapshotText(internshipState.dialog.entity, internshipState.dialog.row);
@@ -15734,6 +15875,7 @@ function submissionSnapshotText(entity, row) {
 }
 
 function canReviewRow(row, entity) {
+  if (entity === 'plan' && row?.workflow?.instance_id) return row.status === 'wait' && Boolean(row.workflow.can_review);
   if (entity === 'base_application' && row?.workflow) return Boolean(row.workflow.can_review);
   if (!row || row.status !== 'wait') {
     return false;
@@ -16287,7 +16429,12 @@ async function savePlan() {
   if (!canManageInternshipPlan.value) {
     return;
   }
-  if (!internshipState.planForm.course_name) {
+  const form = internshipState.planForm;
+  const dialog = internshipState.dialog;
+  const session = internshipFoundationSessionKey();
+  const sameSession = () => session === internshipFoundationSessionKey();
+  const current = () => sameSession() && internshipState.planForm === form && internshipState.dialog === dialog;
+  if (!String(form.course_name || '').trim()) {
     internshipState.message = '请填写课程名称';
     return;
   }
@@ -16313,10 +16460,19 @@ async function savePlan() {
     return;
   }
 
+  if (!planProfessionOptions().some(item => Number(item.profession_id) === Number(form.profession_id))) {
+    internshipState.message = '所选专业与当前学院、年级不匹配，请重新选择';
+    return;
+  }
+  if (form.credit !== '' && form.credit !== null && (!Number.isFinite(Number(form.credit)) || Number(form.credit) < 0)) {
+    internshipState.message = '学分须为非负数';
+    return;
+  }
+
   internshipState.loading = true;
   internshipState.message = '';
   try {
-    await saveInternshipPlan({
+    const result = await saveInternshipPlan(planSubmissionPayload(form, {
       id: internshipState.planForm.id || undefined,
       source_type: internshipState.planForm.source_type,
       course_code: internshipState.planForm.course_code,
@@ -16326,14 +16482,18 @@ async function savePlan() {
       graduation_cohort_id: category.scope_type === 'cohort' ? internshipState.planForm.graduation_cohort_id : null,
       dep_id: internshipState.planForm.dep_id,
       profession_id: internshipState.planForm.profession_id,
-      semester: '',
-      credit: internshipState.planForm.credit || null,
+      semester: internshipState.planForm.semester || '',
+      credit: internshipState.planForm.credit === '' ? null : internshipState.planForm.credit,
       score_rule: internshipState.planForm.score_rule,
       plan_content: {
+        ...(internshipState.planForm.plan_content || {}),
         content: internshipState.planForm.content,
       },
       status: internshipState.planForm.status,
-    });
+    }));
+    if (!current()) return;
+    if (!Number.isInteger(Number(result?.id)) || Number(result.id) <= 0) throw new Error('保存结果未确认，请刷新计划列表核对');
+    form.id = result.id;
     internshipState.planForm = emptyPlanForm();
     closeInternshipDialog();
     invalidateInternshipFoundation();
@@ -16342,9 +16502,9 @@ async function savePlan() {
       loadInternshipFoundation(),
     ]);
   } catch (error) {
-    internshipState.message = error.message;
+    if (current()) internshipState.message = error.message;
   } finally {
-    internshipState.loading = false;
+    if (sameSession()) internshipState.loading = false;
   }
 }
 

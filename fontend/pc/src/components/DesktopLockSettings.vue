@@ -3,20 +3,21 @@
     <header><strong>客户端锁定</strong><small>自动锁定设置仅保存在本机。</small></header>
     <form @submit.prevent="save">
       <div class="lock-setting-row"><div><strong id="desktop-lock-enabled">无操作自动锁定</strong><small>可用账号密码、本机锁屏密码或企业微信扫码解锁。</small></div><el-switch v-model="enabled" aria-labelledby="desktop-lock-enabled" :disabled="lock.busy || lock.locked" /></div>
-      <div class="lock-setting-row"><label for="desktop-lock-minutes">无操作时长（分钟）</label><el-input-number id="desktop-lock-minutes" v-model="minutes" :min="1" :max="480" :precision="0" :disabled="lock.busy || lock.locked || !enabled" /></div>
+      <div class="lock-setting-row"><label for="desktop-lock-minutes"><FormFieldLabel :required="true" help="1-480 的整数；关闭自动锁定后保留此时长">无操作时长（分钟）</FormFieldLabel></label><el-input-number id="desktop-lock-minutes" v-model="minutes" :min="1" :max="480" :precision="0" :disabled="lock.busy || lock.locked || !enabled" /></div>
       <p v-if="message || lock.error" class="lock-setting-message" :class="{ saved }" role="status">{{ message || lock.error }}</p>
       <div class="lock-setting-actions"><el-button :disabled="lock.busy" @click="emit('close')">返回</el-button><el-button type="primary" native-type="submit" :loading="lock.busy" :disabled="lock.locked">保存本机设置</el-button></div>
     </form>
     <form class="local-password-settings" @submit.prevent="savePassword">
       <div class="lock-setting-row"><div><strong>本机锁屏密码（可选）</strong><small>仅保存在此设备，按学校和账号分别保存，不修改账号密码。退出或关闭客户端后保留，直到手动修改或清除。</small></div><span class="local-password-status">{{ configured === null ? '状态未读取' : configured ? '已设置' : '未设置' }}</span></div>
-      <div class="local-password-field"><label for="desktop-local-password">{{ configured ? '新的本机锁屏密码' : '设置本机锁屏密码' }}</label><el-input id="desktop-local-password" v-model="password" type="password" show-password autocomplete="new-password" placeholder="4 至 64 个字符" :disabled="lock.busy || lock.locked" /></div>
-      <div class="local-password-field"><label for="desktop-local-confirmation">确认本机锁屏密码</label><el-input id="desktop-local-confirmation" v-model="confirmation" type="password" show-password autocomplete="new-password" placeholder="请再次输入" :disabled="lock.busy || lock.locked" /></div>
+      <div class="local-password-field"><label for="desktop-local-password"><FormFieldLabel :required="true" help="设置或修改时填写 4-64 个字符，仅用于此设备的当前学校和账号">{{ configured ? '新的本机锁屏密码' : '设置本机锁屏密码' }}</FormFieldLabel></label><el-input id="desktop-local-password" v-model="password" type="password" show-password autocomplete="new-password" placeholder="4 至 64 个字符" :disabled="lock.busy || lock.locked" /></div>
+      <div class="local-password-field"><label for="desktop-local-confirmation"><FormFieldLabel :required="true" help="须与本次输入的本机锁屏密码一致">确认本机锁屏密码</FormFieldLabel></label><el-input id="desktop-local-confirmation" v-model="confirmation" type="password" show-password autocomplete="new-password" placeholder="请再次输入" :disabled="lock.busy || lock.locked" /></div>
       <p v-if="passwordMessage" class="lock-setting-message" :class="{ saved: passwordSaved }" role="status">{{ passwordMessage }}</p>
       <div class="lock-setting-actions local-password-actions"><el-button :disabled="lock.busy || lock.locked" @click="readPassword">刷新状态</el-button><el-button :disabled="lock.busy || lock.locked || configured === false" @click="clearPassword">清除本机密码</el-button><el-button type="primary" native-type="submit" :loading="lock.busy" :disabled="lock.locked || !password || !confirmation">{{ configured ? '修改本机密码' : '保存本机密码' }}</el-button></div>
     </form>
   </section>
 </template>
 <script setup>
+import FormFieldLabel from '../../../shared/components/FormFieldLabel.vue';
 import { onBeforeUnmount, ref, watch } from 'vue';
 const props = defineProps({ lock: { type: Object, required: true } });
 const emit = defineEmits(['close']);

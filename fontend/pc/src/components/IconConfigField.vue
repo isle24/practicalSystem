@@ -1,7 +1,7 @@
 <template>
   <section class="icon-config-field">
     <label>
-      <span>{{ iconLabel }}</span>
+      <FormFieldLabel :required="false">{{ iconLabel }}</FormFieldLabel>
       <input
         :value="icon"
         :placeholder="placeholder"
@@ -9,7 +9,7 @@
       >
     </label>
     <label class="icon-config-upload">
-      <span>{{ uploadLabel }}</span>
+      <FormFieldLabel :required="false">{{ uploadLabel }}</FormFieldLabel>
       <IconUpload
         :button-class="uploadButtonClass"
         :icon="resolvedIcon"
@@ -26,6 +26,7 @@
 </template>
 
 <script setup>
+import FormFieldLabel from '../../../shared/components/FormFieldLabel.vue';
 import { computed } from 'vue';
 import IconUpload from './IconUpload.vue';
 
