@@ -1,17 +1,19 @@
 <script setup>
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
+import { workflowEventOutcome } from '../workflowPresentation';
 
-const props = defineProps({ entityType: { type: String, required: true }, entityId: { type: [Number, String], required: true }, accountId: { type: [Number, String], required: true }, request: { type: Function, required: true }, backendUrl: { type: Function, default: value => value } });
+const props = defineProps({ reviewAllowed: { type: Boolean, default: true }, entityType: { type: String, required: true }, entityId: { type: [Number, String], required: true }, accountId: { type: [Number, String], required: true }, request: { type: Function, required: true }, backendUrl: { type: Function, default: value => value } });
 const emit = defineEmits(['updated']);
 const items = ref([]);
 const busy = ref(false);
 const message = ref('');
 const opinion = ref('');
+const decision = ref('');
 const signature = ref(null);
 const useSignature = ref(false);
 const current = computed(() => items.value[0] || null);
 const activeNode = computed(() => current.value?.nodes_json?.[Number(current.value.active_position) - 1] || null);
-const canReview = computed(() => current.value?.status === 'wait' && current.value.tasks?.some(task => task.status === 'pending' && Number(task.position) === Number(current.value.active_position) && Number(task.account_id) === Number(props.accountId)));
+const canReview = computed(() => props.reviewAllowed && current.value?.status === 'wait' && current.value.tasks?.some(task => task.kind === 'review' && task.status === 'pending' && Number(task.position) === Number(current.value.active_position) && Number(task.account_id) === Number(props.accountId)));
 const statusNames = { draft: '草稿', wait: '待审批', accept: '已通过', modify: '已退回', cancelled: '已取消' };
 const actionNames = { start: '提交', accept: '通过', modify: '退回', cancel: '取消' };
 function candidateName(instance, actorId) {
@@ -29,6 +31,7 @@ async function reload() {
   signature.value = null;
   useSignature.value = false;
   opinion.value = '';
+  decision.value = '';
   busy.value = false;
   message.value = '';
   if (!props.entityId) return;
@@ -45,10 +48,12 @@ async function reload() {
   } catch (error) { if (!disposed && version === generation) message.value = error.message; }
   finally { if (!disposed && version === generation) busy.value = false; }
 }
-async function review(action) {
+async function review() {
+  const action = decision.value;
   if (disposed || busy.value || !canReview.value) return;
   const version = generation;
   const source = [props.entityType, props.entityId, props.accountId].join(':');
+  if (!['accept', 'modify'].includes(action)) { message.value = '请选择审批结果'; return; }
   if (action === 'modify' && !opinion.value.trim()) { message.value = '请填写退回意见'; return; }
   if (activeNode.value?.signature_required && (!signature.value || !useSignature.value)) { message.value = '此节点需要本人签名，请先在个人设置中保存签名，并勾选用于本次审批。'; return; }
   busy.value = true;
@@ -81,14 +86,15 @@ defineExpose({ reload });
         </li>
       </ol>
       <ul class="workflow-events">
-        <li v-for="event in instance.history" :key="event.id"><div><strong>{{ candidateName(instance, event.actor_id) }} · {{ actionNames[event.action] || event.action }}</strong><time>{{ event.created_at }}</time></div><p v-if="event.opinion">{{ event.opinion }}</p><small v-if="event.signature_json">已签名 · 版本 {{ event.signature_json.version }} · {{ event.signature_json.signed_at }}</small></li>
+        <li v-for="event in instance.history" :key="event.id"><div><strong>{{ instance.nodes_json?.[Number(event.position) - 1]?.name || '流程' }} · {{ candidateName(instance, event.actor_id) }} · {{ actionNames[event.action] || event.action }}</strong><time>{{ event.created_at }}</time></div><p v-if="workflowEventOutcome(instance, event)">{{ workflowEventOutcome(instance, event) }}</p><p v-if="event.opinion">{{ event.opinion }}</p><small v-if="event.signature_json">已签名 · 版本 {{ event.signature_json.version }} · {{ event.signature_json.signed_at }}</small></li>
       </ul>
     </article>
-    <form v-if="canReview" class="workflow-review" @submit.prevent="review('accept')">
+    <form v-if="canReview" class="workflow-review" @submit.prevent="review">
+      <fieldset :disabled="busy"><legend>审批结果</legend><label><input v-model="decision" type="radio" value="accept" /> 通过</label><label><input v-model="decision" type="radio" value="modify" /> 退回修改</label></fieldset>
       <label>审批意见<textarea v-model="opinion" rows="3" maxlength="2000" :disabled="busy" placeholder="退回时必须填写意见" /></label>
       <div v-if="signature" class="workflow-signature-choice"><label><input v-model="useSignature" type="checkbox" :disabled="busy" /> 使用本人电子签名{{ activeNode?.signature_required ? '（必填）' : '' }}</label><img :src="backendUrl(signature.url)" alt="本人电子签名" /></div>
       <p v-else class="workflow-muted">尚未设置电子签名，可在个人设置中手写或扫码签名。</p>
-      <div class="workflow-review-actions"><button class="workflow-accept" type="submit" :disabled="busy">通过</button><button type="button" :disabled="busy" @click="review('modify')">退回</button></div>
+      <div class="workflow-review-actions"><button class="workflow-accept" type="submit" :disabled="busy || !decision">{{ decision === 'accept' ? '确认通过' : decision === 'modify' ? '退回修改' : '请选择审批结果' }}</button></div>
     </form>
   </section>
 </template>
@@ -113,6 +119,7 @@ defineExpose({ reload });
 .workflow-events li > div { flex-wrap: wrap; justify-content: space-between; }
 .workflow-events p { white-space: pre-wrap; overflow-wrap: anywhere; margin: 6px 0; }
 .workflow-review { margin-top: 16px; display: grid; gap: 12px; }
+.workflow-review fieldset { display: flex; gap: 20px; border: 1px solid var(--line, #dbe1ea); border-radius: 5px; padding: 10px; }
 .workflow-review textarea { display: block; width: 100%; box-sizing: border-box; margin-top: 6px; padding: 10px; border: 1px solid var(--line, #dbe1ea); border-radius: 5px; font: inherit; resize: vertical; color: var(--text, #253248); background: var(--surface, #fff); }
 .workflow-signature-choice { display: flex; align-items: center; flex-wrap: wrap; gap: 16px; }
 .workflow-signature-choice img { width: 150px; height: 70px; object-fit: contain; background: #fff; border: 1px solid var(--line, #e2e7ef); }

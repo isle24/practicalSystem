@@ -138,10 +138,12 @@
 
 ### 计划草稿、提交、审核与发布
 
-1. `social-practice.detail`（resource=plan）：取 draft/modify 的完整字段/日期/approval_flow_id/数组。新建须核实年级/学院/流程；无社会实践选项/审批流列表，缺 ID 请用户原界面选择，不猜流程。
-2. `social-practice.save`（B）：显式 resource=plan，填 title/grade_id/有效 approval_flow_id 及完整字段、scopes/requirements/score_rules。服务强制 draft，不传 status/submit/published_at/uuid；返回 id/status 后 detail 回查。数组全量替换，禁止只传改动项。
-3. `social-practice.submit`（C）：resource=plan/id 仅提交已有 draft/modify；先保存或核实内容，预览计划/流程后执行，detail/timeline 回查 wait/节点。缺资料不自动补业务配置。
-4. `social-practice.review`（C）：detail/timeline 确认 wait/节点，用户给 accept/modify/意见；原服务校验节点权限/能否退回，执行后回查。单次审核不保证最终 accept。
+计划详情必须包含 workflow 字段（未配置流程时为 null）。若没有此字段，说明学校后端尚未适配，暂停计划提交、审核和发布并提示升级；不能按新版单次审核规则操作旧服务器。
+
+1. `social-practice.detail`（resource=plan）：取 draft/modify 的完整字段、日期、数组与 workflow。新建核实有效年级和学院；缺基础 ID 请用户原界面选择。审批使用系统已发布的“社会实践计划”流程；未配置时一次人工审核，已有草稿流程须发布后使用。
+2. `social-practice.save`（B）：显式 resource=plan，填 title/grade_id 及完整字段、scopes/requirements/score_rules。approval_flow_id 仅为旧版兼容字段，不要求新建时填写。服务强制 draft，不传 status/submit/published_at/uuid；返回 id/status 后 detail 回查。数组全量替换，禁止只传改动项。
+3. `social-practice.submit`（C）：resource=plan/id 仅提交已有 draft/modify；先保存或核实内容，预览计划/流程后执行。request_id 由预览生成并固定，重复请求须复用；detail/timeline 回查 wait/节点。缺资料不自动补业务配置，不自动通过或追加备案。
+4. `social-practice.review`（C）：detail/timeline 确认 wait、workflow.can_review 和当前节点，由用户明确决定 accept/modify，不能默认通过。有 workflow 时必须带其 instance_id 与 revision；要求签名时须使用本人明确授权的 signature_id，无法取得合法签名则回原界面办理，不能跳过或猜测。modify 立即退回修改；accept 可能继续下一节点或会签等待，最终流程 accept 才是全部通过。执行后回查结果和下一步。
 5. `social-practice.publish`（C）：用户要求发布才做；detail 确认 accept，预览 phase/发布时间/必修名单同步/通知，执行后 detail/timeline 核对 phase=enrolling、published_at 和回执。审核通过不自动发布。
 
 ### 材料草稿与提交

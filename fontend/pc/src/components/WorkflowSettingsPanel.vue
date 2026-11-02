@@ -7,7 +7,8 @@ const loading = ref(false);
 const message = ref('');
 const definitions = ref([]);
 const options = reactive({ entity_types: [], accounts: [], roles: [], departments: [] });
-const labels = { base_application: '基地申报', base_expense: '基地建设费用申请' };
+const labels = { social_practice_plan: '社会实践计划', base_application: '基地申报', base_expense: '基地建设费用申请' };
+const defaultNames = { base_application: '基地申报审批', base_expense: '基地建设费用审批', social_practice_plan: '社会实践计划审批' };
 const channels = [{ value: 'internal', label: '站内消息' }, { value: 'wechat', label: '企业微信' }, { value: 'sms', label: '短信' }];
 const form = reactive({ entity_type: 'base_expense', dep_id: 0, name: '', nodes: [] });
 const selectedVersion = ref(null);
@@ -17,8 +18,13 @@ function node(name = '审批节点', kind = 'review') {
   return { name, kind, mode: 'any', signature_required: false, selector: { type: 'accounts', account_ids: [], role_id: 0, department: 'entity', dep_id: 0 }, notification: { enabled: false, channels: ['internal'], template: 'workflow_pending' } };
 }
 function newDefinition() {
-  Object.assign(form, { entity_type: options.entity_types.includes('base_expense') ? 'base_expense' : options.entity_types[0] || '', dep_id: 0, name: '基地建设费用审批', nodes: [node('直接上级'), node('教务处审批'), node('教务处领导'), node('抄送', 'cc')] });
+  const entityType = options.entity_types.includes('base_expense') ? 'base_expense' : options.entity_types[0] || '';
+  Object.assign(form, { entity_type: entityType, dep_id: 0, name: defaultNames[entityType] || '', nodes: [node('直接上级'), node('教务处审批'), node('教务处领导'), node('抄送', 'cc')] });
   selectedVersion.value = null;
+  dirty.value = true;
+}
+function changeEntityType() {
+  if (Object.values(defaultNames).includes(form.name)) form.name = defaultNames[form.entity_type] || '';
   dirty.value = true;
 }
 async function run(action) {
@@ -83,10 +89,11 @@ onMounted(() => run(async () => {
       </aside>
       <el-form class="workflow-definition-editor" label-position="top" @change="dirty = true">
         <div class="workflow-settings-grid">
-          <el-form-item label="适用模块"><el-select v-model="form.entity_type" @change="dirty = true"><el-option v-for="type in options.entity_types" :key="type" :value="type" :label="labels[type] || type" /></el-select></el-form-item>
+          <el-form-item label="适用模块"><el-select v-model="form.entity_type" @change="changeEntityType"><el-option v-for="type in options.entity_types" :key="type" :value="type" :label="labels[type] || type" /></el-select></el-form-item>
           <el-form-item label="适用学院"><el-select v-model="form.dep_id" @change="dirty = true"><el-option :value="0" label="学校默认" /><el-option v-for="department in options.departments" :key="department.dep_id" :value="Number(department.dep_id)" :label="department.dep_name" /></el-select></el-form-item>
           <el-form-item label="流程名称"><el-input v-model="form.name" maxlength="180" @input="dirty = true" /></el-form-item>
         </div>
+        <p v-if="form.entity_type === 'social_practice_plan'" class="workflow-help">计划按已发布配置审批；未配置时进行一次人工审核。退回后可修改并重新提交。</p>
         <p class="workflow-help">按顺序处理审批节点；或签由任一审批人通过，会签需全部审批人通过。发布前须为每个节点配置有效人员。</p>
         <article v-for="(item, index) in form.nodes" :key="index" class="workflow-node-editor">
           <header><strong>节点 {{ index + 1 }}</strong><div><el-button size="small" :disabled="index === 0" @click="move(index, -1)">上移</el-button><el-button size="small" :disabled="index === form.nodes.length - 1" @click="move(index, 1)">下移</el-button><el-button size="small" type="danger" text @click="form.nodes.splice(index, 1); dirty = true">删除</el-button></div></header>

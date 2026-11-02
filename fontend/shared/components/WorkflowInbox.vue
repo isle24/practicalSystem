@@ -13,10 +13,10 @@ const pageSize = ref(20);
 const total = ref(0);
 let generation = 0;
 let disposed = false;
-const application = computed(() => selected.value?.snapshot_json?.application || selected.value?.snapshot_json?.expense || selected.value?.snapshot_json || {});
+const application = computed(() => selected.value?.snapshot_json?.plan || selected.value?.snapshot_json?.application || selected.value?.snapshot_json?.expense || selected.value?.snapshot_json || {});
 const base = computed(() => selected.value?.snapshot_json?.base || {});
-const labels = { base_application: '基地申报', base_expense: '基地建设费用申请' };
-const title = item => item.snapshot_json?.application?.title || item.snapshot_json?.expense?.title || item.snapshot_json?.title || labels[item.entity_type] || '审批申请';
+const labels = { social_practice_plan: '社会实践计划', base_application: '基地申报', base_expense: '基地建设费用申请' };
+const title = item => item.snapshot_json?.plan?.title || item.snapshot_json?.application?.title || item.snapshot_json?.expense?.title || item.snapshot_json?.title || labels[item.entity_type] || '审批申请';
 async function load() {
   const version = ++generation;
   const current = () => !disposed && version === generation;
@@ -48,7 +48,7 @@ onBeforeUnmount(() => { disposed = true; generation++; });
       <button @click="selected = null">返回列表</button>
       <article class="workflow-inbox-detail">
         <h3>{{ title(selected) }}</h3>
-        <dl><dt>类型</dt><dd>{{ labels[selected.entity_type] || '审批申请' }}</dd><dt>实习基地</dt><dd>{{ base.name || application.base_name || '—' }}</dd><dt>申报内容</dt><dd class="workflow-inbox-content">{{ String(application.content || '').replace(/<[^>]*>/g, '') || '—' }}</dd></dl>
+        <dl><dt>类型</dt><dd>{{ labels[selected.entity_type] || '审批申请' }}</dd><template v-if="selected.entity_type !== 'social_practice_plan'"><dt>实习基地</dt><dd>{{ base.name || application.base_name || '—' }}</dd></template><dt>{{ selected.entity_type === 'social_practice_plan' ? '计划说明' : '申报内容' }}</dt><dd class="workflow-inbox-content">{{ String(application.description || application.content || '').replace(/<[^>]*>/g, '') || '—' }}</dd></dl>
       <WorkflowHistory :key="selected.instance_id" :entity-type="selected.entity_type" :entity-id="selected.entity_id" :account-id="accountId" :request="request" :backend-url="backendUrl" @updated="load" />
       </article>
     </template>

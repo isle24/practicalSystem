@@ -56,6 +56,7 @@
     </template>
 
     <template v-else>
+      <el-alert v-if="panelResource === 'plan' && state.options.loaded && !planApprovalReady" :title="planApprovalUpgradeMessage" type="warning" :closable="false" show-icon />
       <header class="social-panel-head compact">
         <div>
           <h2>{{ panelConfig.title }}</h2>
@@ -130,7 +131,7 @@
           <label class="span-2"><span>计划名称</span><input v-model="state.form.title" maxlength="180" placeholder="请输入社会实践计划名称"></label>
           <label><span>年级</span><el-select v-model="state.form.grade_id" filterable placeholder="请选择年级" @change="normalizePlanScopes"><el-option v-for="item in state.options.grades" :key="item.grade_id" :label="item.grade_name" :value="item.grade_id" /></el-select></label>
           <label><span>组织学院</span><el-select v-model="state.form.organizer_dep_id" clearable filterable placeholder="请选择学院"><el-option v-for="item in state.options.departments" :key="item.dep_id" :label="item.dep_name" :value="item.dep_id" /></el-select></label>
-          <label><span>审批流程</span><el-select v-model="state.form.approval_flow_id" filterable placeholder="请选择审批流程"><el-option v-for="item in state.options.approval_flows" :key="item.id" :label="item.name" :value="item.id" /></el-select></label>
+          <p class="span-2">审批流程由系统配置决定；未配置时进行一次人工审核，退回后可修改并重新提交。</p>
           <label><span>学分</span><el-input-number v-model="state.form.credit" :min="0" :max="99" :precision="1" /></label>
           <label><span>参与方式</span><el-select v-model="state.form.participation_mode" placeholder="请选择参与方式"><el-option label="必修" value="mandatory" /><el-option label="自愿" value="voluntary" /></el-select></label>
           <label><span>教师匹配</span><el-select v-model="state.form.teacher_match_mode" placeholder="请选择教师匹配方式"><el-option label="学生选择" value="student_choose" /><el-option label="管理员分配" value="admin_assign" /><el-option label="混合匹配" value="mixed" /></el-select></label>
@@ -301,30 +302,35 @@
       @close="closeDialog"
     >
       <div class="social-review-form">
-        <el-radio-group v-if="state.dialog.type === 'review'" v-model="state.review.status">
+        <el-radio-group v-if="state.dialog.type === 'review'" v-model="state.review.status" :disabled="state.saving">
           <el-radio-button value="accept">通过</el-radio-button>
           <el-radio-button value="modify">退回修改</el-radio-button>
         </el-radio-group>
         <label>
           <span>{{ state.dialog.type === 'modify' ? '修改理由' : '审核意见' }}</span>
-          <textarea v-model="state.review.opinion" :maxlength="reviewLimit.max" rows="7" :placeholder="reviewPlaceholder" />
+          <textarea :disabled="state.saving" v-model="state.review.opinion" :maxlength="reviewLimit.max" rows="7" :placeholder="reviewPlaceholder" />
           <small>{{ state.review.opinion.length }} / {{ reviewLimit.max }} 字<span v-if="reviewLimit.min">，至少 {{ reviewLimit.min }} 字</span></small>
         </label>
       </div>
       <template #footer>
         <el-button :disabled="state.saving" @click="closeDialog">取消</el-button>
-        <el-button v-if="state.dialog.type === 'review'" :loading="state.saving" @click="saveReviewDraftOnly">保存草稿</el-button>
-        <el-button type="primary" :loading="state.saving" @click="submitReview">提交审核</el-button>
+        <el-button v-if="state.dialog.type === 'review'" :loading="state.saving" :disabled="!state.review.status" @click="saveReviewDraftOnly">保存草稿</el-button>
+        <el-button type="primary" :loading="state.saving" :disabled="!state.review.status" @click="submitReview">{{ reviewSubmitLabel }}</el-button>
       </template>
     </OperationDialog>
 
+    <OperationDialog :visible="state.dialog.type === 'workflow'" title="计划审批" @close="closeDialog">
+      <WorkflowHistory v-if="state.dialog.type === 'workflow'" entity-type="social_practice_plan" :review-allowed="Boolean(state.dialog.row?.workflow?.can_review)" :entity-id="state.dialog.row.id" :account-id="accountId" :request="request" :backend-url="backendUrl" @updated="workflowUpdated" />
+    </OperationDialog>
+
     <OperationDialog :visible="state.dialog.type === 'timeline'" title="流程记录" dialog-class="social-practice-timeline-dialog" @close="closeDialog">
+      <WorkflowHistory v-if="state.dialog.type === 'timeline' && state.dialog.row?.resource === 'plan' && state.dialog.row?.workflow?.instance_id" entity-type="social_practice_plan" :review-allowed="Boolean(state.dialog.row?.workflow?.can_review)" :entity-id="state.dialog.row.id" :account-id="accountId" :request="request" :backend-url="backendUrl" @updated="workflowUpdated" />
       <div class="social-timeline">
         <article v-for="record in state.timeline.records" :key="record.id">
           <span class="social-timeline-dot" />
           <div class="social-timeline-main">
             <header><strong>{{ actionText(record.action) }}</strong><time>{{ record.created_at }}</time></header>
-            <p>{{ statusText(record.from_status) }} → {{ statusText(record.to_status) }}</p>
+            <p>{{ socialPracticeRecordOutcome(record, reviewsFor(record.id), statusText) }}</p>
             <blockquote v-if="record.content">{{ record.content }}</blockquote>
             <section v-for="review in reviewsFor(record.id)" :key="review.id" class="social-review-branch">
               <span /><div><strong>{{ review.reviewer_name || review.reviewer_login || '审核人' }} · {{ statusText(review.status) }}</strong><p>{{ review.opinion || '无审核意见' }}</p></div>
@@ -469,7 +475,9 @@ import {
   submitSocialPractice,
   uploadFile,
 } from '../api/system';
-import { backendUrl } from '../api/client';
+import WorkflowHistory from '../../../shared/components/WorkflowHistory.vue';
+import { socialPracticeRecordOutcome } from '../../../shared/workflowPresentation';
+import { backendUrl, request } from '../api/client';
 
 const props = defineProps({
   panel: { type: String, default: 'overview' },
@@ -515,7 +523,7 @@ const state = reactive({
   dialog: { type: '', title: '', row: null },
   detail: {},
   timeline: { records: [], reviews: [] },
-  review: { status: 'accept', opinion: '' },
+  review: { status: '', opinion: '' },
   form: emptyForm('plan'),
   assignment: { projectId: null, declarationId: null, declarationTeacherId: null, teachers: [], participants: [] },
   planImport: { fileId: null, items: [], summary: null },
@@ -527,6 +535,8 @@ let readRequest = 0;
 let optionsRequest = 0;
 let optionsPromise = null;
 let studentRequest = 0;
+const submitRequests = new Map();
+let reviewEditVersion = 0;
 const detailPageSize = 20;
 const assignmentPage = ref(1);
 const detailParticipantPage = ref(1);
@@ -552,6 +562,8 @@ const scoreStudentOptions = computed(() => {
   return assignedIds.length ? state.options.students.filter(item => assignedIds.includes(Number(item.student_id))) : state.options.students;
 });
 const scoreStudentSelectOptions = computed(() => scoreStudentOptions.value.map(item => ({ label: `${item.name} / ${item.student_num}`, value: item.student_id })));
+const planApprovalUpgradeMessage = '当前服务端尚不支持新的社会实践计划审批。请先升级并重启服务端，再刷新页面；当前仅可查看计划和流程记录。';
+const planApprovalReady = computed(() => state.options.plan_approval_engine === 'configured_or_manual_v1');
 const panelResource = computed(() => panelConfig.value.resource);
 const createLabel = computed(() => ({
   plan: '新增计划', project: '新增集中项目', implementation: '新增实施申请', declaration: '发起分散申报',
@@ -587,8 +599,11 @@ const listFilters = computed(() => [
 ]);
 const tableActions = computed(() => uniqueActions(state.rows.flatMap(rowActions)));
 const detailFacts = computed(() => detailFields(state.dialog.row?.resource || panelResource.value).map(item => ({ label: item.label, value: item.format ? item.format(state.detail) : state.detail[item.key] })));
+const reviewSubmitLabel = computed(() => state.dialog.type === 'modify' ? '发起修改' : state.review.status === 'accept' ? '确认通过' : state.review.status === 'modify' ? '退回修改' : '请选择审核结果');
 const reviewLimit = computed(() => state.review.status === 'modify' || state.dialog.type === 'modify' ? { min: 8, max: 800 } : { min: 0, max: 300 });
 const reviewPlaceholder = computed(() => reviewLimit.value.min ? `请填写不少于 ${reviewLimit.value.min} 字的具体原因` : '可填写审核意见');
+
+watch(() => [state.review.status, state.review.opinion], () => { reviewEditVersion++; }, { flush: 'sync' });
 
 watch(() => state.detail, () => { detailParticipantPage.value = 1; detailMemberPage.value = 1; });
 
@@ -600,6 +615,8 @@ watch(() => [props.panel, props.sessionKey, props.accountId, props.roleType], as
   optionsPromise = null;
   if (previous && next.slice(1).some((value, index) => value !== previous[index + 1])) state.options = emptyOptions();
   state.loading = false;
+  state.saving = false;
+  submitRequests.clear();
   state.message = '';
   state.error = false;
   state.rows = [];
@@ -667,7 +684,6 @@ function applyPlanScopeDefaults(form) {
     form.organizer_dep_id = depId;
     form.scopes = [{ scope_type: 'college', dep_id: depId, profession_id: '', class_id: '' }];
   }
-  form.approval_flow_id = state.options.approval_flows[0]?.id || '';
 }
 
 /** 读取社会实践总览数据。 */
@@ -718,6 +734,7 @@ async function downloadPlanImportTemplate() {
 
 /** 打开社会实践计划导入窗口。 */
 function openPlanImport() {
+  if (!requirePlanApprovalEngine('plan')) return;
   planImportPage.value = 1;
   state.planImport = { fileId: null, items: [], summary: null };
   state.dialog = { type: 'planImport', title: '导入社会实践计划', row: null };
@@ -746,13 +763,14 @@ async function previewPlanImport(event) {
 
 /** 确认写入社会实践计划草稿。 */
 async function confirmPlanImport() {
+  if (!requirePlanApprovalEngine('plan')) return;
   if (state.saving || !state.planImport.fileId) return;
   state.saving = true;
   try {
     const rows = state.planImport.items.filter(item => !item.errors?.length);
     const data = await confirmSocialPracticePlanImport({ import_file_id: state.planImport.fileId, rows });
     ElMessage.success(`导入完成：新增 ${data.created || 0} 条，更新 ${data.updated || 0} 条`);
-    closeDialog();
+    closeDialog(true);
     await loadList(1);
   } catch (error) {
     ElMessage.error(error.message);
@@ -791,9 +809,12 @@ async function resetFilters() {
 
 /** 打开当前面板的新建表单。 */
 async function openCreate() {
+  if (state.saving) return;
+  const operation = ++readRequest;
   const context = generation;
-  if (!await ensureOptions() || disposed || context !== generation) return;
+  if (!await ensureOptions() || disposed || context !== generation || operation !== readRequest) return;
   const resource = ['safety', 'material'].includes(panelResource.value) ? 'material' : panelResource.value;
+  if (!requirePlanApprovalEngine(resource)) return;
   state.form = emptyForm(resource);
   applyPlanScopeDefaults(state.form);
   if (resource === 'material' && props.panel === 'safety') state.form.material_type = 'safety_agreement';
@@ -802,15 +823,18 @@ async function openCreate() {
 
 /** 打开业务记录编辑表单。 */
 async function openEdit(row) {
+  if (state.saving) return;
+  const operation = ++readRequest;
   const context = generation;
   const resource = actionResource(row);
+  if (!requirePlanApprovalEngine(resource)) return;
   let detail = row;
   if (workflowResources.includes(resource)) detail = await fetchSocialPracticeDetail(resource, row.id);
-  if (disposed || context !== generation) return;
+  if (disposed || context !== generation || operation !== readRequest) return;
   state.form = formFromRow(resource, detail);
   if (resource === 'score') prepareScoreRules(state.form.project_id);
   if (resource === 'declaration' && state.form.plan_id) await loadPlanStudents();
-  if (disposed || context !== generation) return;
+  if (disposed || context !== generation || operation !== readRequest) return;
   state.dialog = { type: 'form', title: `编辑${panelConfig.value.title}`, row: { ...row, resource } };
 }
 
@@ -842,30 +866,41 @@ function removeMaterialFile(file) {
 
 /** 保存业务表单并按需提交审核。 */
 async function saveForm(submit) {
+  if (!requirePlanApprovalEngine(state.form.resource)) return;
   if (state.saving || state.uploading) return;
+  const context = generation;
+  const form = state.form;
+  const dialog = state.dialog;
+  const current = () => !disposed && context === generation && dialog === state.dialog && form === state.form;
+  const resource = form.resource;
+  const payload = normalizeFormPayload(form);
   state.saving = true;
   try {
-    const payload = normalizeFormPayload(state.form);
     let result;
-    if (state.form.resource === 'material') result = await saveSocialPracticeMaterial({ ...payload, submit });
-    else if (state.form.resource === 'patch_sign') result = await saveSocialPracticePatchSign({ ...payload, submit });
-    else if (state.form.resource === 'score') result = await saveSocialPracticeScore({ ...payload, submit });
+    if (resource === 'material') result = await saveSocialPracticeMaterial({ ...payload, submit });
+    else if (resource === 'patch_sign') result = await saveSocialPracticePatchSign({ ...payload, submit });
+    else if (resource === 'score') result = await saveSocialPracticeScore({ ...payload, submit });
     else {
       result = await saveSocialPractice(payload);
-      if (submit && state.form.resource !== 'project') await submitSocialPractice({ resource: state.form.resource, id: result.id });
+      if (!current()) return;
+      form.id = result.id;
+      if (submit && resource !== 'project') await submitEntity(resource, result.id);
     }
-    ElMessage.success(state.form.resource === 'project' ? '项目已保存' : (submit ? '已提交审核' : '草稿已保存'));
-    closeDialog();
+    if (!current()) return;
+    ElMessage.success(resource === 'project' ? '项目已保存' : (submit ? '已提交审核' : '草稿已保存'));
+    closeDialog(true);
     await loadList(1);
   } catch (error) {
-    ElMessage.error(error.message);
+    if (current()) ElMessage.error(error.message);
   } finally {
-    state.saving = false;
+    if (!disposed && context === generation) state.saving = false;
   }
 }
 
 /** 执行列表记录操作。 */
 async function handleRowAction({ action, row }) {
+  if (state.saving) return;
+  readRequest++;
   if (action === 'view') return openDetail(row);
   if (action === 'timeline') return openTimeline(row);
   if (action === 'edit') return openEdit(row);
@@ -905,71 +940,126 @@ async function openTimeline(row) {
 
 /** 打开审核或通过后修改表单。 */
 async function openReview(row, type) {
+  if (state.saving) return;
+  readRequest++;
   const context = generation;
   const resource = actionResource(row);
-  state.review = { status: type === 'modify' ? 'modify' : 'accept', opinion: '' };
-  if (type === 'review') {
-    try {
-      const data = await fetchSocialPracticeReviewDraft(resource, row.id);
-      if (disposed || context !== generation) return;
-      if (data.draft) state.review = { status: data.draft.review_status || 'accept', opinion: data.draft.opinion || '' };
-    } catch {
-      if (disposed || context !== generation) return;
-      state.review = { status: 'accept', opinion: '' };
-    }
+  if (resource === 'plan' && row.workflow?.instance_id && type === 'review') {
+    if (!row.workflow.can_review) return;
+    state.dialog = { type: 'workflow', title: '计划审批', row: { ...row, resource } };
+    return;
   }
-  if (disposed || context !== generation) return;
+  if (!requirePlanApprovalEngine(resource)) return;
+  state.review = { status: type === 'modify' ? 'modify' : '', opinion: '' };
   state.dialog = { type, title: type === 'modify' ? '通过后修改' : `审核${panelConfig.value.title}`, row: { ...row, resource } };
+  const dialog = state.dialog;
+  const review = state.review;
+  const editVersion = reviewEditVersion;
+  if (type !== 'review') return;
+  try {
+    const data = await fetchSocialPracticeReviewDraft(resource, row.id);
+    if (disposed || context !== generation || dialog !== state.dialog || review !== state.review || editVersion !== reviewEditVersion || state.saving) return;
+    if (data.draft && !review.opinion && !review.status) review.opinion = data.draft.opinion || '';
+  } catch (error) {
+    if (!disposed && context === generation && dialog === state.dialog && error?.status !== 404) ElMessage.error(error.message);
+  }
+}
+
+async function workflowUpdated() {
+  const context = generation;
+  const dialog = state.dialog;
+  await loadList(state.pagination.page);
+  if (disposed || context !== generation || dialog !== state.dialog) return;
+  if (dialog.type === 'workflow') closeDialog(true);
+  else if (dialog.type === 'timeline') await openTimeline(dialog.row);
 }
 
 /** 保存审核意见草稿。 */
 async function saveReviewDraftOnly() {
-  if (state.saving) return;
+  if (!requirePlanApprovalEngine(state.dialog.row?.resource)) return;
+  if (state.saving || !['accept', 'modify'].includes(state.review.status)) return;
+  const context = generation;
+  const dialog = state.dialog;
+  const current = () => !disposed && context === generation && dialog === state.dialog;
+  const payload = { resource: dialog.row.resource, id: dialog.row.id, ...state.review };
   state.saving = true;
   try {
-    await saveSocialPracticeReviewDraft({ resource: state.dialog.row.resource, id: state.dialog.row.id, ...state.review });
-    ElMessage.success('审核草稿已保存');
+    await saveSocialPracticeReviewDraft(payload);
+    if (current()) ElMessage.success('审核草稿已保存');
   } catch (error) {
-    ElMessage.error(error.message);
+    if (current()) ElMessage.error(error.message);
   } finally {
-    state.saving = false;
+    if (!disposed && context === generation) state.saving = false;
   }
 }
 
 /** 提交审核结果或通过后修改请求。 */
 async function submitReview() {
+  if (!requirePlanApprovalEngine(state.dialog.row?.resource)) return;
   if (state.saving) return;
-  if (state.review.opinion.length < reviewLimit.value.min) {
+  if (!['accept', 'modify'].includes(state.review.status)) { ElMessage.warning('请选择审核结果'); return; }
+  if (state.review.opinion.trim().length < reviewLimit.value.min) {
     ElMessage.warning(`意见至少填写 ${reviewLimit.value.min} 字`);
     return;
   }
+  const context = generation;
+  const dialog = state.dialog;
+  const current = () => !disposed && context === generation && dialog === state.dialog;
+  const payload = { resource: dialog.row.resource, id: dialog.row.id, ...state.review, opinion: state.review.opinion.trim() };
   state.saving = true;
   try {
-    const payload = { resource: state.dialog.row.resource, id: state.dialog.row.id, ...state.review };
-    if (state.dialog.type === 'modify') await requestSocialPracticeModification(payload);
-    else await reviewSocialPractice(payload);
-    ElMessage.success(state.dialog.type === 'modify' ? '已发起修改' : '审核已提交');
-    closeDialog();
+    const result = dialog.type === 'modify' ? await requestSocialPracticeModification(payload) : await reviewSocialPractice(payload);
+    if (!current()) return;
+    ElMessage.success(dialog.type === 'modify' ? '已发起修改' : payload.status === 'accept' ? (result.status === 'wait' ? '本次已通过，流程仍待后续审核' : '已确认通过') : '已退回修改');
+    closeDialog(true);
     await loadList(state.pagination.page);
   } catch (error) {
-    ElMessage.error(error.message);
+    if (current()) ElMessage.error(error.message);
   } finally {
-    state.saving = false;
+    if (!disposed && context === generation) state.saving = false;
   }
+}
+
+function requirePlanApprovalEngine(resource) {
+  if (resource !== 'plan' || planApprovalReady.value) return true;
+  ElMessage.warning(planApprovalUpgradeMessage);
+  return false;
+}
+
+async function submitEntity(resource, id) {
+  if (resource === 'plan' && !planApprovalReady.value) throw new Error(planApprovalUpgradeMessage);
+  const key = `${resource}:${id}`;
+  if (!submitRequests.has(key)) submitRequests.set(key, globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`);
+  const result = await submitSocialPractice({ resource, id, request_id: submitRequests.get(key) });
+  submitRequests.delete(key);
+  return result;
 }
 
 /** 二次确认提交草稿。 */
 async function confirmSubmit(row) {
+  if (!requirePlanApprovalEngine(actionResource(row))) return;
+  if (state.saving) return;
+  const context = generation;
+  const resource = actionResource(row);
+  const current = () => !disposed && context === generation;
   try {
     await ElMessageBox.confirm('提交后将进入审核流程，并向审核人发送待办和消息。', '提交审核', { type: 'warning', confirmButtonText: '提交审核' });
-    await runSaving(async () => submitSocialPractice({ resource: actionResource(row), id: row.id }), '已提交审核');
+    if (!current() || state.saving) return;
+    state.saving = true;
+    await submitEntity(resource, row.id);
+    if (!current()) return;
+    ElMessage.success('已提交审核');
+    await loadList(state.pagination.page);
   } catch (error) {
-    if (error !== 'cancel' && error !== 'close') ElMessage.error(error.message || String(error));
+    if (current() && error !== 'cancel' && error !== 'close') ElMessage.error(error.message || String(error));
+  } finally {
+    if (current()) state.saving = false;
   }
 }
 
 /** 二次确认发布计划。 */
 async function confirmPublish(row) {
+  if (!requirePlanApprovalEngine('plan')) return;
   try {
     await ElMessageBox.confirm('发布后，计划范围内的学生将收到通知。', '发布计划', { type: 'warning', confirmButtonText: '确认发布' });
     await runSaving(async () => publishSocialPractice({ id: row.id }), '计划已发布');
@@ -980,9 +1070,11 @@ async function confirmPublish(row) {
 
 /** 打开项目教师分配。 */
 async function openTeacherAssignment(row) {
+  if (state.saving) return;
+  const operation = ++readRequest;
   const context = generation;
   const detail = await fetchSocialPracticeDetail('project', row.id);
-  if (disposed || context !== generation) return;
+  if (disposed || context !== generation || operation !== readRequest) return;
   state.assignment = { projectId: row.id, teachers: detail.teachers?.length ? detail.teachers.map(item => ({ teacher_id: item.teacher_id, teacher_role: item.teacher_role, capacity: Number(item.capacity || 0) })) : [{ teacher_id: null, teacher_role: 'leader', capacity: Number(row.capacity || 0) }], participants: detail.participants || [] };
   state.dialog = { type: 'assignTeachers', title: '分配指导教师', row: { ...row, resource: 'project' } };
 }
@@ -994,9 +1086,11 @@ async function submitTeacherAssignment() {
 
 /** 打开项目学生分配。 */
 async function openStudentAssignment(row) {
+  if (state.saving) return;
+  const operation = ++readRequest;
   const context = generation;
   const detail = await fetchSocialPracticeDetail('project', row.id);
-  if (disposed || context !== generation) return;
+  if (disposed || context !== generation || operation !== readRequest) return;
   state.assignment = {
     projectId: row.id,
     teachers: detail.teachers || [],
@@ -1082,7 +1176,7 @@ async function runAssignment(callback, message) {
   try {
     await callback();
     ElMessage.success(message);
-    closeDialog();
+    closeDialog(true);
     await loadList(state.pagination.page);
   } catch (error) {
     ElMessage.error(error.message);
@@ -1130,8 +1224,8 @@ async function runLoading(callback, matches = () => true) {
 }
 
 /** 关闭当前弹窗。 */
-function closeDialog() {
-  if (state.saving) return;
+function closeDialog(force = false) {
+  if (state.saving && force !== true) return;
   readRequest++;
   studentRequest++;
   state.loading = false;
@@ -1150,7 +1244,7 @@ function rowActions(row) {
     actions.push({ key: 'edit', label: '编辑', type: 'primary' });
     if (resource !== 'project' && !['material', 'patch_sign', 'score'].includes(resource)) actions.push({ key: 'submit', label: '提交审核', type: 'success' });
   }
-  if (row.status === 'wait' && canReviewResource(resource) && (resource !== 'declaration' || row.teacher_confirm_status === 'accepted')) actions.push({ key: 'review', label: '审核', type: 'warning' });
+  if (row.status === 'wait' && (resource === 'plan' && row.workflow?.instance_id ? row.workflow.can_review : canReviewResource(resource)) && (resource !== 'declaration' || row.teacher_confirm_status === 'accepted')) actions.push({ key: 'review', label: '审核', type: 'warning' });
   if (row.status === 'accept' && canReviewResource(resource)) actions.push({ key: 'modify', label: '通过后修改', type: 'warning' });
   if (resource === 'plan' && row.status === 'accept' && row.phase === 'ready' && can('social_practice:plan:manage')) actions.push({ key: 'publish', label: '发布', type: 'success' });
   if (resource === 'project' && can('social_practice:project:manage')) {
@@ -1223,7 +1317,7 @@ function confirmStatusText(status) {
 
 /** 返回流程动作中文名。 */
 function actionText(action) {
-  return { submit: '提交审核', review: '审核处理', modify_after_accept: '通过后修改', publish: '发布计划', auto_filing: '自动备案', archive: '完成归档', assign_teachers: '分配教师', assign_students: '分配学生', confirm_teacher: '教师确认', confirm_member: '成员确认' }[action] || action || '流程处理';
+  return { submit: '提交审核', review: '审核处理', modify_after_accept: '通过后修改', publish: '发布计划', auto_filing: '旧流程自动备案', archive: '完成归档', assign_teachers: '分配教师', assign_students: '分配学生', confirm_teacher: '教师确认', confirm_member: '成员确认' }[action] || action || '流程处理';
 }
 
 /** 返回流程记录对应的审核支线。 */
@@ -1343,7 +1437,7 @@ function normalizeDateFields(form) {
 /** 创建资源空表单。 */
 function emptyForm(resource) {
   const common = { resource, id: null };
-  if (resource === 'plan') return { ...common, title: '', code: '', grade_id: null, organizer_dep_id: null, credit: 0, source_type: 'manual', participation_mode: 'mandatory', teacher_match_mode: 'mixed', teacher_confirm_hours: 48, max_reselect_count: 2, default_team_submit_mode: 'individual', register_start_at: '', register_end_at: '', practice_start_at: '', practice_end_at: '', result_deadline_at: '', score_deadline_at: '', approval_flow_id: 1, description: '', scopes: [{ scope_type: 'school', dep_id: null, profession_id: null, class_id: null }], requirements: defaultRequirements(), score_rules: defaultScoreRules() };
+  if (resource === 'plan') return { ...common, title: '', code: '', grade_id: null, organizer_dep_id: null, credit: 0, source_type: 'manual', participation_mode: 'mandatory', teacher_match_mode: 'mixed', teacher_confirm_hours: 48, max_reselect_count: 2, default_team_submit_mode: 'individual', register_start_at: '', register_end_at: '', practice_start_at: '', practice_end_at: '', result_deadline_at: '', score_deadline_at: '', description: '', scopes: [{ scope_type: 'school', dep_id: null, profession_id: null, class_id: null }], requirements: defaultRequirements(), score_rules: defaultScoreRules() };
   if (resource === 'project') return { ...common, plan_id: null, practice_mode: 'centralized', project_code: '', title: '', content: '', objective: '', location: '', start_at: '', end_at: '', capacity: 0 };
   if (resource === 'implementation') return { ...common, project_id: null, title: '', content: '', budget_amount: 0, material_requirement: '', venue_requirement: '' };
   if (resource === 'declaration') return { ...common, plan_id: null, declaration_type: 'individual', team_submit_mode: 'individual', title: '', content: '', objective: '', expected_duration: '', expected_result: '', location: '', selected_teacher_id: null, member_student_ids: [] };
@@ -1365,7 +1459,7 @@ function emptyFilters() {
 
 /** 返回空选项集合。 */
 function emptyOptions() {
-  return { loaded: false, grades: [], departments: [], professions: [], classes: [], teachers: [], students: [], plans: [], projects: [], approval_flows: [], current_grade_id: null, current_student_id: null, default_dep_id: null, default_profession_id: null };
+  return { loaded: false, grades: [], departments: [], professions: [], classes: [], teachers: [], students: [], plans: [], projects: [], approval_flows: [], plan_approval_engine: '', current_grade_id: null, current_student_id: null, default_dep_id: null, default_profession_id: null };
 }
 
 /** 去重列表动作配置。 */
@@ -1401,7 +1495,7 @@ function materialTypeText(value) { return materialTypeOptions.find(item => item.
 
 const workflowResources = ['plan', 'project', 'implementation', 'declaration', 'material', 'patch_sign', 'score'];
 const dateFields = ['register_start_at', 'register_end_at', 'practice_start_at', 'practice_end_at', 'result_deadline_at', 'score_deadline_at', 'start_at', 'end_at'];
-const statusMap = { draft: '草稿', wait: '待审核', accept: '已通过', modify: '需修改', enabled: '正常', active: '进行中', archived: '已归档', pending: '待确认', accepted: '已确认', rejected: '已拒绝' };
+const statusMap = { draft: '草稿', wait: '待审核', accept: '已通过', modify: '退回修改', enabled: '正常', active: '进行中', archived: '已归档', pending: '待确认', accepted: '已确认', rejected: '已拒绝' };
 const statusOptions = [{ label: '草稿', value: 'draft' }, { label: '待审核', value: 'wait' }, { label: '已通过', value: 'accept' }, { label: '需修改', value: 'modify' }, { label: '进行中', value: 'active' }, { label: '已归档', value: 'archived' }];
 function defaultRequirements() { return materialTypeOptions.map(item => ({ practice_mode: ['practice_proof', 'social_practice_report'].includes(item.value) ? 'distributed' : ['practice_report', 'practice_photo'].includes(item.value) ? 'centralized' : 'all', requirement_type: item.value, required_flag: item.value !== 'parent_notice', submit_scope: item.value === 'emergency_plan' ? 'project' : 'student' })); }
 function defaultScoreRules() { return [{ practice_mode: 'centralized', item_code: 'attendance', item_name: '签到', weight: 20, max_score: 100, sort: 10 }, { practice_mode: 'centralized', item_code: 'performance', item_name: '实践表现', weight: 30, max_score: 100, sort: 20 }, { practice_mode: 'centralized', item_code: 'report', item_name: '实践报告', weight: 50, max_score: 100, sort: 30 }, { practice_mode: 'distributed', item_code: 'attitude', item_name: '实践态度', weight: 20, max_score: 100, sort: 10 }, { practice_mode: 'distributed', item_code: 'result', item_name: '实践成果', weight: 30, max_score: 100, sort: 20 }, { practice_mode: 'distributed', item_code: 'report', item_name: '社会实践报告', weight: 50, max_score: 100, sort: 30 }]; }
