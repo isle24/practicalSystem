@@ -1,4 +1,5 @@
 import { computed, onBeforeUnmount, reactive, watch } from 'vue';
+import { desktopUiKey, localThemeKey, uiStyles, useUiStyle } from '../../../shared/uiStyles';
 
 export const themePresets = [
   { id: 'system', name: '跟随系统', mode: 'system', accent: '#2563eb', window: '', text: '#ffffff', opacity: 1, density: 'normal' },
@@ -83,7 +84,8 @@ function wallpaperStore(action, id, blob) {
   });
 }
 
-export function useLocalTheme(scope) {
+export function useLocalTheme(scope, accountId) {
+  const look = useUiStyle(scope);
   const media = window.matchMedia('(prefers-color-scheme: dark)');
   const state = reactive({ saved: defaults(), preview: null, custom: [], wallpaperUrl: '', systemDark: media.matches, error: '', scopeRevision: 0 });
   let generation = 0;
@@ -91,22 +93,41 @@ export function useLocalTheme(scope) {
   let objectUrl = '';
   const current = computed(() => state.preview || state.saved);
   const dark = computed(() => current.value.mode === 'dark' || (current.value.mode === 'system' && state.systemDark));
-  const styles = computed(() => ({ '--desktop-label-color': current.value.text, '--primary': current.value.accent, '--el-color-primary': current.value.accent, '--theme-window-opacity': current.value.opacity, '--desktop-tile-padding-top': current.value.density === 'compact' ? '5px' : current.value.density === 'comfortable' ? '18px' : '10px', ...surfaceVariables(current.value.window, dark.value), ...(state.wallpaperUrl ? { backgroundImage: `url("${state.wallpaperUrl}")`, backgroundSize: 'cover', backgroundPosition: 'center' } : {}) }));
+  const skin = computed(() => uiStyles.find(item => item.key === look.effective.value));
+  const useSkinColors = computed(() => skin.value.key !== 'classic' && current.value.id === 'system');
+  const accent = computed(() => useSkinColors.value && current.value.accent === themePresets[0].accent
+    ? skin.value[dark.value ? 'darkAccent' : 'accent'] : current.value.accent);
+  const windowColor = computed(() => current.value.window || ({
+    obsidian_pro: dark.value ? '#18181b' : '#ffffff',
+    ivory_editorial: dark.value ? '#2b2621' : '#faf8f3',
+  })[skin.value.key] || '');
+  const labelColor = computed(() => useSkinColors.value && !dark.value && !current.value.wallpaper_id && current.value.text === '#ffffff'
+    ? '#20354d' : current.value.text);
+  const styles = computed(() => ({
+    '--desktop-label-color': labelColor.value, '--primary': accent.value, '--el-color-primary': accent.value,
+    '--theme-window-opacity': current.value.opacity,
+    '--desktop-tile-padding-top': current.value.density === 'compact' ? '5px' : current.value.density === 'comfortable' ? '18px' : '10px',
+    ...surfaceVariables(windowColor.value, dark.value),
+    ...(state.wallpaperUrl ? { backgroundImage: `url("${state.wallpaperUrl}")`, backgroundSize: 'cover', backgroundPosition: 'center' } : {}),
+  }));
   const updateSystem = event => { state.systemDark = event.matches; };
   media.addEventListener('change', updateSystem);
-  watch([dark, current], () => {
+  watch([dark, current, look.effective, scope, accountId], () => {
     const html = document.documentElement;
     html.dataset.theme = dark.value ? 'dark' : 'light';
     html.classList.toggle('dark', dark.value);
-    html.style.setProperty('--primary', current.value.accent);
-    html.style.setProperty('--el-color-primary', current.value.accent);
-    html.style.setProperty('--desktop-label-color', current.value.text);
+    html.style.setProperty('--primary', accent.value);
+    html.style.setProperty('--el-color-primary', accent.value);
+    html.style.setProperty('--desktop-label-color', labelColor.value);
     for (const key of ['--surface', '--surface-2', '--line', '--line-strong', '--text', '--muted', '--el-bg-color', '--el-bg-color-overlay']) html.style.removeProperty(key);
-    const surface = surfaceVariables(current.value.window, dark.value);
+    const surface = surfaceVariables(windowColor.value, dark.value);
     Object.entries(surface).forEach(([key, value]) => html.style.setProperty(key, value));
     const value = surface['--surface'];
-    Object.entries(accentVariables(current.value.accent, value)).forEach(([key, value]) => html.style.setProperty(key, value));
+    Object.entries(accentVariables(accent.value, value)).forEach(([key, value]) => html.style.setProperty(key, value));
     html.style.setProperty('--theme-window-background', `rgba(${rgb(value).join(',')},${current.value.opacity})`);
+    if (window.__PRACTICAL_DESKTOP__?.windowLabel === 'school') {
+      try { localStorage.setItem(desktopUiKey, JSON.stringify({ account_id: accountId.value, style: look.effective.value, theme: html.dataset.theme })); } catch {}
+    }
   }, { immediate: true, deep: true });
 
   function revokeWallpaper() {
@@ -126,14 +147,14 @@ export function useLocalTheme(scope) {
   }
   function persist() {
     if (!currentKey) throw new Error('请登录后保存本机主题');
-    localStorage.setItem(currentKey, JSON.stringify({ saved: state.saved, custom: state.custom }));
+    localStorage.setItem(currentKey, JSON.stringify({ saved: state.saved, custom: state.custom, ui_style: look.choice.value }));
   }
   watch(scope, value => {
     state.scopeRevision++;
     generation++;
     revokeWallpaper();
     state.saved = defaults(); state.preview = null; state.custom = []; state.error = '';
-    currentKey = value ? `practical:local-theme:v1:${value}` : '';
+    currentKey = value ? localThemeKey(value) : '';
     if (!currentKey) return;
     try {
       const stored = JSON.parse(localStorage.getItem(currentKey) || 'null');
@@ -182,5 +203,5 @@ export function useLocalTheme(scope) {
     await displayWallpaper(state.saved.wallpaper_id);
   }
   onBeforeUnmount(() => { generation++; revokeWallpaper(); media.removeEventListener('change', updateSystem); });
-  return { state, current, dark, styles, presets: themePresets, preview, cancelPreview, apply, remove, selectWallpaper, reset: () => apply(defaults()) };
+  return { state, current, dark, look, styles, presets: themePresets, preview, cancelPreview, apply, remove, selectWallpaper, reset: () => apply(defaults()) };
 }

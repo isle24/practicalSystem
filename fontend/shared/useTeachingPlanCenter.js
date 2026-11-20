@@ -173,6 +173,7 @@ export function useTeachingPlanCenter(props) {
       state.receipt = '文件已接收，请刷新批次查看校验结果；确认导入后进入原始计划列表。';
       state.upload.file = null;
       await loadBatches();
+      return true;
     } catch (error) { if (alive && generation === context) state.error = error.message; }
     finally { if (alive && generation === context) state.busy = false; }
   }
@@ -196,8 +197,10 @@ export function useTeachingPlanCenter(props) {
   watch(() => props.sessionKey, async () => {
     context++; requests.clear(); state.detail = null; state.batch = null; state.rows = []; state.batches = []; state.error = ''; state.receipt = ''; state.busy = false; state.detailLoading = false;
     state.options = {}; state.classification = ''; state.supplement = { category_id: '', graduation_cohort_id: '' }; state.change = null; state.confirmation = ''; state.retainReason = ''; state.upload = { academic_year: '', semester: '', file: null }; state.filters = { keyword: '', academic_year: '', semester: '', stage: '', classification: '', owner_dep_id: '' };
-    await read('options', () => get('options'), data => { state.options = data; });
-    await load();
+    await Promise.all([
+      read('options', () => get('options'), data => { state.options = data; }),
+      load(),
+    ]);
   }, { immediate: true });
   onBeforeUnmount(() => { alive = false; context++; });
   return { state, types, categories, cohorts, requiresCohort, sourceFields, canAssign, canComplete, canChange, canApply, canReconcile, canRetain, retainReasonReady, assignmentReady, supplementReady, load, openDetail, closeDetail, mutate, loadBatches, openBatch, closeBatch, loadBatchPage, upload, confirmImport };

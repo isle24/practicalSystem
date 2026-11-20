@@ -1,0 +1,186 @@
+:root[data-ui-style]:where(:not([data-ui-style="classic"])) {
+  --el-border-radius-base: var(--control-radius);
+}
+:root[data-ui-style="liquid_glass"] { --control-height: 36px; }
+
+:root[data-ui-style]:where(:not([data-ui-style="classic"])) :is(.desktop-shell, .login-shell, .desktop-lock-screen) { background: var(--skin-canvas); }
+:root[data-ui-style]:where(:not([data-ui-style="classic"])) .desktop-window { animation: none; }
+:root[data-ui-style]:where(:not([data-ui-style="classic"])) .login-panel :is(input:not([type="radio"], [type="checkbox"]), select) {
+  border-radius: var(--control-radius);
+}
+:root[data-ui-style]:where(:not([data-ui-style="classic"])) .login-panel .login-submit-button {
+  border-radius: var(--skin-primary-radius, var(--control-radius));
+}
+:root[data-ui-style]:where(:not([data-ui-style="classic"])) .login-view-title { margin: 4px 0; text-align: left; }
+:root[data-ui-style]:where(:not([data-ui-style="classic"])) .login-panel > header > svg {
+  color: var(--primary-contrast, #fff);
+  background: var(--primary);
+  border-radius: var(--control-radius);
+}
+
+:root[data-ui-style]:where(:not([data-ui-style="classic"])) :is(
+  .window-title, .module-sidebar, .operation-dialog > header, .operation-dialog > footer,
+  .data-list-action-drawer > header, .file-preview > header, .desktop-native-titlebar,
+  .profile-navigation, .profile-detail-header
+) {
+  background: var(--skin-chrome);
+  border-color: var(--line);
+}
+:root[data-ui-style]:where(:not([data-ui-style="classic"])) :is(.operation-dialog, .data-list-action-drawer, .el-dialog, .el-message-box) {
+  color: var(--text);
+}
+:root[data-ui-style]:where(:not([data-ui-style="classic"])) .operation-dialog > header strong { font-size: 16px; }
+:root[data-ui-style]:where(:not([data-ui-style="classic"])) :is(.operation-dialog > header, .operation-dialog > footer) {
+  min-height: 50px;
+  padding-inline: 18px;
+}
+:root[data-ui-style]:where(:not([data-ui-style="classic"])) :is(.operation-dialog-controls button, .data-list-action-drawer > header > button) {
+  border-radius: var(--control-radius);
+}
+:root[data-ui-style]:where(:not([data-ui-style="classic"])) .data-list-action-drawer {
+  border-radius: var(--skin-window-radius) 0 0 var(--skin-window-radius);
+}
+:root[data-ui-style]:where(:not([data-ui-style="classic"])) :is(
+  .module-content-panel, .module-collection, .profile-app, .profile-panel-card, .school-asset-card, .stat-card, .internship-stat
+) { background: var(--skin-card); }
+:root[data-ui-style]:where(:not([data-ui-style="classic"])) :is(.profile-panel-card, .school-asset-card, .stat-card, .internship-stat) {
+  border-color: var(--line);
+  border-radius: var(--skin-card-radius);
+}
+:root[data-ui-style]:where(:not([data-ui-style="classic"])) :is(.el-table, .el-dialog, .el-message-box, .el-popper) {
+  --el-border-radius-base: var(--control-radius);
+}
+:root[data-ui-style]:where(:not([data-ui-style="classic"])) :is(
+  .desktop-context-menu, .global-search-results, .switch-account-menu, .data-list-column-menu, .el-popper.is-light
+) {
+  --el-popper-bg-color-light: var(--skin-card);
+  background: var(--skin-card);
+  border-color: var(--skin-edge);
+  border-radius: var(--skin-card-radius);
+  box-shadow: var(--skin-shadow, none);
+  -webkit-backdrop-filter: var(--skin-dock-blur, none);
+  backdrop-filter: var(--skin-dock-blur, none);
+}
+:root[data-ui-style="liquid_glass"] .el-popper.is-light .el-dropdown-menu { background: transparent; }
+
+:root[data-ui-style="liquid_glass"] .desktop-window { grid-template-rows: 46px minmax(0, 1fr); }
+:root[data-ui-style="liquid_glass"] .desktop-window.active { border-color: var(--skin-edge); }
+:root[data-ui-style="liquid_glass"] .desktop-window :is(.app-body, .profile-layout) { background: transparent; }
+:root[data-ui-style="liquid_glass"] .el-button--primary:not(.is-link, .is-text, .is-plain) {
+  border-radius: var(--skin-primary-radius);
+}
+:root[data-ui-style="liquid_glass"] .desktop-shell:not(.desktop-shell-custom-wallpaper) .shortcut-tile-desktop {
+  text-shadow: 0 1px 4px color-mix(in srgb, var(--surface) 75%, transparent);
+}
+:root[data-ui-style="liquid_glass"] .desktop-native-titlebar {
+  border-color: var(--skin-edge);
+  box-shadow: var(--skin-shadow);
+  -webkit-backdrop-filter: var(--skin-dock-blur, none);
+  backdrop-filter: var(--skin-dock-blur, none);
+}
+:root[data-ui-style="liquid_glass"] .desktop-shell-mac .taskbar {
+  border-radius: 24px;
+  background: var(--surface-2);
+  border-color: var(--line);
+  box-shadow: 0 6px 22px #1420352b;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+@supports (((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) and (background: color-mix(in srgb, white, transparent))) {
+  :root[data-ui-style="liquid_glass"] .desktop-shell-mac .taskbar {
+    background: linear-gradient(172deg,
+      color-mix(in srgb, var(--surface) 23%, transparent),
+      color-mix(in srgb, var(--surface) 8%, transparent) 55%,
+      color-mix(in srgb, var(--surface) 15%, transparent));
+    border-color: #ffffff60;
+    box-shadow: inset 0 1px 0 #ffffff60, inset 0 -1px 0 #192c4230, 0 7px 22px #1420352b;
+    -webkit-backdrop-filter: blur(11px) saturate(145%);
+    backdrop-filter: blur(11px) saturate(145%);
+  }
+  :root[data-ui-style="liquid_glass"][data-theme="dark"] .desktop-shell-mac .taskbar {
+    border-color: #eef5ff40;
+    box-shadow: inset 0 1px 0 #eef5ff32, 0 7px 22px #080e1f62;
+  }
+}
+@media (prefers-reduced-transparency: reduce) {
+  :root[data-ui-style="liquid_glass"] .desktop-shell-mac .taskbar {
+    background: var(--surface-2);
+    border-color: var(--line);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+:root[data-ui-style="liquid_glass"] .desktop-shell-mac .taskbar .taskbar-clock {
+  color: var(--text);
+  text-shadow: 0 1px 3px var(--surface);
+}
+.taskbar :is(.taskbar-launcher-button, .taskbar-apps > :is(button, a)):hover { transform: none; }
+.taskbar :is(.taskbar-launcher-button, .taskbar-apps > :is(button, a)):hover:not(.active) {
+  border-color: transparent;
+  background: transparent;
+}
+.desktop-shell-mac.desktop-shell-dock-auto-hide .taskbar:not(.taskbar-revealed, :focus-within) .taskbar-apps {
+  pointer-events: none;
+}
+@media (prefers-reduced-motion: no-preference) {
+  :root[data-ui-style]:where(:not([data-ui-style="classic"])) .data-list-drawer-enter-active {
+    transition-duration: .28s;
+  }
+  :root[data-ui-style]:where(:not([data-ui-style="classic"])) .data-list-drawer-enter-active .data-list-action-drawer {
+    transition: transform .28s var(--ease-spring);
+  }
+  :root[data-ui-style]:where(:not([data-ui-style="classic"])) .dialog-fade-enter-active .el-dialog,
+  :root[data-ui-style]:where(:not([data-ui-style="classic"])) .fade-in-linear-enter-active .el-message-box {
+    animation: skin-window-in .32s var(--ease-spring);
+  }
+}
+
+:root[data-ui-style="obsidian_pro"] .desktop-shell-mac:not(.desktop-shell-dock-auto-hide) {
+  grid-template-rows: minmax(0, 1fr) 60px;
+}
+:root[data-ui-style="obsidian_pro"] .desktop-shell-mac .taskbar {
+  height: 46px;
+  margin-bottom: 7px;
+  border: 1px solid var(--skin-edge);
+  border-radius: var(--skin-card-radius);
+  background: var(--skin-pane);
+  box-shadow: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+:root[data-ui-style="obsidian_pro"] .desktop-shell-mac .taskbar :is(.taskbar-apps > *, .taskbar-launcher-button) {
+  width: 34px;
+  height: 34px;
+  flex-basis: 34px;
+  border-radius: var(--control-radius);
+}
+:root[data-ui-style="obsidian_pro"] .taskbar .taskbar-glyph { width: 28px; height: 28px; box-shadow: none; }
+:root[data-ui-style="obsidian_pro"] :is(.window-title, .el-table__header, .taskbar-clock) {
+  font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+}
+:root[data-ui-style="obsidian_pro"] .el-table__header { text-transform: uppercase; }
+:root[data-ui-style="obsidian_pro"] .el-table .el-table__cell { padding-block: 4px; }
+:root:is([data-ui-style="obsidian_pro"], [data-ui-style="ivory_editorial"]) :is(.desktop-window, .operation-dialog) {
+  background: var(--theme-window-background);
+}
+:root[data-ui-style="obsidian_pro"] :is(.side-item.active, .profile-navigation button.active) {
+  border-radius: var(--control-radius);
+  box-shadow: inset 2.5px 0 var(--primary);
+}
+
+:root[data-ui-style="ivory_editorial"] .desktop-shell .taskbar {
+  border-top: 2px solid var(--skin-ink);
+  background: var(--skin-pane);
+  box-shadow: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+:root[data-ui-style="ivory_editorial"] :is(.school-settings h2, .school-settings h3, .profile-detail-header h1, .profile-panel-card > header strong, .module-content-panel h2) {
+  font-family: var(--skin-heading-font);
+}
+:root[data-ui-style="ivory_editorial"] :is(.side-item.active, .profile-navigation button.active) {
+  border-radius: 0;
+  box-shadow: inset 3px 0 var(--skin-ink);
+  color: var(--skin-ink);
+}
+.color-settings-title { display: block; margin-top: 12px; font-size: 14px; }

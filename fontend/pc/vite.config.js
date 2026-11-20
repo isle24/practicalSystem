@@ -10,6 +10,7 @@ export default defineConfig(({ mode }) => {
     plugins: [vue(), pdfAssetsPlugin(process.cwd())],
     resolve: { dedupe: ['qrcode', 'vue', 'markdown-it', 'dompurify', '@lucide/vue', 'pdfjs-dist', 'docx-preview', 'exceljs', 'fflate', 'papaparse'] },
     server: {
+      fs: { allow: ['.', '../shared'] },
       proxy: {
         '/api': {
           target: env.VITE_API_PROXY || 'http://127.0.0.1:8787',

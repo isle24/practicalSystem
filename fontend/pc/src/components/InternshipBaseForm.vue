@@ -50,7 +50,7 @@
 
         <div v-else class="operation-form base-main-form">
           <label>
-            <FormFieldLabel :required="local.base_type !== 'temporary'" help="临时基地留空时按基地位置和负责人信息生成名称">基地名称</FormFieldLabel>
+            <FormFieldLabel :required="local.base_type !== 'temporary'" :help="local.base_type === 'temporary' ? '留空时按基地地址和负责人生成名称' : ''">基地名称</FormFieldLabel>
             <input v-model="local.name" :placeholder="local.base_type === 'temporary' ? '留空后按位置和负责人自动生成' : ''">
           </label>
           <label v-if="local.base_type === 'long_term'"><FormFieldLabel :required="false">基地编号</FormFieldLabel><input v-model="local.code"></label>
@@ -63,12 +63,12 @@
             </el-select>
           </label>
           <label>
-            <FormFieldLabel v-if="permissionState.context.role_type" :required="permissionState.context.role_type === 'profession_admin'" :help="permissionState.context.role_type === 'profession_admin' ? '专业管理员至少选择一个服务专业' : ''">服务专业</FormFieldLabel><span v-else>服务专业</span>
+            <FormFieldLabel :required="local.base_type === 'temporary' || permissionState.context.role_type === 'profession_admin'" :help="local.base_type === 'temporary' || permissionState.context.role_type === 'profession_admin' ? '保存时至少选择一项' : ''">服务专业</FormFieldLabel>
             <el-select-v2 v-model="local.profession_ids" :options="professionOptions" :props="{ label: 'profession_name', value: 'profession_id' }" multiple collapse-tags collapse-tags-tooltip filterable placeholder="请选择服务专业" />
           </label>
-          <div class="base-address-label span-2"><span>基地所在地址</span><BaseAddressField :model-value="local" /></div>
-          <div class="base-address-label span-2"><FormFieldLabel :required="false">服务课程</FormFieldLabel><BaseCourseField v-model="local.course_ids" :selected="detail.courses || []" :departments="options.departments || []" :dep-id="local.dep_id" :legacy-text="detail.courses?.length ? '' : local.service_courses" /></div>
-          <label><FormFieldLabel :required="false">基地负责人</FormFieldLabel><BaseManagerSelect v-model="local.manager_account_id" :selected="local.manager" @change="selectManager" /></label>
+          <div class="base-address-label span-2"><FormFieldLabel :required="local.base_type === 'temporary'">基地所在地址</FormFieldLabel><BaseAddressField :model-value="local" /></div>
+          <div class="base-address-label span-2"><FormFieldLabel :required="local.base_type === 'temporary'">服务课程</FormFieldLabel><BaseCourseField v-model="local.course_ids" :selected="detail.courses || []" :departments="options.departments || []" :dep-id="local.dep_id" :legacy-text="detail.courses?.length ? '' : local.service_courses" /></div>
+          <label><FormFieldLabel :required="local.base_type === 'temporary'">基地负责人</FormFieldLabel><BaseManagerSelect v-model="local.manager_account_id" :selected="local.manager" @change="selectManager" /></label>
           <label><FormFieldLabel :required="false">负责人电话</FormFieldLabel><input v-model="local.manager.phone"></label>
           <template v-if="local.base_type === 'long_term'">
             <label>

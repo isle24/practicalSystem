@@ -12,9 +12,9 @@
       <FormFieldLabel :required="false">{{ uploadLabel }}</FormFieldLabel>
       <IconUpload
         :button-class="uploadButtonClass"
-        :icon="resolvedIcon"
+        :menu-key="menuKey"
+        :icon-name="icon"
         :icon-url="iconUrl"
-        image-fit="cover"
         :label="uploadLabel"
         :uploading="uploading"
         :backend-url="backendUrl"
@@ -27,21 +27,19 @@
 
 <script setup>
 import FormFieldLabel from '../../../shared/components/FormFieldLabel.vue';
-import { computed } from 'vue';
 import IconUpload from './IconUpload.vue';
 
-const props = defineProps({
+defineProps({
+  menuKey: { type: String, default: '' },
   icon: { type: String, default: '' },
   iconUrl: { type: String, default: '' },
   iconLabel: { type: String, default: '图标' },
   uploadLabel: { type: String, default: '上传图标' },
   placeholder: { type: String, default: 'lucide 图标名' },
   uploadButtonClass: { type: [String, Array, Object], default: 'favorite-icon-upload' },
-  resolveIcon: { type: Function, required: true },
   uploading: { type: Boolean, default: false },
   backendUrl: { type: Function, required: true },
 });
 
 const emit = defineEmits(['select', 'update:icon']);
-const resolvedIcon = computed(() => props.resolveIcon(props.icon));
 </script>

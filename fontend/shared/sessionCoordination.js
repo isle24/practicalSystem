@@ -1,7 +1,7 @@
 const lockName = 'practical-cookie-session';
 const revisionKey = 'practical:cookie-session-revision';
 const channelName = 'practical-cookie-session';
-const mutationPaths = new Set(['/auth/login', '/auth/register', '/auth/logout', '/auth/switch-account', '/auth/passkey-login', '/auth/wechat-login/consume', '/auth/password-recovery/reset']);
+const mutationPaths = new Set(['/auth/login', '/auth/register', '/auth/logout', '/auth/switch-account', '/auth/passkey-login', '/auth/wechat-login/consume', '/auth/iam/consume', '/auth/password-recovery/reset']);
 const pathname = path => String(path || '').split('?')[0];
 
 export const isSessionMutation = path => mutationPaths.has(pathname(path));

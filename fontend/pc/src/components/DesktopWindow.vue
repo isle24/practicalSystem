@@ -14,7 +14,7 @@
   >
     <header class="window-title" @mousedown="startDrag" @dblclick="toggleMaximize">
       <div class="window-name">
-        <component :is="icon" :size="18" />
+        <AppIcon :menu-key="menuKey" :icon-name="iconName" :icon-url="iconUrl" :backend-url="backendUrl" :size="20" />
         <span>{{ title }}</span>
       </div>
       <div class="window-title-side">
@@ -46,11 +46,15 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { Minus, Square, X } from '@lucide/vue';
+import AppIcon from '../../../shared/components/AppIcon.vue';
 import { useMaximizedWindow } from '../composables/useMaximizedWindows';
 
 const props = defineProps({
   title: { type: String, required: true },
-  icon: { type: null, required: true },
+  menuKey: { type: String, default: '' },
+  iconName: { type: String, default: '' },
+  iconUrl: { type: String, default: '' },
+  backendUrl: { type: Function, required: true },
   zIndex: { type: Number, default: 1 },
   initialLeft: { type: Number, default: 184 },
   initialTop: { type: Number, default: 70 },

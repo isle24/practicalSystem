@@ -19,11 +19,9 @@
     >
       <AppIcon
         class="app-glyph"
-        :icon="item.icon"
+        :menu-key="item.id"
+        :icon-name="item.menu?.icon"
         :icon-url="item.iconUrl"
-        :label="item.name"
-        :color="item.color"
-        :size="iconSize"
         :backend-url="backendUrl"
       />
       <span class="shortcut-tile-label">
@@ -51,7 +49,7 @@
 <script setup>
 import { computed } from 'vue';
 import { Check, LockKeyhole, Pencil, Plus } from '@lucide/vue';
-import AppIcon from './AppIcon.vue';
+import AppIcon from '../../../shared/components/AppIcon.vue';
 import { isExternalLinkOpening } from '../utils/externalLinks';
 
 const props = defineProps({
@@ -81,7 +79,6 @@ function handleDragStart(event) {
 }
 const opening = computed(() => props.item.type === 'favoriteLink' && isExternalLinkOpening(props.item));
 const tagName = computed(() => (props.href ? 'a' : 'button'));
-const iconSize = computed(() => (props.mode === 'launcher' ? 28 : 25));
 const actionIconSize = computed(() => (props.mode === 'launcher' ? 14 : 16));
 const tileClasses = computed(() => [
   `shortcut-tile-${props.mode}`,

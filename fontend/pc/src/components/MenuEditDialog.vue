@@ -25,9 +25,9 @@
       <IconConfigField
         v-model:icon="form.icon"
         class="span-2"
+        :menu-key="form.module_key"
         :icon-url="form.icon_url"
         upload-label="菜单图标"
-        :resolve-icon="resolveIcon"
         :uploading="iconUploading"
         :backend-url="backendUrl"
         @select="file => emit('select-icon', file)"
@@ -124,7 +124,6 @@ defineProps({
   form: { type: Object, required: true },
   parentOptions: { type: Array, default: () => [] },
   treeProps: { type: Object, required: true },
-  resolveIcon: { type: Function, required: true },
   iconUploading: { type: Boolean, default: false },
   loading: { type: Boolean, default: false },
   backendUrl: { type: Function, required: true },

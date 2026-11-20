@@ -1,9 +1,16 @@
 <script setup>
-import { onMounted, reactive } from 'vue';
+import { onMounted, reactive, ref } from 'vue';
 import { Building2, ImagePlus, RefreshCw } from '@lucide/vue';
 import { backendUrl, request } from '../api/client';
+import UiStylePicker from '../../../shared/components/UiStylePicker.vue';
+import { DEFAULT_UI_STYLE } from '../../../shared/uiStyles';
+import SchoolDemoSettings from './SchoolDemoSettings.vue';
+import IntegrationSettingsPanel from './IntegrationSettingsPanel.vue';
 
+defineProps({ superAdmin: Boolean });
 const emit = defineEmits(['updated']);
+const draftStyle = ref(DEFAULT_UI_STYLE);
+const styleMessage = ref('');
 const state = reactive({ loading: false, uploading: '', error: '', school_name: '', school_logo_url: '', login_background_url: '', default_wallpaper_url: '', sharedWallpapers: [], wallpaperPage: 1, wallpaperTotal: 0 });
 const assets = [
   { type: 'logo', label: '学校 Logo', field: 'school_logo_url', accept: 'image/png,image/jpeg,image/webp', limit: 2, hint: '推荐 256 × 256 px，透明 PNG / WebP，最大 2 MB。按原比例完整显示。' },
@@ -13,9 +20,26 @@ const assets = [
 async function load() {
   state.loading = true;
   state.error = '';
-  try { Object.assign(state, await request('/school-appearance/settings')); await loadShared(); }
+  try {
+    Object.assign(state, await request('/school-appearance/settings'));
+    draftStyle.value = state.default_ui_style || DEFAULT_UI_STYLE;
+    await loadShared();
+  }
   catch (error) { state.error = error.message; }
   finally { state.loading = false; }
+}
+
+async function saveStyle() {
+  state.uploading = 'style';
+  state.error = '';
+  styleMessage.value = '';
+  try {
+    const data = await request('/school-appearance/ui-style', { method: 'POST', body: JSON.stringify({ default_ui_style: draftStyle.value }) });
+    Object.assign(state, data);
+    emit('updated', data);
+    styleMessage.value = '学校默认风格已保存';
+  } catch (error) { state.error = error.message; }
+  finally { state.uploading = ''; }
 }
 
 async function loadShared() {
@@ -85,6 +109,14 @@ onMounted(load);
       <el-button :icon="RefreshCw" :disabled="Boolean(state.uploading)" @click="load">刷新</el-button>
     </header>
     <el-alert v-if="state.error" :title="state.error" type="error" :closable="false" />
+    <section class="school-asset-card">
+      <UiStylePicker v-model="draftStyle" label="学校默认界面风格（必选）" :disabled="state.loading || Boolean(state.uploading)" @update:model-value="styleMessage = ''" />
+      <p>登录页和选择「跟随学校」的用户使用此风格。</p>
+      <div class="school-asset-controls">
+        <el-button type="primary" :loading="state.uploading === 'style'" :disabled="state.loading || Boolean(state.uploading) || draftStyle === state.default_ui_style" @click="saveStyle">保存默认风格</el-button>
+        <span role="status">{{ styleMessage }}</span>
+      </div>
+    </section>
     <section v-for="asset in assets" :key="asset.type" class="school-asset-card">
       <div><h3>{{ asset.label }}</h3><p>{{ asset.hint }}</p></div>
       <div class="school-asset-controls">
@@ -113,6 +145,8 @@ onMounted(load);
       <p v-if="!state.sharedWallpapers.length">暂无共享壁纸</p>
       <ListPagination v-model:current-page="state.wallpaperPage" :page-size="8" :total="state.wallpaperTotal" layout="prev, pager, next" background @current-change="loadShared" />
     </section>
+    <SchoolDemoSettings v-if="superAdmin" />
+    <IntegrationSettingsPanel v-if="superAdmin" />
     <slot />
   </section>
 </template>

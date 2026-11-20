@@ -19,6 +19,8 @@ pub struct School {
     pub origin: String,
     pub name: String,
     #[serde(default)]
+    pub default_ui_style: String,
+    #[serde(default)]
     pub port: u16,
     #[serde(default)]
     pub username: String,
@@ -222,6 +224,10 @@ pub async fn connect_with_cancel(
         school: School {
             origin: origin.origin().ascii_serialization(),
             name: name.unwrap_or_default().to_owned(),
+            default_ui_style: payload["data"]["default_ui_style"]
+                .as_str()
+                .unwrap_or_default()
+                .to_owned(),
             port,
             username: String::new(),
             login_method: String::new(),

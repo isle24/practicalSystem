@@ -1063,6 +1063,10 @@ export function fetchInternshipInsurances(params = {}) {
   return internshipList('insurances', params);
 }
 
+export function saveInternshipInsurance(payload) {
+  return internshipPost('save-insurance', payload);
+}
+
 export function fetchInternshipSafetyLetters(params = {}) {
   return internshipList('safety-letters', params);
 }
@@ -1293,8 +1297,8 @@ export function fetchSocialPracticeOptions() {
   return socialPracticeQuery('options');
 }
 
-export function fetchSocialPracticeEligibleStudents(planId) {
-  return socialPracticeQuery('eligible-students', { plan_id: planId });
+export function fetchSocialPracticeEligibleStudents(params) {
+  return socialPracticeQuery('eligible-students', params);
 }
 
 export function fetchSocialPracticeList(resource, params = {}) {

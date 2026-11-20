@@ -12,10 +12,7 @@
     <el-alert v-if="error" type="warning" :closable="false" show-icon :title="error" />
     <div class="plugin-grid" v-loading="loading">
       <article v-for="item in items" :key="item.id" class="plugin-card">
-        <div class="plugin-card-icon">
-          <img v-if="item.icon_url" :src="backendUrl(item.icon_url)" :alt="item.name">
-          <Globe2 v-else :size="28" />
-        </div>
+        <AppIcon menu-key="pluginCenter" :icon-url="item.icon_url" :backend-url="backendUrl" :size="52" />
         <div class="plugin-card-body">
           <header><strong>{{ item.name }}</strong><small>v{{ item.version || '1.0.0' }}</small></header>
           <el-tag v-if="item.status === 'disabled'" type="info" size="small">已停用</el-tag>
@@ -50,10 +47,11 @@
 </template>
 
 <script setup>
+import AppIcon from '../../../shared/components/AppIcon.vue';
 import FormFieldLabel from '../../../shared/components/FormFieldLabel.vue';
 import { onMounted, ref } from 'vue';
 import { ElMessage } from 'element-plus';
-import { ExternalLink, Globe2, Plus, Search } from '@lucide/vue';
+import { ExternalLink, Plus, Search } from '@lucide/vue';
 import { backendUrl, request } from '../api/client';
 import { openExternalLink } from '../utils/externalLinks';
 import OperationDialog from './OperationDialog.vue';
@@ -140,8 +138,6 @@ onMounted(load);
 .plugin-search{display:flex;gap:8px;min-width:300px}
 .plugin-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px;align-content:start}
 .plugin-card{display:flex;gap:14px;padding:17px;border:1px solid var(--line);border-radius:8px;background:var(--surface);min-width:0}
-.plugin-card-icon{width:52px;height:52px;display:grid;place-items:center;flex:none;border-radius:13px;background:var(--primary-soft);color:var(--primary-ink)}
-.plugin-card-icon img{width:100%;height:100%;object-fit:cover;border-radius:13px}
 .plugin-card-body{display:grid;gap:8px;min-width:0;flex:1}
 .plugin-card-body header{display:flex;align-items:center;justify-content:space-between;gap:10px}
 .plugin-card-body header small,.plugin-permission{color:var(--muted);font-size:11px}

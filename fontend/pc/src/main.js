@@ -47,6 +47,8 @@ import LocalWidthTable from './components/LocalWidthTable';
 import './styles.css';
 import './desktop-appearance.css';
 import './theme.css';
+import '../../shared/interface.css';
+import './interface.css';
 import { configureFilePreview } from '../../shared/filePreview';
 import { request, backendUrl } from './api/client';
 configureFilePreview({ request, backendUrl });

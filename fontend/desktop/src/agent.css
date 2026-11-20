@@ -999,31 +999,28 @@ h3 {
     padding: 5px 7px;
   }
 }
-@media (prefers-color-scheme: dark) {
-  :root {
-    color-scheme: dark;
-    color: #e0e5ee;
-    background: #171a21;
-    --surface: #1b1e26;
-    --sidebar: #171a21;
-    --border: #30343f;
-    --muted: #919aaa;
-    --primary: #7d9bfa;
-    --primary-hover: #9bb1fb;
-    --soft: #272f45;
-    --input: #20242d;
-    --error: #f4a5b2;
-    --error-bg: #3c2630;
-  }
-  .brand-mark,
-  .empty-mark {
-    background: #d3dceb;
-    color: #202635;
-  }
-  button.primary {
-    color: #141d35;
-  }
-  .composer {
-    box-shadow: none;
-  }
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  color: #e0e5ee;
+  background: #171a21;
+  --surface: #1b1e26;
+  --sidebar: #171a21;
+  --border: #30343f;
+  --muted: #919aaa;
+  --primary: #7d9bfa;
+  --primary-hover: #9bb1fb;
+  --soft: #272f45;
+  --input: #20242d;
+  --error: #f4a5b2;
+  --error-bg: #3c2630;
+}
+:root[data-theme='dark'] :is(.brand-mark, .empty-mark) {
+  background: #d3dceb;
+  color: #202635;
+}
+:root[data-theme='dark'] button.primary {
+  color: #141d35;
+}
+:root[data-theme='dark'] .composer {
+  box-shadow: none;
 }

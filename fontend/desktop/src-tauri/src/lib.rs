@@ -391,6 +391,14 @@ fn read_connection_settings(
     Ok(settings)
 }
 
+/// 连接前读取所选学校的公开外观。
+#[tauri::command]
+async fn read_school_appearance(window: WebviewWindow, domain: String) -> Result<String, String> {
+    require_connection(&window)?;
+    let origin = connection::school_origin(&domain)?;
+    Ok(connection::connect(origin, 0).await?.school.default_ui_style)
+}
+
 /// 读取当前学校账号对应的系统密码。
 #[tauri::command]
 fn read_saved_connection_password(
@@ -452,11 +460,11 @@ async fn connect_school(
             "password".into()
         }
     });
-    if !matches!(login_method.as_str(), "password" | "wechat") {
+    if !matches!(login_method.as_str(), "password" | "wechat" | "iam") {
         return Err("请选择有效的登录方式".into());
     }
     if login_method == "password" && (username.trim().is_empty() || password.is_empty()) {
-        return Err("请输入账号和密码，或选择企业微信扫码登录".into());
+        return Err("请输入账号和密码，或选择企业微信、统一认证登录".into());
     }
     if username.len() > 255
         || password.len() > 4096
@@ -465,16 +473,16 @@ async fn connect_school(
     {
         return Err("登录输入过长，请检查账号、密码和验证码".into());
     }
-    if login_method == "wechat"
+    if login_method != "password"
         && (!username.trim().is_empty() || !password.is_empty() || remember_password || auto_login)
     {
-        return Err("企业微信扫码登录无需填写账号密码".into());
+        return Err("企业微信、统一认证登录无需填写账号密码".into());
     }
     if client_lock::load(&app)?.require_fresh_login
         && login_method == "password"
         && fresh_password != Some(true)
     {
-        return Err("客户端锁定后需要手工输入密码，或重新进行企业微信扫码登录".into());
+        return Err("客户端锁定后需要手工输入密码，或重新进行企业微信、统一认证登录".into());
     }
     if state.connecting.swap(true, Ordering::AcqRel) {
         return Err("正在连接，请稍候".into());
@@ -502,6 +510,12 @@ async fn connect_school(
             && same_school
             && settings.last_username == username.trim()
             && password.is_empty()
+            && settings.schools.iter().any(|profile| {
+                profile.origin == origin.origin().ascii_serialization()
+                    && profile.username == settings.last_username
+                    && (profile.login_method == login_method
+                        || profile.login_method.is_empty() && login_method == "wechat")
+            })
         {
             let _ = school.unminimize();
             let _ = school.set_focus();
@@ -925,6 +939,7 @@ pub fn run() {
         )
         .invoke_handler(tauri::generate_handler![
             read_connection_settings,
+            read_school_appearance,
             read_saved_connection_password,
             create_connection_login_captcha,
             cancel_connection_login,

@@ -63,6 +63,7 @@
           <p>{{ panelConfig.description }}</p>
         </div>
         <div class="social-panel-actions">
+          <el-button v-if="panelResource === 'attendance' && isStudent && can('social_practice:attendance:manage')" type="primary" @click="openGpsSignIn()">GPS 签到</el-button>
           <el-button v-if="panelResource === 'plan' && canCreate" :icon="Download" @click="downloadPlanImportTemplate">下载模板</el-button>
           <el-button v-if="panelResource === 'plan' && canCreate" :icon="Upload" @click="openPlanImport">Excel 导入</el-button>
           <el-button v-if="canCreate" type="primary" :icon="Plus" @click="openCreate">{{ createLabel }}</el-button>
@@ -179,9 +180,9 @@
 
         <template v-else-if="state.form.resource === 'project'">
           <p class="span-2 social-project-note">计划审核通过并发布后，可创建集中项目。保存后在项目列表分配负责人、指导教师和学生，再进入“实施申请”准备实施资料。</p>
-          <label class="span-2"><span>所属计划（必填）</span><el-select-v2 v-model="state.form.plan_id" filterable clearable placeholder="请选择已审核通过并发布的计划" :disabled="state.saving" :options="projectPlanOptions" @change="validateProjectPlan" /></label>
+          <label class="span-2"><span>所属计划（必填）</span><el-select-v2 v-model="state.form.plan_id" filterable clearable placeholder="请选择已审核通过并发布的计划" :disabled="state.saving || state.form.plan_change_blockers?.length > 0" :options="projectPlanOptions" @change="validateProjectPlan" /></label>
           <div class="span-2 social-project-note" :class="{ 'is-error': projectPlan.error || (state.form.plan_id && !selectedProjectPlanEligibility.canCreate) }" role="status" aria-live="polite">
-            {{ projectPlanMessage }}
+            {{ state.form.plan_change_blockers?.length ? '已有' + state.form.plan_change_blockers.join('、') + '，所属计划已锁定。' : projectPlanMessage }}
             <el-button v-if="state.form.plan_id" link type="primary" :disabled="state.saving || projectPlan.checking" @click="validateProjectPlan">重新核对计划</el-button>
           </div>
           <label><span>项目编号（选填）</span><input v-model="state.form.project_code" maxlength="120" placeholder="不填则自动生成"></label>
@@ -204,11 +205,17 @@
         </template>
 
         <template v-else-if="state.form.resource === 'declaration'">
-          <label><FormFieldLabel required help="保存时必填；须选择当前账号可访问的计划">所属计划</FormFieldLabel><el-select-v2 v-model="state.form.plan_id" filterable placeholder="请选择计划" @change="changeDeclarationPlan" :options="state.options.plans" :props="{ label: 'title', value: 'id' }" /></label>
+          <label><FormFieldLabel required help="保存时必填；须选择当前账号可访问的计划">所属计划</FormFieldLabel><el-select-v2 v-model="state.form.plan_id" filterable placeholder="请选择计划" :disabled="Boolean(state.form.id)" @change="changeDeclarationPlan" :options="state.options.plans" :props="{ label: 'title', value: 'id' }" /></label>
           <label><FormFieldLabel required help="请选择个人或团队申报；默认个人">申报类型</FormFieldLabel><el-select v-model="state.form.declaration_type" placeholder="请选择申报类型"><el-option label="个人申报" value="individual" /><el-option label="团队申报" value="team" /></el-select></label>
           <label v-if="state.form.declaration_type === 'team'"><FormFieldLabel required help="请选择分别提交或共同提交">团队提交</FormFieldLabel><el-select v-model="state.form.team_submit_mode" placeholder="请选择团队提交方式"><el-option label="分别提交" value="individual" /><el-option label="共同提交" value="shared" /></el-select></label>
-          <label><FormFieldLabel :required="false" help="保存草稿可不选；提交前须已选择或由管理员分配教师。管理员分配模式下请勿自行选择">指导教师</FormFieldLabel><el-select-v2 v-model="state.form.selected_teacher_id" filterable placeholder="请选择指导教师" :options="teacherSelectOptions" /></label>
-          <label v-if="state.form.declaration_type === 'team'" class="span-2"><FormFieldLabel :required="false" help="本人自动加入；可选择同计划范围的其他成员，提交前成员须全部确认">团队成员</FormFieldLabel><el-select-v2 v-model="state.form.member_student_ids" multiple filterable collapse-tags placeholder="请选择团队成员" :options="planStudentSelectOptions" /></label>
+          <label v-if="!state.form.assigned_teacher_id"><FormFieldLabel :required="false" help="保存草稿可不选；提交前须已选择或由管理员分配教师。管理员分配模式下请勿自行选择">指导教师</FormFieldLabel><el-select-v2 v-model="state.form.selected_teacher_id" filterable placeholder="请选择指导教师" :options="teacherSelectOptions" /></label>
+          <p v-else class="social-project-note">指导教师已分配为 {{ state.form.assigned_teacher_name }}。</p>
+          <label v-if="state.form.declaration_type === 'team'" class="span-2">
+            <FormFieldLabel submit-required help="至少选择一名其他成员，提交前须确认加入">团队成员</FormFieldLabel>
+            <el-select-v2 v-model="state.form.member_student_ids" multiple filterable remote collapse-tags placeholder="搜索姓名或学号" :disabled="!state.form.plan_id" :remote-method="students.search" :loading="studentOptions.loading" :options="studentSelectOptions">
+              <template #footer><el-button v-if="studentOptions.hasMore" link type="primary" :loading="studentOptions.loading" @click="students.more">加载更多</el-button></template>
+            </el-select-v2>
+          </label>
           <label class="span-2"><FormFieldLabel required help="保存时必填，最多 180 字">申报名称</FormFieldLabel><input v-model="state.form.title" maxlength="180"></label>
           <label><FormFieldLabel :required="false" help="最多 120 字，例如：5 天">预计时长</FormFieldLabel><input v-model="state.form.expected_duration" maxlength="120" placeholder="例如：5天"></label>
           <label><FormFieldLabel :required="false" help="最多 255 字">实践地点</FormFieldLabel><input v-model="state.form.location" maxlength="255"></label>
@@ -218,11 +225,25 @@
         </template>
 
         <template v-else-if="state.form.resource === 'material'">
-          <label><FormFieldLabel required help="保存时必填；须选择当前账号可访问的计划">所属计划</FormFieldLabel><el-select-v2 v-model="state.form.plan_id" filterable placeholder="请选择所属计划" @change="state.form.project_id = null" :options="state.options.plans" :props="{ label: 'title', value: 'id' }" /></label>
-          <label><FormFieldLabel :required="state.form.resource !== 'material' || !state.form.declaration_id" help="材料须且只能关联项目或申报；项目须属于所选计划">实践项目</FormFieldLabel><el-select-v2 v-model="state.form.project_id" filterable placeholder="请选择实践项目" :options="projectsForPlan(state.form.plan_id)" :props="{ label: 'title', value: 'id' }" /></label>
-          <label v-if="!isStudent"><FormFieldLabel :required="state.form.resource !== 'material' || (Boolean(state.form.project_id) && (state.form.submit_scope || 'student') === 'student')" help="成绩保存必选项目学生；学生范围的项目材料须指定学生">学生</FormFieldLabel><el-select-v2 v-model="state.form.student_id" filterable placeholder="请选择学生" :options="studentSelectOptions" /></label>
-          <label><FormFieldLabel required help="保存时必填，最多 80 字">材料类型</FormFieldLabel><el-select v-model="state.form.material_type" filterable allow-create placeholder="请选择材料类型"><el-option v-for="option in materialTypeOptions" :key="option.value" :label="option.label" :value="option.value" /></el-select></label>
-          <label><FormFieldLabel required help="请选择学生、团队或项目；默认学生">提交范围</FormFieldLabel><el-select v-model="state.form.submit_scope" placeholder="请选择提交范围"><el-option label="学生" value="student" /><el-option label="团队" value="team" /><el-option label="项目" value="project" /></el-select></label>
+          <label v-if="!state.form.declaration_id" class="span-2">
+            <FormFieldLabel required help="选择可提交材料的项目，材料要求由该项目计划决定">实践项目</FormFieldLabel>
+            <el-select-v2 v-model="state.form.project_id" filterable placeholder="请选择实践项目" :disabled="Boolean(state.form.id)" :options="state.options.projects" :props="{ label: 'title', value: 'id' }" @change="changeFormProject" />
+          </label>
+          <p v-else class="span-2 social-project-note">本材料关联原分散申报。</p>
+          <label>
+            <FormFieldLabel required help="系统按计划核对材料的提交主体">材料类型</FormFieldLabel>
+            <el-select v-model="state.form.material_type" filterable allow-create placeholder="请选择材料类型" :disabled="Boolean(state.form.id) || materialConfig.loading" @change="applyMaterialScope">
+              <el-option v-for="option in formMaterialTypes" :key="option.value" :label="option.label" :value="option.value" :disabled="option.disabled" />
+            </el-select>
+          </label>
+          <p class="social-project-note" role="status">提交范围 {{ materialScopeText }}</p>
+          <p v-if="state.form.id && state.form.submit_scope !== materialScope" class="span-2 social-project-note is-error">原记录的提交范围与现行要求不符，请按现行范围新建材料。</p>
+          <label v-if="!isStudent && materialScope === 'student'" class="span-2">
+            <FormFieldLabel required help="只显示当前项目的授权参与学生">学生</FormFieldLabel>
+            <el-select-v2 v-model="state.form.student_id" filterable remote placeholder="搜索姓名或学号" :disabled="!state.form.project_id || Boolean(state.form.id)" :remote-method="students.search" :loading="studentOptions.loading" :options="studentSelectOptions">
+              <template #footer><el-button v-if="studentOptions.hasMore" link type="primary" :loading="studentOptions.loading" @click="students.more">加载更多</el-button></template>
+            </el-select-v2>
+          </label>
           <label class="span-2"><FormFieldLabel :required="false" help="最多 180 字">材料标题</FormFieldLabel><input v-model="state.form.title" maxlength="180"></label>
           <label class="span-2"><FormFieldLabel :required="false" help="最多 500000 字；提交须在对应材料截止时间内">材料内容</FormFieldLabel><textarea v-model="state.form.content" rows="8" maxlength="500000" /></label>
           <section class="span-2 social-material-files">
@@ -240,20 +261,32 @@
         </template>
 
         <template v-else-if="state.form.resource === 'patch_sign'">
-          <label class="span-2"><FormFieldLabel required help="保存时必填；须选择可操作的集中实践项目">集中实践项目</FormFieldLabel><el-select-v2 v-model="state.form.project_id" filterable placeholder="请选择集中实践项目" :options="centralizedProjects" :props="{ label: 'title', value: 'id' }" /></label>
-          <label><FormFieldLabel required help="保存时必填；日期须在项目或计划实践时间内">补签日期</FormFieldLabel><input v-model="state.form.sign_date" type="date"></label>
+          <label class="span-2">
+            <FormFieldLabel required help="请选择本人已参与且仍可补签的集中或分散项目">实践项目</FormFieldLabel>
+            <el-select-v2 v-model="state.form.project_id" filterable placeholder="请选择实践项目" :options="patchProjects" />
+            <small v-if="!patchProjects.length">暂无开放补签的本人项目。</small>
+          </label>
+          <label><FormFieldLabel required help="须在项目实践日期内，且不能晚于系统当天">补签日期</FormFieldLabel><input v-model="state.form.sign_date" type="date" :max="state.options.current_date"></label>
           <label class="span-2"><FormFieldLabel required help="保存时必填，最多 10000 字">补签原因</FormFieldLabel><textarea v-model="state.form.reason" rows="4" maxlength="10000" /></label>
-          <label class="span-2"><FormFieldLabel :required="false" help="最多 100000 字">证明说明</FormFieldLabel><textarea v-model="state.form.proof" rows="4" maxlength="100000" /></label>
+          <label class="span-2"><FormFieldLabel submit-required help="填写可供导师核对的证明，最多 100000 字">证明说明</FormFieldLabel><textarea v-model="state.form.proof" rows="4" maxlength="100000" /></label>
         </template>
 
         <template v-else-if="state.form.resource === 'score'">
-          <label><FormFieldLabel :required="state.form.resource !== 'material' || !state.form.declaration_id" help="材料须且只能关联项目或申报；项目须属于所选计划">实践项目</FormFieldLabel><el-select-v2 v-model="state.form.project_id" filterable placeholder="请选择实践项目" @change="prepareScoreRules" :options="state.options.projects" :props="{ label: 'title', value: 'id' }" /></label>
-          <label><FormFieldLabel :required="state.form.resource !== 'material' || (Boolean(state.form.project_id) && (state.form.submit_scope || 'student') === 'student')" help="成绩保存必选项目学生；学生范围的项目材料须指定学生">学生</FormFieldLabel><el-select-v2 v-model="state.form.student_id" filterable placeholder="请选择学生" :options="scoreStudentSelectOptions" /></label>
+          <label>
+            <FormFieldLabel required help="选择项目后加载评分项和项目学生">实践项目</FormFieldLabel>
+            <el-select-v2 v-model="state.form.project_id" filterable placeholder="请选择实践项目" :disabled="Boolean(state.form.id)" @change="changeFormProject" :options="state.options.projects" :props="{ label: 'title', value: 'id' }" />
+          </label>
+          <label>
+            <FormFieldLabel required help="只显示当前项目的授权参与学生">学生</FormFieldLabel>
+            <el-select-v2 v-model="state.form.student_id" filterable remote placeholder="搜索姓名或学号" :disabled="!state.form.project_id || Boolean(state.form.id)" :remote-method="students.search" :loading="studentOptions.loading" :options="studentSelectOptions">
+              <template #footer><el-button v-if="studentOptions.hasMore" link type="primary" :loading="studentOptions.loading" @click="students.more">加载更多</el-button></template>
+            </el-select-v2>
+          </label>
           <section class="span-2 social-inline-editor">
             <header><FormFieldLabel required help="保存时须包含当前计划的全部评分项">评分项</FormFieldLabel><small>按计划规则自动计算总评</small></header>
             <div v-for="item in state.form.items" :key="item.item_code" class="social-score-input">
               <FormFieldLabel :required="false" :help="`0–${item.max_score || 100} 分，留空按 0 分；须保留全部评分项`">{{ item.item_name }}（{{ item.weight }}%）</FormFieldLabel>
-              <el-input-number v-model="item.score_value" :min="0" :max="item.max_score || 100" :precision="1" />
+              <el-input-number v-model="item.score_value" :min="0" :max="item.max_score || 100" :precision="2" />
             </div>
           </section>
           <label class="span-2"><FormFieldLabel :required="false" help="最多 10000 字">评语</FormFieldLabel><textarea v-model="state.form.comment" rows="4" maxlength="10000" /></label>
@@ -261,8 +294,8 @@
       </form>
       <template #footer>
         <el-button :disabled="state.saving" @click="closeDialog">取消</el-button>
-        <el-button :loading="state.saving" :disabled="state.form.resource === 'project' && !projectPlanReady" @click="saveForm(false)">{{ state.form.resource === 'project' ? '保存' : '保存草稿' }}</el-button>
-        <el-button v-if="state.form.resource !== 'project'" type="primary" :loading="state.saving" @click="saveForm(true)">提交审核</el-button>
+        <el-button :loading="state.saving" :disabled="!formTargetReady" @click="saveForm(false)">{{ state.form.resource === 'project' ? '保存' : '保存草稿' }}</el-button>
+        <el-button v-if="state.form.resource !== 'project'" type="primary" :loading="state.saving" :disabled="!formTargetReady" @click="saveForm(true)">提交审核</el-button>
       </template>
     </OperationDialog>
 
@@ -276,6 +309,7 @@
         <section class="social-detail-grid">
           <article v-for="item in detailFacts" :key="item.label"><span>{{ item.label }}</span><strong>{{ item.value || '-' }}</strong></article>
         </section>
+        <SocialPracticeArchiveEvidence :snapshot="state.detail.snapshot_json" :record-id="state.detail.id" :version="state.detail.version" />
         <section v-if="state.detail.description || state.detail.content" class="social-detail-block">
           <strong>内容</strong><p>{{ state.detail.description || state.detail.content }}</p>
         </section>
@@ -296,8 +330,29 @@
           <strong>团队成员</strong>
           <el-table width-storage-key="social-practice-panel:visibleDetailMembers" :data="visibleDetailMembers" size="small"><el-table-column type="index" label="序号" width="66" :index="index => (detailMemberPage - 1) * detailPageSize + index + 1" /><el-table-column prop="student_name" label="学生" /><el-table-column prop="student_num" label="学号" /><el-table-column prop="confirm_status" label="确认状态"><template #default="{ row }">{{ confirmStatusText(row.confirm_status) }}</template></el-table-column></el-table>
           <ListPagination v-model:current-page="detailMemberPage" layout="total, prev, pager, next" :page-size="detailPageSize" :total="state.detail.members.length" />
+          <div v-if="pendingMembership" class="social-panel-actions">
+            <span>{{ pendingMembership.student_name }} 待确认</span>
+            <el-button type="primary" :disabled="state.saving" @click="confirmMember('accepted')">确认加入团队</el-button>
+            <el-button :disabled="state.saving" @click="confirmMember('refused')">拒绝加入</el-button>
+          </div>
         </section>
       </div>
+    </OperationDialog>
+
+    <OperationDialog :visible="state.dialog.type === 'gpsSign'" title="当天 GPS 签到" :busy="state.saving" @close="closeDialog">
+      <div class="social-review-form">
+        <label><FormFieldLabel required help="选择当前办理学生已参与的实践项目">实践项目</FormFieldLabel>
+          <el-select v-model="gps.project" filterable @change="locateForSignIn">
+            <el-option v-for="project in state.options.projects" :key="project.id" :value="project.id" :label="project.title" />
+          </el-select>
+        </label>
+        <p aria-live="polite">{{ gps.notice }}</p>
+        <el-button v-if="gps.retry" @click="locateForSignIn(gps.project)">重新获取定位</el-button>
+      </div>
+      <template #footer>
+        <el-button :disabled="state.saving" @click="closeDialog">取消</el-button>
+        <el-button type="primary" :disabled="!gps.position || state.saving" @click="submitGpsSignIn">确认签到</el-button>
+      </template>
     </OperationDialog>
 
     <OperationDialog
@@ -365,8 +420,8 @@
         <header><el-button :icon="Plus" @click="addParticipant">添加学生</el-button><small>每名学生必须绑定当前项目中的一名指导教师。</small></header>
         <el-table width-storage-key="social-practice-panel:visibleAssignmentParticipants" :data="visibleAssignmentParticipants" size="small" height="420">
           <el-table-column type="index" label="序号" width="66" :index="index => (assignmentPage - 1) * detailPageSize + index + 1" />
-          <el-table-column label="学生" min-width="220"><template #header><FormFieldLabel required help="须属于当前计划范围，不能重复">学生</FormFieldLabel></template><template #default="{ row }"><el-select-v2 v-model="row.student_id" filterable placeholder="请选择学生" :options="studentSelectOptions" /></template></el-table-column>
-          <el-table-column label="指导教师" min-width="200"><template #header><FormFieldLabel required help="每名学生须绑定一名项目教师">指导教师</FormFieldLabel></template><template #default="{ row }"><el-select-v2 v-model="row.teacher_id" filterable placeholder="请选择指导教师" :options="assignmentTeacherSelectOptions" /></template></el-table-column>
+          <el-table-column label="学生" min-width="220"><template #header><FormFieldLabel required help="须属于当前计划范围，不能重复">学生</FormFieldLabel></template><template #default="{ row }"><el-select-v2 v-model="row.student_id" filterable remote placeholder="搜索姓名或学号" :remote-method="students.search" :loading="studentOptions.loading" :options="studentSelectOptions"><template #footer><el-button v-if="studentOptions.hasMore" link type="primary" :loading="studentOptions.loading" @click="students.more">加载更多</el-button></template></el-select-v2></template></el-table-column>
+          <el-table-column label="指导教师" min-width="200"><template #header><FormFieldLabel required help="每名学生须绑定一名项目教师">指导教师</FormFieldLabel></template><template #default="{ row }"><el-select-v2 v-model="row.teacher_id" filterable placeholder="请选择指导教师" :options="assignmentTeacherOptions(row)" /></template></el-table-column>
           <el-table-column label="操作" width="80"><template #default="{ $index }"><el-button link type="danger" @click="removeParticipant($index)">移除</el-button></template></el-table-column>
         </el-table>
         <ListPagination v-model:current-page="assignmentPage" layout="total, prev, pager, next" :page-size="detailPageSize" :total="state.assignment.participants.length" />
@@ -394,7 +449,7 @@
     <OperationDialog :visible="state.dialog.type === 'teacherReselect'" title="重新选择指导教师" :busy="state.saving" @close="closeDialog">
       <div class="social-assignment-form">
         <label class="social-assignment-field"><FormFieldLabel required help="须选择已启用且有权限访问的教师">指导教师</FormFieldLabel><el-select-v2 v-model="state.assignment.declarationTeacherId" filterable placeholder="请选择其他指导教师" :options="teacherSelectOptions" /></label>
-        <small class="social-assignment-hint">仅在教师拒绝或确认超时后可重新选择，次数受计划配置限制。</small>
+        <small class="social-assignment-hint">仅在教师拒绝后可重新选择，确认超时由管理员分配，次数受计划配置限制。</small>
       </div>
       <template #footer><el-button @click="closeDialog">取消</el-button><el-button type="primary" :loading="state.saving" @click="submitTeacherReselect">提交选择</el-button></template>
     </OperationDialog>
@@ -432,6 +487,8 @@
 
 <script setup>
 import FormFieldLabel from '../../../shared/components/FormFieldLabel.vue';
+import SocialPracticeArchiveEvidence from '../../../shared/components/SocialPracticeArchiveEvidence.vue';
+import { useSocialPracticeStudentOptions } from '../../../shared/useSocialPracticeStudentOptions';
 import FilePreviewButton from '../../../shared/components/FilePreviewButton.vue';
 import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue';
 import { filterAcademicClasses, filterAcademicProfessions } from '../../../shared/academicCascade';
@@ -458,6 +515,7 @@ import {
   assignSocialPracticeDeclarationTeacher,
   assignSocialPracticeStudents,
   assignSocialPracticeTeachers,
+  confirmSocialPracticeMember,
   confirmSocialPracticePlanImport,
   confirmSocialPracticeTeacher,
   fetchSocialPracticeDetail,
@@ -480,11 +538,12 @@ import {
   saveSocialPracticePatchSign,
   saveSocialPracticeReviewDraft,
   saveSocialPracticeScore,
+  saveSocialPracticeSignIn,
   submitSocialPractice,
   uploadFile,
 } from '../api/system';
 import WorkflowHistory from '../../../shared/components/WorkflowHistory.vue';
-import { socialPracticeRecordOutcome } from '../../../shared/workflowPresentation';
+import { socialPracticeRecordOutcome, trustedImportHistory } from '../../../shared/workflowPresentation';
 import { socialPracticeProjectPlanEligibility, socialPracticeProjectPlanOptions } from '../../../shared/socialPracticePlanEligibility';
 import { backendUrl, request } from '../api/client';
 
@@ -527,7 +586,6 @@ const state = reactive({
   overview: {},
   statistics: { summary: {}, by_grade: [], by_mode: [], by_college: [] },
   options: emptyOptions(),
-  planStudents: [],
   rows: [],
   pagination: { page: 1, page_size: 20, total: 0 },
   filters: emptyFilters(),
@@ -540,6 +598,13 @@ const state = reactive({
   planImport: { fileId: null, items: [], summary: null },
 });
 const materialFileInput = ref(null);
+const materialConfig = reactive({ project: null, loading: false });
+let materialRequest = 0;
+const students = useSocialPracticeStudentOptions(fetchSocialPracticeEligibleStudents, () => {
+  if (state.dialog.type === 'assignStudents') return state.assignment.participants.map(item => item.student_id);
+  return state.form.resource === 'declaration' ? state.form.member_student_ids : [state.form.student_id];
+}, message => ElMessage.error(message));
+const studentOptions = students.state;
 const projectPlan = reactive({ checking: false, checkedId: null, error: '' });
 let projectPlanRequest = 0;
 let disposed = false;
@@ -548,7 +613,6 @@ let readRequest = 0;
 let targetOpenRequest = 0;
 let optionsRequest = 0;
 let optionsPromise = null;
-let studentRequest = 0;
 const submitRequests = new Map();
 let reviewEditVersion = 0;
 const detailPageSize = 20;
@@ -561,8 +625,7 @@ const visibleDetailParticipants = computed(() => (state.detail.participants || [
 const visibleDetailMembers = computed(() => (state.detail.members || []).slice((detailMemberPage.value - 1) * detailPageSize, detailMemberPage.value * detailPageSize));
 const visiblePlanImportItems = computed(() => state.planImport.items.slice((planImportPage.value - 1) * detailPageSize, planImportPage.value * detailPageSize));
 const teacherSelectOptions = computed(() => state.options.teachers.map(item => ({ label: `${item.teacher_name} / ${item.teacher_num || '-'}`, value: item.teacher_id })));
-const studentSelectOptions = computed(() => state.options.students.map(item => ({ label: `${item.name} / ${item.student_num}`, value: item.student_id })));
-const planStudentSelectOptions = computed(() => state.planStudents.map(item => ({ label: `${item.name} / ${item.student_num}`, value: item.student_id })));
+const studentSelectOptions = computed(() => studentOptions.items.map(item => ({ label: `${item.name} / ${item.student_num}`, value: Number(item.student_id) })));
 const assignmentTeacherSelectOptions = computed(() => state.assignment.teachers.map(item => ({ label: teacherName(item.teacher_id), value: item.teacher_id })));
 
 const panelConfig = computed(() => panelDefinitions[props.panel] || panelDefinitions.plans);
@@ -580,12 +643,30 @@ const projectPlanMessage = computed(() => {
   if (!selectedProjectPlanEligibility.value.canCreate) return selectedProjectPlanEligibility.value.reason;
   return projectPlanReady.value ? '计划已审核通过并发布，可以填写项目资料。' : '请核对计划最新状态后继续。';
 });
-const scoreStudentOptions = computed(() => {
-  const projectId = Number(state.form.project_id || 0);
-  const assignedIds = state.rows.filter(row => Number(row.project_id) === projectId).map(row => Number(row.student_id));
-  return assignedIds.length ? state.options.students.filter(item => assignedIds.includes(Number(item.student_id))) : state.options.students;
+const patchProjects = computed(() => state.options.projects.filter(item => item.can_patch_sign || Number(item.id) === Number(state.form.project_id))
+  .map(item => ({ label: item.title + (item.patch_sign_unavailable_reason ? `（${item.patch_sign_unavailable_reason}）` : ''), value: item.id, disabled: !item.can_patch_sign })));
+const materialScope = computed(() => materialConfig.project?.requirements?.find(row => row.requirement_type === state.form.material_type)?.submit_scope || 'student');
+const materialScopeText = computed(() => ({ student: '个人分别提交', team: '团队共同提交', project: '项目共同提交' }[materialScope.value]));
+const formMaterialTypes = computed(() => {
+  const safety = ['safety_agreement', 'insurance', 'emergency_plan', 'parent_notice'];
+  const configured = materialConfig.project?.requirements || [];
+  const values = new Set([...materialTypeOptions.map(item => item.value), ...configured.map(item => item.requirement_type), state.form.material_type]);
+  return [...values].filter(value => value === state.form.material_type || (props.panel === 'safety') === safety.includes(value)).map(value => {
+    const teamOnly = configured.some(row => row.requirement_type === value && row.submit_scope === 'team') && !materialConfig.project?.has_team;
+    return { value, disabled: teamOnly, label: materialTypeText(value) + (teamOnly ? '（仅多人团队）' : '') };
+  });
 });
-const scoreStudentSelectOptions = computed(() => scoreStudentOptions.value.map(item => ({ label: `${item.name} / ${item.student_num}`, value: item.student_id })));
+const formTargetReady = computed(() => {
+  if (state.form.resource === 'project') return projectPlanReady.value;
+  if (state.form.resource === 'material') {
+    return !materialConfig.loading && Boolean(materialConfig.project) && state.form.submit_scope === materialScope.value
+      && (materialScope.value !== 'student' || Boolean(state.form.student_id))
+      && (materialScope.value !== 'team' || materialConfig.project.has_team);
+  }
+  if (state.form.resource === 'score') return !materialConfig.loading && state.form.items.length > 0 && Boolean(state.form.student_id);
+  if (state.form.resource === 'patch_sign') return patchProjects.value.some(item => Number(item.value) === Number(state.form.project_id) && !item.disabled);
+  return true;
+});
 const planApprovalUpgradeMessage = '当前服务端尚不支持新的社会实践计划审批。请先升级并重启服务端，再刷新页面；当前仅可查看计划和流程记录。';
 const planApprovalReady = computed(() => state.options.plan_approval_engine === 'configured_or_manual_v1');
 const panelResource = computed(() => panelConfig.value.resource);
@@ -622,6 +703,9 @@ const listFilters = computed(() => [
   { key: 'keyword', label: '关键词', type: 'input', placeholder: '名称、学生、教师或内容' },
 ]);
 const tableActions = computed(() => uniqueActions(state.rows.flatMap(rowActions)));
+const gps = reactive({ project: null, position: null, notice: '', retry: false });
+const pendingMembership = computed(() => isStudent.value && can('social_practice:declare') &&
+  state.detail.members?.find(row => row.confirm_status === 'pending' && Number(row.student_id) === Number(state.options.current_student_id)));
 const detailFacts = computed(() => detailFields(state.dialog.row?.resource || panelResource.value).map(item => ({ label: item.label, value: item.format ? item.format(state.detail) : state.detail[item.key] })));
 const reviewSubmitLabel = computed(() => state.dialog.type === 'modify' ? '发起修改' : state.review.status === 'accept' ? '确认通过' : state.review.status === 'modify' ? '退回修改' : '请选择审核结果');
 const reviewLimit = computed(() => {
@@ -638,7 +722,9 @@ watch(() => [props.panel, props.sessionKey, props.accountId, props.roleType], as
   generation++;
   readRequest++;
   optionsRequest++;
-  studentRequest++;
+  materialRequest++;
+  Object.assign(materialConfig, { project: null, loading: false });
+  students.reset();
   optionsPromise = null;
   resetProjectPlan();
   if (previous && next.slice(1).some((value, index) => value !== previous[index + 1])) state.options = emptyOptions();
@@ -654,14 +740,13 @@ watch(() => [props.panel, props.sessionKey, props.accountId, props.roleType], as
   state.dialog = { type: '', title: '', row: null };
   state.detail = {};
   state.timeline = { records: [], reviews: [] };
-  state.planStudents = [];
   state.filters = defaultFilters();
   if (props.panel === 'overview') await loadOverview();
   else if (props.panel === 'statistics') await loadStatistics();
   else await loadList(1);
 }, { immediate: true, flush: 'sync' });
 
-onBeforeUnmount(() => { disposed = true; generation++; readRequest++; optionsRequest++; studentRequest++; projectPlanRequest++; });
+onBeforeUnmount(() => { disposed = true; generation++; readRequest++; optionsRequest++; materialRequest++; students.reset(); projectPlanRequest++; });
 
 watch(() => [props.targetPlan, props.panel], async (next, previous) => {
   const target = props.targetPlan;
@@ -746,20 +831,15 @@ async function ensureOptions(force = false) {
 }
 
 /** 读取所选计划范围内的团队成员。 */
-async function loadPlanStudents() {
-  const request = ++studentRequest;
-  const context = generation;
-  const form = state.form;
-  const planId = form.plan_id;
-  state.planStudents = [];
-  if (!planId) return;
-  const data = await fetchSocialPracticeEligibleStudents(planId);
-  if (disposed || context !== generation || request !== studentRequest || form !== state.form || planId !== state.form.plan_id) return;
-  state.planStudents = (data.items || []).filter(item => Number(item.student_id) !== Number(state.options.current_student_id || 0));
+function loadPlanStudents(members = []) {
+  const selected = members.filter(member => member.member_role !== 'leader')
+    .map(member => ({ ...member, name: member.student_name }));
+  return students.reset(state.form.plan_id ? { purpose: 'team', plan_id: state.form.plan_id } : null, selected);
 }
 
 function changeDeclarationPlan() {
   state.form.member_student_ids = [];
+  state.form.selected_teacher_id = null;
   loadPlanStudents();
 }
 
@@ -934,8 +1014,8 @@ async function openEdit(row) {
     if (workflowResources.includes(resource)) detail = await fetchSocialPracticeDetail(resource, row.id);
     if (!current()) return;
     state.form = formFromRow(resource, detail);
-    if (resource === 'score') prepareScoreRules(state.form.project_id);
-    if (resource === 'declaration' && state.form.plan_id) await loadPlanStudents();
+    if (['score', 'material'].includes(resource)) await loadFormProject(detail);
+    if (resource === 'declaration' && state.form.plan_id) await loadPlanStudents(detail.members);
     if (!current()) return;
     state.dialog = { type: 'form', title: `编辑${panelConfig.value.title}`, row: { ...row, resource } };
     if (resource === 'project') await validateProjectPlan();
@@ -986,6 +1066,8 @@ async function saveForm(submit) {
       if (!await validateProjectPlan() || !current() || !projectPlanReady.value) return;
       if (!form.title.trim()) { ElMessage.warning('请填写项目名称'); return; }
     }
+    if (!formTargetReady.value) return;
+    if (submit && resource === 'patch_sign' && !String(form.proof || '').trim()) { ElMessage.warning('请填写补签证明'); return; }
     const payload = normalizeFormPayload(form);
     let result;
     if (resource === 'material') result = await saveSocialPracticeMaterial({ ...payload, submit });
@@ -1025,6 +1107,7 @@ async function handleRowAction({ action, row }) {
   if (action === 'assignDeclarationTeacher') return openDeclarationTeacherAssignment(row);
   if (action === 'teacherConfirm') return openTeacherConfirmation(row);
   if (action === 'teacherReselect') return openTeacherReselect(row);
+  if (action === 'gpsSign') return openGpsSignIn(row.id);
   if (action === 'archive') return confirmArchive(row);
 }
 
@@ -1032,11 +1115,57 @@ async function handleRowAction({ action, row }) {
 async function openDetail(row) {
   await runLoading(async current => {
     const resource = actionResource(row);
-    const data = workflowResources.includes(resource) ? await fetchSocialPracticeDetail(resource, row.id) : { ...row };
+    if (resource === 'declaration' && isStudent.value && !await ensureOptions()) return;
+    const data = (workflowResources.includes(resource) || resource === 'archive') ? await fetchSocialPracticeDetail(resource, row.id) : { ...row };
     if (!current()) return;
     state.detail = data;
     state.dialog = { type: 'detail', title: `${panelConfig.value.title}详情`, row: { ...row, resource } };
   });
+}
+
+async function confirmMember(status) {
+  const declaration = state.detail.id;
+  if (!pendingMembership.value) return;
+  try {
+    await ElMessageBox.confirm(status === 'accepted' ? '确认以当前办理学生加入这个团队？' : '确认以当前办理学生拒绝加入？', '团队成员确认');
+    await runAssignment(() => confirmSocialPracticeMember({ declaration_id: declaration, status }), '成员确认已保存');
+  } catch (error) {
+    if (error !== 'cancel' && error !== 'close') ElMessage.error(error.message);
+  }
+}
+
+async function openGpsSignIn(projectId = null) {
+  const context = generation;
+  if (!await ensureOptions() || disposed || context !== generation) return;
+  const projects = state.options.projects;
+  Object.assign(gps, { project: projectId || (projects.length === 1 ? projects[0].id : null), position: null,
+    notice: projects.length ? '请选择项目后获取本机定位。' : '当前学生尚无可签到项目。', retry: false });
+  state.dialog = { type: 'gpsSign', title: 'GPS 签到' };
+  if (gps.project) await locateForSignIn(gps.project);
+}
+
+async function locateForSignIn(id) {
+  const version = ++readRequest;
+  const current = () => !disposed && version === readRequest && state.dialog.type === 'gpsSign' && id === gps.project;
+  Object.assign(gps, { position: null, notice: '正在核对签到条件…', retry: false });
+  try {
+    const project = await fetchSocialPracticeDetail('project', id);
+    if (!current()) return;
+    if (project.sign_in_blockers?.length) { gps.notice = project.sign_in_blockers.map(item => item.message).join('。'); return; }
+    if (!navigator.geolocation) throw new Error('当前客户端未提供定位，请使用支持定位的浏览器或手机。');
+    gps.notice = '正在获取本机位置，请允许定位。';
+    const { coords } = await new Promise((resolve, reject) =>
+      navigator.geolocation.getCurrentPosition(resolve, () => reject(new Error('未取得本机位置，请检查系统和浏览器定位权限。')), { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }));
+    if (!current()) return;
+    gps.position = { longitude: coords.longitude, latitude: coords.latitude };
+    gps.notice = `经度 ${coords.longitude.toFixed(7)}，纬度 ${coords.latitude.toFixed(7)}。确认后记录当前系统日期。`;
+  } catch (error) {
+    if (current()) Object.assign(gps, { notice: error.message, retry: true });
+  }
+}
+
+function submitGpsSignIn() {
+  if (gps.position) return runAssignment(() => saveSocialPracticeSignIn({ project_id: gps.project, ...gps.position }), '签到已保存');
 }
 
 /** 打开流程记录。 */
@@ -1213,10 +1342,19 @@ async function openStudentAssignment(row) {
   state.assignment = {
     projectId: row.id,
     teachers: detail.teachers || [],
-    participants: (detail.participants || []).map(item => ({ student_id: item.student_id, teacher_id: item.teacher_id })),
+    participants: (detail.participants || []).map(item => ({ ...item, student_id: Number(item.student_id), teacher_id: Number(item.teacher_id) })),
   };
   assignmentPage.value = 1;
   state.dialog = { type: 'assignStudents', title: '分配学生与指导教师', row: { ...row, resource: 'project' } };
+  await students.reset({ purpose: 'assignment', project_id: row.id }, (detail.participants || []).map(item => ({ ...item, name: item.student_name })));
+}
+
+function assignmentTeacherOptions(row) {
+  const options = assignmentTeacherSelectOptions.value;
+  if (row.teacher_id && !options.some(item => Number(item.value) === Number(row.teacher_id))) {
+    return [...options, { value: row.teacher_id, label: row.teacher_name || `教师 ${row.teacher_id}`, disabled: true }];
+  }
+  return options;
 }
 
 /** 添加学生分配行。 */
@@ -1350,7 +1488,9 @@ async function runLoading(callback, matches = () => true) {
 function closeDialog(force = false) {
   if (state.saving && force !== true) return;
   readRequest++;
-  studentRequest++;
+  materialRequest++;
+  Object.assign(materialConfig, { project: null, loading: false });
+  students.reset();
   resetProjectPlan();
   state.loading = false;
   state.dialog = { type: '', title: '', row: null };
@@ -1363,7 +1503,8 @@ function closeDialog(force = false) {
 function rowActions(row) {
   const resource = actionResource(row);
   const actions = [{ key: 'view', label: '查看', type: 'primary' }];
-  if (workflowResources.includes(resource)) actions.push({ key: 'timeline', label: '记录', type: 'primary' });
+  if (resource === 'project' && isStudent.value && can('social_practice:attendance:manage')) actions.push({ key: 'gpsSign', label: 'GPS 签到', type: 'primary' });
+  if (workflowResources.includes(resource) || resource === 'attendance' || resource === 'archive') actions.push({ key: 'timeline', label: '记录', type: 'primary' });
   if ((['draft', 'modify'].includes(row.status) || resource === 'project') && canEditResource(resource, row)) {
     actions.push({ key: 'edit', label: '编辑', type: 'primary' });
     if (resource !== 'project' && !['material', 'patch_sign', 'score'].includes(resource)) actions.push({ key: 'submit', label: '提交审核', type: 'success' });
@@ -1371,16 +1512,17 @@ function rowActions(row) {
   if (row.status === 'wait' && (resource === 'plan' && row.workflow?.instance_id ? row.workflow.can_review : canReviewResource(resource)) && (resource !== 'declaration' || row.teacher_confirm_status === 'accepted')) actions.push({ key: 'review', label: '审核', type: 'warning' });
   if (row.status === 'accept' && canReviewResource(resource)) actions.push({ key: 'modify', label: '通过后修改', type: 'warning' });
   if (resource === 'plan' && row.status === 'accept' && row.phase === 'ready' && can('social_practice:plan:manage')) actions.push({ key: 'publish', label: '发布', type: 'success' });
-  if (resource === 'project' && can('social_practice:project:manage')) {
-    actions.push({ key: 'assignTeachers', label: '分配教师', type: 'primary' }, { key: 'assignStudents', label: '分配学生', type: 'primary' });
+  if (resource === 'project' && row.practice_mode === 'centralized' && isAdmin.value && can('social_practice:project:manage')) {
+    if (row.can_manage_project) actions.push({ key: 'assignTeachers', label: '分配教师', type: 'primary' });
+    actions.push({ key: 'assignStudents', label: '分配学生', type: 'primary' });
   }
   if (resource === 'declaration' && isAdmin.value && can('social_practice:project:manage') && ['draft', 'wait', 'modify'].includes(row.status)) {
     actions.push({ key: 'assignDeclarationTeacher', label: '分配教师', type: 'primary' });
   }
-  if (resource === 'declaration' && isTeacher.value && row.teacher_confirm_status === 'pending' && Number(row.assigned_teacher_id || row.selected_teacher_id) > 0) {
+  if (resource === 'declaration' && isTeacher.value && row.can_confirm_teacher) {
     actions.push({ key: 'teacherConfirm', label: '确认指导', type: 'success' });
   }
-  if (resource === 'declaration' && isStudent.value && row.status === 'wait' && row.teacher_confirm_status === 'refused') {
+  if (resource === 'declaration' && isStudent.value && row.can_reselect_teacher) {
     actions.push({ key: 'teacherReselect', label: '重新选导师', type: 'warning' });
   }
   if (resource === 'participant' && can('social_practice:archive')) actions.push({ key: 'archive', label: '归档', type: 'success' });
@@ -1390,9 +1532,9 @@ function rowActions(row) {
 /** 判断资源是否允许当前账号编辑。 */
 function canEditResource(resource, row) {
   if (resource === 'plan') return isAdmin.value && can('social_practice:plan:manage');
-  if (resource === 'project') return isAdmin.value && can('social_practice:project:manage');
+  if (resource === 'project') return isAdmin.value && row?.can_manage_project === true && can('social_practice:project:manage');
   if (resource === 'implementation') return can('social_practice:project:manage');
-  if (resource === 'declaration') return isStudent.value && can('social_practice:declare');
+  if (resource === 'declaration') return isStudent.value && row?.is_applicant && can('social_practice:declare');
   if (resource === 'material') return can('social_practice:material:manage');
   if (resource === 'patch_sign') return isStudent.value && can('social_practice:attendance:manage');
   if (resource === 'score') return can('social_practice:score:manage');
@@ -1436,12 +1578,12 @@ function statusTagType(status) {
 
 /** 返回成员确认状态。 */
 function confirmStatusText(status) {
-  return { pending: '待确认', accepted: '已确认', rejected: '已拒绝' }[status] || status || '-';
+  return { pending: '待确认', accepted: '已确认', refused: '已拒绝', rejected: '已拒绝' }[status] || status || '-';
 }
 
 /** 返回流程记录的展示内容。 */
 function workflowRecordContent(record) {
-  return record.action === 'trusted_initial_accept' ? '由教学计划中心完成首次可信导入，计划免审生效。后续修改按原计划审核流程处理。' : record.content;
+  return record.action === 'trusted_initial_accept' ? trustedImportHistory(record) : record.content;
 }
 
 /** 返回流程动作中文名。 */
@@ -1510,18 +1652,42 @@ function removeArrayItem(key, index) {
 }
 
 /** 按项目读取评分规则。 */
-async function prepareScoreRules(projectId) {
-  const context = generation;
+function applyMaterialScope() {
   const form = state.form;
-  const project = state.options.projects.find(item => Number(item.id) === Number(projectId));
-  if (!project) return;
+  form.submit_scope = materialScope.value;
+  if (form.submit_scope !== 'student') form.student_id = null;
+  else if (isStudent.value) form.student_id = state.options.current_student_id || null;
+}
+
+function changeFormProject() {
+  state.form.student_id = null;
+  state.form.items = [];
+  return loadFormProject();
+}
+
+async function loadFormProject(existing = {}) {
+  const form = state.form;
+  const current = ++materialRequest;
+  materialConfig.project = null;
+  if (!form.project_id && !form.declaration_id) { students.reset(); materialConfig.loading = false; return; }
+  materialConfig.loading = true;
+  const selected = existing.student_id ? [{ student_id: existing.student_id, name: existing.student_name, student_num: existing.student_num }] : [];
+  if (form.project_id && !isStudent.value) students.reset({ purpose: form.resource === 'score' ? 'score' : 'participant', project_id: form.project_id }, selected);
   try {
-    const plan = await fetchSocialPracticeDetail('plan', project.plan_id);
-    if (disposed || context !== generation || form !== state.form || Number(projectId) !== Number(state.form.project_id)) return;
-    state.form.items = (plan.score_rules || []).filter(item => item.practice_mode === project.practice_mode).map(item => ({ ...item, score_value: 0 }));
-  } catch (error) {
-    if (!disposed && context === generation && form === state.form) ElMessage.error(error.message);
-  }
+    const project = form.project_id ? await fetchSocialPracticeDetail('project', form.project_id) : null;
+    const plan = !project || form.resource === 'score' ? await fetchSocialPracticeDetail('plan', project?.plan_id || form.plan_id) : null;
+    if (disposed || current !== materialRequest || state.form !== form) return;
+    materialConfig.project = project || { requirements: (plan?.requirements || []).filter(item => item.practice_mode === 'all' || item.practice_mode === 'distributed'), has_team: form.submit_scope === 'team' };
+    if (form.resource === 'material') {
+      form.plan_id = project?.plan_id || form.plan_id;
+      if (!form.id) applyMaterialScope();
+    } else {
+      const saved = new Map((existing.details || []).map(item => [String(item.item_code), item.score_value]));
+      form.items = (plan.score_rules || []).filter(item => item.practice_mode === project.practice_mode)
+        .map(item => ({ ...item, score_value: Number(saved.get(String(item.item_code)) ?? 0) }));
+    }
+  } catch (error) { if (!disposed && current === materialRequest) ElMessage.error(error.message); }
+  finally { if (current === materialRequest) materialConfig.loading = false; }
 }
 
 /** 将详情数据转换为编辑表单。 */
@@ -1535,7 +1701,8 @@ function formFromRow(resource, row) {
     form.requirements = (row.requirements || []).map(item => ({ ...item, required_flag: item.required_flag === 'true' }));
     form.score_rules = (row.score_rules || []).map(item => ({ ...item, weight: Number(item.weight), max_score: Number(item.max_score) }));
   }
-  if (resource === 'declaration') form.member_student_ids = (row.members || []).map(item => item.student_id);
+  if (resource === 'declaration') form.member_student_ids = (row.members || []).filter(item => item.member_role !== 'leader').map(item => Number(item.student_id));
+  if (resource === 'score' || resource === 'material') form.student_id = Number(form.student_id) || null;
   if (resource === 'material') {
     form.attachments = (row.attachments || []).map(item => ({ ...item, file_id: item.file_id || item.id }));
     form.file_ids = form.attachments.map(item => item.file_id || item.id);
@@ -1552,6 +1719,9 @@ function normalizeFormPayload(form) {
   if (payload.resource === 'plan') payload.plan_code = payload.code || payload.plan_code || '';
   if (payload.resource === 'material') payload.file_ids = (payload.attachments || []).map(item => item.file_id || item.id).filter(Boolean);
   delete payload.attachments;
+  delete payload.plan_change_blockers;
+  delete payload.assigned_teacher_id;
+  delete payload.assigned_teacher_name;
   return payload;
 }
 
@@ -1567,9 +1737,9 @@ function normalizeDateFields(form) {
 function emptyForm(resource) {
   const common = { resource, id: null };
   if (resource === 'plan') return { ...common, title: '', code: '', grade_id: null, organizer_dep_id: null, credit: 0, source_type: 'manual', participation_mode: 'mandatory', teacher_match_mode: 'mixed', teacher_confirm_hours: 48, max_reselect_count: 2, default_team_submit_mode: 'individual', register_start_at: '', register_end_at: '', practice_start_at: '', practice_end_at: '', result_deadline_at: '', score_deadline_at: '', description: '', scopes: [{ scope_type: 'school', dep_id: null, profession_id: null, class_id: null }], requirements: defaultRequirements(), score_rules: defaultScoreRules() };
-  if (resource === 'project') return { ...common, plan_id: null, practice_mode: 'centralized', project_code: '', title: '', content: '', objective: '', location: '', start_at: '', end_at: '', capacity: 0 };
+  if (resource === 'project') return { ...common, plan_id: null, plan_change_blockers: [], practice_mode: 'centralized', project_code: '', title: '', content: '', objective: '', location: '', start_at: '', end_at: '', capacity: 0 };
   if (resource === 'implementation') return { ...common, project_id: null, title: '', content: '', budget_amount: 0, material_requirement: '', venue_requirement: '' };
-  if (resource === 'declaration') return { ...common, plan_id: null, declaration_type: 'individual', team_submit_mode: 'individual', title: '', content: '', objective: '', expected_duration: '', expected_result: '', location: '', selected_teacher_id: null, member_student_ids: [] };
+  if (resource === 'declaration') return { ...common, plan_id: null, declaration_type: 'individual', team_submit_mode: 'individual', title: '', content: '', objective: '', expected_duration: '', expected_result: '', location: '', selected_teacher_id: null, assigned_teacher_id: null, assigned_teacher_name: '', member_student_ids: [] };
   if (resource === 'material') return { ...common, plan_id: null, project_id: null, declaration_id: null, student_id: state.options.students[0]?.student_id || null, material_type: 'practice_report', submit_scope: 'student', title: '', content: '', file_ids: [], attachments: [] };
   if (resource === 'patch_sign') return { ...common, project_id: null, sign_date: '', reason: '', proof: '' };
   if (resource === 'score') return { ...common, project_id: null, student_id: null, teacher_id: null, items: [], comment: '' };
@@ -1601,7 +1771,7 @@ function uniqueActions(actions) {
 function planColumns() { return [{ prop: 'title', label: '计划名称', minWidth: 220, required: true }, { prop: 'grade_name', label: '年级', width: 110 }, { prop: 'organizer_dep_name', label: '组织学院', minWidth: 150 }, { prop: 'credit', label: '学分', width: 80 }, { prop: 'participation_mode', label: '参与方式', width: 100, formatter: row => row.participation_mode === 'mandatory' ? '必修' : '自愿' }, { prop: 'phase', label: '阶段', width: 100, formatter: row => phaseText(row.phase) }, { prop: 'status', label: '状态', width: 100, tag: true, tagType: row => statusTagType(row.status), formatter: row => statusText(row.status) }, { prop: 'practice_start_at', label: '实践开始', width: 160 }, { prop: 'practice_end_at', label: '实践结束', width: 160 }]; }
 function projectColumns() { return [{ prop: 'title', label: '项目名称', minWidth: 220, required: true }, { prop: 'plan_title', label: '所属计划', minWidth: 180 }, { prop: 'grade_name', label: '年级', width: 110 }, { prop: 'organizer_dep_name', label: '组织学院', minWidth: 140 }, { prop: 'location', label: '地点', minWidth: 160 }, { prop: 'teacher_count', label: '教师数', width: 90 }, { prop: 'participant_count', label: '学生数', width: 90 }, { prop: 'capacity', label: '容量', width: 80 }, { prop: 'phase', label: '阶段', width: 100, formatter: row => phaseText(row.phase) }, { prop: 'status', label: '状态', width: 100, tag: true, tagType: row => statusTagType(row.status), formatter: row => statusText(row.status) }]; }
 function implementationColumns() { return [{ prop: 'title', label: '实施申请', minWidth: 220, required: true }, { prop: 'project_title', label: '集中项目', minWidth: 200 }, { prop: 'plan_title', label: '所属计划', minWidth: 180 }, { prop: 'grade_name', label: '年级', width: 110 }, { prop: 'budget_amount', label: '预算', width: 110 }, { prop: 'status', label: '状态', width: 100, tag: true, tagType: row => statusTagType(row.status), formatter: row => statusText(row.status) }, { prop: 'submitted_at', label: '提交时间', width: 160 }]; }
-function declarationColumns() { return [{ prop: 'title', label: '申报名称', minWidth: 220, required: true }, { prop: 'applicant_name', label: '申报学生', width: 120 }, { prop: 'student_num', label: '学号', width: 130 }, { prop: 'declaration_type', label: '类型', width: 100, formatter: row => row.declaration_type === 'team' ? '团队' : '个人' }, { prop: 'selected_teacher_name', label: '选择教师', width: 120 }, { prop: 'assigned_teacher_name', label: '分配教师', width: 120 }, { prop: 'teacher_confirm_status', label: '教师确认', width: 110, formatter: row => confirmStatusText(row.teacher_confirm_status) }, { prop: 'status', label: '状态', width: 100, tag: true, tagType: row => statusTagType(row.status), formatter: row => statusText(row.status) }, { prop: 'submitted_at', label: '提交时间', width: 160 }]; }
+function declarationColumns() { return [{ prop: 'title', label: '申报名称', minWidth: 220, required: true }, { prop: 'applicant_name', label: '申报学生', width: 120 }, { prop: 'student_num', label: '学号', width: 130 }, { prop: 'declaration_type', label: '类型', width: 100, formatter: row => row.declaration_type === 'team' ? '团队' : '个人' }, { prop: 'selected_teacher_name', label: '选择教师', width: 120 }, { prop: 'assigned_teacher_name', label: '分配教师', width: 120 }, { prop: 'teacher_confirm_status', label: '教师确认', width: 110, formatter: row => row.teacher_confirm_expired ? '已超时，待管理员分配' : confirmStatusText(row.teacher_confirm_status) }, { prop: 'status', label: '状态', width: 100, tag: true, tagType: row => statusTagType(row.status), formatter: row => statusText(row.status) }, { prop: 'submitted_at', label: '提交时间', width: 160 }]; }
 function participantColumns() { return [{ prop: 'student_name', label: '学生', width: 120, required: true }, { prop: 'student_num', label: '学号', width: 130 }, { prop: 'grade_name', label: '年级', width: 110 }, { prop: 'dep_name', label: '学院', minWidth: 150 }, { prop: 'profession_name', label: '专业', minWidth: 150 }, { prop: 'class_name', label: '班级', minWidth: 140 }, { prop: 'project_title', label: '实践项目', minWidth: 200 }, { prop: 'teacher_name', label: '指导教师', width: 120 }, { prop: 'practice_mode', label: '实践模式', width: 100, formatter: row => modeText(row.practice_mode) }, { prop: 'status', label: '状态', width: 90, formatter: row => statusText(row.status) }]; }
 function teacherColumns() { return [{ prop: 'teacher_name', label: '教师', width: 120, required: true }, { prop: 'teacher_num', label: '工号', width: 130 }, { prop: 'dep_name', label: '学院', minWidth: 150 }, { prop: 'profession_name', label: '专业', minWidth: 150 }, { prop: 'project_title', label: '集中项目', minWidth: 210 }, { prop: 'teacher_role', label: '项目角色', width: 100, formatter: row => row.teacher_role === 'leader' ? '负责人' : '指导教师' }, { prop: 'assigned_count', label: '指导人数', width: 100 }, { prop: 'capacity', label: '容量', width: 80 }]; }
 function materialColumns() { return [{ prop: 'title', label: '材料标题', minWidth: 220, required: true }, { prop: 'material_type', label: '材料类型', width: 140, formatter: row => materialTypeText(row.material_type) }, { prop: 'student_name', label: '学生', width: 120 }, { prop: 'student_num', label: '学号', width: 130 }, { prop: 'project_title', label: '实践项目', minWidth: 190 }, { prop: 'plan_title', label: '所属计划', minWidth: 180 }, { prop: 'version', label: '版本', width: 80 }, { prop: 'status', label: '状态', width: 100, tag: true, tagType: row => statusTagType(row.status), formatter: row => statusText(row.status) }, { prop: 'submitted_at', label: '提交时间', width: 160 }]; }
@@ -1624,15 +1794,15 @@ function materialTypeText(value) { return materialTypeOptions.find(item => item.
 
 const workflowResources = ['plan', 'project', 'implementation', 'declaration', 'material', 'patch_sign', 'score'];
 const dateFields = ['register_start_at', 'register_end_at', 'practice_start_at', 'practice_end_at', 'result_deadline_at', 'score_deadline_at', 'start_at', 'end_at'];
-const statusMap = { draft: '草稿', wait: '待审核', accept: '已通过', modify: '退回修改', enabled: '正常', active: '进行中', archived: '已归档', pending: '待确认', accepted: '已确认', rejected: '已拒绝' };
+const statusMap = { draft: '草稿', wait: '待审核', accept: '已通过', modify: '退回修改', enabled: '正常', active: '进行中', archived: '已归档', pending: '待确认', accepted: '已确认', refused: '已拒绝', rejected: '已拒绝' };
 const statusOptions = [{ label: '草稿', value: 'draft' }, { label: '待审核', value: 'wait' }, { label: '已通过', value: 'accept' }, { label: '需修改', value: 'modify' }, { label: '进行中', value: 'active' }, { label: '已归档', value: 'archived' }];
 function defaultRequirements() { return materialTypeOptions.map(item => ({ practice_mode: ['practice_proof', 'social_practice_report'].includes(item.value) ? 'distributed' : ['practice_report', 'practice_photo'].includes(item.value) ? 'centralized' : 'all', requirement_type: item.value, required_flag: item.value !== 'parent_notice', submit_scope: item.value === 'emergency_plan' ? 'project' : 'student' })); }
 function defaultScoreRules() { return [{ practice_mode: 'centralized', item_code: 'attendance', item_name: '签到', weight: 20, max_score: 100, sort: 10 }, { practice_mode: 'centralized', item_code: 'performance', item_name: '实践表现', weight: 30, max_score: 100, sort: 20 }, { practice_mode: 'centralized', item_code: 'report', item_name: '实践报告', weight: 50, max_score: 100, sort: 30 }, { practice_mode: 'distributed', item_code: 'attitude', item_name: '实践态度', weight: 20, max_score: 100, sort: 10 }, { practice_mode: 'distributed', item_code: 'result', item_name: '实践成果', weight: 30, max_score: 100, sort: 20 }, { practice_mode: 'distributed', item_code: 'report', item_name: '社会实践报告', weight: 50, max_score: 100, sort: 30 }]; }
 </script>
 
 <style scoped>
-.social-practice-panel { height: 100%; min-height: 0; display: flex; flex-direction: column; gap: 12px; }
-.social-panel-head { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 4px 2px 10px; }
+.social-practice-panel { height: 100%; min-height: 0; display: flex; flex-direction: column; gap: 12px; overflow: auto; }
+.social-panel-head { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding-bottom: 10px; }
 .social-panel-head.compact { padding-bottom: 2px; }
 .social-panel-head h2 { margin: 0 0 4px; font-size: 20px; letter-spacing: 0; }
 .social-panel-head p { margin: 0; color: var(--muted); font-size: 13px; }
@@ -1644,7 +1814,9 @@ function defaultScoreRules() { return [{ practice_mode: 'centralized', item_code
 .social-overview-icon { width: 40px; height: 40px; display: grid; place-items: center; border-radius: 8px; background: var(--primary-soft); color: var(--primary-ink); }
 .social-overview-icon.green { background: var(--green-soft); color: var(--green); }.social-overview-icon.teal { background: var(--teal-soft); color: var(--teal); }.social-overview-icon.amber { background: var(--amber-soft); color: var(--amber); }.social-overview-icon.red { background: var(--danger-soft); color: var(--danger); }.social-overview-icon.purple { background: var(--purple-soft); color: var(--purple); }.social-overview-icon.gray { background: var(--surface-2); color: var(--muted); }
 .social-flow-band { margin-top: 4px; padding: 18px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
-.social-flow-band header { display: flex; align-items: center; gap: 8px; margin-bottom: 18px; }.social-flow-band > div { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }.social-flow-band > div span { flex: 1 1 120px; min-height: 42px; display: grid; place-items: center; border: 1px solid var(--primary-border); border-radius: 7px; color: var(--primary-ink); background: var(--primary-soft); font-size: 13px; }
+.social-flow-band header { display: flex; align-items: center; gap: 8px; margin-bottom: 18px; }
+.social-flow-band > div { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.social-flow-band > div span { flex: 1 1 120px; min-height: 42px; display: grid; place-items: center; border: 1px solid var(--primary-border); border-radius: 7px; color: var(--primary-ink); background: var(--primary-soft); font-size: 13px; }
 .social-practice-panel :deep(.data-list-panel) { flex: 1; min-height: 0; }
 .social-plan-import { display: grid; gap: 14px; padding: 18px 20px; }.social-import-upload { position: relative; min-height: 76px; display: grid; place-items: center; border: 1px dashed var(--primary); border-radius: 6px; color: var(--primary-ink, var(--primary)); background: color-mix(in srgb, var(--primary) 5%, var(--surface)); cursor: pointer; }.social-import-upload input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }.social-import-upload span { display: flex; align-items: center; gap: 8px; }.social-import-summary { display: flex; align-items: center; gap: 18px; color: var(--muted); font-size: 13px; }
 .social-stat-filters { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 10px 0 2px; }.social-stat-filters .el-select { width: 190px; }.social-stat-summary { margin-top: 4px; }.social-stat-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; min-height: 0; overflow: auto; }.social-stat-card { min-width: 0; padding: 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }.social-stat-card-wide { grid-column: 1 / -1; }.social-stat-card header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 10px; }.social-stat-card header small { color: var(--muted); }

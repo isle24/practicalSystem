@@ -6,6 +6,7 @@ export default defineConfig({
   base: './',
   plugins: [vue()],
   resolve: { dedupe: ['vue', '@lucide/vue', 'markdown-it', 'dompurify'] },
+  server: { fs: { allow: ['.', '../shared'] } },
   build: {
     outDir: 'dist/shell',
     rollupOptions: {

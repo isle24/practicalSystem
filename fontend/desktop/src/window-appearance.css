@@ -1,0 +1,129 @@
+:root[data-ui-style="liquid_glass"] {
+  --window-accent: #0071e3;
+  --window-surface: var(--skin-solid);
+  --window-side: #eaf1f9;
+  --window-tint: #e1edfc;
+  --window-border: #b5c5db;
+}
+:root[data-ui-style="liquid_glass"][data-theme="dark"] {
+  --window-accent: #70b8ff;
+  --window-side: #1d2838;
+  --window-tint: #2e4059;
+  --window-border: #50617a;
+}
+:root[data-ui-style="obsidian_pro"] {
+  --window-accent: #18181b;
+  --window-surface: var(--skin-solid);
+  --window-side: #edeef0;
+  --window-tint: #e2e3e6;
+}
+:root[data-ui-style="obsidian_pro"][data-theme="dark"] {
+  --window-accent: #d0d2d8;
+  --window-side: #18191d;
+  --window-tint: #34363e;
+}
+:root[data-ui-style="ivory_editorial"] {
+  --window-accent: var(--skin-ink);
+  --window-surface: var(--skin-solid);
+  --window-side: #eee8dc;
+  --window-tint: #efe3d7;
+}
+:root[data-ui-style="ivory_editorial"][data-theme="dark"] {
+  --window-side: #25221d;
+  --window-tint: #41332d;
+}
+:root[data-ui-style]:not([data-ui-style="classic"]) {
+  --surface: var(--window-surface);
+  --sidebar: var(--window-side);
+  --soft: var(--window-tint);
+  --input: var(--window-surface);
+  --border: var(--window-border, var(--skin-edge));
+  --primary: var(--window-accent);
+  --primary-ink: var(--window-accent);
+  --primary-hover: var(--window-accent);
+  --connection-muted: #526071;
+  --muted: var(--connection-muted);
+  color-scheme: light;
+  color: #232934;
+  background: var(--skin-canvas);
+}
+:root[data-ui-style]:where(:not([data-ui-style="classic"]))[data-theme="dark"] {
+  --connection-muted: #b2bdcb;
+  --primary-contrast: #162030;
+  --primary-hover-contrast: #162030;
+  color-scheme: dark;
+  color: #e8ecf2;
+}
+:root[data-ui-style]:where(:not([data-ui-style="classic"])) .connection-page {
+  width: calc(100% - 28px);
+  margin: 14px auto;
+  padding-inline: clamp(18px, 5vw, 32px);
+  --surface: var(--window-surface);
+  --line: var(--border);
+  --primary-ink: var(--window-accent);
+  color: inherit;
+}
+:root[data-ui-style]:where(:not([data-ui-style="classic"])) :is(.domain-field, .connection-form > input) {
+  background: var(--skin-card);
+  border-color: var(--border);
+  color: inherit;
+}
+:root[data-ui-style]:where(:not([data-ui-style="classic"])) .domain-field input { color: inherit; }
+:root[data-ui-style]:where(:not([data-ui-style="classic"])) .domain-field:focus-within,
+:root[data-ui-style]:where(:not([data-ui-style="classic"])) .connection-form > input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--soft);
+}
+:root[data-ui-style]:where(:not([data-ui-style="classic"])) .domain-field.invalid { border-color: #c44141; }
+:root[data-ui-style]:where(:not([data-ui-style="classic"])) :is(.switch-school,.add-school) {
+  color: var(--window-accent);
+}
+:root[data-ui-style]:where(:not([data-ui-style="classic"])) :is(.domain-field, .connection-form > input, .agent-shell :where(button, input, select, textarea)) {
+  border-radius: var(--control-radius);
+}
+:root[data-ui-style]:where(:not([data-ui-style="classic"])) .connect-button {
+  border-radius: var(--skin-primary-radius, var(--control-radius));
+}
+:root[data-ui-style="liquid_glass"] .connect-button {
+  box-shadow: inset 0 1px 0 #ffffff55, 0 5px 14px #164a8720;
+}
+:root[data-ui-style]:where(:not([data-ui-style="classic"])) .agent-shell { background: var(--skin-canvas); }
+:root[data-ui-style="liquid_glass"] .agent-shell :is(.navigation, .conversation-sidebar, .main-panel) {
+  background: var(--skin-pane);
+  border-color: var(--skin-edge);
+}
+:root[data-ui-style="liquid_glass"] .agent-shell .navigation {
+  background: var(--skin-chrome);
+  -webkit-backdrop-filter: var(--skin-dock-blur, none);
+  backdrop-filter: var(--skin-dock-blur, none);
+  box-shadow: var(--skin-rim);
+}
+:root[data-ui-style="liquid_glass"] .agent-shell .composer {
+  background: var(--skin-card);
+  border-radius: var(--skin-card-radius);
+  box-shadow: var(--skin-rim), 0 5px 20px #182e4e19;
+}
+:root[data-ui-style="obsidian_pro"] :is(.brand-mark,.empty-mark) { border-radius: 4px; }
+:root[data-ui-style="obsidian_pro"] .navigation { background: var(--skin-canvas); }
+:root[data-ui-style="ivory_editorial"] :is(.panel-heading h1,.brand strong) {
+  font-family: var(--skin-heading-font);
+}
+:root[data-ui-style="ivory_editorial"] .panel-heading { border-top: 3px solid var(--skin-ink); }
+:root[data-ui-style]:where(:not([data-ui-style="classic"])) :is(.product-name,.school-identity,.recent-schools h2,.school-row,footer) {
+  color: var(--connection-muted);
+}
+:root[data-ui-style="liquid_glass"][data-window-inactive] {
+  --skin-blur: none;
+  --skin-dock-blur: none;
+  --skin-pane: var(--window-surface);
+  --skin-chrome: var(--window-side);
+  --skin-card: var(--window-surface);
+}
+:root[data-window-inactive] .spin,
+:root[data-window-inactive] .connect-button:hover::after { animation-play-state: paused; }
+.captcha-overlay { overflow: auto; }
+.captcha-dialog { max-height: calc(100vh - 40px); overflow: auto; }
+@media (max-height: 680px) {
+  :root[data-ui-style]:where(:not([data-ui-style="classic"])) .connection-page { margin-block: 10px; padding-block: 14px; }
+  :root[data-ui-style]:where(:not([data-ui-style="classic"])) .connection-page footer { margin-top: 16px; }
+}

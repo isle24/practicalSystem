@@ -86,9 +86,15 @@ struct GatewayState {
     token: String,
     owner: String,
     authorization_cancel: Arc<Mutex<tokio_util::sync::CancellationToken>>,
+    iam_pending: Mutex<Option<DesktopIamPending>>,
     profile: Mutex<School>,
     lock: Arc<crate::client_lock::ClientLock>,
     recovery: bool,
+}
+
+struct DesktopIamPending {
+    nonce: String,
+    session_id: String,
 }
 
 impl Drop for Gateway {
@@ -260,6 +266,7 @@ pub async fn start(
         token,
         owner: owner.clone(),
         authorization_cancel: authorization_cancel.clone(),
+        iam_pending: Mutex::new(None),
         lock: lock.clone(),
         recovery,
     });
@@ -383,6 +390,11 @@ async fn handle(State(state): State<Arc<GatewayState>>, request: Request) -> Res
     {
         return error(StatusCode::FORBIDDEN, "不允许访问该本机地址");
     }
+    if request.method() == axum::http::Method::GET
+        && request.uri().path().starts_with("/_desktop/iam/complete/")
+    {
+        return complete_desktop_iam(&state, request).await;
+    }
     if headers.get(header::ORIGIN).is_some_and(|origin| {
         origin.as_bytes() != state.local.origin().ascii_serialization().as_bytes()
     }) || headers
@@ -401,6 +413,8 @@ async fn handle(State(state): State<Arc<GatewayState>>, request: Request) -> Res
             header::LOCATION,
             HeaderValue::from_static(if state.recovery {
                 "/pc/index.html#password-recovery"
+            } else if state.connection.school.login_method == "iam" {
+                "/pc/index.html#login=iam"
             } else {
                 "/pc/index.html"
             }),
@@ -855,6 +869,98 @@ async fn handle(State(state): State<Arc<GatewayState>>, request: Request) -> Res
     error(StatusCode::NOT_FOUND, "客户端资源不存在，请更新客户端")
 }
 
+/// 以原学校会话确认系统浏览器返回的一次性授权结果。
+async fn complete_desktop_iam(state: &GatewayState, request: Request) -> Response<Body> {
+    let uri = request.uri().clone();
+    drop(request);
+    let result: Result<(), (StatusCode, &str)> = async {
+        let nonce = uri.path().strip_prefix("/_desktop/iam/complete/").unwrap_or("");
+        let ticket = url::form_urlencoded::parse(uri.query().unwrap_or("").as_bytes())
+            .find(|(key, _)| key == "ticket")
+            .map(|(_, value)| value.into_owned())
+            .filter(|value| {
+                value.len() == 64
+                    && value.bytes().all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+            })
+            .ok_or((StatusCode::BAD_REQUEST, "认证回传凭据无效，请在客户端重新发起统一认证。"))?;
+        let _session = state.connection.session_lock.read().await;
+        if state.cancel.is_cancelled() || state.lock.is_locked() {
+            return Err((StatusCode::GONE, "客户端连接已关闭或锁定，请返回客户端重新登录。"));
+        }
+        let session_id = {
+            let mut pending = state.iam_pending.lock().await;
+            match pending.as_ref() {
+                Some(value) if value.nonce == nonce => {
+                    let session_id = value.session_id.clone();
+                    *pending = None;
+                    session_id
+                }
+                _ => return Err((StatusCode::FORBIDDEN, "此登录回传已失效，请回到原客户端重新发起统一认证。")),
+            }
+        };
+        let target = state.connection.origin.join("api/auth/iam/complete")
+            .map_err(|_| (StatusCode::BAD_GATEWAY, "学校认证地址无效，请联系管理员。"))?;
+        let response = tokio::select! {
+            _ = state.cancel.cancelled() => return Err((StatusCode::GONE, "客户端连接已关闭，请重新登录。")),
+            response = state.connection.client.post(target)
+                .header(header::ORIGIN, state.connection.origin.origin().ascii_serialization())
+                .header(header::REFERER, format!("{}pc/index.html", state.connection.origin))
+                .header("sec-fetch-site", "same-origin")
+                .timeout(std::time::Duration::from_secs(15))
+                .json(&serde_json::json!({"session_id": session_id, "completion_ticket": ticket}))
+                .send() => response.map_err(|_| (StatusCode::BAD_GATEWAY, "无法确认学校授权结果，请返回客户端重新发起统一认证。"))?,
+        };
+        let status = response.status();
+        let bytes = login_response_body(response).await
+            .map_err(|_| (StatusCode::BAD_GATEWAY, "无法读取学校授权结果，请返回客户端重试。"))?;
+        let value: serde_json::Value = serde_json::from_slice(&bytes)
+            .map_err(|_| (StatusCode::BAD_GATEWAY, "学校授权响应无效，请联系管理员。"))?;
+        if !status.is_success() || value["code"].as_i64() != Some(0) {
+            return Err((StatusCode::BAD_REQUEST, "未能确认本次授权，请返回客户端重新发起统一认证。"));
+        }
+        if !state.cancel.is_cancelled() && !state.lock.is_locked()
+            && crate::school_owner_current(&state.app, &state.owner)
+        {
+            if let Some(window) = state.app.get_webview_window("school") {
+                let _ = window.show();
+                let _ = window.unminimize();
+                let _ = window.set_focus();
+            }
+        }
+        Ok(())
+    }.await;
+    let (status, message) = match result {
+        Ok(()) => (
+            StatusCode::OK,
+            "授权已返回客户端，请在客户端选择账号并确认登录。",
+        ),
+        Err(failure) => failure,
+    };
+    let message = message
+        .replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;");
+    let mut response = Response::new(Body::from(format!(
+        "<!doctype html><html lang=\"zh-CN\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>统一身份认证</title></head><body><main><h1>统一身份认证</h1><p>{message}</p></main></body></html>"
+    )));
+    *response.status_mut() = status;
+    for (name, value) in [
+        ("content-type", "text/html; charset=utf-8"),
+        ("cache-control", "no-store"),
+        ("referrer-policy", "no-referrer"),
+        ("x-content-type-options", "nosniff"),
+        (
+            "content-security-policy",
+            "default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+        ),
+    ] {
+        response
+            .headers_mut()
+            .insert(name, HeaderValue::from_static(value));
+    }
+    response
+}
+
 /// 转发学校接口和文件流，令牌只保存在 Rust 会话容器中。
 async fn proxy(
     state: Arc<GatewayState>,
@@ -869,6 +975,7 @@ async fn proxy(
                 | "/api/auth/register"
                 | "/api/auth/passkey-login"
                 | "/api/auth/wechat-login/consume"
+                | "/api/auth/iam/consume"
                 | "/api/auth/switch-account"
         );
     let session_change = authentication
@@ -880,7 +987,11 @@ async fn proxy(
     let identity_read = matches!(parts.uri.path(), "/api/auth/refresh" | "/api/auth/context");
     let oidc_switch =
         parts.method == axum::http::Method::POST && parts.uri.path() == "/api/oidc/interaction";
-    let serialized = session_change || identity_read || oidc_switch;
+    let iam_create =
+        parts.method == axum::http::Method::POST && parts.uri.path() == "/api/auth/iam/create";
+    let iam_cancel =
+        parts.method == axum::http::Method::POST && parts.uri.path() == "/api/auth/iam/cancel";
+    let serialized = session_change || identity_read || oidc_switch || iam_create || iam_cancel;
     if session_change {
         crate::office_preview::cancel_owner(&state.owner);
         crate::client_agent::cancel_owner(&state.owner);
@@ -896,9 +1007,36 @@ async fn proxy(
     if state.lock.is_locked() && !locked_request_allowed(parts.uri.path()) {
         return error(StatusCode::LOCKED, "客户端已锁定，请先验证当前账号");
     }
+    if session_change || iam_cancel {
+        *state.iam_pending.lock().await = None;
+    }
+    let (body, iam_nonce) = if iam_create {
+        let bytes = match axum::body::to_bytes(body, 2048).await {
+            Ok(bytes) => bytes,
+            Err(_) => return error(StatusCode::BAD_REQUEST, "统一认证请求过长"),
+        };
+        let mut input: serde_json::Map<String, serde_json::Value> =
+            match serde_json::from_slice(&bytes) {
+                Ok(input) => input,
+                Err(_) => return error(StatusCode::BAD_REQUEST, "统一认证请求格式无效"),
+            };
+        let nonce = uuid::Uuid::new_v4().simple().to_string();
+        input.insert(
+            "desktop_callback".into(),
+            serde_json::json!(format!("{}_desktop/iam/complete/{nonce}", state.local)),
+        );
+        *state.iam_pending.lock().await = None;
+        (
+            reqwest::Body::from(serde_json::Value::Object(input).to_string()),
+            Some(nonce),
+        )
+    } else {
+        (reqwest::Body::wrap_stream(body.into_data_stream()), None)
+    };
     let login_method = match parts.uri.path() {
         "/api/auth/login" => Some("password"),
         "/api/auth/wechat-login/consume" => Some("wechat"),
+        "/api/auth/iam/consume" => Some("iam"),
         _ => None,
     };
     let mut target = state.connection.origin.clone();
@@ -908,6 +1046,7 @@ async fn proxy(
     for (name, value) in &parts.headers {
         if !blocked_header(name.as_str(), &parts.headers)
             && !(serialized && name.as_str() == "accept-encoding")
+            && !(iam_create && matches!(name.as_str(), "content-length" | "content-type"))
             && !matches!(
                 name.as_str(),
                 "host"
@@ -933,7 +1072,10 @@ async fn proxy(
             header::REFERER,
             format!("{}pc/index.html", state.connection.origin),
         )
-        .body(reqwest::Body::wrap_stream(body.into_data_stream()));
+        .body(body);
+    if iam_create {
+        upstream = upstream.header(header::CONTENT_TYPE, "application/json");
+    }
     if serialized {
         upstream = upstream.header(header::ACCEPT_ENCODING, "identity");
     }
@@ -998,6 +1140,26 @@ async fn proxy(
             Ok(bytes) => bytes,
             Err(message) => return error(StatusCode::BAD_GATEWAY, &message),
         };
+        if let Some(nonce) = iam_nonce {
+            if status.is_success()
+                && !state.cancel.is_cancelled()
+                && !authorization_cancel.is_cancelled()
+            {
+                if let Ok(value) = serde_json::from_slice::<serde_json::Value>(&bytes) {
+                    if value["code"].as_i64() == Some(0) {
+                        if let Some(session_id) = value["data"]["session_id"]
+                            .as_str()
+                            .filter(|id| !id.is_empty())
+                        {
+                            *state.iam_pending.lock().await = Some(DesktopIamPending {
+                                nonce,
+                                session_id: session_id.to_owned(),
+                            });
+                        }
+                    }
+                }
+            }
+        }
         if identity_read
             && status.is_success()
             && !state.cancel.is_cancelled()
@@ -1136,6 +1298,7 @@ async fn renew_authorization_context(state: &GatewayState, body: &[u8], authenti
 /// Cookie 身份边界已变更时立即结束旧窗口和请求代次。
 async fn invalidate_authorization_context(state: &GatewayState) {
     let had_account = state.lock.password_context(false).is_ok();
+    *state.iam_pending.lock().await = None;
     crate::client_agent::cancel_owner(&state.owner);
     {
         let mut cancel = state.authorization_cancel.lock().await;
@@ -1173,7 +1336,7 @@ async fn remember_authenticated_account(
     if let Err(message) = state.lock.authenticated(
         &state.app,
         &value["data"]["context"],
-        matches!(login_method, Some("password" | "wechat")),
+        matches!(login_method, Some("password" | "wechat" | "iam")),
     ) {
         state
             .app

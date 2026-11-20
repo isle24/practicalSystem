@@ -177,6 +177,7 @@
           云端同步暂不可用：{{ cloudError }} 本机配置仍可保存和使用。
         </p>
         <p v-if="notice" class="notice" role="status">{{ notice }}</p>
+        <p v-if="pollError" class="notice" role="status">暂时无法读取任务进度，正在重试。{{ pollError }}</p>
       </div>
 
       <template v-if="section === 'chat'">
@@ -1164,6 +1165,7 @@ import {
 } from 'vue';
 import menuGuides from '../../shared/operation-guides.json';
 import { renderAgentMarkdown, resolveAgentMarkdownUrl } from '../../shared/agentMarkdown';
+import { useWindowAppearance } from './useWindowAppearance';
 const navigation = [
   {
     id: 'chat',
@@ -1210,6 +1212,7 @@ const section = ref('chat'),
   scope = ref(null),
   profiles = ref([]),
   school = ref({ enabled: false, model: '' });
+useWindowAppearance(scope);
 const menuGuideDialog = ref(null);
 const menuGuide = computed(() => menuGuides.find(item => item.key === `agent.${section.value}`));
 const conflicts = ref([]),
@@ -1228,6 +1231,7 @@ const history = ref([]),
   search = ref('');
 const activeText = ref(''),
   runId = ref(''),
+  pollError = ref(''),
   busy = ref(false),
   loading = ref(true),
   pending = ref(false),
@@ -1583,6 +1587,7 @@ function wipe() {
   prompt.value = '';
   activeText.value = '';
   runId.value = '';
+  pollError.value = '';
   busy.value = false;
   pending.value = false;
   loading.value = false;
@@ -1880,6 +1885,7 @@ function applyBootstrap(value) {
   applyOperationState(run || value);
   busy.value = run ? run.status === 'running' : value.busy === true;
   runId.value = text(run?.run_id || value.run_id);
+  if (!busy.value) pollError.value = '';
   applyToolMetadata(value, runId.value);
   toolStatus.value = text(
     run?.tools_status ||
@@ -2398,6 +2404,7 @@ async function send() {
     );
     prompt.value = '';
     runId.value = value.run_id;
+    pollError.value = '';
     busy.value = true;
     if (value.workspace) applyWorkspace(value.workspace);
     schedulePoll();
@@ -2408,9 +2415,9 @@ async function send() {
     pending.value = false;
   }
 }
-function schedulePoll() {
+function schedulePoll(delay = 600) {
   clearTimeout(pollTimer);
-  if (!disposed && busy.value && runId.value) pollTimer = setTimeout(poll, 600);
+  if (!disposed && busy.value && runId.value) pollTimer = setTimeout(poll, delay);
 }
 async function poll() {
   if (!busy.value || !runId.value || disposed) return;
@@ -2420,9 +2427,11 @@ async function poll() {
   }
   polling = true;
   const id = runId.value;
+  const version = generation;
   try {
     const value = await request('poll', { run_id: id });
-    if (!value || id !== runId.value) return;
+    if (!value || id !== runId.value || version !== generation) return;
+    pollError.value = '';
     applyToolConnection(value);
     applyToolMetadata(value, id);
     applyWorkspace(value);
@@ -2445,11 +2454,19 @@ async function poll() {
       if (value.status === 'cancelled')
         notice.value = text(value.error) || '任务已停止。';
       if (!applyWorkspace(value)) await refreshWorkspace();
-    } else throw new Error('任务状态无效，请同步配置。');
+    } else throw new Error('客户端返回的任务状态无效。');
     scrollMessages();
   } catch (reason) {
-    error.value = reason.message;
-    notice.value = '状态同步已暂停，可停止任务或重新同步配置。';
+    if (disposed || id !== runId.value || version !== generation) return;
+    if (busy.value) {
+      pollError.value = reason.message;
+      if (reason.message === 'Agent 运行已结束，请重新读取' || reason.message === 'Agent 运行不属于当前账号') {
+        await bootstrap();
+      }
+      schedulePoll(3000);
+    } else {
+      error.value = reason.message;
+    }
   } finally {
     polling = false;
   }

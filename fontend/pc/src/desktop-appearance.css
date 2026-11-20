@@ -59,9 +59,6 @@
 .native-taskbar-edge:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
 @media (prefers-reduced-motion: reduce) { .desktop-shell.desktop-shell-dock-auto-hide .taskbar { transition: none; } }
 .taskbar .global-search svg { flex-shrink: 0; }
-.taskbar .taskbar-glyph,
-.taskbar .search-result-glyph { color: #fff; }
-.taskbar .taskbar-glyph img { border-radius: inherit; }
 .taskbar-apps { padding: 6px 4px; }
 .taskbar .global-search { border-radius: 18px; }
 .taskbar .global-search-results button {
@@ -78,6 +75,7 @@
 .taskbar .global-search-results button > span { white-space: normal; }
 
 .desktop-shell-mac {
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr) 84px;
   font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif;
 }
@@ -106,11 +104,8 @@
 .desktop-shell-mac .taskbar-apps { flex: 0 1 auto; max-width: none; gap: 5px; padding: 7px 4px; }
 .desktop-shell-mac .taskbar button,
 .desktop-shell-mac .taskbar a { flex-basis: 46px; width: 46px; height: 46px; border-radius: 12px; }
-.desktop-shell-mac .taskbar .taskbar-glyph { width: 38px; height: 38px; border-radius: 10px; box-shadow: inset 0 1px 0 rgba(255,255,255,.4), 0 2px 5px rgba(0,0,0,.12); }
-.desktop-shell-mac .taskbar a:hover,
-.desktop-shell-mac .taskbar .dock-pinned-app:hover { transform: translateY(-4px); }
-.desktop-shell-mac .taskbar a.active,
-.desktop-shell-mac .taskbar .dock-pinned-app.active { background: color-mix(in srgb, var(--text) 12%, transparent); border-color: transparent; box-shadow: none; }
+.desktop-shell-mac .taskbar .taskbar-glyph { width: 38px; height: 38px; box-shadow: inset 0 1px 0 rgba(255,255,255,.4), 0 2px 5px rgba(0,0,0,.12); }
+.desktop-shell-mac .taskbar .taskbar-apps > :is(button, a).active { background: transparent; border-color: transparent; box-shadow: none; }
 .desktop-shell-mac .taskbar .dock-pinned-app::after,
 .desktop-shell-mac .taskbar a::after,
 .desktop-shell-mac .taskbar .message-taskbar-button::after {
@@ -134,6 +129,7 @@
 .desktop-shell-mac .taskbar .switch-account-button { width: 34px; height: 38px; flex-basis: 34px; padding: 0; }
 .desktop-shell-mac .taskbar .global-search-wrap { flex: 0 0 40px; width: 40px; }
 .desktop-shell-mac .taskbar .global-search { height: 40px; padding: 0 11px; border: 0; border-radius: 11px; background: color-mix(in srgb, var(--surface) 45%, transparent); }
+.desktop-shell-mac .taskbar .global-search:not(:focus-within) { background: transparent; box-shadow: none; }
 .desktop-shell-mac .taskbar .global-search input { width: 0; min-width: 0; opacity: 0; }
 .desktop-shell-mac .taskbar .global-search-wrap:focus-within { width: 210px; flex-basis: 210px; }
 .desktop-shell-mac .taskbar .global-search-wrap:focus-within input { width: 100%; opacity: 1; }

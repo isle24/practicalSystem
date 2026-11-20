@@ -4,7 +4,7 @@
       <div>
         <span class="education-sync-eyebrow">教务数据接收</span>
         <h2>教学计划同步</h2>
-        <p>只接收教务系统教学计划，确认后生成本地计划草稿，任务和实施数据仍由本系统维护。</p>
+        <p>新来源生成计划草稿，已有计划的来源变更提交实习计划审核。</p>
       </div>
       <div class="education-sync-actions">
         <el-button :icon="RefreshCw" :loading="state.loading" @click="loadInbox(state.pagination.page)">刷新</el-button>
@@ -44,7 +44,7 @@
       <div class="education-sync-section-title">
         <div>
           <strong>计划接收箱</strong>
-          <small>先查看映射与差异，再确认生成本地计划</small>
+          <small>核对组织映射和课程差异后办理</small>
         </div>
         <FilterToolbar class="education-sync-filter" :values="{ keyword: state.keyword }">
           <input v-model.trim="state.keyword" placeholder="搜索课程、学院、专业" @keyup.enter="loadInbox(1)">
@@ -55,6 +55,7 @@
       <el-tabs v-model="state.tab" @tab-change="loadInbox(1)">
         <el-tab-pane label="待接收" name="pending" />
         <el-tab-pane label="已生成" name="generated" />
+        <el-tab-pane label="已提交审核" name="submitted" />
         <el-tab-pane label="已忽略" name="ignored" />
       </el-tabs>
 
@@ -80,7 +81,9 @@
         <el-table-column label="操作" width="220" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" @click="openDetail(row)">查看差异</el-button>
-            <el-button v-if="isPending(row)" link type="success" :disabled="row.mapping_status !== 'matched'" @click="confirmRow(row)">确认生成</el-button>
+            <el-tooltip v-if="isPending(row)" :disabled="!confirmBlocked(row)" :content="confirmBlocked(row)">
+              <span><el-button link type="success" :disabled="Boolean(confirmBlocked(row))" @click="confirmRow(row)">{{ row.status === 'change_pending' ? '提交变更' : '确认生成' }}</el-button></span>
+            </el-tooltip>
             <el-button v-if="isPending(row)" link type="warning" @click="openIgnore(row)">忽略</el-button>
           </template>
         </el-table-column>
@@ -119,12 +122,15 @@
           :closable="false"
           title="基础档案映射失败，修正年级、学院或专业后重新同步"
         />
-        <el-alert
-          v-else
-          type="info"
-          :closable="false"
-          title="确认后生成本地计划草稿；实习类别仍需在计划表补充后再提交审核"
-        />
+        <el-alert v-else-if="state.detail.item?.status === 'pending'" type="info" :closable="false"
+          title="确认后生成计划草稿。请在实习计划补齐类别、届次或年级后提交审核。" />
+        <div v-else-if="state.detail.local_plan" class="education-sync-detail-head">
+          <span v-if="state.detail.item?.status === 'change_pending'">{{ confirmBlocked({ ...state.detail.item, local_plan_status: state.detail.local_plan.status }) || '核对差异后提交变更审核，保留本地计划的学期及届次。' }}</span>
+          <span v-if="state.detail.item?.review_snapshot?.before">原版本 {{ state.detail.item.review_snapshot.before.source_version || '—' }} · 原学院 {{ state.detail.item.review_snapshot.before.dep_id || '—' }}</span>
+          <span v-if="state.detail.item?.review_snapshot?.workflow_instance_id">审批实例 {{ state.detail.item.review_snapshot.workflow_instance_id }}</span>
+          <span v-else-if="state.detail.item?.review_snapshot?.plan_recording_id">提交记录 {{ state.detail.item.review_snapshot.plan_recording_id }}</span>
+          <el-link type="primary" href="#panel=internship:plans" @click="state.detailVisible = false">实习计划表</el-link>
+        </div>
         <el-table width-storage-key="education-plan-sync-panel:state-detail-diff" :data="state.detail.diff || []" size="small" stripe>
           <el-table-column prop="label" label="字段" width="130" />
           <el-table-column prop="source" label="教务系统" min-width="220" show-overflow-tooltip />
@@ -207,12 +213,22 @@ function statusLabel(status) {
     change_pending: '待确认变更',
     mapping_failed: '映射失败',
     generated: '已生成',
+    submitted: '已提交审核',
     ignored: '已忽略',
   }[status] || status || '-';
 }
 
 function isPending(row) {
   return ['pending', 'change_pending', 'mapping_failed'].includes(row?.status);
+}
+
+function confirmBlocked(row) {
+  if (row.mapping_status !== 'matched') return '请修正基础档案后重新同步';
+  if (row.status !== 'change_pending') return '';
+  if (row.local_plan_status === 'wait') return '请在实习计划处理当前审核';
+  if (row.local_plan_status === 'accept') return '请在实习计划执行通过后修改';
+  if (!['draft', 'modify'].includes(row.local_plan_status)) return '请核对原计划状态';
+  return '';
 }
 
 async function loadConfig() {
@@ -305,13 +321,16 @@ async function openDetail(row) {
 }
 
 async function confirmRow(row) {
+  if (state.loading || confirmBlocked(row)) return;
+  const isChange = row.status === 'change_pending';
+  const action = isChange ? '提交变更审核' : '确认生成计划';
   try {
     await ElMessageBox.confirm(
-      `确认接收「${row.course_name || row.source_plan_id}」并生成本地计划草稿？`,
-      '确认生成计划',
+      isChange ? `将「${row.course_name || row.source_plan_id}」的来源变更提交实习计划审核？` : `将「${row.course_name || row.source_plan_id}」生成为新的本地计划草稿？`,
+      action,
       {
         type: 'warning',
-        confirmButtonText: '确认生成',
+        confirmButtonText: action,
         cancelButtonText: '取消',
       },
     );
@@ -321,9 +340,10 @@ async function confirmRow(row) {
   state.loading = true;
   state.message = '';
   try {
-    await confirmEducationPlanSync({ ids: [row.id] });
-    state.message = '教学计划已生成本地草稿';
+    const result = await confirmEducationPlanSync({ ids: [row.id] });
+    const message = result.items?.[0]?.action === 'submitted' ? '来源变更已提交实习计划审核' : '教学计划已生成本地草稿';
     await loadInbox(state.pagination.page || 1);
+    state.message = state.message ? `${message}。${state.message}` : message;
   } catch (error) {
     state.message = error.message;
   } finally {

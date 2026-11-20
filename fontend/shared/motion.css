@@ -1,0 +1,102 @@
+:root[data-ui-style]:where(:not([data-ui-style="classic"])) {
+  --ease-apple: cubic-bezier(.28, .11, .32, 1);
+  --ease-spring: cubic-bezier(.22, 1, .36, 1);
+  --ease-bounce: cubic-bezier(.34, 1.56, .64, 1);
+}
+
+@property --beam-angle {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+
+@keyframes glass-rim-turn { to { --beam-angle: 360deg; } }
+@keyframes glass-rim-breathe { 0%, 100% { opacity: .62; } 50% { opacity: 1; } }
+@keyframes skin-window-in {
+  from { opacity: 0; transform: translateY(16px) scale(.96); }
+  70% { opacity: 1; transform: translateY(-2px) scale(1.004); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes skin-window-out {
+  to { opacity: 0; transform: translateY(26px) scale(.9); }
+}
+@keyframes skin-glint {
+  from { transform: translateX(-180%) skewX(-24deg); }
+  to { transform: translateX(430%) skewX(-24deg); }
+}
+@keyframes qr-scan-beam {
+  0%, 100% { transform: translateY(0); opacity: .2; }
+  50% { transform: translateY(calc(100% - 2px)); opacity: .65; }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  :root[data-ui-style]:where(:not([data-ui-style="classic"])) :is(
+    .desktop-window.skin-window-enter-active:not(.dragging, .resizing),
+    .operation-dialog:not(.is-resizing), .password-recovery-mask > :where(.password-recovery),
+    .login-panel, .connection-page, .captcha-dialog, .h5-login,
+    .file-preview, .agent-shell :where(dialog[open])
+  ) {
+    animation: skin-window-in .34s var(--ease-spring);
+  }
+  :root[data-ui-style]:where(:not([data-ui-style="classic"])) .desktop-window.skin-window-leave-active {
+    animation: skin-window-out .18s var(--ease-apple) both;
+    pointer-events: none;
+  }
+  :root[data-ui-style]:where(:not([data-ui-style="classic"])) .desktop-window:is(.dragging, .resizing),
+  :root[data-ui-style]:where(:not([data-ui-style="classic"])) .operation-dialog.is-resizing {
+    animation: none;
+    transition: none;
+  }
+  :root[data-ui-style]:where(:not([data-ui-style="classic"])) .login-mode-tabs::before {
+    transition: transform .26s var(--ease-bounce);
+  }
+  :root[data-ui-style="liquid_glass"] :is(.login-panel, .connection-page, .h5-login)::before {
+    content: "";
+    position: absolute;
+    z-index: 1;
+    inset: -1px;
+    padding: 2px;
+    border-radius: inherit;
+    pointer-events: none;
+    box-shadow: 0 0 22px #368eff65;
+    animation: glass-rim-breathe 3.5s ease-in-out infinite;
+  }
+  @supports (mask-composite: exclude) or (-webkit-mask-composite: xor) {
+    :root[data-ui-style="liquid_glass"] :is(.login-panel, .connection-page, .h5-login)::before {
+      background: conic-gradient(from var(--beam-angle, 0deg), transparent 60%, #5ab5ff75 73%, #e1f7ff 84%, #1688ff 93%, transparent);
+      -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+      mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+      -webkit-mask-composite: xor;
+      mask-composite: exclude;
+      animation: glass-rim-turn 7s linear infinite, glass-rim-breathe 3.5s ease-in-out infinite;
+    }
+  }
+  :root[data-ui-style="liquid_glass"][data-window-inactive] :is(.login-panel, .connection-page, .h5-login)::before { animation-play-state: paused; }
+  :root[data-ui-style="liquid_glass"] .scan-code-card:has(img)::after {
+    content: "";
+    position: absolute;
+    inset: 11px;
+    pointer-events: none;
+    background: linear-gradient(90deg, transparent, #3ba9ff, transparent) top / 100% 2px no-repeat;
+    animation: qr-scan-beam 3s ease-in-out infinite;
+  }
+  :root[data-ui-style="liquid_glass"] :is(.login-submit-button, .connect-button, .el-button, .app-button):not(:disabled):active { transform: scale(.975); }
+  @media (hover: hover) and (pointer: fine) {
+    :root[data-ui-style="liquid_glass"] .conversation-item { transition: transform .16s var(--ease-apple); }
+    :root[data-ui-style="liquid_glass"] .conversation-item:hover { transform: translateX(2px); }
+    :root[data-ui-style="liquid_glass"] :is(
+      .login-submit-button, .connect-button, .app-button.is-primary, .el-button--primary:not(.is-link, .is-text, .is-plain)
+    ) { position: relative; overflow: hidden; }
+    :root[data-ui-style="liquid_glass"] :is(
+      .login-submit-button, .connect-button, .app-button.is-primary, .el-button--primary:not(.is-link, .is-text, .is-plain)
+    ):hover:not(:disabled)::after {
+      content: "";
+      position: absolute;
+      inset: -50% auto -50% 0;
+      width: 36%;
+      pointer-events: none;
+      background: linear-gradient(90deg, transparent, #ffffff66, transparent);
+      animation: skin-glint .6s var(--ease-apple) both;
+    }
+  }
+}

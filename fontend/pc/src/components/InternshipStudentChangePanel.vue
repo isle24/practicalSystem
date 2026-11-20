@@ -81,7 +81,7 @@
               <el-option v-for="item in changeTypeOptions" :key="item.value" :label="item.label" :value="item.value" />
             </el-select>
           </el-form-item>
-          <el-form-item label="期望生效日期"><template #label><FormFieldLabel :required="false">期望生效日期</FormFieldLabel></template>
+          <el-form-item label="期望生效日期"><template #label><FormFieldLabel :required="false" help="供审核时参考，审核通过后立即生效">期望生效日期</FormFieldLabel></template>
             <input v-model="form.effective_date" class="native-control" type="date">
           </el-form-item>
           <template v-if="showCompanyFields">
@@ -314,22 +314,27 @@ watch(() => [props.sessionKey, props.roleType], () => {
 
 onBeforeUnmount(() => { disposed = true; generation++; detailRequest++; });
 
-watch(() => JSON.stringify(props.defaultFilters || {}), () => {
-  if (applyDefaults()) { normalizeFilters(); loadActive(1); }
-});
-
-watch(() => JSON.stringify([
-  props.options.internship_categories,
-  props.options.grades,
-  props.options.graduation_cohorts,
-  props.options.professions,
-  props.options.classes,
-  props.options.students,
-  props.options.plans,
-  props.options.arrangements,
-]), () => {
+watch([
+  () => props.defaultFilters?.grade_id,
+  () => props.defaultFilters?.graduation_cohort_id,
+  () => props.defaultFilters?.dep_id,
+  () => props.defaultFilters?.profession_id,
+  defaultCategoryId,
+  currentGradeId,
+  currentCohortId,
+], () => {
   const changed = applyDefaults();
   if (normalizeFilters() || changed) loadActive(1);
+});
+
+watch([
+  () => props.options.professions,
+  () => props.options.classes,
+  () => props.options.students,
+  () => props.options.plans,
+  () => props.options.arrangements,
+], () => {
+  if (normalizeFilters()) loadActive(1);
 });
 
 async function loadProfiles(page = 1) {

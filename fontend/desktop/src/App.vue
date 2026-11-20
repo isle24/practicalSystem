@@ -1,7 +1,7 @@
 <template>
   <main class="connection-page">
     <fieldset class="connection-background" :inert="captchaVisible" :aria-hidden="captchaVisible ? 'true' : undefined" :disabled="captchaVisible || busy || loading || captchaLoading">
-    <LoginModeToggle v-if="!switching" :mode="loginMethod" :disabled="busy || loading" @update:mode="switchLoginMode" />
+    <LoginModeToggle v-if="!switching" :mode="loginMethod" iam-available :disabled="busy || loading" @update:mode="switchLoginMode" />
     <header class="connection-heading">
       <span class="product-name">实践系统</span>
       <h1>{{ editingSchool ? (domain.trim() === defaultSchoolOrigin ? defaultSchoolName : '连接学校') : schoolName }}</h1>
@@ -10,7 +10,7 @@
         <button type="button" class="switch-school" :disabled="busy || loading || captchaLoading" @click="switching = !switching"><RefreshCw :size="14" />切换</button>
       </div>
     </header>
-    <p v-if="requireFreshLogin" class="connection-guidance" role="status">客户端此前已锁定，请重新输入密码或使用企业微信扫码验证。</p>
+    <p v-if="requireFreshLogin" class="connection-guidance" role="status">客户端此前已锁定，请重新输入密码，或使用企业微信、统一认证登录。</p>
 
     <section v-if="switching" class="recent-schools" aria-label="切换学校">
       <div class="history-heading"><h2>学校与账号</h2><button type="button" class="icon-button" aria-label="关闭切换" @click="switching = false"><X :size="16" /></button></div>
@@ -28,7 +28,7 @@
         <Globe2 :size="19" aria-hidden="true" />
         <input id="school-domain" v-model="domain" type="text" autocomplete="url" autocapitalize="off"
           spellcheck="false" placeholder="请输入学校服务器域名" :disabled="busy || loading" :aria-invalid="!!error"
-          :aria-describedby="error ? 'connection-error' : undefined" autofocus>
+          :aria-describedby="error ? 'connection-error' : undefined" autofocus @change="refreshSchoolAppearance">
       </div>
       <button v-if="profiles.length" class="switch-school history-entry" type="button" @click="switching = true">选择已连接的学校<ChevronRight :size="14" /></button>
       </template>
@@ -38,6 +38,7 @@
       <label for="school-password"><FormFieldLabel :required="true">密码</FormFieldLabel></label>
       <input id="school-password" ref="passwordInput" v-model="password" type="password" autocomplete="current-password" placeholder="请输入密码" :disabled="busy || loading" @input="markFreshPassword">
       </template>
+      <p v-else-if="loginMethod === 'iam'" class="connection-guidance">连接后进入学校统一认证页面，在系统浏览器完成授权后返回客户端。</p>
       <p v-else class="connection-guidance">连接学校后将显示登录二维码，请使用已绑定账号的企业微信扫码。</p>
       <label for="school-remark"><FormFieldLabel :required="false" help="最多 60 字，用于区分学校账号">备注</FormFieldLabel></label>
       <input id="school-remark" v-model="remark" maxlength="60" placeholder="例如：工作账号" :disabled="busy || loading">
@@ -48,24 +49,27 @@
       <p v-if="error" id="connection-error" class="error" role="alert"><CircleAlert :size="17" />{{ error }}</p>
       <button ref="loginButton" class="connect-button" type="submit" :disabled="busy || loading || captchaLoading || retrySeconds > 0 || !domain.trim()">
         <LoaderCircle v-if="busy" :size="19" class="spin" />
-        <span>{{ busy ? '正在连接' : retrySeconds > 0 ? `${retrySeconds} 秒后重试` : loginMethod === 'wechat' ? '连接学校并扫码' : '登录' }}</span>
+        <span>{{ busy ? '正在连接' : retrySeconds > 0 ? `${retrySeconds} 秒后重试` : loginMethod === 'wechat' ? '连接学校并扫码' : loginMethod === 'iam' ? '连接学校并统一认证' : '登录' }}</span>
         <ArrowRight v-if="!busy" :size="19" />
       </button>
       <button type="button" class="switch-school recovery-entry" :disabled="busy || loading || !domain.trim()" @click="recoverPassword">忘记密码</button>
+      <IamLoginEntry v-if="loginMethod === 'password'" display-name="统一认证登录" @click="switchLoginMode('iam')" />
     </form>
 
     <footer><LockKeyhole :size="13" /><span>学校独立登录</span><span class="version">v{{ version }}</span></footer>
     </fieldset>
 
-    <div v-if="captchaVisible" class="captcha-overlay" @click.self="closeCaptcha">
-      <form ref="captchaDialog" class="captcha-dialog" role="dialog" aria-modal="true" aria-labelledby="captcha-title" tabindex="-1" @submit.prevent="connect(true)" @keydown.esc.prevent="closeCaptcha" @keydown.tab.prevent="handleCaptchaTab">
-        <div class="captcha-dialog-heading"><h2 id="captcha-title">验证后登录</h2><button type="button" class="icon-button" aria-label="关闭验证码" :disabled="busy || captchaLoading" @click="closeCaptcha"><X :size="16" /></button></div>
-        <p class="connection-guidance">请完成验证码。账号和密码可关闭此窗口后修改。</p>
-        <LoginCaptchaInput v-model="captchaCode" :captcha="captcha" :busy="busy || captchaLoading" @refresh="refreshCaptcha" />
-        <p v-if="error" class="error" role="alert">{{ error }}</p>
-        <button class="connect-button" type="submit" :disabled="busy || loading || captchaLoading || retrySeconds > 0 || !captcha || !captchaCode.trim()"><span>{{ busy ? '正在登录' : retrySeconds > 0 ? `${retrySeconds} 秒后重试` : '验证并登录' }}</span></button>
-      </form>
-    </div>
+    <Teleport to="body">
+      <div v-if="captchaVisible" class="captcha-overlay" @click.self="closeCaptcha">
+        <form ref="captchaDialog" class="captcha-dialog" role="dialog" aria-modal="true" aria-labelledby="captcha-title" tabindex="-1" @submit.prevent="connect(true)" @keydown.esc.prevent="closeCaptcha" @keydown.tab.prevent="handleCaptchaTab">
+          <div class="captcha-dialog-heading"><h2 id="captcha-title">验证后登录</h2><button type="button" class="icon-button" aria-label="关闭验证码" :disabled="busy || captchaLoading" @click="closeCaptcha"><X :size="16" /></button></div>
+          <p class="connection-guidance">请完成验证码。账号和密码可关闭此窗口后修改。</p>
+          <LoginCaptchaInput v-model="captchaCode" :captcha="captcha" :busy="busy || captchaLoading" @refresh="refreshCaptcha" />
+          <p v-if="error" class="error" role="alert">{{ error }}</p>
+          <button class="connect-button" type="submit" :disabled="busy || loading || captchaLoading || retrySeconds > 0 || !captcha || !captchaCode.trim()"><span>{{ busy ? '正在登录' : retrySeconds > 0 ? `${retrySeconds} 秒后重试` : '验证并登录' }}</span></button>
+        </form>
+      </div>
+    </Teleport>
   </main>
 </template>
 
@@ -75,8 +79,11 @@ import { ref, nextTick, onBeforeUnmount, onMounted, watch } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
 import { getVersion } from '@tauri-apps/api/app';
 import { ArrowRight, ChevronRight, CircleAlert, Globe2, LoaderCircle, LockKeyhole, Plus, RefreshCw, X } from '@lucide/vue';
+import IamLoginEntry from '../../shared/components/IamLoginEntry.vue';
 import LoginModeToggle from '../../shared/components/LoginModeToggle.vue';
 import LoginCaptchaInput from '../../shared/components/LoginCaptchaInput.vue';
+import { applyUiStyle } from '../../shared/uiStyles';
+import { useWindowAppearance } from './useWindowAppearance';
 
 const defaultSchoolOrigin = 'https://sxxt.cdjcc.edu.cn';
 const defaultSchoolName = '成都锦城学院';
@@ -91,6 +98,12 @@ const password = ref('');
 const rememberPassword = ref(false);
 const autoLogin = ref(false);
 const profiles = ref([]);
+let appearanceRevision = 0;
+useWindowAppearance();
+watch(domain, value => {
+  appearanceRevision++;
+  applyUiStyle(profiles.value.find(school => school.origin === value.trim())?.default_ui_style);
+}, { immediate: true, flush: 'sync' });
 const error = ref('');
 const loading = ref(true);
 const busy = ref(false);
@@ -112,6 +125,16 @@ let loginScope = crypto.randomUUID();
 let scopeVersion = 0;
 let operationVersion = 0;
 let disposed = false;
+
+async function refreshSchoolAppearance() {
+  const address = domain.value.trim();
+  const revision = ++appearanceRevision;
+  if (!address || disposed || document.hidden) return;
+  try {
+    const style = await invoke('read_school_appearance', { domain: address });
+    if (!disposed && revision === appearanceRevision) applyUiStyle(style);
+  } catch { /* 离线时沿用已保存的学校外观。 */ }
+}
 
 function resetLoginScope() {
   const previousScope = loginScope;
@@ -239,6 +262,8 @@ onMounted(async () => {
     domain.value = settings.last_origin || domain.value;
     const recent = settings.schools.find(item => item.origin === domain.value && item.username === settings.last_username)
       || settings.schools.find(item => item.origin === domain.value);
+    applyUiStyle(recent?.default_ui_style);
+    refreshSchoolAppearance();
     if (recent) {
       schoolName.value = recent.name;
       remark.value = recent.remark || '';
@@ -313,7 +338,8 @@ async function showPasswordConnection() {
 }
 
 function profileLoginMethod(profile) {
-  return profile.login_method === 'wechat' || (!profile.login_method && !profile.username) ? 'wechat' : 'password';
+  if (['password', 'wechat', 'iam'].includes(profile.login_method)) return profile.login_method;
+  return !profile.login_method && !profile.username ? 'wechat' : 'password';
 }
 
 async function refreshProfiles() {
@@ -325,6 +351,7 @@ async function refreshProfiles() {
     if (!currentScope(version, scope)) return;
     applyFreshRequirement(settings);
     profiles.value = settings.schools;
+    refreshSchoolAppearance();
   } catch (reason) {
     if (currentScope(version, scope)) error.value = String(reason);
   }
@@ -358,7 +385,7 @@ async function selectLoginMethod(method) {
 async function switchLoginMode(method) {
   if (busy.value || loading.value) return;
   await selectLoginMethod(method);
-  if (method === 'wechat' && domain.value.trim()) await connect();
+  if (method !== 'password' && domain.value.trim()) await connect();
 }
 
 // 使用所填域名建立独立学校会话。
@@ -366,7 +393,7 @@ async function connect(fromCaptcha = false) {
   if (busy.value || loading.value || captchaLoading.value || retrySeconds.value > 0) return;
   const passwordLogin = loginMethod.value === 'password';
   if (passwordLogin && (!username.value.trim() || !password.value)) {
-    error.value = '请输入账号和密码，或选择企业微信扫码登录';
+    error.value = '请输入账号和密码，或选择企业微信、统一认证登录';
     return;
   }
   if (passwordLogin && captchaRequired.value && (!fromCaptcha || !captcha.value?.id || !captchaCode.value.trim())) {
@@ -437,6 +464,7 @@ async function selectSchool(school) {
   loading.value = true;
   error.value = '';
   domain.value = school.origin;
+  refreshSchoolAppearance();
   schoolName.value = school.name;
   remark.value = school.remark || '';
   editingSchool.value = false;
@@ -474,6 +502,20 @@ function newSchool() {
 </script>
 
 <style scoped>
+.connection-page { --surface: #fff; --line: #d9dfe5; --muted: var(--connection-muted, #5f6b78); }
 .connection-guidance { margin: 0 0 14px; color: var(--connection-muted, #5f6b78); font-size: 13px; line-height: 1.6; }
 .recovery-entry { margin-top: 16px; }
+.connection-form .iam-login-entry { margin-top: 16px; }
+@media (max-height: 680px) {
+  .connection-page { padding-top: 20px; }
+  .connection-heading { margin-bottom: 12px; }
+  .connection-heading h1 { margin-top: 8px; }
+  .connection-form label { margin-bottom: 6px; }
+  .connection-form > input, .connection-form .domain-field { height: 42px; margin-bottom: 8px; }
+  .connection-form .connect-button { margin-top: 8px; }
+  .connection-form .recovery-entry, .connection-form .iam-login-entry { margin-top: 8px; }
+}
+@media (prefers-color-scheme: dark) {
+  .connection-page { --surface: #18212f; --line: #354359; --primary-ink: #91bff1; }
+}
 </style>

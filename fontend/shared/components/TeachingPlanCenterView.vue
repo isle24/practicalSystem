@@ -3,14 +3,14 @@ import { computed, nextTick, ref, watch } from 'vue';
 import FormFieldLabel from './FormFieldLabel.vue';
 import { teachingPlanFieldLabel, teachingPlanProgress, teachingPlanStage, teachingPlanValue, useTeachingPlanCenter } from '../useTeachingPlanCenter';
 
-const props = defineProps({ request: { type: Function, required: true }, canImport: Boolean, canAssign: Boolean, canChange: Boolean, mobile: Boolean, sessionKey: { type: String, default: '' } });
+const props = defineProps({ request: { type: Function, required: true }, canImport: Boolean, canAssign: Boolean, canChange: Boolean, mobile: Boolean, workspaceComponent: { type: Object, default: null }, sessionKey: { type: String, default: '' } });
 const emit = defineEmits(['open-target']);
 const { state, types, categories, cohorts, requiresCohort, sourceFields, canAssign, canComplete, canChange, canApply, canReconcile, canRetain, retainReasonReady, assignmentReady, supplementReady, load, openDetail, closeDetail, mutate, loadBatches, openBatch, closeBatch, loadBatchPage, upload, confirmImport } = useTeachingPlanCenter(props);
 const workspace = ref(null);
 watch(() => [state.detail?.id, state.batch?.id || state.batch?.batch?.id], async values => {
   if (!values.some(Boolean)) return;
   await nextTick();
-  workspace.value?.scrollIntoView({ block: 'start' });
+  if (props.mobile) workspace.value?.scrollIntoView({ block: 'start' });
   workspace.value?.focus({ preventScroll: true });
 });
 const stageOptions = ['unassigned', 'needs_completion', 'accepted', 'change_pending'];
@@ -80,7 +80,21 @@ const importChangeLabel = value => ({ created: '新增', updated: '更新', unch
 function previewDiff(item) { return item.diff_json || item.field_changes || item.changes || item.diff || []; }
 function chooseFile(event) { state.upload.file = event.target.files?.[0] || null; event.target.value = ''; }
 function switchTab(tab) { state.tab = tab; state.error = ''; if (tab === 'batches') loadBatches(); else load(); }
-function target() { if (state.detail?.target_id) emit('open-target', { ...state.detail, target_type: state.detail.target_type || state.detail.classification }); }
+function target() {
+  if (!state.detail?.target_id) return;
+  emit('open-target', { ...state.detail, target_type: state.detail.target_type || state.detail.classification });
+  if (!props.mobile) closeWorkspace();
+}
+function closeWorkspace() { if (!state.busy) { closeDetail(); closeBatch(); } }
+const workspaceOpen = computed(() => Boolean(state.detail || state.detailLoading || state.batch));
+const presentation = computed(() => ({
+  state, years: years.value, departments: departments.value, types: types.value, stageOptions,
+  batch: batch.value, sourceName, sourceScope, typeLabel, batchLabel, teachingPlanProgress, teachingPlanStage,
+  canAssign: canAssign.value, canComplete: canComplete.value, canChange: canChange.value, canApply: canApply.value,
+  canReconcile: canReconcile.value, canRetain: canRetain.value, retainReasonReady: retainReasonReady.value,
+  assignmentReady: assignmentReady.value, supplementReady: supplementReady.value,
+  load, loadBatches, openDetail, openBatch, closeWorkspace, mutate, confirmImport, upload, chooseFile, target,
+}));
 
 </script>
 
@@ -88,17 +102,17 @@ function target() { if (state.detail?.target_id) emit('open-target', { ...state.
   <section class="teaching-center" :class="{ 'is-mobile': mobile }" :aria-busy="state.loading || state.busy">
     <header class="center-header">
       <div><h1>教学计划中心</h1><p>查看原始教学计划，按专业所属学院分配并补齐业务计划。</p></div>
-      <button type="button" :disabled="state.loading || state.busy" @click="state.tab === 'batches' ? loadBatches(state.batchPagination.page) : load(state.pagination.page)">刷新</button>
+      <slot name="header-actions" v-bind="presentation"><button type="button" :disabled="state.loading || state.busy" @click="state.tab === 'batches' ? loadBatches(state.batchPagination.page) : load(state.pagination.page)">刷新</button></slot>
     </header>
     <p class="center-note">以“专业学院名称”匹配学院全名或简称；只有唯一匹配才能分配。学院管理员仅处理本学院，归属不明或重名需由学校管理员修正基础档案。</p>
-    <div class="center-tabs" aria-label="教学计划视图">
+    <slot name="navigation" v-bind="presentation" :switch-tab="switchTab"><div class="center-tabs" aria-label="教学计划视图">
       <button type="button" :disabled="state.busy || state.loading" :aria-pressed="state.tab === 'records'" @click="switchTab('records')">原始计划</button>
       <button v-if="canImport" type="button" :disabled="state.busy || state.loading" :aria-pressed="state.tab === 'batches'" @click="switchTab('batches')">上传与批次</button>
-    </div>
+    </div></slot>
     <p v-if="state.error && !state.detail && !state.batch" class="center-error" role="alert">{{ state.error }}</p>
     <p v-if="state.receipt && !state.detail && !state.batch" class="center-receipt" role="status">{{ state.receipt }}</p>
 
-    <template v-if="state.tab === 'records'">
+    <slot v-if="state.tab === 'records'" name="records" v-bind="presentation">
       <form class="center-filters" @submit.prevent="load(1)">
         <label><span>关键词</span><input v-model.trim="state.filters.keyword" placeholder="课程代码、课程名称、专业"></label>
         <label><span>学年</span><select v-model="state.filters.academic_year"><option value="">全部学年</option><option v-for="year in years" :key="year">{{ year }}</option></select></label>
@@ -123,9 +137,9 @@ function target() { if (state.detail?.target_id) emit('open-target', { ...state.
         </article>
       </div>
       <nav class="center-pagination" aria-label="原始计划分页"><span>共 {{ state.pagination.total }} 条</span><button type="button" :disabled="state.loading || state.pagination.page <= 1" @click="load(state.pagination.page - 1)">上一页</button><span>{{ state.pagination.page }}</span><button type="button" :disabled="state.loading || state.pagination.page * state.pagination.page_size >= state.pagination.total" @click="load(state.pagination.page + 1)">下一页</button></nav>
-    </template>
+    </slot>
 
-    <template v-else-if="canImport">
+    <slot v-else-if="canImport" name="batches" v-bind="presentation">
       <form class="center-upload" @submit.prevent="upload">
         <h2>上传教学计划</h2>
         <p>沿用教务开课计划模板的 45 列，上传后先校验、预览，再确认导入。从本入口新上传的批次按增量更新，未出现在本文件中的已有来源保留，分类由管理员明确选择。</p>
@@ -141,9 +155,12 @@ function target() { if (state.detail?.target_id) emit('open-target', { ...state.
       <p v-if="state.loading">正在读取批次…</p><p v-else-if="!state.batches.length" class="center-empty">尚无教学计划导入批次。</p>
       <div class="center-records"><article v-for="item in state.batches" :key="item.id" class="center-record"><strong>{{ item.original_name || item.file_name || `批次 ${item.id}` }}</strong><span>{{ item.academic_year }} / {{ item.semester }} · {{ batchLabel(item.status) }}</span><span>{{ item.created_at }}</span><button type="button" :disabled="state.busy" @click="openBatch(item)">查看校验与预览</button></article></div>
       <nav class="center-pagination" aria-label="导入批次分页"><span>共 {{ state.batchPagination.total }} 批</span><button type="button" :disabled="state.loading || state.batchPagination.page <= 1" @click="loadBatches(state.batchPagination.page - 1)">上一页</button><span>{{ state.batchPagination.page }}</span><button type="button" :disabled="state.loading || state.batchPagination.page * state.batchPagination.page_size >= state.batchPagination.total" @click="loadBatches(state.batchPagination.page + 1)">下一页</button></nav>
-    </template>
+    </slot>
 
-    <section v-if="state.detail || state.detailLoading || state.batch" ref="workspace" class="center-workspace" tabindex="-1" aria-label="教学计划处理详情" :aria-busy="state.detailLoading">
+    <slot name="import-dialog" v-bind="presentation" />
+
+    <component :is="workspaceComponent || 'div'" :visible="workspaceOpen" :busy="state.busy" :title="state.detail ? sourceName(state.detail) : state.batch ? `批次 ${batch.id} 校验与预览` : '正在读取教学计划'" dialog-class="teaching-center-processing-dialog" @close="closeWorkspace">
+    <section v-if="workspaceOpen" ref="workspace" class="center-workspace" :class="{ 'is-desktop-workspace': !mobile }" tabindex="-1" aria-label="教学计划处理详情" :aria-busy="state.detailLoading">
       <p v-if="state.error" class="center-error" role="alert">{{ state.error }}</p>
       <p v-if="state.receipt" class="center-receipt" role="status">{{ state.receipt }}</p>
       <p v-if="state.detailLoading" role="status">正在读取详情…</p>
@@ -156,7 +173,7 @@ function target() { if (state.detail?.target_id) emit('open-target', { ...state.
         <p v-if="missing.length" class="center-note">当前缺项：{{ missing.join('、') }}。</p>
         <p class="center-note">下一步：{{ nextStep }}</p>
         <p v-if="mobile && state.detail.target_id && state.detail.target_type !== 'social_practice' && canComplete" class="center-note">手机端可查看计划及流程。请在 PC 端打开本条绑定计划的原表单补齐，保存后回中心完成首次导入。</p>
-        <div class="center-actions"><button v-if="state.detail.target_id" type="button" :disabled="state.busy || state.detail.target?.unavailable" @click="target">打开{{ typeLabel(state.detail.target_type) }}计划 #{{ state.detail.target_id }}</button><button type="button" :disabled="state.busy || state.detailLoading" @click="openDetail(state.detail)">刷新此计划</button></div>
+        <div class="center-actions"><button v-if="state.detail.target_id" type="button" :disabled="state.busy || state.detail.target?.unavailable" @click="target">打开{{ typeLabel(state.detail.target_type) }}计划 #{{ state.detail.target_id }}</button><button v-if="mobile" type="button" :disabled="state.busy || state.detailLoading" @click="openDetail(state.detail)">刷新此计划</button></div>
         <form v-if="canAssign || ((canComplete || canChange) && !state.detail.target_id)" class="center-assignment" @submit.prevent="canAssign && (state.confirmation = 'assign')">
           <h3>{{ canAssign ? '分配业务类型' : '补齐已绑定类型的生成条件' }}</h3><p>首次生成将唯一绑定目标计划，之后不能重复分类。字段完整时免审生效；存在缺项时保存为待补齐计划。</p>
           <div class="center-form-grid">
@@ -164,13 +181,14 @@ function target() { if (state.detail?.target_id) emit('open-target', { ...state.
             <label v-if="state.classification === 'internship'"><FormFieldLabel required help="按类别决定年级或毕业届次范围">实习类别</FormFieldLabel><select v-model="state.supplement.category_id" required :disabled="state.busy"><option value="" disabled>请选择实习类别</option><option v-for="item in categories" :key="item.id" :value="item.id" :disabled="item.disabled">{{ optionLabel(item) }}</option></select></label>
             <label v-if="requiresCohort"><FormFieldLabel required help="仅显示当前可用毕业届次">毕业届次</FormFieldLabel><select v-model="state.supplement.graduation_cohort_id" required :disabled="state.busy"><option value="" disabled>请选择毕业届次</option><option v-for="item in cohorts" :key="item.id" :value="item.id" :disabled="item.disabled">{{ optionLabel(item) }}</option></select></label>
           </div>
-          <button v-if="canAssign" type="submit" class="primary" :disabled="state.busy || !assignmentReady">确认分类并生成</button>
+          <button v-if="mobile && canAssign" type="submit" class="primary" :disabled="state.busy || !assignmentReady">确认分类并生成</button>
         </form>
         <p v-else-if="state.detail.intake_id" class="center-note">已绑定{{ typeLabel(state.detail.classification) }}计划 #{{ state.detail.target_id || '待生成' }}，分类已锁定。</p>
-        <div v-if="canComplete" class="center-actions"><button type="button" class="primary" :disabled="state.busy || (!state.detail.target_id && !supplementReady)" @click="state.confirmation = 'complete'">完成首次导入</button><span>仅首次可信导入且未经过人工审核的完整计划可免审；服务端会重新校验。</span></div>
+        <div v-if="mobile && canComplete" class="center-actions"><button type="button" class="primary" :disabled="state.busy || (!state.detail.target_id && !supplementReady)" @click="state.confirmation = 'complete'">完成首次导入</button><span>仅首次可信导入且未经过人工审核的完整计划可免审；服务端会重新校验。</span></div>
+        <p v-if="!mobile && canComplete" class="center-note">仅首次可信导入且未经过人工审核的完整计划可免审；服务端会重新校验。</p>
         <section v-if="state.detail.pending_change || state.change" class="center-change">
           <h3>来源变更</h3><p>先准备差异，再到目标计划按原流程发起修改；处于可编辑状态后才可应用差异并提交原审核流程。</p>
-          <div class="center-actions"><button v-if="canChange" type="button" :disabled="state.busy" @click="mutate('prepare-change')">{{ state.detail.pending_change?.status === 'submitted' ? '重新准备退回变更' : '准备变更并查看差异' }}</button><button v-if="canApply" type="button" :disabled="state.busy" @click="state.confirmation = 'apply-change'">应用差异并提交审核</button></div>
+          <div class="center-actions"><button v-if="canChange" type="button" :disabled="state.busy" @click="mutate('prepare-change')">{{ state.detail.pending_change?.status === 'submitted' ? '重新准备退回变更' : '准备变更并查看差异' }}</button><button v-if="mobile && canApply" type="button" :disabled="state.busy" @click="state.confirmation = 'apply-change'">应用差异并提交审核</button></div>
           <p v-if="state.detail.pending_change?.status === 'submitted'">目标计划当前状态：{{ targetStatus(state.detail.target_status) }}。{{ teachingPlanProgress(state.detail) === '已退回' ? '按退回意见修改后可重新准备变更。' : '请按上方下一步提示处理。' }}</p>
           <p v-if="state.change?.message">{{ state.change.message }}</p>
           <div v-if="changeRows.length" class="center-table-wrap"><table><thead><tr><th>字段</th><th>原值</th><th>来源新值</th></tr></thead><tbody><tr v-for="(item, index) in changeRows" :key="index"><th>{{ item.label || item.field }}</th><td>{{ teachingPlanValue(item.before ?? item.local) }}</td><td>{{ teachingPlanValue(item.after ?? item.source) }}</td></tr></tbody></table></div>
@@ -184,19 +202,19 @@ function target() { if (state.detail?.target_id) emit('open-target', { ...state.
           <dl class="approved-fields"><div v-for="field in currentApprovedFields" :key="field.key"><dt>{{ field.label }}</dt><dd>{{ teachingPlanValue(field.value) }}</dd></div></dl>
           <div v-if="canRetain && retainedDiff.length" class="center-table-wrap"><table><thead><tr><th>字段</th><th>原审核来源快照</th><th>当前已审核内容</th></tr></thead><tbody><tr v-for="(difference, index) in retainedDiff" :key="index"><th>{{ difference.label || businessLabels[difference.field] || previewLabels[difference.field] || teachingPlanFieldLabel(difference.field) }}</th><td>{{ retainedValue(difference.field, difference.before) }}</td><td>{{ retainedValue(difference.field, difference.after) }}</td></tr></tbody></table></div>
           <p v-if="canRetain">以上为计划字段差异；适用范围、材料要求和成绩规则等关联内容请打开原计划核对。</p>
-          <div v-if="canReconcile" class="center-actions"><button type="button" class="primary" :disabled="state.busy" @click="mutate('reconcile-change')">同步审核结果</button></div>
+          <div v-if="mobile && canReconcile" class="center-actions"><button type="button" class="primary" :disabled="state.busy" @click="mutate('reconcile-change')">同步审核结果</button></div>
           <form v-if="canRetain" @submit.prevent="retainReasonReady && (state.confirmation = 'retain-approved')">
             <label><FormFieldLabel required help="8 至 800 字，说明为何保留当前人工审核后的业务内容">保留原因</FormFieldLabel><textarea v-model="state.retainReason" rows="4" minlength="8" maxlength="800" required :disabled="state.busy" placeholder="请说明已核对的业务内容、调整原因与审核结果"></textarea></label>
             <p>{{ [...state.retainReason.trim()].length }} / 800 字</p>
-            <button type="submit" :disabled="state.busy || !retainReasonReady">保留本次人工审核结果并同步来源版本</button>
+            <button v-if="mobile" type="submit" :disabled="state.busy || !retainReasonReady">保留本次人工审核结果并同步来源版本</button>
           </form>
         </section>
-        <div v-if="['assign', 'complete', 'apply-change', 'retain-approved'].includes(state.confirmation)" class="center-confirm" role="alert">
+        <div v-if="mobile && ['assign', 'complete', 'apply-change', 'retain-approved'].includes(state.confirmation)" class="center-confirm" role="alert">
           <p v-if="state.confirmation === 'retain-approved'">确认保留计划 #{{ state.detail.target_id }} 当前已经人工审核通过的业务内容，并将本次审核对应的来源版本与其关联？本次不修改业务计划，也不会执行首次免审。保留原因：{{ state.retainReason.trim() }}</p>
           <p v-else>{{ state.confirmation === 'assign' ? `确认生成${typeLabel(state.classification)}计划？生成后类型锁定，不能再次分配。` : state.confirmation === 'complete' ? '确认已在目标计划保存全部必需内容？完成首次导入将重新校验当前来源、绑定及审批历史。' : '确认将已展示的来源差异应用到可编辑计划？原计划中未涉及的业务设置保留，确认后提交原审核流程。' }}</p>
           <button type="button" class="primary" :disabled="state.busy || (state.confirmation === 'assign' && !assignmentReady) || (state.confirmation === 'retain-approved' && !retainReasonReady)" @click="mutate(state.confirmation)">{{ state.busy ? '正在处理…' : '确认执行' }}</button><button type="button" :disabled="state.busy" @click="state.confirmation = ''">取消</button>
         </div>
-        <details class="center-source" open><summary>原始教学计划字段（{{ sourceFields.length }} 列，只读）</summary><dl><div v-for="field in sourceFields" :key="field.key"><dt>{{ field.label }}</dt><dd>{{ teachingPlanValue(field.value) }}</dd></div></dl></details>
+        <details class="center-source" :open="mobile"><summary>原始教学计划字段（{{ sourceFields.length }} 列，只读）</summary><dl><div v-for="field in sourceFields" :key="field.key"><dt>{{ field.label }}</dt><dd>{{ teachingPlanValue(field.value) }}</dd></div></dl></details>
       </template>
       <template v-if="state.batch">
         <header class="center-header"><div><h2>批次 {{ batch.id }} 校验与预览</h2><p>{{ batchLabel(batch.status) }} · {{ batch.academic_year }} / {{ batch.semester }}</p></div><button type="button" :disabled="state.busy" @click="closeBatch">关闭批次</button></header>
@@ -204,12 +222,14 @@ function target() { if (state.detail?.target_id) emit('open-target', { ...state.
         <p v-if="batch.error_message" class="center-error">{{ batch.error_message }}</p>
         <p class="center-note">导入方式：{{ batch.import_semantics_label || '尚未读取，请刷新批次核对' }}。</p>
         <p>确认导入按本批次的导入方式处理原始数据，不会直接生成业务计划。</p>
-        <div class="center-actions"><button type="button" :disabled="state.busy || state.detailLoading" @click="openBatch(batch)">刷新批次</button><button v-if="batch.can_confirm_import" type="button" class="primary" :disabled="state.busy" @click="state.confirmation = 'import'">确认导入原始数据</button><button v-if="batch.can_cancel_import" type="button" :disabled="state.busy" @click="state.confirmation = 'cancel-import'">取消此批次</button></div>
-        <div v-if="state.confirmation === 'import'" class="center-confirm"><p>确认导入本批次的原始教学计划？{{ batch.import_semantics_label || '导入方式尚未读取，请先刷新批次' }}。请先核对全部校验问题、前后值及完整源字段。</p><button type="button" class="primary" :disabled="state.busy" @click="confirmImport(false)">确认导入</button><button type="button" :disabled="state.busy" @click="state.confirmation = ''">取消</button></div>
-        <div v-if="state.confirmation === 'cancel-import'" class="center-confirm"><p>确认取消批次 #{{ batch.id }}？本批次剩余待导入数据将停止处理；已发布的原始数据保留。修正文件和学年学期后可重新上传。</p><button type="button" :disabled="state.busy || !batch.can_cancel_import" @click="confirmImport(true)">确认取消批次</button><button type="button" :disabled="state.busy" @click="state.confirmation = ''">返回预览</button></div>
+        <div v-if="mobile" class="center-actions"><button type="button" :disabled="state.busy || state.detailLoading" @click="openBatch(batch)">刷新批次</button><button v-if="batch.can_confirm_import" type="button" class="primary" :disabled="state.busy" @click="state.confirmation = 'import'">确认导入原始数据</button><button v-if="batch.can_cancel_import" type="button" :disabled="state.busy" @click="state.confirmation = 'cancel-import'">取消此批次</button></div>
+        <div v-if="mobile && state.confirmation === 'import'" class="center-confirm"><p>确认导入本批次的原始教学计划？{{ batch.import_semantics_label || '导入方式尚未读取，请先刷新批次' }}。请先核对全部校验问题、前后值及完整源字段。</p><button type="button" class="primary" :disabled="state.busy" @click="confirmImport(false)">确认导入</button><button type="button" :disabled="state.busy" @click="state.confirmation = ''">取消</button></div>
+        <div v-if="mobile && state.confirmation === 'cancel-import'" class="center-confirm"><p>确认取消批次 #{{ batch.id }}？本批次剩余待导入数据将停止处理；已发布的原始数据保留。修正文件和学年学期后可重新上传。</p><button type="button" :disabled="state.busy || !batch.can_cancel_import" @click="confirmImport(true)">确认取消批次</button><button type="button" :disabled="state.busy" @click="state.confirmation = ''">返回预览</button></div>
         <section v-for="kind in ['issues', 'changes']" :key="kind" class="center-batch-preview"><h3>{{ kind === 'issues' ? '校验问题' : '待导入预览与前后差异' }}</h3><p v-if="!state.batch[kind]?.items?.length">本页无{{ kind === 'issues' ? '校验问题' : '差异记录' }}。</p><article v-for="(item, index) in state.batch[kind]?.items || []" :key="item.id || index"><strong>{{ item.row_number ? `第 ${item.row_number} 行` : item.source_key || `记录 ${index + 1}` }}</strong><p v-if="item.message || item.issue_message">{{ item.message || item.issue_message }}</p><p v-if="kind === 'issues'">{{ item.issue_detail || item.detail || item.reason || '' }}</p><div v-else-if="previewDiff(item).length" class="center-table-wrap"><table><thead><tr><th>字段</th><th>原值</th><th>新值</th></tr></thead><tbody><tr v-for="(difference, diffIndex) in previewDiff(item)" :key="diffIndex"><th>{{ difference.label || previewLabels[difference.field] || difference.field }}</th><td>{{ teachingPlanValue(difference.before) }}</td><td>{{ teachingPlanValue(difference.after) }}</td></tr></tbody></table></div><p v-else-if="kind === 'changes'">{{ item.after_json?.course_name || item.before_json?.course_name || '本条无字段差异' }} · {{ importChangeLabel(item.change_type) }}</p><details v-if="kind === 'changes' && (item.after_json?.raw_payload || item.before_json?.raw_payload)" class="batch-source-preview"><summary>查看此行完整原始字段（{{ state.options.source_fields?.length || 45 }} 列）</summary><div class="center-table-wrap"><table><thead><tr><th>字段</th><th>导入前</th><th>待导入</th></tr></thead><tbody><tr v-for="field in previewSourceRows(item)" :key="field.key"><th>{{ field.label }}</th><td>{{ teachingPlanValue(field.before) }}</td><td>{{ teachingPlanValue(field.after) }}</td></tr></tbody></table></div></details></article><nav v-if="state.batch[kind]?.pagination" class="center-pagination" :aria-label="kind === 'issues' ? '校验问题分页' : '原始差异分页'"><span>共 {{ state.batch[kind].pagination.total }} 条</span><button type="button" :disabled="state.detailLoading || state.batch[kind].pagination.page <= 1" @click="loadBatchPage(kind, state.batch[kind].pagination.page - 1)">上一页</button><span>{{ state.batch[kind].pagination.page }}</span><button type="button" :disabled="state.detailLoading || state.batch[kind].pagination.page * state.batch[kind].pagination.page_size >= state.batch[kind].pagination.total" @click="loadBatchPage(kind, state.batch[kind].pagination.page + 1)">下一页</button></nav></section>
       </template>
     </section>
+    <template v-if="!mobile" #footer><slot name="workspace-footer" v-bind="presentation" /></template>
+    </component>
   </section>
 </template>
 
@@ -236,5 +256,12 @@ label { display: grid; align-content: start; gap: 6px; min-width: 0; } .center-t
 .center-source dl, .approved-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 0; } .center-source dl > div, .approved-fields > div { padding: 10px; border-bottom: 1px solid var(--line, var(--app-line, #dce2e9)); min-width: 0; } dt { color: var(--muted, var(--app-text-secondary, #627083)); font-size: 12px; } dd { margin: 4px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 .center-confirm button + button { margin-left: 8px; } .center-table-wrap { overflow-x: auto; } table { width: 100%; border-collapse: collapse; table-layout: fixed; } th, td { text-align: left; vertical-align: top; padding: 10px; border-bottom: 1px solid var(--line, var(--app-line, #dce2e9)); overflow-wrap: anywhere; } th { font-weight: 500; }
 .center-batch-preview { margin: 18px 0; } .center-batch-preview article { padding: 10px 0; border-bottom: 1px solid var(--line, var(--app-line, #dce2e9)); } pre { white-space: pre-wrap; overflow-wrap: anywhere; margin: 6px 0; font-size: 12px; }
+.is-desktop-workspace { min-height: 0; overflow: auto; overscroll-behavior: contain; margin: 0; padding: 18px 20px; border: 0; color: var(--text, #202b3a); font-size: 13px; line-height: 1.6; }
+.is-desktop-workspace > .center-header > button, .is-desktop-workspace > .center-header h2 { display: none; }
+.is-desktop-workspace > .center-header { min-height: 0; padding: 0; border: 0; background: transparent; }
+.is-desktop-workspace .center-source { margin-top: 12px; }
+.is-desktop-workspace .center-form-grid { max-width: 760px; }
+.teaching-center:not(.is-mobile) > .center-header, .teaching-center:not(.is-mobile) > .center-note, .teaching-center:not(.is-mobile) > .center-error, .teaching-center:not(.is-mobile) > .center-receipt { flex: 0 0 auto; }
+.teaching-center:not(.is-mobile) > .center-note { padding: 8px 10px; margin-bottom: 8px; font-size: 12px; }
 @media (max-width: 600px) { .teaching-center { padding: 12px; } .center-header { gap: 10px; } .center-header h1 { font-size: 19px; } .center-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); } .center-filters label:first-child { grid-column: 1 / -1; } .center-form-grid, .center-source dl, .approved-fields { grid-template-columns: minmax(0, 1fr); } .wide { grid-column: auto; } button, input, select, textarea { min-height: 42px; } .center-actions { align-items: stretch; } .center-actions > button { flex: 1 1 auto; } .record-facts { display: grid; gap: 2px; } }
 </style>

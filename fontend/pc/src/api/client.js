@@ -1,4 +1,5 @@
 import { createSessionCoordination, isCookieSessionRequest, isSessionMutation } from '../../../shared/sessionCoordination';
+import { schoolDemo, schoolDemoHeaders } from '../../../shared/schoolDemo';
 
 export const apiBase = import.meta.env.VITE_API_BASE || '/api';
 let refreshPromise = null;
@@ -67,6 +68,7 @@ export async function request(path, options = {}) {
 }
 
 async function sendRequest(path, options = {}, canRefresh = true) {
+  const demoHeaders = schoolDemoHeaders(path);
   const generation = sessionGeneration;
   const {
     timeoutMs: rawTimeoutMs,
@@ -121,6 +123,7 @@ async function sendRequest(path, options = {}, canRefresh = true) {
             Accept: 'application/json',
             ...(!isFormData ? { 'Content-Type': 'application/json' } : {}),
             ...headers,
+            ...demoHeaders,
           },
           ...fetchOptions,
           signal: abortController?.signal || externalSignal,
@@ -170,6 +173,7 @@ async function sendRequest(path, options = {}, canRefresh = true) {
   requireCurrent();
 
   if (payload.code === 40310) window.dispatchEvent(new CustomEvent('practical-wechat-required'));
+  if (payload.code === 40372 && demoHeaders['X-School-Demo'] === schoolDemo.selection) schoolDemo.error = payload.message;
 
   if (!response.ok || payload.code !== 0) {
     const error = new Error(payload.message || '请求失败');

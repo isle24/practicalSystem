@@ -11,7 +11,6 @@
   <main v-if="startupState.loading || startupState.error" class="startup-shell" :class="{ native: isDesktopShell }"><section><strong>{{ startupState.error ? '连接未完成' : '正在连接并加载登录会话...' }}</strong><span v-if="startupState.error">{{ startupState.error }}</span><el-button v-if="startupState.error" type="primary" @click="initializeSession">重试</el-button></section></main>
   <main v-else-if="!isLoggedIn || pendingSsoResume" class="login-shell" :class="{ 'login-shell-native': isDesktopShell }" :style="loginPageStyle" :inert="passwordRecoveryVisible ? true : undefined" :aria-hidden="passwordRecoveryVisible ? 'true' : undefined">
     <section class="login-panel" :class="{ 'login-panel-scan': loginMethod === 'wechat' }">
-      <LoginModeToggle v-model:mode="loginMethod" :disabled="loginState.loading || registerState.loading || loginCaptcha.state.loading" />
       <header>
         <img v-if="loginPageState.school_logo_url" class="login-school-logo" :src="backendUrl(loginPageState.school_logo_url)" :alt="loginSchoolName">
         <Building2 v-else :size="32" />
@@ -20,10 +19,12 @@
           <span>{{ loginSchoolName }}</span>
         </div>
       </header>
+      <LoginModeToggle v-model:mode="loginMethod" :iam-available="iamOptions.available" :disabled="loginState.loading || registerState.loading || loginCaptcha.state.loading" />
       <h1 v-if="loginMethod === 'password'" class="login-view-title">账号密码登录</h1>
-      <p v-if="pendingSsoResume">请重新使用密码或企业微信扫码登录，完成应用授权。</p>
+      <p v-if="pendingSsoResume">请登录后继续应用授权；若要求重新验证，请使用账号密码或企业微信。</p>
       <p v-else-if="cliEntryMode">{{ cliEntryMode === 'authorize' ? '登录后核对设备及授权码，再确认 CLI 授权。' : cliEntryMode === 'operation' ? '登录当前学校账号，核对本次业务操作并确认。' : '登录后查看并管理本人的 CLI 会话。' }}</p>
       <WechatLogin v-if="loginMethod === 'wechat' && !passwordRecoveryVisible" :request="request" :public-origin="publicSchoolOrigin" @logged-in="onFreshAuthentication" />
+      <IamLogin v-else-if="loginMethod === 'iam' && iamOptions.available && !passwordRecoveryVisible" ref="iamLogin" :key="publicSchoolOrigin" :request="request" :public-origin="publicSchoolOrigin" :display-name="iamOptions.display_name" @logged-in="onFreshAuthentication" />
       <div v-else-if="nativePasswordEntry" class="native-password-entry">
         <p>请在客户端登录窗口校验账号密码。</p>
         <button type="button" class="login-submit-button" :disabled="loginState.loading" @click="openNativePasswordLogin">打开客户端登录</button>
@@ -75,6 +76,7 @@
       <button type="button" class="login-secondary-button" :disabled="loginState.loading || registerState.loading" @click="openPasswordRecovery">忘记密码</button>
       <small v-if="loginState.message">{{ loginState.message }}</small>
       <small v-if="registerState.message">{{ registerState.message }}</small>
+      <IamLoginEntry v-if="loginMethod === 'password' && iamOptions.available" :display-name="iamOptions.display_name" :disabled="loginState.loading || registerState.loading || loginCaptcha.state.loading" @click="openIamLogin" />
       <ClientDownloadButton />
     </section>
   </main>
@@ -82,8 +84,9 @@
   <CliOperationEntry v-else-if="cliEntryMode === 'operation' && !wechatBlocked" :key="cliSessionKey" :operation-id="cliOperationId" :session-key="cliSessionKey" :account-name="operatorName" @close="closeCliEntry" @logout="submitLogout" />
   <CliAccessEntry v-else-if="cliEntryMode && !wechatBlocked" :key="cliSessionKey" :mode="cliEntryMode" :user-code="cliUserCode" :session-key="cliSessionKey" :account-name="operatorName" @close="closeCliEntry" @logout="submitLogout" />
 
-  <main v-else-if="!wechatBlocked" class="desktop-shell" :class="{ 'desktop-shell-mac': desktopStyleMode === 'mac', 'desktop-shell-maximized': !isDesktopShell && hasMaximizedWindow, 'desktop-shell-native': isDesktopShell, 'desktop-shell-dock-auto-hide': dockShouldAutoHide }" :style="desktopStyle" @click.left="closeDesktopContextMenu" @contextmenu.prevent="openDesktopContextMenu">
+  <main v-else-if="!wechatBlocked" class="desktop-shell" :class="{ 'desktop-shell-custom-wallpaper': customDesktopWallpaper, 'desktop-shell-mac': desktopStyleMode === 'mac', 'desktop-shell-maximized': !isDesktopShell && hasMaximizedWindow, 'desktop-shell-native': isDesktopShell, 'desktop-shell-dock-auto-hide': dockShouldAutoHide }" :style="desktopStyle" @click.left="closeDesktopContextMenu" @contextmenu.prevent="openDesktopContextMenu">
     <section class="workspace">
+      <SchoolDemoSwitcher :actor="permissionState.context" :request="request" platform="pc" />
       <AdaptiveDesktopGrid
         ref="desktopGridRef"
         :modules="visibleDesktopModules"
@@ -99,11 +102,15 @@
         @warning="ElMessage.warning"
       />
 
+      <TransitionGroup name="skin-window" :css="localTheme.look.effective.value !== 'classic'">
       <DesktopWindow
         v-for="win in visibleWindows"
         :key="win.id"
         :title="win.module.name"
-        :icon="win.module.icon"
+        :menu-key="win.module.id"
+        :icon-name="win.module.menu?.icon"
+        :icon-url="win.module.iconUrl"
+        :backend-url="backendUrl"
         :z-index="win.zIndex"
         :initial-left="win.left"
         :initial-top="win.top"
@@ -183,7 +190,7 @@
             <template #appearance>
               <ThemeSettings :theme="localTheme" />
               <DesktopBarSettings :preferences="desktopBarPreferences.state" :native="isDesktopShell" @change="desktopBarPreferences.setPreference" />
-              <section class="profile-panel-card">
+              <section v-if="localTheme.look.effective.value === 'classic'" class="profile-panel-card">
                 <header>
                   <strong>客户端外观</strong>
                   <small>只保存在当前设备，不同步到学校服务器。</small>
@@ -335,7 +342,7 @@
 
             <OperationRoute :module="operationGuideForWindow(win).module || ''" :panel="operationGuideForWindow(win).panel || ''" :page-title="operationGuideForWindow(win).title" />
             <div class="module-workspace">
-              <section class="module-content-panel">
+              <section class="module-content-panel" :class="{ 'bounded-workspace': ['teachingPlanCenter', 'educationSync', 'workflow', 'iamConfig'].includes(win.module.id) || (win.module.id === 'config' && ['workflowSettings', 'iamConfig'].includes(win.panel)) }">
                 <BaseVisitRecordPanel
                   v-if="canViewBaseVisits && (win.module.id === 'baseVisitRecords' || (win.module.id === 'companyManage' && win.panel === 'baseVisitRecords'))"
                   :session-key="[permissionState.context.school_id, permissionState.context.account_id, permissionState.context.role_type].join(':')"
@@ -519,7 +526,7 @@
                         </el-table>
                       </div>
 
-                      <WorkflowHistory v-else-if="internshipState.dialog.type === 'workflow'" :entity-type="internshipState.dialog.entity" :entity-id="internshipState.dialog.row.id" :account-id="permissionState.context.account_id" :request="request" :backend-url="backendUrl" @updated="refreshInternshipPlanWorkflow" />
+                      <WorkflowHistory v-else-if="internshipState.dialog.type === 'workflow'" :entity-type="internshipState.dialog.entity" :entity-id="internshipState.dialog.row.id" :account-id="businessAccountId" :request="request" :backend-url="backendUrl" @updated="refreshInternshipPlanWorkflow" />
 
                       <div v-else-if="internshipState.dialog.type === 'contentDetail'" class="content-detail-view">
                         <section v-for="field in internshipState.dialog.fields || []" :key="field.label">
@@ -539,7 +546,7 @@
                           </div>
                           <pre v-else>{{ detailFieldText(field.value) }}</pre>
                         </section>
-                        <WorkflowHistory v-if="internshipState.dialog.entity === 'base_application' && internshipState.dialog.row?.workflow" entity-type="base_application" :entity-id="internshipState.dialog.row.id" :account-id="permissionState.context.account_id" :request="request" :backend-url="backendUrl" @updated="loadInternshipPanel('baseApplications', 1)" />
+                        <WorkflowHistory v-if="internshipState.dialog.entity === 'base_application' && internshipState.dialog.row?.workflow" entity-type="base_application" :entity-id="internshipState.dialog.row.id" :account-id="businessAccountId" :request="request" :backend-url="backendUrl" @updated="loadInternshipPanel('baseApplications', 1)" />
                       </div>
 
                       <div v-else-if="internshipState.dialog.type === 'syllabusGuide'" class="operation-form single syllabus-guide-form">
@@ -994,7 +1001,7 @@
                     :session-key="workspaceContextKey"
                     :role-type="currentRoleType"
                     :options="internshipState.options"
-                    :default-filters="defaultScopedFilters()"
+                    :default-filters="internshipDefaultFilters"
                     :can-approve="canApproveInternship"
                   />
 
@@ -1002,7 +1009,7 @@
                     v-else-if="win.panel === 'enterpriseEvaluations'"
                     :session-key="workspaceContextKey"
                     :options="internshipState.options"
-                    :default-filters="defaultScopedFilters()"
+                    :default-filters="internshipDefaultFilters"
                     :can-manage="canManageInternship && isAdminRole"
                     :can-configure="['super_admin', 'school_admin'].includes(currentRoleType)"
                   />
@@ -1702,6 +1709,40 @@
                     </DataListPanel>
                   </template>
 
+                  <template v-else-if="win.panel === 'insurances'">
+                    <p v-if="internshipState.options.insurance_registration && !internshipState.options.insurance_registration.can_register">
+                      如需补录保单，请联系{{ internshipState.options.insurance_registration.role_label }}，通过{{ internshipState.options.insurance_registration.label }}办理。
+                    </p>
+                    <DataListPanel
+                      :columns="internshipListConfigs.insurances.columns"
+                      :filters="internshipListConfigs.insurances.filters"
+                      :filter-values="internshipState.filters.insurances"
+                      :loading="internshipState.loading"
+                      :pagination="internshipState.lists.insurances.pagination"
+                      :rows="internshipState.lists.insurances.items"
+                      :storage-key="dataListStorageKey(win, 'insurances')"
+                      @filter-change="setInternshipFilter('insurances', $event)"
+                      @page-change="page => loadInternshipPanel('insurances', page)"
+                      @reset="resetInternshipFilters('insurances')"
+                      @search="loadInternshipPanel('insurances', 1)"
+                    >
+                      <template v-if="internshipState.options.insurance_registration?.can_register" #toolbar>
+                        <el-button type="primary" :icon="Plus" @click="insuranceRegistrationWindow = win.id">登记保险</el-button>
+                      </template>
+                      <template #actions="{ row }">
+                        <el-button link type="primary" @click="openTimelineDialog('insurance', row)">记录</el-button>
+                      </template>
+                    </DataListPanel>
+                    <OperationDialog
+                      v-if="insuranceRegistrationWindow === win.id && internshipState.options.insurance_registration?.can_register"
+                      :visible="true"
+                      title="保险登记"
+                      @close="insuranceRegistrationWindow = ''"
+                    >
+                      <InternshipInsuranceRegistration :load-pairs="fetchInternshipPairs" :save-insurance="saveInternshipInsurance" :upload-file="uploadFile" @saved="finishInsuranceRegistration" />
+                    </OperationDialog>
+                  </template>
+
                   <template v-else-if="win.panel === 'documents'">
                     <StudentOwnPanel
                       v-if="isStudentRole"
@@ -1761,7 +1802,7 @@
                   :session-key="workspaceContextKey"
                   :panel="win.panel"
                   :role-type="currentRoleType"
-                  :account-id="permissionState.context.account_id"
+                  :account-id="businessAccountId"
                   :has-permission="hasPermission"
                 />
 
@@ -1782,14 +1823,14 @@
                   >
                     <el-alert v-if="practiceModuleState(win.module.id).message" class="operation-feedback" :title="practiceModuleState(win.module.id).message" type="warning" :closable="false" show-icon />
 
-                      <div v-if="practiceModuleState(win.module.id).dialog.type === 'execution'" class="operation-form">
+                      <div v-if="practiceModuleState(win.module.id).dialog.type === 'execution'" class="operation-form" :inert="practiceModuleState(win.module.id).loading">
                         <label>
                           <FormFieldLabel :required="true">类别</FormFieldLabel>
-                          <el-segmented v-model="practiceModuleState(win.module.id).form.module_type" :options="practiceWriteModuleTypeOptions" @change="handlePracticeWriteModuleTypeChange(win.module.id)" />
+                          <el-segmented v-model="practiceModuleState(win.module.id).form.module_type" :disabled="win.panel === 'reports' && Boolean(practiceModuleState(win.module.id).form.id)" :options="practiceWriteModuleTypeOptions" @change="handlePracticeWriteModuleTypeChange(win.module.id)" />
                         </label>
                         <label>
                           <FormFieldLabel :required="true">项目</FormFieldLabel>
-                          <el-select-v2 v-model="practiceModuleState(win.module.id).form.project_id" clearable filterable placeholder="请选择项目" @change="changePracticeExecutionProject(win.module.id)" :options="(practiceProjectOptions(win.module.id)).map(project => ({ label: project.title || project.course_name, value: project.id }))" />
+                          <el-select-v2 v-model="practiceModuleState(win.module.id).form.project_id" :disabled="win.panel === 'reports' && Boolean(practiceModuleState(win.module.id).form.id)" clearable filterable placeholder="请选择项目" @change="changePracticeExecutionProject(win.module.id)" :options="(practiceProjectOptions(win.module.id)).map(project => ({ label: project.title || project.course_name, value: project.id }))" />
                         </label>
                         <label v-if="win.panel === 'signIns'"><FormFieldLabel :required="false" help="留空使用当天日期。">日期</FormFieldLabel><input v-model="practiceModuleState(win.module.id).form.date" type="date"></label>
                         <label v-if="win.panel === 'signIns'"><FormFieldLabel :required="false">位置</FormFieldLabel><input v-model="practiceModuleState(win.module.id).form.location"></label>
@@ -1805,6 +1846,16 @@
                           <FormFieldLabel :required="false" submit-required help="草稿可暂不填写，提交审核前需补全。">反思小结</FormFieldLabel>
                           <textarea v-model="practiceModuleState(win.module.id).form.reflection_summary" rows="4" maxlength="5000" placeholder="请总结本项目的收获、问题和改进方向" />
                         </label>
+                        <section v-if="win.panel === 'reports'" class="span-2">
+                          <label><FormFieldLabel :required="false">报告附件</FormFieldLabel><input type="file" multiple :disabled="!practiceModuleState(win.module.id).form.report_ready" @change="uploadPracticeReportAttachments(win.module.id, $event)"></label>
+                          <ul v-if="practiceModuleState(win.module.id).form.attachments.length">
+                            <li v-for="file in practiceModuleState(win.module.id).form.attachments" :key="file.file_id">
+                              <a v-if="file.url" :href="backendUrl(file.url)" target="_blank" rel="noopener noreferrer">{{ file.name }}</a>
+                              <span v-else>{{ file.name }}</span>
+                              <el-button link @click="removePracticeReportAttachment(win.module.id, file.file_id)">移除</el-button>
+                            </li>
+                          </ul>
+                        </section>
                         <label class="span-2">
                           <FormFieldLabel :required="false">备注</FormFieldLabel>
                           <textarea v-model="practiceModuleState(win.module.id).form.remark" rows="3" />
@@ -1864,6 +1915,8 @@
                             <span>{{ practiceArchiveStatusText(item.status) }}</span>
                             <strong>{{ item.name }}</strong>
                             <small>{{ item.count || 0 }} / {{ item.required_count || 0 }}</small>
+                            <small v-if="item.next_action">{{ item.next_action }}</small>
+                            <small v-for="teacher in item.teachers || []" :key="teacher.teacher_id">{{ teacher.teacher_name || `教师 ${teacher.teacher_id}` }} · {{ practiceArchiveStatusText(teacher.status) }}</small>
                           </article>
                         </div>
                       </div>
@@ -1893,7 +1946,7 @@
                         <label>
                           <FormFieldLabel :required="['plans', 'schedules'].includes(win.panel) || (currentRoleType === 'profession_admin' &amp;&amp; win.panel !== 'rooms')">专业</FormFieldLabel>
                           <el-select-v2 v-model="practiceModuleState(win.module.id).form.profession_id" clearable filterable placeholder="请选择专业" @change="handlePracticeProfessionChange(win.module.id)" :options="practiceProfessionOptions(win.module.id)" :props="{ label: 'profession_name', value: 'profession_id' }" />
-                          <small v-if="win.panel === 'schedules'">选择学院后，仅显示该学院所选年级可用的专业。</small>
+                          <small v-if="['plans', 'schedules'].includes(win.panel)">仅显示所选年级及学院内可用的专业。</small>
                         </label>
                         <label>
                           <FormFieldLabel v-if="win.panel !== 'projects'" :required="win.panel === 'schedules'">任课教师</FormFieldLabel><span v-else>任课教师</span>
@@ -1992,6 +2045,13 @@
 
                       <div v-else-if="['review', 'reopen'].includes(practiceModuleState(win.module.id).dialog.type)" class="operation-form single">
                         <p>{{ practiceModuleState(win.module.id).dialog.description }}</p>
+                        <template v-if="practiceModuleState(win.module.id).dialog.panel === 'reports'">
+                          <div v-if="practiceModuleState(win.module.id).dialog.row.content" class="workflow-content">{{ practiceModuleState(win.module.id).dialog.row.content }}</div>
+                          <div v-if="practiceModuleState(win.module.id).dialog.row.reflection_summary" class="workflow-content">{{ practiceModuleState(win.module.id).dialog.row.reflection_summary }}</div>
+                          <ul v-if="practiceModuleState(win.module.id).dialog.row.attachments?.length">
+                            <li v-for="file in practiceModuleState(win.module.id).dialog.row.attachments" :key="file.id"><a :href="backendUrl(file.url)" target="_blank" rel="noopener noreferrer">{{ file.name }}</a></li>
+                          </ul>
+                        </template>
                         <label v-if="practiceModuleState(win.module.id).dialog.type === 'review'">
                           <FormFieldLabel :required="true">审核结论</FormFieldLabel>
                           <el-segmented v-model="practiceModuleState(win.module.id).dialog.status" :options="practiceReviewStatusOptions()" />
@@ -2011,7 +2071,7 @@
                         </label>
                       </div>
 
-                      <WorkflowHistory v-else-if="practiceModuleState(win.module.id).dialog.type === 'workflow'" :entity-type="practiceModuleState(win.module.id).dialog.workflowEntity" :entity-id="practiceModuleState(win.module.id).dialog.row.id" :account-id="permissionState.context.account_id" :request="request" :backend-url="backendUrl" @updated="loadPracticePanel(win.module.id, 'plans', 1, true)" />
+                      <WorkflowHistory v-else-if="practiceModuleState(win.module.id).dialog.type === 'workflow'" :entity-type="practiceModuleState(win.module.id).dialog.workflowEntity" :entity-id="practiceModuleState(win.module.id).dialog.row.id" :account-id="businessAccountId" :request="request" :backend-url="backendUrl" @updated="loadPracticePanel(win.module.id, 'plans', 1, true)" />
 
                       <div v-else-if="practiceModuleState(win.module.id).dialog.type === 'timeline'" class="operation-form single">
                         <div class="timeline-view">
@@ -2207,6 +2267,8 @@
                         <span>{{ practiceArchiveStatusText(item.status) }}</span>
                         <strong>{{ item.name }}</strong>
                         <small>{{ item.count || 0 }} / {{ item.required_count || 0 }}</small>
+                        <small v-if="item.next_action">{{ item.next_action }}</small>
+                        <small v-for="teacher in item.teachers || []" :key="teacher.teacher_id">{{ teacher.teacher_name || `教师 ${teacher.teacher_id}` }} · {{ practiceArchiveStatusText(teacher.status) }}</small>
                       </article>
                     </div>
                   </section>
@@ -2254,6 +2316,7 @@
                       </el-button>
                     </template>
                     <template #actions="{ row }">
+                      <el-button v-for="file in win.panel === 'reports' ? row.attachments || [] : []" :key="file.id" link type="primary" tag="a" :href="backendUrl(file.url)" target="_blank" rel="noopener noreferrer">{{ file.name || '报告附件' }}</el-button>
                       <el-button v-if="win.panel === 'plans' && isAdminRole" link type="primary" @click="openPracticePlanTeachers(win.module.id, row)">
                         任课教师
                       </el-button>
@@ -2557,7 +2620,7 @@
                     <el-button :icon="RefreshCw" :loading="archiveStateForWindow(win).loading" @click="loadArchiveItems(archiveTypeForWindow(win), archiveStateForWindow(win).pagination.page)">
                       刷新
                     </el-button>
-                    <el-button :icon="Plus" @click="openArchiveDialog(archiveTypeForWindow(win))">
+                    <el-button :icon="Plus" :loading="archiveEditorLoading(win)" @click="openArchiveDialog(win)">
                       新增
                     </el-button>
                     <a
@@ -2575,7 +2638,7 @@
                     >
                       导入Excel
                     </el-button>
-                    <el-button :icon="Edit3" :disabled="!archiveStateForWindow(win).selected" @click="openArchiveDialog(archiveTypeForWindow(win), archiveStateForWindow(win).selected)">
+                    <el-button :icon="Edit3" :disabled="!archiveStateForWindow(win).selected" :loading="archiveEditorLoading(win)" @click="openArchiveDialog(win, archiveStateForWindow(win).selected)">
                       编辑
                     </el-button>
                     <el-button
@@ -2800,11 +2863,12 @@
                     :can-manage="hasPermission('template:manage')"
                     :can-view-message-templates="canViewMessageTemplates"
                     :can-manage-message-templates="canManageMessageTemplates"
+                    :can-configure-sms-templates="canConfigureSmsTemplates"
                   />
                 </div>
 
                 <div v-else-if="win.module.id === 'expenseManage'" class="module-content-panel">
-                  <ExpensePanel :request="request" :backend-url="backendUrl" :account-id="permissionState.context.account_id" :open-expense-id="expenseInboxSelection" :can-view="hasPermission('expense:view')" :can-create="hasPermission('expense:manage')" :can-export="hasPermission('expense:export')" />
+                  <ExpensePanel :key="workspaceContextKey" :request="request" :backend-url="backendUrl" :account-id="businessAccountId" :open-inbox-item="expenseInboxSelection" :can-view="hasPermission('expense:view')" :can-create="hasPermission('expense:manage')" :can-export="hasPermission('expense:export')" @close-inbox-item="expenseInboxSelection = null" />
                 </div>
 
                 <div v-else-if="win.module.id === 'exportTask'" class="module-content-panel">
@@ -2815,10 +2879,11 @@
                 <FavoritePanel v-else-if="win.module.id === 'favorite'" :ref="panel => setFavoritePanelRef(win.id, panel)" :key="workspaceContextKey" :session-key="workspaceContextKey" :is-desktop="isFavoriteDesktop" :set-desktop="setFavoriteDesktopShortcut" @changed="refreshFavoriteShortcuts" />
                 <NotebookPanel v-else-if="win.module.id === 'notebook'" :key="noteSessionKey" :ref="el => setNotebookRef(win.id, el)" :request="request" :session-key="noteSessionKey" />
                 <ReleaseNotesPanel v-else-if="win.module.id === 'releaseNotes'" :request="request" />
-                <SchoolSettingsPanel v-else-if="win.module.id === 'config' && win.panel === 'schoolAppearance' && canManageConfig" @updated="applyLoginPageData" />
+                <SchoolSettingsPanel v-else-if="win.module.id === 'config' && win.panel === 'schoolAppearance' && canManageConfig" :super-admin="permissionState.context.role_type === 'super_admin' && !permissionState.context.sso_impersonated" @updated="applyLoginPageData" />
                 <CliPolicyPanel v-else-if="win.module.id === 'config' && win.panel === 'cliAuthorization' && canManageConfig" :key="cliSessionKey" :session-key="cliSessionKey" :public-origin="publicSchoolOrigin" />
                 <SsoClientPanel v-else-if="win.module.id === 'config' && win.panel === 'ssoClients' && canManageConfig" />
-                <WorkflowSettingsPanel v-else-if="win.module.id === 'config' && win.panel === 'workflowSettings' && canManageConfig" />
+                <IamSettingsPanel v-else-if="(win.module.id === 'iamConfig' || (win.module.id === 'config' && win.panel === 'iamConfig')) && hasPermission('iam:manage') && ['super_admin', 'school_admin'].includes(currentRoleType)" :session-key="workspaceContextKey" />
+                <WorkflowSettingsPanel v-else-if="(win.module.id === 'workflow' || (win.module.id === 'config' && win.panel === 'workflowSettings')) && canManageWorkflows" :session-key="workspaceContextKey" />
                 <MessageChannelSettings v-else-if="win.module.id === 'config' && win.panel === 'messageChannels' && canManageConfig" />
                 <ReleaseManager v-else-if="win.module.id === 'config' && win.panel === 'releases' && canManageConfig" />
                 <DatabaseSchemaPanel v-else-if="win.module.id === 'config' && win.panel === 'databaseSchema' && canManageConfig" :session-key="[noteSessionKey, permissionState.context.school_id, permissionState.context.role_type].join(':')" />
@@ -2826,7 +2891,7 @@
                 <div v-else-if="win.module.source === 'menu'" class="module-content-panel menu-module-panel">
                   <section class="menu-module-card">
                     <header>
-                      <AppIcon class="app-glyph" :icon="win.module.icon" :icon-url="win.module.iconUrl" :label="win.module.name" :color="win.module.color" :size="26" :backend-url="backendUrl" />
+                      <AppIcon class="app-glyph" :menu-key="win.module.id" :icon-name="win.module.menu?.icon" :icon-url="win.module.iconUrl" :backend-url="backendUrl" />
                       <span>
                         <strong>{{ win.module.name }}</strong>
                         <small>{{ win.module.scope }}</small>
@@ -2839,7 +2904,7 @@
                         type="button"
                         @click="openMenuModuleChild(item)"
                       >
-                        <component :is="resolveMenuIcon(item.icon)" :size="18" />
+                        <AppIcon class="menu-module-child-icon" :menu-key="item.module_key" :icon-name="item.icon" :icon-url="item.icon_url" :backend-url="backendUrl" />
                         <span>{{ item.name }}</span>
                         <small>{{ menuNodeTypeText(item.type) }}</small>
                       </button>
@@ -2858,7 +2923,7 @@
                     <small>{{ realtimeStatus === 'connected' ? '实时连接' : '自动重连中' }}</small>
                   </div>
                   <AssistantPanel v-if="assistantVisible" :key="noteSessionKey" :request="request" />
-                  <WorkflowInbox v-else-if="workflowInboxVisible" :request="request" :backend-url="backendUrl" :account-id="permissionState.context.account_id" @open-expense="openExpenseFromWorkflowInbox" />
+                  <WorkflowInbox v-else-if="workflowInboxVisible" :request="request" :backend-url="backendUrl" :account-id="businessAccountId" @open-expense="openExpenseFromWorkflowInbox" />
                   <template v-else>
                   <div class="message-toolbar">
                     <el-select v-model="messageState.filters.type" placeholder="请选择消息类型" @change="loadMessages(1)">
@@ -3278,10 +3343,11 @@
                         <label><FormFieldLabel :required="false">状态</FormFieldLabel><el-switch v-model="messageState.templateEdit.form.status" active-value="enabled" inactive-value="disabled" active-text="启用" inactive-text="停用" /></label>
                         <label><FormFieldLabel :required="false" help="留空按 100 保存。">排序</FormFieldLabel><el-input v-model.number="messageState.templateEdit.form.sort" type="number" /></label>
                         <label>
-                          <FormFieldLabel :required="false" help="保留站内消息，可追加企业微信。">发送渠道</FormFieldLabel>
+                          <FormFieldLabel :required="false" help="站内消息固定保留。校级管理员可设置短信。">发送渠道</FormFieldLabel>
                           <el-checkbox-group v-model="messageState.templateEdit.form.channels">
                             <el-checkbox value="internal" disabled>站内消息</el-checkbox>
                             <el-checkbox value="wechat">企业微信</el-checkbox>
+                            <el-checkbox value="sms" :disabled="!canConfigureSmsTemplates">短信</el-checkbox>
                           </el-checkbox-group>
                         </label>
                         <label class="wide"><FormFieldLabel :required="true">标题模板</FormFieldLabel><el-input v-model="messageState.templateEdit.form.title_tpl" maxlength="255" show-word-limit /></label>
@@ -3473,7 +3539,6 @@
                     :form="adminState.menu.editing"
                     :parent-options="parentMenuTreeOptions"
                     :tree-props="treeProps"
-                    :resolve-icon="resolveMenuIcon"
                     :icon-uploading="adminState.menu.iconUploading"
                     :loading="adminState.menu.loading"
                     :backend-url="backendUrl"
@@ -3489,7 +3554,8 @@
                       v-model="adminState.roleMenus.role_id"
                       filterable
                       placeholder="选择角色"
-                      @change="loadRolePermissions"
+                      :disabled="adminState.roleMenus.saving"
+                      @change="loadRolePermissions()"
                     >
                       <el-option
                         v-for="role in adminState.roles"
@@ -3498,27 +3564,33 @@
                         :value="role.id"
                       />
                     </el-select>
-                    <el-button :icon="RefreshCw" :loading="adminState.roleMenus.loading" @click="loadAdminFoundation(true).then(loadRolePermissions)">
+                    <el-button :icon="RefreshCw" :loading="adminState.roleMenus.loading" :disabled="adminState.roleMenus.saving" @click="loadRolePermissions(true)">
                       读取
                     </el-button>
                     <el-button
                       type="primary"
                       :icon="Save"
-                      :loading="adminState.roleMenus.loading"
-                      :disabled="!adminState.roleMenus.role_id"
+                      :loading="adminState.roleMenus.saving"
+                      :disabled="!roleMenusReady"
                       @click="saveRoleMenuConfig"
                     >
                       保存
                     </el-button>
                   </div>
+                  <small v-if="roleMenusReady">选中一项即授予该项权限，目录和子项可分别设置。</small>
                   <el-tree
-                    ref="roleTreeRef"
+                    v-if="roleMenusReady"
+                    :key="adminState.roleMenus.loaded_role_id"
                     class="permission-tree role-permission-tree"
                     :data="adminState.menus"
                     :props="treeProps"
+                    :default-checked-keys="adminState.roleMenus.menu_ids"
+                    :inert="adminState.roleMenus.saving ? true : undefined"
                     node-key="id"
                     show-checkbox
+                    check-strictly
                     default-expand-all
+                    @check="updateRoleMenuSelection"
                   >
                     <template #default="{ data }">
                       <span class="tree-node menu-manage-node">
@@ -3533,7 +3605,8 @@
                       </span>
                     </template>
                   </el-tree>
-                  <small v-if="adminState.roleMenus.message">{{ adminState.roleMenus.message }}</small>
+                  <small v-if="adminState.roleMenus.loading" role="status">正在读取角色权限</small>
+                  <small v-else-if="adminState.roleMenus.message" role="status">{{ adminState.roleMenus.message }}</small>
                 </div>
 
                 <div v-else-if="win.module.id === 'config' && win.panel === 'organizationScope'" class="admin-panel">
@@ -3617,6 +3690,13 @@
                   :can-issue="hasPermission('edu:data:issue')"
                   :can-manage-accounts="canManageAccounts"
                   :session-key="accountImportSessionKey"
+                  @open-target="openTeachingPlanTarget($event, true)"
+                />
+
+                <EducationDataSyncPanel
+                  v-else-if="win.module.id === 'educationSync' && hasPermission('edu:sync:manage') && ['super_admin', 'school_admin'].includes(currentRoleType)"
+                  :session-key="workspaceContextKey"
+                  :active="focusedWindowId === win.id && !win.minimized && !workspaceFrozen"
                 />
 
                 <div v-else-if="win.module.id === 'dataManage' || (win.module.id === 'config' && win.panel === 'dataManage')" class="admin-panel data-manage-panel">
@@ -4074,6 +4154,7 @@
           </section>
         </div>
       </DesktopWindow>
+      </TransitionGroup>
     </section>
 
     <div
@@ -4189,25 +4270,38 @@
     />
 
     <button v-if="dockShouldAutoHide" type="button" class="native-taskbar-edge" aria-label="显示任务栏" aria-controls="desktop-taskbar" @pointerenter="nativeDockHovered = true" @pointerleave="nativeDockHovered = false" @focus="nativeDockHovered = true" @blur="nativeDockHovered = false" />
-    <footer id="desktop-taskbar" class="taskbar" :class="{ 'taskbar-revealed': nativeDockHovered || webProfileMenuOpen || desktopLauncherState.visible || showGlobalSearchResults }" @pointerenter="nativeDockHovered = true" @pointerleave="nativeDockHovered = false">
+    <footer
+      id="desktop-taskbar"
+      class="taskbar"
+      :class="{ 'taskbar-revealed': nativeDockHovered || webProfileMenuOpen || desktopLauncherState.visible || showGlobalSearchResults }"
+      @pointerenter="nativeDockHovered = true"
+      @pointerleave="nativeDockHovered = false"
+    >
       <div class="taskbar-brand">
         <span class="brand-mark">实</span>
         <strong>实践管理系统</strong>
       </div>
       <div class="taskbar-center">
-        <button class="taskbar-icon-button taskbar-launcher-button" title="启动台" aria-label="启动台" @click="openDesktopLauncher">
-          <LayoutGrid :size="20" />
-        </button>
+        <DockTooltip label="启动台">
+          <button type="button" class="taskbar-icon-button taskbar-launcher-button" aria-label="启动台" @click="openDesktopLauncher">
+            <AppIcon class="taskbar-glyph" menu-key="apps" />
+          </button>
+        </DockTooltip>
         <div class="global-search-wrap">
-          <label class="global-search" title="搜索模块、基地或消息">
-            <Search :size="16" />
-            <input
-              v-model="keyword"
-              type="search"
-              placeholder="搜索模块、基地或消息"
-              @keyup.enter="submitGlobalSearch"
-            >
-          </label>
+          <DockTooltip label="搜索" :disabled="dockSearchFocused">
+            <label class="global-search">
+              <Search :size="16" />
+              <input
+                v-model="keyword"
+                type="search"
+                aria-label="搜索模块、基地或消息"
+                placeholder="搜索模块、基地或消息"
+                @focus="dockSearchFocused = true"
+                @blur="dockSearchFocused = false"
+                @keyup.enter="submitGlobalSearch"
+              >
+            </label>
+          </DockTooltip>
           <div v-if="showGlobalSearchResults" class="global-search-results">
             <button
               v-for="module in globalSearchResults"
@@ -4215,7 +4309,7 @@
               type="button"
               @mousedown.prevent="openGlobalSearchModule(module)"
             >
-              <AppIcon class="search-result-glyph" :icon="module.icon" :icon-url="module.iconUrl" :label="module.name" :color="module.color" :size="15" :backend-url="backendUrl" />
+              <AppIcon class="search-result-glyph" :menu-key="module.id" :icon-name="module.menu?.icon" :icon-url="module.iconUrl" :backend-url="backendUrl" />
               <span>
                 <strong>{{ module.name }}</strong>
                 <small>{{ module.scope }}</small>
@@ -4225,34 +4319,36 @@
         </div>
         <div class="taskbar-apps">
           <template v-if="desktopStyleMode === 'mac'">
-            <button v-for="module in visibleDesktopModules" :key="`dock-${module.id}`" type="button"
-              class="dock-pinned-app" :title="module.name" :aria-label="module.name"
-              :class="{ active: isModuleFocused(module.id), running: isModuleOpen(module.id) }"
-              @click="openModule(module)">
-              <AppIcon class="taskbar-glyph" :icon="module.icon" :icon-url="module.iconUrl" :label="module.name" :color="module.color" :size="24" :backend-url="backendUrl" />
-            </button>
+            <DockTooltip v-for="module in visibleDesktopModules" :key="`dock-${module.id}`" :label="module.name">
+              <button type="button" class="dock-pinned-app" :aria-label="module.name"
+                :class="{ active: isModuleFocused(module.id), running: isModuleOpen(module.id) }"
+                @click="openModule(module)">
+                <AppIcon class="taskbar-glyph" :menu-key="module.id" :icon-name="module.menu?.icon" :icon-url="module.iconUrl" :backend-url="backendUrl" />
+              </button>
+            </DockTooltip>
           </template>
-          <a
-            v-for="win in taskbarWindows"
-            :key="win.id"
-            :href="windowHref(win)"
-            :title="win.module.name"
-            :aria-label="win.module.name"
-            :class="{ active: focusedWindowId === win.id && !win.minimized, running: !win.minimized }"
-            @click="toggleTaskWindow(win.id)"
-          >
-            <AppIcon class="taskbar-glyph" :icon="win.module.icon" :icon-url="win.module.iconUrl" :label="win.module.name" :color="win.module.color" :size="17" :backend-url="backendUrl" />
-          </a>
-          <button
-            class="taskbar-icon-button message-taskbar-button"
-            :class="{ active: isModuleFocused('message'), running: isModuleOpen('message') }"
-            title="消息中心"
-            aria-label="消息中心"
-            @click="toggleMessageTaskWindow"
-          >
-            <MessageCircle :size="19" />
-            <i v-if="messageUnreadCount > 0">{{ messageUnreadCount > 99 ? '99+' : messageUnreadCount }}</i>
-          </button>
+          <DockTooltip v-for="win in taskbarWindows" :key="win.id" :label="win.module.name">
+            <a
+              :href="windowHref(win)"
+              :aria-label="win.module.name"
+              :class="{ active: focusedWindowId === win.id && !win.minimized, running: !win.minimized }"
+              @click="toggleTaskWindow(win.id)"
+            >
+              <AppIcon class="taskbar-glyph" :menu-key="win.module.id" :icon-name="win.module.menu?.icon" :icon-url="win.module.iconUrl" :backend-url="backendUrl" />
+            </a>
+          </DockTooltip>
+          <DockTooltip label="消息中心">
+            <button
+              type="button"
+              class="taskbar-icon-button message-taskbar-button"
+              :class="{ active: isModuleFocused('message'), running: isModuleOpen('message') }"
+              aria-label="消息中心"
+              @click="toggleMessageTaskWindow"
+            >
+              <AppIcon class="taskbar-glyph" menu-key="message" />
+              <i v-if="messageUnreadCount > 0">{{ messageUnreadCount > 99 ? '99+' : messageUnreadCount }}</i>
+            </button>
+          </DockTooltip>
         </div>
       </div>
       <div v-if="!isDesktopShell" class="taskbar-status" aria-label="系统状态">
@@ -4331,8 +4427,12 @@ import MessageChannelSettings from './components/MessageChannelSettings.vue';
 import WallpaperLibrary from './components/WallpaperLibrary.vue';
 import SignatureSettings from './components/profile/SignatureSettings.vue';
 import WorkflowHistory from '../../shared/components/WorkflowHistory.vue';
+import { trustedImportHistory } from '../../shared/workflowPresentation';
+import SchoolDemoSwitcher from '../../shared/components/SchoolDemoSwitcher.vue';
+import { schoolDemo } from '../../shared/schoolDemo';
 import OperationRoute from '../../shared/components/OperationRoute.vue';
 import WorkflowInbox from '../../shared/components/WorkflowInbox.vue';
+import InternshipInsuranceRegistration from '../../shared/components/InternshipInsuranceRegistration.vue';
 import ExpensePanel from './components/ExpensePanel.vue';
 import { hasMaximizedWindow } from './composables/useMaximizedWindows';
 import { useNativeWindowState } from './composables/useNativeWindowState';
@@ -4353,6 +4453,8 @@ import ProfileMenu from './components/ProfileMenu.vue';
 import FilterToolbar from './components/FilterToolbar.vue';
 import DesktopTitlebar from './components/DesktopTitlebar.vue';
 import WechatLogin from '../../shared/components/WechatLogin.vue';
+import IamLogin from '../../shared/components/IamLogin.vue';
+import IamLoginEntry from '../../shared/components/IamLoginEntry.vue';
 import LoginModeToggle from '../../shared/components/LoginModeToggle.vue';
 import EmbeddedExternalPage from './components/EmbeddedExternalPage.vue';
 import { computed, nextTick, onBeforeUnmount, onMounted, provide, reactive, ref, watch } from 'vue';
@@ -4428,13 +4530,16 @@ import { ssoResume, finishSsoResume } from './utils/ssoClient';
 import MobileBinding from './components/MobileBinding.vue';
 import DesktopLauncher from './components/DesktopLauncher.vue';
 import AdaptiveDesktopGrid from './components/AdaptiveDesktopGrid.vue';
-import AppIcon from './components/AppIcon.vue';
+import AppIcon from '../../shared/components/AppIcon.vue';
+import DockTooltip from './components/DockTooltip.vue';
 import DataListPanel from './components/DataListPanel.vue';
 import RemoteAcademicSelect from './components/RemoteAcademicSelect.vue';
 import PracticePeriodManager from './components/PracticePeriodManager.vue';
 import PracticeScheduleBoard from './components/PracticeScheduleBoard.vue';
 import DocCenter from './components/DocCenter.vue';
 import EducationPlanSyncPanel from './components/EducationPlanSyncPanel.vue';
+import EducationDataSyncPanel from './components/EducationDataSyncPanel.vue';
+import IamSettingsPanel from './components/IamSettingsPanel.vue';
 import EduDataPanel from './components/EduDataPanel.vue';
 import AccountImportDialog from './components/AccountImportDialog.vue';
 import ProfessionImportDialog from './components/ProfessionImportDialog.vue';
@@ -4589,6 +4694,7 @@ import {
   saveInternshipCourseScore,
   saveInternshipPlan,
   saveInternshipImplementationSheet,
+  saveInternshipInsurance,
   saveInternshipPair,
   saveInternshipReviewDraft,
   saveInternshipSyllabusGuide,
@@ -4639,7 +4745,7 @@ const baseImportInputRef = ref(null);
 const syllabusGuideFileInputRef = ref(null);
 const focusedWindowId = ref(null);
 const zIndexSeed = ref(20);
-const desktopStyleMode = ref(localStorage.getItem('practical:desktop-style') === 'mac' ? 'mac' : 'windows');
+const preferredDesktopStyle = ref(localStorage.getItem('practical:desktop-style'));
 const clientVersion = window.__PRACTICAL_DESKTOP__?.version || 'Web';
 const wallpaperCacheKey = 'practical_pc_wallpaper';
 const loginBackgroundMaxSize = 8 * 1024 * 1024;
@@ -4786,7 +4892,7 @@ const logState = reactive({
 });
 const logDetailState = reactive({ visible: false, row: null });
 const workflowInboxVisible = ref(false);
-const expenseInboxSelection = ref(0);
+const expenseInboxSelection = ref(null);
 const messageState = reactive({
   loading: false,
   targetLoading: false,
@@ -4839,7 +4945,7 @@ const messageState = reactive({
     form: emptyMessageSendForm(),
   },
 });
-const statState = reactive({
+const createStatState = () => ({
   report: 'overview',
   filters: {
     semester: '',
@@ -4867,6 +4973,7 @@ const statState = reactive({
   loading: false,
   message: '',
 });
+const statState = reactive(createStatState());
 const profileState = reactive({
   loading: false,
   message: '',
@@ -4905,7 +5012,7 @@ const guideAdminState = reactive({
 const guideEditorRef = ref(null);
 let guideReadVersion = 0;
 let guideAdminVersion = 0;
-const roleTreeRef = ref(null);
+let roleMenuRequest = 0;
 const treeProps = {
   label: 'name',
   children: 'children',
@@ -4930,9 +5037,12 @@ const adminState = reactive({
   },
   roleMenus: {
     role_id: null,
+    loaded_role_id: null,
+    saved_menu_ids: [],
     menu_ids: [],
     permissions: [],
     loading: false,
+    saving: false,
     message: '',
   },
   options: {
@@ -4956,8 +5066,13 @@ const adminState = reactive({
     message: '',
   },
 });
+const roleMenusReady = computed(() => Boolean(adminState.roleMenus.role_id)
+  && adminState.roleMenus.role_id === adminState.roleMenus.loaded_role_id
+  && !adminState.roleMenus.loading);
 const adminFoundationCache = { key: '', promise: null, loadedAt: 0 };
-const practiceFoundationCache = { key: '', promise: null, value: null, loadedAt: 0 };
+const practiceOptionsLoader = createScopedPanelLoader(60000);
+const practiceOverviewLoader = createScopedPanelLoader(60000);
+const practiceListConfigs = new Map();
 let organizationScopeRequest = 0;
 let statRequest = 0;
 let practiceLoadRequest = 0;
@@ -5008,6 +5123,16 @@ const userAdminState = reactive({
 
 const modules = [
   {
+    id: 'iamConfig', name: '统一身份认证', icon: ShieldCheck, color: 'blue',
+    scope: '学校认证应用 / 回调地址 / 登录入口',
+    viewPermission: 'iam:manage', managePermission: 'iam:manage', defaultPanel: 'iamConfig',
+  },
+  {
+    id: 'workflow', name: '工作流', icon: ClipboardList, color: 'blue',
+    scope: '可视化审批设计 / 节点人员 / 版本发布',
+    viewPermission: 'workflow:manage', managePermission: 'workflow:manage', defaultPanel: 'designer',
+  },
+  {
     id: 'teachingPlanCenter', name: '教学计划中心', icon: ClipboardList, color: 'blue',
     scope: '原始教学计划 / 学院分配 / 补齐与变更',
     viewPermission: 'teaching_plan:view', managePermission: 'teaching_plan:assign', defaultPanel: 'records',
@@ -5048,7 +5173,7 @@ const modules = [
     color: 'red',
     scope: '统计报表与学校基础数据',
     collection: true,
-    childIds: ['stat', 'userManage', 'gradeManage', 'departmentManage', 'professionManage', 'classManage', 'companyManage', 'eduData', 'dataManage'],
+    childIds: ['stat', 'userManage', 'gradeManage', 'departmentManage', 'professionManage', 'classManage', 'companyManage', 'eduData', 'educationSync', 'dataManage'],
     adminOnly: true,
   },
   {
@@ -5302,6 +5427,18 @@ const modules = [
     collectionParent: 'dataCenter',
   },
   {
+    id: 'educationSync',
+    name: '教务数据同步',
+    icon: RefreshCw,
+    color: 'blue',
+    scope: '学生 / 教职工接口同步与任务排错',
+    viewPermission: 'edu:sync:manage',
+    managePermission: 'edu:sync:manage',
+    defaultPanel: 'educationSync',
+    adminOnly: true,
+    collectionParent: 'dataCenter',
+  },
+  {
     id: 'dataManage',
     name: '测试数据清理',
     icon: HardDrive,
@@ -5441,7 +5578,8 @@ function emptyMessageTemplateForm(row = {}) {
     status: row.status || 'enabled',
     sort: row.sort ?? 100,
     is_system: Boolean(row.is_system),
-    channels: ['internal', ...(channels.includes('wechat') ? ['wechat'] : [])],
+    channels: ['internal', ...channels.filter(channel => channel !== 'internal')],
+    saved_channels: ['internal', ...channels.filter(channel => channel !== 'internal')],
   };
 }
 
@@ -5729,6 +5867,7 @@ const dataManageState = reactive({
 });
 let cleanupPollTimer = null;
 const archiveRequirementVisible = ref(false);
+const insuranceRegistrationWindow = ref('');
 
 const internshipSidebarItems = [
   { key: 'overview', name: '总览', icon: ChartColumn },
@@ -5742,6 +5881,7 @@ const internshipSidebarItems = [
   { key: 'journals', name: '实习日志', icon: FileClock },
   { key: 'reports', name: '实习报告', icon: FileText },
   { key: 'studentChanges', name: '实习资料变更', icon: Workflow },
+  { key: 'insurances', name: '保险登记', icon: ShieldCheck },
   { key: 'enterpriseEvaluations', name: '企业评价', icon: Building2 },
   { key: 'requests', name: '申请管理', icon: ClipboardList },
   { key: 'teacherWorkReports', name: '教师工作报告', icon: FileText },
@@ -5857,12 +5997,9 @@ const internshipState = reactive({
     safetyLetters: emptyPagedList(),
   },
 });
-const internshipFoundationCache = {
-  key: '',
-  value: null,
-  promise: null,
-  appliedKey: '',
-};
+const internshipOptionsLoader = createScopedPanelLoader();
+const internshipOverviewLoader = createScopedPanelLoader();
+const internshipDefaultFilters = computed(defaultScopedFilters);
 
 const practiceState = reactive({
   practice: createPracticeModuleState(),
@@ -5871,6 +6008,7 @@ const practiceState = reactive({
 const openWindows = reactive([]);
 
 const moduleSearchKeywords = {
+  workflow: '工作流 审批流程 画布 拖拽 节点 会签 或签 抄送 发布 版本',
   internship: '学生 教师 学院 专业 企业 任务 绑定 申请管理 实习方式申请 审核 签到 日志 报告 延期 成绩 归档 实习任务 实习计划',
   practice: '实验 实训 教学计划 课表 项目 过程记录 成绩 审核 课节',
   dataCenter: '数据管理 统计 用户 年级 学院 专业 班级 基地 测试数据',
@@ -5894,6 +6032,8 @@ const moduleSearchKeywords = {
   companyManage: '基地管理 基地统计 基地申报 基地审批 合作单位 企业',
   teachingPlanCenter: '教学计划 开课计划 导入 分类 学院 分配 补齐 来源 变更',
   eduData: '教务数据 学生 教师 开课计划 开课情况 导入 模板 差异 候选',
+  educationSync: '教务数据同步 学生 教职工 网关 接口 任务 诊断',
+  iamConfig: '统一身份认证 IAM OAuth 学校 登录 应用 回调',
   dataManage: '数据 管理 清理 测试数据 初始化',
   config: '设置 配置 菜单 权限 角色 企业微信 操作说明 学校',
   profile: '个人设置 头像 壁纸 背景 消息接收 密码 资料',
@@ -5905,7 +6045,7 @@ const configSidebarDefinitions = [
   { key: 'schoolAppearance', name: '学校设置', permission: 'config:manage', schoolConfig: true, icon: Building2 },
   { key: 'cliAuthorization', name: 'CLI 授权', permission: 'config:manage', schoolConfig: true, icon: ShieldCheck },
   { key: 'ssoClients', name: '授权应用', permission: 'config:manage', schoolConfig: true, icon: Globe2 },
-  { key: 'workflowSettings', name: '审批流程', permission: 'config:manage', schoolConfig: true, icon: ClipboardList },
+  { key: 'iamConfig', name: '统一身份认证', permission: 'iam:manage', schoolConfig: true, icon: ShieldCheck },
   { key: 'messageChannels', name: '消息渠道', permission: 'config:manage', schoolConfig: true, icon: MessageCircle },
   { key: 'releases', name: '版本与更新', permission: 'config:manage', schoolConfig: true, icon: Download },
   { key: 'databaseSchema', name: '数据库结构', permission: 'config:manage', schoolConfig: true, icon: Table2 },
@@ -5930,6 +6070,7 @@ const { state: nativeWindowState, control: controlNativeWindow } = useNativeWind
 const nativeProfileMenuOpen = ref(false);
 const webProfileMenuOpen = ref(false);
 const nativeDockHovered = ref(false);
+const dockSearchFocused = ref(false);
 const publicSchoolOrigin = window.__PRACTICAL_DESKTOP__?.serverOrigin || window.location.origin;
 const workspaceSourceEpoch = ref(0);
 const workspaceFrozen = ref(false);
@@ -5941,14 +6082,22 @@ const cliEntryParams = new URLSearchParams(window.location.search);
 const cliUserCode = cliEntryParams.get('cli_authorize')?.trim() || '';
 const cliOperationId = cliEntryParams.get('cli_operation')?.trim() || '';
 const cliEntryMode = ref(cliEntryParams.has('cli_operation') ? 'operation' : cliEntryParams.has('cli_authorize') ? 'authorize' : cliEntryParams.get('cli_sessions') === '1' ? 'sessions' : '');
-const loginMethod = ref(cliEntryMode.value || window.__PRACTICAL_DESKTOP__?.loginMethod === 'wechat' ? 'wechat' : 'password');
+const iamEntryRequested = window.location.hash === '#login=iam';
+const loginMethod = ref(iamEntryRequested || window.__PRACTICAL_DESKTOP__?.loginMethod === 'iam' ? 'iam' : cliEntryMode.value || window.__PRACTICAL_DESKTOP__?.loginMethod === 'wechat' ? 'wechat' : 'password');
+const iamOptions = reactive({ enabled: false, available: false, display_name: '统一身份认证' });
+const iamLogin = ref(null);
 const pendingSsoResume = ref(Boolean(ssoResume()));
 const themeScope = computed(() => permissionState.context.user_id ? `${publicSchoolOrigin}:${permissionState.context.school_database_id}:${permissionState.context.user_id}` : '');
 const tableWidthScope = computed(() => permissionState.context.account_id
   ? JSON.stringify([publicSchoolOrigin, permissionState.context.school_database_id || permissionState.context.school_id,
     permissionState.context.account_id, permissionState.context.role_id, permissionState.context.role_type]) : '');
 provide(TABLE_WIDTH_SCOPE, tableWidthScope);
-const localTheme = useLocalTheme(themeScope);
+const localTheme = useLocalTheme(themeScope, computed(() => Number(permissionState.context.account_id || 0)));
+const desktopStyleMode = computed(() => {
+  const style = localTheme.look.effective.value;
+  if (style === 'classic') return preferredDesktopStyle.value || 'windows';
+  return style === 'ivory_editorial' ? 'windows' : 'mac';
+});
 const desktopBarPreferences = useDesktopBarPreferences(themeScope);
 const desktopOpenScope = computed(() => permissionState.context.account_id ? `${publicSchoolOrigin}:${permissionState.context.school_database_id}:${permissionState.context.account_id}` : '');
 const desktopOpenPreferences = useDesktopOpenPreferences(desktopOpenScope);
@@ -5960,7 +6109,8 @@ let messagePreviewVersion = 0;
 let clockTimer;
 const isLoggedIn = computed(() => Boolean(permissionState.context.account_id));
 const nativePasswordEntry = computed(() => isDesktopClient && loginMethod.value === 'password' && !pendingSsoResume.value);
-const currentRoleType = computed(() => permissionState.context.role_type || '');
+const businessAccountId = computed(() => schoolDemo.subject?.id || permissionState.context.account_id);
+const currentRoleType = computed(() => schoolDemo.subject?.role_type || permissionState.context.role_type || '');
 const isStudentRole = computed(() => currentRoleType.value === 'student');
 const isTeacherRole = computed(() => currentRoleType.value === 'teacher');
 const isAdminRole = computed(() => ['super_admin', 'school_admin', 'college_admin', 'profession_admin'].includes(currentRoleType.value));
@@ -6004,6 +6154,7 @@ const visibleWindows = computed(() => openWindows.filter(win => !win.minimized))
 const taskbarWindows = computed(() => openWindows.filter(win => win.module.id !== 'message'
   && !(desktopStyleMode.value === 'mac' && visibleDesktopModules.value.some(module => module.id === win.module.id))));
 const canManageConfig = computed(() => hasPermission('config:manage') && ['super_admin', 'school_admin'].includes(permissionState.context.role_type));
+const canManageWorkflows = computed(() => ['super_admin', 'school_admin'].includes(currentRoleType.value) && (hasPermission('workflow:manage') || hasPermission('config:manage')));
 const cliSessionKey = computed(() => isLoggedIn.value && !workspaceFrozen.value && !wechatBlocked.value && !desktopIsLocked.value
   ? JSON.stringify([workspaceContextKey.value, permissionState.permissions, permissionState.dataScope, permissionState.context.organization_scopes]) : '');
 
@@ -6057,6 +6208,7 @@ function refreshImportedAccounts() {
 
 watch(accountImportSessionKey, () => { accountImportState.visible = false; });
 const canManageMessageTemplates = computed(() => ['super_admin', 'school_admin'].includes(currentRoleType.value) || hasPermission('template:manage'));
+const canConfigureSmsTemplates = computed(() => isSchoolConfigRole() && canManageConfig.value);
 const canViewMessageTemplates = computed(() => ['super_admin', 'school_admin'].includes(currentRoleType.value) || hasPermission('template:view') || hasPermission('template:manage'));
 const hasMessageTemplateFilters = computed(() => messageState.templateFilters.type !== 'all'
   || !['all', 'enabled'].includes(messageState.templateFilters.status)
@@ -6206,18 +6358,17 @@ const registerRoleOptions = computed(() => registerState.roles.length
     ]);
 const userEditingRoleType = computed(() => userSelectedRoleType());
 const canManageLoginBackground = computed(() => ['super_admin', 'school_admin'].includes(permissionState.context.role_type));
-const defaultLoginBackground = 'linear-gradient(135deg, rgba(31, 115, 210, .22), rgba(15, 143, 126, .14)), #eaf1f7';
-const loginPageStyle = computed(() => ({
-  background: loginPageState.login_background_url
-    ? `linear-gradient(135deg, rgba(20, 31, 43, .42), rgba(20, 31, 43, .24)), url("${safeCssUrl(loginPageState.login_background_url)}") center / cover no-repeat`
-    : defaultLoginBackground,
-}));
+const loginPageStyle = computed(() => loginPageState.login_background_url ? {
+  background: `linear-gradient(135deg, rgba(20, 31, 43, .42), rgba(20, 31, 43, .24)), url("${safeCssUrl(loginPageState.login_background_url)}") center / cover no-repeat`,
+} : {});
 const selectedWallpaper = computed(() => wallpaperPresets.find(item => item.key === profileState.form.wallpaper) || wallpaperPresets[0]);
+const customDesktopWallpaper = computed(() => Boolean(profileState.form.wallpaper_url || localTheme.current.value.wallpaper_id || selectedWallpaper.value.key !== 'default'));
 const desktopStyle = computed(() => ({
   background: profileState.form.wallpaper_url
     ? `linear-gradient(135deg, rgba(30, 42, 54, .20), rgba(30, 42, 54, .08)), url("${safeCssUrl(profileState.form.wallpaper_url)}") center / cover no-repeat`
-    : selectedWallpaper.value.background,
+    : selectedWallpaper.value.key === 'default' && localTheme.look.effective.value !== 'classic' ? undefined : selectedWallpaper.value.background,
   ...localTheme.styles.value,
+  ...(customDesktopWallpaper.value ? { '--desktop-label-color': localTheme.current.value.text } : {}),
 }));
 const avatarStyle = computed(() => (profileState.form.avatar ? {
   backgroundImage: `url("${safeCssUrl(profileState.form.avatar)}")`,
@@ -6268,6 +6419,9 @@ function collectionModuleItems(moduleId) {
 }
 
 function canShowModule(module) {
+  if (module.id === 'iamConfig') return hasPermission('iam:manage') && ['super_admin', 'school_admin'].includes(currentRoleType.value);
+  if (module.id === 'workflow') return canManageWorkflows.value;
+  if (module.id === 'educationSync') return hasPermission('edu:sync:manage') && ['super_admin', 'school_admin'].includes(currentRoleType.value);
   if (module.id === 'teachingPlanCenter') return hasPermission('teaching_plan:view') && ['super_admin', 'school_admin', 'college_admin'].includes(currentRoleType.value);
   if (module.source === 'menu') {
     return isLoggedIn.value && module.menu?.visible !== 'false';
@@ -6405,8 +6559,8 @@ function syllabusGuideListConfig(listKey, filename) {
   };
 }
 
-const internshipListConfigs = computed(() => ({
-  baseFlows: {
+const internshipListConfigs = reactive({
+  baseFlows: computed(() => ({
     listKey: 'baseFlows',
     filename: '基地统计',
     filters: internshipListFilters('baseFlows', [
@@ -6431,10 +6585,10 @@ const internshipListConfigs = computed(() => ({
       { prop: 'status', label: '启用状态', width: 148, tooltip: false, tag: true, tagType: row => row.status === 'enabled' ? 'success' : 'info', formatter: row => row.status === 'enabled' ? '启用' : '停用' },
       { prop: 'created_at', label: '创建时间', width: 168 },
     ],
-  },
-  baseApplications: baseManagementFlowConfig('baseApplications', 'application', '基地申报'),
-  baseUsage: baseManagementFlowConfig('baseUsage', 'usage', '基地审批'),
-  arrangements: {
+  })),
+  baseApplications: computed(() => baseManagementFlowConfig('baseApplications', 'application', '基地申报')),
+  baseUsage: computed(() => baseManagementFlowConfig('baseUsage', 'usage', '基地审批')),
+  arrangements: computed(() => ({
     listKey: 'arrangements',
     filename: '实习任务',
     filters: internshipListFilters('arrangements', ['grade_id', 'dep_id', 'profession_id', 'plan_id', 'type', 'organize_mode', 'status', 'keyword']),
@@ -6458,8 +6612,8 @@ const internshipListConfigs = computed(() => ({
       { key: 'scope', label: '范围', minWidth: 190, formatter: row => arrangementScopeText(row) },
       { prop: 'status', label: '状态', width: 90, tag: true, tagType: row => statusTagType(row.status), formatter: row => statusText(row.status) },
     ],
-  },
-  arrangementChanges: {
+  })),
+  arrangementChanges: computed(() => ({
     listKey: 'arrangementChanges',
     filename: '任务变更',
     filters: internshipListFilters('arrangementChanges', ['grade_id', 'dep_id', 'profession_id', 'arrangement_id', 'status', 'keyword']),
@@ -6480,8 +6634,8 @@ const internshipListConfigs = computed(() => ({
       { prop: 'review_opinion', label: '审核意见', minWidth: 180 },
       { prop: 'status', label: '状态', width: 90, tag: true, tagType: row => statusTagType(row.status), formatter: row => statusText(row.status) },
     ],
-  },
-  applications: {
+  })),
+  applications: computed(() => ({
     listKey: 'applications',
     filename: '实习方式申请',
     filters: internshipListFilters('applications', ['grade_id', 'dep_id', 'profession_id', 'class_id', 'status', 'keyword']),
@@ -6497,8 +6651,8 @@ const internshipListConfigs = computed(() => ({
       { key: 'admin_status', label: '管理审核', width: 100, formatter: row => statusText(row.admin_status) },
       { prop: 'created_at', label: '提交时间', width: 168 },
     ],
-  },
-  plans: {
+  })),
+  plans: computed(() => ({
     listKey: 'plans',
     filename: '计划表',
     filters: internshipPlanFilters(),
@@ -6523,8 +6677,8 @@ const internshipListConfigs = computed(() => ({
       { prop: 'status', label: '状态', width: 90, tag: true, tagType: row => statusTagType(row.status), formatter: row => statusText(row.status) },
       { prop: 'created_at', label: '提交时间', width: 168 },
     ],
-  },
-  pairs: {
+  })),
+  pairs: computed(() => ({
     listKey: 'pairs',
     filename: '任务绑定',
     filters: internshipListFilters('pairs', ['grade_id', 'dep_id', 'profession_id', 'class_id', 'status', 'keyword']),
@@ -6542,8 +6696,8 @@ const internshipListConfigs = computed(() => ({
       { prop: 'status', label: '状态', width: 90, tag: true, tagType: row => statusTagType(row.status), formatter: row => statusText(row.status) },
       { prop: 'created_at', label: '创建时间', width: 168 },
     ],
-  },
-  signIns: {
+  })),
+  signIns: computed(() => ({
     listKey: 'signIns',
     filename: '签到记录',
     filters: internshipListFilters('signIns', ['grade_id', 'dep_id', 'profession_id', 'class_id', 'arrangement_id', 'keyword']),
@@ -6557,8 +6711,8 @@ const internshipListConfigs = computed(() => ({
       { prop: 'location', label: '地点', minWidth: 150 },
       { key: 'sign_type', label: '方式', width: 90, formatter: row => signTypeText(row.sign_type) },
     ],
-  },
-  journals: {
+  })),
+  journals: computed(() => ({
     listKey: 'journals',
     filename: '实习日志',
     filters: internshipListFilters('journals', ['grade_id', 'dep_id', 'profession_id', 'class_id', 'arrangement_id', 'status', 'keyword']),
@@ -6570,8 +6724,8 @@ const internshipListConfigs = computed(() => ({
       { prop: 'status', label: '状态', width: 90, tag: true, tagType: row => statusTagType(row.status), formatter: row => statusText(row.status) },
       { prop: 'content', label: '内容摘要', minWidth: 220, formatter: row => contentSummary(row.content) },
     ],
-  },
-  reports: {
+  })),
+  reports: computed(() => ({
     listKey: 'reports',
     filename: '实习报告',
     filters: internshipListFilters('reports', ['grade_id', 'dep_id', 'profession_id', 'class_id', 'arrangement_id', 'status', 'keyword']),
@@ -6583,8 +6737,8 @@ const internshipListConfigs = computed(() => ({
       { prop: 'submitted_at', label: '提交时间', width: 168 },
       { prop: 'content', label: '内容摘要', minWidth: 240, formatter: row => contentSummary(row.content) },
     ],
-  },
-  delays: {
+  })),
+  delays: computed(() => ({
     listKey: 'delays',
     filename: '延期申请',
     filters: internshipListFilters('delays', ['grade_id', 'dep_id', 'profession_id', 'class_id', 'arrangement_id', 'config_key', 'status', 'keyword']),
@@ -6599,8 +6753,8 @@ const internshipListConfigs = computed(() => ({
       { prop: 'status', label: '状态', width: 90, tag: true, tagType: row => statusTagType(row.status), formatter: row => statusText(row.status) },
       { prop: 'created_at', label: '申请时间', width: 168 },
     ],
-  },
-  scores: {
+  })),
+  scores: computed(() => ({
     listKey: 'scores',
     filename: '实习成绩',
     filters: internshipListFilters('scores', ['grade_id', 'dep_id', 'profession_id', 'class_id', 'arrangement_id', 'keyword']),
@@ -6616,8 +6770,8 @@ const internshipListConfigs = computed(() => ({
       { prop: 'final_score', label: '总评', width: 90 },
       { prop: 'teacher_name', label: '评分人', width: 110 },
     ],
-  },
-  courseScores: {
+  })),
+  courseScores: computed(() => ({
     listKey: 'courseScores',
     filename: '课程成绩汇总',
     filters: internshipListFilters('courseScores', ['grade_id', 'dep_id', 'profession_id', 'class_id', 'plan_id', 'keyword']),
@@ -6637,8 +6791,8 @@ const internshipListConfigs = computed(() => ({
       { prop: 'manual_score_updated_at', label: '核定时间', width: 168 },
       { prop: 'class_name', label: '班级', minWidth: 130 },
     ],
-  },
-  archiveMaterials: {
+  })),
+  archiveMaterials: computed(() => ({
     listKey: 'archiveMaterials',
     filename: '归档材料',
     filters: internshipListFilters('archiveMaterials', ['grade_id', 'dep_id', 'profession_id', 'archive_status', 'keyword']),
@@ -6654,8 +6808,8 @@ const internshipListConfigs = computed(() => ({
       { prop: 'material_progress', label: '归档进度', width: 100 },
       { prop: 'archive_status_text', label: '归档状态', width: 100 },
     ],
-  },
-  insurances: {
+  })),
+  insurances: computed(() => ({
     listKey: 'insurances',
     filename: '保险记录',
     filters: internshipListFilters('insurances', ['grade_id', 'dep_id', 'profession_id', 'class_id', 'arrangement_id', 'keyword']),
@@ -6669,8 +6823,8 @@ const internshipListConfigs = computed(() => ({
       { prop: 'start_date', label: '开始', width: 110 },
       { prop: 'end_date', label: '结束', width: 110 },
     ],
-  },
-  safetyLetters: {
+  })),
+  safetyLetters: computed(() => ({
     listKey: 'safetyLetters',
     filename: '安全承诺',
     filters: internshipListFilters('safetyLetters', ['grade_id', 'dep_id', 'profession_id', 'class_id', 'arrangement_id', 'keyword']),
@@ -6682,10 +6836,10 @@ const internshipListConfigs = computed(() => ({
       { prop: 'signed_at', label: '签署时间', minWidth: 160 },
       { key: 'status', label: '状态', width: 90, formatter: row => statusText(row.status) },
     ],
-  },
-  syllabuses: syllabusGuideListConfig('syllabuses', '实习大纲'),
-  guides: syllabusGuideListConfig('guides', '实习指导书'),
-  implementationSheets: {
+  })),
+  syllabuses: computed(() => syllabusGuideListConfig('syllabuses', '实习大纲')),
+  guides: computed(() => syllabusGuideListConfig('guides', '实习指导书')),
+  implementationSheets: computed(() => ({
     listKey: 'implementationSheets',
     filename: '实习实施',
     filters: internshipListFilters('implementationSheets', ['grade_id', 'dep_id', 'profession_id', 'plan_id', 'type', 'organize_mode', 'status', 'keyword']),
@@ -6703,8 +6857,8 @@ const internshipListConfigs = computed(() => ({
       { prop: 'location', label: '实施地点', minWidth: 150 },
       { prop: 'status', label: '状态', width: 90, tag: true, tagType: row => statusTagType(row.status), formatter: row => statusText(row.status) },
     ],
-  },
-  teacherWorkReports: {
+  })),
+  teacherWorkReports: computed(() => ({
     listKey: 'teacherWorkReports',
     filename: '实习指导教师工作报告',
     filters: internshipListFilters('teacherWorkReports', ['grade_id', 'dep_id', 'profession_id', 'arrangement_id', 'status', 'keyword']),
@@ -6719,8 +6873,8 @@ const internshipListConfigs = computed(() => ({
       { prop: 'status', label: '状态', width: 90, tag: true, tagType: row => statusTagType(row.status), formatter: row => statusText(row.status) },
       { prop: 'created_at', label: '提交时间', width: 168 },
     ],
-  },
-  inspections: {
+  })),
+  inspections: computed(() => ({
     listKey: 'inspections',
     filename: '实习巡查记录',
     filters: internshipListFilters('inspections', ['grade_id', 'dep_id', 'profession_id', 'class_id', 'arrangement_id', 'result', 'keyword']),
@@ -6736,8 +6890,8 @@ const internshipListConfigs = computed(() => ({
       { prop: 'remark', label: '说明', minWidth: 220 },
       { prop: 'created_at', label: '记录时间', width: 168 },
     ],
-  },
-}));
+  })),
+});
 
 function internshipRolePanelName(key) {
   if (!isStudentRole.value) {
@@ -6772,7 +6926,7 @@ function internshipSidebarItemVisible(item) {
   if (!isStudentRole.value) {
     return !item.studentOnly;
   }
-  return ['overview', 'arrangements', 'requests', 'signIns', 'journals', 'reports', 'studentChanges', 'scores', 'courseScores', 'documents'].includes(item.key);
+  return ['overview', 'arrangements', 'requests', 'signIns', 'journals', 'reports', 'studentChanges', 'insurances', 'scores', 'courseScores', 'documents'].includes(item.key);
 }
 
 function isInternshipReadOnlyListPanel(panel) {
@@ -7724,7 +7878,9 @@ async function submitMessageTemplate() {
       status: form.status,
       sort: Number(form.sort || 100),
       is_system: form.is_system,
-      channels: ['internal', ...((form.channels || []).includes('wechat') ? ['wechat'] : [])],
+      ...(!form.id || form.channels.length !== form.saved_channels.length || form.channels.some(channel => !form.saved_channels.includes(channel))
+        ? { channels: form.channels }
+        : {}),
     });
     messageState.templateEdit.visible = false;
     await loadMessageTemplates(messageState.templatePagination.page || 1);
@@ -7866,7 +8022,7 @@ function decorateModule(module) {
 }
 
 function moduleDisplayName(module) {
-  if (['dataManage', 'baseVisits', 'baseVisitRecords'].includes(module.id)) {
+  if (['dataManage', 'baseVisits', 'baseVisitRecords', 'educationSync', 'workflow', 'iamConfig'].includes(module.id)) {
     return module.name;
   }
   const item = permissionState.menus.find(menu => moduleMatchesMenu(module, menu));
@@ -7959,14 +8115,17 @@ let teachingPlanTargetRequest = 0;
 function consumeTeachingPlanTarget(win, token) {
   if (Number.isInteger(token) && token > 0 && win.teachingPlanTarget?.token === token) win.teachingPlanTarget = null;
 }
-async function openTeachingPlanTarget(item) {
+async function openTeachingPlanTarget(item, fromCandidate = false) {
   const version = ++teachingPlanTargetRequest;
   const session = workspaceContextKey.value;
-  const current = () => version === teachingPlanTargetRequest && session === workspaceContextKey.value;
+  const current = () => version === teachingPlanTargetRequest && session === workspaceContextKey.value && !workspaceFrozen.value && !desktopIsLocked.value;
   try {
-    const detail = await request(`/teaching-plan-center/detail?id=${encodeURIComponent(item.source_id || item.id)}`);
+    const detailUrl = fromCandidate
+      ? `/edu-data/candidate-target?id=${encodeURIComponent(item.id)}`
+      : `/teaching-plan-center/detail?id=${encodeURIComponent(item.source_id || item.id)}`;
+    const detail = await request(detailUrl);
     if (!current()) return;
-    if (!detail.target_id || Number(detail.target_id) !== Number(item.target_id)) throw new Error('计划绑定已变化，请刷新中心后重试');
+    if (!detail.target_id || Number(detail.target_id) !== Number(item.target_id)) throw new Error('计划绑定已变化，请刷新后重试');
     const type = detail.target_type || detail.classification;
     const moduleId = type === 'internship' ? 'internship' : type === 'social_practice' ? 'socialPractice' : ['lab', 'training'].includes(type) ? 'practice' : '';
     const module = modules.find(value => value.id === moduleId);
@@ -7977,20 +8136,21 @@ async function openTeachingPlanTarget(item) {
     const win = openWindows.find(value => value.module.id === moduleId);
     if (!win) return;
     win.panel = 'plans';
+    const targetIsCurrent = () => current() && openWindows.includes(win) && !win.minimized && win.panel === 'plans';
     if (moduleId === 'socialPractice') {
       win.teachingPlanTarget = { id: Number(detail.target_id), token: version };
       return;
     }
     if (moduleId === 'internship') {
-      await loadInternshipFoundation();
-      if (!current()) return;
+      await loadInternshipOptions();
+      if (!targetIsCurrent()) return;
       internshipState.filters.plans.keyword = row.course_code || row.course_name || '';
       if (canEditInternshipPlan(row)) openPlanDialog(row);
       else openPlanDetail(row);
     } else {
       practiceModuleState('practice').module_type = type;
-      await loadPracticeFoundation('practice');
-      if (!current()) return;
+      await loadPracticeOptions('practice');
+      if (!targetIsCurrent()) return;
       practiceModuleState('practice').filters.plans.keyword = row.title || row.course_name || '';
       if (showPracticeRowEdit('practice', 'plans', row)) await openPracticeDialog('practice', 'plans', row);
       else await openPracticeTimelineDialog('practice', 'plans', row);
@@ -8046,7 +8206,7 @@ async function editDesktopModule(module) {
   if (win) win.panel = 'menuManage';
   await loadAdminFoundation();
   if (source !== workspaceContextKey.value || workspaceFrozen.value || !canManageConfig.value) return;
-  const row = adminState.menus.find(item => Number(item.id) === Number(module.menuId));
+  const row = adminState.menu.items.find(item => Number(item.id) === Number(module.menuId));
   if (row) openMenuDialog(row);
   else ElMessage.error('模块配置不存在或没有编辑权限');
 }
@@ -8069,17 +8229,21 @@ function editDesktopContextModule() {
   if (module) editDesktopModule(module);
 }
 
-function openExpenseFromWorkflowInbox(expenseId) {
+function openExpenseFromWorkflowInbox(item) {
   const module = modules.find(item => item.id === 'expenseManage');
   if (!module) return;
-  expenseInboxSelection.value = 0;
-  openModule(module, { skipOpenPreference: true });
-  nextTick(() => { expenseInboxSelection.value = Number(expenseId || 0); });
+  expenseInboxSelection.value = null;
+  if (hasPermission('expense:view')) openModule(module, { skipOpenPreference: true });
+  else openModuleWindow(decorateModule(module), { reuse: true });
+  const workspace = workspaceContextKey.value;
+  nextTick(() => {
+    if (workspace === workspaceContextKey.value) expenseInboxSelection.value = item;
+  });
 }
 
 function setDesktopStyle(style) {
-  desktopStyleMode.value = style === 'mac' ? 'mac' : 'windows';
-  localStorage.setItem('practical:desktop-style', desktopStyleMode.value);
+  preferredDesktopStyle.value = style === 'mac' ? 'mac' : 'windows';
+  localStorage.setItem('practical:desktop-style', preferredDesktopStyle.value);
 }
 
 function openNotebook() {
@@ -8735,7 +8899,7 @@ function openWallpaperSettings() {
 
 function focusWindow(id) {
   const win = openWindows.find(item => item.id === id);
-  if (!win) {
+  if (!win || (focusedWindowId.value === id && win.zIndex === zIndexSeed.value)) {
     return;
   }
   win.zIndex = ++zIndexSeed.value;
@@ -8834,10 +8998,7 @@ async function handleHashNavigation() {
       }
       if (win) {
         win.minimized = false;
-        focusWindow(win.id);
-        nextTick(() => {
-          window.setTimeout(() => activateWindowPanel(win, panel), 50);
-        });
+        activateWindowPanel(win, panel);
         clearNavigationHash();
       }
     }
@@ -8881,7 +9042,6 @@ function activateWindowPanel(win, panel) {
   }
   win.panel = panel;
   focusWindow(win.id);
-
 }
 
 function focusLogin() {
@@ -9241,6 +9401,7 @@ async function submitLogout() {
       workspaceFrozen.value = false;
       await loadLoginPageSettings();
       await loadRegisterOptions();
+      await loadIamOptions();
     });
   } catch (error) {
     loginState.message = error.message;
@@ -10076,6 +10237,10 @@ async function handleMenuIconSelected(file) {
   if (!file) {
     return;
   }
+  if (!/\.(?:jpe?g|png|webp|gif)$/i.test(file.name)) {
+    ElMessage.warning('请选择 JPG、PNG、WebP 或 GIF 格式的图标');
+    return;
+  }
   adminState.menu.iconUploading = true;
   adminState.menu.message = '';
   try {
@@ -10151,8 +10316,9 @@ async function loadAdminFoundation(force = false) {
   const key = internshipFoundationSessionKey();
   if (!force && adminFoundationCache.key === key) {
     if (adminFoundationCache.promise) return adminFoundationCache.promise;
-    if (Date.now() - adminFoundationCache.loadedAt < 60000) return;
+    if (Date.now() - adminFoundationCache.loadedAt < 60000) return true;
   }
+  adminFoundationCache.loadedAt = 0;
   adminState.loading = true;
   const pending = (async () => {
     try {
@@ -10172,6 +10338,7 @@ async function loadAdminFoundation(force = false) {
       adminState.options.companies = optionsData.companies || [];
       if (!adminState.roleMenus.role_id) adminState.roleMenus.role_id = adminState.roles[0]?.id || null;
       adminFoundationCache.loadedAt = Date.now();
+      return true;
     } catch (error) {
       if (adminFoundationCache.promise === pending && key === internshipFoundationSessionKey()) {
         adminState.roleMenus.message = error.message;
@@ -10189,55 +10356,72 @@ async function loadAdminFoundation(force = false) {
   return pending;
 }
 
-async function loadRolePermissions() {
-  if (!adminState.roleMenus.role_id || !canManageConfig.value) {
+async function loadRolePermissions(refreshMenus = false) {
+  const panel = adminState.roleMenus;
+  const revision = ++roleMenuRequest;
+  const session = internshipFoundationSessionKey();
+  const roleId = panel.role_id;
+  Object.assign(panel, { loaded_role_id: null, saved_menu_ids: [], menu_ids: [], permissions: [], loading: false, message: '' });
+  if (!roleId || !canManageConfig.value) {
     return;
   }
 
-  adminState.roleMenus.loading = true;
-  adminState.roleMenus.message = '';
+  const current = () => revision === roleMenuRequest && session === internshipFoundationSessionKey() && panel.role_id === roleId;
+  panel.loading = true;
   try {
-    const data = await fetchRolePermissions(adminState.roleMenus.role_id);
-    adminState.roleMenus.menu_ids = data.menu_ids || [];
-    adminState.roleMenus.permissions = data.permissions || [];
-    await nextTick();
-    activeRoleTree()?.setCheckedKeys(adminState.roleMenus.menu_ids);
+    if (refreshMenus && !await loadAdminFoundation(true)) return;
+    if (!current()) return;
+    const data = await fetchRolePermissions(roleId);
+    if (!current()) return;
+    if (Number(data.role_id) !== Number(roleId)) throw new Error('返回的角色与所选角色不一致，请重新读取');
+    panel.menu_ids = (data.menu_ids || []).map(Number);
+    panel.saved_menu_ids = panel.menu_ids;
+    panel.permissions = data.permissions || [];
+    panel.loaded_role_id = roleId;
+    panel.message = '';
   } catch (error) {
-    adminState.roleMenus.message = error.message;
+    if (current()) panel.message = error.message;
   } finally {
-    adminState.roleMenus.loading = false;
+    if (current()) panel.loading = false;
   }
+}
+
+function updateRoleMenuSelection(_node, { checkedKeys }) {
+  if (!roleMenusReady.value || adminState.roleMenus.saving) return;
+  adminState.roleMenus.menu_ids = checkedKeys.map(Number);
 }
 
 async function saveRoleMenuConfig() {
-  const tree = activeRoleTree();
-  if (!adminState.roleMenus.role_id || !tree) {
+  const panel = adminState.roleMenus;
+  if (!roleMenusReady.value || panel.saving || !canManageConfig.value) return;
+  if (panel.menu_ids.length === panel.saved_menu_ids.length && panel.menu_ids.every(id => panel.saved_menu_ids.includes(id))) {
+    panel.message = '角色权限没有改动';
     return;
   }
 
-  adminState.roleMenus.loading = true;
-  adminState.roleMenus.message = '';
+  const roleId = panel.loaded_role_id;
+  const revision = roleMenuRequest;
+  const session = internshipFoundationSessionKey();
+  const current = () => revision === roleMenuRequest && session === internshipFoundationSessionKey() && panel.role_id === roleId;
+  panel.saving = true;
+  panel.message = '';
   try {
-    const checked = tree.getCheckedKeys(false);
-    const halfChecked = tree.getHalfCheckedKeys();
     const data = await saveRoleMenus({
-      role_id: adminState.roleMenus.role_id,
-      menu_ids: Array.from(new Set([...checked, ...halfChecked])).map(Number),
+      role_id: roleId,
+      menu_ids: panel.menu_ids,
     });
-    adminState.roleMenus.menu_ids = data.menu_ids || [];
-    adminState.roleMenus.permissions = data.permissions || [];
-    adminState.roleMenus.message = '已保存';
+    if (!current()) return;
+    if (Number(data.role_id) !== Number(roleId)) throw new Error('返回的角色与保存的角色不一致，请重新读取');
+    panel.menu_ids = (data.menu_ids || []).map(Number);
+    panel.saved_menu_ids = panel.menu_ids;
+    panel.permissions = data.permissions || [];
+    panel.message = '已保存';
     await load();
   } catch (error) {
-    adminState.roleMenus.message = error.message;
+    if (current()) panel.message = error.message;
   } finally {
-    adminState.roleMenus.loading = false;
+    if (session === internshipFoundationSessionKey()) panel.saving = false;
   }
-}
-
-function activeRoleTree() {
-  const tree = roleTreeRef.value;
-  return Array.isArray(tree) ? tree.at(-1) : tree;
 }
 
 function handleScopeAccountChange(account) {
@@ -10453,7 +10637,28 @@ function isArchiveManageWindow(win) {
   return Boolean(win && (archiveManageModules[win.module.id] || (win.module.id === 'config' && archiveManagePanels[win.panel])));
 }
 
-function openArchiveDialog(type, row = null) {
+function archiveUsesOrganizationOptions(type) {
+  return type === 'profession' || type === 'class';
+}
+
+function archiveEditorLoading(win) {
+  return adminState.loading && archiveUsesOrganizationOptions(archiveTypeForWindow(win));
+}
+
+async function openArchiveDialog(win, row = null) {
+  const type = archiveTypeForWindow(win);
+  if (archiveUsesOrganizationOptions(type)) {
+    const scope = workspaceContextKey.value;
+    const focus = focusedWindowId.value;
+    const ready = await loadAdminFoundation();
+    if (scope !== workspaceContextKey.value || focus !== focusedWindowId.value
+      || workspaceFrozen.value || desktopIsLocked.value || wechatBlocked.value
+      || !openWindows.includes(win) || win.minimized || !isArchiveManageWindow(win) || archiveTypeForWindow(win) !== type) return;
+    if (!ready) {
+      archiveStateByType(type).message = '读取关联选项失败，请重试。';
+      return;
+    }
+  }
   if (row) {
     editArchiveItem(type, row);
   } else {
@@ -10865,17 +11070,15 @@ async function loadStats(page = 1) {
   statState.loading = true;
   statState.message = '';
   try {
-    await loadInternshipFoundation();
+    if (isPracticeScoreSheetReport()) {
+      practiceModuleState('practice').module_type = statState.filters.module_type || 'all';
+      await loadPracticeOptions('practice');
+    } else {
+      await loadInternshipOptions();
+    }
     if (!current()) return;
     applyAcademicDefaults(statState.filters, organizationScopeDefaults(statAcademicOptions()));
     normalizeStatCascade();
-    if (isPracticeScoreSheetReport()) {
-      practiceModuleState('practice').module_type = statState.filters.module_type || 'all';
-      await loadPracticeFoundation('practice');
-      if (!current()) return;
-      applyAcademicDefaults(statState.filters, organizationScopeDefaults(statAcademicOptions()));
-      normalizeStatCascade();
-    }
     const data = await fetchInternshipStats(statQueryParams(page));
     if (!current()) return;
     statState.cards = data.cards || [];
@@ -11570,6 +11773,7 @@ function emptyPracticeForm(row = {}) {
 }
 
 function emptyPracticeExecutionForm(row = {}) {
+  const attachmentIds = Array.isArray(row.attachment_ids) ? row.attachment_ids.map(Number) : [];
   return {
     id: row.id || null,
     project_id: row.project_id || row.entity_id || null,
@@ -11578,6 +11782,12 @@ function emptyPracticeExecutionForm(row = {}) {
     date: row.date || '',
     content: row.content || '',
     reflection_summary: row.reflection_summary || '',
+    attachment_ids: attachmentIds,
+    attachments: attachmentIds.map(id => {
+      const file = (row.attachments || []).find(item => Number(item.file_id || item.id) === id);
+      return { file_id: id, name: file?.name || `附件 ${id}`, url: file?.url || '' };
+    }),
+    report_ready: Boolean(row.id),
     location: row.location || '',
     longitude: row.longitude || '',
     latitude: row.latitude || '',
@@ -11912,7 +12122,7 @@ function showPracticeRowEdit(module, panel, row) {
     return isStudentRole.value && ['draft', 'modify'].includes(row?.status || '');
   }
   if (isTeacherRole.value && panel === 'lessonPlans') {
-    return canManagePractice(module) && Number(row?.submitter_id || 0) === Number(permissionState.context.account_id || 0)
+    return canManagePractice(module) && Number(row?.submitter_id || 0) === Number(businessAccountId.value || 0)
       && ['draft', 'modify'].includes(row?.status || '');
   }
   if (isTeacherRole.value && panel === 'scores') {
@@ -11975,6 +12185,14 @@ function practiceRatioText(value) {
 }
 
 function practiceListConfig(module, panel) {
+  const key = `${module}:${panel}`;
+  if (!practiceListConfigs.has(key)) {
+    practiceListConfigs.set(key, computed(() => buildPracticeListConfig(module, panel)));
+  }
+  return practiceListConfigs.get(key).value;
+}
+
+function buildPracticeListConfig(module, panel) {
   const commonFilters = ['module_type', 'grade_id', 'dep_id', 'profession_id', 'status', 'keyword'];
   const filters = practiceFilters(module, panel, panel === 'schedules'
     ? ['module_type', 'grade_id', 'dep_id', 'profession_id', 'plan_id', 'place_type', 'status', 'keyword']
@@ -12145,22 +12363,22 @@ function practiceFilterDefinitions(module, panel, keys) {
   const options = practiceModuleState(module).options;
   const values = practiceModuleState(module).filters[panel] || {};
   const definitions = {
-    module_type: { key: 'module_type', label: '类别', type: 'select', options: practiceReadModuleTypeOptions() },
-    keyword: { key: 'keyword', label: '关键词', placeholder: '标题、课程、学生、内容' },
-    grade_id: { key: 'grade_id', label: '年级', type: 'select', options: optionItems(options.grades, 'grade_id', 'grade_name') },
-    dep_id: { key: 'dep_id', label: '学院', type: 'select', options: optionItems(filterAcademicDepartments(options, values), 'dep_id', 'dep_name') },
-    profession_id: { key: 'profession_id', label: '专业', type: 'select', options: optionItems(filterAcademicProfessions(options, values), 'profession_id', 'profession_name') },
-    class_id: { key: 'class_id', label: '班级', type: 'select', options: optionItems(filterAcademicClasses(options, values), 'class_id', 'class_name') },
-    plan_id: { key: 'plan_id', label: '教学计划', type: 'select', options: optionItems(filterAcademicItems(options.plans, values, ['grade_id', 'dep_id', 'profession_id', 'class_id']), 'id', 'title') },
-    project_id: { key: 'project_id', label: '项目', type: 'select', options: optionItems(filterAcademicItems(options.projects || [], values, ['grade_id', 'dep_id', 'profession_id', 'class_id', 'plan_id']), 'id', 'title') },
-    schedule_id: { key: 'schedule_id', label: '课表', type: 'select', options: optionItems(filterAcademicItems(options.schedules, values, ['grade_id', 'dep_id', 'profession_id', 'class_id', 'plan_id']), 'id', 'title') },
-    room_id: { key: 'room_id', label: '场地', type: 'select', options: optionItems(options.rooms, 'id', 'name') },
-    place_type: { key: 'place_type', label: '地点类型', type: 'select', options: practicePlaceTypeOptions() },
-    source_type: { key: 'source_type', label: '来源', type: 'select', options: practiceSourceTypeOptions() },
-    status: { key: 'status', label: '状态', type: 'select', options: statusOptions() },
-    date: { key: 'date', label: '日期', placeholder: 'YYYY-MM-DD' },
+    module_type: () => ({ key: 'module_type', label: '类别', type: 'select', options: practiceReadModuleTypeOptions() }),
+    keyword: () => ({ key: 'keyword', label: '关键词', placeholder: '标题、课程、学生、内容' }),
+    grade_id: () => ({ key: 'grade_id', label: '年级', type: 'select', options: optionItems(options.grades, 'grade_id', 'grade_name') }),
+    dep_id: () => ({ key: 'dep_id', label: '学院', type: 'select', options: optionItems(filterAcademicDepartments(options, values), 'dep_id', 'dep_name') }),
+    profession_id: () => ({ key: 'profession_id', label: '专业', type: 'select', options: optionItems(filterAcademicProfessions(options, values), 'profession_id', 'profession_name') }),
+    class_id: () => ({ key: 'class_id', label: '班级', type: 'select', options: optionItems(filterAcademicClasses(options, values), 'class_id', 'class_name') }),
+    plan_id: () => ({ key: 'plan_id', label: '教学计划', type: 'select', options: optionItems(filterAcademicItems(options.plans, values, ['grade_id', 'dep_id', 'profession_id', 'class_id']), 'id', 'title') }),
+    project_id: () => ({ key: 'project_id', label: '项目', type: 'select', options: optionItems(filterAcademicItems(options.projects || [], values, ['grade_id', 'dep_id', 'profession_id', 'class_id', 'plan_id']), 'id', 'title') }),
+    schedule_id: () => ({ key: 'schedule_id', label: '课表', type: 'select', options: optionItems(filterAcademicItems(options.schedules, values, ['grade_id', 'dep_id', 'profession_id', 'class_id', 'plan_id']), 'id', 'title') }),
+    room_id: () => ({ key: 'room_id', label: '场地', type: 'select', options: optionItems(options.rooms, 'id', 'name') }),
+    place_type: () => ({ key: 'place_type', label: '地点类型', type: 'select', options: practicePlaceTypeOptions() }),
+    source_type: () => ({ key: 'source_type', label: '来源', type: 'select', options: practiceSourceTypeOptions() }),
+    status: () => ({ key: 'status', label: '状态', type: 'select', options: statusOptions() }),
+    date: () => ({ key: 'date', label: '日期', placeholder: 'YYYY-MM-DD' }),
   };
-  return keys.map(key => definitions[key]).filter(Boolean);
+  return keys.map(key => definitions[key]?.()).filter(Boolean);
 }
 
 function practiceSourceTypeOptions() {
@@ -12190,6 +12408,10 @@ function practiceSourceText(value) {
 
 function practiceProfessionOptions(module) {
   const state = practiceModuleState(module);
+  if (state.dialog.panel === 'plans') {
+    const { professions, classes, students } = state.options;
+    return filterAcademicProfessions({ professions, classes, students }, state.form);
+  }
   return filterAcademicProfessions(state.options, state.form);
 }
 
@@ -12242,6 +12464,7 @@ function handlePracticePlanChange(module) {
   if (state.dialog.panel === 'gradeRules') {
     syncPracticeGradeRuleProjects(module);
   }
+  if (state.dialog.panel === 'projects') normalizePracticeSchedule(module);
 }
 
 function handlePracticePlaceTypeChange(module) {
@@ -12298,7 +12521,9 @@ function practiceBaseOptions(module) {
 
 function practiceScheduleOptions(module) {
   const state = practiceModuleState(module);
-  return filterAcademicItems(practiceItemsByModuleType(state.options.schedules, state.form.module_type), state.form, ['grade_id', 'dep_id', 'profession_id']);
+  const schedules = practiceItemsByModuleType(state.options.schedules, state.form.module_type)
+    .filter(item => !state.form.plan_id || Number(item.plan_id) === Number(state.form.plan_id));
+  return filterAcademicItems(schedules, state.form, ['grade_id', 'dep_id', 'profession_id']);
 }
 
 function practiceRoomOptions(module) {
@@ -12321,12 +12546,71 @@ function practiceScoreProjectOptions(module) {
   return projects.filter(project => Number(project.teacher_id || 0) === teacherId);
 }
 
-function changePracticeExecutionProject(module) {
+async function changePracticeExecutionProject(module) {
   const state = practiceModuleState(module);
-  const project = practiceProjectOptions(module).find(item => Number(item.id) === Number(state.form.project_id || 0));
+  const { form, dialog } = state;
+  const project = practiceProjectOptions(module).find(item => Number(item.id) === Number(form.project_id || 0));
   if (project?.module_type) {
-    state.form.module_type = project.module_type;
+    form.module_type = project.module_type;
   }
+  if (dialog.panel !== 'reports' || form.id) return;
+  Object.assign(form, { report_ready: false, attachment_ids: [], attachments: [] });
+  if (!project) return;
+  const session = internshipFoundationSessionKey();
+  const current = () => state.form === form && state.dialog === dialog && session === internshipFoundationSessionKey();
+  state.loading = true;
+  state.message = '';
+  try {
+    const data = await fetchPracticeExecutionList(form.module_type, 'report', { project_id: project.id, page: 1, page_size: 1 });
+    if (!current()) return;
+    const existing = data.items?.find(item => Number(item.project_id || item.entity_id) === Number(project.id));
+    if (existing && !['draft', 'modify'].includes(existing.status)) {
+      state.message = '该项目已有已提交报告，请到项目报告列表查看';
+      return;
+    }
+    if (existing) {
+      Object.assign(form, emptyPracticeExecutionForm(existing));
+      dialog.title = '编辑项目报告';
+    }
+    form.report_ready = true;
+  } catch (error) {
+    if (current()) state.message = error.message;
+  } finally {
+    if (current()) state.loading = false;
+  }
+}
+
+async function uploadPracticeReportAttachments(module, event) {
+  const state = practiceModuleState(module);
+  const { form, dialog } = state;
+  const files = [...(event.target.files || [])];
+  event.target.value = '';
+  if (!files.length || !form.report_ready || state.loading) return;
+  const session = internshipFoundationSessionKey();
+  const current = () => state.form === form && state.dialog === dialog && session === internshipFoundationSessionKey();
+  state.message = '';
+  state.loading = true;
+  try {
+    for (const file of files) {
+      const uploaded = await uploadFile(file, { category: 'practice_report', is_temporary: 'true' });
+      if (!current()) return;
+      const id = Number(uploaded.file_id);
+      if (!form.attachment_ids.includes(id)) {
+        form.attachment_ids.push(id);
+        form.attachments.push({ file_id: id, name: uploaded.name || file.name, url: uploaded.url || '' });
+      }
+    }
+  } catch (error) {
+    if (current()) state.message = error.message;
+  } finally {
+    if (current()) state.loading = false;
+  }
+}
+
+function removePracticeReportAttachment(module, id) {
+  const { form } = practiceModuleState(module);
+  form.attachment_ids = form.attachment_ids.filter(fileId => fileId !== id);
+  form.attachments = form.attachments.filter(file => file.file_id !== id);
 }
 
 async function changePracticeScoreProject(module) {
@@ -12446,6 +12730,7 @@ function handlePracticeWriteModuleTypeChange(module) {
   if (!practiceProjectOptions(module).some(item => Number(item.id) === Number(state.form.project_id || 0))) {
     state.form.project_id = null;
   }
+  if (state.dialog.panel === 'reports' && !state.form.id) changePracticeExecutionProject(module);
 }
 
 async function handlePracticeScoreModuleTypeChange(module) {
@@ -12462,6 +12747,7 @@ function practiceScheduleLabel(schedule) {
   return [
     schedule.title || schedule.course_name || `课表 ${schedule.id}`,
     schedule.schedule_date,
+    schedule.teacher_name,
     [schedule.start_time, schedule.end_time].filter(Boolean).join('-'),
   ].filter(Boolean).join(' / ');
 }
@@ -12601,33 +12887,23 @@ function resetPracticeFilters(module, panel) {
   loadPracticePanel(module, panel, 1);
 }
 
-async function loadPracticeFoundation(module, force = false) {
+function loadPracticeOptions(module) {
   if (!hasPermission('practice:view') || wechatBlocked.value) return;
   const state = practiceModuleState(module);
   const moduleType = state.module_type;
-  const key = `${internshipFoundationSessionKey()}:${moduleType}`;
-  if (!force && practiceFoundationCache.key === key) {
-    if (practiceFoundationCache.promise) return practiceFoundationCache.promise;
-    if (practiceFoundationCache.value && Date.now() - practiceFoundationCache.loadedAt < 60000) return practiceFoundationCache.value;
-  }
-  const pending = Promise.all([fetchPracticeOverview(moduleType), fetchPracticeOptions(moduleType)]).then(([overview, options]) => {
-    if (practiceFoundationCache.promise !== pending || key !== `${internshipFoundationSessionKey()}:${state.module_type}`) return;
-    state.overview = { ...emptyPracticeOverview(), ...(overview || {}) };
-    state.options = { ...emptyPracticeOptions(), ...(options || {}) };
-    const defaults = organizationScopeDefaults(state.options);
-    Object.keys(state.filters).forEach(panel => {
-      state.filters[panel].module_type = moduleType;
-      applyAcademicDefaults(state.filters[panel], defaults);
-      normalizeFilterCascade(state.filters[panel], state.options);
-    });
-    practiceFoundationCache.value = { overview, options };
-    practiceFoundationCache.loadedAt = Date.now();
-    return practiceFoundationCache.value;
-  }).finally(() => {
-    if (practiceFoundationCache.promise === pending) practiceFoundationCache.promise = null;
-  });
-  Object.assign(practiceFoundationCache, { key, promise: pending, value: null });
-  return pending;
+  return practiceOptionsLoader.load(
+    () => `${internshipFoundationSessionKey()}:${state.module_type}`,
+    () => fetchPracticeOptions(moduleType),
+    (options) => {
+      state.options = { ...emptyPracticeOptions(), ...(options || {}) };
+      const defaults = organizationScopeDefaults(state.options);
+      Object.keys(state.filters).forEach(panel => {
+        state.filters[panel].module_type = moduleType;
+        applyAcademicDefaults(state.filters[panel], defaults);
+        normalizeFilterCascade(state.filters[panel], state.options);
+      });
+    },
+  );
 }
 
 async function loadPracticePanel(module, panel = 'overview', page = 1, forceFoundation = false) {
@@ -12636,14 +12912,29 @@ async function loadPracticePanel(module, panel = 'overview', page = 1, forceFoun
   }
   const state = practiceModuleState(module);
   const revision = ++practiceLoadRequest;
-  const key = `${internshipFoundationSessionKey()}:${state.module_type}`;
+  const moduleType = state.module_type;
+  const scope = () => `${internshipFoundationSessionKey()}:${state.module_type}`;
+  const key = scope();
   practicePanelRequests.set(panel, revision);
-  const current = () => practicePanelRequests.get(panel) === revision && key === `${internshipFoundationSessionKey()}:${state.module_type}`;
+  const current = () => practicePanelRequests.get(panel) === revision && key === scope();
   state.loading = true;
   state.message = '';
   try {
-    const foundation = await loadPracticeFoundation(module, forceFoundation);
-    if (!foundation || !current()) return;
+    if (forceFoundation) {
+      practiceOptionsLoader.clear();
+      practiceOverviewLoader.clear();
+    }
+    const optionsReady = loadPracticeOptions(module);
+    if (panel === 'overview') {
+      await waitForPanelLoads([
+        optionsReady,
+        practiceOverviewLoader.load(scope, () => fetchPracticeOverview(moduleType), (overview) => {
+          state.overview = { ...emptyPracticeOverview(), ...(overview || {}) };
+        }),
+      ]);
+      return;
+    }
+    if (!(await optionsReady) || !current()) return;
     if (panel === 'schedules' && state.schedule.view === 'board') {
       await loadPracticeScheduleWeek(module, current);
     } else if (panel === 'courseScores') {
@@ -12666,7 +12957,7 @@ async function loadPracticePanel(module, panel = 'overview', page = 1, forceFoun
         ...state.lists.courseScores.pagination,
         ...(data.pagination || {}),
       };
-    } else if (panel !== 'overview') {
+    } else {
       const data = panel === 'archives'
         ? await fetchPracticeArchives(practiceRequestModuleType(module, state.filters[panel].module_type), practiceQueryParams(module, panel, page))
         : isPracticeExecutionPanel(panel)
@@ -12680,7 +12971,7 @@ async function loadPracticePanel(module, panel = 'overview', page = 1, forceFoun
       };
     }
   } catch (error) {
-    if (current()) state.message = error.message;
+    if (revision === practiceLoadRequest && current()) state.message = error.message;
   } finally {
     if (revision === practiceLoadRequest) state.loading = false;
   }
@@ -12744,6 +13035,7 @@ async function openPracticeDialog(module, panel, row = null) {
   if (panel === 'scores') {
     await changePracticeScoreProject(module);
   }
+  if (panel === 'reports' && !row?.id) await changePracticeExecutionProject(module);
 }
 
 function closePracticeDialog(module) {
@@ -12863,10 +13155,14 @@ async function savePracticeExecutionDialog(module, workflowStatus = 'wait') {
     state.message = '提交审核前请填写反思小结';
     return;
   }
+  if (execution === 'report' && !state.form.report_ready) {
+    state.message = '请先确认该项目报告可编辑';
+    return;
+  }
   state.loading = true;
   state.message = '';
   try {
-    await savePracticeExecution(state.form.module_type, execution, {
+    const saved = await savePracticeExecution(state.form.module_type, execution, {
       id: state.form.id || undefined,
       project_id: state.form.project_id,
       student_id: state.form.student_id || undefined,
@@ -12874,13 +13170,17 @@ async function savePracticeExecutionDialog(module, workflowStatus = 'wait') {
       date: state.form.date,
       content: state.form.content,
       reflection_summary: state.form.reflection_summary,
+      ...(execution === 'report' ? { attachment_ids: state.form.attachment_ids } : {}),
       location: state.form.location,
       longitude: state.form.longitude,
       latitude: state.form.latitude,
       remark: state.form.remark,
       status: execution === 'sign_in' ? 'signed' : workflowStatus,
     });
-    closePracticeDialog(module);
+    if (execution === 'report' && workflowStatus === 'draft') {
+      state.form.id = saved.id;
+      ElMessage.success('项目报告草稿已保存');
+    } else closePracticeDialog(module);
     await loadPracticePanel(module, panel, state.lists[panel]?.pagination.page || 1, true);
   } catch (error) {
     state.message = error.message;
@@ -13027,6 +13327,7 @@ function practiceArchiveStatusText(status) {
     pending: '待审核',
     modify: '需修改',
     missing: '未提交',
+    draft: '草稿',
   }[status] || '未知';
 }
 
@@ -13291,22 +13592,29 @@ async function openPracticeTimelineDialog(module, panel, row) {
 
 async function loadPracticeDialogReviewDraft(module) {
   const state = practiceModuleState(module);
-  const { entity, panel, row } = state.dialog;
+  const dialog = state.dialog;
+  const { entity, panel, row } = dialog;
   if (!entity || !row?.id) {
     return;
   }
   const params = isPracticeExecutionPanel(panel)
     ? { execution: practiceExecutionType(panel), id: row.id }
     : { entity, id: row.id };
+  const session = internshipFoundationSessionKey();
+  const current = () => state.dialog === dialog && session === internshipFoundationSessionKey();
+  let edited = false;
+  const stopWatching = watch(() => [dialog.status, dialog.reason], () => { edited = true; }, { flush: 'sync' });
   try {
     const data = await fetchPracticeReviewDraft(practiceRequestModuleType(module, row.module_type), params);
     const draft = data.draft || null;
-    if (draft) {
-      state.dialog.status = draft.review_status || state.dialog.status;
-      state.dialog.reason = draft.opinion || '';
+    if (current() && !edited && !state.loading && draft) {
+      dialog.status = draft.review_status || dialog.status;
+      dialog.reason = draft.opinion || '';
     }
   } catch (error) {
-    state.message = error.message;
+    if (current() && !edited) state.message = error.message;
+  } finally {
+    stopWatching();
   }
 }
 
@@ -13462,31 +13770,31 @@ function hasFilterValue(value) {
 function internshipFilters(keys, values = {}, options = internshipState.options) {
   const visibleKeys = keys.filter(key => key !== 'semester'); // 暂时隐藏学期筛选，后续需要时恢复。
   const definitions = {
-    keyword: { key: 'keyword', label: '关键词', placeholder: '学生、学号、教师、标题' },
-    student_keyword: { key: 'keyword', label: '学生', placeholder: '姓名或学号' },
-    base_id: { key: 'base_id', label: '实习基地', type: 'select', options: optionItems(internshipState.options.bases, 'id', 'name') },
-    base_type: { key: 'base_type', label: '基地性质', type: 'select', options: [{ value: 'long_term', label: '长期基地' }, { value: 'temporary', label: '临时基地' }] },
-    base_category: { key: 'base_category', label: '基地类别', type: 'select', options: valueOptions(options.base_categories) },
-    is_project_approved: { key: 'is_project_approved', label: '是否立项', type: 'select', options: [{ value: '1', label: '是' }, { value: '0', label: '否' }] },
-    base_level: { key: 'base_level', label: '基地等级', type: 'select', options: valueOptions(options.base_levels) },
-    company_id: { key: 'company_id', label: '合作单位', type: 'select', options: optionItems(options.companies, 'company_id', 'company_name') },
-    declaration_year: { key: 'declaration_year', label: '申报年份', type: 'select', options: valueOptions(options.base_declaration_years) },
-    category_id: { key: 'category_id', label: '实习类别', type: 'select', options: optionItems(options.internship_categories, 'id', 'name') },
-    grade_id: { key: 'grade_id', label: '年级', type: 'select', options: optionItems(options.grades, 'grade_id', 'grade_name') },
-    graduation_cohort_id: { key: 'graduation_cohort_id', label: '毕业届次', type: 'select', options: optionItems(options.graduation_cohorts, 'cohort_id', 'cohort_name') },
-    dep_id: { key: 'dep_id', label: '学院', type: 'select', options: optionItems(filterAcademicDepartments(options, values), 'dep_id', 'dep_name') },
-    profession_id: { key: 'profession_id', label: '专业', type: 'select', options: optionItems(filterAcademicProfessions(options, values), 'profession_id', 'profession_name') },
-    class_id: { key: 'class_id', label: '班级', type: 'select', options: optionItems(filterAcademicClasses(options, values), 'class_id', 'class_name') },
-    plan_id: { key: 'plan_id', label: '实习计划', type: 'select', options: optionItems(filterAcademicItems(options.plans, values, ['grade_id', 'dep_id', 'profession_id']), 'id', 'course_name') },
-    arrangement_id: { key: 'arrangement_id', label: '实习任务', type: 'select', options: optionItems(filterAcademicItems(options.arrangements, values, ['grade_id', 'dep_id', 'profession_id', 'class_id']), 'id', 'title') },
-    config_key: { key: 'config_key', label: '延期类型', type: 'select', options: delayConfigOptions() },
-    status: { key: 'status', label: '状态', type: 'select', options: statusOptions() },
-    archive_status: { key: 'archive_status', label: '归档状态', type: 'select', options: archiveStatusOptions() },
-    result: { key: 'result', label: '巡查结果', type: 'select', options: inspectionResultOptions() },
-    type: { key: 'type', label: '类型', type: 'select', options: internshipState.options.types.map(value => ({ value, label: arrangementTypeText(value) })) },
-    organize_mode: { key: 'organize_mode', label: '组织方式', type: 'select', options: internshipState.options.organize_modes.map(value => ({ value, label: organizeModeText(value) })) },
+    keyword: () => ({ key: 'keyword', label: '关键词', placeholder: '学生、学号、教师、标题' }),
+    student_keyword: () => ({ key: 'keyword', label: '学生', placeholder: '姓名或学号' }),
+    base_id: () => ({ key: 'base_id', label: '实习基地', type: 'select', options: optionItems(internshipState.options.bases, 'id', 'name') }),
+    base_type: () => ({ key: 'base_type', label: '基地性质', type: 'select', options: [{ value: 'long_term', label: '长期基地' }, { value: 'temporary', label: '临时基地' }] }),
+    base_category: () => ({ key: 'base_category', label: '基地类别', type: 'select', options: valueOptions(options.base_categories) }),
+    is_project_approved: () => ({ key: 'is_project_approved', label: '是否立项', type: 'select', options: [{ value: '1', label: '是' }, { value: '0', label: '否' }] }),
+    base_level: () => ({ key: 'base_level', label: '基地等级', type: 'select', options: valueOptions(options.base_levels) }),
+    company_id: () => ({ key: 'company_id', label: '合作单位', type: 'select', options: optionItems(options.companies, 'company_id', 'company_name') }),
+    declaration_year: () => ({ key: 'declaration_year', label: '申报年份', type: 'select', options: valueOptions(options.base_declaration_years) }),
+    category_id: () => ({ key: 'category_id', label: '实习类别', type: 'select', options: optionItems(options.internship_categories, 'id', 'name') }),
+    grade_id: () => ({ key: 'grade_id', label: '年级', type: 'select', options: optionItems(options.grades, 'grade_id', 'grade_name') }),
+    graduation_cohort_id: () => ({ key: 'graduation_cohort_id', label: '毕业届次', type: 'select', options: optionItems(options.graduation_cohorts, 'cohort_id', 'cohort_name') }),
+    dep_id: () => ({ key: 'dep_id', label: '学院', type: 'select', options: optionItems(filterAcademicDepartments(options, values), 'dep_id', 'dep_name') }),
+    profession_id: () => ({ key: 'profession_id', label: '专业', type: 'select', options: optionItems(filterAcademicProfessions(options, values), 'profession_id', 'profession_name') }),
+    class_id: () => ({ key: 'class_id', label: '班级', type: 'select', options: optionItems(filterAcademicClasses(options, values), 'class_id', 'class_name') }),
+    plan_id: () => ({ key: 'plan_id', label: '实习计划', type: 'select', options: optionItems(filterAcademicItems(options.plans, values, ['grade_id', 'dep_id', 'profession_id']), 'id', 'course_name') }),
+    arrangement_id: () => ({ key: 'arrangement_id', label: '实习任务', type: 'select', options: optionItems(filterAcademicItems(options.arrangements, values, ['grade_id', 'dep_id', 'profession_id', 'class_id']), 'id', 'title') }),
+    config_key: () => ({ key: 'config_key', label: '延期类型', type: 'select', options: delayConfigOptions() }),
+    status: () => ({ key: 'status', label: '状态', type: 'select', options: statusOptions() }),
+    archive_status: () => ({ key: 'archive_status', label: '归档状态', type: 'select', options: archiveStatusOptions() }),
+    result: () => ({ key: 'result', label: '巡查结果', type: 'select', options: inspectionResultOptions() }),
+    type: () => ({ key: 'type', label: '类型', type: 'select', options: internshipState.options.types.map(value => ({ value, label: arrangementTypeText(value) })) }),
+    organize_mode: () => ({ key: 'organize_mode', label: '组织方式', type: 'select', options: internshipState.options.organize_modes.map(value => ({ value, label: organizeModeText(value) })) }),
   };
-  return visibleKeys.map(key => definitions[key]).filter(Boolean);
+  return visibleKeys.map(key => definitions[key]?.()).filter(Boolean);
 }
 
 function baseFlowFilters(listKey) {
@@ -13726,7 +14034,7 @@ async function handleStatFilterChange(key) {
   if (key === 'module_type') {
     statState.filters.plan_id = '';
     practiceModuleState('practice').module_type = statState.filters.module_type || 'all';
-    await loadPracticeFoundation('practice');
+    await loadPracticeOptions('practice');
     applyAcademicDefaults(statState.filters, organizationScopeDefaults(statAcademicOptions()));
   }
 
@@ -14933,6 +15241,12 @@ function openBaseFlowDialog(row = null, flowType = '') {
   loadBaseFlowBaseAvailability();
 }
 
+async function finishInsuranceRegistration() {
+  insuranceRegistrationWindow.value = '';
+  ElMessage.success('保险已登记');
+  await loadInternshipPanel('insurances', 1);
+}
+
 async function openBaseDialog(row = null, readonly = false) {
   internshipState.loading = true;
   internshipState.message = '';
@@ -14976,11 +15290,12 @@ async function submitInternshipBase(form) {
     internshipState.message = '请填写长期基地名称';
     return;
   }
+  const legacyCourses = !internshipState.baseDetail.courses?.length && String(form.service_courses || '').trim();
   if (form.base_type === 'temporary') {
     const missing = [];
     if (!String(form.address || '').trim()) missing.push('基地所在位置');
     if (!(form.profession_ids || []).length) missing.push('服务专业');
-    if (!(form.course_ids || []).length && !String(form.service_courses || '').trim()) missing.push('服务课程');
+    if (!(form.course_ids || []).length && !legacyCourses) missing.push('服务课程');
     if (!String(form.manager?.name || '').trim()) missing.push('基地负责人');
     if (missing.length) {
       internshipState.message = `请填写${missing.join('、')}`;
@@ -14994,6 +15309,7 @@ async function submitInternshipBase(form) {
   try {
     await saveInternshipBase({
       ...form,
+      course_ids: form.base_type === 'temporary' && !form.course_ids?.length && legacyCourses ? undefined : form.course_ids,
       dep_id: form.dep_id || null,
       company_id: form.company_id || null,
       area: numericOrNull(form.area),
@@ -15071,7 +15387,7 @@ async function removeSelectedBases(rows = null, panel = 'baseFlows') {
     for (const key of ['baseFlows', 'baseApplications', 'baseUsage']) {
       internshipState.lists[key].items = internshipState.lists[key].items.filter(item => !ids.includes(Number(key === 'baseFlows' ? item.id : item.base_id)));
     }
-    await loadInternshipPanel(panel, 1, true);
+    await loadInternshipPanel(panel, 1);
   } catch (error) {
     if (current()) internshipState.message = error.message;
   } finally {
@@ -15485,19 +15801,26 @@ async function openTimelineDialog(entity, row) {
 }
 
 async function loadInternshipDialogReviewDraft() {
-  const { entity, row } = internshipState.dialog;
+  const dialog = internshipState.dialog;
+  const { entity, row } = dialog;
   if (!entity || !row?.id) {
     return;
   }
+  const session = internshipFoundationSessionKey();
+  const current = () => internshipState.dialog === dialog && session === internshipFoundationSessionKey();
+  let edited = false;
+  const stopWatching = watch(() => [dialog.status, dialog.reason], () => { edited = true; }, { flush: 'sync' });
   try {
     const data = await fetchInternshipReviewDraft({ entity, id: row.id });
     const draft = data.draft || null;
-    if (draft) {
-      internshipState.dialog.status = draft.review_status || internshipState.dialog.status;
-      internshipState.dialog.reason = draft.opinion || '';
+    if (current() && !edited && !internshipState.loading && draft) {
+      dialog.status = draft.review_status || dialog.status;
+      dialog.reason = draft.opinion || '';
     }
   } catch (error) {
-    internshipState.message = error.message;
+    if (current() && !edited) internshipState.message = error.message;
+  } finally {
+    stopWatching();
   }
 }
 
@@ -15810,7 +16133,7 @@ function timelineBranchReviews(branch) {
 }
 
 function timelineBranchContent(branch) {
-  if (branch.record?.action === 'trusted_initial_accept') return '\u6559\u5b66\u8ba1\u5212\u4e2d\u5fc3\u9996\u6b21\u5bfc\u5165\u786e\u8ba4\uff0c\u539f\u59cb\u6765\u6e90\u5df2\u4fdd\u7559\uff1b\u540e\u7eed\u4fee\u6539\u9700\u91cd\u65b0\u5ba1\u6838\u3002';
+  if (branch.record?.action === 'trusted_initial_accept') return trustedImportHistory(branch.record);
   if (timelineBranchReviews(branch).length) {
     return '';
   }
@@ -15835,7 +16158,7 @@ function isModifyAfterAcceptBranch(branch) {
 }
 
 function timelineContent(item) {
-  if (item.record?.action === 'trusted_initial_accept') return '\u6559\u5b66\u8ba1\u5212\u4e2d\u5fc3\u9996\u6b21\u5bfc\u5165\u786e\u8ba4\uff0c\u539f\u59cb\u6765\u6e90\u5df2\u4fdd\u7559\uff1b\u540e\u7eed\u4fee\u6539\u9700\u91cd\u65b0\u5ba1\u6838\u3002';
+  if (item.record?.action === 'trusted_initial_accept') return trustedImportHistory(item.record);
   if (item.record) {
     if (item.record.action === 'submit' && isGenericSubmitContent(item.record.content)) {
       return submissionSnapshotText(internshipState.dialog.entity, internshipState.dialog.row);
@@ -15898,6 +16221,7 @@ function canReviewRow(row, entity) {
     }
     return false;
   }
+  if (entity === 'teacher_work_report') return isAdminRole.value && canApproveInternship.value;
   return canApproveInternship.value;
 }
 
@@ -15945,6 +16269,7 @@ function canRequestModification(row, entity) {
   if (entity === 'arrangement') {
     return canReviewArrangement.value;
   }
+  if (entity === 'teacher_work_report') return isAdminRole.value && canApproveInternship.value;
   return canApproveInternship.value;
 }
 
@@ -15991,83 +16316,71 @@ function internshipFoundationSessionKey() {
   ].join(':');
 }
 
-function applyInternshipFoundation(data) {
-  const overview = data?.overview || {};
-  const options = data?.options || {};
-  internshipState.overview = {
-    ...emptyInternshipOverview(),
-    ...overview,
-  };
+function applyInternshipOptions(options) {
   internshipState.options = {
     ...emptyInternshipOptions(),
-    ...options,
+    ...(options || {}),
   };
   if (!internshipState.arrangementForm.base_id && internshipState.options.bases.length) {
     internshipState.arrangementForm.base_id = internshipState.options.bases[0].id;
   }
   normalizeArrangementCascade();
   applyDefaultScopedFilters();
-  internshipFoundationCache.appliedKey = internshipFoundationSessionKey();
 }
 
 function invalidateInternshipFoundation() {
-  internshipFoundationCache.value = null;
-  internshipFoundationCache.promise = null;
-  internshipFoundationCache.appliedKey = '';
+  internshipOptionsLoader.clear();
+  internshipOverviewLoader.clear();
 }
 
-async function loadInternshipFoundation(force = false) {
-  if (wechatBlocked.value || !hasPermission('internship:view')) {
-    return;
-  }
+function createScopedPanelLoader(maxAge = Infinity) {
+  let key;
+  let pending = null;
+  let expiresAt = 0;
+  return {
+    async load(scope, request, apply) {
+      const requestedKey = scope();
+      if (key === requestedKey) {
+        if (pending) return pending;
+        if (Date.now() < expiresAt) return true;
+      }
+      key = requestedKey;
+      expiresAt = 0;
+      const current = request().then((data) => {
+        if (pending !== current || scope() !== requestedKey) return;
+        apply(data);
+        expiresAt = Date.now() + maxAge;
+        return true;
+      }).finally(() => {
+        if (pending === current) pending = null;
+      });
+      pending = current;
+      return current;
+    },
+    clear() {
+      pending = null;
+      expiresAt = 0;
+    },
+  };
+}
 
-  const key = internshipFoundationSessionKey();
-  if (force) {
-    invalidateInternshipFoundation();
-  }
-  if (internshipFoundationCache.key === key && internshipFoundationCache.value) {
-    if (internshipFoundationCache.appliedKey !== key) {
-      applyInternshipFoundation(internshipFoundationCache.value);
-    }
-    return internshipFoundationCache.value;
-  }
-  if (internshipFoundationCache.key === key && internshipFoundationCache.promise) {
-    const data = await internshipFoundationCache.promise;
-    if (internshipFoundationSessionKey() === key) {
-      applyInternshipFoundation(data);
-    }
-    return data;
-  }
+async function waitForPanelLoads(requests) {
+  const failed = (await Promise.allSettled(requests)).find(result => result.status === 'rejected');
+  if (failed) throw failed.reason;
+}
 
-  const requestPromise = Promise.all([
-    fetchInternshipOverview(),
-    fetchInternshipOptions(),
-  ]).then(([overview, options]) => {
-    const data = { overview, options };
-    if (internshipFoundationCache.key === key
-      && internshipFoundationCache.promise === requestPromise
-      && internshipFoundationSessionKey() === key) {
-      internshipFoundationCache.value = data;
-      applyInternshipFoundation(data);
-    }
-    return data;
-  }).finally(() => {
-    if (internshipFoundationCache.promise === requestPromise) {
-      internshipFoundationCache.promise = null;
-    }
-  });
-  internshipFoundationCache.key = key;
-  internshipFoundationCache.promise = requestPromise;
-  return requestPromise;
+async function loadInternshipOptions() {
+  if (wechatBlocked.value || !hasPermission('internship:view')) return;
+  return internshipOptionsLoader.load(internshipFoundationSessionKey, fetchInternshipOptions, applyInternshipOptions);
 }
 
 async function refreshInternshipPanel(panel = 'overview', page = 1) {
   invalidateInternshipFoundation();
-  return loadInternshipPanel(panel, page, true);
+  return loadInternshipPanel(panel, page);
 }
 
-async function loadInternshipPanel(panel = 'overview', page = 1, forceFoundation = false) {
-  if (wechatBlocked.value || ['baseVisits', 'baseVisitRecords'].includes(panel) || !hasPermission('internship:view')) {
+async function loadInternshipPanel(panel = 'overview', page = 1) {
+  if (wechatBlocked.value || ['baseVisits', 'baseVisitRecords', 'educationPlanSync'].includes(panel) || !hasPermission('internship:view')) {
     return;
   }
 
@@ -16086,20 +16399,32 @@ async function loadInternshipPanel(panel = 'overview', page = 1, forceFoundation
   internshipState.loading = true;
   internshipState.message = '';
   try {
-    await loadInternshipFoundation(forceFoundation);
-    if (!current()) return;
-    const params = (key) => internshipQueryParams(key, page);
+    const optionsReady = loadInternshipOptions();
     if (panel === 'overview') {
-      const applicationParams = isStudentRole.value
-        ? { ...internshipQueryParams('applications', 1), page_size: 8 }
-        : { ...internshipQueryParams('applications', 1), page_size: 8, status: 'wait' };
-      const [arrangements, applications] = await Promise.all([
-        fetchInternshipArrangements({ ...internshipQueryParams('arrangements', 1), page_size: 8 }),
-        fetchInternshipApplications(applicationParams),
+      await waitForPanelLoads([
+        internshipOverviewLoader.load(internshipFoundationSessionKey, fetchInternshipOverview, (overview) => {
+          internshipState.overview = { ...emptyInternshipOverview(), ...(overview || {}) };
+        }),
+        optionsReady.then(async (ready) => {
+          if (!ready || !current()) return;
+          const applicationParams = {
+            ...internshipQueryParams('applications', 1),
+            page_size: 8,
+            ...(isStudentRole.value ? {} : { status: 'wait' }),
+          };
+          const [arrangements, applications] = await Promise.all([
+            fetchInternshipArrangements({ ...internshipQueryParams('arrangements', 1), page_size: 8 }),
+            fetchInternshipApplications(applicationParams),
+          ]);
+          applyPage('arrangements', arrangements);
+          applyPage('applications', applications);
+        }),
       ]);
-      applyPage('arrangements', arrangements);
-      applyPage('applications', applications);
-    } else if (panel === 'arrangements') {
+      return;
+    }
+    if (!(await optionsReady) || !current()) return;
+    const params = (key) => internshipQueryParams(key, page);
+    if (panel === 'arrangements') {
       applyPage('arrangements', await fetchInternshipArrangements(params('arrangements')));
     } else if (panel === 'arrangementChanges') {
       applyPage('arrangementChanges', await fetchInternshipArrangementChanges(params('arrangementChanges')));
@@ -16162,7 +16487,7 @@ async function loadInternshipPanel(panel = 'overview', page = 1, forceFoundation
       applyPage('safetyLetters', await fetchInternshipSafetyLetters(params('safetyLetters')));
     }
   } catch (error) {
-    if (sameSession() && listKeys.every(key => internshipPanelRequests.get(key) === revision)) internshipState.message = error.message;
+    if (revision === internshipLoadRequest && sameSession() && listKeys.every(key => internshipPanelRequests.get(key) === revision)) internshipState.message = error.message;
   } finally {
     if (sameSession() && revision === internshipLoadRequest) internshipState.loading = false;
   }
@@ -16295,7 +16620,7 @@ async function saveArrangement() {
       loadInternshipPanel('arrangements'),
       loadInternshipPanel('arrangementChanges'),
       loadInternshipPanel('pairs'),
-      loadInternshipFoundation(),
+      loadInternshipOptions(),
     ]);
   } catch (error) {
     internshipState.message = error.message;
@@ -16322,7 +16647,7 @@ async function reviewArrangementChange(row, status, opinion = '') {
       loadInternshipPanel('arrangementChanges'),
       loadInternshipPanel('arrangements'),
       loadInternshipPanel('pairs'),
-      loadInternshipFoundation(),
+      loadInternshipOptions(),
     ]);
   } catch (error) {
     internshipState.message = error.message;
@@ -16348,7 +16673,7 @@ async function reviewArrangement(row, status, opinion = '') {
     await Promise.all([
       loadInternshipPanel('arrangements'),
       loadInternshipPanel('implementationSheets'),
-      loadInternshipFoundation(),
+      loadInternshipOptions(),
     ]);
   } catch (error) {
     internshipState.message = error.message;
@@ -16387,7 +16712,7 @@ async function handleArrangementImportFile(event) {
     await Promise.all([
       loadInternshipPanel('arrangements'),
       loadInternshipPanel('pairs'),
-      loadInternshipFoundation(),
+      loadInternshipOptions(),
     ]);
   } catch (error) {
     internshipState.message = error.message;
@@ -16499,7 +16824,7 @@ async function savePlan() {
     invalidateInternshipFoundation();
     await Promise.all([
       loadInternshipPanel('plans'),
-      loadInternshipFoundation(),
+      loadInternshipOptions(),
     ]);
   } catch (error) {
     if (current()) internshipState.message = error.message;
@@ -16825,11 +17150,14 @@ function statusTagType(value) {
 }
 
 function resetAdminState() {
+  expenseInboxSelection.value = null;
+  insuranceRegistrationWindow.value = '';
   guideReadVersion++;
   guideAdminVersion++;
   Object.assign(guideState, { visible: false, loading: false, title: '', content: '', message: '' });
   Object.assign(guideAdminState, { items: [], selected: null, editing: emptyGuideForm(), dialogVisible: false, loading: false, message: '' });
   Object.assign(adminFoundationCache, { key: '', promise: null, loadedAt: 0 });
+  roleMenuRequest++;
   organizationScopeRequest++;
   adminState.loading = false;
   adminState.scope.loading = false;
@@ -16842,10 +17170,9 @@ function resetAdminState() {
   adminState.menu.expandedKeys = [];
   adminState.menu.treeKey = 0;
   adminState.menu.message = '';
-  adminState.roleMenus.role_id = null;
-  adminState.roleMenus.menu_ids = [];
-  adminState.roleMenus.permissions = [];
-  adminState.roleMenus.message = '';
+  Object.assign(adminState.roleMenus, {
+    role_id: null, loaded_role_id: null, saved_menu_ids: [], menu_ids: [], permissions: [], loading: false, saving: false, message: '',
+  });
   adminState.options.accounts = [];
   adminState.options.departments = [];
   adminState.options.grades = [];
@@ -16944,11 +17271,12 @@ function resetInternshipState() {
   internshipState.baseFlowOriginalStatus = null;
   internshipState.loading = false;
   statRequest++;
-  statState.loading = false;
+  Object.assign(statState, createStatState());
   practiceLoadRequest++;
   practicePanelRequests.clear();
-  practiceModuleState('practice').loading = false;
-  Object.assign(practiceFoundationCache, { key: '', promise: null, value: null, loadedAt: 0 });
+  practiceState.practice = createPracticeModuleState();
+  practiceOptionsLoader.clear();
+  practiceOverviewLoader.clear();
   invalidateInternshipFoundation();
   internshipState.message = '';
   internshipState.savedMessage = '';
@@ -16995,6 +17323,7 @@ function applyProfileData(data) {
 
 function applyLoginPageData(data) {
   const payload = data?.data && typeof data.data === 'object' ? data.data : data || {};
+  localTheme.look.setSchool(payload.default_ui_style);
   loginPageState.school_name = payload.school_name || '成都锦城学院';
   loginPageState.school_logo_url = payload.school_logo_url || '';
   loginPageState.default_wallpaper_url = payload.default_wallpaper_url || '';
@@ -17015,6 +17344,28 @@ async function loadLoginPageSettings() {
   } finally {
     loginPageState.loading = false;
   }
+}
+
+async function loadIamOptions() {
+  try {
+    const options = await request('/auth/iam/options', { refreshOnUnauthorized: false });
+    Object.assign(iamOptions, options);
+    if (options.available) {
+      try { if (sessionStorage.getItem(`practical:iam-login:${new URL(publicSchoolOrigin).origin}:WEB`)) loginMethod.value = 'iam'; } catch {}
+    } else if (loginMethod.value === 'iam') {
+      loginMethod.value = 'password';
+      loginState.message = '当前学校尚未启用统一身份认证，请使用其他登录方式。';
+    }
+  } catch {
+    iamOptions.available = false;
+    if (loginMethod.value === 'iam') { loginMethod.value = 'password'; loginState.message = '读取学校认证入口失败，请重试或使用其他登录方式。'; }
+  }
+}
+
+async function openIamLogin() {
+  loginMethod.value = 'iam';
+  await nextTick();
+  iamLogin.value?.start();
 }
 
 function resetProfileState() {
@@ -17421,14 +17772,12 @@ async function loadWindowPanel(win) {
   const { panel, module } = win;
   const current = () => openWindows.includes(win) && !win.minimized && win.panel === panel && isLoggedIn.value && !wechatBlocked.value;
   if (isUserManageWindow(win)) {
-    await loadUserFilterRoles();
-    if (!current()) return;
-    return loadUserAccounts();
+    return Promise.all([loadUserAccounts(), loadUserFilterRoles()]);
   }
   if (isArchiveManageWindow(win)) {
-    await loadAdminFoundation();
-    if (!current()) return;
-    return loadArchiveItems(archiveTypeForWindow(win));
+    const type = archiveTypeForWindow(win);
+    const list = loadArchiveItems(type);
+    return archiveUsesOrganizationOptions(type) ? Promise.all([list, loadAdminFoundation()]) : list;
   }
   if (module.id === 'config' && ['menuManage', 'roleMenus', 'organizationScope'].includes(panel)) {
     await loadAdminFoundation();
@@ -17461,6 +17810,12 @@ watch(() => openWindows.filter(win => !win.minimized).map(win => JSON.stringify(
     const win = openWindows.find(item => item.id === id);
     if (win) loadWindowPanel(win);
   });
+});
+
+watch(() => practiceState.practice.module_type, () => {
+  if (workspaceFrozen.value || !openWindows.some(win => !win.minimized && isPracticeModule(win.module.id) && win.panel === 'overview')) return;
+  practiceState.practice.overview = emptyPracticeOverview();
+  loadPracticePanel('practice', 'overview');
 });
 
 watch(() => [workspaceContextKey.value, wechatBlocked.value], ([, blocked]) => {
@@ -17628,7 +17983,7 @@ async function initializeSession() {
   if (startupState.loading && startupState.started) return;
   startupState.started = true; startupState.loading = true; startupState.error = '';
   try {
-    await Promise.all([loadLoginPageSettings(), loadRegisterOptions()]);
+    await Promise.all([loadLoginPageSettings(), loadRegisterOptions(), loadIamOptions()]);
     if (!pendingSsoResume.value) await consumeUrlPasskey();
     await load();
     if (permissionState.error) throw new Error(permissionState.error);
@@ -17649,6 +18004,7 @@ async function initializeSession() {
 }
 
 onMounted(() => {
+  if (iamEntryRequested) clearNavigationHash();
   window.addEventListener('hashchange', handleHashNavigation);
   window.addEventListener('keydown', lockShortcut);
   window.addEventListener('practical-auth-expired', handleAuthExpired);

@@ -1,7 +1,13 @@
 <script setup>
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import WorkflowHistory from './WorkflowHistory.vue';
-const props = defineProps({ request: { type: Function, required: true }, backendUrl: { type: Function, default: value => value }, accountId: { type: [Number, String], required: true } });
+import { workflowEntityLabels, workflowSnapshot } from '../workflowPresentation';
+const props = defineProps({
+  request: { type: Function, required: true },
+  backendUrl: { type: Function, default: value => value },
+  accountId: { type: [Number, String], required: true },
+  entityType: { type: String, default: '' },
+});
 const emit = defineEmits(['open-expense']);
 const kind = ref('review');
 const items = ref([]);
@@ -13,31 +19,41 @@ const pageSize = ref(20);
 const total = ref(0);
 let generation = 0;
 let disposed = false;
-const application = computed(() => selected.value?.snapshot_json?.plan || selected.value?.snapshot_json?.application || selected.value?.snapshot_json?.expense || selected.value?.snapshot_json || {});
+const application = computed(() => workflowSnapshot(selected.value));
 const base = computed(() => selected.value?.snapshot_json?.base || {});
-const labels = { social_practice_plan: '社会实践计划', base_application: '基地申报', base_expense: '基地建设费用申请' };
-const title = item => item.snapshot_json?.plan?.title || item.snapshot_json?.application?.title || item.snapshot_json?.expense?.title || item.snapshot_json?.title || labels[item.entity_type] || '审批申请';
+const label = entityType => workflowEntityLabels[entityType] || '审批申请';
+const title = item => {
+  const snapshot = workflowSnapshot(item);
+  return snapshot.title || snapshot.course_name || snapshot.name || label(item.entity_type);
+};
 async function load() {
   const version = ++generation;
   const current = () => !disposed && version === generation;
   busy.value = true;
   message.value = '';
   try {
-    const data = await props.request(`/workflow/inbox?kind=${kind.value}&page=${page.value}&page_size=${pageSize.value}`);
+    const query = new URLSearchParams({ kind: kind.value, page: page.value, page_size: pageSize.value });
+    if (props.entityType) query.set('entity_type', props.entityType);
+    const data = await props.request(`/workflow/inbox?${query}`);
     if (!current()) return;
     items.value = data.items || [];
     pageSize.value = Number(data.pagination?.page_size || pageSize.value);
     total.value = Number(data.pagination?.total || 0);
-  } catch (error) { if (current()) message.value = error.message; }
+    const lastPage = Math.max(1, Math.ceil(total.value / pageSize.value));
+    if (page.value > lastPage) { page.value = lastPage; await load(); return; }
+    const updated = items.value.find(item => item.task_id === selected.value?.task_id);
+    if (updated && updated.instance_id === selected.value.instance_id) selected.value = updated;
+  } catch (error) { if (current()) { items.value = []; message.value = error.message; } }
   finally { if (current()) busy.value = false; }
 }
 function open(item) {
-  if (item.entity_type === 'base_expense') { emit('open-expense', item.entity_id); return; }
+  if (item.entity_type === 'base_expense') { emit('open-expense', item); return; }
   selected.value = item;
 }
-function changeKind(value) { kind.value = value; page.value = 1; selected.value = null; load(); }
-watch(() => props.accountId, () => { page.value = 1; selected.value = null; items.value = []; total.value = 0; load(); }, { immediate: true });
+function changeKind(value) { kind.value = value; page.value = 1; selected.value = null; items.value = []; load(); }
+watch(() => [props.accountId, props.entityType], () => { page.value = 1; selected.value = null; items.value = []; total.value = 0; load(); }, { immediate: true });
 onBeforeUnmount(() => { disposed = true; generation++; });
+defineExpose({ load });
 </script>
 
 <template>
@@ -48,14 +64,27 @@ onBeforeUnmount(() => { disposed = true; generation++; });
       <button @click="selected = null">返回列表</button>
       <article class="workflow-inbox-detail">
         <h3>{{ title(selected) }}</h3>
-        <dl><dt>类型</dt><dd>{{ labels[selected.entity_type] || '审批申请' }}</dd><template v-if="selected.entity_type !== 'social_practice_plan'"><dt>实习基地</dt><dd>{{ base.name || application.base_name || '—' }}</dd></template><dt>{{ selected.entity_type === 'social_practice_plan' ? '计划说明' : '申报内容' }}</dt><dd class="workflow-inbox-content">{{ String(application.description || application.content || '').replace(/<[^>]*>/g, '') || '—' }}</dd></dl>
-      <WorkflowHistory :key="selected.instance_id" :entity-type="selected.entity_type" :entity-id="selected.entity_id" :account-id="accountId" :request="request" :backend-url="backendUrl" @updated="load" />
+        <p>{{ label(selected.entity_type) }} · {{ selected.kind === 'cc' ? '抄送' : '待办' }} · 第 {{ selected.round }} 轮</p>
+        <dl v-if="selected.entity_type === 'base_application'"><dt>实习基地</dt><dd>{{ base.name || application.base_name || '—' }}</dd><dt>申报内容</dt><dd class="workflow-inbox-content">{{ String(application.description || application.content || '').replace(/<[^>]*>/g, '') || '—' }}</dd></dl>
+        <WorkflowHistory
+          :key="selected.task_id"
+          :entity-type="selected.entity_type"
+          :entity-id="selected.entity_id"
+          :instance-id="selected.instance_id"
+          :instance-revision="selected.revision"
+          :task-id="selected.task_id"
+          :review-allowed="selected.kind === 'review'"
+          :account-id="accountId"
+          :request="request"
+          :backend-url="backendUrl"
+          @updated="load"
+        />
       </article>
     </template>
     <template v-else>
       <p v-if="!busy && !items.length" class="workflow-inbox-empty">{{ kind === 'review' ? '暂无待处理审批' : '暂无抄送记录' }}</p>
-      <button v-for="item in items" :key="item.task_id" class="workflow-inbox-item" @click="open(item)"><strong>{{ title(item) }}</strong><span>{{ labels[item.entity_type] || '审批申请' }} · {{ item.nodes_json?.[Number(item.position) - 1]?.name }} · 第 {{ item.round }} 轮</span></button>
-      <footer><span>{{ pageSize }} 条/页</span><button :disabled="busy || page <= 1" @click="page--; load()">上一页</button><span>{{ page }} / {{ Math.max(1, Math.ceil(total / pageSize)) }}</span><button :disabled="busy || page * pageSize >= total" @click="page++; load()">下一页</button></footer>
+      <button v-for="item in items" :key="item.task_id" class="workflow-inbox-item" @click="open(item)"><strong>{{ title(item) }}</strong><span>{{ [label(item.entity_type), item.nodes_json?.[Number(item.position) - 1]?.name, `第 ${item.round} 轮`].filter(Boolean).join(' · ') }}</span></button>
+      <footer><span>共 {{ total }} 条</span><button :disabled="busy || page <= 1" @click="page--; load()">上一页</button><span>{{ page }} / {{ Math.max(1, Math.ceil(total / pageSize)) }}</span><button :disabled="busy || page * pageSize >= total" @click="page++; load()">下一页</button></footer>
     </template>
   </section>
 </template>

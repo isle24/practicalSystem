@@ -179,23 +179,6 @@ a {
 .search-result-glyph {
   width: 28px;
   height: 28px;
-  display: grid;
-  place-items: center;
-  border-radius: 7px;
-  color: #fff;
-}
-
-.search-result-glyph.blue { background: #1f73d2; }
-.search-result-glyph.teal { background: #0f8f7e; }
-.search-result-glyph.amber { background: #b96d08; }
-.search-result-glyph.red { background: #c74350; }
-.search-result-glyph.gray { background: #53606f; }
-.search-result-glyph.green { background: #2e7d4f; }
-
-.app-icon img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
 }
 
 .global-search-results strong,
@@ -394,26 +377,8 @@ a {
 .app-glyph {
   width: 48px;
   height: 48px;
-  display: grid;
-  place-items: center;
-  border-radius: 10px;
-  color: #fff;
   box-shadow: 0 8px 18px rgba(24, 33, 43, .18), inset 0 1px 0 rgba(255, 255, 255, .24);
 }
-
-.app-glyph img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  border-radius: inherit;
-}
-
-.app-glyph.blue { background: linear-gradient(135deg, #1f73d2, #4b96e3); }
-.app-glyph.teal { background: linear-gradient(135deg, #0f8f7e, #36aa92); }
-.app-glyph.amber { background: linear-gradient(135deg, #b96d08, #d9992a); }
-.app-glyph.red { background: linear-gradient(135deg, #c74350, #e05f6d); }
-.app-glyph.gray { background: linear-gradient(135deg, #53606f, #7b8795); }
-.app-glyph.green { background: linear-gradient(135deg, #2e7d4f, #57a46f); }
 
 .shortcut-tile-desktop .shortcut-tile-main {
   display: grid;
@@ -426,11 +391,6 @@ a {
 .shortcut-tile-desktop .app-glyph {
   width: var(--desktop-icon-box, 48px);
   height: var(--desktop-icon-box, 48px);
-}
-
-.shortcut-tile-desktop .app-glyph img {
-  width: 100%;
-  height: 100%;
 }
 
 .shortcut-tile-desktop .shortcut-tile-label strong {
@@ -782,7 +742,6 @@ a {
 .shortcut-tile-launcher .app-glyph {
   width: 58px;
   height: 58px;
-  border-radius: 13px;
   box-shadow: 0 14px 30px rgba(0, 0, 0, .22), inset 0 1px 0 rgba(255, 255, 255, .22);
   transition: transform .16s ease, box-shadow .16s ease;
 }
@@ -1206,14 +1165,6 @@ a {
   font-size: 13px;
 }
 
-.side-item-icon {
-  width: 17px;
-  height: 17px;
-  flex: 0 0 17px;
-  color: var(--muted);
-  transition: color .14s ease, transform .14s ease;
-}
-
 .side-item-label {
   min-width: 0;
   overflow: hidden;
@@ -1235,14 +1186,6 @@ a {
 .side-item:not(.active):hover {
   color: var(--text);
   background: var(--surface-2);
-}
-
-.side-item.active .side-item-icon {
-  color: var(--primary-ink, var(--primary));
-}
-
-.side-item:not(.active):hover .side-item-icon {
-  color: var(--text);
 }
 
 .side-item:focus-visible {
@@ -1366,6 +1309,10 @@ a {
   background: var(--surface);
 }
 
+.module-content-panel > :is(.social-practice-panel, .iam-settings) {
+  padding: 14px 16px;
+}
+
 .module-empty-state {
   min-height: 220px;
   border: 1px dashed var(--line);
@@ -1376,6 +1323,20 @@ a {
   gap: 8px;
   color: var(--muted);
   background: var(--surface-2);
+}
+
+.module-content-panel.bounded-workspace {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.module-content-panel.bounded-workspace > * {
+  flex: 1 1 0%;
+  min-width: 0;
+  min-height: 0;
+  max-height: 100%;
 }
 
 .module-empty-state strong {
@@ -3347,6 +3308,7 @@ a {
   min-height: 0;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
   border-left: 1px solid var(--line);
   color: var(--text);
   background: var(--surface);
@@ -6074,18 +6036,7 @@ a {
 .taskbar-glyph {
   width: 24px;
   height: 24px;
-  border-radius: 7px;
-  display: grid;
-  place-items: center;
-  color: #fff;
 }
-
-.taskbar-glyph.blue { background: linear-gradient(135deg, #1f73d2, #4b96e3); }
-.taskbar-glyph.teal { background: linear-gradient(135deg, #0f8f7e, #36aa92); }
-.taskbar-glyph.amber { background: linear-gradient(135deg, #b96d08, #d9992a); }
-.taskbar-glyph.red { background: linear-gradient(135deg, #c74350, #e05f6d); }
-.taskbar-glyph.gray { background: linear-gradient(135deg, #53606f, #7b8795); }
-.taskbar-glyph.green { background: linear-gradient(135deg, #2e7d4f, #57a46f); }
 
 .taskbar span {
   color: var(--muted);
@@ -6789,9 +6740,8 @@ a {
   background: var(--primary-soft);
 }
 
-.menu-module-grid svg {
+.menu-module-child-icon {
   grid-row: 1 / span 2;
-  color: var(--primary-ink, var(--primary));
 }
 
 .menu-module-grid span,

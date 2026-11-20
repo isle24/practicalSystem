@@ -179,14 +179,17 @@ onMounted(async () => {
   await Promise.all([load(1), loadRule()]);
 });
 
-watch(() => JSON.stringify(props.defaultFilters || {}), () => {
-  if (applyDefaults()) { normalizeFilters(); load(1); }
-});
-
-watch(() => props.options, () => {
+watch([
+  () => props.defaultFilters.graduation_cohort_id,
+  () => props.defaultFilters.dep_id,
+  () => props.defaultFilters.profession_id,
+  () => props.options.graduation_cohorts,
+  () => props.options.professions,
+  () => props.options.arrangements,
+], () => {
   const changed = applyDefaults();
   if (normalizeFilters() || changed) load(1);
-}, { deep: true });
+});
 
 watch(() => props.sessionKey, () => {
   generation++;

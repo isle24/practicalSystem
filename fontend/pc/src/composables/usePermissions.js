@@ -1,5 +1,7 @@
 import { computed, reactive } from 'vue';
 import { fetchContext, fetchDataScope, fetchMenus } from '../api/system';
+import { request } from '../api/client';
+import { businessPermissions, loadSchoolDemo, mergeDemoMenus } from '../../../shared/schoolDemo';
 
 const state = reactive({
   loading: false,
@@ -36,6 +38,7 @@ export function usePermissions() {
       if (version !== loadVersion) return;
 
       if (!context.role_id) {
+        await loadSchoolDemo(context, request, 'pc');
         state.context = context;
         state.error = context.auth_error || '';
         state.menus = [];
@@ -48,11 +51,13 @@ export function usePermissions() {
       if (version !== loadVersion) return;
       const scope = context.role_type ? await fetchDataScope() : null;
       if (version !== loadVersion) return;
+      const demo = await loadSchoolDemo(context, request, 'pc');
+      if (version !== loadVersion) return;
       Object.assign(state, {
         context,
-        menus: menuResult.menus?.length ? flattenMenus(menuResult.menus) : [],
-        permissions: menuResult.permissions || [],
-        dataScope: scope,
+        menus: flattenMenus(mergeDemoMenus(menuResult.menus || [], demo?.menus)),
+        permissions: businessPermissions(menuResult.permissions || [], demo),
+        dataScope: demo?.data_scope || scope,
       });
     } catch (error) {
       if (version !== loadVersion) return;

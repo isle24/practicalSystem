@@ -24,12 +24,10 @@
         :aria-label="item.name"
         @click.prevent.stop="emit('select', item.key)"
       >
-        <component
-          :is="item.icon || LayoutGrid"
+        <AppIcon
+          :menu-key="item.key"
           class="side-item-icon"
-          :size="17"
-          :stroke-width="1.9"
-          aria-hidden="true"
+          :size="20"
         />
         <span class="side-item-label">{{ item.name }}</span>
       </a>
@@ -39,7 +37,8 @@
 
 <script setup>
 import { ref, watch } from 'vue';
-import { LayoutGrid, PanelLeftClose, PanelLeftOpen } from '@lucide/vue';
+import { PanelLeftClose, PanelLeftOpen } from '@lucide/vue';
+import AppIcon from '../../../shared/components/AppIcon.vue';
 
 const props = defineProps({
   items: { type: Array, default: () => [] },

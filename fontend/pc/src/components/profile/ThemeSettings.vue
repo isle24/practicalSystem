@@ -1,6 +1,8 @@
 <template>
   <section class="profile-panel-card theme-settings">
-    <header><strong>本机主题</strong><small>按学校和当前用户保存在本机，壁纸不会上传服务器。</small></header>
+    <header><strong>本机主题</strong><small>设置按学校和当前用户保存在本机。</small></header>
+    <UiStylePicker :model-value="theme.look.choice.value" :school="theme.look.school.value" label="界面风格（选中即应用）" @update:model-value="chooseStyle" />
+    <strong class="color-settings-title">配色与壁纸</strong>
     <div class="theme-presets" aria-label="预置与自定义主题"><button v-for="preset in [...theme.presets, ...theme.state.custom]" :key="preset.id" type="button" :disabled="busy" :class="{ active: draft.id === preset.id }" :aria-pressed="draft.id === preset.id" @click="select(preset)"><span class="theme-swatch" :style="{ '--swatch-accent': preset.accent, '--swatch-window': preset.window || (theme.state.systemDark && preset.mode === 'system' ? '#18212f' : '#ffffff') }" aria-hidden="true"><i /><b /></span><span>{{ preset.name || preset.id }}</span></button></div>
     <div class="theme-fields">
       <label><span>明暗模式</span><el-select v-model="draft.mode"><el-option label="跟随系统" value="system" /><el-option label="亮色" value="light" /><el-option label="暗色" value="dark" /></el-select></label>
@@ -18,6 +20,7 @@
 </template>
 <script setup>
 import FormFieldLabel from '../../../../shared/components/FormFieldLabel.vue';
+import UiStylePicker from '../../../../shared/components/UiStylePicker.vue';
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { ElMessageBox } from 'element-plus';
 const props = defineProps({ theme: { type: Object, required: true } });
@@ -27,6 +30,10 @@ const windowColor = computed({ get: () => draft.value.window || (draft.value.mod
 watch(() => props.theme.state.saved, value => { draft.value = { ...value }; name.value = ''; error.value = ''; }, { flush: 'sync' });
 watch(() => props.theme.state.scopeRevision, () => { revision++; error.value = ''; busy.value = false; }, { flush: 'sync' });
 function select(preset) { draft.value = { ...preset, wallpaper_id: preset.wallpaper_id || '', name: preset.name || '' }; name.value = ''; }
+function chooseStyle(value) {
+  try { props.theme.look.choose(value); error.value = ''; }
+  catch { error.value = '界面风格保存失败，请检查本机存储'; }
+}
 async function run(action) { if (busy.value) return; const ticket = ++revision; busy.value = true; error.value = ''; try { await action(); } catch (reason) { if (alive && ticket === revision) error.value = reason.message; } finally { if (alive && ticket === revision) busy.value = false; } }
 async function chooseWallpaper(event) { const file = event.target.files?.[0]; event.target.value = ''; const target = draft.value; if (file) await run(async () => { const id = await props.theme.selectWallpaper(file); if (alive && target === draft.value) draft.value.wallpaper_id = id; }); }
 function preview() { return run(() => props.theme.preview(draft.value)); }

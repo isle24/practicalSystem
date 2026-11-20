@@ -1,0 +1,230 @@
+@import "./motion.css";
+
+:where(:root[data-ui-style] *) { corner-shape: squircle; }
+:where(:root[data-ui-style] *)::before,
+:where(:root[data-ui-style] *)::after { corner-shape: inherit; }
+:where(:root[data-ui-style]) :where(
+  .el-radio__inner, .van-radio__icon > .van-icon, .el-switch__action, .van-switch__node,
+  .avatar-preview, .top-avatar, .desktop-window-mac .window-controls > button
+) { corner-shape: round; }
+
+:root[data-ui-style="liquid_glass"] {
+  --skin-canvas: url("./assets/liquid-glass-light.jpg") center / cover no-repeat, #e4ecf8;
+  --skin-solid: #f4f8ff;
+  --skin-edge: #ffffffbc;
+  --skin-rim: inset 0 2px 0 #ffffffe8, inset 0 -1px 0 #ffffff48;
+  --skin-shadow: var(--skin-rim), 0 22px 64px #17395f38, 0 3px 12px #1d42661c;
+  --skin-overlay: #172b473d;
+  --skin-window-radius: 24px;
+  --skin-card-radius: 16px;
+  --skin-primary-radius: 980px;
+  --control-radius: 12px;
+}
+
+:root[data-ui-style="liquid_glass"][data-theme="dark"] {
+  --skin-canvas: url("./assets/liquid-glass-dark.jpg") center / cover no-repeat, #101722;
+  --skin-solid: #202b3e;
+  --skin-edge: #bad7ff59;
+  --skin-rim: inset 0 2px 0 #e0efff47, inset 0 -1px 0 #d2e5ff1c;
+  --skin-shadow: var(--skin-rim), 0 22px 64px #02081185, 0 3px 12px #01050a60;
+  --skin-overlay: #07102265;
+}
+
+:root[data-ui-style="obsidian_pro"] {
+  --skin-canvas: radial-gradient(#c3c3cb .9px, transparent 1px) 0 0 / 22px 22px, #f4f4f5;
+  --skin-solid: #fff;
+  --skin-edge: #a4a4ae;
+  --skin-overlay: #09090b39;
+  --skin-window-radius: 10px;
+  --skin-card-radius: 8px;
+  --control-radius: 6px;
+}
+
+:root[data-ui-style="obsidian_pro"][data-theme="dark"] {
+  --skin-canvas: radial-gradient(#45454d .9px, transparent 1px) 0 0 / 22px 22px, #141417;
+  --skin-solid: #18181b;
+  --skin-edge: #565660;
+  --skin-overlay: #09090b86;
+}
+
+:root[data-ui-style="ivory_editorial"] {
+  --skin-canvas: #f4efe6;
+  --skin-solid: #faf8f3;
+  --skin-edge: #cdbfaf;
+  --skin-ink: #9f2b1f;
+  --skin-top-edge: 3px solid var(--skin-ink);
+  --skin-overlay: #33271b38;
+  --skin-window-radius: 4px;
+  --skin-card-radius: 3px;
+  --control-radius: 3px;
+  --skin-heading-font: "Songti SC", STSong, "Noto Serif CJK SC", Georgia, serif;
+}
+
+:root[data-ui-style="ivory_editorial"][data-theme="dark"] {
+  --skin-canvas: #25211d;
+  --skin-solid: #2b2621;
+  --skin-edge: #6a5e52;
+  --skin-ink: #e9a196;
+  --skin-overlay: #130e0980;
+}
+
+:root[data-ui-style]:where(:not([data-ui-style="classic"])) {
+  --skin-pane: var(--surface, var(--skin-solid));
+  --skin-chrome: var(--surface-2, var(--skin-solid));
+  --skin-card: var(--surface, var(--skin-solid));
+}
+
+@supports (((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) and (background: color-mix(in srgb, white, transparent))) {
+  :root[data-ui-style="liquid_glass"] {
+    --skin-pane: linear-gradient(148deg,
+      color-mix(in srgb, var(--theme-window-background, var(--surface, var(--skin-solid))) 76%, transparent),
+      color-mix(in srgb, var(--theme-window-background, var(--surface, var(--skin-solid))) 56%, transparent));
+    --skin-chrome: linear-gradient(180deg,
+      color-mix(in srgb, var(--surface, var(--skin-solid)) 66%, transparent),
+      color-mix(in srgb, var(--surface, var(--skin-solid)) 38%, transparent));
+    --skin-card: color-mix(in srgb, var(--surface, var(--skin-solid)) 78%, transparent);
+    --skin-blur: blur(48px) saturate(225%) contrast(103%);
+    --skin-dock-blur: blur(42px) saturate(225%);
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  :root[data-ui-style="liquid_glass"] {
+    --skin-pane: var(--surface, var(--skin-solid));
+    --skin-chrome: var(--surface-2, var(--skin-solid));
+    --skin-card: var(--surface, var(--skin-solid));
+    --skin-blur: none;
+    --skin-dock-blur: none;
+  }
+}
+
+:root[data-ui-style]:where(:not([data-ui-style="classic"])) :is(
+  .login-panel, .h5-login, .connection-page, .captcha-dialog, .desktop-window,
+  .operation-dialog, .data-list-action-drawer, .el-dialog, .el-drawer, .el-message-box,
+  .app-dialog-popup, .app-sheet-popup, .van-dialog, .van-action-sheet, .file-preview,
+  .profile-menu-panel, .demo-popover, .desktop-lock-card, .desktop-lock-recovery,
+  .desktop-launcher-panel, .agent-shell :where(dialog),
+  .password-recovery-mask > :where(.password-recovery), .wechat-binding-gate > :where(section)
+) {
+  background: var(--skin-pane);
+  border: 1px solid var(--skin-edge);
+  border-top: var(--skin-top-edge, 1px solid var(--skin-edge));
+  border-radius: var(--skin-window-radius);
+  box-shadow: var(--skin-shadow, none);
+  -webkit-backdrop-filter: var(--skin-blur, none);
+  backdrop-filter: var(--skin-blur, none);
+}
+:root[data-ui-style]:where(:not([data-ui-style="classic"])) :is(.profile-menu-panel, .demo-popover) {
+  border-radius: var(--skin-card-radius);
+}
+
+:root[data-ui-style]:where(:not([data-ui-style="classic"])) :is(
+  .operation-mask, .password-recovery-mask, .data-list-action-layer, .file-preview-mask,
+  .captcha-overlay, .el-overlay, .van-overlay, .wechat-binding-gate, .desktop-launcher-mask
+) {
+  background: var(--skin-overlay);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+:root[data-ui-style]:where(:not([data-ui-style="classic"])) .agent-shell dialog::backdrop { background: var(--skin-overlay, #101b335e); }
+
+:root[data-ui-style="ivory_editorial"] :is(
+  .login-panel h1, .login-panel header strong, .h5-login h1, .connection-heading h1,
+  .window-name, .mobile-page-title, .sidebar-heading h2, .operation-dialog > header strong,
+  .app-dialog > header strong, .app-sheet > header strong, .el-dialog__title,
+  .el-message-box__title, .file-preview > header strong, .agent-shell .dialog-heading h2
+) { font-family: var(--skin-heading-font); }
+
+:root[data-ui-style]:where(:not([data-ui-style="classic"])) :is(.desktop-window.maximized, .operation-dialog.is-maximized, .el-dialog.is-fullscreen) {
+  border: 0;
+  border-radius: 0;
+}
+
+:root[data-ui-style]:where(:not([data-ui-style="classic"])) .login-mode-corner {
+  width: 38px;
+  height: 38px;
+  top: 14px;
+  right: 14px;
+  padding: 0;
+  place-items: center;
+  color: var(--primary-ink, var(--primary, #075db3));
+  border: 1px solid var(--skin-edge);
+  border-radius: var(--control-radius);
+  background: var(--skin-card);
+}
+:root[data-ui-style]:where(:not([data-ui-style="classic"])) .login-mode-corner::before { display: none; }
+:root[data-ui-style]:where(:not([data-ui-style="classic"])) .login-mode-corner:hover:not(:disabled) {
+  color: var(--primary-ink, var(--primary, #075db3));
+  background: var(--skin-chrome);
+}
+:root[data-ui-style="liquid_glass"] .login-mode-corner { border-radius: 50%; box-shadow: var(--skin-rim); }
+
+:root[data-ui-style]:where(:not([data-ui-style="classic"])) .login-mode-tabs {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  padding: 3px;
+  border: 1px solid var(--skin-edge);
+  border-radius: var(--control-radius);
+  background: var(--skin-chrome);
+}
+:root[data-ui-style]:where(:not([data-ui-style="classic"])) .login-mode-tabs::before {
+  content: "";
+  position: absolute;
+  inset: 3px 50% 3px 3px;
+  border-radius: calc(var(--control-radius) - 2px);
+  background: var(--skin-pane);
+  pointer-events: none;
+}
+:root[data-ui-style]:where(:not([data-ui-style="classic"])) .login-mode-tabs[data-mode="wechat"]::before { transform: translateX(100%); }
+:root[data-ui-style]:where(:not([data-ui-style="classic"])) .login-mode-tabs button {
+  position: relative;
+  min-height: 36px;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: var(--control-radius);
+  background: transparent;
+  color: var(--muted, #526071);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+:root[data-ui-style]:where(:not([data-ui-style="classic"])) .login-mode-tabs button[aria-pressed="true"] {
+  color: var(--primary-ink, var(--primary));
+  font-weight: 650;
+}
+:root[data-ui-style="liquid_glass"] .login-mode-tabs::before {
+  background: var(--skin-card);
+  box-shadow: var(--skin-rim), 0 2px 7px #1a3a631c;
+}
+:root[data-ui-style="obsidian_pro"] .login-mode-tabs::before { border: 1px solid var(--skin-edge); }
+:root[data-ui-style="ivory_editorial"] .login-mode-tabs { padding: 0; border: 0; border-bottom: 1px solid var(--skin-edge); border-radius: 0; background: transparent; }
+:root[data-ui-style="ivory_editorial"] .login-mode-tabs::before { inset: auto 50% -1px 0; height: 2px; border-radius: 0; background: var(--skin-ink); }
+
+:root[data-ui-style]:where(:not([data-ui-style="classic"])) .scan-code-card {
+  position: relative;
+  width: min(204px, 100%);
+  padding: 13px;
+  overflow: hidden;
+  border-radius: var(--skin-card-radius);
+}
+:root[data-ui-style="liquid_glass"] .scan-code-card::before {
+  content: "";
+  position: absolute;
+  inset: 6px;
+  pointer-events: none;
+  background:
+    linear-gradient(#2181e8, #2181e8) top left / 12px 2px,
+    linear-gradient(#2181e8, #2181e8) top left / 2px 12px,
+    linear-gradient(#2181e8, #2181e8) top right / 12px 2px,
+    linear-gradient(#2181e8, #2181e8) top right / 2px 12px,
+    linear-gradient(#2181e8, #2181e8) bottom left / 12px 2px,
+    linear-gradient(#2181e8, #2181e8) bottom left / 2px 12px,
+    linear-gradient(#2181e8, #2181e8) bottom right / 12px 2px,
+    linear-gradient(#2181e8, #2181e8) bottom right / 2px 12px;
+  background-repeat: no-repeat;
+}
+
+@media (max-width: 600px) {
+  :root[data-ui-style]:where(:not([data-ui-style="classic"])) .file-preview { border: 0; border-radius: 0; }
+}

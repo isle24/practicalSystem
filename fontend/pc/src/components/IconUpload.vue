@@ -2,14 +2,13 @@
   <button
     type="button"
     class="icon-upload-button"
-    :class="[buttonClass, { 'icon-upload-button--cover': imageFit === 'cover' }]"
+    :class="buttonClass"
     :disabled="uploading"
-    :title="uploading ? '正在上传' : `上传${label || '图标'}`"
+    :title="uploading ? '正在上传' : `上传${label || '图标'}（JPG、PNG、WebP 或 GIF）`"
     :aria-label="`上传${label || '图标'}`"
     @click="chooseFile"
   >
-    <img v-if="iconUrl" :src="resolvedUrl" :alt="label">
-    <component v-else :is="icon" :size="size" />
+    <AppIcon :menu-key="menuKey" :icon-name="iconName" :icon-url="iconUrl" :backend-url="backendUrl" />
   </button>
   <input
     ref="inputRef"
@@ -21,23 +20,22 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue';
+import { ref } from 'vue';
+import AppIcon from '../../../shared/components/AppIcon.vue';
 
-const props = defineProps({
-  icon: { type: null, required: true },
+defineProps({
+  menuKey: { type: String, default: '' },
+  iconName: { type: String, default: '' },
   iconUrl: { type: String, default: '' },
   label: { type: String, default: '' },
-  size: { type: Number, default: 24 },
-  accept: { type: String, default: 'image/jpeg,image/png,image/webp,image/gif,image/x-icon' },
+  accept: { type: String, default: '.jpg,.jpeg,.png,.webp,.gif' },
   uploading: { type: Boolean, default: false },
-  imageFit: { type: String, default: 'contain' },
   buttonClass: { type: [String, Array, Object], default: '' },
   backendUrl: { type: Function, required: true },
 });
 
 const emit = defineEmits(['select']);
 const inputRef = ref(null);
-const resolvedUrl = computed(() => (props.iconUrl ? props.backendUrl(props.iconUrl) : ''));
 
 function chooseFile() {
   inputRef.value?.click();
@@ -53,5 +51,18 @@ function handleFileChange(event) {
 </script>
 
 <style scoped>
-.icon-upload-button{width:56px;height:56px;flex-shrink:0;display:grid;place-items:center;border:1px dashed var(--line);border-radius:8px;background:var(--surface-2);color:var(--muted);cursor:pointer;overflow:hidden;padding:8px}.icon-upload-button:hover{border-color:var(--primary);background:var(--primary-soft)}.icon-upload-button:disabled{opacity:.5;cursor:wait}.icon-upload-button img{width:100%;height:100%;object-fit:contain}.icon-upload-button--cover{padding:0}.icon-upload-button--cover img{object-fit:cover;border-radius:inherit}.hidden-file{display:none}
+.icon-upload-button {
+  width: 56px;
+  height: 56px;
+  flex-shrink: 0;
+  padding: 0;
+  border: 1px dashed var(--line);
+  border-radius: 25%;
+  background: transparent;
+  cursor: pointer;
+}
+.icon-upload-button:hover { border-color: var(--primary); }
+.icon-upload-button:disabled { opacity: .5; cursor: wait; }
+.icon-upload-button .app-icon { width: 100%; height: 100%; }
+.hidden-file { display: none; }
 </style>

@@ -5,7 +5,7 @@ import { createHash } from 'node:crypto';
 
 const root = fileURLToPath(new URL('../../../', import.meta.url));
 const check = process.argv.includes('--check');
-const skill = join(root, 'server/cli/skill/practical-system');
+const skill = join(root, 'server/tools/cli/skill/practical-system');
 const desktop = join(root, 'fontend/desktop/agent/skills/practical-system');
 const menusPath = join(root, 'fontend/shared/operation-guides.json');
 const manifestPath = join(desktop, 'resources.json');

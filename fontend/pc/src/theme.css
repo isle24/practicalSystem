@@ -185,17 +185,13 @@
 .login-methods button { flex: 1; padding: 10px; background: var(--surface-2); color: var(--muted); border: 1px solid var(--line); border-radius: 8px; cursor: pointer; }
 .login-methods button.active { color: var(--primary); border-color: var(--primary); }
 .message-recipient-preview { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 12px; background: var(--surface-2); color: var(--muted); border: 1px solid var(--line); border-radius: 8px; font-size: 12px; }
-:root[data-theme="dark"] .login-panel,
-:root[data-theme="dark"] .profile-panel-card,
-:root[data-theme="dark"] .module-content-panel,
-:root[data-theme="dark"] .menu-dialog,
+:root[data-theme="dark"]:is([data-ui-style="classic"], :not([data-ui-style])) :is(
+  .login-panel, .profile-panel-card, .module-content-panel, .menu-dialog, .taskbar,
+  .switch-account-menu, .desktop-context-menu, .wechat-binding-gate
+),
 :root[data-theme="dark"] .plugin-card,
 :root[data-theme="dark"] .favorite-tile,
-:root[data-theme="dark"] .wechat-binding-gate,
-:root[data-theme="dark"] .wechat-binding-card,
-:root[data-theme="dark"] .switch-account-menu,
-:root[data-theme="dark"] .desktop-context-menu,
-:root[data-theme="dark"] .taskbar {
+:root[data-theme="dark"] .wechat-binding-card {
   background: var(--surface) !important;
   color: var(--text);
   border-color: var(--line);
@@ -213,7 +209,7 @@
 :root[data-theme="dark"] select { background-color: var(--surface); color: var(--text); border-color: var(--line); }
 :root[data-theme="dark"] .window-content,
 :root[data-theme="dark"] .operation-dialog-body { background: transparent; color: var(--text); }
-:root[data-theme="dark"] .wechat-binding-gate { background: rgba(5, 10, 18, .8) !important; }
+:root[data-theme="dark"]:is([data-ui-style="classic"], :not([data-ui-style])) .wechat-binding-gate { background: rgba(5, 10, 18, .8) !important; }
 
 @media (prefers-reduced-motion: reduce) {
   .data-list-drawer-enter-active,

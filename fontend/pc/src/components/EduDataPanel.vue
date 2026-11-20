@@ -5,6 +5,8 @@ import { Check, Download, RefreshCw, Upload } from '@lucide/vue';
 import EduFieldChanges from './EduFieldChanges.vue';
 import OperationDialog from './OperationDialog.vue';
 import AccountImportDialog from './AccountImportDialog.vue';
+import FormFieldLabel from '../../../shared/components/FormFieldLabel.vue';
+import { request } from '../api/client';
 import {
   cancelEduBatch,
   classifyEduCandidate,
@@ -28,6 +30,7 @@ const props = defineProps({
   canManageAccounts: { type: Boolean, default: false },
   sessionKey: { type: String, default: '' },
 });
+const emit = defineEmits(['open-target']);
 
 const today = new Date();
 const academicStartYear = today.getFullYear() - (today.getMonth() < 8 ? 1 : 0);
@@ -58,9 +61,13 @@ const state = reactive({
   sourcePagination: { page: 1, page_size: 20, total: 0 },
   sourceLoading: false,
   candidates: [],
+  candidateStatus: 'pending',
   candidatePagination: { page: 1, page_size: 20, total: 0 },
   candidateLoading: false,
   candidateSubmitting: false,
+  sourceReview: null,
+  reviewSubmitting: false,
+  reviewError: '',
   selectedCandidateIds: [],
   issues: [],
   issuePagination: { page: 1, page_size: 20, total: 0 },
@@ -71,6 +78,9 @@ let inputElement = null;
 let refreshTimer = null;
 let batchRequestId = 0;
 let sourceRequestId = 0;
+let detailRequestId = 0;
+let candidateRequestId = 0;
+let issueRequestId = 0;
 
 const templateDefinitions = [
   { type: 'student', label: '在校学生模板' },
@@ -86,6 +96,14 @@ const sourceDefinitions = [
 
 const processing = computed(() => state.batches.some(item => ['queued', 'parsing', 'validating', 'publishing'].includes(item.status)));
 const candidateSelectionReady = computed(() => state.selectedCandidateIds.length > 0);
+const sourceReviewDiff = computed(() => {
+  const review = state.sourceReview?.source_change;
+  if (!review) return [];
+  return Object.entries(review.after_json || {}).flatMap(([field, after]) => {
+    const before = review.before_json?.[field] ?? null;
+    return before === after ? [] : [{ field, before, after }];
+  });
+});
 const canFilterPeriod = computed(() => ['batches', 'teaching_plan', 'course_offering'].includes(state.tab));
 const academicYearOptions = computed(() => [...new Set([
   ...Array.from({ length: 8 }, (_, index) => `${academicStartYear + 2 - index}-${academicStartYear + 3 - index}`),
@@ -215,36 +233,41 @@ async function loadBatches(page = 1) {
 }
 
 async function openBatch(row) {
+  const requestId = ++detailRequestId;
   state.selectedBatch = row;
+  state.detail = { changes: { items: [], pagination: {} }, issues: { items: [], pagination: {} } };
   state.issueBatchId = String(row.id);
   state.detailVisible = true;
   state.detailLoading = true;
   try {
-    state.detail = await fetchEduBatchDetail(row.id);
+    const detail = await fetchEduBatchDetail(row.id);
+    if (requestId === detailRequestId) state.detail = detail;
   } catch (error) {
-    state.message = error.message;
+    if (requestId === detailRequestId) state.message = error.message;
   } finally {
-    state.detailLoading = false;
+    if (requestId === detailRequestId) state.detailLoading = false;
   }
 }
 
 async function loadDetailPage(type, page) {
   if (state.detailLoading || !state.selectedBatch) return;
+  const requestId = ++detailRequestId;
   state.detailLoading = true;
   try {
     const params = { page, page_size: 20 };
-    state.detail[type] = type === 'changes'
+    const result = type === 'changes'
       ? await fetchEduChanges(state.selectedBatch.id, params)
       : await fetchEduIssues(state.selectedBatch.id, params);
+    if (requestId === detailRequestId) state.detail[type] = result;
   } catch (error) {
-    state.message = error.message;
+    if (requestId === detailRequestId) state.message = error.message;
   } finally {
-    state.detailLoading = false;
+    if (requestId === detailRequestId) state.detailLoading = false;
   }
 }
 
 async function publishBatch(row) {
-  if (!props.canConfirm || !['pending_confirm', 'partial_failed'].includes(row.status)) {
+  if (!props.canConfirm || Number(row.invalid_rows) > 0 || !['pending_confirm', 'partial_failed'].includes(row.status)) {
     return;
   }
   try {
@@ -260,7 +283,7 @@ async function publishBatch(row) {
 }
 
 async function cancelBatch(row) {
-  if (!props.canConfirm || !['queued', 'parsing', 'validating', 'pending_confirm'].includes(row.status)) {
+  if (!props.canConfirm || !['queued', 'parsing', 'validating', 'pending_confirm', 'failed'].includes(row.status)) {
     return;
   }
   try {
@@ -293,29 +316,33 @@ async function loadSource(page = 1) {
 }
 
 async function loadCandidates(page = 1) {
+  const requestId = ++candidateRequestId;
   state.candidateLoading = true;
   try {
-    const data = await fetchEduCandidates({ page, page_size: state.candidatePagination.page_size, candidate_status: 'pending' });
+    const data = await fetchEduCandidates({ page, page_size: state.candidatePagination.page_size, candidate_status: state.candidateStatus });
+    if (requestId !== candidateRequestId) return;
     state.candidates = data.items || [];
     state.candidatePagination = { ...state.candidatePagination, ...(data.pagination || {}), page };
   } catch (error) {
-    state.message = error.message;
+    if (requestId === candidateRequestId) state.message = error.message;
   } finally {
-    state.candidateLoading = false;
+    if (requestId === candidateRequestId) state.candidateLoading = false;
   }
 }
 
 async function loadIssues(page = 1) {
+  const requestId = ++issueRequestId;
   if (!state.issueBatchId) {
     state.issues = [];
     return;
   }
   try {
     const data = await fetchEduIssues(state.issueBatchId, { page, page_size: state.issuePagination.page_size });
+    if (requestId !== issueRequestId) return;
     state.issues = data.items || [];
     state.issuePagination = { ...state.issuePagination, ...(data.pagination || {}), page };
   } catch (error) {
-    state.message = error.message;
+    if (requestId === issueRequestId) state.message = error.message;
   }
 }
 
@@ -324,9 +351,9 @@ async function resolveIssue(row) {
     return;
   }
   try {
-    await ElMessageBox.confirm('确认将该问题标记为已处理？', '处理导入问题', { type: 'warning' });
+    await ElMessageBox.confirm('标记后保留行校验结果。无效行须修正文件并重新上传。', '确认已阅', { confirmButtonText: '标记已阅' });
     await resolveEduIssue(row.id);
-    state.message = '导入问题已处理';
+    state.message = '导入问题已标记为已阅';
     await loadIssues(state.issuePagination.page || 1);
   } catch (error) {
     if (error !== 'cancel' && error !== 'close') {
@@ -376,6 +403,39 @@ function toggleCandidate(row, checked) {
   }
 }
 
+function openCandidateTarget(row) {
+  if (!row?.generated_business_id) return;
+  state.sourceReview = null;
+  emit('open-target', { id: row.id, target_id: row.generated_business_id });
+}
+
+function reviewCandidateSource(row) {
+  state.reviewError = '';
+  state.sourceReview = row;
+}
+
+async function retainCandidatePlan() {
+  const row = state.sourceReview;
+  if (!props.canConfirm || !row?.source_change?.id || row.source_change.reviewed_at || state.reviewSubmitting) return;
+  const session = props.sessionKey;
+  state.reviewSubmitting = true;
+  state.reviewError = '';
+  try {
+    await request('/edu-data/retain-candidate-plan', {
+      method: 'POST', body: JSON.stringify({ id: Number(row.id), review_id: Number(row.source_change.id) }),
+      isCurrent: () => props.sessionKey === session,
+    });
+    if (props.sessionKey !== session) return;
+    state.sourceReview = null;
+    state.message = '已记录本次来源核对，继续使用既有计划';
+    await loadCandidates(1);
+  } catch (error) {
+    if (props.sessionKey === session) state.reviewError = error.message;
+  } finally {
+    if (props.sessionKey === session) state.reviewSubmitting = false;
+  }
+}
+
 function handleTabChange(tab) {
   if (tab === 'batches') loadBatches(1);
   if (tab === 'student' || tab === 'teaching_plan' || tab === 'course_offering') {
@@ -412,7 +472,11 @@ onBeforeUnmount(() => {
   inputElement?.removeEventListener('change', handleFileChange);
 });
 
-watch(() => props.sessionKey, () => { state.accountImportVisible = false; });
+watch(() => props.sessionKey, () => {
+  state.accountImportVisible = false;
+  state.sourceReview = null;
+  state.reviewSubmitting = false;
+});
 </script>
 
 <template>
@@ -472,12 +536,14 @@ watch(() => props.sessionKey, () => { state.accountImportVisible = false; });
         <template #default="{ row }"><el-progress :percentage="Number(row.progress || 0)" :stroke-width="8" /></template>
       </el-table-column>
       <el-table-column label="状态" width="110"><template #default="{ row }"><el-tag :type="statusType(row.status)">{{ statusLabel(row.status) }}</el-tag></template></el-table-column>
-      <el-table-column label="数量" width="170"><template #default="{ row }">{{ row.total_rows || 0 }} / 有效 {{ row.valid_rows || 0 }} / 问题 {{ row.invalid_rows || 0 }}</template></el-table-column>
+      <el-table-column label="数量" width="180"><template #default="{ row }"><span v-if="row.total_rows == null">—</span><span v-else>{{ row.total_rows }} / 有效 {{ row.valid_rows }} / 无效 {{ row.invalid_rows }}</span></template></el-table-column>
       <el-table-column label="操作" width="210" fixed="right">
         <template #default="{ row }">
           <el-button link type="primary" @click="openBatch(row)">详情</el-button>
-          <el-button v-if="props.canConfirm && ['pending_confirm', 'partial_failed'].includes(row.status)" link type="success" @click="publishBatch(row)">{{ row.status === 'partial_failed' ? '继续发布' : '发布' }}</el-button>
-          <el-button v-if="props.canConfirm && ['queued', 'parsing', 'validating', 'pending_confirm'].includes(row.status)" link type="warning" @click="cancelBatch(row)">取消</el-button>
+          <el-tooltip v-if="props.canConfirm && ['pending_confirm', 'partial_failed'].includes(row.status)" :disabled="!Number(row.invalid_rows)" content="请取消批次，按问题表修正文件后重新上传">
+            <span><el-button link type="success" :disabled="Number(row.invalid_rows) > 0" @click="publishBatch(row)">{{ row.status === 'partial_failed' ? '继续发布' : '发布' }}</el-button></span>
+          </el-tooltip>
+          <el-button v-if="props.canConfirm && ['queued', 'parsing', 'validating', 'pending_confirm', 'failed'].includes(row.status)" link type="warning" @click="cancelBatch(row)">取消</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -500,23 +566,32 @@ watch(() => props.sessionKey, () => { state.accountImportVisible = false; });
 
     <section v-else-if="state.tab === 'candidates'" class="edu-candidate-section">
       <div class="edu-candidate-toolbar">
-        <span>待确认业务候选</span>
-        <el-button type="primary" :icon="Check" :loading="state.candidateSubmitting" :disabled="!props.canConfirm || !candidateSelectionReady" @click="confirmSelectedCandidates">生成业务草稿</el-button>
+        <el-select v-model="state.candidateStatus" aria-label="候选状态" style="width: 150px" @change="state.selectedCandidateIds = []; loadCandidates(1)">
+          <el-option label="待生成" value="pending" /><el-option label="来源待变更" value="change_pending" /><el-option label="已生成" value="generated" /><el-option label="已忽略" value="ignored" />
+        </el-select>
+        <el-button v-if="state.candidateStatus === 'pending'" type="primary" :icon="Check" :loading="state.candidateSubmitting" :disabled="!props.canConfirm || !candidateSelectionReady" @click="confirmSelectedCandidates">生成业务草稿</el-button>
       </div>
       <el-table width-storage-key="edu-data-panel:state-candidates" :data="state.candidates" stripe size="small" v-loading="state.candidateLoading" class="edu-data-table">
-        <el-table-column label="选择" width="60">
+        <el-table-column v-if="state.candidateStatus === 'pending'" label="选择" width="60">
           <template #default="{ row }"><el-checkbox :aria-label="`选择${row.name || '课程'}`" :disabled="!props.canConfirm || state.candidateSubmitting" :model-value="state.selectedCandidateIds.includes(Number(row.id))" @change="value => toggleCandidate(row, value)" /></template>
         </el-table-column>
         <el-table-column prop="name" label="课程" min-width="220" show-overflow-tooltip />
         <el-table-column prop="business_type" label="分类" width="130">
           <template #default="{ row }">
-            <el-select :model-value="row.business_type" size="small" :disabled="!props.canConfirm || state.candidateSubmitting" @change="value => classify(row, value)">
+            <el-select :model-value="row.business_type" size="small" :disabled="state.candidateStatus !== 'pending' || !props.canConfirm || state.candidateSubmitting" @change="value => classify(row, value)">
               <el-option label="待分类" value="pending" /><el-option label="实习" value="internship" /><el-option label="实验" value="lab" /><el-option label="实训" value="training" /><el-option label="社会实践" value="social_practice" />
             </el-select>
           </template>
         </el-table-column>
         <el-table-column prop="classification_reason" label="分类依据" min-width="210" show-overflow-tooltip />
         <el-table-column prop="mapping_status" label="映射" width="100" />
+        <el-table-column v-if="['change_pending', 'generated'].includes(state.candidateStatus)" label="业务计划" width="220">
+          <template #default="{ row }">
+            <el-button v-if="row.generated_business_id" link type="primary" @click="openCandidateTarget(row)">打开计划 #{{ row.generated_business_id }}</el-button>
+            <el-button v-if="row.source_change" link type="primary" @click="reviewCandidateSource(row)">{{ row.source_change.reviewed_at ? '核对记录' : '核对来源变更' }}</el-button>
+            <span v-else-if="state.candidateStatus === 'change_pending'">待学校管理员核对</span>
+          </template>
+        </el-table-column>
       </el-table>
     </section>
 
@@ -526,10 +601,10 @@ watch(() => props.sessionKey, () => { state.accountImportVisible = false; });
       <el-table-column prop="field_name" label="字段" width="140" />
       <el-table-column prop="issue_type" label="类型" width="120" />
       <el-table-column prop="message" label="问题" min-width="260" />
-      <el-table-column prop="resolved" label="处理状态" width="100" />
+      <el-table-column label="查阅状态" width="100"><template #default="{ row }">{{ String(row.resolved) === 'true' ? '已阅' : '待查阅' }}</template></el-table-column>
       <el-table-column label="操作" width="100" fixed="right">
         <template #default="{ row }">
-          <el-button v-if="props.canIssue && String(row.resolved) !== 'true'" link type="primary" @click="resolveIssue(row)">标记处理</el-button>
+          <el-button v-if="props.canIssue && String(row.resolved) !== 'true'" link type="primary" @click="resolveIssue(row)">标记已阅</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -555,10 +630,23 @@ watch(() => props.sessionKey, () => { state.accountImportVisible = false; });
     </div>
 
     <AccountImportDialog :visible="state.accountImportVisible" mode="student" :session-key="props.sessionKey" @close="state.accountImportVisible = false" @completed="state.tab === 'student' && loadSource(state.sourcePagination.page || 1)" />
+    <OperationDialog :visible="Boolean(state.sourceReview)" title="核对开课来源变更" dialog-class="edu-batch-detail-dialog" :busy="state.reviewSubmitting" @close="state.sourceReview = null">
+      <div v-if="state.sourceReview" class="edu-batch-detail-body">
+        <p class="edu-detail-title">{{ state.sourceReview.name }} · 业务计划 #{{ state.sourceReview.generated_business_id }} · 来源批次 #{{ state.sourceReview.source_change.batch_id }}</p>
+        <EduFieldChanges :value="sourceReviewDiff" />
+        <p v-if="state.sourceReview.source_change.reviewed_at">已核对并继续使用既有计划 · {{ state.sourceReview.source_change.reviewed_at }}</p>
+        <p v-else>计划需采纳本次来源内容时，请打开关联计划并提交原业务变更审核。</p>
+        <el-alert v-if="state.reviewError" :title="state.reviewError" type="error" :closable="false" />
+      </div>
+      <template #footer>
+        <el-button :disabled="state.reviewSubmitting" @click="openCandidateTarget(state.sourceReview)">打开关联计划</el-button>
+        <el-button v-if="props.canConfirm && !state.sourceReview?.source_change?.reviewed_at" type="primary" :loading="state.reviewSubmitting" @click="retainCandidatePlan">已核对，继续使用既有计划</el-button>
+      </template>
+    </OperationDialog>
     <OperationDialog :visible="state.uploadPeriodVisible" title="选择开课数据所属学期" dialog-class="menu-dialog" @close="state.uploadPeriodVisible = false">
       <div class="operation-form menu-dialog-form">
-        <label><span>学年</span><el-select v-model="state.uploadPeriod.academic_year" aria-label="上传学年"><el-option v-for="year in academicYearOptions" :key="year" :label="year" :value="year" /></el-select></label>
-        <label><span>学期</span><el-select v-model="state.uploadPeriod.semester" aria-label="上传学期"><el-option v-for="semester in semesterOptions" :key="semester" :label="semesterLabel(semester)" :value="semester" /></el-select></label>
+        <label><FormFieldLabel :required="true" help="各行学年须与所选学年一致。">学年</FormFieldLabel><el-select v-model="state.uploadPeriod.academic_year" aria-label="上传学年"><el-option v-for="year in academicYearOptions" :key="year" :label="year" :value="year" /></el-select></label>
+        <label><FormFieldLabel :required="true" help="各行学期须与所选学期一致。">学期</FormFieldLabel><el-select v-model="state.uploadPeriod.semester" aria-label="上传学期"><el-option v-for="semester in semesterOptions" :key="semester" :label="semesterLabel(semester)" :value="semester" /></el-select></label>
       </div>
       <footer><el-button @click="state.uploadPeriodVisible = false">取消</el-button><el-button type="primary" :disabled="!state.uploadPeriod.academic_year || !state.uploadPeriod.semester" @click="chooseFile">选择文件</el-button></footer>
     </OperationDialog>
@@ -568,6 +656,7 @@ watch(() => props.sessionKey, () => { state.accountImportVisible = false; });
       <el-skeleton v-if="state.detailLoading" :rows="8" animated />
       <template v-else>
         <p class="edu-detail-title">{{ state.selectedBatch?.name || '-' }} · {{ statusLabel(state.selectedBatch?.status) }}</p>
+        <el-alert v-if="Number(state.detail.invalid_rows) > 0" type="warning" :closable="false" title="批次含无效行，请按问题表修正文件，取消原批次后重新上传。" />
         <el-tabs>
           <el-tab-pane label="差异">
             <el-table width-storage-key="edu-data-panel:state-detail-changes-items" :data="state.detail.changes?.items || []" size="small" max-height="54vh">
