@@ -108,6 +108,8 @@
         :key="win.id"
         :title="win.module.name"
         :menu-key="win.module.id"
+        :icon="win.module.icon"
+        :color="win.module.color"
         :icon-name="win.module.menu?.icon"
         :icon-url="win.module.iconUrl"
         :backend-url="backendUrl"
@@ -2891,7 +2893,7 @@
                 <div v-else-if="win.module.source === 'menu'" class="module-content-panel menu-module-panel">
                   <section class="menu-module-card">
                     <header>
-                      <AppIcon class="app-glyph" :menu-key="win.module.id" :icon-name="win.module.menu?.icon" :icon-url="win.module.iconUrl" :backend-url="backendUrl" />
+                      <AppIcon class="app-glyph" :menu-key="win.module.id" :icon="win.module.icon" :color="win.module.color" :icon-name="win.module.menu?.icon" :icon-url="win.module.iconUrl" :backend-url="backendUrl" />
                       <span>
                         <strong>{{ win.module.name }}</strong>
                         <small>{{ win.module.scope }}</small>
@@ -2904,7 +2906,7 @@
                         type="button"
                         @click="openMenuModuleChild(item)"
                       >
-                        <AppIcon class="menu-module-child-icon" :menu-key="item.module_key" :icon-name="item.icon" :icon-url="item.icon_url" :backend-url="backendUrl" />
+                        <AppIcon class="menu-module-child-icon" :menu-key="item.module_key" :icon="item.icon ? resolveMenuIcon(item.icon) : null" :icon-name="item.icon" :icon-url="item.icon_url" :backend-url="backendUrl" />
                         <span>{{ item.name }}</span>
                         <small>{{ menuNodeTypeText(item.type) }}</small>
                       </button>
@@ -4309,7 +4311,7 @@
               type="button"
               @mousedown.prevent="openGlobalSearchModule(module)"
             >
-              <AppIcon class="search-result-glyph" :menu-key="module.id" :icon-name="module.menu?.icon" :icon-url="module.iconUrl" :backend-url="backendUrl" />
+              <AppIcon class="search-result-glyph" :menu-key="module.id" :icon="module.icon" :color="module.color" :icon-name="module.menu?.icon" :icon-url="module.iconUrl" :backend-url="backendUrl" />
               <span>
                 <strong>{{ module.name }}</strong>
                 <small>{{ module.scope }}</small>
@@ -4323,7 +4325,7 @@
               <button type="button" class="dock-pinned-app" :aria-label="module.name"
                 :class="{ active: isModuleFocused(module.id), running: isModuleOpen(module.id) }"
                 @click="openModule(module)">
-                <AppIcon class="taskbar-glyph" :menu-key="module.id" :icon-name="module.menu?.icon" :icon-url="module.iconUrl" :backend-url="backendUrl" />
+                <AppIcon class="taskbar-glyph" :menu-key="module.id" :icon="module.icon" :color="module.color" :icon-name="module.menu?.icon" :icon-url="module.iconUrl" :backend-url="backendUrl" />
               </button>
             </DockTooltip>
           </template>
@@ -4334,7 +4336,7 @@
               :class="{ active: focusedWindowId === win.id && !win.minimized, running: !win.minimized }"
               @click="toggleTaskWindow(win.id)"
             >
-              <AppIcon class="taskbar-glyph" :menu-key="win.module.id" :icon-name="win.module.menu?.icon" :icon-url="win.module.iconUrl" :backend-url="backendUrl" />
+              <AppIcon class="taskbar-glyph" :menu-key="win.module.id" :icon="win.module.icon" :color="win.module.color" :icon-name="win.module.menu?.icon" :icon-url="win.module.iconUrl" :backend-url="backendUrl" />
             </a>
           </DockTooltip>
           <DockTooltip label="消息中心">

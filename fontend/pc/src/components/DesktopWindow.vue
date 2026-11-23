@@ -14,7 +14,7 @@
   >
     <header class="window-title" @mousedown="startDrag" @dblclick="toggleMaximize">
       <div class="window-name">
-        <AppIcon :menu-key="menuKey" :icon-name="iconName" :icon-url="iconUrl" :backend-url="backendUrl" :size="20" />
+        <AppIcon :menu-key="menuKey" :icon="icon" :color="color" :icon-name="iconName" :icon-url="iconUrl" :backend-url="backendUrl" :size="20" />
         <span>{{ title }}</span>
       </div>
       <div class="window-title-side">
@@ -52,6 +52,8 @@ import { useMaximizedWindow } from '../composables/useMaximizedWindows';
 const props = defineProps({
   title: { type: String, required: true },
   menuKey: { type: String, default: '' },
+  icon: { type: [Object, Function], default: null },
+  color: { type: String, default: '' },
   iconName: { type: String, default: '' },
   iconUrl: { type: String, default: '' },
   backendUrl: { type: Function, required: true },

@@ -26,6 +26,7 @@
       >
         <AppIcon
           :menu-key="item.key"
+          :icon="item.icon"
           class="side-item-icon"
           :size="20"
         />

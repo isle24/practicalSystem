@@ -9,7 +9,7 @@
       :class="{ active: modelValue === item.key }"
       @click="emit('update:modelValue', item.key)"
     >
-      <AppIcon v-if="item.icon" :menu-key="item.key" :size="18" />
+      <AppIcon v-if="item.icon" :menu-key="item.key" :icon="item.icon" :size="18" />
       <span>{{ item.label || item.name }}</span>
       <small v-if="item.count !== null && item.count !== undefined">{{ item.count }}</small>
     </button>

@@ -20,6 +20,8 @@
       <AppIcon
         class="app-glyph"
         :menu-key="item.id"
+        :icon="item.icon"
+        :color="item.color"
         :icon-name="item.menu?.icon"
         :icon-url="item.iconUrl"
         :backend-url="backendUrl"

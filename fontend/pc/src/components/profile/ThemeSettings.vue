@@ -2,6 +2,7 @@
   <section class="profile-panel-card theme-settings">
     <header><strong>本机主题</strong><small>设置按学校和当前用户保存在本机。</small></header>
     <UiStylePicker :model-value="theme.look.choice.value" :school="theme.look.school.value" label="界面风格（选中即应用）" @update:model-value="chooseStyle" />
+    <MenuIconPicker :look="theme.look" />
     <strong class="color-settings-title">配色与壁纸</strong>
     <div class="theme-presets" aria-label="预置与自定义主题"><button v-for="preset in [...theme.presets, ...theme.state.custom]" :key="preset.id" type="button" :disabled="busy" :class="{ active: draft.id === preset.id }" :aria-pressed="draft.id === preset.id" @click="select(preset)"><span class="theme-swatch" :style="{ '--swatch-accent': preset.accent, '--swatch-window': preset.window || (theme.state.systemDark && preset.mode === 'system' ? '#18212f' : '#ffffff') }" aria-hidden="true"><i /><b /></span><span>{{ preset.name || preset.id }}</span></button></div>
     <div class="theme-fields">
@@ -21,6 +22,7 @@
 <script setup>
 import FormFieldLabel from '../../../../shared/components/FormFieldLabel.vue';
 import UiStylePicker from '../../../../shared/components/UiStylePicker.vue';
+import MenuIconPicker from '../../../../shared/components/MenuIconPicker.vue';
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { ElMessageBox } from 'element-plus';
 const props = defineProps({ theme: { type: Object, required: true } });
