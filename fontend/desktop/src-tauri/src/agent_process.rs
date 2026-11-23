@@ -40,7 +40,6 @@ pub(crate) fn spawn_runtime(app: &AppHandle) -> Result<RuntimeChild, String> {
     let mut command = tokio::process::Command::new(node);
     command
         .arg("--disable-proto=throw")
-        .arg(script)
         .env_clear()
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -51,9 +50,13 @@ pub(crate) fn spawn_runtime(app: &AppHandle) -> Result<RuntimeChild, String> {
         if let Some(value) = std::env::var_os("SystemRoot") {
             command.env("SystemRoot", value);
         }
-        command.creation_flags(0x08000000);
+        // 保留 Tauri 已解析的 Windows 扩展路径。
+        command
+            .arg("--preserve-symlinks-main")
+            .creation_flags(0x08000000);
     }
     command
+        .arg(script)
         .spawn()
         .map(|child| RuntimeChild(Some(child)))
         .map_err(|_| "无法启动随包 Agent 运行环境".into())
