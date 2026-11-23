@@ -127,7 +127,7 @@
       dialog-class="social-practice-operation-dialog"
       @close="closeDialog"
     >
-      <form class="social-practice-form" @submit.prevent>
+      <form ref="formElement" class="social-practice-form" @submit.prevent>
         <template v-if="state.form.resource === 'plan'">
           <label class="span-2"><FormFieldLabel required help="保存草稿时也须填写，最多 180 字">计划名称</FormFieldLabel><input v-model="state.form.title" maxlength="180" placeholder="请输入社会实践计划名称"></label>
           <label><FormFieldLabel required help="保存时必填；须选择已启用年级">年级</FormFieldLabel><el-select v-model="state.form.grade_id" filterable placeholder="请选择年级" @change="normalizePlanScopes"><el-option v-for="item in state.options.grades" :key="item.grade_id" :label="item.grade_name" :value="item.grade_id" /></el-select></label>
@@ -139,12 +139,7 @@
           <label><FormFieldLabel required help="请选择分别提交或共同提交">团队提交</FormFieldLabel><el-select v-model="state.form.default_team_submit_mode" placeholder="请选择团队提交方式"><el-option label="分别提交" value="individual" /><el-option label="共同提交" value="shared" /></el-select></label>
           <label><FormFieldLabel :required="false" help="1–720 小时；留空默认 48 小时">教师确认时限（小时）</FormFieldLabel><el-input-number v-model="state.form.teacher_confirm_hours" :min="1" :max="720" /></label>
           <label><FormFieldLabel :required="false" help="0–20 次；留空默认 2 次">可重选教师次数</FormFieldLabel><el-input-number v-model="state.form.max_reselect_count" :min="0" :max="20" /></label>
-          <label><FormFieldLabel submit-required help="保存草稿可暂缺；不得晚于报名截止">报名开始</FormFieldLabel><input v-model="state.form.register_start_at" type="datetime-local"></label>
-          <label><FormFieldLabel submit-required help="保存草稿可暂缺；不得早于报名开始或晚于实践开始">报名截止</FormFieldLabel><input v-model="state.form.register_end_at" type="datetime-local"></label>
-          <label><FormFieldLabel submit-required help="保存草稿可暂缺；不得早于报名截止或晚于实践结束">实践开始</FormFieldLabel><input v-model="state.form.practice_start_at" type="datetime-local"></label>
-          <label><FormFieldLabel submit-required help="保存草稿可暂缺；不得早于实践开始或晚于成果截止">实践结束</FormFieldLabel><input v-model="state.form.practice_end_at" type="datetime-local"></label>
-          <label><FormFieldLabel submit-required help="保存草稿可暂缺；不得早于实践结束或晚于成绩截止">成果截止</FormFieldLabel><input v-model="state.form.result_deadline_at" type="datetime-local"></label>
-          <label><FormFieldLabel submit-required help="保存草稿可暂缺；不得早于成果截止">成绩截止</FormFieldLabel><input v-model="state.form.score_deadline_at" type="datetime-local"></label>
+          <PlanDateTimeField v-for="field in planDateFields" :key="field.key" v-model="state.form[field.key]" :field="field" />
           <label class="span-2"><FormFieldLabel :required="false" help="最多 100000 字">计划说明</FormFieldLabel><textarea v-model="state.form.description" rows="4" maxlength="100000" placeholder="请输入目标、范围和执行要求" /></label>
           <section class="span-2 social-inline-editor">
             <header><FormFieldLabel required help="至少保留一项；学院、专业、班级须与年级和管理范围一致">适用范围</FormFieldLabel><el-button link type="primary" :icon="Plus" @click="addScope">添加范围</el-button></header>
@@ -510,6 +505,8 @@ import {
 } from '@lucide/vue';
 import DataListPanel from './DataListPanel.vue';
 import OperationDialog from './OperationDialog.vue';
+import PlanDateTimeField from './PlanDateTimeField.vue';
+import { socialPracticeDateKeys, socialPracticePlanDateFields } from '../../../shared/socialPracticePlanDates';
 import {
   archiveSocialPractice,
   assignSocialPracticeDeclarationTeacher,
@@ -598,6 +595,7 @@ const state = reactive({
   planImport: { fileId: null, items: [], summary: null },
 });
 const materialFileInput = ref(null);
+const formElement = ref(null);
 const materialConfig = reactive({ project: null, loading: false });
 let materialRequest = 0;
 const students = useSocialPracticeStudentOptions(fetchSocialPracticeEligibleStudents, () => {
@@ -634,6 +632,7 @@ const isTeacher = computed(() => props.roleType === 'teacher');
 const isAdmin = computed(() => ['super_admin', 'school_admin', 'college_admin', 'profession_admin'].includes(props.roleType));
 const centralizedProjects = computed(() => state.options.projects.filter(item => item.practice_mode === 'centralized'));
 const projectPlanOptions = computed(() => socialPracticeProjectPlanOptions(state.options.plans));
+const planDateFields = computed(() => socialPracticePlanDateFields(state.form));
 const selectedProjectPlanEligibility = computed(() => socialPracticeProjectPlanEligibility(state.options.plans.find(item => Number(item.id) === Number(state.form.plan_id))));
 const projectPlanReady = computed(() => Boolean(state.form.plan_id) && !projectPlan.checking && !projectPlan.error && Number(projectPlan.checkedId) === Number(state.form.plan_id) && selectedProjectPlanEligibility.value.canCreate);
 const projectPlanMessage = computed(() => {
@@ -1059,6 +1058,14 @@ async function saveForm(submit) {
   const dialog = state.dialog;
   const current = () => !disposed && context === generation && dialog === state.dialog && form === state.form;
   const resource = form.resource;
+  if (resource === 'plan') {
+    const invalid = planDateFields.value.find(field => field.error || (submit && !form[field.key]));
+    if (invalid) {
+      ElMessage.warning(invalid.error || `提交审核前请填写${invalid.label}时间`);
+      formElement.value.elements.namedItem(invalid.key).focus();
+      return;
+    }
+  }
   state.saving = true;
   try {
     if (resource === 'project') {
@@ -1713,7 +1720,7 @@ function formFromRow(resource, row) {
 /** 规范化提交表单字段。 */
 function normalizeFormPayload(form) {
   const payload = JSON.parse(JSON.stringify(form));
-  dateFields.forEach((field) => {
+  socialPracticeDateKeys.forEach((field) => {
     if (payload[field]) payload[field] = payload[field].replace('T', ' ') + (payload[field].length === 16 ? ':00' : '');
   });
   if (payload.resource === 'plan') payload.plan_code = payload.code || payload.plan_code || '';
@@ -1727,7 +1734,7 @@ function normalizeFormPayload(form) {
 
 /** 规范化浏览器日期字段。 */
 function normalizeDateFields(form) {
-  dateFields.forEach((field) => {
+  socialPracticeDateKeys.forEach((field) => {
     if (form[field]) form[field] = String(form[field]).slice(0, 16).replace(' ', 'T');
   });
   return form;
@@ -1793,7 +1800,6 @@ function matchModeText(value) { return { student_choose: '学生选择', admin_a
 function materialTypeText(value) { return materialTypeOptions.find(item => item.value === value)?.label || value || '-'; }
 
 const workflowResources = ['plan', 'project', 'implementation', 'declaration', 'material', 'patch_sign', 'score'];
-const dateFields = ['register_start_at', 'register_end_at', 'practice_start_at', 'practice_end_at', 'result_deadline_at', 'score_deadline_at', 'start_at', 'end_at'];
 const statusMap = { draft: '草稿', wait: '待审核', accept: '已通过', modify: '退回修改', enabled: '正常', active: '进行中', archived: '已归档', pending: '待确认', accepted: '已确认', refused: '已拒绝', rejected: '已拒绝' };
 const statusOptions = [{ label: '草稿', value: 'draft' }, { label: '待审核', value: 'wait' }, { label: '已通过', value: 'accept' }, { label: '需修改', value: 'modify' }, { label: '进行中', value: 'active' }, { label: '已归档', value: 'archived' }];
 function defaultRequirements() { return materialTypeOptions.map(item => ({ practice_mode: ['practice_proof', 'social_practice_report'].includes(item.value) ? 'distributed' : ['practice_report', 'practice_photo'].includes(item.value) ? 'centralized' : 'all', requirement_type: item.value, required_flag: item.value !== 'parent_notice', submit_scope: item.value === 'emergency_plan' ? 'project' : 'student' })); }

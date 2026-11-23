@@ -13,11 +13,14 @@ use std::{
     path::{Path, PathBuf},
 };
 use tauri::{AppHandle, Manager};
+use tokio_util::sync::CancellationToken;
 use zeroize::Zeroizing;
 
 const SERVICE: &str = "com.2iwm.practical.desktop.agent.memory";
 const WORKSPACE_KEY: &str = "local-workspace-v1";
 const IMPORTED_SCOPES: &str = "__imported_scope_keys";
+pub const LEGACY_KEY_REQUIRED: &str =
+    "本机缺少 Agent 解密密钥。若资料来自旧版，请授权从 macOS 钥匙串迁移。";
 const SECTIONS: [&str; 6] = [
     "conversations",
     "memories",
@@ -71,6 +74,15 @@ fn file(app: &AppHandle, key: &str) -> Result<PathBuf, String> {
         .join(format!("{key}.bin")))
 }
 
+#[cfg(target_os = "macos")]
+pub fn has_local_workspace(app: &AppHandle) -> Result<bool, String> {
+    let has_key = key_path(app, WORKSPACE_KEY)?
+        .try_exists()
+        .map_err(|_| "无法读取本机 Agent 密钥状态")?;
+    Ok(has_key
+        && checked_file(&file(app, WORKSPACE_KEY)?.with_extension("workspace.bin"))?.is_some())
+}
+
 fn checked_directory(path: &Path) -> Result<(), String> {
     let parent = path.parent().ok_or("本机记忆目录无效")?;
     match fs::symlink_metadata(parent) {
@@ -92,12 +104,17 @@ fn checked_file(path: &Path) -> Result<Option<fs::Metadata>, String> {
     }
 }
 
-fn secret(key: &str, create: bool) -> Result<Zeroizing<Vec<u8>>, String> {
+fn system_secret(key: &str, _create: bool) -> Result<Zeroizing<[u8; 32]>, String> {
     let entry = crate::system_credentials::Entry::new(SERVICE, key)
         .map_err(|_| "系统凭据库不可用，无法加密本机记忆")?;
-    let value = match entry.get_password() {
+    #[cfg(target_os = "macos")]
+    let stored = entry.get_password_for_migration();
+    #[cfg(not(target_os = "macos"))]
+    let stored = entry.get_password();
+    let value = match stored {
         Ok(value) => Zeroizing::new(value),
-        Err(keyring::Error::NoEntry) if create => {
+        #[cfg(not(target_os = "macos"))]
+        Err(keyring::Error::NoEntry) if _create => {
             let mut bytes = Zeroizing::new([0u8; 32]);
             OsRng.fill_bytes(bytes.as_mut());
             let encoded = Zeroizing::new(STANDARD.encode(bytes.as_ref()));
@@ -106,20 +123,61 @@ fn secret(key: &str, create: bool) -> Result<Zeroizing<Vec<u8>>, String> {
                 .map_err(|_| "系统凭据库无法保存 Agent 加密密钥")?;
             encoded
         }
+        #[cfg(target_os = "macos")]
+        Err(keyring::Error::NoEntry) => {
+            return Err("旧版钥匙串没有对应的 Agent 密钥，请检查原设备的密钥备份".into())
+        }
+        #[cfg(target_os = "macos")]
+        Err(_) => return Err("未取得旧版 Agent 钥匙串授权，可再次点击迁移".into()),
+        #[cfg(not(target_os = "macos"))]
         Err(_) => return Err("本机记忆密钥不可用，请解锁系统凭据库；未启用明文降级".into()),
     };
-    let bytes = Zeroizing::new(
-        STANDARD
-            .decode(value.as_bytes())
-            .map_err(|_| "本机记忆密钥格式无效")?,
-    );
-    if bytes.len() != 32 {
+    let mut bytes = Zeroizing::new([0u8; 32]);
+    if STANDARD
+        .decode_slice(value.as_bytes(), bytes.as_mut())
+        .map_err(|_| "本机记忆密钥格式无效")?
+        != bytes.len()
+    {
         return Err("本机记忆密钥无效".into());
     }
     Ok(bytes)
 }
 
-fn read_encrypted(path: &Path, key: &str, scope: &Value) -> Result<Option<Value>, String> {
+#[cfg(target_os = "macos")]
+fn key_path(app: &AppHandle, key: &str) -> Result<PathBuf, String> {
+    Ok(app
+        .path()
+        .app_config_dir()
+        .map_err(|_| "无法定位本机 Agent 密钥目录")?
+        .join("agent-keys")
+        .join(format!("{key}.key")))
+}
+
+fn secret(app: &AppHandle, key: &str, create: bool) -> Result<Zeroizing<[u8; 32]>, String> {
+    #[cfg(target_os = "macos")]
+    {
+        crate::local_key::load(&key_path(app, key)?, create).map_err(|error| {
+            if !create && error.kind() == std::io::ErrorKind::NotFound {
+                LEGACY_KEY_REQUIRED.into()
+            } else {
+                "本机 Agent 密钥无法读写，请检查文件权限及密钥备份".into()
+            }
+        })
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = app;
+        system_secret(key, create)
+    }
+}
+
+fn read_encrypted(
+    app: &AppHandle,
+    path: &Path,
+    key: &str,
+    scope: &Value,
+    migration: Option<&CancellationToken>,
+) -> Result<Option<Value>, String> {
     let Some(metadata) = checked_file(path)? else {
         return Ok(None);
     };
@@ -138,8 +196,23 @@ fn read_encrypted(path: &Path, key: &str, scope: &Value) -> Result<Option<Value>
     if data.len() < 29 || data[0] != 1 {
         return Err("本机记忆格式无效".into());
     }
-    let key_bytes = secret(key, false)?;
-    let cipher = Aes256Gcm::new_from_slice(&key_bytes).map_err(|_| "本机记忆密钥无效")?;
+    let key_bytes = secret(app, key, false);
+    #[cfg(target_os = "macos")]
+    let (key_bytes, importing) = match (key_bytes, migration) {
+        (Err(message), Some(cancel)) if message == LEGACY_KEY_REQUIRED => {
+            if cancel.is_cancelled() {
+                return Err("旧版 Agent 密钥迁移已取消".into());
+            }
+            (system_secret(key, false)?, Some(cancel))
+        }
+        (key_bytes, _) => (key_bytes?, None),
+    };
+    #[cfg(not(target_os = "macos"))]
+    let key_bytes = {
+        let _ = migration;
+        key_bytes?
+    };
+    let cipher = Aes256Gcm::new_from_slice(key_bytes.as_ref()).map_err(|_| "本机记忆密钥无效")?;
     let clear = Zeroizing::new(
         cipher
             .decrypt(
@@ -149,20 +222,45 @@ fn read_encrypted(path: &Path, key: &str, scope: &Value) -> Result<Option<Value>
                     aad: key.as_bytes(),
                 },
             )
-            .map_err(|_| "本机记忆解密失败，请检查系统凭据库")?,
+            .map_err(|_| "本机 Agent 加密资料与密钥不匹配")?,
     );
     let value: Value = serde_json::from_slice(&clear).map_err(|_| "本机记忆内容无效")?;
     if !value.is_object() || value["scope"] != *scope {
         return Err("本机记忆不属于当前学校账号".into());
     }
+    #[cfg(target_os = "macos")]
+    if let Some(cancel) = importing {
+        if cancel.is_cancelled() {
+            return Err("旧版 Agent 密钥迁移已取消".into());
+        }
+        let path = key_path(app, key)?;
+        match crate::local_key::install(&path, &key_bytes) {
+            Ok(()) => {}
+            Err(error)
+                if error.kind() == std::io::ErrorKind::AlreadyExists
+                    && secret(app, key, false)?.as_ref() == key_bytes.as_ref() => {}
+            Err(_) => return Err("无法保存已验证的旧版 Agent 密钥".into()),
+        }
+    }
     Ok(Some(value))
 }
 
-fn read_account(app: &AppHandle, scope: &Value, key: &str) -> Result<Option<Value>, String> {
+fn read_account(
+    app: &AppHandle,
+    scope: &Value,
+    key: &str,
+    migration: Option<&CancellationToken>,
+) -> Result<Option<Value>, String> {
     let legacy = file(app, key)?;
-    match read_encrypted(&legacy.with_extension("workspace.bin"), key, scope)? {
+    match read_encrypted(
+        app,
+        &legacy.with_extension("workspace.bin"),
+        key,
+        scope,
+        migration,
+    )? {
         Some(value) => Ok(Some(value)),
-        None => read_encrypted(&legacy, key, scope),
+        None => read_encrypted(app, &legacy, key, scope, migration),
     }
 }
 
@@ -235,9 +333,10 @@ fn import_account(
     scope: &Value,
     key: &str,
     shared: &Value,
+    migration: Option<&CancellationToken>,
 ) -> Result<Value, String> {
     let mut candidate = shared.clone();
-    if let Some(legacy) = read_account(app, scope, key)? {
+    if let Some(legacy) = read_account(app, scope, key, migration)? {
         workspace_content(&legacy, true)?;
         let legacy = crate::agent_workspace::normalize(scope, legacy);
         let has_active = candidate["conversations"]
@@ -278,14 +377,23 @@ fn import_account(
 }
 
 pub fn read_locked(app: &AppHandle, scope: &Value) -> Result<Value, String> {
+    read_with_keys(app, scope, None)
+}
+
+pub fn read_with_keys(
+    app: &AppHandle,
+    scope: &Value,
+    migration: Option<&CancellationToken>,
+) -> Result<Value, String> {
     let key = scope_key(scope)?;
     if scope.get("storage").is_some() {
-        return Ok(read_account(app, scope, &key)?
+        return Ok(read_account(app, scope, &key, migration)?
             .unwrap_or_else(|| json!({"scope":scope,"messages":[],"history":[]})));
     }
     let path = file(app, WORKSPACE_KEY)?.with_extension("workspace.bin");
-    let stored = read_encrypted(&path, WORKSPACE_KEY, &local_scope())?;
-    let mut dirty = stored.is_none();
+    let stored = read_encrypted(app, &path, WORKSPACE_KEY, &local_scope(), migration)?;
+    let new_workspace = stored.is_none();
+    let mut dirty = new_workspace;
     let mut value = stored.unwrap_or_else(|| {
         let mut value = json!({"version":2,"scope":local_scope()});
         for section in SECTIONS {
@@ -305,10 +413,16 @@ pub fn read_locked(app: &AppHandle, scope: &Value) -> Result<Value, String> {
         .iter()
         .any(|source| source.as_str() == Some(key.as_str()))
     {
-        match import_account(app, scope, &key, &value) {
+        match import_account(app, scope, &key, &value, migration) {
             Ok(imported) => {
                 value = imported;
                 dirty = true;
+            }
+            Err(message) if migration.is_some() || (cfg!(target_os = "macos") && new_workspace) => {
+                return Err(message)
+            }
+            Err(message) if message == LEGACY_KEY_REQUIRED => {
+                value["migration_notice"] = json!(message);
             }
             Err(message) => {
                 value["migration_notice"] = json!(format!(
@@ -323,13 +437,19 @@ pub fn read_locked(app: &AppHandle, scope: &Value) -> Result<Value, String> {
     Ok(value)
 }
 
-fn write_encrypted(path: &Path, key: &str, value: &Value, exists: bool) -> Result<(), String> {
-    let key_bytes = secret(key, !exists)?;
+fn write_encrypted(
+    app: &AppHandle,
+    path: &Path,
+    key: &str,
+    value: &Value,
+    exists: bool,
+) -> Result<(), String> {
+    let key_bytes = secret(app, key, !exists)?;
     let clear = Zeroizing::new(serde_json::to_vec(value).map_err(|_| "无法保存本机记忆")?);
     if clear.len() > 3 * 1024 * 1024 {
         return Err("本机工作区已满，请删除不需要的会话或插件资源".into());
     }
-    let cipher = Aes256Gcm::new_from_slice(&key_bytes).map_err(|_| "本机记忆密钥无效")?;
+    let cipher = Aes256Gcm::new_from_slice(key_bytes.as_ref()).map_err(|_| "本机记忆密钥无效")?;
     let mut nonce = [0u8; 12];
     OsRng.fill_bytes(&mut nonce);
     let encrypted = cipher
@@ -361,18 +481,19 @@ pub fn write(app: &AppHandle, scope: &Value, value: &Value) -> Result<(), String
         let legacy = file(app, &key)?;
         let path = legacy.with_extension("workspace.bin");
         let exists = checked_file(&path)?.is_some() || checked_file(&legacy)?.is_some();
-        return write_encrypted(&path, &key, value, exists);
+        return write_encrypted(app, &path, &key, value, exists);
     }
     workspace_content(value, false)?;
     if value["scope"] != *scope {
         return Err("本机工作区当前会话范围无效".into());
     }
     let path = file(app, WORKSPACE_KEY)?.with_extension("workspace.bin");
-    let stored = read_encrypted(&path, WORKSPACE_KEY, &local_scope())?;
+    let stored = read_encrypted(app, &path, WORKSPACE_KEY, &local_scope(), None)?;
     if let Some(stored) = &stored {
         workspace_content(stored, false)?;
     }
     write_encrypted(
+        app,
         &path,
         WORKSPACE_KEY,
         &workspace_envelope(value),

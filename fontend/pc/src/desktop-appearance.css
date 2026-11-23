@@ -104,7 +104,8 @@
 .desktop-shell-mac .taskbar-apps { flex: 0 1 auto; max-width: none; gap: 5px; padding: 7px 4px; }
 .desktop-shell-mac .taskbar button,
 .desktop-shell-mac .taskbar a { flex-basis: 46px; width: 46px; height: 46px; border-radius: 12px; }
-.desktop-shell-mac .taskbar .taskbar-glyph { width: 38px; height: 38px; box-shadow: inset 0 1px 0 rgba(255,255,255,.4), 0 2px 5px rgba(0,0,0,.12); }
+.desktop-shell-mac .taskbar .taskbar-glyph { width: 38px; height: 38px; }
+.desktop-shell-mac .taskbar img.taskbar-glyph:not(.menu-artwork) { box-shadow: inset 0 1px 0 rgba(255,255,255,.4), 0 2px 5px rgba(0,0,0,.12); }
 .desktop-shell-mac .taskbar .taskbar-apps > :is(button, a).active { background: transparent; border-color: transparent; box-shadow: none; }
 .desktop-shell-mac .taskbar .dock-pinned-app::after,
 .desktop-shell-mac .taskbar a::after,

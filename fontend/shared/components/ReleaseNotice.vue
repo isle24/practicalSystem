@@ -1,8 +1,8 @@
-<template><aside v-if="latest && visible" class="release-notice" role="status"><Bell :size="20" /><div><strong>{{ latest.title }}</strong><small>新版本 {{ latest.version }} 已发布</small></div><button @click="open">查看</button><button title="关闭" @click="dismiss"><X :size="16" /></button></aside></template>
+<template><aside v-if="latest && visible && !suppressed" class="release-notice" role="status"><Bell :size="20" /><div><strong>{{ latest.title }}</strong><small>新版本 {{ latest.version }} 已发布</small></div><button @click="open">查看</button><button title="关闭" @click="dismiss"><X :size="16" /></button></aside></template>
 <script setup>
 import { ref, onMounted, onBeforeUnmount } from 'vue';
 import { Bell, X } from '@lucide/vue';
-const props = defineProps({ request: { type: Function, required: true }, sessionKey: { type: String, required: true } });
+const props = defineProps({ request: { type: Function, required: true }, sessionKey: { type: String, required: true }, suppressed: Boolean });
 const emit = defineEmits(['open']);
 const latest = ref(null), visible = ref(false);
 let lastCheck = 0, disposed = false;

@@ -3,6 +3,16 @@ use serde::{Deserialize, Serialize};
 use std::{fs, io::Write, sync::Arc, time::Duration};
 use tauri::{AppHandle, Manager};
 use url::Url;
+use zeroize::Zeroizing;
+
+pub const MAX_PASSWORD_BYTES: usize = 4096;
+
+#[derive(Clone, Copy, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum SavedPasswordSource {
+    Local,
+    Legacy,
+}
 
 #[derive(Clone, Default, Deserialize, Serialize)]
 pub struct Settings {
@@ -12,6 +22,14 @@ pub struct Settings {
     pub last_username: String,
     #[serde(default)]
     pub schools: Vec<School>,
+}
+
+impl Settings {
+    pub fn school(&self, origin: &str, username: &str) -> Option<&School> {
+        self.schools
+            .iter()
+            .find(|school| school.origin == origin && school.username == username)
+    }
 }
 
 #[derive(Clone, Deserialize, Serialize)]
@@ -107,56 +125,97 @@ pub fn save(app: &AppHandle, settings: &Settings) -> Result<(), String> {
     Ok(())
 }
 
-/// 生成系统凭据库使用的稳定键名。
-fn credential_key(origin: &str, username: &str) -> String {
+pub fn system_password_account(origin: &str, username: &str) -> String {
     format!("{}:{}", origin.trim().to_ascii_lowercase(), username.trim())
 }
 
-/// 保存学校账号密码到系统凭据库。
-pub fn save_password(origin: &str, username: &str, password: &str) -> Result<(), String> {
-    if username.trim().is_empty() || password.is_empty() {
-        return Ok(());
-    }
-    let entry = crate::system_credentials::Entry::new(
+fn system_password_entry(
+    origin: &str,
+    username: &str,
+) -> Result<crate::system_credentials::Entry, String> {
+    crate::system_credentials::Entry::new(
         "com.2iwm.practical.desktop.school",
-        &credential_key(origin, username),
+        &system_password_account(origin, username),
     )
-    .map_err(|_| "无法初始化系统凭据库")?;
-    entry
-        .set_password(password)
-        .map_err(|_| "无法保存学校账号密码".to_owned())
+    .map_err(|_| "无法初始化系统凭据库".into())
 }
 
-/// 从系统凭据库读取学校账号密码。
-pub fn load_password(origin: &str, username: &str) -> Result<Option<String>, String> {
-    if username.trim().is_empty() {
-        return Ok(None);
-    }
-    let entry = crate::system_credentials::Entry::new(
-        "com.2iwm.practical.desktop.school",
-        &credential_key(origin, username),
-    )
-    .map_err(|_| "无法初始化系统凭据库")?;
-    match entry.get_password() {
+fn system_password(origin: &str, username: &str) -> Result<Option<String>, String> {
+    match system_password_entry(origin, username)?.get_password() {
         Ok(password) => Ok(Some(password)),
         Err(keyring::Error::NoEntry) => Ok(None),
-        Err(_) => Err("无法读取已保存的学校账号密码".into()),
+        Err(_) => Err("无法读取已保存的学校账号密码，请手工输入密码".into()),
     }
 }
 
-/// 删除学校账号密码。
-pub fn delete_password(origin: &str, username: &str) -> Result<(), String> {
-    if username.trim().is_empty() {
-        return Ok(());
+pub fn password_status(
+    app: &AppHandle,
+    origin: &str,
+    username: &str,
+) -> Result<serde_json::Value, String> {
+    #[cfg(target_os = "macos")]
+    {
+        let status =
+            crate::school_password::SchoolPassword::new(app, origin, username)?.status()?;
+        Ok(serde_json::json!({"stored": status == Some(true), "legacy": status.is_none()}))
     }
-    let entry = crate::system_credentials::Entry::new(
-        "com.2iwm.practical.desktop.school",
-        &credential_key(origin, username),
-    )
-    .map_err(|_| "无法初始化系统凭据库")?;
-    match entry.delete_credential() {
-        Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
-        Err(_) => Err("无法删除已保存的学校账号密码".into()),
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = app;
+        Ok(serde_json::json!({"password": system_password(origin, username)?}))
+    }
+}
+
+pub fn password_for_login(
+    app: &AppHandle,
+    origin: &str,
+    username: &str,
+    source: SavedPasswordSource,
+) -> Result<Zeroizing<String>, String> {
+    #[cfg(target_os = "macos")]
+    {
+        let local = crate::school_password::SchoolPassword::new(app, origin, username)?;
+        match source {
+            SavedPasswordSource::Local => local.load(),
+            SavedPasswordSource::Legacy if local.status()?.is_none() => {
+                system_password(origin, username)?
+                    .map(Zeroizing::new)
+                    .filter(|value| !value.is_empty() && value.len() <= MAX_PASSWORD_BYTES)
+                    .ok_or_else(|| "旧版钥匙串没有该账号的有效密码，请手工输入密码".into())
+            }
+            _ => Err("该账号的本机密码设置已变更，请重新选择账号".into()),
+        }
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (app, origin, username, source);
+        Err("该平台请从连接页提交学校密码".into())
+    }
+}
+
+pub fn update_password(
+    app: &AppHandle,
+    origin: &str,
+    username: &str,
+    password: Option<&str>,
+) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        crate::school_password::SchoolPassword::new(app, origin, username)?.save(password)
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = app;
+        let entry = system_password_entry(origin, username)?;
+        if let Some(password) = password {
+            return entry
+                .set_password(password)
+                .map_err(|_| "无法保存学校账号密码".into());
+        }
+        match entry.delete_credential() {
+            Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
+            Err(_) => Err("无法删除已保存的学校账号密码".into()),
+        }
     }
 }
 

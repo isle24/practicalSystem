@@ -1,4 +1,5 @@
 use crate::{
+    agent_confirmation::View,
     agent_models,
     agent_process::{bounded_line, plugin_configs, probe_mcp, send, spawn_runtime},
     agent_profile_sync, agent_profiles, agent_store, agent_workspace,
@@ -12,19 +13,23 @@ use std::{
     sync::{Arc, Mutex, OnceLock},
     time::Duration,
 };
-use tauri::{AppHandle, Manager};
-use tauri_plugin_dialog::{DialogExt, MessageDialogButtons};
+use tauri::{
+    webview::{NewWindowResponse, PageLoadEvent},
+    AppHandle, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder,
+};
+use tauri_plugin_clipboard_manager::ClipboardExt;
+use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_opener::OpenerExt;
 use tokio::io::BufReader;
 use tokio_util::sync::CancellationToken;
 use zeroize::Zeroize;
 
 const RESULT_LIMIT: usize = 256 * 1024;
-const OPERATION_LIMIT: usize = 8 * 1024 * 1024;
 
 #[derive(Default)]
 struct OwnerState {
     run: Option<Arc<Run>>,
+    view: Option<Arc<View>>,
     tools: Arc<tokio::sync::Mutex<Tools>>,
     scope: Value,
     schedule_recovered: bool,
@@ -33,6 +38,7 @@ struct OwnerState {
 struct Run {
     id: String,
     scope: Value,
+    view: Option<Arc<View>>,
     cancel: CancellationToken,
     state: Mutex<Value>,
     options: Value,
@@ -67,11 +73,38 @@ fn owners() -> &'static Mutex<HashMap<String, OwnerState>> {
 pub fn cancel_owner(owner: &str) {
     if let Ok(mut owners) = owners().lock() {
         if let Some(state) = owners.remove(owner) {
+            if let Some(view) = state.view {
+                view.closed.cancel();
+            }
             if let Some(run) = state.run {
                 run.cancel.cancel();
             }
         }
     }
+}
+
+pub(crate) fn view(owner: &str, window: &WebviewWindow) -> Result<Arc<View>, String> {
+    let mut owners = owners().lock().map_err(|_| "Agent 状态不可用")?;
+    Ok(owners
+        .entry(owner.to_owned())
+        .or_default()
+        .view
+        .get_or_insert_with(|| Arc::new(View::new(window.clone())))
+        .clone())
+}
+
+fn close_view(owner: &str) {
+    if let Ok(mut owners) = owners().lock() {
+        if let Some(view) = owners.get_mut(owner).and_then(|state| state.view.take()) {
+            view.closed.cancel();
+        }
+    }
+}
+
+pub(crate) fn bundled_page(url: &url::Url) -> bool {
+    let local = url.scheme() == "tauri" && url.host_str() == Some("localhost")
+        || matches!(url.scheme(), "http" | "https") && url.host_str() == Some("tauri.localhost");
+    local && url.port().is_none() && url.path() == "/agent.html"
 }
 
 fn update(run: &Run, values: Value) {
@@ -82,34 +115,66 @@ fn update(run: &Run, values: Value) {
     }
 }
 
-pub fn open(
-    app: &AppHandle,
-    local: &url::Url,
-    remote: &url::Url,
-    owner: &str,
-) -> Result<Value, String> {
+pub(crate) fn page_session(connection: &Connection) -> Result<String, String> {
+    require_account_session(connection)?;
+    let context = connection
+        .operation_context
+        .as_ref()
+        .ok_or("学校会话不可用")?;
+    Ok(school_api::digest(&format!(
+        "{}:{}:{}:{}",
+        connection.origin.origin().ascii_serialization(),
+        context["school_database_id"],
+        context["account_id"],
+        context["device_jti"]
+    )))
+}
+
+pub fn open(app: &AppHandle, connection: &Connection, owner: &str) -> Result<Value, String> {
+    let session = page_session(connection)?;
     let label = crate::windows::school_window_label("agent", owner, "main");
     if let Some(window) = app.get_webview_window(&label) {
-        window.show().map_err(|_| "无法显示 Agent 窗口")?;
-        window.unminimize().map_err(|_| "无法恢复 Agent 窗口")?;
-        window.set_focus().ok();
-    } else {
-        let url = local
-            .join("/_desktop/agent.html")
-            .map_err(|_| "Agent 地址无效")?;
-        let window = crate::windows::build(
-            app,
-            &label,
-            url,
-            local.clone(),
-            remote.clone(),
-            owner,
-            "",
-            None,
-        )
-        .map_err(|_| "无法创建 Agent 窗口")?;
-        window.set_title("客户端 Agent - 实践系统").ok();
+        if window
+            .url()
+            .is_ok_and(|url| bundled_page(&url) && url.query() == Some(session.as_str()))
+        {
+            window.show().map_err(|_| "无法显示 Agent 窗口")?;
+            window.unminimize().map_err(|_| "无法恢复 Agent 窗口")?;
+            window.set_focus().ok();
+            return Ok(json!({"ok":true}));
+        }
+        window
+            .destroy()
+            .map_err(|_| "无法关闭原账号的 Agent 窗口")?;
     }
+    let page_owner = owner.to_owned();
+    let window_owner = owner.to_owned();
+    let context = json!({"serverOrigin":connection.origin.origin().ascii_serialization(),"windowLabel":label,"platform":std::env::consts::OS});
+    let page = WebviewUrl::App(format!("agent.html?{session}").into());
+    let window = WebviewWindowBuilder::new(app, &label, page)
+            .title("客户端 Agent - 实践系统")
+            .inner_size(1360.0, 900.0)
+            .min_inner_size(880.0, 580.0)
+            .resizable(true)
+            .disable_drag_drop_handler()
+            .center()
+            .initialization_script(format!("Object.defineProperty(window,'__PRACTICAL_DESKTOP__',{{value:Object.freeze({context})}})"))
+            .on_navigation(move |url| bundled_page(url) && url.query() == Some(session.as_str()))
+            .on_new_window(|_, _| NewWindowResponse::Deny)
+            .on_page_load(move |webview, page| {
+                match page.event() {
+                    PageLoadEvent::Started => close_view(&page_owner),
+                    PageLoadEvent::Finished => crate::windows::request_agent_appearance(webview.app_handle()),
+                }
+            })
+            .build().map_err(|_| "无法创建 Agent 窗口")?;
+    crate::input_activity::install(&window);
+    window.on_window_event(move |event| {
+        if matches!(event, tauri::WindowEvent::Destroyed) {
+            close_view(&window_owner);
+        }
+    });
+    crate::windows::finish_agent_frame(&window)?;
     Ok(json!({"ok":true}))
 }
 
@@ -154,7 +219,15 @@ async fn bootstrap(app: &AppHandle, connection: &Connection, owner: &str) -> Res
             json!({"scope":scope,"cloud_error":format!("云端配置暂不可用：{message}。本机模型仍可保存和使用。")})
         }
     };
-    value["profiles"] = agent_profiles::Store::open(app, &scope)?.snapshots();
+    value["profiles"] = match agent_profiles::Store::open(app, &scope) {
+        Ok(store) => store.snapshots(),
+        Err(message) if message == agent_store::LEGACY_KEY_REQUIRED => {
+            value["legacy_storage_pending"] = json!(true);
+            value["memory_error"] = json!(message);
+            Value::Null
+        }
+        Err(message) => return Err(message),
+    };
     value["personal"] = json!({});
     value["busy"] = json!(false);
     let active_run = running(owner).filter(|run| run.scope == value["scope"]);
@@ -190,6 +263,9 @@ async fn bootstrap(app: &AppHandle, connection: &Connection, owner: &str) -> Res
                 value["memory_error"] = json!(message);
             }
         }
+    }
+    if value["memory_error"] == agent_store::LEGACY_KEY_REQUIRED {
+        value["legacy_storage_pending"] = json!(true);
     }
     let tools = {
         let mut state = owners().lock().map_err(|_| "Agent 状态不可用")?;
@@ -292,6 +368,7 @@ pub async fn action(
     connection: &Connection,
     owner: &str,
     cancel: CancellationToken,
+    view: Arc<View>,
     input: &Value,
 ) -> Result<Value, String> {
     if connection.cancel.is_cancelled() || cancel.is_cancelled() {
@@ -299,6 +376,22 @@ pub async fn action(
     }
     require_account_session(connection)?;
     let action = input["action"].as_str().unwrap_or("");
+    if matches!(action, "pending-confirmation" | "decide-confirmation") {
+        let scope = account_scope(connection)?;
+        if action == "pending-confirmation" {
+            return view.pending(&scope);
+        }
+        view.decide(
+            &scope,
+            input["id"].as_str().ok_or("确认编号无效")?,
+            input["allowed"].as_bool().ok_or("请选择允许本次或拒绝")?,
+        )?;
+        return Ok(json!({"ok":true}));
+    }
+    if action == "open-external" {
+        crate::external::open(app, input["url"].as_str().ok_or("链接无效")?, "browser")?;
+        return Ok(json!({"ok":true}));
+    }
     if matches!(action, "poll" | "cancel") {
         let run = owners()
             .lock()
@@ -322,10 +415,29 @@ pub async fn action(
         let value = run.state.lock().map_err(|_| "Agent 状态不可用")?.clone();
         return Ok(value);
     }
-    if action == "bootstrap" {
-        if input["retry_storage"] == true {
-            crate::system_credentials::retry();
+    #[cfg(target_os = "macos")]
+    if action == "migrate-legacy-storage" {
+        let scope = account_scope(connection)?;
+        let handle = app.clone();
+        let migration = cancel.child_token();
+        let _cancel_on_close = migration.clone().drop_guard();
+        let restored = tauri::async_runtime::spawn_blocking(move || {
+            {
+                let _guard = agent_store::acquire(&handle, &scope)?;
+                agent_store::read_with_keys(&handle, &scope, Some(&migration))?;
+            }
+            agent_profiles::Store::open_with_keys(&handle, &scope, Some(&migration))?;
+            Ok::<_, String>(())
+        })
+        .await
+        .map_err(|_| "旧版 Agent 资料迁移未完成")?;
+        let mut value = bootstrap(app, connection, owner).await?;
+        if let Err(message) = restored {
+            value["memory_error"] = json!(message);
         }
+        return Ok(value);
+    }
+    if action == "bootstrap" {
         return bootstrap(app, connection, owner).await;
     }
     if action == "sync" {
@@ -380,7 +492,12 @@ pub async fn action(
             } else {
                 "请先在回执或原业务页面核对已发送操作的结果。确认已核对后继续连接；不会自动重发原操作。"
             };
-            confirm(app, "继续业务调用", message.into(), &cancel).await?;
+            if !view
+                .ask(&scope, None, "继续业务调用", message.into(), &cancel)
+                .await?
+            {
+                return Err("已拒绝继续业务调用".into());
+            }
         }
         if !fresh_task
             && ["task_expired", "task_budget_exhausted"]
@@ -452,7 +569,7 @@ pub async fn action(
         return agent_models::inspect(&model, action, &cancel).await;
     }
     let config = bootstrap(app, connection, owner).await?;
-    if action == "open-operation" {
+    if matches!(action, "open-operation" | "copy-operation") {
         let id = input["operation_id"].as_str().ok_or("操作编号无效")?;
         uuid::Uuid::parse_str(id).map_err(|_| "操作编号无效")?;
         let operation = config["workspace"]["conversations"]
@@ -476,9 +593,15 @@ pub async fn action(
         if cancel.is_cancelled() || connection.cancel.is_cancelled() {
             return Err("学校会话已结束".into());
         }
-        app.opener()
-            .open_url(url.as_str(), None::<&str>)
-            .map_err(|_| "无法打开回执，请复制地址到浏览器")?;
+        if action == "copy-operation" {
+            app.clipboard()
+                .write_text(url.as_str())
+                .map_err(|_| "无法复制回执地址")?;
+        } else {
+            app.opener()
+                .open_url(url.as_str(), None::<&str>)
+                .map_err(|_| "无法打开回执，请复制地址到浏览器")?;
+        }
         return Ok(json!({"ok":true}));
     }
     if action == "workspace" {
@@ -514,7 +637,14 @@ pub async fn action(
                 .cloned()
                 .ok_or("MCP 插件不存在")?;
             drop(guard);
-            approve_plugin(app, &plugin, &cancel).await?;
+            approve_plugin(
+                &view,
+                &scope,
+                &plugin,
+                "连接 MCP 服务并读取工具列表",
+                &cancel,
+            )
+            .await?;
             return probe_mcp(app, &plugin, &cancel).await;
         }
         let edit_input = if let Some(plugin) = imported {
@@ -539,7 +669,7 @@ pub async fn action(
                     .and_then(|items| items.iter().find(|item| item["id"] == result["id"]))
                     .filter(|item| item["type"] == "mcp" && item["enabled"] == true)
                 {
-                    approve_plugin(app, plugin, &cancel).await?;
+                    approve_plugin(&view, &scope, plugin, "保存并启用 MCP 服务", &cancel).await?;
                 }
             }
             data = candidate;
@@ -569,7 +699,7 @@ pub async fn action(
     if action != "start" {
         return Err("Agent 操作无效".into());
     }
-    start_run(app, connection, owner, cancel, input, config).await
+    start_run(app, connection, owner, cancel, Some(view), input, config).await
 }
 
 async fn start_run(
@@ -577,6 +707,7 @@ async fn start_run(
     connection: &Connection,
     owner: &str,
     cancel: CancellationToken,
+    view: Option<Arc<View>>,
     input: &Value,
     config: Value,
 ) -> Result<Value, String> {
@@ -660,6 +791,7 @@ async fn start_run(
     let run = Arc::new(Run {
         id: uuid::Uuid::new_v4().to_string(),
         scope: scope.clone(),
+        view,
         cancel: cancel.child_token(),
         state: Mutex::new(
             json!({"status":"running","text":"","history":initial["history"],"workspace":initial["workspace"],"conversation_id":conversation_id,"tool_status":"正在准备模型与工具","tool_connection":config["tool_connection"]}),
@@ -746,43 +878,69 @@ fn now() -> i64 {
         .unwrap_or(0)
 }
 
-async fn confirm(
-    app: &AppHandle,
-    title: &str,
-    description: String,
-    cancel: &CancellationToken,
-) -> Result<(), String> {
-    if cancel.is_cancelled() {
-        return Err("操作已取消".into());
+impl Run {
+    async fn confirm(&self, title: &str, description: String) -> Result<bool, String> {
+        self.view
+            .as_ref()
+            .ok_or("请在 Agent 窗口内发起需要确认的操作")?
+            .ask(
+                &self.scope,
+                Some(&self.id),
+                title,
+                description,
+                &self.cancel,
+            )
+            .await
     }
-    let dialog = app.dialog().message(description).title(title).buttons(
-        MessageDialogButtons::OkCancelCustom("允许".into(), "拒绝".into()),
-    );
-    let accepted = tokio::select! {biased;_=cancel.cancelled()=>return Err("操作已取消".into()),result=tokio::task::spawn_blocking(move||dialog.blocking_show())=>result.map_err(|_|"无法显示原生确认窗口")?};
-    if !accepted || cancel.is_cancelled() {
-        return Err("用户未批准操作或会话已结束".into());
+
+    fn interaction_ended(&self) -> bool {
+        self.cancel.is_cancelled()
+            || self
+                .view
+                .as_ref()
+                .is_some_and(|view| view.closed.is_cancelled())
     }
-    Ok(())
 }
 
 async fn approve_plugin(
-    app: &AppHandle,
+    view: &View,
+    scope: &Value,
     plugin: &Value,
+    title: &str,
     cancel: &CancellationToken,
 ) -> Result<(), String> {
-    let description = if plugin["transport"] == "stdio" {
-        format!("插件：{}\n命令：{}\n参数：{}\n\n该程序将以当前用户的系统权限在本机运行。仅启用你信任的服务。配置的环境变量不会在此显示。",plugin["name"].as_str().unwrap_or("MCP"),plugin["command"].as_str().unwrap_or(""),serde_json::to_string(&plugin["args"]).unwrap_or_default())
+    let name = plugin["name"].as_str().unwrap_or("MCP");
+    let (mut details, effect) = if plugin["transport"] == "stdio" {
+        (
+            json!({"插件":name,"命令":plugin["command"],"参数":plugin["args"]}),
+            "该程序将以当前用户的系统权限在本机运行。",
+        )
     } else {
-        format!(
-            "插件：{}\n服务：{}\n\n客户端将直接连接此 MCP 服务，工具调用仍需逐次确认。",
-            plugin["name"].as_str().unwrap_or("MCP"),
-            plugin["url"].as_str().unwrap_or("")
+        (
+            json!({"插件":name,"服务":plugin["url"]}),
+            "客户端将直接连接此 MCP 服务。",
         )
     };
+    for secret in plugin["env"]
+        .as_object()
+        .into_iter()
+        .flat_map(|env| env.values())
+        .chain([&plugin["token"]])
+        .filter_map(Value::as_str)
+    {
+        agent_models::redact(&mut details, secret);
+    }
+    let description = format!(
+        "{}\n\n{effect}",
+        crate::agent_confirmation::preview(&details)
+    );
     if description.len() > 16000 {
         return Err("插件配置过长，无法完整确认".into());
     }
-    confirm(app, "确认 MCP 服务", description, cancel).await
+    if !view.ask(scope, None, title, description, cancel).await? {
+        return Err("已拒绝本次 MCP 服务操作".into());
+    }
+    Ok(())
 }
 
 fn show_reminder(app: &AppHandle, item: &Value) {
@@ -792,12 +950,7 @@ fn show_reminder(app: &AppHandle, item: &Value) {
         .show(|_| {});
 }
 
-async fn approve_mcp_call(
-    app: &AppHandle,
-    run: &Run,
-    plugins: &Value,
-    params: &Value,
-) -> Result<Value, String> {
+async fn approve_mcp_call(run: &Run, plugins: &Value, params: &Value) -> Result<Value, String> {
     if run.options["scheduled"] == true {
         return Err("计划任务不允许调用 MCP 工具".into());
     }
@@ -817,12 +970,22 @@ async fn approve_mcp_call(
             !value.is_empty() && value.len() <= 128 && !value.chars().any(char::is_control)
         })
         .ok_or("MCP 工具名无效")?;
-    let preview = serde_json::to_string_pretty(&params["arguments"]).map_err(|_| "MCP 参数无效")?;
-    if preview.len() > 16000 || !params["arguments"].is_object() {
+    if !params["arguments"].is_object() || format!("{:#}", params["arguments"]).len() > 16000 {
         return Err("MCP 参数过长或格式无效，无法确认".into());
     }
+    let preview = crate::agent_confirmation::preview(&params["arguments"]);
+    let name = plugin["name"].as_str().unwrap_or("MCP");
+    let description = format!(
+        "插件：{name}\n工具：{tool}\n\n参数：\n{preview}\n\n插件可能读取或修改本机及外部服务数据。"
+    );
     update(run, json!({"tool_status":format!("等待确认 MCP：{tool}")}));
-    if let Err(message)=confirm(app,"确认 MCP 工具调用",format!("插件：{}\n工具：{tool}\n学校：{}\n\n参数：\n{preview}\n\n插件可能读取或修改本机及外部服务数据，请核对后确认。",plugin["name"].as_str().unwrap_or(""),run.scope["origin"].as_str().unwrap_or("")),&run.cancel).await {run.cancel.cancel();return Err(message);}
+    match run.confirm("调用 MCP 工具", description).await {
+        Ok(true) if !run.interaction_ended() => (),
+        _ => {
+            run.cancel.cancel();
+            return Err("本次 MCP 工具调用未获批准".into());
+        }
+    }
     Ok(json!({"approved":true}))
 }
 
@@ -841,15 +1004,18 @@ async fn start_task(
         .ok_or("Agent 尚未初始化")?;
     let result=async {
         let config=bootstrap(app,connection,owner).await?;
+        if task["mode"] == "personal" && config["profiles"].is_null() && config["legacy_storage_pending"] == true {
+            return Err(agent_store::LEGACY_KEY_REQUIRED.into());
+        }
         let guard=agent_store::acquire(app,&scope)?;
         let mut data=agent_workspace::normalize(&scope,agent_store::read_locked(app,&scope)?);
         agent_workspace::edit(&mut data,&json!({"section":"conversations","operation":"save","item":{"title":format!("定时任务：{}",task["name"].as_str().unwrap_or("任务"))}}))?;
         let id=data["active_conversation_id"].clone();
         agent_store::write(app,&scope,&data)?;drop(guard);
         let input=json!({"mode":task["mode"],"profile_id":task["profile_id"],"model":if task["mode"]=="school"{config["school"]["model"].clone()}else{task["model"].clone()},"conversation_id":id,"prompt":task["prompt"],"scheduled":true,"task_id":task["id"]});
-        start_run(app,connection,owner,cancel,&input,config).await
+        start_run(app,connection,owner,cancel,None,&input,config).await
     }.await;
-    if result.is_err() {
+    if let Err(message) = &result {
         if let Ok(_guard) = agent_store::acquire(app, &scope) {
             if let Ok(mut data) = agent_store::read_locked(app, &scope)
                 .map(|data| agent_workspace::normalize(&scope, data))
@@ -858,7 +1024,11 @@ async fn start_task(
                     &mut data,
                     "task",
                     task["id"].as_str().unwrap_or(""),
-                    "failed",
+                    if message == agent_store::LEGACY_KEY_REQUIRED {
+                        "missed"
+                    } else {
+                        "failed"
+                    },
                     now(),
                 );
                 let _ = agent_store::write(app, &scope, &data);
@@ -884,6 +1054,10 @@ pub async fn scheduler_tick(
         .ok_or("本机学校身份不可用")?;
     let scope = json!({"origin":connection.origin.origin().ascii_serialization(),"school_id":context["school_database_id"],"account_id":context["account_id"]});
     check_scope(connection, &scope)?;
+    #[cfg(target_os = "macos")]
+    if !agent_store::has_local_workspace(app)? {
+        return Ok(());
+    }
     let recovered = {
         let mut owners = owners().lock().map_err(|_| "Agent 状态不可用")?;
         let state = owners.entry(owner.to_owned()).or_default();
@@ -1094,7 +1268,7 @@ async fn operation_request(
         task,
         method == "POST",
         Some(operation_id),
-        OPERATION_LIMIT,
+        school_api::CLI_OPERATION_LIMIT,
     )
     .await
 }
@@ -1269,47 +1443,40 @@ async fn call_confirmed_tool(
         return Err("服务器操作预览不完整，请查询该操作状态".into());
     }
     remember_operation_state(app, run, &prepared["state"]);
-    let preview =
-        serde_json::to_string_pretty(&prepared["preview"]).map_err(|_| "操作预览格式无效")?;
+    let preview = crate::agent_confirmation::preview(&prepared["preview"]);
     let label = cap["label"].as_str().unwrap_or("业务操作");
+    let description = format!("操作编号：{id}\n\n服务器预览：\n{preview}");
     update(run, json!({"tool_status":format!("等待人工确认：{label}")}));
-    let decision = if preview.len() <= 16000 {
-        let description = format!(
-            "学校：{}\n账号 ID：{}\n\n服务器预览：\n{preview}\n\n确认仅授权执行这一操作。",
-            run.scope["origin"].as_str().unwrap_or(""),
-            run.scope["account_id"]
-        );
-        match confirm(app, "确认业务操作", description, &run.cancel).await {
-            Ok(()) => {
-                let _guard = connection.session_lock.read().await;
-                if run.cancel.is_cancelled() || connection.cancel.is_cancelled() {
-                    Err("运行已停止，未批准操作".into())
+    let decision = match run.confirm(label, description).await {
+        Ok(allowed) => {
+            let _guard = connection.session_lock.read().await;
+            if run.interaction_ended() || connection.cancel.is_cancelled() {
+                Err("运行已停止，未提交确认结果".into())
+            } else {
+                let path = if allowed {
+                    "api/cli/operations/approve"
                 } else {
-                    school_api::cli_operation_post(
-                        connection,
-                        "api/cli/operations/approve",
-                        &json!({"operation_id":id,"preview_hash":prepared["preview_hash"]}),
-                    )
-                    .await
-                }
-            }
-            Err(message) => Err(message),
-        }
-    } else {
-        match confirm(app, "打开完整业务预览", format!("操作：{label}\n预览内容较多，请在学校确认页核对完整参数和影响，再人工批准。\n\n{}\n\n客户端将等待这一个操作的确认结果。",receipt_url.as_str()), &run.cancel).await {
-            Ok(()) => {
-                app.opener().open_url(receipt_url.as_str(), None::<&str>).map_err(|_| "无法打开完整预览，请使用确认地址")?;
-                let wait = async {
-                    loop {
-                        tokio::select! {biased; _=run.cancel.cancelled()=>return Err("运行已取消".to_owned()), _=connection.cancel.cancelled()=>return Err("学校会话已结束".to_owned()), _=tokio::time::sleep(Duration::from_secs(3))=>()};
-                        let value = operation_request(client, connection, session, "GET", "api/cli/operations/status", &json!({"operation_id":id}), &id).await?;
-                        if value["state"] != "pending" { return Ok(value); }
-                    }
+                    "api/cli/operations/deny"
                 };
-                match tokio::time::timeout(Duration::from_secs(120), wait).await { Ok(value) => value, Err(_) => Err("等待人工确认超时，未执行操作".into()) }
+                school_api::cli_operation_post(
+                    connection,
+                    path,
+                    &json!({"operation_id":id,"preview_hash":prepared["preview_hash"]}),
+                )
+                .await
+                .and_then(|value| {
+                    if value["operation_id"] != id
+                        || value["preview_hash"] != prepared["preview_hash"]
+                        || value["state"] != if allowed { "approved" } else { "denied" }
+                    {
+                        Err("服务器确认结果与本次操作不一致".into())
+                    } else {
+                        Ok(value)
+                    }
+                })
             }
-            Err(message) => Err(message),
         }
+        Err(message) => Err(message),
     };
     let decision = match decision {
         Ok(value) => value,
@@ -1354,7 +1521,7 @@ async fn call_confirmed_tool(
         );
         return operation_result(decision, receipt_url.as_str());
     }
-    if run.cancel.is_cancelled() || connection.cancel.is_cancelled() {
+    if run.interaction_ended() || connection.cancel.is_cancelled() {
         return Err("运行已停止，未执行本次操作".into());
     }
     update(
@@ -1362,7 +1529,7 @@ async fn call_confirmed_tool(
         json!({"tool_status":format!("正在执行已确认操作：{label}")}),
     );
     remember_operation_state(app, run, &json!("executing"));
-    if run.cancel.is_cancelled() || connection.cancel.is_cancelled() {
+    if run.interaction_ended() || connection.cancel.is_cancelled() {
         return Err("运行已停止，未执行本次操作".into());
     }
     let result = match operation_request(
@@ -1585,7 +1752,7 @@ async fn execute(
                         update(run, json!({"tool_status":"学校模型推理中"}));
                         agent_post(connection,run,"api/client-agent/model",&json!({"revision":config["school"]["revision"],"body":value["params"]["body"]})).await
                     }
-                    "confirm_mcp" => approve_mcp_call(app, run, &plugins, &value["params"]).await,
+                    "confirm_mcp" => approve_mcp_call(run, &plugins, &value["params"]).await,
                     "tool" => {
                         let outcome = call_tool(
                             app,
@@ -1707,29 +1874,21 @@ async fn call_tool(
         json!({"tool_status":format!("{}：{label}",if write {"等待确认"} else {"正在查询"})}),
     );
     if write {
-        let preview =
-            serde_json::to_string_pretty(&params["arguments"]).map_err(|_| "工具参数无效")?;
-        if preview.len() > 16000 {
+        if format!("{:#}", params["arguments"]).len() > 16000 {
             return Err("写操作参数过长，无法完整确认，请拆分后处理".into());
         }
-        let description=format!("操作：{label}\n学校：{}\n账号 ID：{}\n\n参数：\n{preview}\n\n确认后会立即提交。网络中断时请先查询核对结果。",run.scope["origin"].as_str().unwrap_or(""),run.scope["account_id"]);
-        let dialog = app
-            .dialog()
-            .message(description)
-            .title("确认 Agent 写操作")
-            .buttons(MessageDialogButtons::OkCancelCustom(
-                "确认执行".into(),
-                "拒绝".into(),
-            ));
-        let accepted = tokio::task::spawn_blocking(move || dialog.blocking_show())
-            .await
-            .map_err(|_| "无法显示确认窗口")?;
-        if !accepted {
+        let preview = crate::agent_confirmation::preview(&params["arguments"]);
+        let description =
+            format!("功能：{id}\n\n参数：\n{preview}\n\n允许后会立即向学校提交本次写入。");
+        if !run.confirm(label, description).await? {
             run.cancel.cancel();
-            return Err("用户拒绝本次写操作，请停止该操作".into());
+            return Err("已拒绝本次写操作".into());
         }
     }
-    if run.cancel.is_cancelled() || connection.cancel.is_cancelled() {
+    if run.cancel.is_cancelled()
+        || connection.cancel.is_cancelled()
+        || write && run.interaction_ended()
+    {
         return Err("运行已停止，未提交本次请求".into());
     }
     update(run, json!({"tool_status":format!("正在执行：{label}")}));

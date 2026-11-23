@@ -1,6 +1,6 @@
 [package]
 name = "practical-system-desktop"
-version = "0.3.59"
+version = "0.3.60"
 description = "Practical System desktop client"
 edition = "2021"
 rust-version = "1.88"
@@ -43,7 +43,10 @@ argon2 = { version = "=0.5.3", default-features = false, features = ["alloc", "z
 subtle = "=2.6.1"
 
 [target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6.4"
+objc2-app-kit = { version = "0.3.2", default-features = false, features = ["std", "NSColor", "NSView", "NSWindow", "objc2-quartz-core"] }
 objc2-core-graphics = { version = "0.3.2", default-features = false, features = ["std", "CGEventSource", "CGEventTypes"] }
+objc2-quartz-core = { version = "0.3.2", default-features = false, features = ["std", "CALayer", "objc2-core-foundation"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows-sys = { version = "0.61.2", features = ["Win32_System_SystemInformation", "Win32_UI_Input_KeyboardAndMouse"] }

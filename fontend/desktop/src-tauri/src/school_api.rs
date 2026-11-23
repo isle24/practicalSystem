@@ -121,7 +121,7 @@ pub async fn auth_post(
 
 /// 授权写入必须携带学校签发的 CSRF 值和单次请求标识。
 pub async fn sso_post(connection: &Connection, path: &str, input: &Value) -> Result<Value, String> {
-    protected_post(connection, path, input, "api/sso/security").await
+    protected_post(connection, path, input, "api/sso/security", 1024 * 1024).await
 }
 
 /// Agent 使用独立 CSRF 来源，不依赖单点登录配置。
@@ -130,8 +130,17 @@ pub async fn client_agent_post(
     path: &str,
     input: &Value,
 ) -> Result<Value, String> {
-    protected_post(connection, path, input, "api/client-agent/bootstrap").await
+    protected_post(
+        connection,
+        path,
+        input,
+        "api/client-agent/bootstrap",
+        1024 * 1024,
+    )
+    .await
 }
+
+pub(crate) const CLI_OPERATION_LIMIT: usize = 8 * 1024 * 1024;
 
 pub async fn cli_operation_post(
     connection: &Connection,
@@ -144,7 +153,14 @@ pub async fn cli_operation_post(
     ) {
         return Err("业务确认接口无效".into());
     }
-    protected_post(connection, path, input, "api/cli/operations/security").await
+    protected_post(
+        connection,
+        path,
+        input,
+        "api/cli/operations/security",
+        CLI_OPERATION_LIMIT,
+    )
+    .await
 }
 
 async fn protected_post(
@@ -152,6 +168,7 @@ async fn protected_post(
     path: &str,
     input: &Value,
     security_path: &str,
+    response_limit: usize,
 ) -> Result<Value, String> {
     let security = read(connection, security_path).await?;
     let csrf = security["csrf_token"]
@@ -178,7 +195,7 @@ async fn protected_post(
         .send()
         .await
         .map_err(|_| "学校授权接口连接失败")?;
-    decode(response, 1024 * 1024).await
+    decode(response, response_limit).await
 }
 
 async fn decode(response: reqwest::Response, limit: usize) -> Result<Value, String> {

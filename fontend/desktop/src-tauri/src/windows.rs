@@ -46,6 +46,7 @@ pub fn build(
         .center()
         .initialization_script(format!(
             r#"(() => {{
+            const context = {context};
             const bridge = async (action, payload, signal) => {{
                 const controller = new AbortController();
                 const abort = () => controller.abort();
@@ -66,7 +67,7 @@ pub fn build(
                 }} finally {{ clearTimeout(timer); signal?.removeEventListener('abort', abort); }}
             }};
             Object.defineProperty(window, '__PRACTICAL_DESKTOP__', {{
-                value:Object.freeze({{...{context}, version:'{}',
+                value:Object.freeze({{...context, version:'{}',
                     openExternal:(url,mode='client',favorite_id=0)=>bridge('external',{{url,mode,favorite_id}}),
                     openSso:(favorite_id,mode='client')=>bridge('sso',{{favorite_id,mode}}),
                     favoriteCredentials:(id,action,profile)=>bridge('favorite-credentials',{{id,action,profile}}),
@@ -80,6 +81,24 @@ pub fn build(
                     checkUpdate:(interactive=true)=>bridge('update',{{interactive}})
                 }}), writable:false
             }});
+            if (context.windowLabel === 'school') {{
+                const appearanceKey = 'practical:desktop-ui-style:' + context.serverOrigin;
+                const syncAppearance = () => {{
+                    try {{
+                        const saved = JSON.parse(localStorage.getItem(appearanceKey));
+                        if (saved?.account_id) bridge('agent-appearance', {{
+                            account_id:Number(saved.account_id), style:saved.style, theme:saved.theme
+                        }}).catch(() => {{}});
+                    }} catch {{}}
+                }};
+                const observer = new MutationObserver(changes => {{
+                    if (changes.some(change => change.oldValue !== change.target.getAttribute(change.attributeName))) syncAppearance();
+                }});
+                window.addEventListener('practical-agent-request-appearance', () => {{
+                    observer.observe(document.documentElement, {{attributeOldValue:true, attributeFilter:['data-ui-style','data-theme']}});
+                    syncAppearance();
+                }});
+            }}
             const agentButtons = () => document.querySelectorAll('.message-mode-tabs button').forEach(button => {{
                 if (button.textContent.trim() === '问答助手') {{ button.textContent = 'Agent'; button.dataset.clientAgent = 'true'; }}
             }});
@@ -173,6 +192,73 @@ pub fn build(
     let window = builder.build()?;
     crate::input_activity::install(&window);
     Ok(window)
+}
+
+pub fn request_agent_appearance(app: &AppHandle) {
+    if let Some(school) = app.get_webview_window("school") {
+        let _ =
+            school.eval("window.dispatchEvent(new Event('practical-agent-request-appearance'))");
+    }
+}
+
+pub fn finish_agent_frame(window: &WebviewWindow) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        window
+            .with_webview(apply_agent_frame)
+            .map_err(|_| "无法设置 Agent 窗口外观".to_owned())?;
+        let resized = window.clone();
+        window.on_window_event(move |event| {
+            if matches!(event, tauri::WindowEvent::Resized(_)) {
+                let _ = resized.with_webview(apply_agent_frame);
+            }
+        });
+    }
+    #[cfg(not(target_os = "macos"))]
+    let _ = window;
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn apply_agent_frame(webview: tauri::webview::PlatformWebview) {
+    use objc2::{available, msg_send, rc::Retained, runtime::AnyObject};
+    use objc2_app_kit::{NSColor, NSWindow, NSWindowStyleMask};
+    use objc2_quartz_core::{kCACornerCurveContinuous, CACornerMask};
+
+    // with_webview 在 AppKit 主线程持有窗口。
+    let Some(window) = (unsafe { webview.ns_window().cast::<NSWindow>().as_ref() }) else {
+        return;
+    };
+    if window.isOpaque() {
+        window.setOpaque(false);
+        window.setBackgroundColor(Some(&NSColor::clearColor()));
+    }
+    let Some(content) = window.contentView() else {
+        return;
+    };
+    content.setWantsLayer(true);
+    let Some(layer) = content.layer() else { return };
+    let radius = if window.styleMask().contains(NSWindowStyleMask::FullScreen) {
+        0.0
+    } else if available!(macos = 27.0) {
+        // macOS 27 公开的 NSView.effectiveCornerRadii 尚未收录在 objc2-app-kit 0.3 中。
+        let corners: Option<Retained<AnyObject>> =
+            unsafe { msg_send![&*content, effectiveCornerRadii] };
+        corners.map_or(16.0, |radii| unsafe { msg_send![&*radii, bottomLeft] })
+    } else if available!(macos = 26.0) {
+        16.0
+    } else {
+        10.0
+    };
+    if !layer.masksToBounds() || layer.cornerRadius() != radius {
+        layer.setMaskedCorners(
+            CACornerMask::LayerMinXMinYCorner | CACornerMask::LayerMaxXMinYCorner,
+        );
+        layer.setCornerCurve(unsafe { kCACornerCurveContinuous });
+        layer.setCornerRadius(radius);
+        layer.setMasksToBounds(true);
+        window.invalidateShadow();
+    }
 }
 
 /// 仅把普通网页和邮件链接交给系统应用。

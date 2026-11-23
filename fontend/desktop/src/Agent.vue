@@ -1,5 +1,5 @@
 <template>
-  <main class="agent-shell" :aria-busy="loading">
+  <main class="agent-shell" :class="{ 'awaiting-command': commandApproval }" :aria-busy="loading">
     <aside class="navigation" aria-label="Agent 导航">
       <div class="brand">
         <span class="brand-mark">A</span>
@@ -39,10 +39,18 @@
           学校 {{ scope.school_id }} · 账号 {{ scope.account_id }}
         </small>
         <button
-          v-if="!scope || localRefreshBlocked"
+          v-if="legacyStoragePending"
+          type="button"
+          :disabled="loading || pending || busy"
+          @click="bootstrap('migrate')"
+        >
+          授权从钥匙串迁移旧资料
+        </button>
+        <button
+          v-else-if="!scope || localRefreshBlocked"
           type="button"
           :disabled="loading || pending"
-          @click="bootstrap(true)"
+          @click="bootstrap('retry')"
         >
           重新加载
         </button>
@@ -105,6 +113,7 @@
     </aside>
 
     <section class="main-panel" :class="{ 'chat-panel': section === 'chat' }">
+      <div class="agent-panel-content">
       <header class="panel-heading">
         <div>
           <span class="eyebrow">独立工作区</span>
@@ -169,7 +178,7 @@
                 : '添加提醒'
           }}
         </button>
-        <button type="button" :disabled="!menuGuide" @click="menuGuideDialog?.showModal()">操作说明</button>
+        <button type="button" :disabled="!menuGuide || Boolean(commandApproval)" @click="menuGuideDialog?.showModal()">操作说明</button>
       </header>
       <div class="feedback" aria-live="polite">
         <p v-if="error" class="notice error" role="alert">{{ error }}</p>
@@ -346,7 +355,7 @@
             </div>
           </details>
         </div>
-        <div class="chat-bottom">
+        <div v-if="!commandApproval" class="chat-bottom">
           <div class="privacy-strip">
             <span>
               本机记忆 {{ enabledMemories }} 条 · 已启用插件
@@ -525,7 +534,7 @@
         <template v-if="section === 'plugins'">
           <p class="section-description">
             Skill 提供指令与文本资源。MCP
-            提供外部工具，每次调用由原生窗口确认。本机命令以当前用户权限运行。
+            提供外部工具。每次调用时，请在聊天里核对操作并选择是否允许。本机命令以当前用户权限运行。
           </p>
           <article
             v-for="item in workspace.plugins"
@@ -792,15 +801,36 @@
           </p>
         </template>
       </div>
+      </div>
+      <Teleport v-if="commandApproval" :to="editorDialog" :disabled="!approvalInEditor">
+        <section class="agent-approval-card" :class="{ expanded: approvalExpanded }" aria-labelledby="agent-confirmation-title">
+          <header class="agent-approval-heading">
+            <h2 id="agent-confirmation-title">{{ commandApproval.title }}</h2>
+            <button type="button" :aria-expanded="approvalExpanded" aria-controls="agent-confirmation-details" @click="approvalExpanded = !approvalExpanded">
+              {{ approvalExpanded ? '收起预览' : '展开预览' }}
+            </button>
+          </header>
+          <div id="agent-confirmation-details" ref="approvalDetails" class="agent-approval-details" role="region" aria-label="操作详情" tabindex="0">
+            <p>{{ commandApproval.scope.origin }} · 学校 {{ commandApproval.scope.school_id }} · 账号 {{ commandApproval.scope.account_id }}</p>
+            <pre>{{ commandApproval.description }}</pre>
+          </div>
+          <footer class="agent-approval-actions">
+            <span v-if="approvalError" role="alert">{{ approvalError }}</span>
+            <button type="button" :disabled="Boolean(decidingApproval)" @click="decideApproval($event, false)">拒绝</button>
+            <button type="button" class="primary" :disabled="Boolean(decidingApproval)" @click="decideApproval($event, true)">允许本次</button>
+          </footer>
+        </section>
+      </Teleport>
     </section>
 
     <dialog
       ref="editorDialog"
       class="editor-dialog"
-      :aria-labelledby="'editor-title'"
+      :aria-labelledby="approvalInEditor ? 'agent-confirmation-title' : 'editor-title'"
+      @cancel="pending && $event.preventDefault()"
       @close="editorClosed"
     >
-      <form @submit.prevent="saveEditor">
+      <form v-show="!approvalInEditor" @submit.prevent="saveEditor">
         <header class="dialog-heading">
           <h2 id="editor-title">{{ editorTitle }}</h2>
           <button
@@ -1013,7 +1043,7 @@
               </label>
               <p class="muted">
                 已保存的环境变量不回显，命令和参数不变时留空保留，填写 {}
-                可清空。更改命令或参数后需重新填写。请勿在命令参数中填写凭据。添加或启用命令时由原生窗口显示完整命令并确认。
+                可清空。更改命令或参数后需重新填写。请勿在命令参数中填写凭据。保存并启用时，请在此处核对命令和参数，再选择是否允许。
               </p>
               <div class="command-preview">
                 <strong>命令预览</strong>
@@ -1153,6 +1183,7 @@
 </template>
 
 <script setup>
+import { invoke } from '@tauri-apps/api/core';
 import FormFieldLabel from '../../shared/components/FormFieldLabel.vue';
 import {
   computed,
@@ -1245,6 +1276,7 @@ const error = ref(''),
   notice = ref(''),
   toolStatus = ref('');
 const localRefreshBlocked = ref(false);
+const legacyStoragePending = ref(false);
 const toolConnection = ref(null),
   toolRegistration = ref(null),
   toolDispatch = ref(null),
@@ -1305,6 +1337,10 @@ const editorType = ref(''),
   listingChatModels = ref(false);
 const mcpResults = reactive({}),
   confirmation = reactive({ title: '', description: '', action: null });
+const commandApproval = ref(null), approvalInEditor = ref(false), approvalDetails = ref(null);
+const approvalExpanded = ref(false);
+const decidingApproval = ref(''), approvalError = ref('');
+let approvalRevision = 0;
 let generation = 0,
   modelGeneration = 0,
   chatModelGeneration = 0,
@@ -1316,11 +1352,9 @@ let generation = 0,
   clockTimer;
 let mutationRevision = 0;
 let toolMetadataRunId = '';
-const requests = new Set(),
-  channels = new Map(),
+const channels = new Map(),
   promptDrafts = new Map();
 function cancelChannel(name) {
-  channels.get(name)?.abort();
   channels.delete(name);
 }
 watch(
@@ -1381,7 +1415,7 @@ async function openOperation(item) {
 async function copyOperation(item) {
   const url = receiptUrl(item);
   if (!url) return;
-  try { await navigator.clipboard.writeText(url); notice.value = '回执地址已复制。'; }
+  try { if (await request('copy-operation', { operation_id: item.operation_id })) notice.value = '回执地址已复制。'; }
   catch { notice.value = '未能访问剪贴板，请选择上方回执地址手动复制。'; }
 }
 const filteredConversations = computed(() =>
@@ -1492,8 +1526,7 @@ async function openMarkdownLink(event) {
   if (!url) return;
   const version = generation;
   try {
-    if (window.__PRACTICAL_DESKTOP__?.openExternal) await window.__PRACTICAL_DESKTOP__.openExternal(url, 'browser');
-    else window.open(url, '_blank', 'noopener,noreferrer');
+    await request('open-external', { url });
   } catch (reason) {
     if (!disposed && version === generation) error.value = reason.message || '无法打开链接。';
   }
@@ -1572,11 +1605,16 @@ function wipe() {
   modelGeneration++;
   chatModelGeneration++;
   clearTimeout(pollTimer);
-  for (const controller of requests) controller.abort();
-  requests.clear();
+  approvalRevision++;
+  commandApproval.value = null;
+  approvalInEditor.value = false;
+  decidingApproval.value = '';
+  approvalError.value = '';
   channels.clear();
   promptDrafts.clear();
   scope.value = null;
+  localRefreshBlocked.value = false;
+  legacyStoragePending.value = false;
   profiles.value = [];
   resetConflicts();
   syncing.value = false;
@@ -1609,67 +1647,73 @@ function wipe() {
   notice.value = '';
 }
 async function request(action, payload = {}, channel = '') {
-  const version = generation,
-    controller = new AbortController();
-  requests.add(controller);
-  if (channel) {
-    cancelChannel(channel);
-    channels.set(channel, controller);
-  }
-  const timer = setTimeout(
-    () => controller.abort(),
-    action === 'sync'
-      ? 180000
-      : ['reconnect', 'restart-business-task'].includes(action)
-        ? 90000
-      : ['models', 'probe', 'probe-mcp'].includes(action)
-        ? 45000
-        : 30000
-  );
+  const version = generation;
+  const ticket = Symbol();
+  if (channel) channels.set(channel, ticket);
+  const stale = () => disposed || version !== generation || (channel && channels.get(channel) !== ticket);
   try {
-    const response = await fetch('/_desktop/agent', {
-      method: 'POST',
-      credentials: 'same-origin',
-      cache: 'no-store',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action, ...payload }),
-      signal: controller.signal
-    });
-    if (disposed || version !== generation) return null;
-    const result = await response.json().catch(() => null);
-    if (disposed || version !== generation) return null;
-    if ([401, 403, 423].includes(response.status)) {
-      wipe();
-      error.value =
-        response.status === 423
-          ? '客户端已锁定，请解锁后重试。'
-          : response.status === 403
-            ? text(result?.message) || '当前学校或账号无法访问，请重新读取登录状态。'
-            : '登录已失效，请重新登录。';
-      return null;
-    }
-    if (!response.ok)
-      throw new Error(
-        text(result?.message) || `请求失败（${response.status}）`
-      );
-    if (!result || typeof result !== 'object')
-      throw new Error('客户端返回的数据无效。');
+    const result = await invoke('agent_request', { input: { ...payload, action } });
+    if (stale()) return null;
+    if (!result || typeof result !== 'object') throw new Error('客户端返回的数据无效。');
     return result;
   } catch (reason) {
-    if (disposed || version !== generation) return null;
-    throw new Error(
-      reason.name === 'AbortError'
-        ? action === 'sync'
-          ? '同步超时，本机配置仍已保存，请重新点击“同步配置”。'
-          : '请求超时，请重试。'
-        : reason.message || '无法连接客户端。'
-    );
+    if (stale()) return null;
+    const [status, message] = Array.isArray(reason) ? reason : [0, reason?.message || reason];
+    if ([401, 403, 423].includes(status)) {
+      wipe();
+      error.value = status === 423 ? '客户端已锁定，请解锁后重试。'
+        : text(message) || '登录已失效，请重新登录。';
+      return null;
+    }
+    throw new Error(status === 408 && action === 'sync'
+      ? '同步超时，本机配置仍已保存，请重新点击“同步配置”。'
+      : text(message) || '无法连接客户端。');
   } finally {
-    clearTimeout(timer);
-    requests.delete(controller);
-    if (channels.get(channel) === controller) channels.delete(channel);
+    if (channel && channels.get(channel) === ticket) channels.delete(channel);
   }
 }
+
+async function refreshApproval() {
+  const revision = ++approvalRevision;
+  try {
+    const result = await request('pending-confirmation');
+    if (!result || revision !== approvalRevision || disposed) return;
+    const next = result.confirmation;
+    const changed = next?.id !== commandApproval.value?.id;
+    commandApproval.value = next;
+    approvalInEditor.value = Boolean(next && editorDialog.value?.open);
+    if (!changed) return;
+    approvalExpanded.value = false;
+    decidingApproval.value = '';
+    approvalError.value = '';
+    if (next) {
+      menuGuideDialog.value?.close();
+      confirmDialog.value?.close();
+      if (next.run_id && !approvalInEditor.value) section.value = 'chat';
+      await nextTick();
+      if (commandApproval.value?.id === next.id) approvalDetails.value?.focus({ preventScroll: true });
+    }
+  } catch (reason) {
+    if (revision === approvalRevision && !disposed) error.value = reason.message;
+  }
+}
+
+async function decideApproval(event, allowed) {
+  const item = commandApproval.value;
+  if (!event.isTrusted || !item || decidingApproval.value) return;
+  decidingApproval.value = item.id;
+  approvalError.value = '';
+  try {
+    await request('decide-confirmation', { id: item.id, allowed });
+    await refreshApproval();
+  } catch (reason) {
+    if (commandApproval.value?.id === item.id) approvalError.value = reason.message;
+    await refreshApproval();
+  } finally {
+    if (decidingApproval.value === item.id) decidingApproval.value = '';
+  }
+}
+
 function applyWorkspace(value, select = false) {
   const data = value?.workspace || value;
   if (!data || !Array.isArray(data.conversations)) return false;
@@ -1853,12 +1897,14 @@ function applyBootstrap(value) {
     error.value = '';
   }
   scope.value = value.scope;
+  legacyStoragePending.value = value.legacy_storage_pending === true;
+  localRefreshBlocked.value = Boolean(value.memory_error);
   applyToolConnection(value);
   applySchool(value.school);
   cloudError.value = text(value.cloud_error);
   let nextProfiles = Array.isArray(value.profiles)
     ? value.profiles
-    : profiles.value;
+    : legacyStoragePending.value ? [] : profiles.value;
   if (
     !nextProfiles.length &&
     (value.personal?.endpoint || value.personal?.has_key)
@@ -1908,10 +1954,11 @@ async function refreshWorkspace(select = false) {
   if (value && !applyWorkspace(value, select))
     throw new Error('工作区数据无效。');
 }
-async function bootstrap(retryStorage = false) {
+async function bootstrap(reason = '') {
+  const manual = reason === 'retry' || reason === 'migrate';
   if (
     disposed ||
-    (localRefreshBlocked.value && retryStorage !== true) ||
+    (localRefreshBlocked.value && !manual) ||
     bootstrapping ||
     pending.value ||
     modelLoading.value ||
@@ -1921,11 +1968,9 @@ async function bootstrap(retryStorage = false) {
   bootstrapping = true;
   loading.value = true;
   error.value = '';
-  if (retryStorage === true) localRefreshBlocked.value = false;
   try {
-    const value = await request('bootstrap', { retry_storage: retryStorage === true });
+    const value = await request(reason === 'migrate' ? 'migrate-legacy-storage' : 'bootstrap');
     if (value) {
-      localRefreshBlocked.value = Boolean(value.memory_error);
       applyBootstrap(value);
       if (!localRefreshBlocked.value && !value.workspace && !busy.value)
         await refreshWorkspace(!workspace.active_conversation_id);
@@ -2555,7 +2600,6 @@ async function refreshStatus() {
       conversationId !== workspace.active_conversation_id
     )
       return;
-    localRefreshBlocked.value = Boolean(value.memory_error);
     applyBootstrap(value);
   } catch (reason) {
     if (revision === mutationRevision) {
@@ -2567,16 +2611,21 @@ async function refreshStatus() {
   }
 }
 function restoreVisibility() {
-  if (!document.hidden) bootstrap();
+  if (!document.hidden) {
+    bootstrap();
+    refreshApproval();
+  }
 }
 onMounted(() => {
-  bootstrap();
+  window.addEventListener('practical-agent-confirmation', refreshApproval);
+  bootstrap().then(refreshApproval);
   statusTimer = setInterval(refreshStatus, 5000);
   clockTimer = setInterval(() => { clockNow.value = Date.now(); }, 1000);
   document.addEventListener('visibilitychange', restoreVisibility);
 });
 onBeforeUnmount(() => {
   disposed = true;
+  window.removeEventListener('practical-agent-confirmation', refreshApproval);
   clearInterval(statusTimer);
   clearInterval(clockTimer);
   wipe();
@@ -2585,6 +2634,34 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
+.agent-panel-content { display: contents; }
+.awaiting-command { min-height: 0; }
+.awaiting-command .agent-panel-content {
+  display: flex; flex: 1; min-height: 0; flex-direction: column; overflow: auto;
+}
+.agent-approval-card {
+  display: flex; flex: none; flex-direction: column; min-width: 0;
+  max-height: min(38dvh, 270px); margin: 8px clamp(14px, 2vw, 28px) 16px;
+  padding: 12px 14px; gap: 8px; border: 1px solid var(--border);
+  border-radius: 10px; background: var(--surface);
+}
+.agent-approval-card.expanded { max-height: min(64dvh, 460px); }
+.agent-approval-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.agent-approval-heading h2 { margin: 0; min-width: 0; max-height: 2.8em; overflow: auto; overflow-wrap: anywhere; font-size: 14px; line-height: 1.4; }
+.agent-approval-heading button { flex: none; min-height: 26px; padding: 2px 7px; font-size: 12px; }
+.agent-approval-details {
+  min-height: 0; overflow: auto; overscroll-behavior: contain; overflow-wrap: anywhere;
+  padding: 10px 12px; border-radius: 6px; background: var(--sidebar);
+}
+.agent-approval-details p { margin: 0 0 8px; color: var(--muted); font-size: 12px; }
+.agent-approval-details pre { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.65 ui-monospace, monospace; }
+.agent-approval-actions { display: flex; flex: none; align-items: center; justify-content: flex-end; gap: 8px; }
+.agent-approval-actions span { flex: 1; min-width: 0; max-height: 3em; overflow: auto; color: var(--error); overflow-wrap: anywhere; font-size: 12px; }
+.agent-approval-actions button { min-height: 36px; }
+.editor-dialog .agent-approval-card { margin: 0; border: 0; }
+@media (max-width: 640px) {
+  .main-panel .agent-approval-card { position: fixed; inset: auto 10px 10px; z-index: 2; margin: 0; }
+}
 .business-connection { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: 0 28px 8px; padding: 11px 12px; border: 1px solid var(--border); border-radius: 7px; background: var(--sidebar); }
 .business-connection-copy { min-width: 0; }
 .business-connection strong { display: flex; align-items: center; gap: 8px; font-size: 12px; line-height: 1.7; font-weight: 600; }

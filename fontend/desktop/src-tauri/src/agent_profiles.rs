@@ -3,6 +3,7 @@ use serde_json::{json, Value};
 use sha1::{Digest, Sha1};
 use std::fs::File;
 use tauri::AppHandle;
+use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 use zeroize::Zeroize;
 
@@ -68,10 +69,18 @@ fn validate_config(value: &Value) -> Result<(), String> {
 
 impl Store {
     pub fn open(app: &AppHandle, scope: &Value) -> Result<Self, String> {
+        Self::open_with_keys(app, scope, None)
+    }
+
+    pub fn open_with_keys(
+        app: &AppHandle,
+        scope: &Value,
+        migration: Option<&CancellationToken>,
+    ) -> Result<Self, String> {
         let mut scope = scope.clone();
         scope["storage"] = json!("model-profiles:v1");
         let guard = agent_store::acquire(app, &scope)?;
-        let mut data = agent_store::read_locked(app, &scope)?;
+        let mut data = agent_store::read_with_keys(app, &scope, migration)?;
         if !data["profiles"].is_array() {
             data["profiles"] = json!([]);
         }

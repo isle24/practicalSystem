@@ -16,12 +16,17 @@ impl Entry {
     pub fn get_password(&self) -> keyring::Result<String> {
         #[cfg(target_os = "macos")]
         {
-            cache::get_password(&self.key, &self.inner)
+            cache::get_password(&self.key, &self.inner, false)
         }
         #[cfg(not(target_os = "macos"))]
         {
             self.inner.get_password()
         }
+    }
+
+    #[cfg(target_os = "macos")]
+    pub fn get_password_for_migration(&self) -> keyring::Result<String> {
+        cache::get_password(&self.key, &self.inner, true)
     }
 
     pub fn set_password(&self, password: &str) -> keyring::Result<()> {
@@ -50,11 +55,6 @@ impl Entry {
 pub fn clear() {
     #[cfg(target_os = "macos")]
     cache::clear();
-}
-
-pub fn retry() {
-    #[cfg(target_os = "macos")]
-    cache::retry();
 }
 
 #[cfg(target_os = "macos")]
@@ -127,12 +127,20 @@ mod cache {
         }
     }
 
-    pub(super) fn get_password(key: &Key, entry: &keyring::Entry) -> keyring::Result<String> {
+    pub(super) fn get_password(
+        key: &Key,
+        entry: &keyring::Entry,
+        retry: bool,
+    ) -> keyring::Result<String> {
         let (epoch, slot) = slot(key)?;
         let mut slot = slot
             .lock()
             .map_err(|_| failure(io::ErrorKind::Other, "系统凭据操作状态不可用"))?;
         current(epoch)?;
+        if retry {
+            slot.value = None;
+            slot.retry_after = None;
+        }
         if let Some(value) = &slot.value {
             let value = Zeroizing::new(value.as_str().to_owned());
             current(epoch)?;
@@ -223,20 +231,5 @@ mod cache {
         EPOCH.fetch_add(1, Ordering::AcqRel);
         slots.clear();
         cache.clear_poison();
-    }
-
-    pub(super) fn retry() {
-        let pending = {
-            let Ok(slots) = slots().lock() else {
-                return;
-            };
-            slots.values().cloned().collect::<Vec<_>>()
-        };
-        for slot in pending {
-            let Ok(mut state) = slot.try_lock() else {
-                continue;
-            };
-            state.retry_after = None;
-        }
     }
 }

@@ -2765,6 +2765,7 @@ dependencies = [
  "objc2-core-foundation",
  "objc2-core-graphics",
  "objc2-foundation",
+ "objc2-quartz-core",
 ]
 
 [[package]]
@@ -3276,7 +3277,7 @@ checksum = "439ee305def115ba05938db6eb1644ff94165c5ab5e9420d1c1bcedbba909391"
 
 [[package]]
 name = "practical-system-desktop"
-version = "0.3.59"
+version = "0.3.60"
 dependencies = [
  "aes-gcm",
  "argon2",
@@ -3288,7 +3289,10 @@ dependencies = [
  "libc",
  "md-5",
  "mime_guess",
+ "objc2",
+ "objc2-app-kit",
  "objc2-core-graphics",
+ "objc2-quartz-core",
  "quick-xml 0.42.0",
  "reqwest 0.12.28",
  "rust-embed",

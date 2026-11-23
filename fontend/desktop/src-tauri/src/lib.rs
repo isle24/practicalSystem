@@ -1,7 +1,8 @@
+mod agent_confirmation;
 mod agent_models;
+mod agent_process;
 mod agent_profile_sync;
 mod agent_profiles;
-mod agent_process;
 mod agent_store;
 mod agent_workspace;
 mod business_tools;
@@ -15,17 +16,21 @@ mod external;
 mod favorite_auth;
 mod gateway;
 mod input_activity;
+#[cfg(target_os = "macos")]
+mod local_key;
 mod local_lock_password;
 mod office_engine;
 mod office_preview;
 mod preview_cache;
 mod project_guides;
 mod school_api;
+#[cfg(target_os = "macos")]
+mod school_password;
 mod system_credentials;
 mod updater;
 mod windows;
 
-use connection::Settings;
+use connection::{SavedPasswordSource, Settings};
 use connection_login::{CaptchaState, LoginError, PreparedLogin};
 use std::sync::{
     atomic::{AtomicBool, AtomicU8, Ordering},
@@ -388,6 +393,7 @@ fn read_connection_settings(
         serde_json::to_value(connection::load(&app)?).map_err(|_| "连接设置无法读取")?;
     settings["require_fresh_login"] =
         serde_json::json!(client_lock::load(&app)?.require_fresh_login);
+    settings["local_school_passwords"] = serde_json::json!(cfg!(target_os = "macos"));
     Ok(settings)
 }
 
@@ -396,26 +402,33 @@ fn read_connection_settings(
 async fn read_school_appearance(window: WebviewWindow, domain: String) -> Result<String, String> {
     require_connection(&window)?;
     let origin = connection::school_origin(&domain)?;
-    Ok(connection::connect(origin, 0).await?.school.default_ui_style)
+    Ok(connection::connect(origin, 0)
+        .await?
+        .school
+        .default_ui_style)
 }
 
-/// 读取当前学校账号对应的系统密码。
+/// 读取所选账号的密码状态。
 #[tauri::command]
 fn read_saved_connection_password(
     app: AppHandle,
     window: WebviewWindow,
     origin: String,
     username: String,
-) -> Result<Option<String>, String> {
+) -> Result<serde_json::Value, String> {
     require_connection(&window)?;
-    let _ = connection::load(&app)?;
-    if client_lock::load(&app)?.require_fresh_login {
-        return Ok(None);
+    let origin = connection::school_origin(&origin)?
+        .origin()
+        .ascii_serialization();
+    let username = username.trim();
+    if client_lock::load(&app)?.require_fresh_login
+        || current_school_locked(&app)
+        || username.is_empty()
+        || connection::load(&app)?.school(&origin, username).is_none()
+    {
+        return Ok(serde_json::Value::Null);
     }
-    if current_school_locked(&app) {
-        return Ok(None);
-    }
-    connection::load_password(&origin, &username)
+    connection::password_status(&app, &origin, username)
 }
 
 /// 建立所选学校的原生会话，并打开安装包内的 PC 界面。
@@ -427,6 +440,7 @@ async fn connect_school(
     domain: String,
     username: String,
     password: String,
+    saved_password: Option<SavedPasswordSource>,
     login_method: Option<String>,
     remember_password: bool,
     auto_login: bool,
@@ -443,44 +457,46 @@ async fn connect_school(
         return Err("客户端已锁定，请在锁屏退出原会话后重新连接".into());
     }
     let recovery = recovery.unwrap_or(false);
+    let has_password = !password.is_empty() || saved_password.is_some();
+    let has_account = !username.trim().is_empty() || has_password;
+    let has_password_options = has_account || remember_password || auto_login;
     let login_method = if recovery {
         Some("wechat".to_owned())
     } else {
         login_method
     };
-    if recovery
-        && (!username.trim().is_empty() || !password.is_empty() || remember_password || auto_login)
-    {
+    if recovery && has_password_options {
         return Err("找回密码须通过学校扫码连接，不能携带保存密码".into());
     }
     let login_method = login_method.unwrap_or_else(|| {
-        if username.trim().is_empty() && password.is_empty() {
-            "wechat".into()
-        } else {
+        if has_account {
             "password".into()
+        } else {
+            "wechat".into()
         }
     });
     if !matches!(login_method.as_str(), "password" | "wechat" | "iam") {
         return Err("请选择有效的登录方式".into());
     }
-    if login_method == "password" && (username.trim().is_empty() || password.is_empty()) {
+    if login_method == "password" && (username.trim().is_empty() || !has_password) {
         return Err("请输入账号和密码，或选择企业微信、统一认证登录".into());
     }
+    if saved_password.is_some() && !password.is_empty() {
+        return Err("请使用已保存密码或手工输入密码".into());
+    }
     if username.len() > 255
-        || password.len() > 4096
+        || password.len() > connection::MAX_PASSWORD_BYTES
         || captcha_id.as_ref().is_some_and(|id| id.len() > 128)
         || captcha_code.as_ref().is_some_and(|code| code.len() > 64)
     {
         return Err("登录输入过长，请检查账号、密码和验证码".into());
     }
-    if login_method != "password"
-        && (!username.trim().is_empty() || !password.is_empty() || remember_password || auto_login)
-    {
+    if login_method != "password" && has_password_options {
         return Err("企业微信、统一认证登录无需填写账号密码".into());
     }
     if client_lock::load(&app)?.require_fresh_login
         && login_method == "password"
-        && fresh_password != Some(true)
+        && (fresh_password != Some(true) || saved_password.is_some())
     {
         return Err("客户端锁定后需要手工输入密码，或重新进行企业微信、统一认证登录".into());
     }
@@ -509,7 +525,7 @@ async fn connect_school(
         if !recovery
             && same_school
             && settings.last_username == username.trim()
-            && password.is_empty()
+            && !has_password
             && settings.schools.iter().any(|profile| {
                 profile.origin == origin.origin().ascii_serialization()
                     && profile.username == settings.last_username
@@ -556,6 +572,37 @@ async fn connect_school(
         discard_pending_login(&app, None).await?;
         None
     };
+    let password = if let Some(source) = saved_password {
+        let origin = origin.origin().ascii_serialization();
+        let username = username.trim().to_owned();
+        if settings.school(&origin, &username).is_none() {
+            return Err("请选择已保存的学校账号".into());
+        }
+        if source == SavedPasswordSource::Legacy {
+            let key = connection::system_password_account(&origin, &username);
+            if settings.schools.iter().any(|school| {
+                (school.origin != origin || school.username != username)
+                    && connection::system_password_account(&school.origin, &school.username) == key
+            }) {
+                return Err("多个学校账号使用同一旧版钥匙串条目，请手工输入密码".into());
+            }
+        }
+        let handle = app.clone();
+        let stored = tauri::async_runtime::spawn_blocking(move || {
+            connection::password_for_login(&handle, &origin, &username, source)
+        })
+        .await
+        .map_err(|_| "无法读取学校密码，请手工输入密码")??;
+        if login_scope_cancelled(&state, &login_scope)
+            || current_school_locked(&app)
+            || client_lock::load(&app)?.require_fresh_login
+        {
+            return Err("登录连接已变更，请重新输入密码".into());
+        }
+        stored
+    } else {
+        password
+    };
     let verified_context = if let Some(pending) = &pending {
         match pending
             .authenticate(&password, captcha_id.as_deref(), captcha_code.as_deref())
@@ -597,6 +644,7 @@ async fn connect_school(
         username.trim(),
         &password,
         &login_method,
+        saved_password,
         remember_password,
         auto_login,
         remark.unwrap_or_default(),
@@ -638,6 +686,7 @@ async fn activate_school(
     username: &str,
     password: &str,
     login_method: &str,
+    saved_password: Option<SavedPasswordSource>,
     remember_password: bool,
     auto_login: bool,
     remark: String,
@@ -739,16 +788,21 @@ async fn activate_school(
                 }
             }
         }
-        let saved = if remember_password {
-            connection::save_password(&profile.origin, &profile.username, password)
-        } else {
-            connection::delete_password(&profile.origin, &profile.username)
-        };
-        if let Err(message) = saved {
-            app.dialog()
-                .message(format!("已登录，但本机密码设置未保存：{message}"))
-                .title("保存学校连接")
-                .show(|_| {});
+        if saved_password != Some(SavedPasswordSource::Local)
+            || !remember_password
+            || profile.username != username
+        {
+            if let Err(message) = connection::update_password(
+                app,
+                &profile.origin,
+                &profile.username,
+                remember_password.then_some(password),
+            ) {
+                app.dialog()
+                    .message(format!("已登录，但本机密码设置未保存：{message}"))
+                    .title("保存学校连接")
+                    .show(|_| {});
+            }
         }
     }
     let _ = window.hide();
@@ -938,6 +992,7 @@ pub fn run() {
                 .build(),
         )
         .invoke_handler(tauri::generate_handler![
+            gateway::agent_request,
             read_connection_settings,
             read_school_appearance,
             read_saved_connection_password,

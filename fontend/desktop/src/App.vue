@@ -36,16 +36,18 @@
       <label for="school-username"><FormFieldLabel :required="true">账号</FormFieldLabel></label>
       <input id="school-username" v-model="username" type="text" autocomplete="username" placeholder="请输入账号" :disabled="busy || loading">
       <label for="school-password"><FormFieldLabel :required="true">密码</FormFieldLabel></label>
-      <input id="school-password" ref="passwordInput" v-model="password" type="password" autocomplete="current-password" placeholder="请输入密码" :disabled="busy || loading" @input="markFreshPassword">
+      <input id="school-password" ref="passwordInput" v-model="password" type="password" autocomplete="current-password" :placeholder="passwordPlaceholder" :disabled="busy || loading" @input="markFreshPassword">
       </template>
       <p v-else-if="loginMethod === 'iam'" class="connection-guidance">连接后进入学校统一认证页面，在系统浏览器完成授权后返回客户端。</p>
       <p v-else class="connection-guidance">连接学校后将显示登录二维码，请使用已绑定账号的企业微信扫码。</p>
       <label for="school-remark"><FormFieldLabel :required="false" help="最多 60 字，用于区分学校账号">备注</FormFieldLabel></label>
       <input id="school-remark" v-model="remark" maxlength="60" placeholder="例如：工作账号" :disabled="busy || loading">
       <div v-if="loginMethod === 'password'" class="connection-options">
-        <label class="check-option"><input v-model="rememberPassword" type="checkbox" :disabled="busy || loading || !username.trim() || !password"><span>记住密码</span></label>
+        <label class="check-option" :title="localSchoolPasswords ? '按学校和账号加密保存在本机' : undefined"><input v-model="rememberPassword" type="checkbox" :disabled="busy || loading || !username.trim() || !hasPassword"><span>记住密码</span></label>
         <label class="check-option"><input v-model="autoLogin" type="checkbox" :disabled="busy || loading || !rememberPassword"><span>自动登录</span></label>
       </div>
+      <button v-if="legacyPasswordAvailable && !password && !savedPasswordSource" type="button" class="switch-school" @click="selectLegacyPassword">从旧版钥匙串导入密码</button>
+      <p v-if="savedPasswordSource === 'legacy' && !password" class="connection-guidance">登录时将请求 macOS 钥匙串授权。勾选记住密码后，登录成功会将密码加密保存在本机。</p>
       <p v-if="error" id="connection-error" class="error" role="alert"><CircleAlert :size="17" />{{ error }}</p>
       <button ref="loginButton" class="connect-button" type="submit" :disabled="busy || loading || captchaLoading || retrySeconds > 0 || !domain.trim()">
         <LoaderCircle v-if="busy" :size="19" class="spin" />
@@ -75,7 +77,7 @@
 
 <script setup>
 import FormFieldLabel from '../../shared/components/FormFieldLabel.vue';
-import { ref, nextTick, onBeforeUnmount, onMounted, watch } from 'vue';
+import { computed, ref, nextTick, onBeforeUnmount, onMounted, watch } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
 import { getVersion } from '@tauri-apps/api/app';
 import { ArrowRight, ChevronRight, CircleAlert, Globe2, LoaderCircle, LockKeyhole, Plus, RefreshCw, X } from '@lucide/vue';
@@ -95,6 +97,15 @@ const switching = ref(false);
 const loginMethod = ref('password');
 const username = ref('');
 const password = ref('');
+const localSchoolPasswords = ref(false);
+const savedPasswordSource = ref('');
+const legacyPasswordAvailable = ref(false);
+const hasPassword = computed(() => Boolean(password.value || savedPasswordSource.value));
+const passwordPlaceholder = computed(() => {
+  if (savedPasswordSource.value === 'local') return '已保存密码，输入新密码可替换';
+  if (savedPasswordSource.value === 'legacy') return '登录时从旧版钥匙串读取';
+  return '请输入密码';
+});
 const rememberPassword = ref(false);
 const autoLogin = ref(false);
 const profiles = ref([]);
@@ -125,6 +136,7 @@ let loginScope = crypto.randomUUID();
 let scopeVersion = 0;
 let operationVersion = 0;
 let disposed = false;
+let restoreProfileOnShow = '';
 
 async function refreshSchoolAppearance() {
   const address = domain.value.trim();
@@ -231,9 +243,7 @@ function applyFreshRequirement(settings) {
   const required = settings.require_fresh_login === true;
   if (required && !requireFreshLogin.value) {
     resetLoginScope();
-    password.value = '';
-    freshPassword.value = false;
-    autoLogin.value = false;
+    clearPassword();
   }
   requireFreshLogin.value = required;
 }
@@ -242,13 +252,42 @@ function markFreshPassword(event) {
   freshPassword.value = event.isTrusted && Boolean(password.value);
 }
 
-watch([domain, username], () => {
-  if (loading.value || busy.value) return;
-  resetLoginScope();
+function clearPassword() {
   password.value = '';
+  savedPasswordSource.value = '';
+  legacyPasswordAvailable.value = false;
   freshPassword.value = false;
   rememberPassword.value = false;
   autoLogin.value = false;
+}
+
+function selectLegacyPassword() {
+  savedPasswordSource.value = 'legacy';
+  rememberPassword.value = true;
+  autoLogin.value = Boolean(profiles.value.find(school => school.origin === domain.value && school.username === username.value)?.auto_login);
+}
+
+async function restoreSavedPassword(school, restoreAutoLogin = true) {
+  if (!school?.username || loginMethod.value !== 'password' || requireFreshLogin.value) return;
+  const scope = loginScope;
+  const version = scopeVersion;
+  try {
+    const saved = await invoke('read_saved_connection_password', { origin: school.origin, username: school.username });
+    if (!currentScope(version, scope) || document.hidden || password.value) return;
+    password.value = saved?.password || '';
+    savedPasswordSource.value = saved?.stored ? 'local' : '';
+    legacyPasswordAvailable.value = saved?.legacy === true;
+    rememberPassword.value = hasPassword.value;
+    autoLogin.value = Boolean(rememberPassword.value && restoreAutoLogin && school.auto_login);
+  } catch (reason) {
+    if (currentScope(version, scope)) error.value = String(reason);
+  }
+}
+
+watch([domain, username], () => {
+  if (loading.value || busy.value) return;
+  resetLoginScope();
+  clearPassword();
 }, { flush: 'sync' });
 watch(rememberPassword, value => { if (!value) autoLogin.value = false; }, { flush: 'sync' });
 
@@ -257,6 +296,7 @@ onMounted(async () => {
   try {
     const settings = await invoke('read_connection_settings');
     if (disposed) return;
+    localSchoolPasswords.value = settings.local_school_passwords === true;
     applyFreshRequirement(settings);
     profiles.value = settings.schools;
     domain.value = settings.last_origin || domain.value;
@@ -271,16 +311,7 @@ onMounted(async () => {
       editingSchool.value = false;
     }
     if (recent?.username) username.value = recent.username;
-    if (recent?.username && loginMethod.value === 'password' && !requireFreshLogin.value) {
-      const credentialScope = loginScope;
-      const credentialVersion = scopeVersion;
-      const saved = await invoke('read_saved_connection_password', { origin: recent.origin, username: recent.username });
-      if (currentScope(credentialVersion, credentialScope) && !document.hidden) {
-        password.value = saved || '';
-        rememberPassword.value = Boolean(saved);
-        autoLogin.value = Boolean(saved && recent.auto_login);
-      }
-    }
+    await restoreSavedPassword(recent);
     const appVersion = await getVersion();
     if (!disposed) version.value = appVersion;
   } catch (reason) {
@@ -294,7 +325,7 @@ onMounted(async () => {
   window.addEventListener('practical-client-login-cancelled', resetCancelledConnection);
   document.addEventListener('visibilitychange', handleConnectionVisibility);
   retryTimer = window.setInterval(() => { retrySeconds.value = Math.max(0, Math.ceil((retryUntil - Date.now()) / 1000)); }, 1000);
-  if (autoLogin.value && password.value) {
+  if (!document.hidden && autoLogin.value && hasPassword.value) {
     await connect();
   }
 });
@@ -312,14 +343,22 @@ onBeforeUnmount(() => {
 });
 
 function handleConnectionVisibility() {
-  if (!document.hidden) return;
+  if (!document.hidden) {
+    if (restoreProfileOnShow) refreshProfiles();
+    return;
+  }
   operationVersion++;
   busy.value = false;
   loading.value = false;
   captchaLoading.value = false;
   resetLoginScope();
-  password.value = '';
-  freshPassword.value = false;
+  if (localSchoolPasswords.value) {
+    clearPassword();
+    restoreProfileOnShow ||= 'selection';
+  } else {
+    password.value = '';
+    freshPassword.value = false;
+  }
 }
 
 function resetCancelledConnection() {
@@ -351,6 +390,16 @@ async function refreshProfiles() {
     if (!currentScope(version, scope)) return;
     applyFreshRequirement(settings);
     profiles.value = settings.schools;
+    if (restoreProfileOnShow && !document.hidden) {
+      const recent = restoreProfileOnShow === 'last-login';
+      restoreProfileOnShow = '';
+      if (recent) {
+        const school = profiles.value.find(item => item.origin === settings.last_origin && item.username === settings.last_username);
+        if (school) { await selectSchool(school); return; }
+      }
+      const school = profiles.value.find(item => item.origin === domain.value && item.username === username.value);
+      await restoreSavedPassword(school);
+    }
     refreshSchoolAppearance();
   } catch (reason) {
     if (currentScope(version, scope)) error.value = String(reason);
@@ -363,20 +412,13 @@ async function selectLoginMethod(method) {
   const scope = loginScope;
   const version = scopeVersion;
   loginMethod.value = method;
-  password.value = '';
-  freshPassword.value = false;
-  rememberPassword.value = false;
-  autoLogin.value = false;
+  clearPassword();
   error.value = '';
   if (method !== 'password' || !username.value.trim() || editingSchool.value || requireFreshLogin.value) return;
   loading.value = true;
   try {
-    const saved = await invoke('read_saved_connection_password', { origin: domain.value, username: username.value });
-    if (!currentScope(version, scope) || document.hidden) return;
-    password.value = saved || '';
-    rememberPassword.value = Boolean(saved);
-  } catch (reason) {
-    if (currentScope(version, scope)) error.value = String(reason);
+    const school = profiles.value.find(item => item.origin === domain.value && item.username === username.value);
+    await restoreSavedPassword(school, false);
   } finally {
     if (currentScope(version, scope)) loading.value = false;
   }
@@ -392,7 +434,7 @@ async function switchLoginMode(method) {
 async function connect(fromCaptcha = false) {
   if (busy.value || loading.value || captchaLoading.value || retrySeconds.value > 0) return;
   const passwordLogin = loginMethod.value === 'password';
-  if (passwordLogin && (!username.value.trim() || !password.value)) {
+  if (passwordLogin && (!username.value.trim() || !hasPassword.value)) {
     error.value = '请输入账号和密码，或选择企业微信、统一认证登录';
     return;
   }
@@ -404,6 +446,7 @@ async function connect(fromCaptcha = false) {
   const scope = loginScope;
   const version = scopeVersion;
   const operation = ++operationVersion;
+  const savedPassword = passwordLogin && !password.value ? savedPasswordSource.value || null : null;
   busy.value = true;
   error.value = '';
   try {
@@ -412,6 +455,7 @@ async function connect(fromCaptcha = false) {
       loginMethod: loginMethod.value,
       username: passwordLogin ? username.value : '',
       password: passwordLogin ? password.value : '',
+      savedPassword,
       rememberPassword: Boolean(passwordLogin && rememberPassword.value),
       autoLogin: Boolean(passwordLogin && autoLogin.value),
       remark: remark.value,
@@ -420,17 +464,28 @@ async function connect(fromCaptcha = false) {
       captchaId: passwordLogin && captchaRequired.value ? captcha.value?.id : null,
       captchaCode: passwordLogin && captchaRequired.value ? captchaCode.value : null,
     });
+    if (!disposed && localSchoolPasswords.value) restoreProfileOnShow = 'last-login';
     if (!currentScope(version, scope)) return;
     profiles.value = settings.schools;
     domain.value = settings.last_origin;
     const connected = settings.schools.find(item => item.origin === settings.last_origin && item.username === settings.last_username);
-    if (connected) { schoolName.value = connected.name; editingSchool.value = false; }
+    if (connected) {
+      schoolName.value = connected.name;
+      editingSchool.value = false;
+      if (passwordLogin) username.value = connected.username;
+    }
     password.value = '';
     freshPassword.value = false;
     requireFreshLogin.value = false;
     resetLoginScope();
   } catch (reason) {
-    if (currentScope(version, scope)) showLoginFailure(reason);
+    if (currentScope(version, scope)) {
+      if (savedPassword === 'legacy' && !reason?.captcha_required) {
+        savedPasswordSource.value = '';
+        rememberPassword.value = false;
+      }
+      showLoginFailure(reason);
+    }
   } finally {
     if (!disposed && operation === operationVersion) busy.value = false;
   }
@@ -442,7 +497,7 @@ async function recoverPassword() {
   const scope = loginScope;
   const version = scopeVersion;
   const operation = ++operationVersion;
-  busy.value = true; error.value = ''; password.value = ''; freshPassword.value = false;
+  busy.value = true; error.value = ''; clearPassword();
   try {
     const settings = await invoke('connect_school', {
       domain: domain.value, loginMethod: 'wechat', username: '', password: '',
@@ -471,20 +526,9 @@ async function selectSchool(school) {
   switching.value = false;
   username.value = school.username || '';
   loginMethod.value = profileLoginMethod(school);
-  password.value = '';
-  freshPassword.value = false;
-  autoLogin.value = false;
-  rememberPassword.value = false;
+  clearPassword();
   try {
-    if (school.username && loginMethod.value === 'password' && !requireFreshLogin.value) {
-      const saved = await invoke('read_saved_connection_password', { origin: school.origin, username: school.username });
-      if (!currentScope(version, scope) || document.hidden) return;
-      password.value = saved || '';
-      rememberPassword.value = Boolean(saved);
-      autoLogin.value = Boolean(saved && school.auto_login);
-    }
-  } catch (reason) {
-    if (currentScope(version, scope)) error.value = String(reason);
+    await restoreSavedPassword(school);
   } finally {
     if (currentScope(version, scope)) loading.value = false;
   }
@@ -494,9 +538,8 @@ async function selectSchool(school) {
 function newSchool() {
   if (busy.value || loading.value || captchaLoading.value) return;
   resetLoginScope();
-  domain.value = ''; username.value = ''; password.value = ''; remark.value = '';
-  freshPassword.value = false;
-  rememberPassword.value = false; autoLogin.value = false;
+  domain.value = ''; username.value = ''; remark.value = '';
+  clearPassword();
   schoolName.value = ''; editingSchool.value = true; switching.value = false; error.value = '';
 }
 </script>

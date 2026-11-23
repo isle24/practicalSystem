@@ -9,6 +9,11 @@
 ) { corner-shape: round; }
 
 :root[data-ui-style="liquid_glass"] {
+  --menu-glass-wash: #e1efff50;
+  --menu-glass-edge: #ffffffb5;
+  --menu-glass-foot: #afc5d59e;
+  --menu-glass-glint: #ffffffc9;
+  --menu-glass-blur: blur(8px) saturate(125%);
   --skin-canvas: url("./assets/liquid-glass-light.jpg") center / cover no-repeat, #e4ecf8;
   --skin-solid: #f4f8ff;
   --skin-edge: #ffffffbc;
@@ -22,6 +27,10 @@
 }
 
 :root[data-ui-style="liquid_glass"][data-theme="dark"] {
+  --menu-glass-wash: #334d6c7a;
+  --menu-glass-edge: #c5dfff92;
+  --menu-glass-foot: #8da6c17a;
+  --menu-glass-glint: #d8edff68;
   --skin-canvas: url("./assets/liquid-glass-dark.jpg") center / cover no-repeat, #101722;
   --skin-solid: #202b3e;
   --skin-edge: #bad7ff59;
@@ -31,6 +40,11 @@
 }
 
 :root[data-ui-style="obsidian_pro"] {
+  --menu-glass-wash: #a8b2c06b;
+  --menu-glass-edge: #82909d9e;
+  --menu-glass-glint: #fafcfd85;
+  --menu-glass-corner: 26%;
+  --menu-object-finish: saturate(.72) contrast(1.035);
   --skin-canvas: radial-gradient(#c3c3cb .9px, transparent 1px) 0 0 / 22px 22px, #f4f4f5;
   --skin-solid: #fff;
   --skin-edge: #a4a4ae;
@@ -41,6 +55,9 @@
 }
 
 :root[data-ui-style="obsidian_pro"][data-theme="dark"] {
+  --menu-glass-wash: #2a303b87;
+  --menu-glass-edge: #a3afbd87;
+  --menu-glass-glint: #dce7fa47;
   --skin-canvas: radial-gradient(#45454d .9px, transparent 1px) 0 0 / 22px 22px, #141417;
   --skin-solid: #18181b;
   --skin-edge: #565660;
@@ -48,6 +65,11 @@
 }
 
 :root[data-ui-style="ivory_editorial"] {
+  --menu-glass-wash: #ecdab881;
+  --menu-glass-edge: #bea378a1;
+  --menu-glass-glint: #fff8dfcc;
+  --menu-glass-corner: 34%;
+  --menu-object-finish: sepia(.15) saturate(.9);
   --skin-canvas: #f4efe6;
   --skin-solid: #faf8f3;
   --skin-edge: #cdbfaf;
@@ -61,6 +83,9 @@
 }
 
 :root[data-ui-style="ivory_editorial"][data-theme="dark"] {
+  --menu-glass-wash: #51402f87;
+  --menu-glass-edge: #dbbd938f;
+  --menu-glass-glint: #f6d8b35c;
   --skin-canvas: #25211d;
   --skin-solid: #2b2621;
   --skin-edge: #6a5e52;
@@ -86,6 +111,10 @@
     --skin-blur: blur(48px) saturate(225%) contrast(103%);
     --skin-dock-blur: blur(42px) saturate(225%);
   }
+  :root[data-ui-style="classic"] {
+    --menu-glass-wash: color-mix(in srgb, var(--surface, #fff) 46%, transparent);
+    --menu-glass-edge: color-mix(in srgb, var(--primary, #2563eb) 22%, var(--surface, #fff) 55%);
+  }
 }
 
 @media (prefers-reduced-transparency: reduce) {
@@ -103,7 +132,7 @@
   .operation-dialog, .data-list-action-drawer, .el-dialog, .el-drawer, .el-message-box,
   .app-dialog-popup, .app-sheet-popup, .van-dialog, .van-action-sheet, .file-preview,
   .profile-menu-panel, .demo-popover, .desktop-lock-card, .desktop-lock-recovery,
-  .desktop-launcher-panel, .agent-shell :where(dialog),
+  .agent-shell :where(dialog),
   .password-recovery-mask > :where(.password-recovery), .wechat-binding-gate > :where(section)
 ) {
   background: var(--skin-pane);
@@ -120,7 +149,7 @@
 
 :root[data-ui-style]:where(:not([data-ui-style="classic"])) :is(
   .operation-mask, .password-recovery-mask, .data-list-action-layer, .file-preview-mask,
-  .captcha-overlay, .el-overlay, .van-overlay, .wechat-binding-gate, .desktop-launcher-mask
+  .captcha-overlay, .el-overlay, .van-overlay, .wechat-binding-gate
 ) {
   background: var(--skin-overlay);
   -webkit-backdrop-filter: none;

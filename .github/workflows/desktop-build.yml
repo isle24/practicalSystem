@@ -88,6 +88,13 @@ jobs:
         with:
           projectPath: fontend/desktop
           args: ${{ matrix.args }}
+      - name: Bundle Apple Silicon and Intel Mac installers
+        if: matrix.artifact == 'macos'
+        working-directory: fontend/desktop
+        run: |
+          for target in aarch64-apple-darwin x86_64-apple-darwin; do
+            npm run tauri -- bundle --target "$target" --bundles dmg --config '{"bundle":{"createUpdaterArtifacts":false}}'
+          done
       - name: Collect installer artifacts
         run: node fontend/desktop/scripts/release-artifacts.mjs collect ${{ matrix.artifact }}
       - uses: actions/upload-artifact@v4

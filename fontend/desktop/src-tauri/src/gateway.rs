@@ -20,11 +20,8 @@ use url::Url;
 #[folder = "../dist/pc/"]
 struct PcAssets;
 
-#[derive(RustEmbed)]
-#[folder = "../dist/shell/"]
-struct AgentAssets;
-
 pub struct Gateway {
+    state: Arc<GatewayState>,
     pub origin: Url,
     pub remote: Url,
     pub entry: Url,
@@ -332,7 +329,9 @@ pub async fn start(
             .await;
         }
     });
-    let router = Router::new().fallback(any(handle)).with_state(state);
+    let router = Router::new()
+        .fallback(any(handle))
+        .with_state(state.clone());
     let (shutdown, receive) = oneshot::channel();
     tauri::async_runtime::spawn(async move {
         let _ = axum::serve(listener, router)
@@ -342,6 +341,7 @@ pub async fn start(
             .await;
     });
     Ok(Gateway {
+        state,
         origin: local,
         remote,
         entry,
@@ -456,6 +456,40 @@ async fn handle(State(state): State<Arc<GatewayState>>, request: Request) -> Res
         return error(StatusCode::LOCKED, "客户端已锁定，请先验证当前账号");
     }
     let authorization_cancel = state.authorization_cancel.lock().await.clone();
+    if path == "/_desktop/agent-appearance" {
+        if request.method() != axum::http::Method::POST
+            || headers.get(header::ORIGIN).and_then(|v| v.to_str().ok())
+                != Some(state.local.origin().ascii_serialization().as_str())
+        {
+            return error(StatusCode::FORBIDDEN, "仅学校页面可以同步 Agent 外观");
+        }
+        let label = crate::windows::school_window_label("agent", &state.owner, "main");
+        if let Some(window) = state.app.get_webview_window(&label) {
+            let bytes = match axum::body::to_bytes(request.into_body(), 512).await {
+                Ok(bytes) => bytes,
+                Err(_) => return error(StatusCode::BAD_REQUEST, "外观参数过长"),
+            };
+            let Ok(appearance) = serde_json::from_slice::<serde_json::Value>(&bytes) else {
+                return error(StatusCode::BAD_REQUEST, "外观参数无效");
+            };
+            match (
+                appearance["account_id"].as_u64(),
+                appearance["style"].as_str(),
+                appearance["theme"].as_str(),
+            ) {
+                (
+                    Some(id),
+                    Some(style @ ("liquid_glass" | "obsidian_pro" | "ivory_editorial" | "classic")),
+                    Some(theme @ ("light" | "dark")),
+                ) if id > 0 => {
+                    let value = serde_json::json!({"account_id":id, "style":style, "theme":theme});
+                    let _ = window.eval(format!("window.__PRACTICAL_AGENT_APPEARANCE__={value};window.dispatchEvent(new Event('practical-agent-appearance'));"));
+                }
+                _ => return error(StatusCode::BAD_REQUEST, "外观参数无效"),
+            }
+        }
+        return local_json(serde_json::json!({"ok":true}));
+    }
     if path == "/_desktop/preview-file" && request.method() == axum::http::Method::GET {
         let (connection, _session) = match account_operation(&state, &authorization_cancel).await {
             Ok(operation) => operation,
@@ -477,124 +511,32 @@ async fn handle(State(state): State<Arc<GatewayState>>, request: Request) -> Res
             Err(message) => error(StatusCode::BAD_REQUEST, &message),
         };
     }
-    if path == "/_desktop/agent.html" || path.starts_with("/_desktop/assets/") {
-        if request.method() != axum::http::Method::GET {
-            return error(StatusCode::METHOD_NOT_ALLOWED, "请使用 GET");
-        }
-        let key = path.trim_start_matches("/_desktop/");
-        return match AgentAssets::get(key) {
-            Some(asset) => {
-                let mime = mime_guess::from_path(key).first_or_octet_stream();
-                let mut response = Response::new(Body::from(asset.data.into_owned()));
-                if let Ok(value) = HeaderValue::from_str(mime.as_ref()) {
-                    response.headers_mut().insert(header::CONTENT_TYPE, value);
-                }
-                response
-                    .headers_mut()
-                    .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
-                response.headers_mut().insert("content-security-policy", HeaderValue::from_static("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"));
-                response
-            }
-            None => error(
-                StatusCode::NOT_FOUND,
-                "Agent 资源不存在，请重新安装完整客户端",
-            ),
-        };
-    }
     if path == "/_desktop/agent" {
         if request.method() != axum::http::Method::POST
             || headers.get(header::ORIGIN).and_then(|v| v.to_str().ok())
                 != Some(state.local.origin().ascii_serialization().as_str())
         {
-            return error(StatusCode::FORBIDDEN, "仅学校页面可以调用客户端 Agent");
+            return error(StatusCode::FORBIDDEN, "仅学校页面可以打开客户端 Agent");
         }
-        let bytes = match axum::body::to_bytes(request.into_body(), 2 * 1024 * 1024).await {
+        let bytes = match axum::body::to_bytes(request.into_body(), 4096).await {
             Ok(bytes) => bytes,
             Err(_) => return error(StatusCode::BAD_REQUEST, "Agent 参数过长"),
         };
-        let mut input: serde_json::Value = match serde_json::from_slice(&bytes) {
+        let input: serde_json::Value = match serde_json::from_slice(&bytes) {
             Ok(value) => value,
             Err(_) => return error(StatusCode::BAD_REQUEST, "Agent 参数无效"),
         };
-        if matches!(input["action"].as_str(), Some("poll" | "cancel")) {
-            let (context, _) = match state.lock.password_context(false) {
-                Ok(value) => value,
-                Err(message) => return error(StatusCode::UNAUTHORIZED, &message),
-            };
-            let mut connection = state.connection.clone();
-            connection.operation_context = Some(context);
-            if let Err(message) = crate::client_agent::require_account_session(&connection) {
-                return error(StatusCode::FORBIDDEN, &message);
-            }
-            let result = crate::client_agent::action(
-                &state.app,
-                &connection,
-                &state.owner,
-                authorization_cancel.clone(),
-                &input,
-            )
-            .await;
-            if state.lock.is_locked()
-                || state.cancel.is_cancelled()
-                || authorization_cancel.is_cancelled()
-            {
-                return error(StatusCode::LOCKED, "客户端已锁定或账号已变更");
-            }
-            return match result {
-                Ok(value) => local_json(value),
-                Err(message) => error(StatusCode::BAD_REQUEST, &message),
-            };
+        if input["action"] != "open" {
+            return error(StatusCode::FORBIDDEN, "请在客户端 Agent 窗口内操作");
         }
-        let operation = if matches!(
-            input["action"].as_str(),
-            Some(
-                "bootstrap"
-                    | "save"
-                    | "delete-profile"
-                    | "models"
-                    | "probe"
-                    | "workspace"
-                    | "workspace-edit"
-                    | "import-skill"
-                    | "probe-mcp"
-                    | "clear"
-            )
-        ) {
-            local_account_operation(&state, &authorization_cancel).await
-        } else {
-            account_operation(&state, &authorization_cancel).await
-        };
-        let (connection, _session) = match operation {
+        let (connection, _session) = match account_operation(&state, &authorization_cancel).await {
             Ok(value) => value,
             Err(message) => return error(StatusCode::UNAUTHORIZED, &message),
         };
         if let Err(message) = crate::client_agent::require_account_session(&connection) {
             return error(StatusCode::FORBIDDEN, &message);
         }
-        let result = if input["action"] == "open" {
-            crate::client_agent::open(
-                &state.app,
-                &state.local,
-                &state.connection.origin,
-                &state.owner,
-            )
-        } else {
-            tokio::select! {biased;
-                _=authorization_cancel.cancelled()=>Err("客户端已锁定或账号已变更".into()),
-                result=crate::client_agent::action(&state.app,&connection,&state.owner,authorization_cancel.clone(),&input)=>result,
-            }
-        };
-        if let Some(serde_json::Value::String(key)) = input.get_mut("api_key") {
-            use zeroize::Zeroize;
-            key.zeroize();
-        }
-        if state.lock.is_locked()
-            || state.cancel.is_cancelled()
-            || authorization_cancel.is_cancelled()
-        {
-            return error(StatusCode::LOCKED, "客户端已锁定或账号已变更");
-        }
-        return match result {
+        return match crate::client_agent::open(&state.app, &connection, &state.owner) {
             Ok(value) => local_json(value),
             Err(message) => error(StatusCode::BAD_REQUEST, &message),
         };
@@ -1201,6 +1143,107 @@ async fn proxy(
     let mut result = Response::new(body);
     *result.status_mut() = status;
     *result.headers_mut() = outgoing;
+    result
+}
+
+/// 仅安装包 Agent 窗口可以读取会话、提交操作及确认决定。
+#[tauri::command]
+pub async fn agent_request(
+    window: tauri::WebviewWindow,
+    mut input: serde_json::Value,
+) -> Result<serde_json::Value, (u16, String)> {
+    let forbidden = || (403, "仅当前学校的本地 Agent 窗口可以操作".to_owned());
+    let page = window.url().map_err(|_| forbidden())?;
+    if !crate::client_agent::bundled_page(&page) {
+        return Err(forbidden());
+    }
+    let state = window
+        .state::<crate::AppState>()
+        .gateway
+        .lock()
+        .map_err(|_| forbidden())?
+        .as_ref()
+        .filter(|gateway| {
+            window.label() == crate::windows::school_window_label("agent", &gateway.owner, "main")
+        })
+        .map(|gateway| gateway.state.clone())
+        .ok_or_else(forbidden)?;
+    let view = crate::client_agent::view(&state.owner, &window).map_err(|msg| (400, msg))?;
+    if state.lock.due() {
+        let _ = lock_session(&state).await;
+    }
+    let cancel = state.authorization_cancel.lock().await.clone();
+    let locked = || (423, "客户端已锁定或账号已变更".to_owned());
+    if state.cancel.is_cancelled() || state.lock.is_locked() || cancel.is_cancelled() {
+        return Err(locked());
+    }
+    if zeroize::Zeroizing::new(input.to_string()).len() > 2 * 1024 * 1024 {
+        return Err((400, "Agent 参数过长".into()));
+    }
+    let action = input["action"].as_str().unwrap_or("");
+    let (connection, _session) = if matches!(
+        action,
+        "poll" | "cancel" | "pending-confirmation" | "decide-confirmation"
+    ) {
+        let (context, _) = state
+            .lock
+            .password_context(false)
+            .map_err(|msg| (401, msg))?;
+        let mut connection = state.connection.clone();
+        connection.operation_context = Some(context);
+        (connection, None)
+    } else {
+        let operation = if matches!(
+            action,
+            "bootstrap"
+                | "migrate-legacy-storage"
+                | "save"
+                | "delete-profile"
+                | "models"
+                | "probe"
+                | "workspace"
+                | "workspace-edit"
+                | "import-skill"
+                | "probe-mcp"
+                | "clear"
+                | "open-external"
+                | "copy-operation"
+        ) {
+            local_account_operation(&state, &cancel).await
+        } else {
+            account_operation(&state, &cancel).await
+        };
+        let (connection, guard) = operation.map_err(|msg| (401, msg))?;
+        (connection, Some(guard))
+    };
+    let session = crate::client_agent::page_session(&connection).map_err(|msg| (403, msg))?;
+    if page.query() != Some(session.as_str()) {
+        return Err(forbidden());
+    }
+    let seconds = match action {
+        "sync"
+        | "migrate-legacy-storage"
+        | "workspace-edit"
+        | "probe-mcp"
+        | "reconnect"
+        | "restart-business-task" => 180,
+        "models" | "probe" => 45,
+        _ => 30,
+    };
+    let result = tokio::select! {
+        biased;
+        _ = cancel.cancelled() => Err(locked()),
+        _ = view.closed.cancelled() => Err((409, "Agent 窗口已关闭或重新加载".into())),
+        _ = tokio::time::sleep(std::time::Duration::from_secs(seconds)) => Err((408, "客户端操作超时，请重新操作".into())),
+        result = crate::client_agent::action(&state.app, &connection, &state.owner, cancel.clone(), view.clone(), &input) => result.map_err(|msg| (400, msg)),
+    };
+    if let Some(serde_json::Value::String(key)) = input.get_mut("api_key") {
+        use zeroize::Zeroize;
+        key.zeroize();
+    }
+    if state.cancel.is_cancelled() || state.lock.is_locked() || cancel.is_cancelled() {
+        return Err(locked());
+    }
     result
 }
 

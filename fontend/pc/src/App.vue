@@ -4398,7 +4398,7 @@
     <WechatBindingGate :show="wechatShow" :state="wechatBinding.state" :status="wechatStatus" :account-name="operatorName" :role-name="roleText" :in-wechat="wechatBinding.inWechat" :binding-url="wechatBindingUrl" :dismissible="!wechatBlocked" @start="wechatBinding.start" @bind="wechatBinding.bind" @recheck="wechatBinding.recheck" @copy="wechatBinding.copyLink" @close="wechatBinding.close" @logout="submitLogout" />
     <OperationDialog :visible="Boolean(currentExternalItem)" title="外部网页" @close="currentExternalItem = null"><EmbeddedExternalPage v-if="currentExternalItem" :item="currentExternalItem" @close="currentExternalItem = null" /></OperationDialog>
     <DesktopUpdateStatus />
-    <ReleaseNotice v-if="isLoggedIn && !wechatBlocked" :key="noteSessionKey" :request="request" :session-key="noteSessionKey" @open="openModule(modules.find(item => item.id === 'releaseNotes'))" />
+    <ReleaseNotice v-if="isLoggedIn && !wechatBlocked" :key="noteSessionKey" :request="request" :session-key="noteSessionKey" :suppressed="desktopLauncherState.visible" @open="openModule(modules.find(item => item.id === 'releaseNotes'))" />
     <Teleport to="body">
       <div v-if="passwordRecoveryVisible && !desktopIsLocked" class="password-recovery-mask" role="dialog" aria-modal="true" aria-label="找回密码" @keydown.esc.prevent="passwordRecoveryVisible = false" @click.self="passwordRecoveryVisible = false">
         <PasswordRecovery :request="request" :public-origin="publicSchoolOrigin" @close="passwordRecoveryVisible = false" @done="passwordRecovered" />

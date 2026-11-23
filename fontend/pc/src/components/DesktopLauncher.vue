@@ -3,6 +3,8 @@
     v-if="visible"
     ref="maskRef"
     class="desktop-launcher-mask"
+    role="dialog"
+    aria-label="全部应用"
     tabindex="-1"
     @click.self="emit('close')"
     @keyup.esc="emit('close')"

@@ -6,6 +6,10 @@ const root = 'fontend/desktop';
 const directory = 'desktop-artifacts';
 const config = JSON.parse(readFileSync(`${root}/src-tauri/tauri.conf.json`));
 const version = config.version;
+const macInstallers = {
+  'aarch64-apple-darwin': `Practical-System_${version}_macOS-ARM64.dmg`,
+  'x86_64-apple-darwin': `Practical-System_${version}_macOS-Intel.dmg`,
+};
 const sha = path => createHash('sha256').update(readFileSync(path)).digest('hex');
 const scan = path => readdirSync(path).flatMap(name => { const file = join(path, name); return statSync(file).isDirectory() ? scan(file) : [file]; });
 const packageFile = name => /\.(dmg|app\.tar\.gz|exe|AppImage|deb)(\.sig)?$/.test(name);
@@ -23,7 +27,16 @@ function collect(platform) {
     names.add(name);
     copyFileSync(file, join(directory, name));
   }
-  console.log(`Collected ${platform}: ${files.length} artifacts`);
+  if (platform === 'macos') {
+    for (const [target, name] of Object.entries(macInstallers)) {
+      const bundle = `${root}/src-tauri/target/${target}/release/bundle/dmg`;
+      const dmgs = readdirSync(bundle).filter(file => file.endsWith('.dmg'));
+      if (dmgs.length !== 1) throw Error('Expected one DMG for ' + target);
+      copyFileSync(join(bundle, dmgs[0]), join(directory, name));
+      names.add(name);
+    }
+  }
+  console.log(`Collected ${platform}: ${names.size} artifacts`);
 }
 
 /** 校验平台齐全和升级签名，生成不含服务器代码与 SQL 的清单。 */
@@ -53,7 +66,12 @@ function manifest() {
   for (const platform of ['darwin-universal', 'windows-x86_64', 'linux-x86_64']) {
     if (assets.filter(a => a.platform === platform && a.kind === 'updater' && a.signature).length !== 1) throw Error('Missing or duplicate updater: ' + platform);
   }
-  if (!assets.some(a => a.file_name.endsWith('.deb')) || !assets.some(a => a.file_name.endsWith('.dmg'))) throw Error('Missing manual installers');
+  const requiredInstallers = [
+    ...Object.values(macInstallers),
+    `Practical-System_${version}_universal.dmg`,
+  ];
+  if (!requiredInstallers.every(name => assets.some(a => a.file_name === name))
+      || !assets.some(a => a.file_name.endsWith('.deb'))) throw Error('Missing manual installers');
   writeFileSync(join(directory, 'desktop-release.json'), JSON.stringify({ version, notes, source_commit: process.env.GITHUB_SHA, assets }, null, 2) + '\n');
   writeFileSync(join(directory, 'SHA256SUMS.txt'), scan(directory).filter(f => basename(f) !== 'SHA256SUMS.txt').map(f => `${sha(f)}  ${basename(f)}`).join('\n') + '\n');
   console.log(`Validated v${version}: ${assets.length} packages`);
