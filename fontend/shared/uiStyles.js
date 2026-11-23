@@ -3,10 +3,10 @@ import { computed, onBeforeUnmount, provide, ref, watch } from 'vue';
 export const DEFAULT_UI_STYLE = 'liquid_glass';
 export const FOLLOW_SCHOOL = 'school_default';
 export const MENU_ICON_STYLE = Symbol('menu-icon-style');
-export const DEFAULT_MENU_ICON_STYLE = 'emoji';
+export const DEFAULT_MENU_ICON_STYLE = 'classic';
 export const menuIconStyles = [
-  { key: DEFAULT_MENU_ICON_STYLE, name: 'Emoji（默认）' },
-  { key: 'classic', name: '经典彩底' },
+  { key: DEFAULT_MENU_ICON_STYLE, name: '经典彩底' },
+  { key: 'emoji', name: 'Emoji' },
   { key: 'dimensional', name: '立体拟物' },
   { key: 'handdrawn', name: '校园手绘' },
   { key: 'glass', name: '教务玻璃' },
@@ -20,6 +20,7 @@ export const uiStyles = [
 
 export const schoolUiOrigin = window.__PRACTICAL_DESKTOP__?.serverOrigin || window.location.origin;
 const schoolKey = `practical:school-ui-style:${schoolUiOrigin}`;
+const schoolIconsKey = `practical:school-menu-icons:${schoolUiOrigin}`;
 export const desktopUiKey = `practical:desktop-ui-style:${schoolUiOrigin}`;
 export const localThemeKey = scope => `practical:local-theme:v1:${scope}`;
 const validStyle = value => uiStyles.some(({ key }) => key === value);
@@ -32,18 +33,23 @@ export function applyUiStyle(value) {
   return style.key;
 }
 
-export function cachedSchoolStyle() {
+function cachedValue(key, valid, fallback) {
   try {
-    const value = localStorage.getItem(schoolKey);
-    if (validStyle(value)) return value;
+    const value = localStorage.getItem(key);
+    if (valid(value)) return value;
   } catch { /* Storage is optional before login. */ }
-  return DEFAULT_UI_STYLE;
+  return fallback;
 }
+
+export const cachedSchoolStyle = () => cachedValue(schoolKey, validStyle, DEFAULT_UI_STYLE);
+const cachedSchoolIcons = () => cachedValue(schoolIconsKey, validMenuIcons, DEFAULT_MENU_ICON_STYLE);
 
 export function useUiStyle(scope) {
   const school = ref(cachedSchoolStyle());
   const choice = ref(FOLLOW_SCHOOL);
-  const menuIconStyle = ref(DEFAULT_MENU_ICON_STYLE);
+  const schoolMenuIcons = ref(cachedSchoolIcons());
+  const menuIconChoice = ref(FOLLOW_SCHOOL);
+  const menuIconStyle = computed(() => menuIconChoice.value === FOLLOW_SCHOOL ? schoolMenuIcons.value : menuIconChoice.value);
   provide(MENU_ICON_STYLE, menuIconStyle);
   const effective = computed(() => choice.value === FOLLOW_SCHOOL ? school.value : choice.value);
 
@@ -55,14 +61,18 @@ export function useUiStyle(scope) {
     }
     const fallback = stored?.saved ? 'classic' : FOLLOW_SCHOOL;
     choice.value = stored?.ui_style === FOLLOW_SCHOOL || validStyle(stored?.ui_style) ? stored.ui_style : fallback;
-    menuIconStyle.value = validMenuIcons(stored?.menu_icon_style) ? stored.menu_icon_style : DEFAULT_MENU_ICON_STYLE;
+    menuIconChoice.value = validMenuIcons(stored?.menu_icon_style) ? stored.menu_icon_style : FOLLOW_SCHOOL;
   }
   watch(scope, restoreLocal, { immediate: true, flush: 'sync' });
   watch(effective, applyUiStyle, { immediate: true, flush: 'sync' });
 
-  function setSchool(value) {
+  function setSchool(value, icons) {
     school.value = validStyle(value) ? value : DEFAULT_UI_STYLE;
-    try { localStorage.setItem(schoolKey, school.value); } catch { /* The server value still applies. */ }
+    schoolMenuIcons.value = validMenuIcons(icons) ? icons : DEFAULT_MENU_ICON_STYLE;
+    try {
+      localStorage.setItem(schoolKey, school.value);
+      localStorage.setItem(schoolIconsKey, schoolMenuIcons.value);
+    } catch { /* The server values still apply. */ }
   }
   function saveChoice(field, value) {
     const key = localThemeKey(scope.value);
@@ -75,15 +85,16 @@ export function useUiStyle(scope) {
     choice.value = value;
   }
   function chooseMenuIcons(value) {
-    if (!scope.value || !validMenuIcons(value)) return;
+    if (!scope.value || !(value === FOLLOW_SCHOOL || validMenuIcons(value))) return;
     saveChoice('menu_icon_style', value);
-    menuIconStyle.value = value;
+    menuIconChoice.value = value;
   }
   function onStorage(event) {
     if (event.key === schoolKey || event.key === null) school.value = cachedSchoolStyle();
+    if (event.key === schoolIconsKey || event.key === null) schoolMenuIcons.value = cachedSchoolIcons();
     if (scope.value && (event.key === localThemeKey(scope.value) || event.key === null)) restoreLocal(scope.value);
   }
   window.addEventListener('storage', onStorage);
   onBeforeUnmount(() => window.removeEventListener('storage', onStorage));
-  return { school, choice, effective, choose, setSchool, menuIconStyle, chooseMenuIcons };
+  return { school, choice, effective, choose, setSchool, schoolMenuIcons, menuIconChoice, chooseMenuIcons };
 }

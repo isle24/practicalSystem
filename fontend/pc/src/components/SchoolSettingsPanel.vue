@@ -1,17 +1,20 @@
 <script setup>
-import { onMounted, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref } from 'vue';
 import { Building2, ImagePlus, RefreshCw } from '@lucide/vue';
 import { backendUrl, request } from '../api/client';
 import UiStylePicker from '../../../shared/components/UiStylePicker.vue';
-import { DEFAULT_UI_STYLE } from '../../../shared/uiStyles';
+import MenuIconPicker from '../../../shared/components/MenuIconPicker.vue';
+import { DEFAULT_MENU_ICON_STYLE, DEFAULT_UI_STYLE } from '../../../shared/uiStyles';
 import SchoolDemoSettings from './SchoolDemoSettings.vue';
 import IntegrationSettingsPanel from './IntegrationSettingsPanel.vue';
 
 defineProps({ superAdmin: Boolean });
 const emit = defineEmits(['updated']);
 const draftStyle = ref(DEFAULT_UI_STYLE);
+const draftMenuIcons = ref(DEFAULT_MENU_ICON_STYLE);
 const styleMessage = ref('');
-const state = reactive({ loading: false, uploading: '', error: '', school_name: '', school_logo_url: '', login_background_url: '', default_wallpaper_url: '', sharedWallpapers: [], wallpaperPage: 1, wallpaperTotal: 0 });
+const state = reactive({ loading: false, uploading: '', error: '', school_name: '', school_logo_url: '', login_background_url: '', default_wallpaper_url: '', default_ui_style: DEFAULT_UI_STYLE, default_menu_icon_style: null, sharedWallpapers: [], wallpaperPage: 1, wallpaperTotal: 0 });
+const styleChanged = computed(() => draftStyle.value !== state.default_ui_style || (state.default_menu_icon_style && draftMenuIcons.value !== state.default_menu_icon_style));
 const assets = [
   { type: 'logo', label: '学校 Logo', field: 'school_logo_url', accept: 'image/png,image/jpeg,image/webp', limit: 2, hint: '推荐 256 × 256 px，透明 PNG / WebP，最大 2 MB。按原比例完整显示。' },
   { type: 'background', label: '登录页背景', field: 'login_background_url', accept: 'image/png,image/jpeg,image/webp,image/gif', limit: 8, hint: '推荐 1920 × 1080 px 或更大横图，最大 8 MB。按比例铺满登录页。' },
@@ -21,8 +24,10 @@ async function load() {
   state.loading = true;
   state.error = '';
   try {
-    Object.assign(state, await request('/school-appearance/settings'));
+    const data = await request('/school-appearance/settings');
+    Object.assign(state, data, { default_menu_icon_style: data.default_menu_icon_style ?? null });
     draftStyle.value = state.default_ui_style || DEFAULT_UI_STYLE;
+    draftMenuIcons.value = state.default_menu_icon_style || DEFAULT_MENU_ICON_STYLE;
     await loadShared();
   }
   catch (error) { state.error = error.message; }
@@ -34,10 +39,12 @@ async function saveStyle() {
   state.error = '';
   styleMessage.value = '';
   try {
-    const data = await request('/school-appearance/ui-style', { method: 'POST', body: JSON.stringify({ default_ui_style: draftStyle.value }) });
+    const settings = { default_ui_style: draftStyle.value };
+    if (state.default_menu_icon_style) settings.default_menu_icon_style = draftMenuIcons.value;
+    const data = await request('/school-appearance/ui-style', { method: 'POST', body: JSON.stringify(settings) });
     Object.assign(state, data);
     emit('updated', data);
-    styleMessage.value = '学校默认风格已保存';
+    styleMessage.value = '学校默认外观已保存';
   } catch (error) { state.error = error.message; }
   finally { state.uploading = ''; }
 }
@@ -112,8 +119,11 @@ onMounted(load);
     <section class="school-asset-card">
       <UiStylePicker v-model="draftStyle" label="学校默认界面风格（必选）" :disabled="state.loading || Boolean(state.uploading)" @update:model-value="styleMessage = ''" />
       <p>登录页和选择「跟随学校」的用户使用此风格。</p>
+      <MenuIconPicker v-model="draftMenuIcons" label="学校默认菜单图标（必选）"
+        :hint="!state.loading && !state.default_menu_icon_style ? '更新学校服务端后可设置默认图标。' : '学校初始使用「经典彩底」。首次使用或选择「跟随学校」的用户采用这里的设置。'"
+        :disabled="state.loading || Boolean(state.uploading) || !state.default_menu_icon_style" @update:model-value="styleMessage = ''" />
       <div class="school-asset-controls">
-        <el-button type="primary" :loading="state.uploading === 'style'" :disabled="state.loading || Boolean(state.uploading) || draftStyle === state.default_ui_style" @click="saveStyle">保存默认风格</el-button>
+        <el-button type="primary" :loading="state.uploading === 'style'" :disabled="state.loading || Boolean(state.uploading) || !styleChanged" @click="saveStyle">保存学校默认外观</el-button>
         <span role="status">{{ styleMessage }}</span>
       </div>
     </section>
@@ -158,6 +168,7 @@ onMounted(load);
 .school-settings h3 { font-size: 15px; }
 .school-settings p { color: var(--muted); font-size: 13px; line-height: 1.6; margin: 8px 0 0; }
 .school-asset-card { border: 1px solid var(--line); border-radius: 10px; padding: 20px; background: var(--surface); }
+.school-asset-card .menu-icon-picker { margin: 18px 0; }
 .school-asset-controls { display: flex; align-items: center; gap: 20px; margin-top: 18px; flex-wrap: wrap; }
 .school-asset-preview { background: var(--surface-2); color: var(--muted); display: grid; place-items: center; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
 .school-asset-preview.logo { width: 96px; height: 96px; padding: 6px; }

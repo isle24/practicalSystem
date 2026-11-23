@@ -17325,7 +17325,7 @@ function applyProfileData(data) {
 
 function applyLoginPageData(data) {
   const payload = data?.data && typeof data.data === 'object' ? data.data : data || {};
-  localTheme.look.setSchool(payload.default_ui_style);
+  localTheme.look.setSchool(payload.default_ui_style, payload.default_menu_icon_style);
   loginPageState.school_name = payload.school_name || '成都锦城学院';
   loginPageState.school_logo_url = payload.school_logo_url || '';
   loginPageState.default_wallpaper_url = payload.default_wallpaper_url || '';

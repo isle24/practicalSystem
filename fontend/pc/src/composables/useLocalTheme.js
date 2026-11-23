@@ -1,5 +1,5 @@
 import { computed, onBeforeUnmount, reactive, watch } from 'vue';
-import { DEFAULT_MENU_ICON_STYLE, desktopUiKey, localThemeKey, uiStyles, useUiStyle } from '../../../shared/uiStyles';
+import { FOLLOW_SCHOOL, desktopUiKey, localThemeKey, uiStyles, useUiStyle } from '../../../shared/uiStyles';
 
 export const themePresets = [
   { id: 'system', name: '跟随系统', mode: 'system', accent: '#2563eb', window: '', text: '#ffffff', opacity: 1, density: 'normal' },
@@ -148,7 +148,7 @@ export function useLocalTheme(scope, accountId) {
   function persist() {
     if (!currentKey) throw new Error('请登录后保存本机主题');
     localStorage.setItem(currentKey, JSON.stringify({
-      saved: state.saved, custom: state.custom, ui_style: look.choice.value, menu_icon_style: look.menuIconStyle.value,
+      saved: state.saved, custom: state.custom, ui_style: look.choice.value, menu_icon_style: look.menuIconChoice.value,
     }));
   }
   watch(scope, value => {
@@ -207,7 +207,7 @@ export function useLocalTheme(scope, accountId) {
   onBeforeUnmount(() => { generation++; revokeWallpaper(); media.removeEventListener('change', updateSystem); });
   async function reset() {
     await apply(defaults());
-    look.chooseMenuIcons(DEFAULT_MENU_ICON_STYLE);
+    look.chooseMenuIcons(FOLLOW_SCHOOL);
   }
   return { state, current, dark, look, styles, presets: themePresets, preview, cancelPreview, apply, remove, selectWallpaper, reset };
 }
