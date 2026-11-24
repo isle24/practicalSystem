@@ -1,6 +1,6 @@
 use crate::{
     agent_confirmation::View,
-    agent_models,
+    agent_files, agent_models,
     agent_process::{bounded_line, plugin_configs, probe_mcp, send, spawn_runtime},
     agent_profile_sync, agent_profiles, agent_store, agent_workspace,
     business_tools::{self, Tools},
@@ -546,6 +546,41 @@ pub async fn action(
         return Ok(json!({"ok":true}));
     }
     let scope = account_scope(connection)?;
+    if matches!(action, "pick-folder" | "clear-folder" | "pick-attachments") {
+        if running(owner).is_some() {
+            return Err("请在当前运行结束后选择工作区或附件".into());
+        }
+        let handle = app.clone();
+        if action == "pick-attachments" {
+            let files = tokio::task::spawn_blocking(move || agent_files::pick_attachments(&handle))
+                .await
+                .map_err(|_| "无法读取所选附件")??;
+            return Ok(json!({"attachments":files}));
+        }
+        let root = if action == "pick-folder" {
+            tokio::task::spawn_blocking(move || agent_files::pick_folder(&handle))
+                .await
+                .map_err(|_| "无法选择工作区目录")??
+        } else {
+            None
+        };
+        let _guard = agent_store::acquire(app, &scope)?;
+        let mut data = agent_workspace::normalize(&scope, agent_store::read_locked(app, &scope)?);
+        if action == "clear-folder" || root.is_some() {
+            let id = input["conversation_id"].as_str().ok_or("请选择会话")?;
+            if data["active_conversation_id"] != id
+                || cancel.is_cancelled()
+                || view.closed.is_cancelled()
+            {
+                return Err("会话已变化，请重新选择目录".into());
+            }
+            let conversation = agent_workspace::conversation_mut(&mut data, id)?;
+            conversation["project_scope"] = scope.clone();
+            conversation["project_root"] = json!(root);
+            agent_store::write(app, &scope, &data)?;
+        }
+        return snapshot(&data);
+    }
     if matches!(action, "models" | "probe") {
         let supplied_key = input["api_key"].as_str().unwrap_or("");
         let mut model = ModelConfig(if supplied_key.is_empty() {
@@ -658,6 +693,9 @@ pub async fn action(
                 if let Some(item) = items.iter_mut().find(|item| item["id"] == id) {
                     item["history"] = json!([]);
                     item["messages"] = json!([]);
+                    item["goal"] = Value::Null;
+                    item["last_usage"] = Value::Null;
+                    item["usage_total"] = Value::Null;
                 }
             }
         } else {
@@ -748,10 +786,59 @@ async fn start_run(
     if mode == "school" && selected["model"] != model {
         return Err("学校统一模型由管理员配置".into());
     }
-    let prompt = input["prompt"].as_str().unwrap_or("").trim();
+    let work_mode = input["work_mode"].as_str().unwrap_or("chat");
+    if !matches!(work_mode, "chat" | "plan" | "goal") {
+        return Err("请选择有效的 Agent 模式".into());
+    }
+    agent_files::validate_attachments(&input["attachments"])?;
+    let attachments = input["attachments"].as_array().cloned().unwrap_or_default();
+    let resume = input["resume_goal"] == true && work_mode == "goal";
+    let prompt = match input["prompt"].as_str().unwrap_or("").trim() {
+        "" if resume => "继续当前目标，核对已完成步骤后推进剩余事项。",
+        "" if !attachments.is_empty() => "请分析所附文件。",
+        value => value,
+    };
     if prompt.is_empty() || prompt.chars().count() > 12000 {
         return Err("请输入不超过 12000 字的问题".into());
     }
+    let mut model_config = ModelConfig(if mode == "personal" {
+        agent_profiles::Store::open(app, &scope)?.resolve(profile_id, true)?
+    } else {
+        selected.clone()
+    });
+    model_config["model"] = json!(model);
+    if mode == "personal" {
+        model_config["endpoint"] = json!(agent_models::endpoint(
+            model_config["endpoint"].as_str().unwrap_or("")
+        )?
+        .as_str());
+    }
+    let actual_profile = model_config["profile_id"].as_str().unwrap_or(profile_id);
+    let revision = model_config["revision"].as_str().unwrap_or("");
+    let mut user_input = json!({"role":"pending_user","prompt":prompt,"attachments":attachments,"timestamp":now()*1000});
+    if let Some(key) = model_config["api_key"]
+        .as_str()
+        .filter(|key| !key.is_empty())
+    {
+        agent_models::redact(&mut user_input["prompt"], key);
+        for file in user_input["attachments"]
+            .as_array_mut()
+            .into_iter()
+            .flatten()
+        {
+            agent_models::redact(&mut file["name"], key);
+            if let Some(text) = file.get_mut("text") {
+                agent_models::redact(text, key);
+            }
+        }
+    }
+    let filenames: Vec<_> = user_input["attachments"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|file| file["name"].as_str())
+        .collect();
+    let display_input = json!({"role":"user","text":user_input["prompt"],"attachments":filenames,"work_mode":work_mode});
     let guard = agent_store::acquire(app, &scope)?;
     let mut stored = agent_workspace::normalize(&scope, agent_store::read_locked(app, &scope)?);
     if let Some(id) = input["conversation_id"]
@@ -763,29 +850,68 @@ async fn start_run(
             &json!({"section":"conversations","operation":"select","id":id}),
         )?;
     }
-    let active_id = stored["active_conversation_id"].clone();
-    if let Some(item) = stored["conversations"]
-        .as_array_mut()
-        .and_then(|items| items.iter_mut().find(|item| item["id"] == active_id))
-    {
-        if item["mode"] != mode
-            || item["profile_id"] != profile_id
-            || item["model"] != model
-            || item["execution_scope"] != scope
-        {
-            item["revision"] = Value::Null;
-            item["messages"] = json!([]);
-        }
-        item["execution_scope"] = scope.clone();
-        item["mode"] = json!(mode);
-        item["profile_id"] = json!(profile_id);
-        item["model"] = json!(model);
-    }
-    let conversation_id = stored["active_conversation_id"]
+    let conversation_id = agent_workspace::active(&stored)?["id"]
         .as_str()
         .ok_or("会话标识无效")?
         .to_owned();
-    let options = json!({"mode":mode,"profile_id":profile_id,"model":model,"conversation_id":conversation_id,"scheduled":input["scheduled"]==true,"task_id":input["task_id"]});
+    let item = agent_workspace::conversation_mut(&mut stored, &conversation_id)?;
+    let project_root =
+        if item["project_scope"] == scope && view.is_some() && input["scheduled"] != true {
+            item["project_root"].clone()
+        } else {
+            Value::Null
+        };
+    if resume
+        && (item["execution_scope"] != scope
+            || !matches!(
+                item["goal"]["status"].as_str(),
+                Some("active" | "paused" | "blocked")
+            ))
+    {
+        return Err("当前账号在此会话没有可继续的目标".into());
+    }
+    if item["execution_scope"] != scope {
+        item["goal"] = Value::Null;
+    }
+    if item["mode"] != mode
+        || item["profile_id"] != actual_profile
+        || item["model"] != model
+        || item["execution_scope"] != scope
+        || item["revision"] != revision
+    {
+        item["messages"] = json!(item["history"].as_array().into_iter().flatten().filter_map(|entry| {
+            let text = entry["text"].as_str()?;
+            match entry["role"].as_str()? {
+                "user" => Some(json!({"role":"user","content":text,"timestamp":now()*1000})),
+                "assistant" => Some(json!({"role":"assistant","content":[{"type":"text","text":text}],"timestamp":now()*1000})),
+                _ => None,
+            }
+        }).collect::<Vec<_>>());
+    }
+    if work_mode == "goal" {
+        if !resume {
+            item["goal"] =
+                json!({"objective":user_input["prompt"],"status":"active","steps":[],"note":""});
+        } else {
+            item["goal"]["status"] = json!("active");
+        }
+        item["messages"]
+            .as_array_mut()
+            .ok_or("会话消息格式无效")?
+            .push(user_input.clone());
+        let history = item["history"].as_array_mut().ok_or("会话记录格式无效")?;
+        history.push(display_input.clone());
+        if history.len() > 60 {
+            history.drain(..history.len() - 60);
+        }
+    }
+    item["work_mode"] = json!(work_mode);
+    item["revision"] = json!(revision);
+    item["execution_scope"] = scope.clone();
+    item["mode"] = json!(mode);
+    item["profile_id"] = json!(actual_profile);
+    item["model"] = json!(model);
+    let options = json!({"mode":mode,"profile_id":actual_profile,"model":model,"conversation_id":conversation_id,"work_mode":work_mode,"project_root":project_root,"user_input":user_input,"display_input":display_input,"scheduled":input["scheduled"]==true,"task_id":input["task_id"]});
     agent_store::write(app, &scope, &stored)?;
     let initial = snapshot(&stored)?;
     let run = Arc::new(Run {
@@ -814,7 +940,6 @@ async fn start_run(
     };
     let app = app.clone();
     let connection = connection.clone();
-    let prompt = prompt.to_owned();
     let mode = mode.to_owned();
     let running = run.clone();
     tauri::async_runtime::spawn(async move {
@@ -823,7 +948,7 @@ async fn start_run(
             _=running.cancel.cancelled()=>Err("运行已停止；已发送的写请求请先核对结果".to_owned()),
             _=connection.cancel.cancelled()=>Err("学校连接已关闭".to_owned()),
             _=tokio::time::sleep(Duration::from_secs(180))=>Err("运行达到 180 秒上限，已停止；写请求请先核对结果".to_owned()),
-            result=execute(&app,&connection,&running,&mode,&prompt,&config,stored,tools.clone())=>result,
+            result=execute(&app,&connection,&running,&mode,model_config,stored,tools.clone())=>result,
         };
         if result.is_err() {
             cancel_pending_operation(&app, &connection, &running, &tools).await;
@@ -847,10 +972,29 @@ async fn start_run(
         if let Ok(mut data) = agent_store::read_locked(&app, &running.scope)
             .map(|data| agent_workspace::normalize(&running.scope, data))
         {
+            if let Ok(item) = agent_workspace::conversation_mut(
+                &mut data,
+                running.options["conversation_id"].as_str().unwrap_or(""),
+            ) {
+                if let Ok(state) = running.state.lock() {
+                    if state["usage"].is_object() {
+                        agent_workspace::record_usage(item, &state["usage"]);
+                    }
+                }
+                if running.options["work_mode"] == "goal"
+                    && result.is_err()
+                    && item["goal"]["status"] == "active"
+                {
+                    item["goal"]["status"] = json!("paused");
+                    item["goal"]["note"] = json!(result.as_ref().err());
+                }
+            }
             if let Some(id) = running.options["task_id"].as_str() {
                 let _ = agent_workspace::finish(&mut data, "task", id, status, now());
             }
-            let _ = agent_store::write(&app, &running.scope, &data);
+            if let Err(message) = agent_store::write(&app, &running.scope, &data) {
+                update(&running, json!({"progress_error":message}));
+            }
             if let Ok(snapshot) = snapshot(&data) {
                 update(&running, snapshot);
             }
@@ -879,6 +1023,10 @@ fn now() -> i64 {
 }
 
 impl Run {
+    fn read_only(&self) -> bool {
+        self.options["work_mode"] == "plan" || self.options["scheduled"] == true
+    }
+
     async fn confirm(&self, title: &str, description: String) -> Result<bool, String> {
         self.view
             .as_ref()
@@ -900,6 +1048,41 @@ impl Run {
                 .as_ref()
                 .is_some_and(|view| view.closed.is_cancelled())
     }
+}
+
+async fn project_file(run: &Run, params: &Value) -> Result<Value, String> {
+    let root = run.options["project_root"]
+        .as_str()
+        .ok_or("请先选择本机工作区")?
+        .to_owned();
+    let view = run.view.as_ref().ok_or("请在 Agent 窗口内操作工作区文件")?;
+    if run.interaction_ended() {
+        return Err("本次工作区授权已结束".into());
+    }
+    let params = params.clone();
+    if params["action"] != "write" {
+        return tokio::task::spawn_blocking(move || agent_files::read(&root, &params))
+            .await
+            .map_err(|_| "无法读取工作区文件")?;
+    }
+    if run.read_only() {
+        return Err("当前模式仅允许读取工作区".into());
+    }
+    let proposal = tokio::task::spawn_blocking(move || agent_files::prepare_write(&root, &params))
+        .await
+        .map_err(|_| "无法准备工作区文件写入")??;
+    update(run, json!({"tool_status":"等待确认写入工作区文件"}));
+    if !run.confirm("写入工作区文件", proposal.preview()).await? || run.interaction_ended() {
+        run.cancel.cancel();
+        return Err("本次文件写入未获确认".into());
+    }
+    let cancel = run.cancel.clone();
+    let closed = view.closed.clone();
+    tokio::task::spawn_blocking(move || {
+        proposal.apply(|| cancel.is_cancelled() || closed.is_cancelled())
+    })
+    .await
+    .map_err(|_| "无法保存工作区文件")?
 }
 
 async fn approve_plugin(
@@ -1589,44 +1772,24 @@ async fn execute(
     connection: &Connection,
     run: &Arc<Run>,
     mode: &str,
-    prompt: &str,
-    config: &Value,
+    model: ModelConfig,
     mut stored: Value,
     tools_state: Arc<tokio::sync::Mutex<Tools>>,
 ) -> Result<Value, String> {
     let device_id = uuid::Uuid::new_v4().to_string();
     let conversation = agent_workspace::active(&stored)?.clone();
-    let profile_id = run.options["profile_id"].as_str().unwrap_or("");
-    let mut model = ModelConfig(if mode == "personal" {
-        agent_profiles::Store::open(app, &run.scope)?.resolve(profile_id, true)?
-    } else {
-        config["school"].clone()
-    });
-    model["model"] = run.options["model"].clone();
-    if mode == "personal" {
-        model["endpoint"] =
-            json!(agent_models::endpoint(model["endpoint"].as_str().unwrap_or(""))?.as_str());
-    }
     let revision = model["revision"].as_str().unwrap_or("").to_owned();
-    let actual_profile = model["profile_id"]
-        .as_str()
-        .unwrap_or(profile_id)
-        .to_owned();
+    let actual_profile = run.options["profile_id"].as_str().unwrap_or("");
     let selected_model = model["model"].as_str().unwrap_or("").to_owned();
-    let messages = if conversation["mode"] == mode
-        && conversation["execution_scope"] == run.scope
-        && conversation["revision"] == revision
-        && conversation["profile_id"] == actual_profile
-        && conversation["model"] == selected_model
-    {
-        conversation["messages"].clone()
-    } else {
-        json!(conversation["history"].as_array().into_iter().flatten().filter_map(|item|{
-            let role=item["role"].as_str()?;let text=item["text"].as_str()?;
-            match role {"user"=>Some(json!({"role":"user","content":text,"timestamp":now()*1000})),"assistant"=>Some(json!({"role":"assistant","content":[{"type":"text","text":text}],"timestamp":now()*1000})),_=>None}
-        }).collect::<Vec<_>>())
-    };
-    let plugins = if run.options["scheduled"] == true {
+    let mut messages = conversation["messages"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    if run.options["work_mode"] == "goal" {
+        // 本轮输入在开始时已保存，发送给模型时使用独立的 prompt。
+        messages.pop();
+    }
+    let plugins = if run.read_only() {
         json!([])
     } else {
         plugin_configs(&stored)
@@ -1653,19 +1816,26 @@ async fn execute(
             }
         }
     };
-    if run.options["scheduled"] == true {
+    if run.read_only() {
         catalog = json!(catalog
             .as_array()
             .into_iter()
             .flatten()
-            .filter(|cap| cap["kind"] == "read")
+            .filter(|cap| cap["kind"] == "read"
+                && (run.options["work_mode"] != "plan" || cap["phase"] == "B"))
             .cloned()
             .collect::<Vec<_>>());
     }
     let mut child = spawn_runtime(app)?;
     let mut stdin = child.stdin.take().ok_or("Agent 输入通道不可用")?;
     let stdout = child.stdout.take().ok_or("Agent 输出通道不可用")?;
-    let packet = json!({"type":"start","run_id":run.id,"mode":mode,"config":{"model":model["model"]},"prompt":prompt,"messages":messages,"capabilities":catalog,"plugins":plugins,"workspace_context":agent_workspace::context(&stored),"tool_connection":session.status()});
+    let packet = json!({
+        "type":"start","run_id":run.id,"mode":mode,"work_mode":run.options["work_mode"],
+        "config":{"model":model["model"]},"prompt":run.options["user_input"]["prompt"],"attachments":run.options["user_input"]["attachments"],
+        "goal":conversation["goal"],"project_available":run.options["project_root"].is_string(),
+        "messages":messages,"capabilities":catalog,"plugins":plugins,
+        "workspace_context":agent_workspace::context(&stored),"tool_connection":session.status()
+    });
     let sent = send(&mut stdin, &packet).await;
     sent?;
     drop(packet);
@@ -1689,6 +1859,14 @@ async fn execute(
                         .is_some_and(|arguments| agent_models::redact(arguments, key))
                 }
                 Some("text") => agent_models::redact(&mut value["text"], key),
+                Some("goal") => agent_models::redact(&mut value["goal"], key),
+                Some("checkpoint") => {
+                    agent_models::redact_messages(&mut value["messages"], key);
+                    false
+                }
+                Some("rpc") if value["method"] == "project_file" => {
+                    agent_models::redact(&mut value["params"], key)
+                }
                 Some("done") => {
                     agent_models::redact(&mut value["answer"], key);
                     agent_models::redact_messages(&mut value["messages"], key);
@@ -1702,6 +1880,26 @@ async fn execute(
         };
         match value["type"].as_str().unwrap_or("") {
             "ready" => (),
+            "usage" => update(run, json!({"usage":value["usage"]})),
+            "goal" | "checkpoint" if run.options["work_mode"] == "goal" => {
+                stored = agent_workspace::normalize(
+                    &run.scope,
+                    agent_store::read_locked(app, &run.scope)?,
+                );
+                let item = agent_workspace::conversation_mut(
+                    &mut stored,
+                    run.options["conversation_id"].as_str().unwrap_or(""),
+                )?;
+                if value["type"] == "checkpoint" {
+                    item["messages"] = value["messages"].take();
+                } else {
+                    for field in ["status", "steps", "note"] {
+                        item["goal"][field] = value["goal"][field].clone();
+                    }
+                    update(run, json!({"goal":item["goal"]}));
+                }
+                agent_store::write(app, &run.scope, &stored)?;
+            }
             "tools" => update(
                 run,
                 json!({"tool_registration":{"school_capability":value["school_capability"],"capability_count":value["capability_count"],"tool_names":value["tool_names"]}}),
@@ -1724,7 +1922,12 @@ async fn execute(
                 {
                     return Err("Agent 请求标识无效".into());
                 }
-                if protected && matches!(value["method"].as_str(), Some("tool" | "confirm_mcp")) {
+                if protected
+                    && matches!(
+                        value["method"].as_str(),
+                        Some("tool" | "confirm_mcp" | "project_file")
+                    )
+                {
                     return Err("工具参数包含受保护凭据，未执行，请移除凭据后重试".into());
                 }
                 rpc_count += 1;
@@ -1750,9 +1953,18 @@ async fn execute(
                     }
                     "model" if mode == "school" => {
                         update(run, json!({"tool_status":"学校模型推理中"}));
-                        agent_post(connection,run,"api/client-agent/model",&json!({"revision":config["school"]["revision"],"body":value["params"]["body"]})).await
+                        agent_post(
+                            connection,
+                            run,
+                            "api/client-agent/model",
+                            &json!({"revision":revision,"body":value["params"]["body"]}),
+                        )
+                        .await
                     }
-                    "confirm_mcp" => approve_mcp_call(run, &plugins, &value["params"]).await,
+                    "confirm_mcp" if !run.read_only() => {
+                        approve_mcp_call(run, &plugins, &value["params"]).await
+                    }
+                    "project_file" => project_file(run, &value["params"]).await,
                     "tool" => {
                         let outcome = call_tool(
                             app,
@@ -1789,7 +2001,9 @@ async fn execute(
                     .as_array()
                     .cloned()
                     .unwrap_or_default();
-                history.push(json!({"role":"user","text":prompt}));
+                if run.options["work_mode"] != "goal" {
+                    history.push(run.options["display_input"].clone());
+                }
                 history.push(json!({"role":"assistant","text":answer}));
                 if history.len() > 60 {
                     history.drain(..history.len() - 60);
@@ -1807,7 +2021,7 @@ async fn execute(
                     &mut stored,
                     run.options["conversation_id"].as_str().unwrap_or(""),
                     mode,
-                    &actual_profile,
+                    actual_profile,
                     &selected_model,
                     &revision,
                     value["messages"].clone(),
@@ -1862,8 +2076,8 @@ async fn call_tool(
         return Err("业务工具连接已失效，请重新连接".into());
     }
     let write = cap["kind"] == "write";
-    if write && run.options["scheduled"] == true {
-        return Err("计划任务只允许读取学校业务数据".into());
+    if write && run.read_only() {
+        return Err("当前模式只允许读取学校业务数据".into());
     }
     if cap["phase"] == "C" {
         return call_confirmed_tool(app, connection, run, client, session, cap, params).await;

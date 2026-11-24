@@ -317,7 +317,11 @@
               @click="openMarkdownLink"
               @auxclick="openMarkdownLink"
             ></div>
-            <p v-else>{{ message.text }}</p>
+            <template v-else>
+              <p>{{ message.text }}</p>
+              <ul v-if="message.attachments?.length" class="message-files" aria-label="消息附件"><li v-for="(file, i) in message.attachments" :key="i">{{ file }}</li></ul>
+            </template>
+            <button v-if="index === renderedHistory.length - 1 && message.role === 'assistant' && renderedHistory[index - 1]?.work_mode === 'plan'" type="button" :disabled="blocked" @click="executePlan">按此计划执行</button>
           </article>
           <article v-if="busy || activeText" class="message assistant">
             <h3>
@@ -333,6 +337,12 @@
             ></div>
             <p v-else>正在处理任务…</p>
           </article>
+          <details v-if="currentGoal" class="agent-goal" open>
+            <summary>目标进度 · {{ goalStates[currentGoal.status] }}</summary>
+            <strong>{{ currentGoal.objective }}</strong>
+            <ol v-if="currentGoal.steps?.length"><li v-for="(step, i) in currentGoal.steps" :key="i"><span>{{ stepStates[step.status] }}</span>{{ step.title }}</li></ol>
+            <p v-if="currentGoal.note">{{ currentGoal.note }}</p>
+          </details>
           <details v-if="operations.length" class="operation-receipts" open>
             <summary>操作回执（{{ operations.length }}）</summary>
             <p>本机记录最后已知状态；请在学校页面核对最新结果。浏览器需登录对应账号。</p>
@@ -357,15 +367,21 @@
         </div>
         <div v-if="!commandApproval" class="chat-bottom">
           <div class="privacy-strip">
-            <span>
-              本机记忆 {{ enabledMemories }} 条 · 已启用插件
-              {{ enabledPlugins }} 个
+            <span v-if="folderName || attachments.length">附件和读取的文件内容会发送给当前模型。写入工作区前需确认。</span>
+            <span v-else>
+              本机记忆 {{ enabledMemories }} 条 · 已启用插件 {{ enabledPlugins }} 个
             </span>
             <button type="button" @click="section = 'memories'">
               管理记忆
             </button>
           </div>
           <form class="composer" @submit.prevent="send">
+            <div class="composer-options">
+              <label>模式 <select v-model="workMode" :disabled="blocked"><option value="chat">对话</option><option value="plan">Plan · 只读计划</option><option value="goal">Goal · 执行目标</option></select></label>
+              <button type="button" :title="activeConversation?.project_root || '选择本机项目文件夹'" :disabled="blocked" @click="chooseFolder(false)">工作区 · {{ folderName || '选择文件夹' }}</button>
+              <button v-if="folderName" type="button" :disabled="blocked" aria-label="解除当前会话的工作区绑定" @click="chooseFolder(true)">解除绑定</button>
+              <AgentAttachments :key="workspace.active_conversation_id" v-model="attachments" :disabled="blocked" :pick="pickAttachments" @error="message => error = message" />
+            </div>
             <label class="sr-only" for="agent-prompt">任务内容</label>
             <textarea
               id="agent-prompt"
@@ -373,7 +389,7 @@
               v-model="prompt"
               rows="3"
               maxlength="12000"
-              placeholder="输入任务，Enter 发送，Shift + Enter 换行"
+              :placeholder="workMode === 'plan' ? '描述任务，生成可执行的计划' : workMode === 'goal' ? (resumeGoal ? '可补充信息，或直接继续当前目标' : '填写要达成的目标和完成条件') : '输入任务，Enter 发送，Shift + Enter 换行'"
               :disabled="!scope || loading || pending || busy"
               @keydown="handlePromptKeydown"
             ></textarea>
@@ -391,12 +407,12 @@
                 {{ stopping ? '正在停止' : '停止' }}
               </button>
               <button v-else type="submit" class="primary" :disabled="!canSend">
-                发送
+                {{ resumeGoal ? '继续目标' : workMode === 'goal' ? '开始目标' : workMode === 'plan' ? '生成计划' : '发送' }}
               </button>
             </div>
           </form>
           <div class="chat-footnote">
-            <span>会话、记忆和插件凭据仅加密保存在本机。</span>
+            <AgentUsage :turn="busy ? liveUsage : activeConversation?.last_usage" :totals="activeConversation?.usage_total" :running="busy" />
           </div>
         </div>
       </template>
@@ -622,7 +638,7 @@
 
         <template v-if="section === 'memories'">
           <p class="section-description">
-            启用的记忆会加入后续对话上下文，并发送给当前选择的模型提供方。仅在当前学校与账号的本机工作区保存。
+            记忆保存在当前系统用户的本机工作区。启用后会随对话发送给所选模型。
           </p>
           <article
             v-for="item in workspace.memories"
@@ -755,7 +771,7 @@
 
         <template v-if="section === 'status'">
           <p class="section-description">
-            当前账号的本机工作区状态与最近运行记录。
+            当前系统用户的本机工作区状态与最近运行记录。
           </p>
           <div class="status-grid">
             <article class="item-card">
@@ -1184,6 +1200,8 @@
 
 <script setup>
 import { invoke } from '@tauri-apps/api/core';
+import AgentAttachments from './AgentAttachments.vue';
+import AgentUsage from './AgentUsage.vue';
 import FormFieldLabel from '../../shared/components/FormFieldLabel.vue';
 import {
   computed,
@@ -1255,6 +1273,10 @@ const conflictSides = [
   { id: 'cloud', label: '云端' }
 ];
 const workspace = reactive(emptyWorkspace());
+const workMode = ref('chat'), attachments = ref([]), liveUsage = ref(null), liveGoal = ref(null);
+let sentDraft = null;
+const goalStates = { active: '进行中', paused: '已暂停', completed: '已完成', blocked: '需要处理' };
+const stepStates = { pending: '待办', active: '进行中', done: '已完成' };
 const history = ref([]),
   prompt = ref(''),
   source = ref('school'),
@@ -1374,6 +1396,14 @@ const activeConversation = computed(() =>
     (item) => item.id === workspace.active_conversation_id
   )
 );
+const folderName = computed(() => activeConversation.value?.project_root?.split(/[\\/]/).filter(Boolean).at(-1) || activeConversation.value?.project_root || '');
+const currentGoal = computed(() => {
+  if (workMode.value !== 'goal') return null;
+  const goal = (busy.value && liveGoal.value) || activeConversation.value?.goal;
+  if (!busy.value && goal?.status === 'active') return { ...goal, status: 'paused', note: '上次运行已中断，可以继续剩余步骤。' };
+  return goal;
+});
+const resumeGoal = computed(() => ['active', 'paused', 'blocked'].includes(currentGoal.value?.status));
 const operations = computed(() => (Array.isArray(activeConversation.value?.operations)
   ? activeConversation.value.operations : []).slice(-50).reverse());
 const operationStorageError = ref('');
@@ -1455,7 +1485,7 @@ const blocked = computed(
 const canSend = computed(
   () =>
     !blocked.value &&
-    prompt.value.trim() &&
+    (prompt.value.trim() || attachments.value.length || resumeGoal.value) &&
     model.value.trim() &&
     (source.value === 'school'
       ? school.value.enabled
@@ -1623,6 +1653,11 @@ function wipe() {
   Object.assign(workspace, emptyWorkspace());
   history.value = [];
   prompt.value = '';
+  attachments.value = [];
+  workMode.value = 'chat';
+  liveUsage.value = null;
+  liveGoal.value = null;
+  sentDraft = null;
   activeText.value = '';
   runId.value = '';
   pollError.value = '';
@@ -1722,7 +1757,7 @@ function applyWorkspace(value, select = false) {
   const previousId = workspace.active_conversation_id;
   const nextId = text(data.active_conversation_id);
   const transitioned = nextId !== previousId;
-  if (transitioned && previousId) promptDrafts.set(previousId, prompt.value);
+  if (transitioned && previousId) promptDrafts.set(previousId, { prompt: prompt.value, files: attachments.value, mode: workMode.value });
   Object.assign(workspace, {
     active_conversation_id: nextId,
     ...Object.fromEntries(
@@ -1740,10 +1775,16 @@ function applyWorkspace(value, select = false) {
   for (const id of promptDrafts.keys()) {
     if (!retainedIds.has(id)) promptDrafts.delete(id);
   }
-  if (transitioned) prompt.value = promptDrafts.get(nextId) || '';
+  if (transitioned) {
+    prompt.value = promptDrafts.get(nextId)?.prompt || '';
+    attachments.value = promptDrafts.get(nextId)?.files || [];
+    liveUsage.value = null;
+    liveGoal.value = null;
+  }
   if (select || transitioned) {
     history.value = readHistory(activeConversation.value?.history);
     if (activeConversation.value) {
+      workMode.value = (transitioned && promptDrafts.get(nextId)?.mode) || activeConversation.value.work_mode || 'chat';
       source.value =
         activeConversation.value.mode === 'personal'
           ? activeConversation.value.profile_id || 'legacy'
@@ -1928,6 +1969,8 @@ function applyBootstrap(value) {
   }
   if (source.value === 'school') model.value = school.value.model;
   const run = value.run;
+  liveUsage.value = run?.usage || null;
+  liveGoal.value = run?.goal || null;
   applyOperationState(run || value);
   busy.value = run ? run.status === 'running' : value.busy === true;
   runId.value = text(run?.run_id || value.run_id);
@@ -2396,6 +2439,17 @@ async function toggleItem(target, item, enabled) {
 async function importSkill() {
   await perform('import-skill', {}, 'Skill 已导入。', { refresh: true });
 }
+function chooseFolder(clear) {
+  return perform(clear ? 'clear-folder' : 'pick-folder', { conversation_id: workspace.active_conversation_id }, '', { refresh: true });
+}
+function pickAttachments() {
+  return perform('pick-attachments', {}, '');
+}
+function executePlan() {
+  workMode.value = 'goal';
+  prompt.value = ['按上一条计划执行。', prompt.value.trim()].filter(Boolean).join('\n');
+  return send(true);
+}
 async function probeProfile(item) {
   const value = await perform('probe', { profile_id: item.id }, '');
   if (value) {
@@ -2422,9 +2476,12 @@ async function runScheduled(target, item) {
   );
   if (value) await bootstrap();
 }
-async function send() {
+async function send(newGoal = false) {
   if (!canSend.value) return;
   const content = prompt.value.trim();
+  const files = attachments.value.slice();
+  const resume = newGoal !== true && resumeGoal.value;
+  const displayPrompt = content || (resume ? '继续当前目标，核对已完成步骤后推进剩余事项。' : '请分析所附文件。');
   mutationRevision++;
   if (source.value === 'school') model.value = school.value.model;
   pending.value = true;
@@ -2436,6 +2493,9 @@ async function send() {
       mode: source.value === 'school' ? 'school' : 'personal',
       ...(source.value !== 'school' ? { profile_id: source.value } : {}),
       model: model.value.trim(),
+      work_mode: workMode.value,
+      resume_goal: resume,
+      attachments: files,
       conversation_id: workspace.active_conversation_id || undefined,
       prompt: content
     });
@@ -2444,10 +2504,14 @@ async function send() {
       throw new Error('客户端未返回任务编号，请同步配置。');
     applyToolConnection(value);
     applyToolMetadata(value, value.run_id);
-    history.value = [...history.value, { role: 'user', text: content }].slice(
+    history.value = [...history.value, { role: 'user', text: displayPrompt, attachments: files.map(file => file.name), work_mode: workMode.value }].slice(
       -60
     );
     prompt.value = '';
+    attachments.value = [];
+    sentDraft = workMode.value === 'goal' ? null : { conversation: workspace.active_conversation_id, prompt: content, files };
+    liveUsage.value = null;
+    liveGoal.value = null;
     runId.value = value.run_id;
     pollError.value = '';
     busy.value = true;
@@ -2481,6 +2545,8 @@ async function poll() {
     applyToolMetadata(value, id);
     applyWorkspace(value);
     applyOperationState(value);
+    liveUsage.value = value.usage || null;
+    liveGoal.value = value.goal || null;
     activeText.value = text(value.text);
     toolStatus.value = text(value.tools_status || value.tool_status);
     if (value.status === 'running') schedulePoll();
@@ -2498,6 +2564,12 @@ async function poll() {
         error.value = text(value.error) || '任务执行失败。';
       if (value.status === 'cancelled')
         notice.value = text(value.error) || '任务已停止。';
+      if (value.status !== 'done' && sentDraft?.conversation === workspace.active_conversation_id) {
+        prompt.value = sentDraft.prompt;
+        attachments.value = sentDraft.files;
+      }
+      if (value.progress_error) error.value = `运行记录保存失败，${value.progress_error}`;
+      sentDraft = null;
       if (!applyWorkspace(value)) await refreshWorkspace();
     } else throw new Error('客户端返回的任务状态无效。');
     scrollMessages();
@@ -2635,6 +2707,7 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .agent-panel-content { display: contents; }
+.chat-panel .agent-panel-content { display: flex; flex: 1; min-height: 0; flex-direction: column; overflow-y: auto; }
 .awaiting-command { min-height: 0; }
 .awaiting-command .agent-panel-content {
   display: flex; flex: 1; min-height: 0; flex-direction: column; overflow: auto;

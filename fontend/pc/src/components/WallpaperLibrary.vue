@@ -3,7 +3,7 @@ import { computed, onMounted, reactive, watch } from 'vue';
 import { Check, Images, ImagePlus, RefreshCw } from '@lucide/vue';
 import { backendUrl, request } from '../api/client';
 
-const props = defineProps({ selection: { type: Object, default: () => ({}) }, schoolDefaultUrl: { type: String, default: '' } });
+const props = defineProps({ selection: { type: Object, default: () => ({}) }, schoolDefaultUrl: { type: String, default: '' }, revision: { type: Number, required: true } });
 const emit = defineEmits(['applied']);
 const state = reactive({ scope: 'mine', items: [], total: 0, page: 1, size: 12, loading: false, busy: false, error: '', selected: null, importing: false, importItems: [], importPage: 1, importTotal: 0 });
 const activeId = computed(() => Number(state.selected?.wallpaper_id ?? props.selection?.wallpaper_id ?? 0));
@@ -25,7 +25,7 @@ async function apply(id = null) {
   state.busy = true;
   state.error = '';
   try {
-    const data = await request('/wallpaper/apply', { method: 'POST', body: JSON.stringify(id ? { id } : { mode: 'school' }) });
+    const data = await request('/wallpaper/apply', { method: 'POST', body: JSON.stringify({ id, mode: id ? 'item' : 'school', personal_appearance_revision: props.revision }) });
     state.selected = data;
     emit('applied', data);
   } catch (error) { state.error = error.message; }

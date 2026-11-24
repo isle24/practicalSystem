@@ -1,4 +1,5 @@
 mod agent_confirmation;
+mod agent_files;
 mod agent_models;
 mod agent_process;
 mod agent_profile_sync;
@@ -917,10 +918,8 @@ fn handle_menu(app: &AppHandle, id: &str) {
     if id == "check-update" {
         if let Some(window) = app.get_webview_window("school") {
             let _ = window.eval("window.__PRACTICAL_DESKTOP__?.checkUpdate(true)");
-        } else {
-            app.dialog()
-                .message("请先连接学校并登录后检查更新")
-                .show(|_| {});
+        } else if let Some(window) = app.get_webview_window("connection") {
+            let _ = window.eval("window.dispatchEvent(new Event('practical-client-check-update'))");
         }
         return;
     }
@@ -995,6 +994,8 @@ pub fn run() {
             gateway::agent_request,
             read_connection_settings,
             read_school_appearance,
+            updater::select_connection_update_school,
+            updater::check_connection_update,
             read_saved_connection_password,
             create_connection_login_captcha,
             cancel_connection_login,
@@ -1032,6 +1033,7 @@ pub fn run() {
             }
             if window.label() == "connection" {
                 if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                    updater::cancel_connection(None);
                     let pending = window
                         .app_handle()
                         .state::<AppState>()

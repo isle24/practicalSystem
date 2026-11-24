@@ -518,6 +518,23 @@ h3 {
   outline: 2px solid #84a6ff;
   outline-offset: 1px;
 }
+.composer-options, .message-files {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+}
+.composer-options { padding: 5px 0; font-size: 12px; }
+.composer-options label { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); }
+.composer-options select, .composer-options button { max-width: 100%; min-height: 28px; font-size: 12px; }
+.composer-options button { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.message-files { padding: 0; list-style: none; font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+.agent-goal { margin: 12px 0; padding: 10px 12px; border-left: 2px solid var(--border); overflow-wrap: anywhere; }
+.agent-goal summary { cursor: pointer; font-size: 13px; }
+.agent-goal strong { display: block; margin: 6px 0; }
+.agent-goal ol { margin: 6px 0; padding-left: 22px; }
+.agent-goal li span { margin-right: 8px; color: var(--muted); font-size: 12px; }
+.composer-options .agent-attachments { min-width: 0; margin: 0; }
 .composer-footer {
   display: flex;
   justify-content: space-between;
@@ -1023,4 +1040,13 @@ h3 {
 }
 :root[data-theme='dark'] .composer {
   box-shadow: none;
+}
+@media (max-height: 700px) {
+  .agent-shell { min-height: 0; }
+  .chat-panel .panel-heading { min-height: 52px; padding-block: 8px; }
+  .chat-panel .model-toolbar { padding-block: 6px; }
+  .chat-panel .message-list { min-height: 56px; padding-block: 8px; }
+  .chat-panel .privacy-strip { padding-block: 4px; }
+  .chat-panel .composer textarea { min-height: 52px; height: 55px; }
+  .chat-panel .chat-footnote { padding-top: 5px; }
 }

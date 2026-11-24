@@ -47,6 +47,18 @@ export async function probeMcp(plugin, signal) {
   } finally { await closeClient(client); }
 }
 
+const schemaTypes = new Set(['object', 'array', 'string', 'number', 'integer', 'boolean', 'null']);
+
+function publicSchema(schema, sanitize) {
+  if (Array.isArray(schema)) return schema.map(item => publicSchema(item, sanitize));
+  if (!schema || typeof schema !== 'object') return sanitize(schema);
+  return Object.fromEntries(Object.entries(schema).map(([key, value]) => {
+    if (key === 'type' && (schemaTypes.has(value) || Array.isArray(value) && value.every(type => schemaTypes.has(type)))) return [key, value];
+    if (key === 'required' && Array.isArray(value) && value.every(name => Object.hasOwn(schema.properties ?? {}, name))) return [key, value];
+    return [key, publicSchema(value, sanitize)];
+  }));
+}
+
 export async function mcpTools(plugins, rpc, countTool, signal, maxTools = 32, sanitize = (value) => value) {
   if (!Array.isArray(plugins) || plugins.length > 20) throw new Error('MCP 插件配置数量无效。');
   const tools = [];
@@ -60,20 +72,20 @@ export async function mcpTools(plugins, rpc, countTool, signal, maxTools = 32, s
       tools.push({
         name, label: `${plugin.name} · ${definition.title ?? definition.name}`,
         description: sanitize(String(definition.description ?? definition.name).slice(0, 3000)),
-        parameters: sanitize({ ...definition.inputSchema, type: 'object', properties: definition.inputSchema.properties ?? {} }),
+        parameters: publicSchema({ ...definition.inputSchema, type: 'object', properties: definition.inputSchema.properties ?? {} }, sanitize),
         executionMode: 'sequential',
         async execute(_id, params, callSignal) {
           countTool();
           const permitted = sanitize(params);
           if (JSON.stringify(permitted) !== JSON.stringify(params)) throw new Error('MCP 参数包含受保护凭据，未执行。');
-          const approved = await rpc('confirm_mcp', { plugin_id: plugin.id, tool: definition.name, arguments: permitted }, callSignal);
+          const approved = await rpc('confirm_mcp', { plugin_id: plugin.id, tool: sanitize(definition.name), arguments: permitted }, callSignal);
           if (approved?.approved !== true) throw new Error('用户未批准 MCP 调用。');
           try {
             const result = await client.callTool(definition.name, permitted, { signal: callSignal, timeoutMs: 25_000 });
             const content = (result.content ?? []).filter((item) => item.type === 'text' && typeof item.text === 'string').map((item) => ({ type: 'text', text: item.text }));
             if (!content.length && result.structuredContent != null) content.push({ type: 'text', text: JSON.stringify(result.structuredContent) });
             if (Buffer.byteLength(JSON.stringify(content)) > 256 * 1024) throw new Error('MCP 结果超过大小限制。');
-            return { content: sanitize(content.length ? content : [{ type: 'text', text: 'MCP 工具返回了非文本结果。' }]), details: {}, isError: result.isError === true };
+            return { content: content.length ? content.map(item => ({ ...item, text: sanitize(item.text) })) : [{ type: 'text', text: 'MCP 工具返回了非文本结果。' }], details: {}, isError: result.isError === true };
           } catch { throw new Error('MCP 工具调用未完成；写入结果请核对后再继续。'); }
         },
       });

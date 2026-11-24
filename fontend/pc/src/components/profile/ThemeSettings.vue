@@ -2,8 +2,9 @@
   <section class="profile-panel-card theme-settings">
     <header><strong>本机主题</strong><small>设置按学校和当前用户保存在本机。</small></header>
     <UiStylePicker :model-value="theme.look.choice.value" :school="theme.look.school.value" label="界面风格（选中即应用）" @update:model-value="value => saveLook(theme.look.choose, value)" />
-    <MenuIconPicker :model-value="theme.look.menuIconChoice.value" :school="theme.look.schoolMenuIcons.value" @update:model-value="value => saveLook(theme.look.chooseMenuIcons, value)" />
-    <strong class="color-settings-title">配色与壁纸</strong>
+    <MenuIconPicker v-if="theme.look.personalAllowed.value" :model-value="theme.look.menuIconChoice.value" :school="theme.look.schoolMenuIcons.value" @update:model-value="value => saveLook(theme.look.chooseMenuIcons, value)" />
+    <small v-else>壁纸和菜单图标由学校统一设置。</small>
+    <strong class="color-settings-title">{{ theme.look.personalAllowed.value ? '配色与壁纸' : '配色' }}</strong>
     <div class="theme-presets" aria-label="预置与自定义主题"><button v-for="preset in [...theme.presets, ...theme.state.custom]" :key="preset.id" type="button" :disabled="busy" :class="{ active: draft.id === preset.id }" :aria-pressed="draft.id === preset.id" @click="select(preset)"><span class="theme-swatch" :style="{ '--swatch-accent': preset.accent, '--swatch-window': preset.window || (theme.state.systemDark && preset.mode === 'system' ? '#18212f' : '#ffffff') }" aria-hidden="true"><i /><b /></span><span>{{ preset.name || preset.id }}</span></button></div>
     <div class="theme-fields">
       <label><span>明暗模式</span><el-select v-model="draft.mode"><el-option label="跟随系统" value="system" /><el-option label="亮色" value="light" /><el-option label="暗色" value="dark" /></el-select></label>
@@ -12,7 +13,7 @@
       <label><span>窗口颜色</span><input v-model="windowColor" type="color"></label>
       <label><span>窗口透明度</span><el-slider v-model="draft.opacity" :min="0.65" :max="1" :step="0.01" /></label>
       <label><span>图标密度</span><el-select v-model="draft.density"><el-option label="紧凑" value="compact" /><el-option label="标准" value="normal" /><el-option label="宽松" value="comfortable" /></el-select></label>
-      <label><FormFieldLabel :required="false" help="JPG、PNG 或 WebP，不超过 8 MB，仅保存在本机">本地壁纸</FormFieldLabel><input type="file" accept="image/jpeg,image/png,image/webp" @change="chooseWallpaper"><el-button v-if="draft.wallpaper_id" link @click="draft.wallpaper_id = ''">使用服务器壁纸</el-button></label>
+      <label v-if="theme.look.personalAllowed.value"><FormFieldLabel :required="false" help="JPG、PNG 或 WebP，不超过 8 MB，仅保存在本机">本地壁纸</FormFieldLabel><input type="file" accept="image/jpeg,image/png,image/webp" @change="chooseWallpaper"><el-button v-if="draft.wallpaper_id" link @click="draft.wallpaper_id = ''">使用服务器壁纸</el-button></label>
       <label><FormFieldLabel :required="false" help="最多 40 字；留空只应用，不新增主题">另存主题名称</FormFieldLabel><el-input v-model="name" maxlength="40" placeholder="留空只应用，不新增主题" /></label>
     </div>
     <el-alert v-if="error || theme.state.error" :title="error || theme.state.error" type="error" :closable="false" />
@@ -31,13 +32,14 @@ let revision = 0, alive = true;
 const windowColor = computed({ get: () => draft.value.window || (draft.value.mode === 'dark' || (draft.value.mode === 'system' && props.theme.state.systemDark) ? '#18212f' : '#ffffff'), set: value => { draft.value.window = value; } });
 watch(() => props.theme.state.saved, value => { draft.value = { ...value }; name.value = ''; error.value = ''; }, { flush: 'sync' });
 watch(() => props.theme.state.scopeRevision, () => { revision++; error.value = ''; busy.value = false; }, { flush: 'sync' });
+watch(() => props.theme.look.personalRevision.value, () => { draft.value.wallpaper_id = ''; }, { flush: 'sync' });
 function select(preset) { draft.value = { ...preset, wallpaper_id: preset.wallpaper_id || '', name: preset.name || '' }; name.value = ''; }
 function saveLook(choose, value) {
   try { choose(value); error.value = ''; }
   catch { error.value = '外观设置保存失败，请检查本机存储'; }
 }
 async function run(action) { if (busy.value) return; const ticket = ++revision; busy.value = true; error.value = ''; try { await action(); } catch (reason) { if (alive && ticket === revision) error.value = reason.message; } finally { if (alive && ticket === revision) busy.value = false; } }
-async function chooseWallpaper(event) { const file = event.target.files?.[0]; event.target.value = ''; const target = draft.value; if (file) await run(async () => { const id = await props.theme.selectWallpaper(file); if (alive && target === draft.value) draft.value.wallpaper_id = id; }); }
+async function chooseWallpaper(event) { const file = event.target.files?.[0]; event.target.value = ''; const target = draft.value; if (file) await run(async () => { const wallpaper = await props.theme.selectWallpaper(file); if (alive && target === draft.value) Object.assign(target, wallpaper); }); }
 function preview() { return run(() => props.theme.preview(draft.value)); }
 function cancel() { return run(() => props.theme.cancelPreview()); }
 function apply() { return run(() => props.theme.apply(draft.value, name.value)); }

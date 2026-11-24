@@ -1,7 +1,8 @@
-<template><Teleport to="body"><aside v-if="state" class="desktop-update-status" role="status"><Download :size="21" /><div><strong>{{ labels[state.phase] }}</strong><progress v-if="state.phase === 'downloading'" :value="state.bytes" :max="state.total || undefined" /><small v-if="state.total">{{ (state.bytes / 1048576).toFixed(1) }} / {{ (state.total / 1048576).toFixed(1) }} MB</small></div><button v-if="['error', 'cancelled', 'ready'].includes(state.phase)" title="关闭" @click="state = null"><X :size="17" /></button></aside></Teleport></template>
+<template><Teleport to="body" :disabled="inline"><aside v-if="state" class="desktop-update-status" :class="{ inline }" role="status"><Download :size="21" /><div><strong>{{ labels[state.phase] }}</strong><progress v-if="state.phase === 'downloading'" :value="state.total ? state.bytes : undefined" :max="state.total || undefined" /><small v-if="state.total">{{ (state.bytes / 1048576).toFixed(1) }} / {{ (state.total / 1048576).toFixed(1) }} MB</small></div><button v-if="['error', 'cancelled', 'ready'].includes(state.phase)" type="button" title="关闭" @click="state = null"><X :size="17" /></button></aside></Teleport></template>
 <script setup>
 import { ref, onMounted, onBeforeUnmount } from 'vue';
 import { Download, X } from '@lucide/vue';
+defineProps({ inline: Boolean });
 const state = ref(null);
 const labels = { downloading: '正在下载客户端更新', ready: '校验完成，等待安装确认', installing: '正在安装，请稍候', cancelled: '已取消安装', error: '更新未完成，请重新检查' };
 function receive(event) { if (labels[event.detail?.phase]) state.value = event.detail; }
@@ -10,4 +11,5 @@ onBeforeUnmount(() => window.removeEventListener('desktop-update-progress', rece
 </script>
 <style scoped>
 .desktop-update-status{position:fixed;z-index:80000;right:24px;bottom:160px;background:var(--surface);border:1px solid var(--line);box-shadow:0 8px 32px #26395026;border-radius:8px;display:flex;align-items:center;gap:16px;padding:20px;color:var(--muted);max-width:calc(100vw - 48px);box-sizing:border-box}.desktop-update-status div{display:flex;flex-direction:column;gap:10px;min-width:220px}.desktop-update-status strong{font-size:14px}.desktop-update-status small{font-size:12px;color:var(--muted)}.desktop-update-status progress{width:100%;accent-color:var(--primary)}.desktop-update-status button{border:0;background:transparent;color:var(--muted);cursor:pointer}
+.desktop-update-status.inline{position:static;max-width:none;gap:10px;margin-bottom:14px;padding:12px;box-shadow:none}.desktop-update-status.inline div{min-width:0;flex:1}
 </style>

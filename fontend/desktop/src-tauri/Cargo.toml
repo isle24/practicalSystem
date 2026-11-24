@@ -1,6 +1,6 @@
 [package]
 name = "practical-system-desktop"
-version = "0.3.63"
+version = "0.3.64"
 description = "Practical System desktop client"
 edition = "2021"
 rust-version = "1.88"
@@ -31,6 +31,13 @@ axum = "0.8"
 tokio = { version = "1", features = ["net", "sync", "time", "fs", "io-util", "process"] }
 zip = { version = "4.6.1", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 quick-xml = "0.42"
+calamine = "0.38"
+xlsx-zip = { package = "zip", version = "=9.7.3", default-features = false, features = ["deflate"] }
+csv = "1.4"
+encoding_rs = "0.8"
+image = { version = "0.25.10", default-features = false, features = ["jpeg", "png", "webp"] }
+cap-std = "4.0.3"
+cap-fs-ext = "4.0.3"
 rust-embed = "8"
 mime_guess = "2"
 tempfile = "3"
@@ -50,12 +57,14 @@ objc2-quartz-core = { version = "0.3.2", default-features = false, features = ["
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows-sys = { version = "0.61.2", features = ["Win32_System_SystemInformation", "Win32_UI_Input_KeyboardAndMouse"] }
+winx = "0.36.4"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 gtk = "0.18.2"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
+rustix = { version = "1", features = ["fs"] }
 
 [profile.release]
 codegen-units = 1

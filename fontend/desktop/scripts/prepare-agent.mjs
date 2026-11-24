@@ -89,6 +89,21 @@ await mkdir(runtimeDirectory, { recursive: true });
 await mkdir(binaryDirectory, { recursive: true });
 await mkdir(cacheDirectory, { recursive: true });
 
+// 同名模型在不同目录中的窗口不一致时，由界面显示上限未知。
+const modelWindows = new Map();
+const catalogDir = join(root, 'node_modules/@earendil-works/pi-ai/dist/providers/data');
+for (const file of await readdir(catalogDir)) {
+  if (!file.endsWith('.json')) continue;
+  const catalog = JSON.parse(await readFile(join(catalogDir, file), 'utf8'));
+  for (const group of Object.values(catalog)) {
+    for (const model of Object.values(group)) {
+      if (model.type !== 'chat' || !Number.isSafeInteger(model.contextWindow) || model.contextWindow <= 0) continue;
+      const previous = modelWindows.get(model.id);
+      modelWindows.set(model.id, previous === undefined || previous === model.contextWindow ? model.contextWindow : null);
+    }
+  }
+}
+
 const result = await build({
   absWorkingDir: root,
   entryPoints: [join(root, 'agent/runtime.mjs')],
@@ -96,6 +111,7 @@ const result = await build({
   bundle: true,
   platform: 'node',
   format: 'esm',
+  define: { __MODEL_CONTEXT_WINDOWS__: JSON.stringify(Object.fromEntries([...modelWindows].filter(([, size]) => size))) },
   banner: { js: "import { createRequire as __practicalCreateRequire } from 'node:module';const require=__practicalCreateRequire(import.meta.url);" },
   target: 'node22.19',
   packages: 'bundle',

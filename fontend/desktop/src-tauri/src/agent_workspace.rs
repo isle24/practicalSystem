@@ -33,7 +33,7 @@ fn id() -> String {
 
 fn conversation() -> Value {
     let timestamp = now();
-    json!({"id":id(),"title":"新会话","created_at":timestamp,"updated_at":timestamp,"mode":"school","profile_id":"","model":"","revision":"","messages":[],"history":[]})
+    json!({"id":id(),"title":"新会话","created_at":timestamp,"updated_at":timestamp,"mode":"school","work_mode":"chat","profile_id":"","model":"","revision":"","messages":[],"history":[]})
 }
 
 fn builtin(enabled: bool) -> Value {
@@ -121,9 +121,18 @@ pub fn view(data: &Value) -> Value {
     }
     if let Some(items) = visible["conversations"].as_array_mut() {
         for item in items {
+            let show_project = item["project_scope"] == data["scope"];
+            let show_goal = item["execution_scope"] == data["scope"];
             if let Some(object) = item.as_object_mut() {
                 object.remove("messages");
                 object.remove("execution_scope");
+                object.remove("project_scope");
+                if !show_project {
+                    object.remove("project_root");
+                }
+                if !show_goal {
+                    object.remove("goal");
+                }
             }
         }
     }
@@ -154,6 +163,27 @@ pub fn active(data: &Value) -> Result<&Value, String> {
         .iter()
         .find(|item| item["id"].as_str() == Some(active_id))
         .ok_or("当前会话不存在".into())
+}
+
+pub fn conversation_mut<'a>(data: &'a mut Value, id: &str) -> Result<&'a mut Value, String> {
+    data["conversations"]
+        .as_array_mut()
+        .and_then(|items| items.iter_mut().find(|item| item["id"] == id))
+        .ok_or_else(|| "本机会话不存在".into())
+}
+
+pub fn record_usage(conversation: &mut Value, usage: &Value) {
+    let totals = &mut conversation["usage_total"];
+    for field in ["input", "output", "total"] {
+        for key in ["tokens", "reports"] {
+            totals[field][key] = json!(
+                totals[field][key].as_u64().unwrap_or(0) + usage[field][key].as_u64().unwrap_or(0)
+            );
+        }
+    }
+    totals["calls"] =
+        json!(totals["calls"].as_u64().unwrap_or(0) + usage["calls"].as_u64().unwrap_or(0));
+    conversation["last_usage"] = usage.clone();
 }
 
 fn string(item: &Value, field: &str, max: usize, required: bool) -> Result<String, String> {

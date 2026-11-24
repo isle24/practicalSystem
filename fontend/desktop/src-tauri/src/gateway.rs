@@ -99,6 +99,7 @@ impl Drop for Gateway {
     fn drop(&mut self) {
         crate::system_credentials::clear();
         crate::client_agent::cancel_owner(&self.owner);
+        crate::updater::cancel_connection(Some(&self.remote));
         if let Some((client, origin)) = self.login_cancel.take() {
             tauri::async_runtime::spawn(async move {
                 if let Ok(url) = origin.join("api/auth/wechat-login/cancel") {
@@ -1203,6 +1204,9 @@ pub async fn agent_request(
                 | "probe"
                 | "workspace"
                 | "workspace-edit"
+                | "pick-folder"
+                | "clear-folder"
+                | "pick-attachments"
                 | "import-skill"
                 | "probe-mcp"
                 | "clear"
@@ -1224,6 +1228,8 @@ pub async fn agent_request(
         "sync"
         | "migrate-legacy-storage"
         | "workspace-edit"
+        | "pick-folder"
+        | "pick-attachments"
         | "probe-mcp"
         | "reconnect"
         | "restart-business-task" => 180,

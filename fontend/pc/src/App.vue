@@ -132,7 +132,7 @@
         </template>
 
         <div v-if="win.module.id === 'profile'" class="profile-app">
-          <ProfileSettingsLayout v-model="profileSection" :desktop="isDesktopClient">
+          <ProfileSettingsLayout v-model="profileSection" :desktop="isDesktopClient" :can-choose-wallpaper="localTheme.look.personalAllowed.value">
             <template #help>
               <el-button :icon="BookOpen" @click="openGuide(win)">操作说明</el-button>
             </template>
@@ -165,7 +165,7 @@
                     class="hidden-file"
                     type="file"
                     accept="image/jpeg,image/png,image/webp,image/gif"
-                    @change="event => handleAssetSelected('avatar', event)"
+                    @change="handleAvatarSelected"
                   >
                   <div>
                     <strong>{{ profileState.form.name || operatorName }}</strong>
@@ -222,6 +222,7 @@
                 <small class="client-version">客户端版本 v{{ clientVersion }}</small>
               </section>
               <section
+                v-if="localTheme.look.personalAllowed.value"
                 ref="wallpaperSectionRef"
                 class="profile-panel-card"
                 :class="{ focused: profileState.focus === 'wallpaper' }"
@@ -233,7 +234,8 @@
                 <WallpaperLibrary
                   :key="`${permissionState.context.school_database_id}:${permissionState.context.account_id}`"
                   :selection="profileState.form"
-                  :school-default-url="loginPageState.default_wallpaper_url"
+                  :school-default-url="localTheme.look.schoolWallpaper.value"
+                  :revision="localTheme.look.personalRevision.value"
                   @applied="applyWallpaperSelection"
                 />
               </section>
@@ -4176,7 +4178,7 @@
         <button v-if="canEditDesktopModule(desktopContextMenu.module)" type="button" @click="editDesktopContextModule"><Edit3 :size="16" /><span>编辑</span></button>
       </template>
       <template v-else>
-      <button type="button" @click="openWallpaperSettings">
+      <button v-if="localTheme.look.personalAllowed.value" type="button" @click="openWallpaperSettings">
         <ImagePlus :size="16" />
         <span>更换壁纸</span>
       </button>
@@ -4518,7 +4520,7 @@ import ReleaseManager from './components/ReleaseManager.vue';
 import DatabaseSchemaPanel from './components/DatabaseSchemaPanel.vue';
 import BaseVisitPanel from './components/BaseVisitPanel.vue';
 import BaseVisitRecordPanel from './components/BaseVisitRecordPanel.vue';
-import DesktopUpdateStatus from './components/DesktopUpdateStatus.vue';
+import DesktopUpdateStatus from '../../shared/components/DesktopUpdateStatus.vue';
 import ReleaseNotesPanel from '../../shared/components/ReleaseNotesPanel.vue';
 import LoginCaptchaInput from '../../shared/components/LoginCaptchaInput.vue';
 import FormFieldLabel from '../../shared/components/FormFieldLabel.vue';
@@ -4750,6 +4752,9 @@ const zIndexSeed = ref(20);
 const preferredDesktopStyle = ref(localStorage.getItem('practical:desktop-style'));
 const clientVersion = window.__PRACTICAL_DESKTOP__?.version || 'Web';
 const wallpaperCacheKey = 'practical_pc_wallpaper';
+const publicSchoolOrigin = window.__PRACTICAL_DESKTOP__?.serverOrigin || window.location.origin;
+const themeScope = computed(() => permissionState.context.user_id ? `${publicSchoolOrigin}:${permissionState.context.school_database_id}:${permissionState.context.user_id}` : '');
+const localTheme = useLocalTheme(themeScope, computed(() => Number(permissionState.context.account_id || 0)), loadLoginPageSettings);
 const loginBackgroundMaxSize = 8 * 1024 * 1024;
 const imageAssetTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 const iconRegistry = {
@@ -6073,7 +6078,6 @@ const nativeProfileMenuOpen = ref(false);
 const webProfileMenuOpen = ref(false);
 const nativeDockHovered = ref(false);
 const dockSearchFocused = ref(false);
-const publicSchoolOrigin = window.__PRACTICAL_DESKTOP__?.serverOrigin || window.location.origin;
 const workspaceSourceEpoch = ref(0);
 const workspaceFrozen = ref(false);
 let activeWorkspaceTransition = null;
@@ -6089,12 +6093,10 @@ const loginMethod = ref(iamEntryRequested || window.__PRACTICAL_DESKTOP__?.login
 const iamOptions = reactive({ enabled: false, available: false, display_name: '统一身份认证' });
 const iamLogin = ref(null);
 const pendingSsoResume = ref(Boolean(ssoResume()));
-const themeScope = computed(() => permissionState.context.user_id ? `${publicSchoolOrigin}:${permissionState.context.school_database_id}:${permissionState.context.user_id}` : '');
 const tableWidthScope = computed(() => permissionState.context.account_id
   ? JSON.stringify([publicSchoolOrigin, permissionState.context.school_database_id || permissionState.context.school_id,
     permissionState.context.account_id, permissionState.context.role_id, permissionState.context.role_type]) : '');
 provide(TABLE_WIDTH_SCOPE, tableWidthScope);
-const localTheme = useLocalTheme(themeScope, computed(() => Number(permissionState.context.account_id || 0)));
 const desktopStyleMode = computed(() => {
   const style = localTheme.look.effective.value;
   if (style === 'classic') return preferredDesktopStyle.value || 'windows';
@@ -6368,7 +6370,7 @@ const customDesktopWallpaper = computed(() => Boolean(profileState.form.wallpape
 const desktopStyle = computed(() => ({
   background: profileState.form.wallpaper_url
     ? `linear-gradient(135deg, rgba(30, 42, 54, .20), rgba(30, 42, 54, .08)), url("${safeCssUrl(profileState.form.wallpaper_url)}") center / cover no-repeat`
-    : selectedWallpaper.value.key === 'default' && localTheme.look.effective.value !== 'classic' ? undefined : selectedWallpaper.value.background,
+    : localTheme.look.personalAllowed.value && selectedWallpaper.value.key === 'default' && localTheme.look.effective.value !== 'classic' ? undefined : selectedWallpaper.value.background,
   ...localTheme.styles.value,
   ...(customDesktopWallpaper.value ? { '--desktop-label-color': localTheme.current.value.text } : {}),
 }));
@@ -6377,9 +6379,6 @@ const avatarStyle = computed(() => (profileState.form.avatar ? {
 } : {}));
 const topAvatarStyle = computed(() => (profileState.form.avatar ? {
   backgroundImage: `url("${safeCssUrl(profileState.form.avatar)}")`,
-} : {}));
-const wallpaperUploadStyle = computed(() => (profileState.form.wallpaper_url ? {
-  backgroundImage: `url("${safeCssUrl(profileState.form.wallpaper_url)}")`,
 } : {}));
 const loginBackgroundUploadStyle = computed(() => (loginPageState.login_background_url ? {
   backgroundImage: `url("${safeCssUrl(loginPageState.login_background_url)}")`,
@@ -8794,7 +8793,7 @@ function openProfile(section = '') {
     openModuleWindow(profileModule, { reuse: true });
   }
   loginPageState.message = '';
-  if (section === 'wallpaper') {
+  if (section === 'wallpaper' && localTheme.look.personalAllowed.value) {
     profileSection.value = 'appearance';
     profileState.focus = 'wallpaper';
     nextTick(() => {
@@ -9414,16 +9413,12 @@ async function submitLogout() {
 }
 
 function emptyProfile() {
-  const cachedDesktop = readWallpaperCache();
   return {
+    ...readWallpaperCache(),
     name: '',
     avatar: '',
     mobile: '',
     email: '',
-    wallpaper_mode: cachedDesktop.wallpaper_mode || 'school',
-    wallpaper_id: cachedDesktop.wallpaper_id || null,
-    wallpaper: cachedDesktop.wallpaper || 'default',
-    wallpaper_url: cachedDesktop.wallpaper_url || '',
     notify: {
       system: true,
       wechat: true,
@@ -9445,29 +9440,38 @@ function emptyPasswordForm() {
   };
 }
 
+function schoolWallpaperSelection() {
+  return { wallpaper_mode: 'school', wallpaper_id: null, wallpaper: 'default',
+    wallpaper_url: localTheme.look.schoolWallpaper.value, personal_appearance_revision: localTheme.look.personalRevision.value };
+}
+
 function readWallpaperCache() {
   try {
     const account = permissionState.context.account_id;
-    if (!account) return {};
-    const key = [wallpaperCacheKey, window.__PRACTICAL_DESKTOP__?.serverOrigin || window.location.origin, permissionState.context.school_database_id, account].join(':');
-    const value = localStorage.getItem(key);
-    const data = value ? JSON.parse(value) : {};
-    return typeof data === 'object' && data ? data : {};
-  } catch {
-    return {};
-  }
+    if (account && localTheme.look.personalAllowed.value) {
+      const key = [wallpaperCacheKey, publicSchoolOrigin, permissionState.context.school_database_id, account].join(':');
+      const data = JSON.parse(localStorage.getItem(key));
+      if (data && localTheme.look.allowsSelection(data.personal_appearance_revision)) {
+        return { wallpaper_mode: data.wallpaper_mode || 'school', wallpaper_id: data.wallpaper_id || null,
+          wallpaper: data.wallpaper || 'default', wallpaper_url: data.wallpaper_url || '',
+          personal_appearance_revision: data.personal_appearance_revision ?? 0 };
+      }
+    }
+  } catch {}
+  return schoolWallpaperSelection();
 }
 
 function cacheWallpaper() {
   try {
     const account = permissionState.context.account_id;
     if (!account) return;
-    const key = [wallpaperCacheKey, window.__PRACTICAL_DESKTOP__?.serverOrigin || window.location.origin, permissionState.context.school_database_id, account].join(':');
+    const key = [wallpaperCacheKey, publicSchoolOrigin, permissionState.context.school_database_id, account].join(':');
     localStorage.setItem(key, JSON.stringify({
       wallpaper_mode: profileState.form.wallpaper_mode,
       wallpaper_id: profileState.form.wallpaper_id,
       wallpaper: profileState.form.wallpaper,
       wallpaper_url: profileState.form.wallpaper_url,
+      personal_appearance_revision: profileState.form.personal_appearance_revision,
     }));
   } catch {}
 }
@@ -17299,11 +17303,16 @@ function resetInternshipState() {
 }
 
 function applyWallpaperSelection(data) {
+  const schoolChanged = data.personal_appearance_revision > localTheme.look.personalRevision.value;
+  if (!localTheme.look.setAppearance(data.wallpaper_mode === 'school'
+    ? { ...data, default_wallpaper_url: data.wallpaper_url || '' } : data)) return;
+  profileState.form.personal_appearance_revision = data.personal_appearance_revision ?? 0;
   profileState.form.wallpaper_mode = data.wallpaper_mode || 'school';
   profileState.form.wallpaper_id = data.wallpaper_id || null;
   profileState.form.wallpaper = data.wallpaper || 'default';
   profileState.form.wallpaper_url = data.wallpaper_url || '';
   cacheWallpaper();
+  if (schoolChanged) loadLoginPageSettings();
 }
 
 function applyProfileData(data) {
@@ -17320,23 +17329,18 @@ function applyProfileData(data) {
     start: data.wechat_quiet?.start || '00:00',
     end: data.wechat_quiet?.end || '24:00',
   };
-  cacheWallpaper();
 }
 
 function applyLoginPageData(data) {
   const payload = data?.data && typeof data.data === 'object' ? data.data : data || {};
-  localTheme.look.setSchool(payload.default_ui_style, payload.default_menu_icon_style);
+  if (!localTheme.look.setSchool(payload)) return;
   loginPageState.school_name = payload.school_name || '成都锦城学院';
   loginPageState.school_logo_url = payload.school_logo_url || '';
-  loginPageState.default_wallpaper_url = payload.default_wallpaper_url || '';
-  if (isLoggedIn.value && profileState.form.wallpaper_mode === 'school') {
-    profileState.form.wallpaper_url = loginPageState.default_wallpaper_url;
-    cacheWallpaper();
-  }
   loginPageState.login_background_url = payload.login_background_url || payload.url || '';
 }
 
 async function loadLoginPageSettings() {
+  if (loginPageState.loading) return;
   loginPageState.loading = true;
   loginPageState.message = '';
   try {
@@ -17411,12 +17415,6 @@ async function saveProfile() {
   }
 }
 
-function selectWallpaper(key) {
-  profileState.form.wallpaper = key;
-  profileState.form.wallpaper_url = '';
-  cacheWallpaper();
-}
-
 function guardProfileAssetClick(event) {
   if (profileState.loading) {
     event.preventDefault();
@@ -17429,7 +17427,7 @@ function guardLoginBackgroundClick(event) {
   }
 }
 
-async function handleAssetSelected(type, event) {
+async function handleAvatarSelected(event) {
   const file = event.target.files?.[0];
   event.target.value = '';
   if (!file || !isLoggedIn.value) {
@@ -17440,17 +17438,9 @@ async function handleAssetSelected(type, event) {
   profileState.message = '';
   profileState.saved = false;
   try {
-    const data = await uploadProfileAsset(type, file);
-    if (type === 'avatar') {
-      profileState.form.avatar = data.url || '';
-      await persistProfileSettings('头像已更新');
-      return;
-    }
-
-    profileState.form.wallpaper = 'custom';
-    profileState.form.wallpaper_url = data.url || '';
-    cacheWallpaper();
-    await persistProfileSettings('壁纸已更新');
+    const data = await uploadProfileAsset('avatar', file);
+    profileState.form.avatar = data.url || '';
+    await persistProfileSettings('头像已更新');
   } catch (error) {
     profileState.message = error.message;
   } finally {
@@ -17498,8 +17488,6 @@ async function persistProfileSettings(message) {
     avatar: profileState.form.avatar,
     mobile: profileState.form.mobile,
     email: profileState.form.email,
-    wallpaper: profileState.form.wallpaper,
-    wallpaper_url: profileState.form.wallpaper_url,
     notify: { ...profileState.form.notify },
     wechat_quiet: { ...profileState.form.wechat_quiet },
   });
@@ -17973,6 +17961,17 @@ watch(dockShouldAutoHide, hidden => {
 });
 watch(() => nativeWindowState.fullscreen, () => { nativeDockHovered.value = false; closeDesktopTransient(); });
 watch(() => permissionState.context.account_id, closeDesktopTransient);
+watch([() => permissionState.context.school_database_id, () => permissionState.context.account_id], () => {
+  Object.assign(profileState.form, readWallpaperCache());
+}, { flush: 'sync' });
+watch([localTheme.look.personalRevision, localTheme.look.personalAllowed, localTheme.look.schoolWallpaper], () => {
+  if (!localTheme.look.allowsSelection(profileState.form.personal_appearance_revision)) {
+    Object.assign(profileState.form, schoolWallpaperSelection());
+  } else if (profileState.form.wallpaper_mode === 'school') {
+    profileState.form.wallpaper_url = localTheme.look.schoolWallpaper.value;
+  } else return;
+  cacheWallpaper();
+}, { flush: 'sync' });
 
 let desktopRefreshTimer;
 function refreshVisibleDesktop() {

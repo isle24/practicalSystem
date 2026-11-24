@@ -2,11 +2,11 @@
 import { computed } from 'vue';
 import { UserRound, Palette, ShieldCheck, Bell, PenLine, HardDrive } from '@lucide/vue';
 import AppIcon from '../../../../shared/components/AppIcon.vue';
-const props = defineProps({ modelValue: { type: String, default: 'general' }, desktop: Boolean });
+const props = defineProps({ modelValue: { type: String, default: 'general' }, desktop: Boolean, canChooseWallpaper: { type: Boolean, default: true } });
 const emit = defineEmits(['update:modelValue']);
 const tabs = computed(() => [
   { id: 'general', label: '基本资料', icon: UserRound, hint: '管理头像、姓名和联系信息。' },
-  { id: 'appearance', label: '主题与壁纸', icon: Palette, hint: '选择桌面主题，调整当前设备的外观。' },
+  { id: 'appearance', label: props.canChooseWallpaper ? '主题与壁纸' : '主题与配色', icon: Palette, hint: '选择桌面主题，调整当前设备的外观。' },
   { id: 'accounts', label: '账号与安全', icon: ShieldCheck, hint: '管理账号关联和登录身份。' },
   { id: 'notifications', label: '消息通知', icon: Bell, hint: '选择接收渠道与企业微信通知时间。' },
   { id: 'signature', label: '电子签名', icon: PenLine, hint: '管理用于审批的个人电子签名。' },

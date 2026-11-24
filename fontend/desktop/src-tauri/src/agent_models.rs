@@ -324,6 +324,15 @@ pub async fn complete(
             return Err(Failure::new("response_protocol"));
         }
         let mut value = json!({"choices":[{"message":{"role":message["role"],"content":message["content"],"tool_calls":message["tool_calls"]},"finish_reason":choice["finish_reason"]}]});
+        if let Some(usage) = response["usage"].as_object() {
+            let mut counts = serde_json::Map::new();
+            for field in ["prompt_tokens", "completion_tokens", "total_tokens"] {
+                if let Some(count) = usage.get(field).and_then(Value::as_u64) {
+                    counts.insert(field.into(), json!(count));
+                }
+            }
+            value["usage"] = Value::Object(counts);
+        }
         redact(&mut value["choices"][0]["message"]["content"], key);
         if let Some(calls) = value["choices"][0]["message"]["tool_calls"].as_array_mut() {
             for call in calls {

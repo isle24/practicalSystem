@@ -10,6 +10,7 @@
         <button type="button" class="switch-school" :disabled="busy || loading || captchaLoading" @click="switching = !switching"><RefreshCw :size="14" />切换</button>
       </div>
     </header>
+    <DesktopUpdateStatus v-if="connectionVisible" :key="domain" inline />
     <p v-if="requireFreshLogin" class="connection-guidance" role="status">客户端此前已锁定，请重新输入密码，或使用企业微信、统一认证登录。</p>
 
     <section v-if="switching" class="recent-schools" aria-label="切换学校">
@@ -28,7 +29,7 @@
         <Globe2 :size="19" aria-hidden="true" />
         <input id="school-domain" v-model="domain" type="text" autocomplete="url" autocapitalize="off"
           spellcheck="false" placeholder="请输入学校服务器域名" :disabled="busy || loading" :aria-invalid="!!error"
-          :aria-describedby="error ? 'connection-error' : undefined" autofocus @change="refreshSchoolAppearance">
+          :aria-describedby="error ? 'connection-error' : undefined" autofocus @change="refreshSelectedSchool">
       </div>
       <button v-if="profiles.length" class="switch-school history-entry" type="button" @click="switching = true">选择已连接的学校<ChevronRight :size="14" /></button>
       </template>
@@ -58,7 +59,7 @@
       <IamLoginEntry v-if="loginMethod === 'password'" display-name="统一认证登录" @click="switchLoginMode('iam')" />
     </form>
 
-    <footer><LockKeyhole :size="13" /><span>学校独立登录</span><span class="version">v{{ version }}</span></footer>
+    <footer><LockKeyhole :size="13" /><span>学校独立登录</span><span class="version">v{{ version }}</span><button type="button" class="switch-school" :disabled="!domain.trim() || loading || updateRequest" @click="manualUpdate">检查更新</button></footer>
     </fieldset>
 
     <Teleport to="body">
@@ -77,6 +78,7 @@
 
 <script setup>
 import FormFieldLabel from '../../shared/components/FormFieldLabel.vue';
+import DesktopUpdateStatus from '../../shared/components/DesktopUpdateStatus.vue';
 import { computed, ref, nextTick, onBeforeUnmount, onMounted, watch } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
 import { getVersion } from '@tauri-apps/api/app';
@@ -109,9 +111,13 @@ const passwordPlaceholder = computed(() => {
 const rememberPassword = ref(false);
 const autoLogin = ref(false);
 const profiles = ref([]);
+const connectionVisible = ref(!document.hidden);
+const updateRequest = ref(null);
 let appearanceRevision = 0;
+let updateSchool = '';
 useWindowAppearance();
 watch(domain, value => {
+  if (updateSchool && updateSchool !== value.trim()) clearUpdateSchool();
   appearanceRevision++;
   applyUiStyle(profiles.value.find(school => school.origin === value.trim())?.default_ui_style);
 }, { immediate: true, flush: 'sync' });
@@ -137,6 +143,37 @@ let scopeVersion = 0;
 let operationVersion = 0;
 let disposed = false;
 let restoreProfileOnShow = '';
+
+function clearUpdateSchool() {
+  updateSchool = '';
+  updateRequest.value = null;
+  invoke('select_connection_update_school', { domain: null }).catch(() => {});
+}
+
+async function checkConnectionUpdate(interactive = false) {
+  const address = domain.value.trim();
+  if (!address || disposed || (updateSchool === address && (!interactive || updateRequest.value))) return;
+  const request = Symbol();
+  updateRequest.value = request;
+  updateSchool = address;
+  try {
+    const origin = await invoke('select_connection_update_school', { domain: address });
+    if (!disposed && updateSchool === address) await invoke('check_connection_update', { origin, interactive });
+  } catch (reason) {
+    if (interactive && !disposed && updateSchool === address) error.value = String(reason);
+  } finally {
+    if (updateRequest.value === request) updateRequest.value = null;
+  }
+}
+
+function manualUpdate() {
+  if (!loading.value) checkConnectionUpdate(true);
+}
+
+function refreshSelectedSchool() {
+  refreshSchoolAppearance();
+  return checkConnectionUpdate();
+}
 
 async function refreshSchoolAppearance() {
   const address = domain.value.trim();
@@ -293,6 +330,7 @@ watch(rememberPassword, value => { if (!value) autoLogin.value = false; }, { flu
 
 // 加载本机保存的学校连接。
 onMounted(async () => {
+  let startupUpdate;
   try {
     const settings = await invoke('read_connection_settings');
     if (disposed) return;
@@ -303,7 +341,7 @@ onMounted(async () => {
     const recent = settings.schools.find(item => item.origin === domain.value && item.username === settings.last_username)
       || settings.schools.find(item => item.origin === domain.value);
     applyUiStyle(recent?.default_ui_style);
-    refreshSchoolAppearance();
+    startupUpdate = refreshSelectedSchool();
     if (recent) {
       schoolName.value = recent.name;
       remark.value = recent.remark || '';
@@ -317,32 +355,41 @@ onMounted(async () => {
   } catch (reason) {
     if (!disposed) error.value = String(reason);
   } finally {
-    if (!disposed) loading.value = false;
+    if (!disposed) {
+      startupUpdate ??= checkConnectionUpdate();
+      loading.value = false;
+    }
   }
   if (disposed) return;
   window.addEventListener('focus', refreshProfiles);
+  window.addEventListener('practical-client-check-update', manualUpdate);
   window.addEventListener('practical-client-password-login', showPasswordConnection);
   window.addEventListener('practical-client-login-cancelled', resetCancelledConnection);
   document.addEventListener('visibilitychange', handleConnectionVisibility);
   retryTimer = window.setInterval(() => { retrySeconds.value = Math.max(0, Math.ceil((retryUntil - Date.now()) / 1000)); }, 1000);
   if (!document.hidden && autoLogin.value && hasPassword.value) {
-    await connect();
+    const scope = loginScope;
+    await startupUpdate;
+    if (!disposed && !document.hidden && scope === loginScope && autoLogin.value && hasPassword.value) await connect();
   }
 });
 
 onBeforeUnmount(() => {
   disposed = true;
+  clearUpdateSchool();
   resetLoginScope();
   password.value = '';
   freshPassword.value = false;
   window.clearInterval(retryTimer);
   window.removeEventListener('focus', refreshProfiles);
+  window.removeEventListener('practical-client-check-update', manualUpdate);
   window.removeEventListener('practical-client-password-login', showPasswordConnection);
   window.removeEventListener('practical-client-login-cancelled', resetCancelledConnection);
   document.removeEventListener('visibilitychange', handleConnectionVisibility);
 });
 
 function handleConnectionVisibility() {
+  connectionVisible.value = !document.hidden;
   if (!document.hidden) {
     if (restoreProfileOnShow) refreshProfiles();
     return;
@@ -519,7 +566,7 @@ async function selectSchool(school) {
   loading.value = true;
   error.value = '';
   domain.value = school.origin;
-  refreshSchoolAppearance();
+  refreshSelectedSchool();
   schoolName.value = school.name;
   remark.value = school.remark || '';
   editingSchool.value = false;
@@ -548,6 +595,7 @@ function newSchool() {
 .connection-page { --surface: #fff; --line: #d9dfe5; --muted: var(--connection-muted, #5f6b78); }
 .connection-guidance { margin: 0 0 14px; color: var(--connection-muted, #5f6b78); font-size: 13px; line-height: 1.6; }
 .recovery-entry { margin-top: 16px; }
+footer .switch-school { margin-left: 4px; }
 .connection-form .iam-login-entry { margin-top: 16px; }
 @media (max-height: 680px) {
   .connection-page { padding-top: 20px; }

@@ -224,12 +224,8 @@ pub async fn connect(origin: Url, port: u16) -> Result<Connection, String> {
     connect_with_cancel(origin, port, tokio_util::sync::CancellationToken::new()).await
 }
 
-pub async fn connect_with_cancel(
-    origin: Url,
-    port: u16,
-    cancel: tokio_util::sync::CancellationToken,
-) -> Result<Connection, String> {
-    let client = Client::builder()
+pub fn school_client() -> Result<Client, String> {
+    Client::builder()
         .cookie_provider(Arc::new(Jar::default()))
         .redirect(Policy::none())
         .connect_timeout(Duration::from_secs(10))
@@ -240,7 +236,15 @@ pub async fn connect_with_cancel(
             std::env::consts::OS
         ))
         .build()
-        .map_err(|_| "无法初始化学校连接")?;
+        .map_err(|_| "无法初始化学校连接".into())
+}
+
+pub async fn connect_with_cancel(
+    origin: Url,
+    port: u16,
+    cancel: tokio_util::sync::CancellationToken,
+) -> Result<Connection, String> {
+    let client = school_client()?;
     let endpoint = origin
         .join("api/config/login-page")
         .map_err(|_| "学校地址格式不正确")?;

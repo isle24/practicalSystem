@@ -61,10 +61,6 @@ function surfaceVariables(windowColor, dark) {
   return variables;
 }
 
-function normalize(value = {}) {
-  return { id: String(value.id || 'system'), name: String(value.name || '').slice(0, 40), mode: ['light', 'dark', 'system'].includes(value.mode) ? value.mode : 'system', accent: color(value.accent) || '#2563eb', window: color(value.window), text: color(value.text) || '#ffffff', opacity: Math.max(0.65, Math.min(1, Number(value.opacity) || 1)), density: ['compact', 'normal', 'comfortable'].includes(value.density) ? value.density : 'normal', wallpaper_id: String(value.wallpaper_id || '') };
-}
-
 function wallpaperStore(action, id, blob) {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open('practical-local-themes', 1);
@@ -84,13 +80,24 @@ function wallpaperStore(action, id, blob) {
   });
 }
 
-export function useLocalTheme(scope, accountId) {
-  const look = useUiStyle(scope);
+export function useLocalTheme(scope, accountId, refreshSchool) {
+  const look = useUiStyle(scope, refreshSchool);
   const media = window.matchMedia('(prefers-color-scheme: dark)');
   const state = reactive({ saved: defaults(), preview: null, custom: [], wallpaperUrl: '', systemDark: media.matches, error: '', scopeRevision: 0 });
   let generation = 0;
   let currentKey = '';
   let objectUrl = '';
+  function normalize(value = {}) {
+    return {
+      id: String(value.id || 'system'), name: String(value.name || '').slice(0, 40),
+      mode: ['light', 'dark', 'system'].includes(value.mode) ? value.mode : 'system',
+      accent: color(value.accent) || '#2563eb', window: color(value.window), text: color(value.text) || '#ffffff',
+      opacity: Math.max(0.65, Math.min(1, Number(value.opacity) || 1)),
+      density: ['compact', 'normal', 'comfortable'].includes(value.density) ? value.density : 'normal',
+      wallpaper_id: look.allowsSelection(value.wallpaper_revision) ? String(value.wallpaper_id || '') : '',
+      wallpaper_revision: value.wallpaper_revision ?? 0,
+    };
+  }
   const current = computed(() => state.preview || state.saved);
   const dark = computed(() => current.value.mode === 'dark' || (current.value.mode === 'system' && state.systemDark));
   const skin = computed(() => uiStyles.find(item => item.key === look.effective.value));
@@ -147,8 +154,9 @@ export function useLocalTheme(scope, accountId) {
   }
   function persist() {
     if (!currentKey) throw new Error('请登录后保存本机主题');
+    const stored = JSON.parse(localStorage.getItem(currentKey) || '{}');
     localStorage.setItem(currentKey, JSON.stringify({
-      saved: state.saved, custom: state.custom, ui_style: look.choice.value, menu_icon_style: look.menuIconChoice.value,
+      ui_style: look.choice.value, ...stored, saved: state.saved, custom: state.custom,
     }));
   }
   watch(scope, value => {
@@ -164,20 +172,28 @@ export function useLocalTheme(scope, accountId) {
     } catch { state.error = '本机主题配置无效，已使用默认主题'; }
     displayWallpaper(state.saved.wallpaper_id);
   }, { immediate: true, flush: 'sync' });
+  watch([look.personalAllowed, look.personalRevision], () => {
+    for (const theme of [state.saved, state.preview, ...state.custom]) {
+      if (theme && !look.allowsSelection(theme.wallpaper_revision)) theme.wallpaper_id = '';
+    }
+    displayWallpaper(current.value.wallpaper_id);
+  }, { flush: 'sync' });
 
   async function selectWallpaper(file) {
     if (!currentKey) throw new Error('请登录后选择本机壁纸');
+    if (!look.personalAllowed.value) throw new Error('学校已统一管理壁纸和菜单图标');
     const key = currentKey;
     const revision = state.scopeRevision;
+    const wallpaperRevision = look.personalRevision.value;
     if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 8 * 1024 * 1024) throw new Error('请选择不超过 8 MB 的 JPG、PNG 或 WebP 图片');
     const bitmap = await createImageBitmap(file).catch(() => null);
     if (!bitmap) throw new Error('图片内容无法读取');
     bitmap.close();
-    if (key !== currentKey || revision !== state.scopeRevision) throw new Error('登录账号已变化，请重新选择壁纸');
+    if (key !== currentKey || revision !== state.scopeRevision || !look.allowsSelection(wallpaperRevision)) throw new Error('账号或学校设置已变化，请重新选择壁纸');
     const id = crypto.randomUUID();
     await wallpaperStore('put', `${key}:${id}`, file);
-    if (key !== currentKey || revision !== state.scopeRevision) throw new Error('登录账号已变化，请重新选择壁纸');
-    return id;
+    if (key !== currentKey || revision !== state.scopeRevision || !look.allowsSelection(wallpaperRevision)) throw new Error('账号或学校设置已变化，请重新选择壁纸');
+    return { wallpaper_id: id, wallpaper_revision: wallpaperRevision };
   }
   function preview(value) { state.preview = normalize(value); return displayWallpaper(state.preview.wallpaper_id); }
   function cancelPreview() { state.preview = null; return displayWallpaper(state.saved.wallpaper_id); }

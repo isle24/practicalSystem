@@ -21,6 +21,7 @@ export const uiStyles = [
 export const schoolUiOrigin = window.__PRACTICAL_DESKTOP__?.serverOrigin || window.location.origin;
 const schoolKey = `practical:school-ui-style:${schoolUiOrigin}`;
 const schoolIconsKey = `practical:school-menu-icons:${schoolUiOrigin}`;
+const schoolAppearanceKey = `practical:school-appearance:${schoolUiOrigin}`;
 export const desktopUiKey = `practical:desktop-ui-style:${schoolUiOrigin}`;
 export const localThemeKey = scope => `practical:local-theme:v1:${scope}`;
 const validStyle = value => uiStyles.some(({ key }) => key === value);
@@ -44,9 +45,19 @@ function cachedValue(key, valid, fallback) {
 export const cachedSchoolStyle = () => cachedValue(schoolKey, validStyle, DEFAULT_UI_STYLE);
 const cachedSchoolIcons = () => cachedValue(schoolIconsKey, validMenuIcons, DEFAULT_MENU_ICON_STYLE);
 
-export function useUiStyle(scope) {
+function cachedSchoolAppearance() {
+  try { return JSON.parse(localStorage.getItem(schoolAppearanceKey)) || {}; }
+  catch { return {}; }
+}
+
+export function useUiStyle(scope, refreshSchool) {
   const school = ref(cachedSchoolStyle());
   const choice = ref(FOLLOW_SCHOOL);
+  const appearance = ref(cachedSchoolAppearance());
+  const personalAllowed = computed(() => appearance.value.allow_personal_appearance !== false);
+  const personalRevision = computed(() => appearance.value.personal_appearance_revision ?? 0);
+  const schoolWallpaper = computed(() => appearance.value.default_wallpaper_url || '');
+  const allowsSelection = revision => personalAllowed.value && (revision ?? 0) === personalRevision.value;
   const schoolMenuIcons = ref(cachedSchoolIcons());
   const menuIconChoice = ref(FOLLOW_SCHOOL);
   const menuIconStyle = computed(() => menuIconChoice.value === FOLLOW_SCHOOL ? schoolMenuIcons.value : menuIconChoice.value);
@@ -61,40 +72,66 @@ export function useUiStyle(scope) {
     }
     const fallback = stored?.saved ? 'classic' : FOLLOW_SCHOOL;
     choice.value = stored?.ui_style === FOLLOW_SCHOOL || validStyle(stored?.ui_style) ? stored.ui_style : fallback;
-    menuIconChoice.value = validMenuIcons(stored?.menu_icon_style) ? stored.menu_icon_style : FOLLOW_SCHOOL;
+    menuIconChoice.value = allowsSelection(stored?.menu_icon_revision) && validMenuIcons(stored?.menu_icon_style) ? stored.menu_icon_style : FOLLOW_SCHOOL;
   }
-  watch(scope, restoreLocal, { immediate: true, flush: 'sync' });
+  watch([scope, personalRevision, personalAllowed], () => restoreLocal(scope.value), { immediate: true, flush: 'sync' });
   watch(effective, applyUiStyle, { immediate: true, flush: 'sync' });
 
-  function setSchool(value, icons) {
-    school.value = validStyle(value) ? value : DEFAULT_UI_STYLE;
-    schoolMenuIcons.value = validMenuIcons(icons) ? icons : DEFAULT_MENU_ICON_STYLE;
+  function setAppearance(data) {
+    const revision = data.personal_appearance_revision ?? 0;
+    const sameSchool = !data.school_database_id || data.school_database_id === appearance.value.school_database_id;
+    if (sameSchool && revision < personalRevision.value) return false;
+    appearance.value = {
+      school_database_id: data.school_database_id ?? appearance.value.school_database_id,
+      allow_personal_appearance: data.allow_personal_appearance !== false,
+      personal_appearance_revision: revision,
+      default_wallpaper_url: data.default_wallpaper_url ?? (sameSchool ? schoolWallpaper.value : ''),
+    };
+    try { localStorage.setItem(schoolAppearanceKey, JSON.stringify(appearance.value)); } catch {}
+    return true;
+  }
+  function setSchool(settings) {
+    if (!setAppearance(settings)) return false;
+    school.value = validStyle(settings.default_ui_style) ? settings.default_ui_style : DEFAULT_UI_STYLE;
+    schoolMenuIcons.value = validMenuIcons(settings.default_menu_icon_style) ? settings.default_menu_icon_style : DEFAULT_MENU_ICON_STYLE;
     try {
       localStorage.setItem(schoolKey, school.value);
       localStorage.setItem(schoolIconsKey, schoolMenuIcons.value);
     } catch { /* The server values still apply. */ }
+    return true;
   }
-  function saveChoice(field, value) {
+  function saveChoice(fields) {
     const key = localThemeKey(scope.value);
     const stored = JSON.parse(localStorage.getItem(key) || '{}');
-    localStorage.setItem(key, JSON.stringify({ ...stored, [field]: value }));
+    localStorage.setItem(key, JSON.stringify({ ...stored, ...fields }));
   }
   function choose(value) {
     if (!scope.value || !(value === FOLLOW_SCHOOL || validStyle(value))) return;
-    saveChoice('ui_style', value);
+    saveChoice({ ui_style: value });
     choice.value = value;
   }
   function chooseMenuIcons(value) {
-    if (!scope.value || !(value === FOLLOW_SCHOOL || validMenuIcons(value))) return;
-    saveChoice('menu_icon_style', value);
+    if (!personalAllowed.value || !scope.value || !(value === FOLLOW_SCHOOL || validMenuIcons(value))) return;
+    saveChoice({ menu_icon_style: value, menu_icon_revision: personalRevision.value });
     menuIconChoice.value = value;
   }
   function onStorage(event) {
+    if (event.key === schoolAppearanceKey && event.newValue) appearance.value = cachedSchoolAppearance();
     if (event.key === schoolKey || event.key === null) school.value = cachedSchoolStyle();
     if (event.key === schoolIconsKey || event.key === null) schoolMenuIcons.value = cachedSchoolIcons();
     if (scope.value && (event.key === localThemeKey(scope.value) || event.key === null)) restoreLocal(scope.value);
   }
+  const refreshVisible = () => { if (scope.value && !document.hidden) refreshSchool(); };
+  const refreshTimer = window.setInterval(refreshVisible, 60000);
+  document.addEventListener('visibilitychange', refreshVisible);
+  window.addEventListener('online', refreshVisible);
   window.addEventListener('storage', onStorage);
-  onBeforeUnmount(() => window.removeEventListener('storage', onStorage));
-  return { school, choice, effective, choose, setSchool, schoolMenuIcons, menuIconChoice, chooseMenuIcons };
+  onBeforeUnmount(() => {
+    window.clearInterval(refreshTimer);
+    document.removeEventListener('visibilitychange', refreshVisible);
+    window.removeEventListener('online', refreshVisible);
+    window.removeEventListener('storage', onStorage);
+  });
+  return { school, choice, effective, choose, setSchool, setAppearance, schoolMenuIcons, menuIconChoice, chooseMenuIcons,
+    personalAllowed, personalRevision, allowsSelection, schoolWallpaper };
 }
