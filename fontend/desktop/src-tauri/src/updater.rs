@@ -45,7 +45,7 @@ pub async fn check_connection_update(
     window: WebviewWindow,
     origin: String,
     interactive: bool,
-) -> Result<(), String> {
+) -> Result<bool, String> {
     crate::require_connection(&window)?;
     if crate::current_school_locked(&app) {
         return Err("客户端已锁定，请解锁后检查更新".into());
@@ -55,16 +55,16 @@ pub async fn check_connection_update(
         .map_err(|_| "更新状态不可用")?
         .clone();
     if let Some((school, cancel)) = selected.filter(|(school, _)| school.as_str() == origin) {
-        check(
+        return Ok(check(
             &app,
             crate::connection::school_client()?,
             school,
             cancel,
             interactive,
         )
-        .await;
+        .await);
     }
-    Ok(())
+    Ok(false)
 }
 
 /// 学校窗口发起检查后可继续使用。
@@ -86,17 +86,17 @@ async fn check(
     origin: Url,
     cancel: CancellationToken,
     interactive: bool,
-) {
+) -> bool {
     let mut offered = if interactive {
         let Ok(guard) = OFFERED.try_lock() else {
-            return;
+            return false;
         };
         guard
     } else {
-        tokio::select! { _ = cancel.cancelled() => return, guard = OFFERED.lock() => guard }
+        tokio::select! { _ = cancel.cancelled() => return false, guard = OFFERED.lock() => guard }
     };
     if cancel.is_cancelled() {
-        return;
+        return false;
     }
     let mut report_errors = interactive;
     if let Err(message) = run(
@@ -119,7 +119,9 @@ async fn check(
                     .show(|_| {});
             }
         }
+        return false;
     }
+    !cancel.is_cancelled()
 }
 
 /// 签名验证、再次确认发布状态，然后覆盖安装。

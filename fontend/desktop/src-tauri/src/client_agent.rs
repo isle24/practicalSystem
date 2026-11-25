@@ -42,6 +42,7 @@ struct Run {
     cancel: CancellationToken,
     state: Mutex<Value>,
     options: Value,
+    file_write: Arc<tokio::sync::Mutex<()>>,
 }
 
 struct ModelConfig(Value);
@@ -694,6 +695,7 @@ pub async fn action(
                     item["history"] = json!([]);
                     item["messages"] = json!([]);
                     item["goal"] = Value::Null;
+                    item["goal_file_writes"] = json!([]);
                     item["last_usage"] = Value::Null;
                     item["usage_total"] = Value::Null;
                 }
@@ -814,7 +816,11 @@ async fn start_run(
         .as_str());
     }
     let actual_profile = model_config["profile_id"].as_str().unwrap_or(profile_id);
-    let revision = model_config["revision"].as_str().unwrap_or("");
+    let revision = if mode == "personal" {
+        agent_profiles::context_revision(&model_config)
+    } else {
+        model_config["revision"].as_str().unwrap_or("")
+    };
     let mut user_input = json!({"role":"pending_user","prompt":prompt,"attachments":attachments,"timestamp":now()*1000});
     if let Some(key) = model_config["api_key"]
         .as_str()
@@ -879,6 +885,7 @@ async fn start_run(
         || item["execution_scope"] != scope
         || item["revision"] != revision
     {
+        item["goal_file_writes"] = json!([]);
         item["messages"] = json!(item["history"].as_array().into_iter().flatten().filter_map(|entry| {
             let text = entry["text"].as_str()?;
             match entry["role"].as_str()? {
@@ -890,6 +897,7 @@ async fn start_run(
     }
     if work_mode == "goal" {
         if !resume {
+            item["goal_file_writes"] = json!([]);
             item["goal"] =
                 json!({"objective":user_input["prompt"],"status":"active","steps":[],"note":""});
         } else {
@@ -911,7 +919,7 @@ async fn start_run(
     item["mode"] = json!(mode);
     item["profile_id"] = json!(actual_profile);
     item["model"] = json!(model);
-    let options = json!({"mode":mode,"profile_id":actual_profile,"model":model,"conversation_id":conversation_id,"work_mode":work_mode,"project_root":project_root,"user_input":user_input,"display_input":display_input,"scheduled":input["scheduled"]==true,"task_id":input["task_id"]});
+    let options = json!({"mode":mode,"profile_id":actual_profile,"model":model,"context_revision":revision,"conversation_id":conversation_id,"work_mode":work_mode,"project_root":project_root,"user_input":user_input,"display_input":display_input,"scheduled":input["scheduled"]==true,"task_id":input["task_id"]});
     agent_store::write(app, &scope, &stored)?;
     let initial = snapshot(&stored)?;
     let run = Arc::new(Run {
@@ -923,6 +931,7 @@ async fn start_run(
             json!({"status":"running","text":"","history":initial["history"],"workspace":initial["workspace"],"conversation_id":conversation_id,"tool_status":"正在准备模型与工具","tool_connection":config["tool_connection"]}),
         ),
         options,
+        file_write: Default::default(),
     });
     update(&run, json!({"run_id":run.id}));
     let tools = {
@@ -950,6 +959,8 @@ async fn start_run(
             _=tokio::time::sleep(Duration::from_secs(180))=>Err("运行达到 180 秒上限，已停止；写请求请先核对结果".to_owned()),
             result=execute(&app,&connection,&running,&mode,model_config,stored,tools.clone())=>result,
         };
+        // 已确认的文件写入和回执须先完成，才能保存最终运行状态并释放工作区锁。
+        let _write = running.file_write.lock().await;
         if result.is_err() {
             cancel_pending_operation(&app, &connection, &running, &tools).await;
             let pending = running
@@ -1050,12 +1061,14 @@ impl Run {
     }
 }
 
-async fn project_file(run: &Run, params: &Value) -> Result<Value, String> {
+async fn project_file(app: &AppHandle, run: &Arc<Run>, params: &Value) -> Result<Value, String> {
     let root = run.options["project_root"]
         .as_str()
         .ok_or("请先选择本机工作区")?
         .to_owned();
-    let view = run.view.as_ref().ok_or("请在 Agent 窗口内操作工作区文件")?;
+    if run.view.is_none() {
+        return Err("请在 Agent 窗口内操作工作区文件".into());
+    }
     if run.interaction_ended() {
         return Err("本次工作区授权已结束".into());
     }
@@ -1068,6 +1081,7 @@ async fn project_file(run: &Run, params: &Value) -> Result<Value, String> {
     if run.read_only() {
         return Err("当前模式仅允许读取工作区".into());
     }
+    let path = params["path"].clone();
     let proposal = tokio::task::spawn_blocking(move || agent_files::prepare_write(&root, &params))
         .await
         .map_err(|_| "无法准备工作区文件写入")??;
@@ -1076,10 +1090,27 @@ async fn project_file(run: &Run, params: &Value) -> Result<Value, String> {
         run.cancel.cancel();
         return Err("本次文件写入未获确认".into());
     }
-    let cancel = run.cancel.clone();
-    let closed = view.closed.clone();
+    let run = run.clone();
+    let app = app.clone();
+    let write = run.file_write.clone().lock_owned().await;
     tokio::task::spawn_blocking(move || {
-        proposal.apply(|| cancel.is_cancelled() || closed.is_cancelled())
+        let _write = write;
+        if run.interaction_ended() {
+            return Err("本次工作区授权已结束".into());
+        }
+        if run.options["work_mode"] != "goal" {
+            return proposal.apply(|| run.interaction_ended());
+        }
+        let mut stored = agent_store::read_locked(&app, &run.scope)?;
+        let id = run.options["conversation_id"].as_str().unwrap_or("");
+        agent_workspace::write_goal_file(
+            &mut stored,
+            id,
+            &run.options["project_root"],
+            &path,
+            |data| agent_store::write(&app, &run.scope, data),
+            || proposal.apply(|| run.interaction_ended()),
+        )
     })
     .await
     .map_err(|_| "无法保存工作区文件")?
@@ -1785,6 +1816,16 @@ async fn execute(
         .as_array()
         .cloned()
         .unwrap_or_default();
+    let file_receipts: Vec<_> = conversation["goal_file_writes"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|entry| {
+            run.options["work_mode"] == "goal"
+                && entry["project_root"] == run.options["project_root"]
+        })
+        .map(|entry| &entry["receipt"])
+        .collect();
     if run.options["work_mode"] == "goal" {
         // 本轮输入在开始时已保存，发送给模型时使用独立的 prompt。
         messages.pop();
@@ -1832,7 +1873,7 @@ async fn execute(
     let packet = json!({
         "type":"start","run_id":run.id,"mode":mode,"work_mode":run.options["work_mode"],
         "config":{"model":model["model"]},"prompt":run.options["user_input"]["prompt"],"attachments":run.options["user_input"]["attachments"],
-        "goal":conversation["goal"],"project_available":run.options["project_root"].is_string(),
+        "goal":conversation["goal"],"file_receipts":file_receipts,"project_available":run.options["project_root"].is_string(),
         "messages":messages,"capabilities":catalog,"plugins":plugins,
         "workspace_context":agent_workspace::context(&stored),"tool_connection":session.status()
     });
@@ -1964,7 +2005,7 @@ async fn execute(
                     "confirm_mcp" if !run.read_only() => {
                         approve_mcp_call(run, &plugins, &value["params"]).await
                     }
-                    "project_file" => project_file(run, &value["params"]).await,
+                    "project_file" => project_file(app, run, &value["params"]).await,
                     "tool" => {
                         let outcome = call_tool(
                             app,
@@ -2023,7 +2064,7 @@ async fn execute(
                     mode,
                     actual_profile,
                     &selected_model,
-                    &revision,
+                    run.options["context_revision"].as_str().unwrap_or(""),
                     value["messages"].clone(),
                     json!(history),
                 )?;

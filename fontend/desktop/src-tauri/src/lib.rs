@@ -903,6 +903,7 @@ fn application_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
 }
 
 /// 处理原生导航与窗口菜单。
+#[cfg(target_os = "macos")]
 fn handle_menu(app: &AppHandle, id: &str) {
     if id == "client-agent" {
         if let Some(window) = app.get_webview_window("school") {
@@ -916,10 +917,18 @@ fn handle_menu(app: &AppHandle, id: &str) {
         return;
     }
     if id == "check-update" {
-        if let Some(window) = app.get_webview_window("school") {
-            let _ = window.eval("window.__PRACTICAL_DESKTOP__?.checkUpdate(true)");
-        } else if let Some(window) = app.get_webview_window("connection") {
+        let school = app.get_webview_window("school");
+        let connection_active = app
+            .state::<AppState>()
+            .active_window
+            .lock()
+            .is_ok_and(|active| active.as_deref() == Some("connection"));
+        if let Some(window) = app.get_webview_window("connection").filter(|window| {
+            school.is_none() || (connection_active && window.is_visible().unwrap_or(false))
+        }) {
             let _ = window.eval("window.dispatchEvent(new Event('practical-client-check-update'))");
+        } else if let Some(window) = school {
+            let _ = window.eval("window.__PRACTICAL_DESKTOP__?.checkUpdate(true)");
         }
         return;
     }

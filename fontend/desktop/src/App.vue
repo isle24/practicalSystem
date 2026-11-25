@@ -115,6 +115,8 @@ const connectionVisible = ref(!document.hidden);
 const updateRequest = ref(null);
 let appearanceRevision = 0;
 let updateSchool = '';
+let nextUpdateCheck = 0;
+let lastUpdateFailed = false;
 useWindowAppearance();
 watch(domain, value => {
   if (updateSchool && updateSchool !== value.trim()) clearUpdateSchool();
@@ -152,18 +154,32 @@ function clearUpdateSchool() {
 
 async function checkConnectionUpdate(interactive = false) {
   const address = domain.value.trim();
-  if (!address || disposed || (updateSchool === address && (!interactive || updateRequest.value))) return;
-  const request = Symbol();
-  updateRequest.value = request;
-  updateSchool = address;
-  try {
-    const origin = await invoke('select_connection_update_school', { domain: address });
-    if (!disposed && updateSchool === address) await invoke('check_connection_update', { origin, interactive });
-  } catch (reason) {
-    if (interactive && !disposed && updateSchool === address) error.value = String(reason);
-  } finally {
-    if (updateRequest.value === request) updateRequest.value = null;
+  if (!address || disposed || document.hidden) return;
+  if (updateSchool === address) {
+    if (updateRequest.value) return updateRequest.value;
+    if (!interactive && Date.now() < nextUpdateCheck) return;
   }
+  updateSchool = address;
+  const request = invoke('select_connection_update_school', { domain: address }).then(origin => {
+    if (updateRequest.value !== request || (!interactive && navigator.onLine === false)) return false;
+    return invoke('check_connection_update', { origin, interactive });
+  }).catch(reason => {
+    if (interactive && updateRequest.value === request) error.value = String(reason);
+    return false;
+  });
+  updateRequest.value = request;
+  const checked = await request;
+  if (updateRequest.value === request) {
+    updateRequest.value = null;
+    lastUpdateFailed = checked === false;
+    nextUpdateCheck = Date.now() + (lastUpdateFailed ? 30_000 : 300_000);
+  }
+}
+
+async function checkAfterReconnect() {
+  await updateRequest.value;
+  if (lastUpdateFailed) nextUpdateCheck = 0;
+  if (updateSchool || !loading.value) return checkConnectionUpdate();
 }
 
 function manualUpdate() {
@@ -331,6 +347,7 @@ watch(rememberPassword, value => { if (!value) autoLogin.value = false; }, { flu
 // 加载本机保存的学校连接。
 onMounted(async () => {
   let startupUpdate;
+  window.addEventListener('online', checkAfterReconnect);
   try {
     const settings = await invoke('read_connection_settings');
     if (disposed) return;
@@ -370,6 +387,7 @@ onMounted(async () => {
   if (!document.hidden && autoLogin.value && hasPassword.value) {
     const scope = loginScope;
     await startupUpdate;
+    if (scope === loginScope) await updateRequest.value;
     if (!disposed && !document.hidden && scope === loginScope && autoLogin.value && hasPassword.value) await connect();
   }
 });
@@ -382,6 +400,7 @@ onBeforeUnmount(() => {
   freshPassword.value = false;
   window.clearInterval(retryTimer);
   window.removeEventListener('focus', refreshProfiles);
+  window.removeEventListener('online', checkAfterReconnect);
   window.removeEventListener('practical-client-check-update', manualUpdate);
   window.removeEventListener('practical-client-password-login', showPasswordConnection);
   window.removeEventListener('practical-client-login-cancelled', resetCancelledConnection);
@@ -392,6 +411,7 @@ function handleConnectionVisibility() {
   connectionVisible.value = !document.hidden;
   if (!document.hidden) {
     if (restoreProfileOnShow) refreshProfiles();
+    else checkConnectionUpdate();
     return;
   }
   operationVersion++;
@@ -451,6 +471,7 @@ async function refreshProfiles() {
   } catch (reason) {
     if (currentScope(version, scope)) error.value = String(reason);
   }
+  if (currentScope(version, scope)) checkConnectionUpdate();
 }
 
 async function selectLoginMethod(method) {

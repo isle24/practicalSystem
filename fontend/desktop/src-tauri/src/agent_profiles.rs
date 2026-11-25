@@ -48,6 +48,29 @@ fn revision() -> String {
     Uuid::new_v4().simple().to_string()
 }
 
+pub fn context_revision(profile: &Value) -> &str {
+    profile["context_revision"]
+        .as_str()
+        .or_else(|| profile["revision"].as_str())
+        .unwrap_or("")
+}
+
+fn update_revision(item: &mut Value, previous: Option<&Value>) {
+    let revision = revision();
+    let binding = previous
+        .filter(|old| {
+            old["deleted"] != true
+                && old["endpoint"] == item["endpoint"]
+                && old["api_key"] == item["api_key"]
+                && old["model"] == item["model"]
+        })
+        .map(context_revision)
+        .filter(|id| !id.is_empty())
+        .unwrap_or(&revision);
+    item["context_revision"] = json!(binding);
+    item["revision"] = json!(revision);
+}
+
 fn validate_config(value: &Value) -> Result<(), String> {
     let endpoint = text(value, "endpoint", 500)?;
     let model = text(value, "model", 160)?;
@@ -199,7 +222,7 @@ impl Store {
         key.zeroize();
         item["enabled"] = json!(!clear && input["enabled"].as_bool().ok_or("启用标记无效")?);
         item["deleted"] = json!(false);
-        item["revision"] = json!(revision());
+        update_revision(&mut item, previous);
         if let Err(message) = validate_config(&item) {
             wipe(&mut item);
             return Err(message);
@@ -281,7 +304,8 @@ impl Store {
         });
         let mut item = json!({"id":id,"name":cloud["name"],"endpoint":cloud["endpoint"],"model":cloud["model"],
             "enabled":cloud["enabled"],"api_key":cloud["api_key"],"cloud_id":remote_id,"cloud_revision":cloud["revision"],
-            "cloud_attempted":true,"deleted":false,"revision":revision()});
+            "cloud_attempted":true,"deleted":false});
+        update_revision(&mut item, self.find(&id));
         item["synced_revision"] = item["revision"].clone();
         if remote_id == "legacy" {
             item["cloud_id"] = json!("");

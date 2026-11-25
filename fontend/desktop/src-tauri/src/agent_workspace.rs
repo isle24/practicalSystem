@@ -125,6 +125,7 @@ pub fn view(data: &Value) -> Value {
             let show_goal = item["execution_scope"] == data["scope"];
             if let Some(object) = item.as_object_mut() {
                 object.remove("messages");
+                object.remove("goal_file_writes");
                 object.remove("execution_scope");
                 object.remove("project_scope");
                 if !show_project {
@@ -170,6 +171,31 @@ pub fn conversation_mut<'a>(data: &'a mut Value, id: &str) -> Result<&'a mut Val
         .as_array_mut()
         .and_then(|items| items.iter_mut().find(|item| item["id"] == id))
         .ok_or_else(|| "本机会话不存在".into())
+}
+
+pub fn write_goal_file(
+    data: &mut Value,
+    id: &str,
+    root: &Value,
+    path: &Value,
+    save: impl Fn(&Value) -> Result<(), String>,
+    apply: impl FnOnce() -> Result<Value, String>,
+) -> Result<Value, String> {
+    let item = conversation_mut(data, id)?;
+    if !item["goal_file_writes"].is_array() {
+        item["goal_file_writes"] = json!([]);
+    }
+    let writes = item["goal_file_writes"].as_array_mut().unwrap();
+    writes.retain(|entry| &entry["project_root"] != root || &entry["receipt"]["path"] != path);
+    let index = writes.len();
+    writes.push(json!({"project_root":root,"receipt":{"status":"unverified","path":path}}));
+    save(data)?;
+    let result = apply()?;
+    let entry = &mut conversation_mut(data, id)?["goal_file_writes"][index];
+    entry["receipt"] = result.clone();
+    entry["receipt"]["status"] = json!("written");
+    save(data).map_err(|error| format!("文件已写入，回执保存失败，请先核对文件：{error}"))?;
+    Ok(result)
 }
 
 pub fn record_usage(conversation: &mut Value, usage: &Value) {
@@ -570,6 +596,9 @@ pub fn complete(
     value["model"] = json!(model);
     value["revision"] = json!(revision);
     value["messages"] = messages;
+    if value["work_mode"] == "goal" && value["goal"]["status"] == "completed" {
+        value["goal_file_writes"] = json!([]);
+    }
     if value["title"] == "新会话" {
         if let Some(text) = history
             .as_array()

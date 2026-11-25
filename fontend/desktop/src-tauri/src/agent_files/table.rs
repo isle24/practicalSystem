@@ -10,6 +10,7 @@ const SHEETS: usize = 6;
 const ROWS: usize = 40;
 const COLUMNS: usize = 16;
 const CELL_BYTES: usize = 240;
+const FOOTER_BYTES: usize = 180;
 const EXPANDED_BYTES: u64 = 32 * 1024 * 1024;
 const LIMITS: &str = "每张表最多读取 40 行、前 16 列，每个单元格最多 240 字节。";
 
@@ -18,6 +19,7 @@ struct Page {
     offset: usize,
     bytes: usize,
     last_row: Option<usize>,
+    row_start: usize,
     next: Option<usize>,
     truncated: bool,
 }
@@ -29,6 +31,7 @@ impl Page {
             offset,
             bytes,
             last_row: None,
+            row_start: 0,
             next: None,
             truncated: false,
         }
@@ -59,26 +62,27 @@ impl Page {
         };
         let label = char::from(b'A' + column as u8);
         let cell = format!("{label}{}={}{}", row + 1, json!(clipped), suffix);
+        let same_row = self.last_row == Some(row);
         if self.text.len() + cell.len() + 2 > self.bytes {
             self.truncated = true;
-            self.next = Some(if self.last_row == Some(row) {
-                row + 1
-            } else {
-                row
-            });
+            if same_row && self.row_start > 0 {
+                self.text.truncate(self.row_start);
+            }
+            self.next = Some(row);
             return false;
         }
-        self.text.push_str(if self.last_row == Some(row) {
-            "  "
+        if same_row {
+            self.text.push_str("  ");
         } else {
-            "\n"
-        });
+            self.row_start = self.text.len();
+            self.text.push('\n');
+        }
         self.text.push_str(&cell);
         self.last_row = Some(row);
         true
     }
 
-    fn render(self, output: &mut String) {
+    fn render(self, output: &mut String, multiple_sheets: bool) {
         if self.text.is_empty() {
             output.push_str("\n当前范围内没有非空单元格。");
         } else {
@@ -88,7 +92,11 @@ impl Page {
             output.push_str("\n这张表的预览已截断。");
         }
         if let Some(next) = self.next {
-            output.push_str(&format!(" 继续读取可指定 offset={next}。"));
+            if multiple_sheets {
+                output.push_str(&format!(" 继续读取请指定此工作表 sheet 和 offset={next}。"));
+            } else {
+                output.push_str(&format!(" 继续读取可指定 offset={next}。"));
+            }
         }
         output.push('\n');
     }
@@ -101,7 +109,12 @@ pub(super) fn csv(name: &str, bytes: &[u8], delimiter: u8, offset: usize) -> Res
         .has_headers(false)
         .flexible(true)
         .from_reader(decoded.as_bytes());
-    let mut page = Page::new(offset, TEXT_BYTES - 900);
+    let mut text = format!(
+        "表格：{}\n{LIMITS}\n从第 {} 行读取。",
+        json!(name),
+        offset.saturating_add(1)
+    );
+    let mut page = Page::new(offset, TEXT_BYTES - text.len() - FOOTER_BYTES);
     'records: for (row, record) in reader.records().enumerate() {
         let record = record.map_err(|_| "CSV / TSV 表格格式无效")?;
         if row < offset {
@@ -113,13 +126,8 @@ pub(super) fn csv(name: &str, bytes: &[u8], delimiter: u8, offset: usize) -> Res
             }
         }
     }
-    let mut text = format!(
-        "表格：{}\n{LIMITS}\n从第 {} 行读取。",
-        json!(name),
-        offset.saturating_add(1)
-    );
     let (truncated, next) = (page.truncated, page.next);
-    page.render(&mut text);
+    page.render(&mut text, false);
     Ok(json!({"name":name,"kind":"table","text":text,"truncated":truncated,"next_offset":next}))
 }
 
@@ -220,30 +228,32 @@ pub(super) fn xlsx(
             .ok_or("工作表名称不存在")?],
         None => names.iter().take(SHEETS).collect(),
     };
-    let mut index = String::new();
-    let mut count = 0;
-    for name in names.iter().take(32) {
-        let label = json!(prefix(name, 128)).to_string();
-        if index.len() + label.len() + 3 > 4096 {
-            break;
-        }
-        if count > 0 {
-            index.push('、');
-        }
-        index.push_str(&label);
-        count += 1;
-    }
     let mut text = format!(
-        "工作簿包含 {} 张工作表。{}：{}\n{LIMITS}\n从第 {} 行读取。\n",
+        "工作簿包含 {} 张工作表。\n{LIMITS}\n从第 {} 行读取。\n",
         names.len(),
-        if count < names.len() {
+        offset.saturating_add(1)
+    );
+    if shown.len() != 1 {
+        let mut index = String::new();
+        let mut count = 0;
+        for name in names.iter().take(32) {
+            let label = json!(prefix(name, 128)).to_string();
+            if index.len() + label.len() + 3 > 4096 {
+                break;
+            }
+            if count > 0 {
+                index.push('、');
+            }
+            index.push_str(&label);
+            count += 1;
+        }
+        let label = if count < names.len() {
             format!("前 {count} 个表名")
         } else {
             "表名".to_owned()
-        },
-        index,
-        offset.saturating_add(1)
-    );
+        };
+        text.push_str(&format!("{label}：{index}\n"));
+    }
     let mut truncated = selected.is_none() && shown.len() < names.len();
     if truncated {
         text.push_str("已截断工作表范围，仅展示前 6 张。可以指定 sheet 读取其他工作表。\n");
@@ -252,7 +262,10 @@ pub(super) fn xlsx(
     let mut next = None;
     for sheet in &shown {
         let heading = format!("\n工作表：{}", json!(prefix(sheet, 128)));
-        let mut page = Page::new(offset, per_sheet.saturating_sub(heading.len() + 180));
+        let mut page = Page::new(
+            offset,
+            per_sheet.saturating_sub(heading.len() + FOOTER_BYTES),
+        );
         text.push_str(&heading);
         let mut cells = workbook
             .worksheet_cells_reader(sheet)
@@ -274,7 +287,7 @@ pub(super) fn xlsx(
         if shown.len() == 1 {
             next = page.next;
         }
-        page.render(&mut text);
+        page.render(&mut text, shown.len() > 1);
     }
     Ok(json!({"name":name,"kind":"table","text":text,"truncated":truncated,"next_offset":next}))
 }

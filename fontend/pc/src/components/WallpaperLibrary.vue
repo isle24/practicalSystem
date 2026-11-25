@@ -5,9 +5,9 @@ import { backendUrl, request } from '../api/client';
 
 const props = defineProps({ selection: { type: Object, default: () => ({}) }, schoolDefaultUrl: { type: String, default: '' }, revision: { type: Number, required: true } });
 const emit = defineEmits(['applied']);
-const state = reactive({ scope: 'mine', items: [], total: 0, page: 1, size: 12, loading: false, busy: false, error: '', selected: null, importing: false, importItems: [], importPage: 1, importTotal: 0 });
-const activeId = computed(() => Number(state.selected?.wallpaper_id ?? props.selection?.wallpaper_id ?? 0));
-const activeMode = computed(() => state.selected?.wallpaper_mode ?? props.selection?.wallpaper_mode ?? 'school');
+const state = reactive({ scope: 'mine', items: [], total: 0, page: 1, size: 12, loading: false, busy: false, error: '', importing: false, importItems: [], importPage: 1, importTotal: 0 });
+const activeId = computed(() => Number(props.selection?.wallpaper_id ?? 0));
+const activeMode = computed(() => props.selection?.wallpaper_mode ?? 'school');
 
 async function load() {
   state.loading = true;
@@ -26,7 +26,6 @@ async function apply(id = null) {
   state.error = '';
   try {
     const data = await request('/wallpaper/apply', { method: 'POST', body: JSON.stringify({ id, mode: id ? 'item' : 'school', personal_appearance_revision: props.revision }) });
-    state.selected = data;
     emit('applied', data);
   } catch (error) { state.error = error.message; }
   finally { state.busy = false; }
@@ -95,7 +94,6 @@ async function importImage(fileId) {
 
 watch(() => state.scope, () => { state.page = 1; load(); });
 watch(() => state.page, load);
-watch(() => props.selection, () => { state.selected = null; });
 onMounted(load);
 </script>
 

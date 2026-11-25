@@ -50,11 +50,11 @@ function cachedSchoolAppearance() {
   catch { return {}; }
 }
 
-export function useUiStyle(scope, refreshSchool) {
+export function useUiStyle(scope, refreshSchool, policyReady = ref(true)) {
   const school = ref(cachedSchoolStyle());
   const choice = ref(FOLLOW_SCHOOL);
   const appearance = ref(cachedSchoolAppearance());
-  const personalAllowed = computed(() => appearance.value.allow_personal_appearance !== false);
+  const personalAllowed = computed(() => policyReady.value && appearance.value.allow_personal_appearance !== false);
   const personalRevision = computed(() => appearance.value.personal_appearance_revision ?? 0);
   const schoolWallpaper = computed(() => appearance.value.default_wallpaper_url || '');
   const allowsSelection = revision => personalAllowed.value && (revision ?? 0) === personalRevision.value;
@@ -133,5 +133,5 @@ export function useUiStyle(scope, refreshSchool) {
     window.removeEventListener('storage', onStorage);
   });
   return { school, choice, effective, choose, setSchool, setAppearance, schoolMenuIcons, menuIconChoice, chooseMenuIcons,
-    personalAllowed, personalRevision, allowsSelection, schoolWallpaper };
+    policyReady, personalAllowed, personalRevision, allowsSelection, schoolWallpaper };
 }
