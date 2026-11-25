@@ -191,6 +191,9 @@ pub fn build(
     }
     let window = builder.build()?;
     crate::input_activity::install(&window);
+    if label == "school" {
+        finish_window_frame(&window)?;
+    }
     Ok(window)
 }
 
@@ -201,16 +204,14 @@ pub fn request_agent_appearance(app: &AppHandle) {
     }
 }
 
-pub fn finish_agent_frame(window: &WebviewWindow) -> Result<(), String> {
+pub fn finish_window_frame(window: &WebviewWindow) -> tauri::Result<()> {
     #[cfg(target_os = "macos")]
     {
-        window
-            .with_webview(apply_agent_frame)
-            .map_err(|_| "无法设置 Agent 窗口外观".to_owned())?;
+        window.with_webview(apply_window_frame)?;
         let resized = window.clone();
         window.on_window_event(move |event| {
             if matches!(event, tauri::WindowEvent::Resized(_)) {
-                let _ = resized.with_webview(apply_agent_frame);
+                let _ = resized.with_webview(apply_window_frame);
             }
         });
     }
@@ -220,7 +221,7 @@ pub fn finish_agent_frame(window: &WebviewWindow) -> Result<(), String> {
 }
 
 #[cfg(target_os = "macos")]
-fn apply_agent_frame(webview: tauri::webview::PlatformWebview) {
+fn apply_window_frame(webview: tauri::webview::PlatformWebview) {
     use objc2::{available, msg_send, rc::Retained, runtime::AnyObject};
     use objc2_app_kit::{NSColor, NSWindow, NSWindowStyleMask};
     use objc2_quartz_core::{kCACornerCurveContinuous, CACornerMask};
@@ -238,9 +239,11 @@ fn apply_agent_frame(webview: tauri::webview::PlatformWebview) {
     };
     content.setWantsLayer(true);
     let Some(layer) = content.layer() else { return };
-    let radius = if window.styleMask().contains(NSWindowStyleMask::FullScreen) {
+    let style = window.styleMask();
+    let titled = style.contains(NSWindowStyleMask::Titled);
+    let radius = if style.contains(NSWindowStyleMask::FullScreen) {
         0.0
-    } else if available!(macos = 27.0) {
+    } else if titled && available!(macos = 27.0) {
         // macOS 27 公开的 NSView.effectiveCornerRadii 尚未收录在 objc2-app-kit 0.3 中。
         let corners: Option<Retained<AnyObject>> =
             unsafe { msg_send![&*content, effectiveCornerRadii] };
@@ -251,9 +254,11 @@ fn apply_agent_frame(webview: tauri::webview::PlatformWebview) {
         10.0
     };
     if !layer.masksToBounds() || layer.cornerRadius() != radius {
-        layer.setMaskedCorners(
-            CACornerMask::LayerMinXMinYCorner | CACornerMask::LayerMaxXMinYCorner,
-        );
+        let mut corners = CACornerMask::LayerMinXMinYCorner | CACornerMask::LayerMaxXMinYCorner;
+        if !titled {
+            corners |= CACornerMask::LayerMinXMaxYCorner | CACornerMask::LayerMaxXMaxYCorner;
+        }
+        layer.setMaskedCorners(corners);
         layer.setCornerCurve(unsafe { kCACornerCurveContinuous });
         layer.setCornerRadius(radius);
         layer.setMasksToBounds(true);

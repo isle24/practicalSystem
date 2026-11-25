@@ -578,7 +578,7 @@ onBeforeUnmount(() => {
     <el-alert v-if="state.error" :title="state.error" type="error" :closable="false" show-icon />
     <el-alert v-if="state.notice" :title="state.notice" type="success" :closable="false" />
 
-    <el-tabs v-model="state.tab">
+    <el-tabs v-model="state.tab" class="sync-tabs">
       <el-tab-pane label="同步任务" name="jobs" class="sync-jobs-pane">
         <section class="sync-section sync-schedule" aria-label="每日自动同步" :aria-busy="state.loadingSchedule || state.busy === 'schedule'">
           <div class="sync-section-heading">
@@ -597,7 +597,7 @@ onBeforeUnmount(() => {
               <div><dt>下次执行（北京时间）</dt><dd>{{ state.schedule ? (state.schedule.next_run_at ? scheduleTime(state.schedule.next_run_at) : (state.schedule.enabled ? '等待调度' : '未启用')) : '尚未读取' }}</dd></div>
             </dl>
           </div>
-          <p v-if="state.schedule?.blocked_reason || scheduleEnableBlockedReason || scheduleNeedsTakeover" class="sync-help" role="status">
+          <p v-if="state.schedule?.blocked_reason || scheduleEnableBlockedReason || scheduleNeedsTakeover" class="sync-help sync-schedule-feedback" role="status">
             <span v-if="state.schedule?.blocked_reason">定时阻塞原因：{{ state.schedule.blocked_reason }}</span>
             <span v-if="scheduleEnableBlockedReason && scheduleEnableBlockedReason !== state.schedule?.blocked_reason">开启受限：{{ scheduleEnableBlockedReason }}</span>
             <span v-if="scheduleNeedsTakeover">重新启用并保存后，将由当前管理员接管定时设置。</span>
@@ -611,7 +611,7 @@ onBeforeUnmount(() => {
         </section>
 
         <section class="sync-section">
-          <div class="sync-section-heading"><h3>人员同步</h3><span>教务计划、课表：等待接口文档，暂未接入。</span></div>
+          <div class="sync-section-heading"><div><h3>人员同步</h3><span>教务计划、课表：等待接口文档，暂未接入。</span></div></div>
           <p class="sync-help">按学号、工号增改；跳过管理员，保留密码、角色及绑定。不删除来源中缺失的记录，新档案不自动开户。</p>
           <p class="sync-help">拉取 → 页面队列 → 档案写入。页面消费完成后才核对最终结果，拉取完成不代表同步成功。</p>
           <div v-for="resource in resources" :key="resource.value" class="sync-resource-row">
@@ -637,7 +637,7 @@ onBeforeUnmount(() => {
         </section>
 
         <section class="sync-section" aria-label="按条件同步">
-          <div class="sync-section-heading"><h3>按条件同步</h3><span>至少填写一个条件；先检查匹配数量，再发起同步。</span></div>
+          <div class="sync-section-heading"><div><h3>按条件同步</h3><span>至少填写一个条件；先检查匹配数量，再发起同步。</span></div></div>
           <p class="sync-help">单人同步请优先填写完整学号或工号。检查仅从服务器读取第一页并显示数量，不写入档案，不展示人员原始资料。</p>
           <el-form class="sync-form" :disabled="state.busy === 'start:filtered'" @submit.prevent>
             <label><FormFieldLabel :required="true" help="切换资源后清空编号和检查结果。">同步对象</FormFieldLabel><el-select v-model="state.filterForm.resource" @change="state.filterForm.number = ''">
@@ -759,53 +759,115 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.education-data-sync { display: flex; flex-direction: column; flex: 1 1 0; height: 100%; min-height: 0; overflow: hidden; gap: 12px; min-width: 0; color: var(--text, #202b3a); }
+.education-data-sync {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  gap: 8px;
+  padding: 16px;
+  overflow: hidden;
+  color: var(--text);
+  container: education-data-sync / size;
+}
 .education-data-sync > .sync-header, .education-data-sync > .sync-current-step, .education-data-sync > .el-alert { flex: 0 0 auto; }
 .sync-header, .sync-section-heading, .sync-config-footer, .sync-validation { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
-.sync-header h2 { margin: 0; font-size: 20px; }
-.sync-header p, .sync-help, .sync-section-heading span, .sync-job-meta, .sync-validation p { margin: 5px 0; color: var(--muted, #627083); font-size: 12px; line-height: 1.65; }
-.sync-current-step { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 10px 12px; background: var(--surface-2, #f5f7fa); border-radius: var(--control-radius, 6px); font-size: 13px; }
-.sync-current-step > span { color: var(--muted, #627083); }
-.sync-section { display: grid; gap: 12px; padding: 16px 0; min-width: 0; border-bottom: 1px solid var(--line, #dce2e9); }
-.sync-section:first-child { padding-top: 4px; }
-.sync-section h3 { margin: 0; font-size: 15px; font-weight: 600; }
+.sync-header h2 { margin: 0; font-size: 20px; line-height: 24px; }
+.sync-header p, .sync-section-heading span, .sync-validation p { display: block; margin: 4px 0 0; }
+.sync-header p, .sync-help, .sync-section-heading span, .sync-job-meta, .sync-validation p {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 20px;
+  overflow-wrap: anywhere;
+}
+.sync-help, .sync-job-meta { margin: 0; }
+.sync-help:empty { display: none; }
+.sync-current-step {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+  padding: 8px 12px;
+  border-radius: var(--control-radius, 8px);
+  background: var(--surface-2);
+  font-size: 13px;
+  line-height: 20px;
+}
+.sync-current-step > span { color: var(--muted); overflow-wrap: anywhere; }
+.sync-section, .sync-config-footer {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--skin-card-radius, 8px);
+  background: var(--surface);
+}
+.sync-section { display: grid; grid-template-columns: minmax(0, 1fr); grid-auto-rows: max-content; align-content: start; gap: 12px; padding: 16px; }
+.sync-section-heading { align-items: flex-start; }
+.sync-section-heading > div { flex: 1 1 240px; min-width: 0; }
+.sync-section h3 { margin: 0; font-size: 16px; line-height: 20px; font-weight: 600; }
 .sync-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 .sync-actions :deep(.el-button + .el-button) { margin-left: 0; }
-.sync-schedule-fields { display: grid; grid-template-columns: minmax(180px, 1fr) minmax(0, 2fr); align-items: start; gap: 16px; }
-.sync-schedule-toggle { display: grid; gap: 8px; min-width: 0; }
-.sync-schedule-meta { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: 12px; margin: 0; font-size: 13px; line-height: 1.65; }
-.sync-schedule-meta dt, .sync-trigger { color: var(--muted, #627083); font-size: 12px; }
-.sync-schedule-meta dd { margin: 6px 0 0; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
-.sync-resource-row { display: grid; grid-template-columns: 70px minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--line, #dce2e9); font-size: 13px; }
-.sync-resource-row > span { color: var(--muted, #627083); line-height: 1.6; }
-.sync-probe-result { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12px; padding: 12px; background: var(--surface-2, #f5f7fa); }
-.sync-probe-result small { flex-basis: 100%; color: var(--muted, #627083); line-height: 1.6; }
-.sync-job-meta { display: flex; flex-wrap: wrap; gap: 8px 18px; }
-.sync-progress { display: grid; grid-template-columns: 85px minmax(0, 1fr); gap: 10px; align-items: center; font-size: 12px; }
+.sync-schedule-fields { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr); align-items: start; gap: 16px; }
+.sync-schedule-toggle { display: grid; gap: 4px; min-width: 0; }
+.sync-schedule-meta {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr);
+  gap: 12px;
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: var(--control-radius, 8px);
+  background: var(--surface-2);
+  line-height: 20px;
+}
+.sync-schedule-meta dt, .sync-trigger { color: var(--muted); font-size: 12px; }
+.sync-schedule-meta dd { margin: 4px 0 0; font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.sync-schedule-feedback { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 12px; }
+.sync-resource-row { display: grid; grid-template-columns: 72px minmax(0, 1fr) auto; gap: 8px 12px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
+.sync-resource-row > span { color: var(--muted); line-height: 20px; }
+.sync-probe-result, .sync-validation { padding: 12px; border-radius: var(--control-radius, 8px); background: var(--surface-2); }
+.sync-probe-result { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 12px; line-height: 20px; overflow-wrap: anywhere; }
+.sync-probe-result small { flex-basis: 100%; color: var(--muted); }
+.sync-job-meta { display: flex; flex-wrap: wrap; gap: 4px 16px; }
+.sync-progress { display: grid; grid-template-columns: 84px minmax(0, 1fr); gap: 8px; align-items: center; font-size: 12px; }
 .sync-counts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); margin: 0; gap: 16px; }
-.sync-counts dt { color: var(--muted, #627083); font-size: 12px; }
-.sync-counts dd { margin: 4px 0 0; font-size: 22px; font-variant-numeric: tabular-nums; }
+.sync-counts dt { color: var(--muted); font-size: 12px; }
+.sync-counts dd { margin: 4px 0 0; font-size: 20px; line-height: 24px; font-variant-numeric: tabular-nums; }
 .sync-result-toolbar { display: flex; align-items: flex-end; flex-wrap: wrap; gap: 16px; }
-.sync-result-toolbar label { display: grid; gap: 6px; width: 200px; }
-.sync-validation { padding: 14px; background: var(--surface-2, #f5f7fa); font-size: 13px; }
-.sync-validation > div { flex: 1 1 350px; }
-.sync-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; margin: 0; padding: 0; border: 0; min-width: 0; }
-.sync-form > label, .sync-form > div { display: grid; align-content: start; gap: 8px; min-width: 0; }
+.sync-result-toolbar label { display: grid; gap: 8px; width: min(200px, 100%); }
+.sync-result-toolbar .sync-help { flex: 1 1 260px; }
+.sync-validation { font-size: 13px; }
+.sync-validation > div { flex: 1 1 320px; min-width: 0; }
+.sync-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; min-width: 0; }
+.sync-form > :is(label, div) { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.sync-form :deep(.form-field-label) { flex: 1 0 auto; }
+.sync-form :deep(.el-switch) { align-self: flex-start; }
 .sync-form-wide { grid-column: 1 / -1; }
 .sync-form :deep(.el-input-number), .sync-form :deep(.el-select) { width: 100%; }
-.sync-config-footer { flex: 0 0 auto; padding: 12px 0 2px; background: var(--surface, #fff); border-top: 1px solid var(--line, #dce2e9); }
-.education-data-sync > :deep(.el-tabs) { display: flex; flex: 1 1 0; flex-direction: column; min-height: 0; overflow: hidden; }
-.education-data-sync :deep(.el-tabs__header) { flex: 0 0 auto; }
-.education-data-sync :deep(.el-tabs__content) { flex: 1 1 0; min-width: 0; min-height: 0; overflow: hidden; }
-.education-data-sync :deep(.el-tab-pane) { height: 100%; min-width: 0; min-height: 0; }
-.sync-jobs-pane { overflow: auto; overscroll-behavior: contain; padding-right: 6px; box-sizing: border-box; }
-.sync-settings-pane { display: flex; flex-direction: column; overflow: hidden; }
-.sync-settings-body { flex: 1 1 0; min-height: 0; overflow: auto; align-content: start; border-bottom: 0; padding-right: 6px; }
-@media (max-width: 760px) {
-  .sync-schedule-fields, .sync-schedule-meta { grid-template-columns: minmax(0, 1fr); }
-  .sync-resource-row { grid-template-columns: 65px minmax(0, 1fr); }
+.sync-config-footer { flex: 0 0 auto; padding: 12px 16px; }
+.sync-tabs { display: flex; flex: 1 1 0; flex-direction: column; min-height: 0; overflow: hidden; }
+.sync-tabs > :deep(.el-tabs__header) { flex: 0 0 auto; margin: 0 0 8px; }
+.sync-tabs > :deep(.el-tabs__content) { flex: 1 1 0; min-width: 0; min-height: 0; overflow: hidden; }
+.sync-jobs-pane, .sync-settings-pane { height: 100%; min-width: 0; min-height: 0; }
+.sync-jobs-pane {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+  gap: 12px;
+  padding-inline-end: 8px;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.sync-settings-pane { display: flex; flex-direction: column; gap: 8px; overflow: hidden; }
+.sync-settings-body { flex: 1 1 0; min-height: 0; overflow: auto; overscroll-behavior: contain; }
+@container education-data-sync (max-width: 640px) {
+  .sync-schedule-fields, .sync-form { grid-template-columns: minmax(0, 1fr); }
+  .sync-resource-row { grid-template-columns: 72px minmax(0, 1fr); }
   .sync-resource-row .sync-actions { grid-column: 1 / -1; }
-  .sync-form { grid-template-columns: minmax(0, 1fr); }
   .sync-counts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@container education-data-sync (max-height: 360px) {
+  .sync-settings-pane { padding-inline-end: 8px; overflow: auto; overscroll-behavior: contain; }
+  .sync-settings-body { flex: none; overflow: visible; }
 }
 </style>

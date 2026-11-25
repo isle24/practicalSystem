@@ -100,10 +100,10 @@
 }
 :root[data-ui-style="liquid_glass"] .agent-shell .composer {
   background: var(--skin-card);
-  border-radius: var(--skin-card-radius);
-  box-shadow: var(--skin-rim), 0 5px 20px #182e4e19;
+  border-radius: var(--composer-radius, var(--skin-card-radius));
+  box-shadow: var(--skin-rim), 0 4px 14px #182e4e10;
 }
-:root[data-ui-style="obsidian_pro"] :is(.brand-mark,.empty-mark) { border-radius: 4px; }
+:root[data-ui-style="obsidian_pro"] .brand-mark { border-radius: 4px; }
 :root[data-ui-style="obsidian_pro"] .navigation { background: var(--skin-canvas); }
 :root[data-ui-style="ivory_editorial"] :is(.panel-heading h1,.brand strong) {
   font-family: var(--skin-heading-font);

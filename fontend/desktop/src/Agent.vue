@@ -116,7 +116,7 @@
       <div class="agent-panel-content">
       <header class="panel-heading">
         <div>
-          <span class="eyebrow">独立工作区</span>
+          <span v-if="section !== 'chat'" class="eyebrow">独立工作区</span>
           <h1>
             {{
               section === 'chat'
@@ -190,60 +190,6 @@
       </div>
 
       <template v-if="section === 'chat'">
-        <div class="model-toolbar">
-          <label for="chat-provider">模型来源</label>
-          <select
-            id="chat-provider"
-            v-model="source"
-            :disabled="blocked"
-            @change="sourceChanged"
-          >
-            <option value="school" :disabled="!school.enabled">
-              学校统一模型{{ school.enabled ? '' : '（未启用）' }}
-            </option>
-            <option
-              v-if="
-                source !== 'school' &&
-                !enabledProfiles.some((item) => item.id === source)
-              "
-              :value="source"
-              disabled
-            >
-              当前提供方（已停用或移除）
-            </option>
-            <option
-              v-for="item in enabledProfiles"
-              :key="item.id"
-              :value="item.id"
-            >
-              {{ item.name || '个人提供方' }}
-            </option>
-          </select>
-          <label class="sr-only" for="chat-model">当前模型</label>
-          <input
-            id="chat-model"
-            v-model="model"
-            :list="source === 'school' ? undefined : 'chat-model-options'"
-            :readonly="source === 'school'"
-            :disabled="blocked"
-            placeholder="选择或输入模型"
-          />
-          <datalist id="chat-model-options">
-            <option
-              v-for="item in chatModels"
-              :key="item.id"
-              :value="item.id"
-            />
-          </datalist>
-          <button
-            v-if="source !== 'school'"
-            type="button"
-            :disabled="blocked || listingChatModels"
-            @click="loadChatModels"
-          >
-            {{ listingChatModels ? '获取中' : '获取模型' }}
-          </button>
-        </div>
         <section
           class="business-connection"
           :class="toolConnectionTone"
@@ -252,11 +198,12 @@
         >
           <div class="business-connection-copy">
             <strong><span class="business-connection-dot" aria-hidden="true"></span>{{ toolConnectionTitle }}</strong>
-            <p v-if="toolConnectionMessage">{{ toolConnectionMessage }}</p>
+            <p v-if="toolConnectionMessage && toolConnectionTone !== 'ready'">{{ toolConnectionMessage }}</p>
             <p v-if="toolRetryAfter > 0" aria-live="off">请在 {{ toolRetryAfter }} 秒后重试。</p>
             <p v-if="toolConnection?.action === 'review_result'">请先查看操作回执并核对实际结果。</p>
             <details class="business-connection-details">
               <summary>连接详情</summary>
+              <p v-if="toolConnectionMessage && toolConnectionTone === 'ready'">{{ toolConnectionMessage }}</p>
               <dl>
                 <dt>连接阶段</dt><dd>{{ toolConnectionStage }}</dd>
                 <dt>错误码</dt><dd><code>{{ toolConnection?.error || '未记录' }}</code></dd>
@@ -281,9 +228,6 @@
             {{ toolActionPending ? '处理中…' : toolActionLabel }}
           </button>
         </section>
-        <p v-if="providerChanged" class="context-note">
-          切换在下一轮发送时生效；当前可见会话将作为上下文发送给所选提供方。
-        </p>
         <div
           ref="messageList"
           class="message-list"
@@ -294,14 +238,8 @@
             v-if="!history.length && !activeText && !busy"
             class="empty-state"
           >
-            <div class="empty-mark">A</div>
-            <h2>有什么需要处理？</h2>
-            <p>选择模型，开始对话或使用已授权的学校功能。</p>
-            <div class="capability-chips">
-              <span>本机加密会话</span>
-              <span>个人模型直连</span>
-              <span>写入单独确认</span>
-            </div>
+            <h2>开始一段对话</h2>
+            <p>输入任务，或添加附件、选择本机工作区。</p>
           </div>
           <article
             v-for="(message, index) in renderedHistory"
@@ -326,7 +264,7 @@
           <article v-if="busy || activeText" class="message assistant">
             <h3>
               Agent
-              <span v-if="busy" class="muted">处理中</span>
+              <span v-if="busy" class="muted"> · {{ toolStatus || '处理中' }}</span>
             </h3>
             <div
               v-if="activeText"
@@ -366,53 +304,136 @@
           </details>
         </div>
         <div v-if="!commandApproval" class="chat-bottom">
-          <div class="privacy-strip">
-            <span v-if="folderName || attachments.length">附件和读取的文件内容会发送给当前模型。写入工作区前需确认。</span>
-            <span v-else>
-              本机记忆 {{ enabledMemories }} 条 · 已启用插件 {{ enabledPlugins }} 个
-            </span>
-            <button type="button" @click="section = 'memories'">
-              管理记忆
-            </button>
-          </div>
-          <form class="composer" @submit.prevent="send">
-            <div class="composer-options">
-              <label>模式 <select v-model="workMode" :disabled="blocked"><option value="chat">对话</option><option value="plan">Plan · 只读计划</option><option value="goal">Goal · 执行目标</option></select></label>
-              <button type="button" :title="activeConversation?.project_root || '选择本机项目文件夹'" :disabled="blocked" @click="chooseFolder(false)">工作区 · {{ folderName || '选择文件夹' }}</button>
-              <button v-if="folderName" type="button" :disabled="blocked" aria-label="解除当前会话的工作区绑定" @click="chooseFolder(true)">解除绑定</button>
-              <AgentAttachments :key="workspace.active_conversation_id" v-model="attachments" :disabled="blocked" :pick="pickAttachments" @error="message => error = message" />
-            </div>
+          <p v-if="providerChanged || folderName || attachments.length" class="composer-hint">
+            {{ providerChanged ? '发送时会把可见会话带给所选提供方。' : '附件和读取的工作区内容会发送给所选模型。' }}
+          </p>
+          <form class="composer" @submit.prevent="send" @keydown.esc="dismissComposerOnEscape">
+            <AgentAttachments :key="workspace.active_conversation_id" ref="attachmentPicker"
+              v-model="attachments" :disabled="blocked" :pick="pickAttachments" @error="message => error = message" />
             <label class="sr-only" for="agent-prompt">任务内容</label>
             <textarea
               id="agent-prompt"
               ref="promptInput"
               v-model="prompt"
-              rows="3"
+              rows="2"
               maxlength="12000"
-              :placeholder="workMode === 'plan' ? '描述任务，生成可执行的计划' : workMode === 'goal' ? (resumeGoal ? '可补充信息，或直接继续当前目标' : '填写要达成的目标和完成条件') : '输入任务，Enter 发送，Shift + Enter 换行'"
+              :placeholder="workMode === 'plan' ? '描述要制定的计划' : workMode === 'goal' ? (resumeGoal ? '补充信息，或直接继续当前目标' : '输入目标和完成条件') : '发送消息，或添加图片、表格和其他附件'"
               :disabled="!scope || loading || pending || busy"
               @keydown="handlePromptKeydown"
             ></textarea>
-            <div class="composer-footer">
-              <span>
-                {{ prompt.length }} / 12000
-                <span v-if="toolStatus">· {{ toolStatus }}</span>
-              </span>
-              <button
-                v-if="busy"
-                type="button"
-                :disabled="pending || !runId"
-                @click="stop"
-              >
-                {{ stopping ? '正在停止' : '停止' }}
-              </button>
-              <button v-else type="submit" class="primary" :disabled="!canSend">
-                {{ resumeGoal ? '继续目标' : workMode === 'goal' ? '开始目标' : workMode === 'plan' ? '生成计划' : '发送' }}
-              </button>
+            <div class="composer-toolbar">
+              <div class="composer-left">
+                <button type="button" class="composer-control composer-add"
+                  :disabled="blocked || attachmentPicker?.picking || attachments.length >= 4"
+                  :aria-label="attachmentPicker?.picking ? '正在读取附件' : '添加附件'"
+                  :title="attachmentPicker?.help || '添加附件'" @click="attachmentPicker?.choose()">
+                  <Plus :size="19" aria-hidden="true" />
+                </button>
+                <div class="composer-menu" data-composer-menu="workspace">
+                  <button id="agent-composer-workspace" type="button" class="composer-control composer-workspace"
+                    :disabled="blocked" :title="activeConversation?.project_root || '选择本机工作区'"
+                    :aria-expanded="folderName ? composerMenu === 'workspace' : undefined"
+                    :aria-controls="folderName ? 'composer-workspace-options' : undefined"
+                    @click="folderName ? toggleComposerMenu('workspace') : chooseFolder(false)">
+                    <Folder :size="15" aria-hidden="true" />
+                    <span>{{ folderName || '工作区' }}</span>
+                  </button>
+                  <div v-show="composerMenu === 'workspace'" id="composer-workspace-options"
+                    class="composer-popover composer-choice-list" role="group" aria-label="工作区">
+                    <p class="composer-path">{{ activeConversation?.project_root }}</p>
+                    <button type="button" @click="chooseFolder(false)">更换工作区</button>
+                    <button type="button" @click="chooseFolder(true)">解除绑定</button>
+                  </div>
+                </div>
+                <label class="composer-mode">
+                  <span class="sr-only">工作模式</span>
+                  <select v-model="workMode" :disabled="blocked">
+                    <option value="chat">对话</option>
+                    <option value="plan">Plan</option>
+                    <option value="goal">Goal</option>
+                  </select>
+                  <ChevronDown :size="13" aria-hidden="true" />
+                </label>
+                <div class="composer-menu" data-composer-menu="access">
+                  <button id="agent-composer-access" type="button" class="composer-control composer-access"
+                    :disabled="blocked" :aria-label="'运行权限，' + accessLabel"
+                    :aria-expanded="composerMenu === 'access'" aria-controls="composer-access-options"
+                    @click="toggleComposerMenu('access')">
+                    <ShieldCheck v-if="readOnly" :size="15" aria-hidden="true" />
+                    <Shield v-else :size="15" aria-hidden="true" />
+                    <span>{{ accessLabel }}</span>
+                    <ChevronDown :size="13" aria-hidden="true" />
+                  </button>
+                  <div v-show="composerMenu === 'access'" id="composer-access-options"
+                    class="composer-popover composer-choice-list" role="group" aria-label="运行权限">
+                    <button type="button" :aria-pressed="readOnly" @click="chooseAccess('read')">
+                      <ShieldCheck :size="17" aria-hidden="true" />
+                      <span>仅可查看<small>分析附件，使用已授权的读取工具</small></span>
+                      <Check v-if="readOnly" :size="15" aria-hidden="true" />
+                    </button>
+                    <button type="button" :aria-pressed="!readOnly" :disabled="workMode === 'plan'" @click="chooseAccess('confirm')">
+                      <Shield :size="17" aria-hidden="true" />
+                      <span>确认后修改<small>{{ workMode === 'plan' ? 'Plan 使用只读权限' : '写文件、修改学校数据或调用 MCP 前确认' }}</small></span>
+                      <Check v-if="!readOnly" :size="15" aria-hidden="true" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+              <div class="composer-right">
+                <div class="composer-menu composer-model" data-composer-menu="model">
+                  <button id="agent-composer-model" type="button" class="composer-control composer-model-trigger"
+                    :disabled="blocked" :title="model || '选择模型'" :aria-label="'选择模型，' + (model || '尚未选择')"
+                    :aria-expanded="composerMenu === 'model'" aria-controls="composer-model-options"
+                    @click="toggleComposerMenu('model')">
+                    <span>{{ model || '选择模型' }}</span>
+                    <ChevronDown :size="14" aria-hidden="true" />
+                  </button>
+                  <div v-show="composerMenu === 'model'" id="composer-model-options"
+                    class="composer-popover composer-model-picker" role="group" aria-label="模型选择">
+                    <label for="chat-provider">模型来源</label>
+                    <select id="chat-provider" v-model="source" :disabled="blocked" @change="sourceChanged">
+                      <option value="school" :disabled="!school.enabled">学校统一模型{{ school.enabled ? '' : '（未启用）' }}</option>
+                      <option v-if="source !== 'school' && !enabledProfiles.some(item => item.id === source)" :value="source" disabled>
+                        当前提供方（已停用或移除）
+                      </option>
+                      <option v-for="item in enabledProfiles" :key="item.id" :value="item.id">{{ item.name || '个人提供方' }}</option>
+                    </select>
+                    <label for="chat-model">当前模型</label>
+                    <input id="chat-model" v-model="model" :list="source === 'school' ? undefined : 'chat-model-options'"
+                      :readonly="source === 'school'" :disabled="blocked" placeholder="选择或输入模型"
+                      @keydown.enter.prevent="closeComposerMenu(true)" />
+                    <datalist id="chat-model-options">
+                      <option v-for="item in chatModels" :key="item.id" :value="item.id" />
+                    </datalist>
+                    <div class="composer-model-actions">
+                      <button type="button" @click="section = 'models'">模型设置</button>
+                      <button v-if="source !== 'school'" type="button" :disabled="blocked || listingChatModels" @click="loadChatModels">
+                        {{ listingChatModels ? '获取中' : '获取模型' }}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                <button
+                  v-if="busy"
+                  type="button"
+                  class="composer-send composer-stop"
+                  :aria-label="stopping ? '正在停止' : '停止'"
+                  :title="stopping ? '正在停止' : '停止'"
+                  :disabled="pending || !runId"
+                  @click="stop"
+                >
+                  <Square :size="14" fill="currentColor" aria-hidden="true" />
+                </button>
+                <button v-else type="submit" class="primary composer-send" :disabled="!canSend" :aria-label="sendLabel" :title="sendLabel">
+                  <ArrowUp :size="20" aria-hidden="true" />
+                </button>
+              </div>
             </div>
           </form>
           <div class="chat-footnote">
-            <AgentUsage :turn="busy ? liveUsage : activeConversation?.last_usage" :totals="activeConversation?.usage_total" :running="busy" />
+            <AgentUsage :key="workspace.active_conversation_id" :turn="busy ? liveUsage : activeConversation?.last_usage"
+              :totals="activeConversation?.usage_total" :running="busy" />
+            <span v-if="prompt.length >= 11000" class="composer-limit">{{ prompt.length }} / 12000</span>
           </div>
         </div>
       </template>
@@ -1200,6 +1221,7 @@
 
 <script setup>
 import { invoke } from '@tauri-apps/api/core';
+import { ArrowUp, Check, ChevronDown, Folder, Plus, Shield, ShieldCheck, Square } from '@lucide/vue';
 import AgentAttachments from './AgentAttachments.vue';
 import AgentUsage from './AgentUsage.vue';
 import FormFieldLabel from '../../shared/components/FormFieldLabel.vue';
@@ -1274,6 +1296,9 @@ const conflictSides = [
 ];
 const workspace = reactive(emptyWorkspace());
 const workMode = ref('chat'), attachments = ref([]), liveUsage = ref(null), liveGoal = ref(null);
+const accessMode = ref('confirm');
+const composerMenu = ref('');
+const attachmentPicker = ref(null);
 let sentDraft = null;
 const goalStates = { active: '进行中', paused: '已暂停', completed: '已完成', blocked: '需要处理' };
 const stepStates = { pending: '待办', active: '进行中', done: '已完成' };
@@ -1404,6 +1429,10 @@ const currentGoal = computed(() => {
   return goal;
 });
 const resumeGoal = computed(() => ['active', 'paused', 'blocked'].includes(currentGoal.value?.status));
+const readOnly = computed(() => workMode.value === 'plan' || accessMode.value === 'read');
+const accessLabel = computed(() => readOnly.value ? '仅可查看' : '确认后修改');
+const sendLabel = computed(() => resumeGoal.value ? '继续目标'
+  : { chat: '发送', plan: '生成计划', goal: '开始目标' }[workMode.value]);
 const operations = computed(() => (Array.isArray(activeConversation.value?.operations)
   ? activeConversation.value.operations : []).slice(-50).reverse());
 const operationStorageError = ref('');
@@ -1467,12 +1496,6 @@ const selectedConflictCount = computed(
       ['local', 'cloud'].includes(conflictChoices[item.id])
     ).length
 );
-const enabledMemories = computed(
-  () => workspace.memories.filter((item) => item.enabled).length
-);
-const enabledPlugins = computed(
-  () => workspace.plugins.filter((item) => item.enabled).length
-);
 const missedItems = computed(
   () =>
     workspace.tasks.filter(
@@ -1482,6 +1505,7 @@ const missedItems = computed(
 const blocked = computed(
   () => !scope.value || loading.value || pending.value || busy.value
 );
+watch([blocked, section, commandApproval], () => closeComposerMenu());
 const canSend = computed(
   () =>
     !blocked.value &&
@@ -1655,6 +1679,8 @@ function wipe() {
   prompt.value = '';
   attachments.value = [];
   workMode.value = 'chat';
+  accessMode.value = 'confirm';
+  closeComposerMenu();
   liveUsage.value = null;
   liveGoal.value = null;
   sentDraft = null;
@@ -1757,7 +1783,9 @@ function applyWorkspace(value, select = false) {
   const previousId = workspace.active_conversation_id;
   const nextId = text(data.active_conversation_id);
   const transitioned = nextId !== previousId;
-  if (transitioned && previousId) promptDrafts.set(previousId, { prompt: prompt.value, files: attachments.value, mode: workMode.value });
+  if (transitioned && previousId) {
+    promptDrafts.set(previousId, { prompt: prompt.value, files: attachments.value, mode: workMode.value, access: accessMode.value });
+  }
   Object.assign(workspace, {
     active_conversation_id: nextId,
     ...Object.fromEntries(
@@ -1776,8 +1804,11 @@ function applyWorkspace(value, select = false) {
     if (!retainedIds.has(id)) promptDrafts.delete(id);
   }
   if (transitioned) {
+    closeComposerMenu();
     prompt.value = promptDrafts.get(nextId)?.prompt || '';
     attachments.value = promptDrafts.get(nextId)?.files || [];
+    const access = promptDrafts.get(nextId)?.access ?? activeConversation.value?.access_mode;
+    accessMode.value = access === 'read' ? 'read' : 'confirm';
     liveUsage.value = null;
     liveGoal.value = null;
   }
@@ -2439,7 +2470,32 @@ async function toggleItem(target, item, enabled) {
 async function importSkill() {
   await perform('import-skill', {}, 'Skill 已导入。', { refresh: true });
 }
+function closeComposerMenu(returnFocus = false) {
+  const menu = composerMenu.value;
+  if (!menu) return;
+  composerMenu.value = '';
+  if (returnFocus) document.getElementById('agent-composer-' + menu)?.focus();
+}
+function toggleComposerMenu(menu) {
+  composerMenu.value = composerMenu.value === menu ? '' : menu;
+}
+function dismissComposerMenu(event) {
+  if (!composerMenu.value) return;
+  const menu = event.target instanceof Element ? event.target.closest('[data-composer-menu]') : null;
+  if (menu?.dataset.composerMenu !== composerMenu.value) closeComposerMenu();
+}
+function dismissComposerOnEscape(event) {
+  if (!composerMenu.value) return;
+  event.preventDefault();
+  event.stopPropagation();
+  closeComposerMenu(true);
+}
+function chooseAccess(access) {
+  if (workMode.value !== 'plan') accessMode.value = access;
+  closeComposerMenu(true);
+}
 function chooseFolder(clear) {
+  closeComposerMenu();
   return perform(clear ? 'clear-folder' : 'pick-folder', { conversation_id: workspace.active_conversation_id }, '', { refresh: true });
 }
 function pickAttachments() {
@@ -2494,6 +2550,7 @@ async function send(newGoal = false) {
       ...(source.value !== 'school' ? { profile_id: source.value } : {}),
       model: model.value.trim(),
       work_mode: workMode.value,
+      access_mode: accessMode.value,
       resume_goal: resume,
       attachments: files,
       conversation_id: workspace.active_conversation_id || undefined,
@@ -2512,6 +2569,7 @@ async function send(newGoal = false) {
     sentDraft = workMode.value === 'goal' ? null : { conversation: workspace.active_conversation_id, prompt: content, files };
     liveUsage.value = null;
     liveGoal.value = null;
+    toolStatus.value = text(value.tools_status || value.tool_status);
     runId.value = value.run_id;
     pollError.value = '';
     busy.value = true;
@@ -2690,6 +2748,8 @@ function restoreVisibility() {
 }
 onMounted(() => {
   window.addEventListener('practical-agent-confirmation', refreshApproval);
+  document.addEventListener('pointerdown', dismissComposerMenu);
+  document.addEventListener('focusin', dismissComposerMenu);
   bootstrap().then(refreshApproval);
   statusTimer = setInterval(refreshStatus, 5000);
   clockTimer = setInterval(() => { clockNow.value = Date.now(); }, 1000);
@@ -2698,6 +2758,8 @@ onMounted(() => {
 onBeforeUnmount(() => {
   disposed = true;
   window.removeEventListener('practical-agent-confirmation', refreshApproval);
+  document.removeEventListener('pointerdown', dismissComposerMenu);
+  document.removeEventListener('focusin', dismissComposerMenu);
   clearInterval(statusTimer);
   clearInterval(clockTimer);
   wipe();
@@ -2749,6 +2811,10 @@ onBeforeUnmount(() => {
 .business-connection-details dl { display: grid; grid-template-columns: minmax(0, 1fr) minmax(72px, 1fr); gap: 6px 16px; margin: 9px 0; }
 .business-connection-details dt, .business-connection-details dd { margin: 0; line-height: 1.6; overflow-wrap: anywhere; }
 .business-connection-details code { font-size: inherit; }
+.business-connection.ready { padding-block: 6px; }
+.business-connection.ready .business-connection-copy { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; }
+.business-connection.ready .business-connection-details { margin-top: 0; }
+.business-connection.ready .business-connection-details[open] { flex-basis: 100%; }
 @media (max-width: 900px) {
   .business-connection { align-items: flex-start; flex-wrap: wrap; margin-right: 16px; margin-left: 16px; gap: 8px; }
 }

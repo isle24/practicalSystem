@@ -1,9 +1,15 @@
+const samplesKey = Symbol('usageSamples');
+
 export function createUsage(model, capacity) {
   const metric = () => ({ tokens: 0, reports: 0 });
-  return { model, calls: 0, input: metric(), output: metric(), total: metric(), context_tokens: null, context_window: capacity };
+  return {
+    model, calls: 0, tool_calls: 0, input: metric(), output: metric(), total: metric(),
+    output_rate: null, cache_hit_percent: null, context_tokens: null, context_window: capacity,
+    [samplesKey]: { outputTokens: 0, elapsedMs: 0, outputReports: 0, cacheHits: 0, cacheInput: 0, cacheReports: 0 },
+  };
 }
 
-export function recordUsage(usage, response) {
+export function recordUsage(usage, response, elapsedMs) {
   const tokens = value => Number.isSafeInteger(value) && value >= 0 ? value : null;
   const input = tokens(response?.prompt_tokens);
   const output = tokens(response?.completion_tokens);
@@ -16,6 +22,34 @@ export function recordUsage(usage, response) {
   }
   usage.context_tokens = total ?? input;
   usage.context_input_only = total === null && input !== null;
+  const samples = usage[samplesKey];
+  if (output !== null && elapsedMs > 0) {
+    samples.outputTokens += output;
+    samples.elapsedMs += elapsedMs;
+    samples.outputReports++;
+  }
+  usage.output_rate = samples.outputReports === usage.calls ? samples.outputTokens * 1000 / samples.elapsedMs : null;
+  let hit = tokens(response?.prompt_tokens_details?.cached_tokens);
+  let cacheInput = input;
+  const deepSeekHit = tokens(response?.prompt_cache_hit_tokens);
+  const deepSeekMiss = tokens(response?.prompt_cache_miss_tokens);
+  if (deepSeekHit !== null) {
+    let sum = input;
+    if (response.prompt_cache_miss_tokens != null) {
+      sum = deepSeekMiss === null ? null : tokens(deepSeekHit + deepSeekMiss);
+    }
+    if (sum !== null && deepSeekHit <= sum && (input === null || sum === input)) {
+      hit = deepSeekHit;
+      cacheInput = sum;
+    }
+  }
+  if (hit !== null && cacheInput !== null && hit <= cacheInput) {
+    samples.cacheHits += hit;
+    samples.cacheInput += cacheInput;
+    samples.cacheReports++;
+  }
+  usage.cache_hit_percent = samples.cacheReports === usage.calls && samples.cacheInput > 0
+    ? samples.cacheHits * 100 / samples.cacheInput : null;
   return { input, output, total };
 }
 

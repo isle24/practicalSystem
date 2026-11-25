@@ -175,7 +175,7 @@ pub fn open(app: &AppHandle, connection: &Connection, owner: &str) -> Result<Val
             close_view(&window_owner);
         }
     });
-    crate::windows::finish_agent_frame(&window)?;
+    crate::windows::finish_window_frame(&window).map_err(|_| "无法设置 Agent 窗口外观")?;
     Ok(json!({"ok":true}))
 }
 
@@ -792,6 +792,11 @@ async fn start_run(
     if !matches!(work_mode, "chat" | "plan" | "goal") {
         return Err("请选择有效的 Agent 模式".into());
     }
+    let access_mode = match input.get("access_mode") {
+        None => "confirm",
+        Some(Value::String(mode)) if matches!(mode.as_str(), "read" | "confirm") => mode.as_str(),
+        _ => return Err("请选择只读或逐次确认权限".into()),
+    };
     agent_files::validate_attachments(&input["attachments"])?;
     let attachments = input["attachments"].as_array().cloned().unwrap_or_default();
     let resume = input["resume_goal"] == true && work_mode == "goal";
@@ -914,12 +919,13 @@ async fn start_run(
         }
     }
     item["work_mode"] = json!(work_mode);
+    item["access_mode"] = json!(access_mode);
     item["revision"] = json!(revision);
     item["execution_scope"] = scope.clone();
     item["mode"] = json!(mode);
     item["profile_id"] = json!(actual_profile);
     item["model"] = json!(model);
-    let options = json!({"mode":mode,"profile_id":actual_profile,"model":model,"context_revision":revision,"conversation_id":conversation_id,"work_mode":work_mode,"project_root":project_root,"user_input":user_input,"display_input":display_input,"scheduled":input["scheduled"]==true,"task_id":input["task_id"]});
+    let options = json!({"mode":mode,"profile_id":actual_profile,"model":model,"context_revision":revision,"conversation_id":conversation_id,"work_mode":work_mode,"access_mode":access_mode,"project_root":project_root,"user_input":user_input,"display_input":display_input,"scheduled":input["scheduled"]==true,"task_id":input["task_id"]});
     agent_store::write(app, &scope, &stored)?;
     let initial = snapshot(&stored)?;
     let run = Arc::new(Run {
@@ -990,6 +996,8 @@ async fn start_run(
                 if let Ok(state) = running.state.lock() {
                     if state["usage"].is_object() {
                         agent_workspace::record_usage(item, &state["usage"]);
+                    } else {
+                        item["last_usage"] = Value::Null;
                     }
                 }
                 if running.options["work_mode"] == "goal"
@@ -1035,7 +1043,9 @@ fn now() -> i64 {
 
 impl Run {
     fn read_only(&self) -> bool {
-        self.options["work_mode"] == "plan" || self.options["scheduled"] == true
+        self.options["access_mode"] == "read"
+            || self.options["work_mode"] == "plan"
+            || self.options["scheduled"] == true
     }
 
     async fn confirm(&self, title: &str, description: String) -> Result<bool, String> {
@@ -1871,7 +1881,7 @@ async fn execute(
     let mut stdin = child.stdin.take().ok_or("Agent 输入通道不可用")?;
     let stdout = child.stdout.take().ok_or("Agent 输出通道不可用")?;
     let packet = json!({
-        "type":"start","run_id":run.id,"mode":mode,"work_mode":run.options["work_mode"],
+        "type":"start","run_id":run.id,"mode":mode,"work_mode":run.options["work_mode"],"read_only":run.read_only(),
         "config":{"model":model["model"]},"prompt":run.options["user_input"]["prompt"],"attachments":run.options["user_input"]["attachments"],
         "goal":conversation["goal"],"file_receipts":file_receipts,"project_available":run.options["project_root"].is_string(),
         "messages":messages,"capabilities":catalog,"plugins":plugins,

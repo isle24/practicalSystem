@@ -33,7 +33,7 @@ fn id() -> String {
 
 fn conversation() -> Value {
     let timestamp = now();
-    json!({"id":id(),"title":"新会话","created_at":timestamp,"updated_at":timestamp,"mode":"school","work_mode":"chat","profile_id":"","model":"","revision":"","messages":[],"history":[]})
+    json!({"id":id(),"title":"新会话","created_at":timestamp,"updated_at":timestamp,"mode":"school","work_mode":"chat","access_mode":"confirm","profile_id":"","model":"","revision":"","messages":[],"history":[]})
 }
 
 fn builtin(enabled: bool) -> Value {
@@ -124,6 +124,9 @@ pub fn view(data: &Value) -> Value {
             let show_project = item["project_scope"] == data["scope"];
             let show_goal = item["execution_scope"] == data["scope"];
             if let Some(object) = item.as_object_mut() {
+                object
+                    .entry("access_mode")
+                    .or_insert_with(|| json!("confirm"));
                 object.remove("messages");
                 object.remove("goal_file_writes");
                 object.remove("execution_scope");

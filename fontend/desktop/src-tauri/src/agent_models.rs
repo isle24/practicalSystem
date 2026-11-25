@@ -326,10 +326,24 @@ pub async fn complete(
         let mut value = json!({"choices":[{"message":{"role":message["role"],"content":message["content"],"tool_calls":message["tool_calls"]},"finish_reason":choice["finish_reason"]}]});
         if let Some(usage) = response["usage"].as_object() {
             let mut counts = serde_json::Map::new();
-            for field in ["prompt_tokens", "completion_tokens", "total_tokens"] {
+            for field in [
+                "prompt_tokens",
+                "completion_tokens",
+                "total_tokens",
+                "prompt_cache_hit_tokens",
+                "prompt_cache_miss_tokens",
+            ] {
                 if let Some(count) = usage.get(field).and_then(Value::as_u64) {
                     counts.insert(field.into(), json!(count));
                 }
+            }
+            if let Some(cached) =
+                response["usage"]["prompt_tokens_details"]["cached_tokens"].as_u64()
+            {
+                counts.insert(
+                    "prompt_tokens_details".into(),
+                    json!({"cached_tokens":cached}),
+                );
             }
             value["usage"] = Value::Object(counts);
         }
